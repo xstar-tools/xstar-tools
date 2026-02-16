@@ -1,0 +1,128 @@
+# xstar-atdb
+
+`xstar-atdb` is an early research Python package for direct access to XSTAR's packed atomic database FITS file, usually:
+
+```text
+xstar/data/atdb.fits
+```
+
+Unlike ordinary FITS atomic databases, `atdb.fits` is organized as four packed arrays:
+
+```text
+POINTERS, REALS, INTEGERS, CHARS
+```
+
+This package decodes those arrays, reconstructs the element/ion/level/process hierarchy, and provides first-pass physics extractors and emissivity tools.
+
+## Current status
+
+This is an alpha/development package created by refactoring validated standalone scripts. The following pieces are working or partially working:
+
+- Packed FITS record decoding.
+- Element, ion, and level hierarchy reconstruction.
+- Level decoder for XSTAR `data_type=6`.
+- Radiative line decoder for `data_type=50`.
+- Photoionization cross-section decoder for `data_type=53`.
+- Collisional excitation decoders:
+  - `data_type=56` tabulated effective collision strengths.
+  - `data_type=63` Bautista `n,l` algorithmic branch for `nf != ni` and `|Δl| = 1`.
+- Recombination / charge-exchange extractors:
+  - `data_type=1`, `30`, `38`, `39` electron recombination total rates.
+  - `data_type=2` charge exchange with neutral H when explicitly requested.
+- Direct emissivity-table builder.
+- Prototype level-population solver with connected-component diagnostics and source/sink hooks.
+- Prototype cascade source redistribution using radiative branching.
+
+Important limitations:
+
+- Not all XSTAR data types are decoded.
+- True level-resolved recombination/cascade records have not been found in the currently decoded oxygen records.
+- Same-`n` `l`-mixing for `data_type=63` / XSTAR `amcrs` is not yet implemented.
+- The level-population solver is a diagnostic prototype, not a full replacement for XSTAR.
+
+## Installation
+
+From the package directory:
+
+```bash
+python -m pip install -e .
+```
+
+## Command-line tools
+
+After installation, these commands are available:
+
+```bash
+xstar-atdb-inspect
+xstar-atdb-hierarchy
+xstar-atdb-lines
+xstar-atdb-photoionization
+xstar-atdb-collisions
+xstar-atdb-recombination
+xstar-atdb-emissivity
+xstar-atdb-solver
+```
+
+## Examples
+
+Inspect the packed database:
+
+```bash
+xstar-atdb-inspect ./xstar/data/atdb.fits --summary
+```
+
+Extract O VIII Ly-alpha lines:
+
+```bash
+xstar-atdb-lines ./xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --line-search --wavelength-min 18.8 --wavelength-max 19.1
+```
+
+Evaluate O VIII Ly-alpha collisional excitation:
+
+```bash
+xstar-atdb-collisions ./xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --search --lower-level 1 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperatures 1e6 3e6 1e7
+```
+
+Build an O VIII Ly-alpha emissivity table:
+
+```bash
+xstar-atdb-emissivity ./xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperatures 1e6 3e6 1e7 \
+  --out-csv o8_lya_emissivity.csv --print-summary
+```
+
+Run the prototype level-population solver on the ground-connected component:
+
+```bash
+xstar-atdb-solver ./xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperatures 1e6 3e6 1e7 \
+  --electron-densities 1.0 \
+  --component-mode ground \
+  --out-lines-csv o8_lya_pop_lines.csv --print-summary
+```
+
+## Python API example
+
+```python
+from xstar_atdb import ATDB
+
+atdb = ATDB("./xstar/data/atdb.fits")
+records, elements, ions = atdb.build_index()
+print(len(records), len(elements), len(ions))
+```
+
+Higher-level APIs are still evolving. For now, the command-line modules and their module-level functions are the most stable entry points.
+
+## Development roadmap
+
+See `docs/TODO.md`.

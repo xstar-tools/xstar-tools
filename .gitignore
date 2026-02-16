@@ -1,0 +1,27 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+chianti_tools.egg-info/
+.pytest_cache/
+
+# LaTeX build/output files
+*.aux
+*.dvi
+*.log
+*.out
+*.pdf
+*.ps
+# *.eps
+*.synctex.gz
+*.toc
+
+# gcc build output
+*.so
+*.mod
+
+# Sphinx build output
+_build/
+docs/_build/
+docs/sphinx/_build/
+# docs/generated/
