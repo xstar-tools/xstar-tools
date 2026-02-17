@@ -56,6 +56,7 @@ ELEMENT_SYMBOLS = [
     "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
 ]
 SYMBOL_TO_Z = {s.upper(): z for z, s in enumerate(ELEMENT_SYMBOLS) if s}
+Z_TO_SYMBOL = {z: s for z, s in enumerate(ELEMENT_SYMBOLS) if s}
 
 RATE_TYPES: Dict[int, str] = {
     1: "ground state ionization",
