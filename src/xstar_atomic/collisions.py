@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_extract_collisions_v2b.py
+xstar_atomic_extract_collisions_v2b.py
 
 Second-pass collisional-excitation extractor - patched v2b marker 2026-05-18 for XSTAR's packed atdb.fits.
 
 This script builds on:
-  * xstar_atdb_hierarchy.py
-  * xstar_atdb_extract_lines_v2.py
+  * xstar_atomic_hierarchy.py
+  * xstar_atomic_extract_lines_v2.py
 
 It decodes bound-bound collisional records (rate_type=3) and joins them to
 validated XSTAR level and radiative-line information.
@@ -55,20 +55,20 @@ with T in K, DeltaE and kT in eV, and q in cm^3 s^-1.
 Examples
 --------
 # Summary of O VIII collision records
-python xstar_atdb_extract_collisions_v2b.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 --summary
 
 # Search O VIII collisional excitation connected to Ly-alpha upper levels
-python xstar_atdb_extract_collisions_v2b.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 --search --lower-level 1 --limit 20
 
 # Evaluate at temperatures useful for CIE/photoionized-plasma tests
-python xstar_atdb_extract_collisions_v2b.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 --search --lower-level 1 \
   --temperatures 1e5 1e6 1e7 --limit 20
 
 # Export compact tables
-python xstar_atdb_extract_collisions_v2b.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --summary-csv o8_collisions_summary.csv \
   --grid-csv o8_collisions_grid.csv \
@@ -89,16 +89,16 @@ try:
     from .hierarchy import ATDB, SYMBOL_TO_Z, IndexedRecord
 except Exception as exc:  # pragma: no cover
     raise SystemExit(
-        "Could not import xstar_atdb_hierarchy.py. Put this script in the same "
-        "directory as xstar_atdb_hierarchy.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_hierarchy.py. Put this script in the same "
+        "directory as xstar_atomic_hierarchy.py. Original error: " + repr(exc)
     )
 
 try:
     from .lines import extract_levels, level_maps, roman, write_csv
 except Exception as exc:  # pragma: no cover
     raise SystemExit(
-        "Could not import xstar_atdb_extract_lines_v2.py. Put this script in the same "
-        "directory as xstar_atdb_extract_lines_v2.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_extract_lines_v2.py. Put this script in the same "
+        "directory as xstar_atomic_extract_lines_v2.py. Original error: " + repr(exc)
     )
 
 HC_EV_A = 12398.4016

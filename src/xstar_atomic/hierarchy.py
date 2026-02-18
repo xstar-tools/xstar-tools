@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_hierarchy.py
+xstar_atomic_hierarchy.py
 
 Build a parent/child hierarchy over XSTAR's packed atdb.fits database.
 
-This complements xstar_atdb_reader_inspect.py.  The FITS file is not a set of
+This complements xstar_atomic_reader_inspect.py.  The FITS file is not a set of
 semantic tables; it is four packed arrays.  This script follows the same
 record-order idea used by XSTAR's setptrs.f90: element records (rate type 11)
 contain ion records (rate type 12), which contain levels (rate type 13) and all
@@ -18,19 +18,19 @@ Examples
 --------
 
 # Fast summary of hierarchy; loads POINTERS, INTEGERS, CHARS, but not REALS
-python xstar_atdb_hierarchy.py ./xstar/data/atdb.fits --summary
+python xstar_atomic_hierarchy.py ./xstar/data/atdb.fits --summary
 
 # Write one indexed row per database record
-python xstar_atdb_hierarchy.py ./xstar/data/atdb.fits --index-csv atdb_index.csv
+python xstar_atomic_hierarchy.py ./xstar/data/atdb.fits --index-csv atdb_index.csv
 
 # List elements and ions found by the hierarchy scan
-python xstar_atdb_hierarchy.py ./xstar/data/atdb.fits --elements-csv atdb_elements.csv --ions-csv atdb_ions.csv
+python xstar_atomic_hierarchy.py ./xstar/data/atdb.fits --elements-csv atdb_elements.csv --ions-csv atdb_ions.csv
 
 # Dump all O VIII records, excluding the huge real arrays
-python xstar_atdb_hierarchy.py ./xstar/data/atdb.fits --element O --ion-stage 8 --dump --no-reals --limit 50
+python xstar_atomic_hierarchy.py ./xstar/data/atdb.fits --element O --ion-stage 8 --dump --no-reals --limit 50
 
 # Dump only radiative line records for O VIII
-python xstar_atdb_hierarchy.py ./xstar/data/atdb.fits --element O --ion-stage 8 --rate-type 4 --dump --limit 20
+python xstar_atomic_hierarchy.py ./xstar/data/atdb.fits --element O --ion-stage 8 --rate-type 4 --dump --limit 20
 
 Dependencies
 ------------

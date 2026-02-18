@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_extract_recombination_v3.py
+xstar_atomic_extract_recombination_v3.py
 
 Third-pass recombination, charge-exchange, and cascade-source extractor for XSTAR's packed atdb.fits.
 
 Purpose
 -------
-This script inventories and evaluates recombination-like XSTAR ATDB records and
+This script inventories and evaluates recombination-like XSTAR Atomic records and
 can produce a level-source CSV compatible with
-`xstar_atdb_level_population_solver_v2.py --recombination-source-csv`.
+`xstar_atomic_level_population_solver_v2.py --recombination-source-csv`.
 
 This is intentionally conservative.  Many XSTAR records are total ion
 recombination rates rather than level-resolved cascade feeds.  Where a record is
@@ -58,21 +58,21 @@ proper ionization balance calculation.
 Examples
 --------
 # Inventory O VII recombination-like records
-python xstar_atdb_extract_recombination_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 --summary --temperatures 1e6 3e6 1e7
 
 # Export evaluated O VII total recombination rates
-python xstar_atdb_extract_recombination_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 --temperatures 1e6 3e6 1e7 \
   --records-csv o7_recomb_records.csv --eval-csv o7_recomb_eval.csv
 
 # Produce a solver source CSV by putting all total recombination into ground
-python xstar_atdb_extract_recombination_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 --temperatures 1e6 --electron-densities 1.0 \
   --source-mode ground --source-csv o7_recomb_sources_from_atdb.csv
 
 # Produce an approximate statistical-weight distribution over selected levels
-python xstar_atdb_extract_recombination_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 --temperatures 1e6 --electron-densities 1.0 \
   --source-mode selected-statistical --source-levels 2,3,4,5,7 \
   --source-csv o7_triplet_source_test_from_atdb.csv
@@ -92,16 +92,16 @@ try:
     from .hierarchy import ATDB, SYMBOL_TO_Z, DATA_TYPES, RATE_TYPES, IndexedRecord, roman
 except Exception as exc:  # pragma: no cover
     raise SystemExit(
-        "Could not import xstar_atdb_hierarchy.py. Put this script in the same "
-        "directory as xstar_atdb_hierarchy.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_hierarchy.py. Put this script in the same "
+        "directory as xstar_atomic_hierarchy.py. Original error: " + repr(exc)
     )
 
 try:
     from .lines import extract_levels, extract_lines, level_maps
 except Exception as exc:  # pragma: no cover
     raise SystemExit(
-        "Could not import xstar_atdb_extract_lines_v2.py. Put this script in the same "
-        "directory as xstar_atdb_extract_lines_v2.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_extract_lines_v2.py. Put this script in the same "
+        "directory as xstar_atomic_extract_lines_v2.py. Original error: " + repr(exc)
     )
 
 ELECTRON_RECOMB_DATA_TYPES = {1, 7, 8, 22, 30, 37, 38, 39}
@@ -747,7 +747,7 @@ def classify_recombination_records(rows: List[dict]) -> List[dict]:
         else:
             cls = "unknown_recombination_like_inventory"
             action = "inspect_source_code_before_use"
-        # Current decoded XSTAR ATDB records here are total rates, not true level-resolved cascades.
+        # Current decoded XSTAR Atomic records here are total rates, not true level-resolved cascades.
         rec["recombination_record_class"] = cls
         rec["recommended_source_action"] = action
         rec["is_true_level_resolved_recombination"] = False

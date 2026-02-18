@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_level_population_solver_v2.py
+xstar_atomic_level_population_solver_v2.py
 
 Second steady-state level-population solver for XSTAR's packed atdb.fits. v2 adds connected-component diagnostics, ground-component solving, and explicit source/sink hooks.
 
 This script builds on the validated ATDB readers/decoders:
 
-  * xstar_atdb_hierarchy.py
-  * xstar_atdb_extract_lines_v2.py
-  * xstar_atdb_extract_collisions_v2b.py
+  * xstar_atomic_hierarchy.py
+  * xstar_atomic_extract_lines_v2.py
+  * xstar_atomic_extract_collisions_v2b.py
 
 It assembles a simple statistical-equilibrium matrix for one ion using:
 
@@ -48,7 +48,7 @@ rate for experiments, but it is not an XSTAR-equivalent implementation.
 Examples
 --------
 # O VIII Ly-alpha with all O VIII levels in the matrix
-python xstar_atdb_level_population_solver_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_level_population_solver_v2.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperatures 1e6 3e6 1e7 \
@@ -59,7 +59,7 @@ python xstar_atdb_level_population_solver_v2.py ./xstar/data/atdb.fits \
   --print-summary
 
 # O VII triplet status with the current collision set
-python xstar_atdb_level_population_solver_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_level_population_solver_v2.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 \
   --wavelength-min 21.4 --wavelength-max 22.2 \
   --temperatures 1e6 3e6 1e7 \
@@ -701,7 +701,7 @@ def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: Li
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Solve first-pass XSTAR ATDB level populations and line emissivities.")
+    p = argparse.ArgumentParser(description="Solve first-pass XSTAR Atomic level populations and line emissivities.")
     p.add_argument("fitsfile")
     p.add_argument("--element", required=True, help="Element symbol, e.g. O, Ne, Fe")
     p.add_argument("--ion-stage", type=int, required=True, help="Ion stage, e.g. 8 for O VIII")
@@ -744,7 +744,7 @@ def main() -> None:
         raise SystemExit(f"Could not map element {args.element!r} to Z")
 
     db = ATDB(args.fitsfile)
-    # ATDB from xstar_atdb_hierarchy.py exposes build_index(), not index_records().
+    # ATDB from xstar_atomic_hierarchy.py exposes build_index(), not index_records().
     records, elements, ions = db.build_index()
 
     levels = extract_levels(db, records, z, args.ion_stage)

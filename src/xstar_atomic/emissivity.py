@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_make_emissivity_table_v1.py
+xstar_atomic_make_emissivity_table_v1.py
 
 Build an emissivity-ready joined table from XSTAR's packed atdb.fits.
 
-This script joins the validated XSTAR ATDB readers/decoders:
+This script joins the validated XSTAR Atomic readers/decoders:
 
-  * xstar_atdb_hierarchy.py
-  * xstar_atdb_extract_lines_v2.py
-  * xstar_atdb_extract_collisions_v2b.py
+  * xstar_atomic_hierarchy.py
+  * xstar_atomic_extract_lines_v2.py
+  * xstar_atomic_extract_collisions_v2b.py
 
 It produces one row per radiative line, per matched collisional-excitation
 record, per requested temperature.  The output is intended for plasma-emissivity
@@ -37,20 +37,20 @@ Important caveats
 Examples
 --------
 # O VIII Ly-alpha emissivity-ready rows
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperatures 1e6 3e6 1e7 \
   --out-csv o8_lya_emissivity.csv
 
 # O VII direct-excitation lines from ground covered by type-63
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 7 --lower-level 1 \
   --temperatures 1e6 3e6 1e7 \
   --out-csv o7_emissivity.csv
 
 # Also save component tables for debugging
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element Ne --ion-stage 10 --temperatures 1e6 1e7 \
   --out-csv nex_emissivity.csv \
   --lines-csv nex_lines.csv \

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_extract_lines_v2.py
+xstar_atomic_extract_lines_v2.py
 
 Physics-decoded level and radiative-line extractor for XSTAR's packed
 atdb.fits atomic database.
 
-This version is meant as the next validation layer after xstar_atdb_hierarchy.py:
+This version is meant as the next validation layer after xstar_atomic_hierarchy.py:
   * decodes level records (rate_type=13, usually data_type=6/83);
   * decodes radiative line records (rate_type=4/9/14; especially data_type=50);
   * determines the physical lower/upper levels from the decoded level energies;
@@ -13,22 +13,22 @@ This version is meant as the next validation layer after xstar_atdb_hierarchy.py
     using the same type-50 relation visible in XSTAR's ucalc.f90;
   * supports wavelength/energy searches for known X-ray lines.
 
-Place this file in the same directory as xstar_atdb_hierarchy.py.
+Place this file in the same directory as xstar_atomic_hierarchy.py.
 
 Examples
 --------
 # O VIII Ly-alpha search
-python xstar_atdb_extract_lines_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_lines_v2.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --line-search --wavelength-min 18.8 --wavelength-max 19.1
 
 # Export decoded O VIII levels and lines
-python xstar_atdb_extract_lines_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_lines_v2.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --levels-csv o8_levels_v2.csv --lines-csv o8_lines_v2.csv
 
 # Query by energy range in keV
-python xstar_atdb_extract_lines_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_lines_v2.py ./xstar/data/atdb.fits \
   --element Fe --ion-stage 26 \
   --line-search --energy-min-kev 6.8 --energy-max-kev 7.2
 """
@@ -45,8 +45,8 @@ try:
     from .hierarchy import ATDB, SYMBOL_TO_Z, IndexedRecord
 except Exception as exc:  # pragma: no cover - user environment check
     raise SystemExit(
-        "Could not import xstar_atdb_hierarchy.py. Put this script in the same "
-        "directory as xstar_atdb_hierarchy.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_hierarchy.py. Put this script in the same "
+        "directory as xstar_atomic_hierarchy.py. Original error: " + repr(exc)
     )
 
 HC_EV_A = 12398.4016

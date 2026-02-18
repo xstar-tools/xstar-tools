@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_extract_photoionization_v1.py
+xstar_atomic_extract_photoionization_v1.py
 
 Decode/export first-pass photoionization / bound-free records from XSTAR's
 packed atdb.fits database.
 
-This script builds on xstar_atdb_hierarchy.py and xstar_atdb_extract_lines_v2.py.
+This script builds on xstar_atomic_hierarchy.py and xstar_atomic_extract_lines_v2.py.
 It is intentionally conservative: it names only fields that are visible in
 XSTAR's ucalc.f90 for data types 49, 53, and 59.
 
@@ -28,17 +28,17 @@ Data type 59, rate type 1/7: Verner photoionization coefficients
 Examples
 --------
 # Summary for O VIII
-python xstar_atdb_extract_photoionization_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 --summary
 
 # Export one-row-per-PI-record summary and one-row-per-grid-point table
-python xstar_atdb_extract_photoionization_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --summary-csv o8_pi_summary.csv \
   --grid-csv o8_pi_grid.csv
 
 # Search threshold-energy range
-python xstar_atdb_extract_photoionization_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 --search \
   --threshold-min-ev 100 --threshold-max-ev 900
 """
@@ -56,15 +56,15 @@ try:
     from .hierarchy import ATDB, SYMBOL_TO_Z, IndexedRecord
 except Exception as exc:
     raise SystemExit(
-        "Could not import xstar_atdb_hierarchy.py. Put this script in the same "
-        "directory as xstar_atdb_hierarchy.py. Original error: " + repr(exc)
+        "Could not import xstar_atomic_hierarchy.py. Put this script in the same "
+        "directory as xstar_atomic_hierarchy.py. Original error: " + repr(exc)
     )
 
 try:
     from .lines import extract_levels, level_maps, roman, write_csv, preview_list
 except Exception as exc:
     raise SystemExit(
-        "Could not import xstar_atdb_extract_lines_v2.py. Put this script in the same "
+        "Could not import xstar_atomic_extract_lines_v2.py. Put this script in the same "
         "directory as this script. Original error: " + repr(exc)
     )
 

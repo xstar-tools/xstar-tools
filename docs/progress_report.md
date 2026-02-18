@@ -306,7 +306,7 @@ f_osc_from_A = oscillator-strength estimate from A_ul and wavelength
 Search:
 
 ```bash
-python xstar_atdb_extract_lines_v2.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_lines_v2.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --line-search --wavelength-min 18.8 --wavelength-max 19.1
 ```
@@ -361,7 +361,7 @@ photon_E_eV  = threshold_eV + E_i × 13.605692
 Search:
 
 ```bash
-python xstar_atdb_extract_photoionization_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --search --data-type 53 --rate-type 7 --lower-level 1
 ```
@@ -485,7 +485,7 @@ because this format also appears for O VII, not only H-like ions.
 
 ### 12.3 Type 63 evaluator implemented for nf != ni and |Δl| = 1
 
-A patched script, `xstar_atdb_extract_collisions_v2b.py`, implements the `nf != ni`, `|Δl| = 1` branch by porting the relevant logic from:
+A patched script, `xstar_atomic_extract_collisions_v2b.py`, implements the `nf != ni`, `|Δl| = 1` branch by porting the relevant logic from:
 
 ```text
 anl1.f90
@@ -569,7 +569,7 @@ because that requires the `amcrs` branch and density/impact-parameter physics.
 A first emissivity-table builder was created:
 
 ```text
-xstar_atdb_make_emissivity_table_v1.py
+xstar_atomic_make_emissivity_table_v1.py
 ```
 
 It joins:
@@ -619,15 +619,15 @@ The following scripts have been created during this development:
 | Script | Purpose |
 |---|---|
 | `inspect_xstardb_fits.py` | Generic FITS schema inspector for large files |
-| `xstar_atdb_reader_inspect.py` | Low-level packed FITS reader for POINTERS/REALS/INTEGERS/CHARS |
-| `xstar_atdb_hierarchy.py` | Builds element → ion → record hierarchy |
-| `xstar_atdb_extract_basic.py` | First basic level/line/continuum extraction |
-| `xstar_atdb_extract_lines_v2.py` | Validated level and radiative-line decoder with line search |
-| `xstar_atdb_extract_photoionization_v1.py` | Type-53 photoionization cross-section decoder |
-| `xstar_atdb_extract_collisions_v1.py` | First collision extractor: type 56 and metadata for type 63 |
-| `xstar_atdb_extract_collisions_v2.py` | First attempted type-63 evaluator |
-| `xstar_atdb_extract_collisions_v2b.py` | Patched type-63 evaluator with explicit angular branch selector |
-| `xstar_atdb_make_emissivity_table_v1.py` | First direct-excitation emissivity table builder |
+| `xstar_atomic_reader_inspect.py` | Low-level packed FITS reader for POINTERS/REALS/INTEGERS/CHARS |
+| `xstar_atomic_hierarchy.py` | Builds element → ion → record hierarchy |
+| `xstar_atomic_extract_basic.py` | First basic level/line/continuum extraction |
+| `xstar_atomic_extract_lines_v2.py` | Validated level and radiative-line decoder with line search |
+| `xstar_atomic_extract_photoionization_v1.py` | Type-53 photoionization cross-section decoder |
+| `xstar_atomic_extract_collisions_v1.py` | First collision extractor: type 56 and metadata for type 63 |
+| `xstar_atomic_extract_collisions_v2.py` | First attempted type-63 evaluator |
+| `xstar_atomic_extract_collisions_v2b.py` | Patched type-63 evaluator with explicit angular branch selector |
+| `xstar_atomic_make_emissivity_table_v1.py` | First direct-excitation emissivity table builder |
 
 ---
 

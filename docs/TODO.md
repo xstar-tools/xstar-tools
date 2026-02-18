@@ -11,7 +11,7 @@ The long-term target is a fully developed Python package for reading, decoding, 
 The final product should support:
 
 ```python
-from xstar_atdb import XSTARATDB
+from xstar_atomic import XSTARATDB
 
 db = XSTARATDB("./xstar/data/atdb.fits")
 
@@ -33,7 +33,7 @@ It should also provide command-line tools for exporting compact atomic tables fo
 Run:
 
 ```bash
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element O \
   --ion-stage 8 \
   --wavelength-min 18.8 \
@@ -54,7 +54,7 @@ Check:
 Then run:
 
 ```bash
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element Ne \
   --ion-stage 10 \
   --wavelength-min 12.0 \
@@ -69,7 +69,7 @@ python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
 Run:
 
 ```bash
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element O \
   --ion-stage 7 \
   --lower-level 1 \
@@ -86,7 +86,7 @@ Check whether the type-63 evaluated rates are properly joined to radiative decay
 For important lines such as the O VII triplet:
 
 ```bash
-python xstar_atdb_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
+python xstar_atomic_make_emissivity_table_v1.py ./xstar/data/atdb.fits \
   --element O \
   --ion-stage 7 \
   --wavelength-min 21.4 \
@@ -112,7 +112,7 @@ recombination or cascade may be required
 The current work is split into separate scripts. The next engineering step is to refactor them into a package:
 
 ```text
-xstar_atdb/
+xstar_atomic/
   __init__.py
   core.py                 # XSTARATDB class
   packed.py               # low-level POINTERS/REALS/INTEGERS/CHARS reader
@@ -568,7 +568,7 @@ atomic/xstar_collisions.parquet
 Useful for Athena++ / superwind pipeline integration:
 
 ```text
-atomic/xstar_atdb_subset.h5
+atomic/xstar_atomic_subset.h5
 ```
 
 Suggested HDF5 layout:
@@ -592,14 +592,14 @@ Suggested HDF5 layout:
 Create one unified CLI:
 
 ```bash
-xstar-atdb summary ./xstar/data/atdb.fits
-xstar-atdb elements ./xstar/data/atdb.fits
-xstar-atdb ions ./xstar/data/atdb.fits --element O
-xstar-atdb levels ./xstar/data/atdb.fits --element O --ion-stage 8
-xstar-atdb lines ./xstar/data/atdb.fits --element O --ion-stage 8 --wavelength 18.8 19.1
-xstar-atdb photoionization ./xstar/data/atdb.fits --element O --ion-stage 8 --level 1
-xstar-atdb collisions ./xstar/data/atdb.fits --element O --ion-stage 8 --temperatures 1e6 3e6 1e7
-xstar-atdb emissivity ./xstar/data/atdb.fits --element O --ion-stage 8 --temperatures 1e6 3e6 1e7
+xstar-atomic summary ./xstar/data/atdb.fits
+xstar-atomic elements ./xstar/data/atdb.fits
+xstar-atomic ions ./xstar/data/atdb.fits --element O
+xstar-atomic levels ./xstar/data/atdb.fits --element O --ion-stage 8
+xstar-atomic lines ./xstar/data/atdb.fits --element O --ion-stage 8 --wavelength 18.8 19.1
+xstar-atomic photoionization ./xstar/data/atdb.fits --element O --ion-stage 8 --level 1
+xstar-atomic collisions ./xstar/data/atdb.fits --element O --ion-stage 8 --temperatures 1e6 3e6 1e7
+xstar-atomic emissivity ./xstar/data/atdb.fits --element O --ion-stage 8 --temperatures 1e6 3e6 1e7
 ```
 
 ---
@@ -709,7 +709,7 @@ Fe XXVI Lyα
 
 ### Priority A: make current useful product robust
 
-1. Validate `xstar_atdb_make_emissivity_table_v1.py`.
+1. Validate `xstar_atomic_make_emissivity_table_v1.py`.
 2. Package low-level reader, hierarchy, levels, lines, type-53 PI, type-56/type-63 collisions.
 3. Add tests for O VIII, O VII, Ne X, Fe XXVI.
 4. Export compact tables for H, He, C, N, O, Ne, Mg, Si, S, Fe.

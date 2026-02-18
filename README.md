@@ -1,6 +1,6 @@
-# xstar-atdb
+# xstar-atomic
 
-`xstar-atdb` is an early research Python package for direct access to XSTAR's packed atomic database FITS file, usually:
+`xstar-atomic` is an early research Python package for direct access to XSTAR's packed atomic database FITS file, usually:
 
 ```text
 xstar/data/atdb.fits
@@ -53,14 +53,14 @@ python -m pip install -e .
 After installation, these commands are available:
 
 ```bash
-xstar-atdb-inspect
-xstar-atdb-hierarchy
-xstar-atdb-lines
-xstar-atdb-photoionization
-xstar-atdb-collisions
-xstar-atdb-recombination
-xstar-atdb-emissivity
-xstar-atdb-solver
+xstar-atomic-inspect
+xstar-atomic-hierarchy
+xstar-atomic-lines
+xstar-atomic-photoionization
+xstar-atomic-collisions
+xstar-atomic-recombination
+xstar-atomic-emissivity
+xstar-atomic-solver
 ```
 
 ## Examples
@@ -68,13 +68,13 @@ xstar-atdb-solver
 Inspect the packed database:
 
 ```bash
-xstar-atdb-inspect ./xstar/data/atdb.fits --summary
+xstar-atomic-inspect ./xstar/data/atdb.fits --summary
 ```
 
 Extract O VIII Ly-alpha lines:
 
 ```bash
-xstar-atdb-lines ./xstar/data/atdb.fits \
+xstar-atomic-lines ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --line-search --wavelength-min 18.8 --wavelength-max 19.1
 ```
@@ -82,7 +82,7 @@ xstar-atdb-lines ./xstar/data/atdb.fits \
 Evaluate O VIII Ly-alpha collisional excitation:
 
 ```bash
-xstar-atdb-collisions ./xstar/data/atdb.fits \
+xstar-atomic-collisions ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --search --lower-level 1 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
@@ -92,7 +92,7 @@ xstar-atdb-collisions ./xstar/data/atdb.fits \
 Build an O VIII Ly-alpha emissivity table:
 
 ```bash
-xstar-atdb-emissivity ./xstar/data/atdb.fits \
+xstar-atomic-emissivity ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperatures 1e6 3e6 1e7 \
@@ -102,7 +102,7 @@ xstar-atdb-emissivity ./xstar/data/atdb.fits \
 Run the prototype level-population solver on the ground-connected component:
 
 ```bash
-xstar-atdb-solver ./xstar/data/atdb.fits \
+xstar-atomic-solver ./xstar/data/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperatures 1e6 3e6 1e7 \
@@ -114,7 +114,7 @@ xstar-atdb-solver ./xstar/data/atdb.fits \
 ## Python API example
 
 ```python
-from xstar_atdb import ATDB
+from xstar_atomic import ATDB
 
 atdb = ATDB("./xstar/data/atdb.fits")
 records, elements, ions = atdb.build_index()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-xstar_atdb_reader_inspect.py
+xstar_atomic_reader_inspect.py
 
 Read and inspect XSTAR's packed atomic database FITS file, data/atdb.fits.
 This is intentionally a *low-level* reader that mirrors XSTAR's Fortran
@@ -30,16 +30,16 @@ Each database record has a 10-integer pointer/header block:
 Usage examples:
 
   # Fast: reads only the POINTERS extension and prints counts
-  python xstar_atdb_reader_inspect.py ./xstar/data/atdb.fits --summary
+  python xstar_atomic_reader_inspect.py ./xstar/data/atdb.fits --summary
 
   # Dump a few raw records, including reals/integers/chars
-  python xstar_atdb_reader_inspect.py ./xstar/data/atdb.fits --records 1 2 3 10
+  python xstar_atomic_reader_inspect.py ./xstar/data/atdb.fits --records 1 2 3 10
 
   # Dump first 5 records of a data type
-  python xstar_atdb_reader_inspect.py ./xstar/data/atdb.fits --data-type 13 --limit 5 --dump
+  python xstar_atomic_reader_inspect.py ./xstar/data/atdb.fits --data-type 13 --limit 5 --dump
 
   # Write compact inventory tables without reading the huge REALS vector
-  python xstar_atdb_reader_inspect.py ./xstar/data/atdb.fits --inventory atdb_inventory.csv
+  python xstar_atomic_reader_inspect.py ./xstar/data/atdb.fits --inventory atdb_inventory.csv
 
 Dependencies:
   pip install astropy numpy
