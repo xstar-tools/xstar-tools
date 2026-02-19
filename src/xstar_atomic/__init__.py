@@ -7,13 +7,17 @@ emissivity tables, and prototype level-population solving.
 """
 
 from .hierarchy import ATDB, IndexedRecord, SYMBOL_TO_Z, Z_TO_SYMBOL, roman
+from .api import XSTARAtomic, parse_ion, roman_to_int
 
 __all__ = [
     "ATDB",
+    "XSTARAtomic",
     "IndexedRecord",
     "SYMBOL_TO_Z",
     "Z_TO_SYMBOL",
     "roman",
+    "parse_ion",
+    "roman_to_int",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

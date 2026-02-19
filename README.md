@@ -121,7 +121,24 @@ records, elements, ions = atdb.build_index()
 print(len(records), len(elements), len(ions))
 ```
 
-Higher-level APIs are still evolving. For now, the command-line modules and their module-level functions are the most stable entry points.
+High-level convenience API:
+
+```python
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic("./xstar/data/atdb.fits")
+
+# Reuses the same validated decoders as the command-line tools.
+lya = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+coll = db.collisions("O VIII", lower_level=1, wavelength=(18.8, 19.1), temperatures=[1e6, 3e6, 1e7])
+emiss = db.emissivity("O VIII", wavelength=(18.8, 19.1), temperatures=[1e6, 3e6, 1e7])
+recomb = db.recombination(element="O", temperatures=[1e6])
+
+print(len(lya))
+print(emiss["summary"])
+```
+
+The low-level `ATDB` API remains available for direct packed-FITS access, while `XSTARAtomic` is the recommended science-facing wrapper for rates, emissivities, and solver-related workflows.
 
 ## Development roadmap
 

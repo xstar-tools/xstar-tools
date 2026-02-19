@@ -14,3 +14,8 @@ This package is the first refactor of the previously standalone scripts:
 | `xstar_atomic_level_population_solver_v2.py` | `xstar_atomic.solver` | `xstar-atomic-solver` |
 
 The module code is intentionally close to the validated scripts so the current behavior remains reproducible.
+
+
+## v0.1.1 high-level API wrapper
+
+Added `xstar_atomic.api.XSTARAtomic`, a thin science-facing wrapper around the low-level `ATDB` reader. It exposes notebook-friendly methods for `levels`, `lines`, `photoionization`, `collisions`, `recombination`, and `emissivity`, while preserving `ATDB` for direct packed-FITS record access.

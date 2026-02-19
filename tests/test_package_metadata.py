@@ -6,6 +6,7 @@ def test_package_layout_exists():
     assert (root / "pyproject.toml").exists()
     assert (root / "src" / "xstar_atomic" / "__init__.py").exists()
     assert (root / "src" / "xstar_atomic" / "hierarchy.py").exists()
+    assert (root / "src" / "xstar_atomic" / "api.py").exists()
 
 
 def test_console_modules_exist():
@@ -19,6 +20,7 @@ def test_console_modules_exist():
         "recombination.py",
         "emissivity.py",
         "solver.py",
+        "api.py",
     ]
     for module in modules:
         assert (root / "src" / "xstar_atomic" / module).exists()
