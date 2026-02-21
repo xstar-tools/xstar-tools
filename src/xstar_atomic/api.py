@@ -341,6 +341,7 @@ class XSTARAtomic:
         include_unmatched_lines: bool = False,
         include_two_photon: bool = False,
         include_superlevel_radiative: bool = False,
+        collision_data_type: Optional[int] = None,
     ) -> dict:
         """Build a direct-excitation emissivity table for selected lines."""
         sel = self.select(ion, element=element, ion_stage=ion_stage)
@@ -355,6 +356,7 @@ class XSTARAtomic:
             include_two_photon=include_two_photon,
             include_superlevel=include_superlevel_radiative,
             include_superlevel_radiative=include_superlevel_radiative,
+            collision_data_type=collision_data_type,
         )
         line_rows = filter_emissivity_lines(line_rows_all, args)
         collision_summary, _collision_grid, collision_eval = extract_collisions(self.db, self.records, sel.z, sel.ion_stage, temperatures)
