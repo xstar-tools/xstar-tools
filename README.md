@@ -140,6 +140,38 @@ print(emiss["summary"])
 
 The low-level `ATDB` API remains available for direct packed-FITS access, while `XSTARAtomic` is the recommended science-facing wrapper for rates, emissivities, and solver-related workflows.
 
+## Testing
+
+Run metadata/layout tests without the XSTAR database:
+
+```bash
+pytest -q
+```
+
+Run the real `atdb.fits` smoke tests by setting `XSTAR_ATDB_FITS`:
+
+```bash
+XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits pytest -q
+```
+
+The ATDB-dependent tests validate the same O VIII/O VII workflows used during development, including O VIII Ly-alpha lines, collisions, emissivity, and oxygen recombination inventory.
+
+## Example scripts
+
+The `examples/` directory contains runnable scripts that work without installing the package when `PYTHONPATH=src` is set:
+
+```bash
+PYTHONPATH=src python examples/01_o8_lya_lines.py /path/to/xstar/data/atdb.fits
+PYTHONPATH=src python examples/02_o8_lya_collisions.py /path/to/xstar/data/atdb.fits
+PYTHONPATH=src python examples/03_o8_lya_emissivity.py /path/to/xstar/data/atdb.fits
+PYTHONPATH=src python examples/04_oxygen_recombination_inventory.py /path/to/xstar/data/atdb.fits
+PYTHONPATH=src python examples/05_low_level_atdb_index.py /path/to/xstar/data/atdb.fits
+```
+
+## Changelog
+
+See `CHANGELOG.md`.
+
 ## Development roadmap
 
 See `docs/TODO.md`.

@@ -1,0 +1,62 @@
+# CHANGELOG
+
+All notable changes to `xstar-atomic` are documented here.
+
+## v0.1.4 - 2026-02-21
+
+### Added
+- Added real pytest smoke tests for the direct `atdb.fits` workflow.
+- Added API smoke tests for:
+  - low-level `ATDB.build_index()` counts,
+  - O VIII Ly-alpha line extraction,
+  - O VIII Ly-alpha collision-rate evaluation,
+  - O VIII Ly-alpha emissivity table generation,
+  - oxygen recombination inventory.
+- Added CLI smoke tests using `python -m xstar_atomic.*` modules.
+- Added `examples/` scripts:
+  - `01_o8_lya_lines.py`,
+  - `02_o8_lya_collisions.py`,
+  - `03_o8_lya_emissivity.py`,
+  - `04_oxygen_recombination_inventory.py`,
+  - `05_low_level_atdb_index.py`.
+- Added this versioned `CHANGELOG.md`.
+
+### Notes
+- Tests that require the real XSTAR database are skipped unless `XSTAR_ATDB_FITS` points to a readable `atdb.fits` file.
+- Example test command:
+
+  ```bash
+  XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits pytest -q
+  ```
+
+## v0.1.3 - 2026-02-20
+
+### Fixed
+- Fixed the high-level `XSTARAtomic.emissivity()` wrapper by adding the missing `collision_data_type` default expected by the emissivity filters.
+
+## v0.1.2 - 2026-02-19
+
+### Fixed
+- Fixed the high-level `XSTARAtomic.emissivity()` wrapper by adding the missing `include_superlevel_radiative` default expected by the emissivity filters.
+
+## v0.1.1 - 2026-02-18
+
+### Added
+- Added the high-level `XSTARAtomic` API wrapper around the low-level `ATDB` reader.
+- Added convenience methods for lines, collisions, recombination, and emissivity workflows.
+- Kept `ATDB` as the low-level direct packed-FITS API.
+
+## v0.1.0 - 2026-02-17
+
+### Added
+- Initial package refactor from validated standalone scripts.
+- Added package namespace `xstar_atomic` and project name `xstar-atomic`.
+- Added command-line modules for:
+  - inspecting `atdb.fits`,
+  - hierarchy reconstruction,
+  - lines,
+  - photoionization,
+  - collisions,
+  - recombination,
+  - emissivity,
+  - prototype level-population solving.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.1.3"
+version = "0.1.4"
 description = "Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "build>=1.0"]
 
 [project.scripts]
 xstar-atomic-inspect = "xstar_atomic.inspect:main"
