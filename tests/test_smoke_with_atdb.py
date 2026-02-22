@@ -30,6 +30,19 @@ needs_atdb = pytest.mark.skipif(
 )
 
 
+
+
+def test_parse_ion_aliases():
+    pytest.importorskip("astropy")
+    from xstar_atomic import parse_ion
+
+    expected = (8, 8, "O")
+    for ion in ["O VIII", "o viii", "o_viii", "O_VIII", "O-VIII", "OVIII", "o8"]:
+        assert parse_ion(ion) == expected
+
+    assert parse_ion("Fe XXVI") == (26, 26, "Fe")
+    assert parse_ion("fexxvi") == (26, 26, "Fe")
+
 @needs_atdb
 def test_low_level_index_counts():
     from xstar_atomic import ATDB
@@ -52,6 +65,18 @@ def test_o8_lya_lines_high_level_api():
     assert wavelengths == [18.9671, 18.9725]
     assert {row["data_type"] for row in rows} == {50}
 
+
+
+
+@needs_atdb
+def test_o8_lya_line_ion_aliases_high_level_api():
+    from xstar_atomic import XSTARAtomic
+
+    db = XSTARAtomic(str(ATDB_PATH))
+    reference = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+    for ion in ["o viii", "o_viii", "O_VIII", "OVIII", "o8"]:
+        rows = db.lines(ion, wavelength=(18.8, 19.1), slim=True)
+        assert [round(r["wavelength_A"], 4) for r in rows] == [round(r["wavelength_A"], 4) for r in reference]
 
 @needs_atdb
 def test_o8_lya_collisions_high_level_api():

@@ -67,12 +67,65 @@ def roman_to_int(text: str) -> int:
     return total
 
 
+def _split_ion_string(text: str) -> Tuple[str, Optional[str]]:
+    """Split flexible ion strings into ``(element_symbol, stage_text)``.
+
+    Accepted examples include ``"O VIII"``, ``"o viii"``, ``"o_viii"``,
+    ``"O-VIII"``, ``"O.VIII"``, ``"OVIII"``, and ``"o8"``.
+    """
+    import re
+
+    original = text
+    t = str(text).strip()
+    if not t:
+        raise ValueError("Empty ion string")
+
+    # Normalize common separators to spaces.
+    t = re.sub(r"[_\-./]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    parts = t.split()
+
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+
+    token = parts[0]
+
+    # Compact forms: OVIII, O8, FeXXVI, Fe26.  Try a valid 2-letter
+    # element first, then a valid 1-letter element; this avoids parsing
+    # "OVIII" as the nonexistent element "Ov" + "III".
+    m = re.match(r"^([A-Za-z]{1,2})([0-9]+|[IVXLCDMivxlcdm]+)$", token)
+    if m:
+        prefix = m.group(1)
+        suffix = m.group(2)
+        if prefix.upper() in SYMBOL_TO_Z:
+            return prefix, suffix
+
+    m = re.match(r"^([A-Za-z])([0-9]+|[IVXLCDMivxlcdm]+)$", token)
+    if m:
+        return m.group(1), m.group(2)
+
+    # More general compact form where a two-letter valid element is followed
+    # by a roman/integer stage: FeXXVI, Mg12, SiXIV.
+    for nchar in (2, 1):
+        if len(token) > nchar:
+            prefix = token[:nchar]
+            suffix = token[nchar:]
+            if prefix.upper() in SYMBOL_TO_Z and re.match(r"^([0-9]+|[IVXLCDMivxlcdm]+)$", suffix):
+                return prefix, suffix
+
+    # Element only.
+    return token, None
+
+
 def parse_ion(ion: IonLike = None, *, element: Optional[Union[str, int]] = None, ion_stage: Optional[int] = None) -> Tuple[Optional[int], Optional[int], Optional[str]]:
     """Normalize ion input into ``(Z, ion_stage, element_symbol)``.
 
     Examples
     --------
     ``"O VIII"`` -> ``(8, 8, "O")``
+    ``"o viii"`` -> ``(8, 8, "O")``
+    ``"o_viii"`` -> ``(8, 8, "O")``
+    ``"OVIII"`` -> ``(8, 8, "O")``
     ``("O", 8)`` -> ``(8, 8, "O")``
     ``(8, 8)`` -> ``(8, 8, "O")``
     """
@@ -86,17 +139,13 @@ def parse_ion(ion: IonLike = None, *, element: Optional[Union[str, int]] = None,
                 raise ValueError("ion tuple must be (element, ion_stage)")
             element, stage = ion
         elif isinstance(ion, str):
-            parts = ion.replace("+", " ").split()
-            if len(parts) == 1:
-                element = parts[0]
-            elif len(parts) >= 2:
-                element = parts[0]
+            elem_text, stage_text = _split_ion_string(ion)
+            element = elem_text
+            if stage_text is not None:
                 try:
-                    stage = int(parts[1])
+                    stage = int(stage_text)
                 except ValueError:
-                    stage = roman_to_int(parts[1])
-            else:
-                raise ValueError(f"Could not parse ion string: {ion!r}")
+                    stage = roman_to_int(stage_text)
         else:
             raise TypeError("ion must be None, a string, or a 2-tuple")
 
@@ -105,13 +154,18 @@ def parse_ion(ion: IonLike = None, *, element: Optional[Union[str, int]] = None,
             z = int(element)
         else:
             s = str(element).strip()
+            if not s:
+                raise ValueError("Empty element string")
             if s.isdigit():
                 z = int(s)
             else:
-                symbol = s.capitalize()
+                symbol = s[0].upper() + s[1:].lower()
                 z = SYMBOL_TO_Z.get(symbol.upper())
                 if z is None:
                     raise ValueError(f"Unknown element: {element!r}")
+
+    if stage is not None:
+        stage = int(stage)
 
     if z is not None and symbol is None:
         # Avoid importing Z_TO_SYMBOL from __init__; hierarchy guarantees this map.
@@ -119,7 +173,6 @@ def parse_ion(ion: IonLike = None, *, element: Optional[Union[str, int]] = None,
         symbol = Z_TO_SYMBOL.get(z)
 
     return z, stage, symbol
-
 
 @dataclass(frozen=True)
 class AtomicSelection:

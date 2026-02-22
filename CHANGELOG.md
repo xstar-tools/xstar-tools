@@ -2,6 +2,12 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.1.5 - 2026-05-23
+
+### Added
+- Added flexible ion-name parsing in the high-level API. Accepted forms now include `O VIII`, `o viii`, `o_viii`, `O_VIII`, `O-VIII`, `OVIII`, and `o8`.
+- Added unit tests for ion-name aliases.
+
 ## v0.1.4 - 2026-02-21
 
 ### Added

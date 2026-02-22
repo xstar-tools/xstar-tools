@@ -175,3 +175,16 @@ See `CHANGELOG.md`.
 ## Development roadmap
 
 See `docs/TODO.md`.
+
+
+### Flexible ion names
+
+The high-level `XSTARAtomic` API accepts several common ion spellings:
+
+```python
+db.lines("O VIII", wavelength=(18.8, 19.1))
+db.lines("o viii", wavelength=(18.8, 19.1))
+db.lines("o_viii", wavelength=(18.8, 19.1))
+db.lines("OVIII", wavelength=(18.8, 19.1))
+db.lines("o8", wavelength=(18.8, 19.1))
+```

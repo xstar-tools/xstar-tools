@@ -20,4 +20,4 @@ __all__ = [
     "roman_to_int",
 ]
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
