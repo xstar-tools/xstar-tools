@@ -2,7 +2,21 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
-## v0.1.5 - 2026-05-23
+
+## v0.1.6 - 2026-02-23
+
+### Added
+- Added full user guide in Markdown: `docs/user_guide.md`.
+- Added full user guide in LaTeX: `docs/user_guide.tex`.
+- Added Sphinx documentation scaffold under `docs/sphinx/` using `sphinx.ext.autodoc`, `sphinx.ext.napoleon`, and the Read the Docs theme.
+- Added Sphinx pages for user guide, examples, API reference, development notes, and changelog.
+- Added `examples/06_high_level_api_quickstart.py`.
+- Added optional `docs` dependency group with `sphinx` and `sphinx-rtd-theme`.
+
+### Notes
+- Sphinx API pages are generated from Python docstrings. Future public functions/classes should include clear docstrings.
+
+## v0.1.5 - 2026-02-22
 
 ### Added
 - Added flexible ion-name parsing in the high-level API. Accepted forms now include `O VIII`, `o viii`, `o_viii`, `O_VIII`, `O-VIII`, `OVIII`, and `o8`.

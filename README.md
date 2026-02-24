@@ -188,3 +188,28 @@ db.lines("o_viii", wavelength=(18.8, 19.1))
 db.lines("OVIII", wavelength=(18.8, 19.1))
 db.lines("o8", wavelength=(18.8, 19.1))
 ```
+
+## User guide and documentation
+
+Full user guides are included in both Markdown and LaTeX:
+
+```text
+docs/user_guide.md
+docs/user_guide.tex
+```
+
+A Sphinx documentation scaffold using the Read the Docs theme is included under:
+
+```text
+docs/sphinx/
+```
+
+Build the Sphinx HTML documentation with:
+
+```bash
+python -m pip install -e .[docs]
+cd docs/sphinx
+make html
+```
+
+Sphinx API pages use `sphinx.ext.autodoc`, which reads Python docstrings from modules, classes, and functions. New public functions should include docstrings so they appear correctly in the generated API reference.

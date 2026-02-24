@@ -33,3 +33,33 @@ From the source tree:
 ```bash
 PYTHONPATH=src python examples/01_o8_lya_lines.py /path/to/xstar/data/atdb.fits
 ```
+
+## Sphinx documentation
+
+The package now includes a Sphinx documentation scaffold under:
+
+```text
+docs/sphinx/
+```
+
+Build it with:
+
+```bash
+python -m pip install -e .[docs]
+cd docs/sphinx
+make html
+```
+
+The HTML output will be created in:
+
+```text
+docs/sphinx/build/html/
+```
+
+The API pages use `sphinx.ext.autodoc`, so public modules/classes/functions should include docstrings. Inline comments are useful for maintainers, but Sphinx does not normally include them in the public API documentation.
+
+## High-level API example
+
+```bash
+PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/xstar/data/atdb.fits
+```
