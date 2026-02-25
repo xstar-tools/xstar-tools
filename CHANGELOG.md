@@ -2,6 +2,14 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.1.8 - 2026-02-25
+
+### Documentation
+- Added `\usepackage{amsmath,amssymb}` to the LaTeX user guide preamble for math support.
+
+
+All notable changes to `xstar-atomic` are documented here.
+
 ## v0.1.7 - 2026-02-24
 
 Fixed:
