@@ -2,6 +2,14 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.1.7 - 2026-02-24
+
+Fixed:
+- Restored backward-compatible high-level API keys used by the examples:
+  - `collisions()["matches"]` and `collisions()["evaluated_rates"]`.
+  - `emissivity()["rows"]`.
+  - `recombination()["summary"]`.
+- Updated example/API behavior so the examples work with the current return dictionaries.
 
 ## v0.1.6 - 2026-02-23
 

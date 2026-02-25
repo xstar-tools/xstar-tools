@@ -37,6 +37,8 @@ from .recombination import (
     make_source_rows as make_recombination_source_rows,
     make_cascade_rows,
     classify_recombination_records,
+    build_summary as build_recombination_summary,
+    choose_z as choose_recombination_z,
 )
 from .emissivity import (
     build_emissivity_rows,
@@ -330,9 +332,16 @@ class XSTARAtomic:
         selected = filter_collision_rows(summary_rows, args)
         keep = {r.get("record") for r in selected}
         eval_selected = [r for r in eval_rows if r.get("record") in keep]
-        out = {"summary": selected, "evaluated": eval_selected}
+        out = {
+            "summary": selected,
+            "evaluated": eval_selected,
+            # Backward-compatible aliases used by examples and early API tests.
+            "matches": selected,
+            "evaluated_rates": eval_selected,
+        }
         if include_grid:
-            out["grid"] = [r for r in grid_rows if r.get("record") in keep]
+            grid_selected = [r for r in grid_rows if r.get("record") in keep]
+            out["grid"] = grid_selected
         return out
 
     def recombination(
@@ -370,7 +379,41 @@ class XSTARAtomic:
             min_alpha,
             allow_charge_exchange_sources=allow_charge_exchange_sources,
         )
-        out = {"records": rows, "evaluated": eval_rows, "sources": source_rows}
+        summary_args = SimpleNamespace(
+            fitsfile=self.fitsfile,
+            element=sel.element if sel.element is not None else (str(sel.z) if sel.z is not None else None),
+            ion_stage=sel.ion_stage,
+            temperatures=list(temperatures),
+            electron_densities=list(electron_densities),
+            neutral_h_densities=list(neutral_h_densities),
+            include_charge_exchange=include_charge_exchange,
+            allow_charge_exchange_sources=allow_charge_exchange_sources,
+            source_mode=source_mode,
+            source_levels=",".join(str(v) for v in source_levels),
+            parent_population_scale=parent_population_scale,
+        )
+        summary = build_recombination_summary(rows, eval_rows, source_rows, summary_args, sel.z)
+        summary.update({
+            "cascade_mode": cascade_mode,
+            "n_cascade_source_rows": 0,
+            "n_cascade_path_rows": 0,
+            "cascade_max_depth": 50,
+            "cascade_min_probability": 0.0,
+            "counts_by_recombination_record_class": {},
+            "n_true_level_resolved_recombination_records_found": sum(
+                1 for r in rows if r.get("is_true_level_resolved_recombination")
+            ),
+            "cascade_warning": (
+                "radiative-branching cascade redistribution is an approximation; do not combine "
+                "original and cascade sources unless intentionally testing double-counting"
+            ),
+        })
+        from collections import Counter
+        summary["counts_by_recombination_record_class"] = dict(
+            Counter(str(r.get("recombination_record_class")) for r in rows)
+        )
+
+        out = {"records": rows, "evaluated": eval_rows, "sources": source_rows, "summary": summary}
         if cascade_mode == "radiative-branching":
             if sel.ion_stage is None:
                 raise ValueError("cascade_mode requires an ion-stage-specific selection")
@@ -378,6 +421,8 @@ class XSTARAtomic:
             cascade_sources, cascade_paths = make_cascade_rows(source_rows, line_rows)
             out["cascade_sources"] = cascade_sources
             out["cascade_paths"] = cascade_paths
+            summary["n_cascade_source_rows"] = len(cascade_sources)
+            summary["n_cascade_path_rows"] = len(cascade_paths)
         return out
 
     def emissivity(
@@ -423,4 +468,6 @@ class XSTARAtomic:
             "collisions": collision_summary,
             "collision_evaluations": collision_eval,
             "emissivity": emiss_rows,
+            # Backward-compatible alias used by examples and early API tests.
+            "rows": emiss_rows,
         }
