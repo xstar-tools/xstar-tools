@@ -17,35 +17,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
-from .hierarchy import ATDB, SYMBOL_TO_Z, summarize as hierarchy_summary
-from .lines import (
-    extract_levels,
-    extract_lines,
-    filter_lines,
-)
-from .photoionization import (
-    extract_photoionization,
-    filter_summaries as filter_photoionization_summaries,
-)
-from .collisions import (
-    extract_collisions,
-    filter_rows as filter_collision_rows,
-)
-from .recombination import (
-    extract_recombination_records,
-    evaluate_records as evaluate_recombination_records,
-    make_source_rows as make_recombination_source_rows,
-    make_cascade_rows,
-    classify_recombination_records,
-    build_summary as build_recombination_summary,
-    choose_z as choose_recombination_z,
-)
-from .emissivity import (
-    build_emissivity_rows,
-    filter_lines_for_query as filter_emissivity_lines,
-    filter_collision_rows as filter_emissivity_collision_rows,
-    summarize as emissivity_summary,
-)
+from .hierarchy import ATDB, SYMBOL_TO_Z
+
+# Heavy decoder modules are imported lazily inside XSTARAtomic methods.
+# This keeps ``import xstar_atomic`` lightweight and avoids runpy warnings when
+# executing submodules such as ``python -m xstar_atomic.collisions``.
 
 IonLike = Union[str, Tuple[str, int], Tuple[int, int], None]
 
@@ -248,10 +224,14 @@ class XSTARAtomic:
 
     def summary(self) -> dict:
         """Return a compact hierarchy summary for the database."""
+        from .hierarchy import summarize as hierarchy_summary
+
         return hierarchy_summary(self.records, self.elements, self.ions, self.db)
 
     def levels(self, ion: IonLike = None, *, element: Optional[Union[str, int]] = None, ion_stage: Optional[int] = None) -> list[dict]:
         """Decode level records for an element/ion selection."""
+        from .lines import extract_levels
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         return extract_levels(self.db, self.records, sel.z, sel.ion_stage)
 
@@ -270,6 +250,8 @@ class XSTARAtomic:
         slim: bool = False,
     ) -> list[dict]:
         """Return decoded radiative line records, optionally filtered."""
+        from .lines import extract_lines, filter_lines
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         rows = extract_lines(self.db, self.records, sel.z, sel.ion_stage)
         wmin, wmax = wavelength if wavelength is not None else (None, None)
@@ -293,6 +275,11 @@ class XSTARAtomic:
         include_grid: bool = False,
     ) -> Union[list[dict], dict]:
         """Return photoionization/bound-free summaries, optionally with grid rows."""
+        from .photoionization import (
+            extract_photoionization,
+            filter_summaries as filter_photoionization_summaries,
+        )
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         summaries, grids = extract_photoionization(self.db, self.records, sel.z, sel.ion_stage)
         tmin, tmax = threshold_ev if threshold_ev is not None else (None, None)
@@ -319,6 +306,8 @@ class XSTARAtomic:
         electron_density_for_lmixing: float = 1.0,
     ) -> dict:
         """Return collision summaries and evaluated rates."""
+        from .collisions import extract_collisions, filter_rows as filter_collision_rows
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         summary_rows, grid_rows, eval_rows = extract_collisions(
             self.db, self.records, sel.z, sel.ion_stage, temperatures,
@@ -366,6 +355,15 @@ class XSTARAtomic:
         cascade_mode: str = "none",
     ) -> dict:
         """Return recombination inventory/evaluations and optional source terms."""
+        from .recombination import (
+            extract_recombination_records,
+            evaluate_records as evaluate_recombination_records,
+            make_source_rows as make_recombination_source_rows,
+            make_cascade_rows,
+            classify_recombination_records,
+            build_summary as build_recombination_summary,
+        )
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         rows = extract_recombination_records(self.db, self.records, sel.z, sel.ion_stage)
         rows = classify_recombination_records(rows)
@@ -447,6 +445,15 @@ class XSTARAtomic:
         electron_density_for_lmixing: float = 1.0,
     ) -> dict:
         """Build a direct-excitation emissivity table for selected lines."""
+        from .lines import extract_lines
+        from .collisions import extract_collisions
+        from .emissivity import (
+            build_emissivity_rows,
+            filter_lines_for_query as filter_emissivity_lines,
+            filter_collision_rows as filter_emissivity_collision_rows,
+            summarize as emissivity_summary,
+        )
+
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         line_rows_all = extract_lines(self.db, self.records, sel.z, sel.ion_stage)
         args = SimpleNamespace(

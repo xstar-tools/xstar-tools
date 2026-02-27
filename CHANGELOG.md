@@ -2,6 +2,17 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+
+## v0.2.1 - 2026-02-27
+
+### Changed
+- Simplified ``xstar_atomic.__init__`` to expose only ``ATDB``, ``XSTARAtomic``, and ``__version__``.
+- Moved heavy decoder imports in ``api.py`` to lazy method-level imports.
+- Preserved submodule-level imports such as ``xstar_atomic.collisions`` and ``xstar_atomic.recombination``.
+
+### Fixed
+- Avoids ``runpy`` warnings when executing CLI modules with ``python -m xstar_atomic.<module>`` after importing the package.
+
 ## v0.2.0 - 2026-02-26
 
 ### Added
