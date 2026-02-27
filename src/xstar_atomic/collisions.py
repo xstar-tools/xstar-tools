@@ -31,7 +31,7 @@ Implemented/decoded data types
        - XSTAR ucalc.f90: type 63
        - level mapping inferred from final integer fields
        - v2 evaluates nf != ni and |Delta l|=1 by translating anl1/erc
-       - same-n l-changing/amcrs branch remains diagnostic-only
+       - same-n l-changing/amcrs branch is evaluated with the ecm=0 velimp branch
 
   98 : CHIANTI 2016 Burgess-Tully effective collision strengths
        - XSTAR ucalc.f90: type 98
@@ -715,6 +715,154 @@ def erc_py(n: int, m: int, temp_k: float, ic: int, a_sum: float) -> Tuple[float,
     return float(max(0.0, se)), float(max(0.0, sd))
 
 
+
+def xstar_e1_from_scaled(x: float) -> float:
+    """Return E1(x) from XSTAR's scaled expint approximation."""
+    x = float(x)
+    if x <= 0.0:
+        return float("inf")
+    return expint_scaled_py(x) / max(1.0e-300, x * xstar_expo(x))
+
+
+def velimp_py(n: int, l: int, temp: float, ic: int, z1: float, rm: float, ne: float, sum_a: float) -> float:
+    """Translate the ecm=0 branch of XSTAR velimp.f90.
+
+    This is used by the type-63 same-n l-mixing branch through amcrs.f90.
+    It returns the l -> l-1 l-changing collision coefficient in cm^3/s-like
+    XSTAR units.  The density enters only through the impact-parameter cutoff.
+    """
+    n = int(n); l = int(l); ic = int(ic)
+    temp = float(temp); z1 = float(z1); rm = float(rm); ne = float(ne); sum_a = float(sum_a)
+    if n <= 0 or l <= 0 or l >= n or ic <= 0 or temp <= 0.0 or rm <= 0.0 or ne <= 0.0 or sum_a <= 0.0:
+        return 0.0
+    den = l * (n*n - l*l) + (l + 1) * (n*n - (l + 1)*(l + 1))
+    dnl = 6.0 * z1 / ic * z1 / ic * n*n * (n*n - l*l - l - 1)
+    if den <= 0.0 or dnl <= 0.0:
+        return 0.0
+    pi = 2.0 * math.acos(0.0)
+    pa = 0.72 / sum_a
+    pd = 6.90 * math.sqrt(temp / ne)
+    alfa = 3.297e-12 * rm / temp
+    b = 1.157 * math.sqrt(dnl)
+    bb = b*b
+    va = pd / pa
+    vd = b / pd
+    if va <= 0.0 or vd <= 0.0 or alfa <= 0.0:
+        return 0.0
+    vb = math.sqrt(va * vd)
+    ava = alfa * va*va
+    avb = alfa * vb*vb
+    avd = alfa * vd*vd
+    xa = xstar_expo(-ava)
+    xb = xstar_expo(-avb)
+    xd = xstar_expo(-avd)
+    ea = xstar_e1_from_scaled(ava) if ava < 50.0 else 0.0
+    eb = xstar_e1_from_scaled(avb)
+    ed = xstar_e1_from_scaled(avd) if avd < 50.0 else 0.0
+    if va > vd:
+        if avb > 1.0e-3:
+            cn = math.sqrt(pi*alfa) * (pa*pa*(2.0/alfa/alfa - xb*(vb**4 + 2.0*vb*vb/alfa + 2.0/alfa/alfa)) + bb*xb + 2.0*bb*eb - bb*ea)
+        else:
+            cn = math.sqrt(pi*alfa) * bb * (1.0 + avb*(1.0/3.0 - avb/4.0) + 2.0*eb - ea)
+    else:
+        if ava > 1.0e-3:
+            ca = math.sqrt(pi*alfa) * pa*pa * (2.0/alfa/alfa - xa*(va**4 + 2.0*va*va/alfa + 2.0/alfa/alfa))
+        else:
+            ca = math.sqrt(pi*alfa) * pd*pd * va**4 * alfa * (1.0/3.0 - ava/4.0 + ava*ava/10.0)
+        cad = math.sqrt(pi*alfa) * pd*pd / alfa * (xa*(1.0 + ava) - xd*(1.0 + avd))
+        cd = math.sqrt(pi*alfa) * bb * (xd + ed)
+        cn = ca + cad + cd
+    cn = cn * l * (n*n - l*l) / den
+    if not math.isfinite(cn):
+        return 0.0
+    return float(max(0.0, cn))
+
+
+def evaluate_type63_same_n_lmixing(
+    ni: int,
+    li: int,
+    nf: int,
+    lf: int,
+    iq: int,
+    temperature_k: float,
+    electron_density_cm3: float = 1.0,
+    g_lower: Optional[float] = None,
+    g_upper: Optional[float] = None,
+) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
+    """Evaluate XSTAR ucalc.f90 type-63 same-n l-changing branch.
+
+    The branch calls amcrs with ecm forced to zero, which reduces to the
+    Pengelly-Seaton/Hummer-Storey impact-parameter cutoff implemented in
+    velimp.f90.  The returned rates are resolved between the two adjacent-l
+    sublevels using the same detailed-balance convention as XSTAR.
+    """
+    diag = {
+        "type63_case": "same_n_lmixing",
+        "type63_reason": "",
+        "type63_same_n_sum_A": None,
+        "type63_same_n_cn_l_high_to_low_cm3_s": None,
+        "type63_same_n_lii": None,
+        "type63_same_n_lff": None,
+        "type63_same_n_ne_cm^-3": electron_density_cm3,
+        "type63_iq": iq,
+    }
+    vals = [ni, li, nf, lf, iq]
+    if any(v is None for v in vals):
+        diag["type63_reason"] = "missing quantum numbers or ionic charge"
+        return None, None, None, diag
+    ni = int(ni); nf = int(nf); li = int(li); lf = int(lf); iq = int(iq)
+    if ni <= 0 or nf <= 0 or li < 0 or lf < 0 or iq <= 0:
+        diag["type63_reason"] = "invalid quantum numbers or ionic charge"
+        return None, None, None, diag
+    if nf != ni:
+        diag["type63_reason"] = "not_same_n"
+        return None, None, None, diag
+    if abs(lf - li) != 1:
+        diag["type63_reason"] = "same_n_delta_l_not_equal_1"
+        return None, None, None, diag
+    if temperature_k <= 0.0 or electron_density_cm3 <= 0.0:
+        diag["type63_reason"] = "nonpositive_temperature_or_density"
+        return None, None, None, diag
+    lff = min(lf, li)
+    lii = max(lf, li)
+    li1 = max(1, lff)
+    sum_a = 0.0
+    for nn in range(li1, ni):
+        if lii >= 1:
+            _alm, alp = anl1_py(ni, nn, lii - 1, iq)
+            sum_a += alp
+        if nn > lii + 1:
+            alm, _alp = anl1_py(ni, nn, lii + 1, iq)
+            sum_a += alm
+    diag["type63_same_n_sum_A"] = sum_a
+    diag["type63_same_n_lii"] = lii
+    diag["type63_same_n_lff"] = lff
+    if sum_a <= 0.0:
+        diag["type63_reason"] = "nonpositive_same_n_radiative_sum"
+        return None, None, sum_a, diag
+    psi = 0.75 / (iq*iq) * lii / (2.0*lii + 1.0) * ni*ni * (ni*ni - lii*lii)
+    # XSTAR ucalc passes tbig=t*1e4 because its internal temperature variable
+    # is scaled.  Here the API temperature is already Kelvin, so pass it through.
+    cn = velimp_py(ni, lii, temperature_k, iq, 1.0, 1800.0, electron_density_cm3, sum_a)
+    diag["type63_same_n_cn_l_high_to_low_cm3_s"] = cn
+    diag["type63_same_n_psi"] = psi
+    if cn <= 0.0:
+        diag["type63_reason"] = "nonpositive_same_n_lmixing_rate"
+        return None, None, sum_a, diag
+    gl = float(g_lower) if g_lower not in (None, 0, 0.0) else float(2*lff + 1)
+    gu = float(g_upper) if g_upper not in (None, 0, 0.0) else float(2*lii + 1)
+    # cn is for l_high -> l_low.  The reverse low-l -> high-l rate follows
+    # the XSTAR detailed-balance factor.  Map this onto the energy-ordered
+    # lower->upper / upper->lower convention used by xstar-atomic.
+    if li > lf:  # lower level has higher l, upper has lower l
+        q_lower_to_upper = cn
+        q_upper_to_lower = cn * gl / gu if gu != 0.0 else None
+    else:        # lower level has lower l, upper has higher l
+        q_upper_to_lower = cn
+        q_lower_to_upper = cn * gu / gl if gl != 0.0 else None
+    diag["type63_reason"] = "evaluated_same_n_lmixing_amcrs_velimp"
+    return q_lower_to_upper, q_upper_to_lower, sum_a, diag
+
 def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temperature_k: float) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
     """Evaluate XSTAR ucalc.f90 type-63 branch for nf != ni and |lf-li|=1.
 
@@ -950,7 +1098,8 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
         "type63_capability": (
             "not_type63" if r.data_type != 63 else
             "missing_quantum_numbers" if None in (n_lower, l_lower, n_upper, l_upper, type63_iq) else
-            "type63_same_n_lmixing_not_yet_implemented" if int(n_lower) == int(n_upper) else
+            "type63_same_n_lmixing_evaluable" if int(n_lower) == int(n_upper) and abs(int(l_upper) - int(l_lower)) == 1 else
+            "same_n_delta_l_not_equal_1" if int(n_lower) == int(n_upper) else
             "delta_l_not_equal_1" if abs(int(l_upper) - int(l_lower)) != 1 else
             "type63_nf_ne_ni_delta_l_1_evaluable"
         ),
@@ -968,7 +1117,7 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
     return summary, grid_rows
 
 
-def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record: List[dict]) -> dict:
+def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record: List[dict], electron_density_cm3: float = 1.0) -> dict:
     dt = int(row["data_type"])
     ups = None
     q_exc = None
@@ -1009,17 +1158,33 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         if ups is None:
             diagnostic = "missing_or_invalid_BT_inputs"
     elif dt == 63:
-        q_exc, q_deexc, _sum_a, diag = evaluate_type63_nf_ne_ni(
-            row.get("n_lower"),
-            row.get("l_lower"),
-            row.get("n_upper"),
-            row.get("l_upper"),
-            row.get("type63_iq"),
-            temperature_k,
-        )
-        method = diag.get("type63_reason") or "type63_not_evaluated"
-        if method in ("evaluated", "evaluated_with_explicit_branch_selector"):
-            method = "type63_anl1_erc_nf_ne_ni_delta_l_1"
+        if row.get("n_lower") is not None and row.get("n_upper") is not None and int(row.get("n_lower")) == int(row.get("n_upper")):
+            q_exc, q_deexc, _sum_a, diag = evaluate_type63_same_n_lmixing(
+                row.get("n_lower"),
+                row.get("l_lower"),
+                row.get("n_upper"),
+                row.get("l_upper"),
+                row.get("type63_iq"),
+                temperature_k,
+                electron_density_cm3=electron_density_cm3,
+                g_lower=row.get("g_lower"),
+                g_upper=row.get("g_upper"),
+            )
+            method = diag.get("type63_reason") or "type63_same_n_not_evaluated"
+            if method == "evaluated_same_n_lmixing_amcrs_velimp":
+                method = "type63_same_n_lmixing_amcrs_velimp"
+        else:
+            q_exc, q_deexc, _sum_a, diag = evaluate_type63_nf_ne_ni(
+                row.get("n_lower"),
+                row.get("l_lower"),
+                row.get("n_upper"),
+                row.get("l_upper"),
+                row.get("type63_iq"),
+                temperature_k,
+            )
+            method = diag.get("type63_reason") or "type63_not_evaluated"
+            if method in ("evaluated", "evaluated_with_explicit_branch_selector"):
+                method = "type63_anl1_erc_nf_ne_ni_delta_l_1"
         diagnostic = diag.get("type63_reason", "")
         extra_diag = diag
     else:
@@ -1054,6 +1219,7 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         "delta_e_eV": row["delta_e_level_eV"],
         "wavelength_A": row["wavelength_from_levels_A"],
         "temperature_K": temperature_k,
+        "electron_density_for_lmixing_cm^-3": electron_density_cm3,
         "upsilon": ups,
         "q_excitation_cm3_s": q_exc,
         "q_deexcitation_cm3_s": q_deexc,
@@ -1072,13 +1238,19 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         "type63_n_upper_shell",
         "type63_se_shell_cm3_s",
         "type63_sd_shell_cm3_s",
+        "type63_same_n_sum_A",
+        "type63_same_n_cn_l_high_to_low_cm3_s",
+        "type63_same_n_lii",
+        "type63_same_n_lff",
+        "type63_same_n_ne_cm^-3",
+        "type63_same_n_psi",
     ):
         if key in extra_diag:
             out[key] = extra_diag[key]
     return out
 
 
-def extract_collisions(db: ATDB, records: List[IndexedRecord], z: Optional[int], ion_stage: Optional[int], temperatures: Sequence[float]) -> Tuple[List[dict], List[dict], List[dict]]:
+def extract_collisions(db: ATDB, records: List[IndexedRecord], z: Optional[int], ion_stage: Optional[int], temperatures: Sequence[float], electron_density_cm3: float = 1.0) -> Tuple[List[dict], List[dict], List[dict]]:
     levels = extract_levels(db, records, z, ion_stage)
     level_by_index, labels, energies, gs = level_maps(levels)
 
@@ -1119,7 +1291,7 @@ def extract_collisions(db: ATDB, records: List[IndexedRecord], z: Optional[int],
     if temperatures:
         for row in summary_rows:
             for T in temperatures:
-                eval_rows.append(evaluate_collision_row(row, float(T), grid_by_record.get(row["record"], [])))
+                eval_rows.append(evaluate_collision_row(row, float(T), grid_by_record.get(row["record"], []), electron_density_cm3=electron_density_cm3))
 
     return summary_rows, grid_rows, eval_rows
 
@@ -1170,6 +1342,7 @@ def main() -> None:
     p.add_argument("--energy-min-kev", type=float)
     p.add_argument("--energy-max-kev", type=float)
     p.add_argument("--temperatures", nargs="*", type=float, default=[], help="Temperatures in Kelvin for q_ij evaluation")
+    p.add_argument("--electron-density", type=float, default=1.0, help="Electron density cm^-3 used only for type-63 same-n l-mixing cutoff")
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--summary-csv")
     p.add_argument("--grid-csv")
@@ -1179,7 +1352,7 @@ def main() -> None:
     z = choose_z(args.element)
     db = ATDB(Path(args.fitsfile), load_reals=True)
     records, elements, ions = db.build_index()
-    summary_rows, grid_rows, eval_rows = extract_collisions(db, records, z, args.ion_stage, args.temperatures)
+    summary_rows, grid_rows, eval_rows = extract_collisions(db, records, z, args.ion_stage, args.temperatures, electron_density_cm3=args.electron_density)
 
     if args.summary_csv:
         write_csv(args.summary_csv, summary_rows)
@@ -1218,6 +1391,7 @@ def main() -> None:
                 "energy_min_keV": args.energy_min_kev,
                 "energy_max_keV": args.energy_max_kev,
                 "temperatures_K": args.temperatures,
+                "electron_density_for_lmixing_cm^-3": args.electron_density,
             },
             "n_matches": len(filtered),
             "matches": filtered[:args.limit],

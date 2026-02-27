@@ -385,6 +385,7 @@ def main() -> None:
     p.add_argument("--element", required=True, help="Element symbol or Z, e.g. O or 8")
     p.add_argument("--ion-stage", type=int, required=True, help="Ion stage, e.g. 8 for O VIII")
     p.add_argument("--temperatures", type=float, nargs="+", default=[1e6, 3e6, 1e7], help="Temperatures in K")
+    p.add_argument("--electron-density-for-lmixing", type=float, default=1.0, help="Electron density cm^-3 used only for type-63 same-n l-mixing cutoff")
 
     p.add_argument("--lower-level", type=int)
     p.add_argument("--upper-level", type=int)
@@ -421,7 +422,8 @@ def main() -> None:
     line_rows = filter_lines_for_query(all_line_rows, args)
 
     collision_summary, collision_grid, collision_eval = extract_collisions(
-        db, records, z, args.ion_stage, args.temperatures
+        db, records, z, args.ion_stage, args.temperatures,
+        electron_density_cm3=args.electron_density_for_lmixing,
     )
     collision_summary = filter_collision_rows(collision_summary, args)
     # Filter eval rows consistently with selected collision records.

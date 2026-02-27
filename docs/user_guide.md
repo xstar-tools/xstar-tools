@@ -327,3 +327,29 @@ Recommended near-term development priorities:
 3. Add sparse-matrix support to the level-population solver.
 4. Validate line rates and emissivities against XSTAR output, AtomDB/APEC where applicable, and published benchmarks.
 5. Add more tests for Fe K, Fe UTA, Ne X, Mg XII, and Si XIV workflows.
+
+
+## Collision decoder coverage
+
+The collision module evaluates the following XSTAR ATDB collision paths:
+
+| data_type | Meaning | Status |
+|---:|---|---|
+| 51 | Burgess--Tully scaled OP/CHIANTI collision strengths | evaluated |
+| 56 | tabulated effective collision strengths | evaluated |
+| 63 | Bautista algorithmic `n,l` collisions | evaluated for `n_f != n_i, |\Delta l|=1` and same-`n` l-mixing |
+| 98 | CHIANTI-2016-style Burgess--Tully scaled collision strengths | evaluated |
+
+Same-`n` type-63 l-mixing follows the XSTAR `amcrs`/`velimp` ecm=0 branch. Because this branch uses an impact-parameter cutoff, provide `electron_density_for_lmixing` when calling the high-level API if the default `1 cm^-3` is not appropriate.
+
+```python
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic("xstar/data/atdb.fits")
+rates = db.collisions(
+    "O VIII",
+    data_type=63,
+    temperatures=[1e6],
+    electron_density_for_lmixing=1.0,
+)
+```

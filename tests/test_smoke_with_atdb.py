@@ -123,3 +123,23 @@ def test_o_recombination_inventory_high_level_api():
     assert summary["counts_by_source_kind"]["electron_recombination"] == 14
     assert summary["counts_by_source_kind"]["charge_exchange_H0"] == 4
     assert summary["n_true_level_resolved_recombination_records_found"] == 0
+
+
+@needs_atdb
+def test_type63_same_n_lmixing_high_level_api():
+    from xstar_atomic import XSTARAtomic
+
+    db = XSTARAtomic(str(ATDB_PATH))
+    result = db.collisions(
+        "O VIII",
+        data_type=63,
+        temperatures=[1e6],
+        electron_density_for_lmixing=1.0,
+    )
+    rates = result["evaluated_rates"]
+    assert any(row.get("eval_method") == "type63_same_n_lmixing_amcrs_velimp" for row in rates)
+    assert any(
+        row.get("eval_method") == "type63_same_n_lmixing_amcrs_velimp"
+        and row.get("q_excitation_cm3_s") is not None
+        for row in rates
+    )

@@ -351,4 +351,25 @@ Recommended near-term development priorities are:
 \item Add more tests for Fe K, Fe UTA, Ne X, Mg XII, and Si XIV workflows.
 \end{enumerate}
 
+
+\section{Collision Decoder Coverage}
+
+The collision module evaluates the following XSTAR ATDB collision paths:
+
+egin{center}
+egin{tabular}{rll}
+\hline
+Data type & Meaning & Status\\
+\hline
+51 & Burgess--Tully scaled OP/CHIANTI collision strengths & evaluated\\
+56 & Tabulated effective collision strengths & evaluated\\
+63 & Bautista algorithmic $n,l$ collisions & evaluated\\
+98 & CHIANTI-2016-style Burgess--Tully collision strengths & evaluated\\
+\hline
+\end{tabular}
+\end{center}
+
+For data type 63, both the $n_f 
+eq n_i$, $|\Delta l|=1$ branch and the same-$n$ $l$-mixing branch are evaluated.  The same-$n$ branch follows the XSTAR 	exttt{amcrs}/	exttt{velimp} ecm=0 logic and depends weakly on electron density through the impact-parameter cutoff.
+
 \end{document}

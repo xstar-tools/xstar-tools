@@ -213,3 +213,14 @@ make html
 ```
 
 Sphinx API pages use `sphinx.ext.autodoc`, which reads Python docstrings from modules, classes, and functions. New public functions should include docstrings so they appear correctly in the generated API reference.
+
+### Collision decoder status
+
+`xstar-atomic` currently evaluates the main supported collision-rate paths:
+
+- `data_type=56`: tabulated effective collision strengths, interpolated in `log10(T/K)`.
+- `data_type=63`: Bautista `n,l` algorithmic collisions, including both `n_f != n_i, |\Delta l|=1` and same-`n` l-mixing through the XSTAR `amcrs`/`velimp` branch.
+- `data_type=51`: Burgess--Tully scaled collision strengths.
+- `data_type=98`: CHIANTI-2016-style Burgess--Tully scaled collision strengths.
+
+Same-`n` l-mixing depends weakly on the electron density through the impact-parameter cutoff. In the Python API, pass `electron_density_for_lmixing=...` to `collisions()` or `emissivity()` when this matters.

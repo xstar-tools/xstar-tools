@@ -753,8 +753,12 @@ def main() -> None:
     all_lines = extract_lines(db, records, z, args.ion_stage)
     output_lines = select_output_lines(all_lines, args)
 
-    # Collision decoder evaluates at all requested temperatures once, independent of ne.
-    collisions, _collision_grid, collision_eval = extract_collisions(db, records, z, args.ion_stage, args.temperatures)
+    # Collision decoder evaluates at all requested temperatures once.  Most q_ij are density-independent;
+    # type-63 same-n l-mixing uses this density only for the impact-parameter cutoff.
+    lmix_ne = args.electron_density_for_lmixing if args.electron_density_for_lmixing is not None else float(args.electron_densities[0])
+    collisions, _collision_grid, collision_eval = extract_collisions(
+        db, records, z, args.ion_stage, args.temperatures, electron_density_cm3=lmix_ne
+    )
 
     level_indices_initial = build_level_set(levels, all_lines, collisions, args)
     level_set_initial = set(level_indices_initial)

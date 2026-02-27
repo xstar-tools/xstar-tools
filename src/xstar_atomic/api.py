@@ -316,10 +316,14 @@ class XSTARAtomic:
         upper_level: Optional[int] = None,
         data_type: Optional[int] = None,
         include_grid: bool = False,
+        electron_density_for_lmixing: float = 1.0,
     ) -> dict:
         """Return collision summaries and evaluated rates."""
         sel = self.select(ion, element=element, ion_stage=ion_stage)
-        summary_rows, grid_rows, eval_rows = extract_collisions(self.db, self.records, sel.z, sel.ion_stage, temperatures)
+        summary_rows, grid_rows, eval_rows = extract_collisions(
+            self.db, self.records, sel.z, sel.ion_stage, temperatures,
+            electron_density_cm3=electron_density_for_lmixing,
+        )
         args = SimpleNamespace(
             data_type=data_type,
             lower_level=lower_level,
@@ -440,6 +444,7 @@ class XSTARAtomic:
         include_two_photon: bool = False,
         include_superlevel_radiative: bool = False,
         collision_data_type: Optional[int] = None,
+        electron_density_for_lmixing: float = 1.0,
     ) -> dict:
         """Build a direct-excitation emissivity table for selected lines."""
         sel = self.select(ion, element=element, ion_stage=ion_stage)
@@ -457,7 +462,10 @@ class XSTARAtomic:
             collision_data_type=collision_data_type,
         )
         line_rows = filter_emissivity_lines(line_rows_all, args)
-        collision_summary, _collision_grid, collision_eval = extract_collisions(self.db, self.records, sel.z, sel.ion_stage, temperatures)
+        collision_summary, _collision_grid, collision_eval = extract_collisions(
+            self.db, self.records, sel.z, sel.ion_stage, temperatures,
+            electron_density_cm3=electron_density_for_lmixing,
+        )
         collision_summary = filter_emissivity_collision_rows(collision_summary, args)
         keep = {r.get("record") for r in collision_summary}
         collision_eval = [r for r in collision_eval if r.get("record") in keep]
