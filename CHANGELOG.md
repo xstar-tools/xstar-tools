@@ -2,6 +2,10 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.2 - 2026-02-28
+
+### Fixed
+- Corrected LaTeX backslash corruption in `docs/user_guide.tex` for the `center` and `tabular` environments.
 
 ## v0.2.1 - 2026-02-27
 

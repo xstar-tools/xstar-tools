@@ -5,4 +5,4 @@ from .api import XSTARAtomic
 
 __all__ = ["ATDB", "XSTARAtomic"]
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
