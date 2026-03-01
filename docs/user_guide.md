@@ -353,3 +353,24 @@ rates = db.collisions(
     electron_density_for_lmixing=1.0,
 )
 ```
+
+
+## Collision-decoder validation
+
+The package includes a validation helper for the currently difficult collision
+rate decoders: type 51, type 98, and the same-`n` branch of type 63.  The helper
+can inventory ATDB records, find representative ions with positive evaluated
+rate coefficients, and run regression diagnostics for O VIII type-63 l-mixing.
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
+  --inventory --find-targets --data-types 51 98
+
+PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
+  --type63-same-n --element O --ion-stage 8 \
+  --temperatures 1e6 --electron-density 1.0
+```
+
+The type-63 same-`n` diagnostic is a regression check of the Python port of the
+XSTAR `amcrs/velimp` branch.  It should still be compared against XSTAR model
+outputs before production use.

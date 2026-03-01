@@ -67,3 +67,12 @@ Prototype solver
    :members:
    :undoc-members:
    :show-inheritance:
+
+
+Validation helpers
+------------------
+
+.. automodule:: xstar_atomic.validation
+   :members:
+   :undoc-members:
+   :show-inheritance:

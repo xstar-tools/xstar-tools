@@ -372,4 +372,26 @@ Data type & Meaning & Status\\
 For data type 63, both the $n_f 
 eq n_i$, $|\Delta l|=1$ branch and the same-$n$ $l$-mixing branch are evaluated.  The same-$n$ branch follows the XSTAR 	exttt{amcrs}/	exttt{velimp} ecm=0 logic and depends weakly on electron density through the impact-parameter cutoff.
 
+
+\section{Collision-Decoder Validation}
+
+The package includes validation helpers for the collision-rate decoders that are
+most important for the next development stage: data types 51, 98, and the
+same-$n$ branch of data type 63.  The validation command can inventory ions,
+find representative records with positive evaluated rate coefficients, and run
+an O~VIII type-63 same-$n$ l-mixing regression diagnostic.
+
+\begin{verbatim}
+PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
+  --inventory --find-targets --data-types 51 98
+
+PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
+  --type63-same-n --element O --ion-stage 8 \
+  --temperatures 1e6 --electron-density 1.0
+\end{verbatim}
+
+The type-63 same-$n$ diagnostic checks the Python port of the XSTAR
+\texttt{amcrs/velimp} branch.  It is a regression diagnostic, not a substitute
+for comparison against XSTAR model outputs.
+
 \end{document}

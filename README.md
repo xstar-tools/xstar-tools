@@ -140,6 +140,30 @@ print(emiss["summary"])
 
 The low-level `ATDB` API remains available for direct packed-FITS access, while `XSTARAtomic` is the recommended science-facing wrapper for rates, emissivities, and solver-related workflows.
 
+
+## Collision-decoder validation tools
+
+`xstar-atomic` includes a validation helper for collision-rate decoder development.
+It can inventory ions containing selected collision data types, find representative
+evaluable records, and run a type-63 same-`n` l-mixing diagnostic.
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.validation ../xstar/data/atdb.fits \
+  --inventory \
+  --find-targets \
+  --data-types 51 98 \
+  --targets-csv collision_type51_98_targets.csv
+
+PYTHONPATH=src python -m xstar_atomic.validation ../xstar/data/atdb.fits \
+  --type63-same-n \
+  --element O \
+  --ion-stage 8 \
+  --temperatures 1e6 \
+  --electron-density 1.0
+```
+
+The same checks are available in `examples/07_collision_decoder_validation.py`.
+
 ## Testing
 
 Run metadata/layout tests without the XSTAR database:

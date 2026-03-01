@@ -2,6 +2,19 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.3 - 2026-03-01
+
+### Added
+- Added `xstar_atomic.validation` with collision-decoder inventory and validation helpers.
+- Added CLI entry point `xstar-atomic-validate-collisions`.
+- Added `examples/07_collision_decoder_validation.py` for type 51/98 target discovery and type-63 same-`n` diagnostics.
+- Added real-ATDB pytest checks for:
+  - O VIII type-63 same-`n` l-mixing regression diagnostics.
+  - Type 51 and type 98 inventory plus representative positive-rate targets when present in the local `atdb.fits`.
+
+### Notes
+- The type-63 same-`n` diagnostic checks the Python port of the XSTAR `amcrs/velimp` branch, but independent validation against XSTAR model outputs is still recommended for production science.
+
 ## v0.2.2 - 2026-02-28
 
 ### Fixed
