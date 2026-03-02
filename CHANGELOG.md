@@ -2,6 +2,12 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.4 - 2026-03-02
+
+### Fixed
+- Cleaned reStructuredText in module docstrings for the Sphinx API build.
+- Fixed docutils warnings/errors in `photoionization`, `collisions`, and `recombination` module documentation.
+
 ## v0.2.3 - 2026-03-01
 
 ### Added

@@ -1,46 +1,38 @@
 #!/usr/bin/env python3
-"""
-xstar_atomic_extract_photoionization_v1.py
+"""Photoionization and bound-free record extraction for XSTAR ``atdb.fits``.
 
-Decode/export first-pass photoionization / bound-free records from XSTAR's
-packed atdb.fits database.
+This module decodes a conservative subset of photoionization-like
+records from the packed XSTAR atomic database.  It currently focuses on
+the formats used by XSTAR ``ucalc.f90`` for data types 49, 53, and 59.
 
-This script builds on xstar_atomic_hierarchy.py and xstar_atomic_extract_lines_v2.py.
-It is intentionally conservative: it names only fields that are visible in
-XSTAR's ucalc.f90 for data types 49, 53, and 59.
+Decoded formats
+---------------
 
-Main decoded formats
---------------------
-Data type 53, rate type 7: OP photoionization cross sections
-Data type 49, rate type 7: OP inner-shell photoionization cross sections
-    rdat = pairs of (energy_offset_Ryd, sigma_in_1e-18_cm2)
-    sigma_cm2 = sigma_raw * 1e-18
-    photon_energy_eV ~= threshold_eV + max(0, energy_offset_Ryd)*13.605692
-    threshold_eV is taken from the lower level record:
-        ionization_potential_eV - level_energy_eV
+* Data type 53, rate type 7: OP photoionization cross sections.
+* Data type 49, rate type 7: OP inner-shell photoionization cross sections.
+* Data type 59: Verner-style photoionization coefficients.
 
-Data type 59, rate type 1/7: Verner photoionization coefficients
-    nreal=9 format visible in ucalc.f90:
-        [E_th, E_max, E0, sigma0, ya, p, yw, y0, y1]
-    sigma(E) = sigma0 * F(E/E0, ya, p, yw, y0, y1) * 1e-18 cm2
-    This script exports coefficients and can sample the formula.
+For tabulated type-49 and type-53 records, the real array is interpreted
+as pairs of energy offset in Rydberg and cross section in megabarns.
+The cross section is converted to square centimeters using
+``sigma_cm2 = sigma_raw * 1e-18``.
+
+For type-59 records, the module exports the coefficient form and can
+sample the Verner analytic formula.
 
 Examples
 --------
-# Summary for O VIII
-python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 --summary
 
-# Export one-row-per-PI-record summary and one-row-per-grid-point table
-python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 \
-  --summary-csv o8_pi_summary.csv \
-  --grid-csv o8_pi_grid.csv
+Run a summary for O VIII::
 
-# Search threshold-energy range
-python xstar_atomic_extract_photoionization_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 --search \
-  --threshold-min-ev 100 --threshold-max-ev 900
+    python -m xstar_atomic.photoionization atdb.fits --element O --ion-stage 8 --summary
+
+Export summary and grid tables::
+
+    python -m xstar_atomic.photoionization atdb.fits \
+        --element O --ion-stage 8 \
+        --summary-csv o8_pi_summary.csv \
+        --grid-csv o8_pi_grid.csv
 """
 
 from __future__ import annotations

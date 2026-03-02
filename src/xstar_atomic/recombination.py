@@ -1,81 +1,41 @@
 #!/usr/bin/env python3
-"""
-xstar_atomic_extract_recombination_v3.py
+"""Recombination, charge-exchange, and cascade-source tools.
 
-Third-pass recombination, charge-exchange, and cascade-source extractor for XSTAR's packed atdb.fits.
+This module inventories and evaluates recombination-like records from
+XSTAR's packed ``atdb.fits`` database.  It separates electron
+radiative/dielectronic recombination from charge exchange with neutral
+hydrogen, and it can generate prototype level-source CSV files for the
+level-population solver.
 
-Purpose
--------
-This script inventories and evaluates recombination-like XSTAR Atomic records and
-can produce a level-source CSV compatible with
-`xstar_atomic_level_population_solver_v2.py --recombination-source-csv`.
+Implemented record classes
+--------------------------
 
-This is intentionally conservative.  Many XSTAR records are total ion
-recombination rates rather than level-resolved cascade feeds.  Where a record is
-not level-resolved, this script can either:
-  * keep it as an evaluated total record only, or
-  * make a clearly labeled approximate source allocation to solver levels.
+* Type 1: total radiative recombination, Aldrovandi and Pequignot.
+* Type 2: charge exchange with neutral hydrogen, Kingdon and Ferland.
+* Type 7, 8, and 22: total dielectronic recombination fits.
+* Type 30: hydrogenic total radiative recombination.
+* Type 37: Fe 3pq total dielectronic recombination.
+* Type 38: Badnell total radiative recombination.
+* Type 39: Badnell total dielectronic recombination.
 
-Implemented/evaluated data types
---------------------------------
-  1  : total radiative recombination, Aldrovandi & Pequignot
-       alpha = A / T4**eta
-
-  7  : total dielectronic recombination, Aldrovandi & Pequignot
-       alpha = A * 1e-6 * exp(-T0/T4) * (1 + B exp(-T1/T4)) / (T4 sqrt(T4))
-
-  8  : total dielectronic recombination, Arnaud & Raymond style 4-term fit
-
-  22 : total dielectronic recombination, Storey fit
-
-  30 : hydrogenic total radiative recombination, Gould & Thakur style formula
-
-  37 : Fe 3pq total DR, Badnell-like multi-term fit
-
-  38 : Badnell total RR fit
-
-  39 : Badnell total DR fit
-
-Charge exchange handling
-------------------------
-  2  : charge exchange with neutral H, Kingdon & Ferland.
-       This is NOT electron recombination. It is separated as charge_exchange_H0
-       and is evaluated only when --include-charge-exchange is set. Source CSV
-       generation uses neutral-H density, not electron density.
-
-Temperature convention
-----------------------
-XSTAR ucalc uses t = T / 1e4 K.  CLI temperatures are in Kelvin.
-The evaluated alpha_cm3_s values are rate coefficients, not multiplied by n_e.
-For source CSV output, this script writes:
-
-  source_s^-1 = alpha_cm3_s * electron_density_cm^-3 * parent_population_scale
-
-This is a per-target-ion source rate convention for the prototype level solver.
-For physical emissivity, parent ion fraction/population must be supplied by a
-proper ionization balance calculation.
+The decoded RR/DR records are usually total ion recombination rates, not
+true level-resolved cascade feeds.  Source CSV output is therefore a
+prototype interface for solver experiments unless a record is explicitly
+identified as level resolved.
 
 Examples
 --------
-# Inventory O VII recombination-like records
-python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 7 --summary --temperatures 1e6 3e6 1e7
 
-# Export evaluated O VII total recombination rates
-python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 7 --temperatures 1e6 3e6 1e7 \
-  --records-csv o7_recomb_records.csv --eval-csv o7_recomb_eval.csv
+Inventory oxygen recombination-like records::
 
-# Produce a solver source CSV by putting all total recombination into ground
-python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 7 --temperatures 1e6 --electron-densities 1.0 \
-  --source-mode ground --source-csv o7_recomb_sources_from_atdb.csv
+    python -m xstar_atomic.recombination atdb.fits --element O --temperatures 1e6 --summary
 
-# Produce an approximate statistical-weight distribution over selected levels
-python xstar_atomic_extract_recombination_v1.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 7 --temperatures 1e6 --electron-densities 1.0 \
-  --source-mode selected-statistical --source-levels 2,3,4,5,7 \
-  --source-csv o7_triplet_source_test_from_atdb.csv
+Generate an approximate O VII source distribution::
+
+    python -m xstar_atomic.recombination atdb.fits \
+        --element O --ion-stage 7 --temperatures 1e6 \
+        --source-mode selected-statistical --source-levels 2,3,4,5,7 \
+        --source-csv o7_sources.csv
 """
 
 from __future__ import annotations

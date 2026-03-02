@@ -1,79 +1,38 @@
 #!/usr/bin/env python3
-"""
-xstar_atomic_extract_collisions_v2b.py
+"""Collisional-excitation record extraction and evaluation.
 
-Second-pass collisional-excitation extractor - patched v2b marker 2026-05-18 for XSTAR's packed atdb.fits.
+This module decodes XSTAR bound-bound collisional records with
+``rate_type = 3`` and joins them to decoded level information.  It
+currently evaluates the most important collision formats needed for the
+XSTAR Atomic development workflow.
 
-This script builds on:
-  * xstar_atomic_hierarchy.py
-  * xstar_atomic_extract_lines_v2.py
+Implemented data types
+----------------------
 
-It decodes bound-bound collisional records (rate_type=3) and joins them to
-validated XSTAR level and radiative-line information.
+* Type 51: OP/CHIANTI Burgess--Tully effective collision strengths.
+* Type 56: tabulated effective collision strengths as a function of
+  ``log10(T/K)``.
+* Type 63: Bautista n,l algorithmic collision records, including both
+  the shell-changing branch and the same-n l-mixing branch.
+* Type 98: CHIANTI-2016 Burgess--Tully effective collision strengths.
 
-Implemented/decoded data types
-------------------------------
-  51 : OP/CHIANTI Burgess-Tully effective collision strengths
-       - XSTAR ucalc.f90: type 51
-       - idat[0] = BT transition type
-       - idat[1], idat[2] = level indices, then reordered by energy
-       - rdat[0] = transition energy in Ryd
-       - rdat[1] = BT scaling parameter c
-       - rdat[2:] = 5- or 9-point scaled effective collision strengths
+Rate convention
+---------------
 
-  56 : tabulated effective collision strengths, Bautista
-       - XSTAR ucalc.f90: type 56
-       - idat[0], idat[1] = level indices, then reordered by energy
-       - rdat[0:ntmp] = log10(T/K) grid
-       - rdat[ntmp:2*ntmp] = effective collision strength Upsilon(T)
-
-  63 : Bautista n,l algorithmic collision records
-       - XSTAR ucalc.f90: type 63
-       - level mapping inferred from final integer fields
-       - v2 evaluates nf != ni and |Delta l|=1 by translating anl1/erc
-       - same-n l-changing/amcrs branch is evaluated with the ecm=0 velimp branch
-
-  98 : CHIANTI 2016 Burgess-Tully effective collision strengths
-       - XSTAR ucalc.f90: type 98
-       - idat[0], idat[1] = level indices, then reordered by energy
-       - idat[-2] = BT transition type
-       - rdat[0] = transition energy in Ryd
-       - rdat[2] = BT scaling parameter c
-       - rdat[3:3+ntem] = scaled temperature grid
-       - rdat[3+ntem:3+2*ntem] = scaled collision-strength grid
-
-Rate coefficient convention
----------------------------
-For records where an effective collision strength Upsilon(T) can be evaluated,
-this script reports the standard XSTAR-equivalent coefficients:
-
-  q_excitation   = 8.626e-6 * Upsilon(T) * exp(-DeltaE/kT) / (g_lower sqrt(T))
-  q_deexcitation = 8.626e-6 * Upsilon(T)                  / (g_upper sqrt(T))
-
-with T in K, DeltaE and kT in eV, and q in cm^3 s^-1.
+When an effective collision strength can be evaluated, the module reports
+standard excitation and de-excitation rate coefficients in
+``cm^3 s^-1``.  The excitation coefficient includes the Boltzmann factor
+for the level-energy separation.
 
 Examples
 --------
-# Summary of O VIII collision records
-python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 --summary
 
-# Search O VIII collisional excitation connected to Ly-alpha upper levels
-python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 --search --lower-level 1 --limit 20
+Search O VIII Ly-alpha collision records::
 
-# Evaluate at temperatures useful for CIE/photoionized-plasma tests
-python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 --search --lower-level 1 \
-  --temperatures 1e5 1e6 1e7 --limit 20
-
-# Export compact tables
-python xstar_atomic_extract_collisions_v2b.py ./xstar/data/atdb.fits \
-  --element O --ion-stage 8 \
-  --summary-csv o8_collisions_summary.csv \
-  --grid-csv o8_collisions_grid.csv \
-  --eval-csv o8_collisions_eval.csv \
-  --temperatures 1e5 1e6 1e7
+    python -m xstar_atomic.collisions atdb.fits \
+        --element O --ion-stage 8 --search --lower-level 1 \
+        --wavelength-min 18.8 --wavelength-max 19.1 \
+        --temperatures 1e6 3e6 1e7
 """
 
 from __future__ import annotations
@@ -864,7 +823,7 @@ def evaluate_type63_same_n_lmixing(
     return q_lower_to_upper, q_upper_to_lower, sum_a, diag
 
 def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temperature_k: float) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
-    """Evaluate XSTAR ucalc.f90 type-63 branch for nf != ni and |lf-li|=1.
+    """Evaluate the XSTAR type-63 branch for nf != ni and absolute delta-l equal to 1.
 
     Returns (q_excitation, q_deexcitation, angular_sum, diagnostics). The q values
     follow XSTAR ans1/ans2 before density multiplication: excitation low->high and
