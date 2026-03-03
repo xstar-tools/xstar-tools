@@ -2,6 +2,13 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.5 - 2026-03-03
+
+### Fixed
+- Restored the lightweight top-level `parse_ion` export so `from xstar_atomic import parse_ion` works again after the lazy-import cleanup.
+- Kept the minimal top-level API limited to `ATDB`, `XSTARAtomic`, and `parse_ion`; decoder functions remain importable from their submodules.
+
+
 ## v0.2.4 - 2026-03-02
 
 ### Fixed
