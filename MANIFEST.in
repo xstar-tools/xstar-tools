@@ -3,3 +3,4 @@ include CHANGELOG.md
 recursive-include docs *
 recursive-include examples *.py
 recursive-include tests *.py
+recursive-include tests/data *.csv
