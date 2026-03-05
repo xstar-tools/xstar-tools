@@ -2,6 +2,30 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.7 - 2026-03-05
+
+### Added
+- Added a scientific validation status table to the Markdown and LaTeX user guides.
+- Added `xstar_atomic.export` with CSV/JSON export helpers for superwind/Athena++ post-processing.
+- Added CLI entry point `xstar-atomic-export-superwind`.
+- Added `examples/08_compare_xstar_outputs.py` for comparing selected xstar-atomic outputs against user-supplied XSTAR CSV outputs.
+- Added lightweight import tests for the export module.
+
+### Improved
+- Updated solver diagnostics to report that the XSTAR-derived type-63 same-n l-mixing collision decoder is enabled.
+- Updated docs to reflect the implemented type-63 same-n l-mixing path and the current validation status of data types 51 and 98.
+
+## v0.2.6 - 2026-03-04
+
+### Added
+- Added `tests/data/collision_type51_98_targets.csv`, generated from the collision validation inventory.
+- Added API-level real-ATDB pytest coverage for representative collision `data_type=51` and `data_type=98` targets through `XSTARAtomic.collisions(...)`.
+- Added a type-98 ion-alias API regression test using the `ne_ix` alias.
+
+### Validation
+- The type-51 API test validates a representative Burgess--Tully 5-point target against the inventory reference rate.
+- The type-98 API test validates the Ne IX CHIANTI-style Burgess--Tully target against the inventory reference rate.
+
 ## v0.2.5 - 2026-03-03
 
 ### Fixed

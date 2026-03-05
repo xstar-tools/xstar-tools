@@ -38,3 +38,24 @@ Low-level ATDB indexing
 
 .. literalinclude:: ../../../examples/05_low_level_atdb_index.py
    :language: python
+
+
+Additional examples
+-------------------
+
+The package includes additional scripts under ``examples/``:
+
+* ``07_collision_decoder_validation.py``: inventory and validate collision decoder targets.
+* ``08_compare_xstar_outputs.py``: compare xstar-atomic rows with user-supplied XSTAR output CSVs.
+
+Superwind export
+----------------
+
+Use the export CLI to write compact CSV/JSON bundles for selected ions::
+
+   PYTHONPATH=src python -m xstar_atomic.export atdb.fits \
+     --ions "O VIII,Ne IX" \
+     --temperatures 1e6 3e6 1e7 \
+     --wavelength-min 1.0 --wavelength-max 30.0 \
+     --out-dir atomic_export \
+     --print-summary

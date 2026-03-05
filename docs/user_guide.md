@@ -34,7 +34,7 @@ The package currently includes:
 - Photoionization extraction for `data_type=53` and inventory support for related bound-free records.
 - Collisional excitation extraction/evaluation for:
   - `data_type=56`: tabulated effective collision strengths,
-  - `data_type=63`: implemented `nf != ni`, `|Delta l| = 1` branch of the Bautista `n,l` algorithm.
+  - `data_type=63`: implemented `nf != ni`, `|Delta l| = 1` branch and same-`n` l-mixing branch of the Bautista/XSTAR algorithm.
 - Recombination and charge-exchange inventory/evaluation for:
   - `data_type=1`: Aldrovandi & Pequignot total RR,
   - `data_type=30`: hydrogenic total RR,
@@ -45,12 +45,33 @@ The package currently includes:
 - Prototype level-population solver with connected-component diagnostics and source/sink hooks.
 - Prototype radiative-branching cascade redistribution for source-injection experiments.
 
+
+## Scientific validation status
+
+The table below summarizes the current scientific status of the main decoder paths.  ``Validated`` means covered by real-``atdb.fits`` tests and internal consistency checks; it does not replace comparison against full XSTAR model outputs for publication-quality work.
+
+| Component | XSTAR data type(s) | Current status | Validation examples |
+|---|---:|---|---|
+| Packed FITS reader / hierarchy | pointers/reals/integers/chars | Validated | 1,216,792 records, 30 elements, 465 ions |
+| Levels | 6 | Validated | O VIII and O VII level indexing and labels |
+| Radiative lines | 50 | Validated | O VIII Ly-alpha, O VII triplet, Ne X, Fe XXVI checks |
+| Photoionization grids | 53 | Validated for ordinary OP-style grids | O VIII and O VII ground thresholds |
+| Collisions, tabulated Upsilon | 56 | Validated | O VIII Ly-alpha rates and emissivity rows |
+| Collisions, Bautista n,l, nf != ni | 63 | Validated internally | O VII/O VIII direct-excitation records |
+| Collisions, same-n l-mixing | 63 | Implemented and regression-tested | O VIII same-n diagnostic; compare with XSTAR for final science |
+| Collisions, Burgess--Tully 5-point | 51 | Implemented and API-tested | Representative real-ATDB target tests |
+| Collisions, CHIANTI 2016 BT | 98 | Implemented and API-tested | Ne IX representative target test |
+| Electron recombination totals | 1, 30, 38, 39 | Implemented for total rates | Oxygen RR/DR inventory |
+| Charge exchange with H0 | 2 | Implemented when explicitly requested | Low-ion oxygen CX inventory |
+| True level-resolved recombination/cascades | various/unknown | Not yet identified in decoded records | Prototype source/cascade hooks only |
+| Level-population solver | combined | Prototype | Connected-component and source/sink diagnostics |
+
 ## 3. Important limitations
 
 This is an alpha-stage research package. The following limitations are important:
 
 - Not all XSTAR data types are decoded.
-- The `data_type=63` same-`n` `l`-mixing / XSTAR `amcrs` branch is not yet implemented.
+- The `data_type=63` same-`n` `l`-mixing / XSTAR `amcrs` branch is implemented in the collision decoder, but should still be compared against XSTAR outputs for final science.
 - True level-resolved recombination/cascade records have not been identified in the currently decoded oxygen records.
 - Recombination source redistribution modes are prototypes unless true level-resolved recombination data are available.
 - The level-population solver is a diagnostic prototype, not a full replacement for XSTAR.

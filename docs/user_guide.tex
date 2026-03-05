@@ -29,7 +29,7 @@
 
 \title{\texttt{xstar-atomic} User Guide}
 \author{XSTAR ATDB direct decoder, rate evaluator, emissivity tools, and prototype solvers}
-\date{Version 0.1.7}
+\date{Version 0.2.7}
 
 \begin{document}
 \maketitle
@@ -76,13 +76,37 @@ The package currently includes:
 \item Prototype radiative-branching cascade redistribution for source-injection experiments.
 \end{itemize}
 
+
+\section{Scientific validation status}
+
+The table below summarizes the current scientific status of the main decoder paths. ``Validated'' means covered by real-\texttt{atdb.fits} tests and internal consistency checks; it does not replace comparison against full XSTAR model outputs for publication-quality work.
+
+\begin{longtable}{p{0.25\linewidth}p{0.15\linewidth}p{0.25\linewidth}p{0.25\linewidth}}
+\toprule
+Component & Data type(s) & Current status & Validation examples \\
+\midrule
+Packed FITS reader / hierarchy & arrays & Validated & 1,216,792 records; 30 elements; 465 ions \\
+Levels & 6 & Validated & O VIII and O VII level indexing \\
+Radiative lines & 50 & Validated & O VIII Ly-alpha, O VII triplet, Ne X, Fe XXVI \\
+Photoionization grids & 53 & Validated for OP-style grids & O VIII and O VII ground thresholds \\
+Collisions, tabulated $\Upsilon$ & 56 & Validated & O VIII Ly-alpha rates and emissivity rows \\
+Collisions, Bautista $n,l$ & 63 & Validated internally & O VII/O VIII direct-excitation and same-$n$ diagnostics \\
+Collisions, Burgess--Tully & 51 & Implemented and API-tested & Representative real-ATDB targets \\
+Collisions, CHIANTI 2016 BT & 98 & Implemented and API-tested & Ne IX representative target \\
+Electron recombination totals & 1, 30, 38, 39 & Implemented for total rates & Oxygen RR/DR inventory \\
+Charge exchange with H$^0$ & 2 & Implemented when requested & Low-ion oxygen CX inventory \\
+Level-resolved recombination/cascade & unknown & Not yet identified & Prototype source/cascade hooks only \\
+Level-population solver & combined & Prototype & Connected-component and source/sink diagnostics \\
+\bottomrule
+\end{longtable}
+
 \section{Important limitations}
 
 This is an alpha-stage research package. Important limitations include:
 
 \begin{itemize}
 \item Not all XSTAR data types are decoded.
-\item The \texttt{data\_type=63} same-\(n\) \(l\)-mixing / XSTAR \texttt{amcrs} branch is not yet implemented.
+\item The \texttt{data\_type=63} same-\(n\) \(l\)-mixing / XSTAR \texttt{amcrs} branch is implemented in the collision decoder, but should still be compared against XSTAR outputs for final science.
 \item True level-resolved recombination/cascade records have not been identified in the currently decoded oxygen records.
 \item Recombination source redistribution modes are prototypes unless true level-resolved recombination data are available.
 \item The level-population solver is a diagnostic prototype, not a full replacement for XSTAR.

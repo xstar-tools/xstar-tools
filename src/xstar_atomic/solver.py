@@ -700,7 +700,7 @@ def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: Li
     }
 
 
-def main() -> None:
+def main(argv=None) -> None:
     p = argparse.ArgumentParser(description="Solve first-pass XSTAR Atomic level populations and line emissivities.")
     p.add_argument("fitsfile")
     p.add_argument("--element", required=True, help="Element symbol, e.g. O, Ne, Fe")
@@ -737,7 +737,7 @@ def main() -> None:
     p.add_argument("--out-transitions-csv")
     p.add_argument("--summary-json")
     p.add_argument("--print-summary", action="store_true")
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     z = choose_z(args.element)
     if z is None:
@@ -856,7 +856,7 @@ def main() -> None:
         "component_diagnostics_initial_summary": component_diagnostics_initial.get("components", [])[:10],
         "component_diagnostics_selected_summary": component_diagnostics_selected.get("components", [])[:10],
         "recombination_cascade_auto_status": "not_implemented_use_recombination_source_csv" if args.auto_recombination_cascade else "not_requested",
-        "same_n_lmixing_status": ("phenomenological_enabled_not_xstar_amcrs" if args.phenomenological_same_n_lmixing_rate_coeff else "xstar_amcrs_not_implemented"),
+        "same_n_lmixing_status": ("phenomenological_extra_enabled_on_top_of_xstar_amcrs" if args.phenomenological_same_n_lmixing_rate_coeff else "xstar_amcrs_collision_decoder_enabled"),
         "source_sink_interface": {
             "manual_source_terms": args.source_level or [],
             "manual_sink_terms": args.sink_level or [],

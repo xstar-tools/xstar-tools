@@ -37,8 +37,29 @@ Important limitations:
 
 - Not all XSTAR data types are decoded.
 - True level-resolved recombination/cascade records have not been found in the currently decoded oxygen records.
-- Same-`n` `l`-mixing for `data_type=63` / XSTAR `amcrs` is not yet implemented.
+- Same-`n` `l`-mixing for `data_type=63` / XSTAR `amcrs` is implemented as a Python port, but should still be compared against XSTAR outputs for final science.
 - The level-population solver is a diagnostic prototype, not a full replacement for XSTAR.
+
+
+## Scientific validation status
+
+The table below summarizes the current scientific status of the main decoder paths.  ``Validated`` means covered by real-``atdb.fits`` tests and internal consistency checks; it does not replace comparison against full XSTAR model outputs for publication-quality work.
+
+| Component | XSTAR data type(s) | Current status | Validation examples |
+|---|---:|---|---|
+| Packed FITS reader / hierarchy | pointers/reals/integers/chars | Validated | 1,216,792 records, 30 elements, 465 ions |
+| Levels | 6 | Validated | O VIII and O VII level indexing and labels |
+| Radiative lines | 50 | Validated | O VIII Ly-alpha, O VII triplet, Ne X, Fe XXVI checks |
+| Photoionization grids | 53 | Validated for ordinary OP-style grids | O VIII and O VII ground thresholds |
+| Collisions, tabulated Upsilon | 56 | Validated | O VIII Ly-alpha rates and emissivity rows |
+| Collisions, Bautista n,l, nf != ni | 63 | Validated internally | O VII/O VIII direct-excitation records |
+| Collisions, same-n l-mixing | 63 | Implemented and regression-tested | O VIII same-n diagnostic; compare with XSTAR for final science |
+| Collisions, Burgess--Tully 5-point | 51 | Implemented and API-tested | Representative real-ATDB target tests |
+| Collisions, CHIANTI 2016 BT | 98 | Implemented and API-tested | Ne IX representative target test |
+| Electron recombination totals | 1, 30, 38, 39 | Implemented for total rates | Oxygen RR/DR inventory |
+| Charge exchange with H0 | 2 | Implemented when explicitly requested | Low-ion oxygen CX inventory |
+| True level-resolved recombination/cascades | various/unknown | Not yet identified in decoded records | Prototype source/cascade hooks only |
+| Level-population solver | combined | Prototype | Connected-component and source/sink diagnostics |
 
 ## Installation
 
@@ -248,3 +269,19 @@ Sphinx API pages use `sphinx.ext.autodoc`, which reads Python docstrings from mo
 - `data_type=98`: CHIANTI-2016-style Burgess--Tully scaled collision strengths.
 
 Same-`n` l-mixing depends weakly on the electron density through the impact-parameter cutoff. In the Python API, pass `electron_density_for_lmixing=...` to `collisions()` or `emissivity()` when this matters.
+
+
+## Superwind/Athena++ export
+
+Create compact CSV/JSON atomic products for selected ions:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.export ./xstar/data/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 30.0 \
+  --out-dir atomic_export \
+  --print-summary
+```
+
+The export writes levels, lines, collision records/rates, photoionization summaries, emissivity rows, and JSON manifests.
