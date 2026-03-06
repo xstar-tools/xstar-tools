@@ -730,6 +730,8 @@ def main(argv=None) -> None:
                    help="Record a diagnostic that automatic ATDB recombination/cascade decoding is requested but not yet implemented")
     p.add_argument("--phenomenological-same-n-lmixing-rate-coeff", type=float,
                    help="Optional experimental same-n adjacent-l mixing coefficient in cm^3 s^-1; not an XSTAR amcrs port")
+    p.add_argument("--electron-density-for-lmixing", type=float, default=None,
+                   help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
     p.add_argument("--include-two-photon", action="store_true")
     p.add_argument("--include-superlevel", action="store_true")
     p.add_argument("--out-lines-csv", default="level_population_lines.csv")

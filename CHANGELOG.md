@@ -2,6 +2,12 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.8 - 2026-03-06
+
+### Fixed
+- Added the missing solver CLI argument `--electron-density-for-lmixing`.
+- Fixed the real-ATDB solver status test failure caused by the solver referencing `args.electron_density_for_lmixing` without registering the argparse option.
+
 ## v0.2.7 - 2026-03-05
 
 ### Added
