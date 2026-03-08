@@ -15,7 +15,7 @@ Example
 -------
 PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   ../xstar/data/atdb.fits xstar_reference_lines.csv \
-  --ion "O VIII" --wavelength-tolerance 0.01 \
+  --ion "O VIII" --wavelength-column wavelength_A --wavelength-tolerance 0.01 \
   --atomic-column line_energy_emissivity_coeff_erg_cm3_s
 """
 
@@ -51,6 +51,8 @@ def main():
     p.add_argument("--ion", required=True)
     p.add_argument("--temperature", type=float, default=1e6)
     p.add_argument("--wavelength-tolerance", type=float, default=0.02)
+    p.add_argument("--wavelength-column", default=None,
+                   help="Reference CSV wavelength column; defaults to wavelength_A if present, otherwise wavelength")
     p.add_argument("--reference-column", default="reference_value")
     p.add_argument("--atomic-column", default="line_energy_emissivity_coeff_erg_cm3_s")
     args = p.parse_args()
@@ -59,10 +61,20 @@ def main():
     if not reference:
         raise SystemExit(f"No rows for ion {args.ion!r} found in {args.reference_csv}")
 
-    wave_values = [maybe_float(r.get("wavelength_A")) for r in reference]
+    wave_col = args.wavelength_column
+    if wave_col is None:
+        fieldnames = set(reference[0].keys()) if reference else set()
+        if "wavelength_A" in fieldnames:
+            wave_col = "wavelength_A"
+        elif "wavelength" in fieldnames:
+            wave_col = "wavelength"
+        else:
+            raise SystemExit("Reference CSV must contain wavelength_A or wavelength, or pass --wavelength-column")
+
+    wave_values = [maybe_float(r.get(wave_col)) for r in reference]
     wave_values = [w for w in wave_values if w is not None]
     if not wave_values:
-        raise SystemExit("Reference CSV must contain wavelength_A values")
+        raise SystemExit(f"Reference CSV column {wave_col!r} contains no numeric wavelengths")
     wmin = min(wave_values) - args.wavelength_tolerance
     wmax = max(wave_values) + args.wavelength_tolerance
 
@@ -72,7 +84,7 @@ def main():
 
     comparisons = []
     for ref in reference:
-        rw = maybe_float(ref.get("wavelength_A"))
+        rw = maybe_float(ref.get(wave_col))
         if rw is None:
             continue
         candidates = [row for row in atomic_rows if maybe_float(row.get("wavelength_A")) is not None]
@@ -99,7 +111,7 @@ def main():
             "atomic_eval_method": best.get("collision_eval_method"),
         })
 
-    pprint({"n_reference_rows": len(reference), "n_atomic_rows": len(atomic_rows), "comparisons": comparisons})
+    pprint({"n_reference_rows": len(reference), "n_atomic_rows": len(atomic_rows), "wavelength_column": wave_col, "comparisons": comparisons})
 
 
 if __name__ == "__main__":
