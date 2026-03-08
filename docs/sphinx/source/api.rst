@@ -85,3 +85,11 @@ Export tools
    :members:
    :undoc-members:
    :show-inheritance:
+
+XSTAR Output Readers
+--------------------
+
+.. automodule:: xstar_atomic.xstar_outputs
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -2,6 +2,13 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.9 - 2026-03-07
+
+### Added
+- Added `xstar_atomic.xstar_outputs` for reading XSTAR `xout_lines*.fits` files.
+- Added CLI entry point `xstar-atomic-xstar-outputs` and module execution with `python -m xstar_atomic.xstar_outputs`.
+- Supports CSV export, JSON summaries, and filtering by ion, wavelength, and emission columns.
+
 ## v0.2.8 - 2026-03-06
 
 ### Fixed

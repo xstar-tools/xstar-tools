@@ -285,3 +285,21 @@ PYTHONPATH=src python -m xstar_atomic.export ./xstar/data/atdb.fits \
 ```
 
 The export writes levels, lines, collision records/rates, photoionization summaries, emissivity rows, and JSON manifests.
+
+### Reading XSTAR output FITS files
+
+Convert an XSTAR `xout_lines1.fits` file to CSV for validation against `xstar-atomic` outputs:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs xout_lines1.fits \
+  --out-csv xstar_lines.csv \
+  --print-summary
+```
+
+You can also filter by ion and wavelength:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs xout_lines1.fits \
+  --ion "O VIII" --wavelength-min 18.8 --wavelength-max 19.1 \
+  --out-csv xstar_o8_lya_lines.csv --print-summary
+```
