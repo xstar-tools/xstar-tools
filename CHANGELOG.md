@@ -2,6 +2,19 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.11 - 2026-03-09
+
+Added:
+- Extended ``examples/08_compare_xstar_outputs.py`` with explicit ``--mode`` choices: ``wavelength``, ``emissivity``, and ``both``.
+- Added ``--out-csv`` and ``--out-json`` outputs for XSTAR-vs-xstar-atomic comparison tables.
+- Added clearer warnings/notes that XSTAR model ``emit_*`` columns are not directly equivalent to local atomic emissivity coefficients.
+
+## v0.2.10 - 2026-03-08
+
+Fixed:
+- Added `--wavelength-column` to `examples/08_compare_xstar_outputs.py`.
+- The comparison example now auto-detects `wavelength_A` or `wavelength` columns in XSTAR-output CSV files.
+
 ## v0.2.9 - 2026-03-07
 
 ### Added

@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
 project = "xstar-atomic"
-author = "Ashkbiz Danehkar / ChatGPT-assisted development"
+author = "Ashkbiz Danehkar"
 release = "0.1.7"
 version = "0.1.7"
 

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.2.2"
+version = "0.2.11"
 description = "Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-  {name = "Ashkbiz Danehkar"},
+  {name = "Ashkbiz Danehkar"}
 ]
 keywords = ["astronomy", "atomic-data", "xstar", "fits", "emissivity", "x-ray"]
 classifiers = [
@@ -37,6 +37,9 @@ xstar-atomic-collisions = "xstar_atomic.collisions:main"
 xstar-atomic-recombination = "xstar_atomic.recombination:main"
 xstar-atomic-emissivity = "xstar_atomic.emissivity:main"
 xstar-atomic-solver = "xstar_atomic.solver:main"
+xstar-atomic-validate-collisions = "xstar_atomic.validation:main"
+xstar-atomic-export-superwind = "xstar_atomic.export:main"
+xstar-atomic-xstar-outputs = "xstar_atomic.xstar_outputs:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
