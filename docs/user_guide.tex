@@ -393,8 +393,7 @@ Data type & Meaning & Status\\
 \end{tabular}
 \end{center}
 
-For data type 63, both the $n_f 
-eq n_i$, $|\Delta l|=1$ branch and the same-$n$ $l$-mixing branch are evaluated.  The same-$n$ branch follows the XSTAR 	exttt{amcrs}/	exttt{velimp} ecm=0 logic and depends weakly on electron density through the impact-parameter cutoff.
+For data type 63, both the $n_f \neq n_i$, $|\Delta l|=1$ branch and the same-$n$ $l$-mixing branch are evaluated. The same-$n$ branch follows the XSTAR \texttt{amcrs}/\texttt{velimp} ecm=0 logic and depends weakly on electron density through the impact-parameter cutoff.
 
 
 \section{Collision-Decoder Validation}
@@ -417,5 +416,53 @@ PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
 The type-63 same-$n$ diagnostic checks the Python port of the XSTAR
 \texttt{amcrs/velimp} branch.  It is a regression diagnostic, not a substitute
 for comparison against XSTAR model outputs.
+
+
+
+\section{XSTAR-output comparison validation examples}
+
+Saved XSTAR-vs-\texttt{xstar-atomic} comparison outputs are included under:
+
+\begin{lstlisting}
+docs/validation/xstar_outputs/
+examples/reference_outputs/
+\end{lstlisting}
+
+These files document wavelength comparisons produced from XSTAR \texttt{xout\_lines1.fits} output converted with \texttt{xstar\_atomic.xstar\_outputs} and compared with \texttt{examples/08\_compare\_xstar\_outputs.py}.
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+File & Purpose\\
+\hline
+\texttt{compare\_o8\_lya\_wavelength.csv/json} & O~VIII Ly-alpha wavelength validation\\
+\texttt{compare\_o8\_lya\_both.csv/json} & O~VIII wavelength plus emissivity-ratio diagnostics\\
+\texttt{compare\_o7\_triplet\_wavelength.csv/json} & O~VII triplet wavelength validation\\
+\hline
+\end{tabular}
+\end{center}
+
+The O~VIII Ly-alpha wavelengths agree with XSTAR to approximately $10^{-5}$~\AA. The O~VII triplet and near-triplet wavelengths agree with XSTAR to approximately $10^{-7}$--$8\times10^{-7}$~\AA.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+  xout_lines1.fits \
+  --out-csv xstar_lines.csv \
+  --print-summary
+
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  /path/to/atdb.fits \
+  xstar_lines.csv \
+  --ion "O VIII" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_lines.csv \
+  --out-json compare_lines.json
+\end{lstlisting}
+
+Use wavelength mode for database and line-identification validation. Absolute comparison of \texttt{xstar-atomic} local emissivity coefficients against XSTAR \texttt{emit\_outward} requires a model-dependent normalization involving ion fractions, density, column, geometry, and radiative transfer.
 
 \end{document}

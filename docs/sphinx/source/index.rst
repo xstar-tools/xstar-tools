@@ -17,6 +17,7 @@ Contents
 
    user_guide
    examples
+   xstar_comparisons
    api
    development
    changelog

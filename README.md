@@ -303,3 +303,15 @@ PYTHONPATH=src python -m xstar_atomic.xstar_outputs xout_lines1.fits \
   --ion "O VIII" --wavelength-min 18.8 --wavelength-max 19.1 \
   --out-csv xstar_o8_lya_lines.csv --print-summary
 ```
+
+
+## XSTAR comparison validation examples
+
+Saved O VIII Ly-alpha and O VII triplet comparisons against XSTAR `xout_lines1.fits` outputs are included under:
+
+```text
+docs/validation/xstar_outputs/
+examples/reference_outputs/
+```
+
+See `docs/xstar_comparison_examples.md` for commands and interpretation. These examples validate line identification and wavelengths; absolute ratios against XSTAR `emit_inward`/`emit_outward` require model-dependent normalization.

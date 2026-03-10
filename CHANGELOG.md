@@ -2,6 +2,18 @@
 
 All notable changes to `xstar-atomic` are documented here.
 
+## v0.2.12 - 2026-03-10
+
+### Added
+- Added saved XSTAR-vs-`xstar-atomic` comparison outputs for O VIII Ly-alpha and the O VII triplet under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`.
+- Added `docs/xstar_comparison_examples.md` documenting the XSTAR-output comparison workflow and validation results.
+- Added Sphinx page `xstar_comparisons.rst` and linked it from the Sphinx index.
+
+### Documentation
+- Documented that O VIII Ly-alpha wavelength agreement is at the ~1e-5 Angstrom level.
+- Documented that O VII triplet wavelength agreement is at the ~1e-7 to 8e-7 Angstrom level.
+- Clarified that XSTAR model `emit_*` columns are not directly equivalent to local `xstar-atomic` emissivity coefficients without model-dependent normalization.
+
 ## v0.2.11 - 2026-03-09
 
 Added:

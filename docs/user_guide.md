@@ -395,3 +395,51 @@ PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
 The type-63 same-`n` diagnostic is a regression check of the Python port of the
 XSTAR `amcrs/velimp` branch.  It should still be compared against XSTAR model
 outputs before production use.
+
+## XSTAR-output comparison validation examples
+
+Saved XSTAR-vs-`xstar-atomic` comparison outputs are included under:
+
+```text
+docs/validation/xstar_outputs/
+examples/reference_outputs/
+```
+
+These files document wavelength comparisons produced from XSTAR `xout_lines1.fits` output converted with `xstar_atomic.xstar_outputs` and compared with `examples/08_compare_xstar_outputs.py`.
+
+### Included validation artifacts
+
+| File | Purpose |
+|---|---|
+| `compare_o8_lya_wavelength.csv/json` | O VIII Ly-alpha wavelength and transition-ID validation |
+| `compare_o8_lya_both.csv/json` | O VIII Ly-alpha wavelength plus emissivity-ratio diagnostics |
+| `compare_o7_triplet_wavelength.csv/json` | O VII triplet/near-triplet wavelength and transition-ID validation |
+
+### Main results
+
+- O VIII Ly-alpha wavelengths agree with XSTAR to approximately `1e-5` Angstrom.
+- O VII triplet/near-triplet wavelengths agree with XSTAR to approximately `1e-7`--`8e-7` Angstrom.
+- O VII triplet rows are expected to show `no_matched_collision` in the direct-emissivity join; XSTAR emits them through its full plasma model, including population, recombination, cascade, and radiative-transfer physics.
+
+### Reproduce a comparison
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+  xout_lines1.fits \
+  --out-csv xstar_lines.csv \
+  --print-summary
+
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  /path/to/atdb.fits \
+  xstar_lines.csv \
+  --ion "O VIII" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_lines.csv \
+  --out-json compare_lines.json
+```
+
+Use wavelength mode for database/line-identification validation. Absolute comparison of `xstar-atomic` local emissivity coefficients against XSTAR `emit_outward` requires a model-dependent normalization involving ion fractions, density, column, geometry, and radiative transfer.

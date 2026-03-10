@@ -1,0 +1,65 @@
+{
+  "summary": {
+    "ion": "O VIII",
+    "mode": "wavelength",
+    "n_reference_rows": 2,
+    "n_atomic_rows": 2,
+    "n_comparisons": 2,
+    "n_matched_within_tolerance": 2,
+    "wavelength_column": "wavelength",
+    "reference_column": "emit_outward",
+    "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+    "temperature_K": 1000000.0,
+    "wavelength_tolerance_A": 0.02,
+    "notes": [
+      "Wavelength mode validates line identification and wavelength agreement.",
+      "Emissivity ratios compare a local xstar-atomic coefficient to an XSTAR model-output column; ratios are not expected to be unity without matching the full plasma model."
+    ]
+  },
+  "comparisons": [
+    {
+      "ion": "O VIII",
+      "mode": "wavelength",
+      "match_status": "matched",
+      "reference_wavelength_A": 18.9671,
+      "atomic_wavelength_A": 18.96710968017578,
+      "delta_wavelength_A": 9.680175782733613e-06,
+      "abs_delta_wavelength_A": 9.680175782733613e-06,
+      "wavelength_tolerance_A": 0.02,
+      "reference_column": "emit_outward",
+      "reference_value": 0.582344,
+      "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+      "atomic_value": null,
+      "atomic_over_reference": null,
+      "atomic_lower_level": 1,
+      "atomic_upper_level": 3,
+      "atomic_lower_label": "1s1.2S_1/2",
+      "atomic_upper_label": "1s0.2p1.2P_3/2",
+      "atomic_eval_method": "linear_logT_type56",
+      "xstar_lower_level": "1s1.2S_1/2",
+      "xstar_upper_level": "1s0.2p1.2P_3/2"
+    },
+    {
+      "ion": "O VIII",
+      "mode": "wavelength",
+      "match_status": "matched",
+      "reference_wavelength_A": 18.9725,
+      "atomic_wavelength_A": 18.972517013549805,
+      "delta_wavelength_A": 1.701354980454539e-05,
+      "abs_delta_wavelength_A": 1.701354980454539e-05,
+      "wavelength_tolerance_A": 0.02,
+      "reference_column": "emit_outward",
+      "reference_value": 0.358237,
+      "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+      "atomic_value": null,
+      "atomic_over_reference": null,
+      "atomic_lower_level": 1,
+      "atomic_upper_level": 2,
+      "atomic_lower_label": "1s1.2S_1/2",
+      "atomic_upper_label": "1s0.2p1.2P_1/2",
+      "atomic_eval_method": "linear_logT_type56",
+      "xstar_lower_level": "1s1.2S_1/2",
+      "xstar_upper_level": "1s0.2p1.2P_1/2"
+    }
+  ]
+}
