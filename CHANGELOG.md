@@ -1,6 +1,13 @@
 # CHANGELOG
 
-All notable changes to `xstar-atomic` are documented here.
+## v0.2.13 - 2026-03-11
+
+### Added
+- Added `xstar_test_run/` with direct-XSTAR `xout_lines1.fits` outputs, converted CSV line tables, and a README documenting the exact XSTAR commands and FITS-to-CSV conversion workflow.
+- Added tests for packaged XSTAR test-run artifacts and conversion consistency.
+
+### Documentation
+- Updated XSTAR comparison documentation to reference `xstar_test_run/` and the included O VIII/O VII validation CSV files.
 
 ## v0.2.12 - 2026-03-10
 

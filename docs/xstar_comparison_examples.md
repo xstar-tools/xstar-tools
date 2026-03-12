@@ -24,6 +24,44 @@ The comparison examples use `examples/08_compare_xstar_outputs.py`. Two modes ar
 
 The absolute ratios in `--mode both` are not expected to be unity because `xstar-atomic` reports local atomic coefficients, while XSTAR `emit_inward`/`emit_outward` columns are full model outputs that include ion fractions, geometry, column, density, and radiative-transfer effects.
 
+
+## Included XSTAR test-run archive
+
+The package also includes a small reproducibility directory:
+
+```text
+xstar_test_run/
+  README.md
+  o_ne_xi3/xout_lines1.fits
+  o7_xi15/xout_lines1.fits
+  o7_xi15_highdens/xout_lines1.fits
+  xstar_o_ne_xi3_lines.csv
+  xstar_o8_lya_lines.csv
+  xstar_o7_triplet_lines.csv
+```
+
+The README in `xstar_test_run/` records the exact direct-XSTAR commands used
+for the O VIII/Ne IX high-ionization run, the O VII triplet run, and the
+high-density O VII triplet run. It also records the `xstar_atomic.xstar_outputs`
+commands used to convert each `xout_lines1.fits` file into CSV.
+
+For example, using the included O VII triplet CSV:
+
+```bash
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  ../xstar/data/atdb.fits \
+  xstar_test_run/xstar_o7_triplet_lines.csv \
+  --ion "O VII" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_o7_triplet_wavelength.csv \
+  --out-json compare_o7_triplet_wavelength.json \
+  --print-summary
+```
+
 ## O VIII Ly-alpha wavelength validation
 
 Saved files:

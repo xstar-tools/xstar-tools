@@ -11,6 +11,37 @@ The package includes saved XSTAR-vs-``xstar-atomic`` comparison outputs under::
 
 The source Markdown page is maintained at ``docs/xstar_comparison_examples.md``.
 
+
+Included XSTAR test-run data
+----------------------------
+
+The package includes a reproducibility directory::
+
+   xstar_test_run/
+
+It contains three direct-XSTAR ``xout_lines1.fits`` files, converted CSV line
+tables, and a README with the exact XSTAR commands and FITS-to-CSV conversion
+commands.  The test runs are:
+
+* O VIII / Ne IX high-ionization validation.
+* O VII triplet / recombination-cascade validation.
+* O VII triplet validation at higher density.
+
+Example comparison using the included O VII triplet CSV::
+
+   PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+     ../xstar/data/atdb.fits \
+     xstar_test_run/xstar_o7_triplet_lines.csv \
+     --ion "O VII" \
+     --wavelength-column wavelength \
+     --reference-column emit_outward \
+     --mode wavelength \
+     --temperature 1e6 \
+     --wavelength-tolerance 0.02 \
+     --out-csv compare_o7_triplet_wavelength.csv \
+     --out-json compare_o7_triplet_wavelength.json \
+     --print-summary
+
 O VIII Ly-alpha
 ---------------
 

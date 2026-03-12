@@ -315,3 +315,14 @@ examples/reference_outputs/
 ```
 
 See `docs/xstar_comparison_examples.md` for commands and interpretation. These examples validate line identification and wavelengths; absolute ratios against XSTAR `emit_inward`/`emit_outward` require model-dependent normalization.
+
+
+### Included XSTAR validation runs
+
+The source distribution includes `xstar_test_run/`, which contains small direct-XSTAR `xout_lines1.fits` outputs and converted CSV line tables for:
+
+- O VIII / Ne IX high-ionization validation.
+- O VII triplet validation.
+- O VII high-density triplet validation.
+
+See `xstar_test_run/README.md` and `docs/xstar_comparison_examples.md` for the exact XSTAR commands and the `xstar_atomic.xstar_outputs` conversion commands.
