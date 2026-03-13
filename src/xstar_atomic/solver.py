@@ -41,9 +41,10 @@ This is still a prototype collisional-radiative solver. v2 can add explicit
 user-supplied source/sink terms and can restrict the matrix to the connected
 component containing the ground level. It does not yet decode XSTAR recombination
 records into level-resolved cascade sources automatically; instead it provides
-source/sink hooks and clear diagnostics. Same-n l-mixing/amcrs is still not
-ported from XSTAR; v2 provides an optional phenomenological same-n l-mixing
-rate for experiments, but it is not an XSTAR-equivalent implementation.
+source/sink hooks and clear diagnostics. The collision decoder now provides the XSTAR type-63 same-n l-mixing/amcrs
+branch.  The older phenomenological same-n l-mixing option remains available
+for controlled experiments, but it is separate from the XSTAR-equivalent
+collision rates.
 
 Examples
 --------
@@ -534,13 +535,31 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
     return R, transition_log
 
 
-def solve_steady_state(R: np.ndarray, source_vector: Optional[np.ndarray] = None, sink_rates: Optional[np.ndarray] = None) -> Tuple[np.ndarray, dict]:
-    """Solve statistical equilibrium for R[i,j] = rate j -> i.
+def solve_steady_state(
+    R: np.ndarray,
+    source_vector: Optional[np.ndarray] = None,
+    sink_rates: Optional[np.ndarray] = None,
+    *,
+    linear_solver: str = "dense",
+) -> Tuple[np.ndarray, dict]:
+    """Solve statistical equilibrium for ``R[i, j] = rate j -> i``.
 
-    Optional source_vector adds +S_i to dn_i/dt. Optional sink_rates adds
-    -K_i n_i. The normalization equation is still imposed, so source/sink
-    terms should be interpreted as controlled prototype drivers unless a full
-    adjacent-ion balance is supplied.
+    Optional ``source_vector`` adds ``+S_i`` to ``dn_i/dt``. Optional
+    ``sink_rates`` adds ``-K_i n_i``. The normalization equation is still
+    imposed, so source/sink terms should be interpreted as controlled prototype
+    drivers unless a full adjacent-ion balance is supplied.
+
+    Parameters
+    ----------
+    R:
+        Dense transition-rate matrix.
+    source_vector, sink_rates:
+        Optional source and sink terms in s^-1.
+    linear_solver:
+        ``"dense"`` uses NumPy ``solve``/``lstsq``. ``"sparse"`` attempts
+        SciPy sparse ``spsolve`` and falls back to dense least-squares if
+        SciPy is unavailable or the sparse solve fails. ``"auto"`` uses sparse
+        for matrices with at least 64 levels when SciPy is available.
     """
     n = R.shape[0]
     A = np.zeros((n, n), dtype=float)
@@ -563,27 +582,58 @@ def solve_steady_state(R: np.ndarray, source_vector: Optional[np.ndarray] = None
     M[-1, :] = 1.0
     b[-1] = 1.0
 
+    requested_solver = str(linear_solver or "dense").lower()
     info = {
         "matrix_size": n,
         "matrix_rank": None,
         "condition_number": None,
-        "solver": "numpy.linalg.solve",
+        "solver": None,
+        "solver_requested": requested_solver,
         "solver_warning": "",
+        "sparse_available": False,
         "n_source_terms_nonzero": int(np.count_nonzero(source_vector)) if source_vector is not None else 0,
         "n_sink_terms_nonzero": int(np.count_nonzero(sink_rates)) if sink_rates is not None else 0,
         "source_sum_s^-1": float(np.sum(source_vector)) if source_vector is not None else 0.0,
         "sink_sum_s^-1": float(np.sum(sink_rates)) if sink_rates is not None else 0.0,
     }
+
+    scipy_sparse = None
+    scipy_splinalg = None
     try:
-        info["matrix_rank"] = int(np.linalg.matrix_rank(M))
+        import scipy.sparse as scipy_sparse  # type: ignore
+        import scipy.sparse.linalg as scipy_splinalg  # type: ignore
+        info["sparse_available"] = True
+    except Exception:
+        pass
+
+    use_sparse = requested_solver == "sparse" or (requested_solver == "auto" and info["sparse_available"] and n >= 64)
+
+    # Dense diagnostics are useful but can be expensive for very large matrices.
+    if n <= 800:
+        try:
+            info["matrix_rank"] = int(np.linalg.matrix_rank(M))
+        except Exception:
+            pass
         try:
             cond = float(np.linalg.cond(M))
             if math.isfinite(cond):
                 info["condition_number"] = cond
         except Exception:
             pass
-        pop = np.linalg.solve(M, b)
-    except np.linalg.LinAlgError as exc:
+
+    try:
+        if use_sparse:
+            if scipy_sparse is None or scipy_splinalg is None:
+                raise RuntimeError("SciPy sparse solver requested but scipy is not available")
+            info["solver"] = "scipy.sparse.linalg.spsolve"
+            pop = scipy_splinalg.spsolve(scipy_sparse.csr_matrix(M), b)
+            pop = np.asarray(pop, dtype=float)
+            if not np.all(np.isfinite(pop)):
+                raise RuntimeError("sparse solve returned non-finite populations")
+        else:
+            info["solver"] = "numpy.linalg.solve"
+            pop = np.linalg.solve(M, b)
+    except Exception as exc:
         info["solver"] = "numpy.linalg.lstsq"
         info["solver_warning"] = f"solve failed: {exc}; used least-squares"
         pop, *_ = np.linalg.lstsq(M, b, rcond=None)
@@ -732,6 +782,8 @@ def main(argv=None) -> None:
                    help="Optional experimental same-n adjacent-l mixing coefficient in cm^3 s^-1; not an XSTAR amcrs port")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
+    p.add_argument("--linear-solver", choices=["dense", "sparse", "auto"], default="dense",
+                   help="Linear algebra backend for the statistical-equilibrium solve. Sparse uses scipy.sparse.linalg.spsolve when available.")
     p.add_argument("--include-two-photon", action="store_true")
     p.add_argument("--include-superlevel", action="store_true")
     p.add_argument("--out-lines-csv", default="level_population_lines.csv")
@@ -813,7 +865,7 @@ def main(argv=None) -> None:
             )
             R, trans_log = assemble_rate_matrix(level_indices, rad_lines_matrix, coll_T, same_n_rows)
             source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(level_indices, args, T, ne)
-            pop, info = solve_steady_state(R, source_vec, sink_vec)
+            pop, info = solve_steady_state(R, source_vec, sink_vec, linear_solver=args.linear_solver)
             info.update({
                 "temperature_K": T,
                 "electron_density_cm^-3": ne,

@@ -1,6 +1,19 @@
 # CHANGELOG
 
-## v0.2.14 - 2026-03-11
+## v0.2.15 - 2026-03-13
+
+### Added
+- Added HDF5 export support to `xstar_atomic.export` via `--formats hdf5` or `--formats csv,hdf5`.
+- Added a general CLI alias `xstar-atomic-export` while keeping `xstar-atomic-export-superwind` for backward compatibility.
+- Added optional SciPy sparse-matrix support to the level-population solver via `--linear-solver sparse` or `--linear-solver auto`.
+- Added tests for HDF5 export helpers and sparse-solver fallback/consistency.
+
+### Changed
+- Generalized export documentation and manifests for plasma post-processing workflows beyond superwinds, including AGN outflows.
+- The export manifest is now written as `atomic_export_manifest.json` and also as the legacy `superwind_export_manifest.json`.
+
+
+## v0.2.14 - 2026-03-12
 
 ### Added
 - Added `xstar_test_run/` with direct-XSTAR `xout_lines1.fits` outputs, converted CSV line tables, and a README documenting the exact XSTAR commands and FITS-to-CSV conversion workflow.

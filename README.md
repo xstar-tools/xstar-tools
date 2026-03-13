@@ -271,20 +271,21 @@ Sphinx API pages use `sphinx.ext.autodoc`, which reads Python docstrings from mo
 Same-`n` l-mixing depends weakly on the electron density through the impact-parameter cutoff. In the Python API, pass `electron_density_for_lmixing=...` to `collisions()` or `emissivity()` when this matters.
 
 
-## Superwind/Athena++ export
+## Plasma post-processing export
 
-Create compact CSV/JSON atomic products for selected ions:
+Create compact CSV/JSON/HDF5 atomic products for selected ions.  The exporter is intended for superwinds, AGN outflows, and other plasma post-processing workflows:
 
 ```bash
 PYTHONPATH=src python -m xstar_atomic.export ./xstar/data/atdb.fits \
   --ions "O VIII,Ne IX" \
   --temperatures 1e6 3e6 1e7 \
   --wavelength-min 1.0 --wavelength-max 30.0 \
+  --formats csv,hdf5 \
   --out-dir atomic_export \
   --print-summary
 ```
 
-The export writes levels, lines, collision records/rates, photoionization summaries, emissivity rows, and JSON manifests.
+The export writes levels, lines, collision records/rates, photoionization summaries, emissivity rows, JSON manifests, and optional per-ion HDF5 files.  The installable CLI aliases are `xstar-atomic-export` and the backward-compatible `xstar-atomic-export-superwind`.
 
 ### Reading XSTAR output FITS files
 

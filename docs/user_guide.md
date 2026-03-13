@@ -281,10 +281,28 @@ xstar-atomic-solver /path/to/atdb.fits \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperatures 1e6 3e6 1e7 \
   --electron-densities 1.0 \
+  --electron-density-for-lmixing 1.0 \
   --component-mode ground \
+  --linear-solver sparse \
   --out-lines-csv o8_lya_pop_lines.csv \
   --print-summary
 ```
+
+Use `--linear-solver dense`, `--linear-solver sparse`, or `--linear-solver auto`.  The sparse solver uses `scipy.sparse.linalg.spsolve` when SciPy is available and falls back to dense least-squares if needed.
+
+### 6.7 Plasma export bundles
+
+```bash
+xstar-atomic-export /path/to/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 30.0 \
+  --formats csv,hdf5 \
+  --out-dir atomic_export \
+  --print-summary
+```
+
+This writes per-ion CSV products, optional HDF5 tables, and JSON manifests.  The export is intended for superwind, AGN outflow, and other plasma post-processing workflows.
 
 ## 7. Testing
 
