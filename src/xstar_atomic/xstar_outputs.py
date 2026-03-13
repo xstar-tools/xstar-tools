@@ -155,8 +155,17 @@ def filter_rows(
     return out
 
 
-def write_csv(rows: Sequence[Dict[str, Any]], path: str | Path) -> None:
-    """Write a list of dictionaries to CSV."""
+def write_csv(rows: Sequence[Dict[str, Any]] | str | Path, path: str | Path | Sequence[Dict[str, Any]]) -> None:
+    """Write a list of dictionaries to CSV.
+
+    Parameters
+    ----------
+    rows, path:
+        Preferred order is ``write_csv(rows, path)``.  For compatibility with
+        early test/example code, ``write_csv(path, rows)`` is also accepted.
+    """
+    if isinstance(rows, (str, Path)) and not isinstance(path, (str, Path)):
+        rows, path = path, rows
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if rows:
@@ -212,6 +221,31 @@ def summarize_lines(rows: Sequence[Dict[str, Any]], fitsfile: str | Path) -> Dic
         "n_nonzero_emit_outward": nonzero_out,
         "n_nonzero_emit_inward": nonzero_in,
     }
+
+
+def load_xstar_lines(
+    fitsfile: str | Path,
+    ion: Optional[str] = None,
+    wavelength_min: Optional[float] = None,
+    wavelength_max: Optional[float] = None,
+    min_emit_outward: Optional[float] = None,
+    min_emit_inward: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Read an XSTAR line-output FITS file and optionally filter rows.
+
+    This is a stable convenience alias for the common validation workflow.
+    It reads the ``XSTAR_LINES`` table from an ``xout_lines*.fits`` file and
+    returns rows filtered by ion, wavelength range, and emission thresholds.
+    """
+    rows = read_xout_lines(fitsfile)
+    return filter_rows(
+        rows,
+        ion=ion,
+        wavelength_min=wavelength_min,
+        wavelength_max=wavelength_max,
+        min_emit_outward=min_emit_outward,
+        min_emit_inward=min_emit_inward,
+    )
 
 
 def convert_xout_lines(
