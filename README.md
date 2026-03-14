@@ -344,3 +344,8 @@ PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
 ```
 
 This writes ``*_band_emissivity.csv`` and, for HDF5 exports, a ``/band_emissivity`` group.
+
+
+### Band-emissivity export notes
+
+Band-emissivity rows keep the ion label even for bands with zero selected lines, and use `methods_used="none"` for zero-line bands. This makes CSV/HDF5 exports easier to ingest in simulation post-processing workflows.

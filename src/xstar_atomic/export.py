@@ -262,6 +262,15 @@ def compute_band_emissivity_rows(emissivity_rows: Sequence[dict], bands: Sequenc
     out: list[dict] = []
     for temp in sorted(by_temp):
         rows_t = by_temp[temp]
+        # Preserve ion metadata even for bands with zero selected lines.  This
+        # keeps CSV/HDF5 band products easy to ingest in downstream simulation
+        # post-processing without special handling for blank ion names.
+        ions_for_temperature = sorted({str(row.get("ion", "")) for row in rows_t if row.get("ion")})
+        ion_label_for_temperature = (
+            ions_for_temperature[0]
+            if len(ions_for_temperature) == 1
+            else ",".join(ions_for_temperature)
+        )
         for band in bands:
             emin = float(band["energy_min_keV"])
             emax = float(band["energy_max_keV"])
@@ -281,8 +290,9 @@ def compute_band_emissivity_rows(emissivity_rows: Sequence[dict], bands: Sequenc
                 selected.append((row, e_coeff or 0.0, p_coeff or 0.0))
             methods = sorted({str(row.get("collision_eval_method", "")) for row, _, _ in selected if row.get("collision_eval_method")})
             ions = sorted({str(row.get("ion", "")) for row, _, _ in selected if row.get("ion")})
+            ion_label = (ions[0] if len(ions) == 1 else ",".join(ions)) or ion_label_for_temperature
             out.append({
-                "ion": ions[0] if len(ions) == 1 else ",".join(ions),
+                "ion": ion_label,
                 "band_name": band["band_name"],
                 "energy_min_keV": emin,
                 "energy_max_keV": emax,
@@ -290,7 +300,7 @@ def compute_band_emissivity_rows(emissivity_rows: Sequence[dict], bands: Sequenc
                 "n_lines_in_band": len(selected),
                 "energy_emissivity_coeff_erg_cm3_s": sum(v for _, v, _ in selected),
                 "photon_emissivity_coeff_cm3_s": sum(v for _, _, v in selected),
-                "methods_used": ",".join(methods),
+                "methods_used": ",".join(methods) if methods else "none",
             })
     return out
 

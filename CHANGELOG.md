@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.2.17 - 2026-03-14
+
+### Fixed
+- Filled the `ion` field for all band-emissivity rows, including zero-line bands.
+- Set `methods_used="none"` for zero-line band-emissivity rows.
+
+### Tests
+- Added unit and real-ATDB export tests that check band-emissivity rows do not contain blank ion names or blank method fields.
+
 ## v0.2.15 - 2026-03-13
 
 ### Added
