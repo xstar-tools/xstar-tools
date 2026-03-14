@@ -180,6 +180,120 @@ def parse_ion_list(values: Sequence[str] | str) -> list[str]:
     return [v.strip() for v in raw if v.strip()]
 
 
+
+
+def parse_band_specs(values: Sequence[str] | str | None) -> list[dict]:
+    """Parse X-ray band specifications.
+
+    Parameters
+    ----------
+    values:
+        Band specifications in the form ``name:emin:emax`` where energies are
+        in keV.  A comma-separated string or a list of strings is accepted.
+
+    Returns
+    -------
+    list of dict
+        Dictionaries with ``band_name``, ``energy_min_keV`` and
+        ``energy_max_keV``.
+
+    Examples
+    --------
+    ``"soft:0.5:2.0,hard:2.0:10.0"`` or
+    ``["soft:0.5:2.0", "hard:2.0:10.0"]``.
+    """
+    if not values:
+        return []
+    if isinstance(values, str):
+        raw = []
+        for chunk in values.split(","):
+            raw.extend(chunk.split())
+    else:
+        raw = []
+        for value in values:
+            raw.extend(str(value).split(","))
+    bands: list[dict] = []
+    for spec in raw:
+        spec = spec.strip()
+        if not spec:
+            continue
+        parts = spec.split(":")
+        if len(parts) != 3:
+            raise ValueError(f"Band specification must be name:emin:emax, got {spec!r}")
+        name, emin, emax = parts
+        try:
+            emin_f = float(emin)
+            emax_f = float(emax)
+        except ValueError as exc:
+            raise ValueError(f"Band energies must be numeric in {spec!r}") from exc
+        if not name:
+            raise ValueError(f"Band name is empty in {spec!r}")
+        if emax_f <= emin_f:
+            raise ValueError(f"Band maximum energy must be greater than minimum in {spec!r}")
+        bands.append({"band_name": name, "energy_min_keV": emin_f, "energy_max_keV": emax_f})
+    return bands
+
+
+def _safe_float(value):
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def compute_band_emissivity_rows(emissivity_rows: Sequence[dict], bands: Sequence[dict]) -> list[dict]:
+    """Aggregate line emissivity rows into broad energy bands.
+
+    The returned coefficients are still local coefficients per ``n_e n_ion``.
+    Rows with missing/null emissivity coefficients are ignored.  Energies are
+    selected using the line photon energy in keV.
+    """
+    if not bands:
+        return []
+    by_temp: dict[float, list[dict]] = {}
+    for row in emissivity_rows or []:
+        temp = _safe_float(row.get("temperature_K"))
+        if temp is None:
+            continue
+        by_temp.setdefault(temp, []).append(row)
+
+    out: list[dict] = []
+    for temp in sorted(by_temp):
+        rows_t = by_temp[temp]
+        for band in bands:
+            emin = float(band["energy_min_keV"])
+            emax = float(band["energy_max_keV"])
+            selected = []
+            for row in rows_t:
+                energy = _safe_float(row.get("energy_keV"))
+                if energy is None:
+                    wave = _safe_float(row.get("wavelength_A"))
+                    if wave and wave > 0:
+                        energy = 12.398419843320026 / wave
+                if energy is None or not (emin <= energy < emax):
+                    continue
+                e_coeff = _safe_float(row.get("line_energy_emissivity_coeff_erg_cm3_s"))
+                p_coeff = _safe_float(row.get("line_photon_emissivity_coeff_cm3_s"))
+                if e_coeff is None and p_coeff is None:
+                    continue
+                selected.append((row, e_coeff or 0.0, p_coeff or 0.0))
+            methods = sorted({str(row.get("collision_eval_method", "")) for row, _, _ in selected if row.get("collision_eval_method")})
+            ions = sorted({str(row.get("ion", "")) for row, _, _ in selected if row.get("ion")})
+            out.append({
+                "ion": ions[0] if len(ions) == 1 else ",".join(ions),
+                "band_name": band["band_name"],
+                "energy_min_keV": emin,
+                "energy_max_keV": emax,
+                "temperature_K": temp,
+                "n_lines_in_band": len(selected),
+                "energy_emissivity_coeff_erg_cm3_s": sum(v for _, v, _ in selected),
+                "photon_emissivity_coeff_cm3_s": sum(v for _, _, v in selected),
+                "methods_used": ",".join(methods),
+            })
+    return out
+
 def ion_slug(ion: str) -> str:
     """Return a filename-safe ion label such as ``o_viii``."""
     z, stage, symbol = parse_ion(ion)
@@ -202,6 +316,7 @@ def export_ion_products(
     include_photoionization_grid: bool = False,
     make_emissivity: bool = True,
     formats: Sequence[str] = ("csv",),
+    bands: Sequence[dict] | None = None,
 ) -> dict:
     """Export compact decoded products for one ion.
 
@@ -221,6 +336,7 @@ def export_ion_products(
         "wavelength_A": list(wavelength) if wavelength is not None else None,
         "electron_density_for_lmixing_cm^-3": electron_density_for_lmixing,
         "formats": list(formats),
+        "bands_keV": list(bands or []),
         "files": {},
         "counts": {},
     }
@@ -281,6 +397,7 @@ def export_ion_products(
             manifest["files"]["photoionization_grid_csv"] = str(pi_grid_path)
         manifest["counts"]["photoionization_grid_rows"] = len(pi_grid)
 
+    band_rows: list[dict] = []
     if make_emissivity:
         emiss = db.emissivity(
             ion,
@@ -293,8 +410,16 @@ def export_ion_products(
             emiss_path = out_dir / f"{slug}_emissivity.csv"
             write_csv(emiss_path, emiss.get("emissivity", []))
             manifest["files"]["emissivity_csv"] = str(emiss_path)
-        manifest["counts"]["emissivity_rows"] = len(emiss.get("emissivity", []))
+        emiss_rows = emiss.get("emissivity", [])
+        manifest["counts"]["emissivity_rows"] = len(emiss_rows)
         manifest["emissivity_summary"] = emiss.get("summary", {})
+        band_rows = compute_band_emissivity_rows(emiss_rows, bands or [])
+        if bands:
+            manifest["counts"]["band_emissivity_rows"] = len(band_rows)
+            if write_csv_products:
+                band_path = out_dir / f"{slug}_band_emissivity.csv"
+                write_csv(band_path, band_rows)
+                manifest["files"]["band_emissivity_csv"] = str(band_path)
 
     if write_hdf5_products:
         h5_path = out_dir / f"{slug}_atomic.h5"
@@ -310,6 +435,8 @@ def export_ion_products(
             write_hdf5_rows(h5_path, "photoionization_grid", pi_grid, metadata=h5_meta)
         if make_emissivity:
             write_hdf5_rows(h5_path, "emissivity", emiss.get("emissivity", []), metadata=h5_meta)
+            if bands:
+                write_hdf5_rows(h5_path, "band_emissivity", band_rows, metadata={**h5_meta, "bands_keV": list(bands or [])})
         manifest["files"]["hdf5"] = str(h5_path)
 
     manifest_path = out_dir / f"{slug}_manifest.json"
@@ -331,6 +458,7 @@ def export_superwind_bundle(
     include_photoionization_grid: bool = False,
     make_emissivity: bool = True,
     formats: Sequence[str] = ("csv",),
+    bands: Sequence[dict] | None = None,
 ) -> dict:
     """Export a multi-ion CSV/JSON bundle for Athena++/superwind use."""
     ion_list = parse_ion_list(ions)
@@ -346,6 +474,7 @@ def export_superwind_bundle(
                 include_photoionization_grid=include_photoionization_grid,
                 make_emissivity=make_emissivity,
                 formats=formats,
+                bands=bands,
             )
             for ion in ion_list
         ]
@@ -357,6 +486,7 @@ def export_superwind_bundle(
         "wavelength_A": list(wavelength) if wavelength is not None else None,
         "electron_density_for_lmixing_cm^-3": electron_density_for_lmixing,
         "formats": list(formats),
+        "bands_keV": list(bands or []),
         "manifests": manifests,
     }
     write_json(Path(out_dir) / "atomic_export_manifest.json", bundle)
@@ -379,6 +509,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     p.add_argument("--include-photoionization-grid", action="store_true")
     p.add_argument("--no-emissivity", action="store_true", help="Skip emissivity-table export.")
     p.add_argument("--formats", default="csv", help="Comma-separated output formats: csv, hdf5, or csv,hdf5")
+    p.add_argument("--bands-kev", nargs="*", default=None,
+                   help="Optional band specs name:emin:emax in keV, e.g. soft:0.5:2.0 hard:2.0:10.0")
     p.add_argument("--print-summary", action="store_true")
     args = p.parse_args(argv)
 
@@ -387,6 +519,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.wavelength_min is None or args.wavelength_max is None:
             raise SystemExit("Both --wavelength-min and --wavelength-max are required when selecting a wavelength range")
         wavelength = (args.wavelength_min, args.wavelength_max)
+
+    try:
+        bands = parse_band_specs(args.bands_kev)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     bundle = export_superwind_bundle(
         args.fitsfile,
@@ -398,6 +535,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         include_photoionization_grid=args.include_photoionization_grid,
         make_emissivity=not args.no_emissivity,
         formats=[x.strip() for x in args.formats.split(",") if x.strip()],
+        bands=bands,
     )
     if args.print_summary:
         print(json.dumps(bundle, indent=2))

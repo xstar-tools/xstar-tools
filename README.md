@@ -327,3 +327,20 @@ The source distribution includes `xstar_test_run/`, which contains small direct-
 - O VII high-density triplet validation.
 
 See `xstar_test_run/README.md` and `docs/xstar_comparison_examples.md` for the exact XSTAR commands and the `xstar_atomic.xstar_outputs` conversion commands.
+
+### Band emissivity export
+
+Broad-band line emissivity products can be generated with ``--bands-kev``:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 40.0 \
+  --bands-kev soft:0.5:2.0 osoft:0.3:0.6 med:0.6:1.0 hard:2.0:10.0 \
+  --formats csv,hdf5 \
+  --out-dir atomic_export \
+  --print-summary
+```
+
+This writes ``*_band_emissivity.csv`` and, for HDF5 exports, a ``/band_emissivity`` group.
