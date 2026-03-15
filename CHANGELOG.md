@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.18 - 2026-03-15
+
+### Documentation
+- Updated the Markdown, LaTeX, and Sphinx user-guide material for the validated Stage-4 band-emissivity export workflow.
+- Documented `--bands-kev`, `*_band_emissivity.csv`, and HDF5 `/band_emissivity` products.
+- Recorded the v0.2.17 Stage-4 real-ATDB validation result: 34 passing tests, 12 band-emissivity rows per ion for four bands and three temperatures, nonblank `ion`, and `methods_used="none"` for zero-line bands.
+
+### Examples
+- Added `examples/09_export_band_emissivity.py` for CSV/HDF5 export of line-based X-ray band emissivity products.
+
 ## v0.2.17 - 2026-03-14
 
 ### Fixed

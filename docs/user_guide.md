@@ -33,8 +33,10 @@ The package currently includes:
 - Radiative-line extraction for `data_type=50`.
 - Photoionization extraction for `data_type=53` and inventory support for related bound-free records.
 - Collisional excitation extraction/evaluation for:
+  - `data_type=51`: Burgess--Tully 5-point collision strengths,
   - `data_type=56`: tabulated effective collision strengths,
-  - `data_type=63`: implemented `nf != ni`, `|Delta l| = 1` branch and same-`n` l-mixing branch of the Bautista/XSTAR algorithm.
+  - `data_type=63`: implemented `nf != ni`, `|Delta l| = 1` branch and same-`n` l-mixing branch of the Bautista/XSTAR algorithm,
+  - `data_type=98`: CHIANTI-2016-style Burgess--Tully collision strengths.
 - Recombination and charge-exchange inventory/evaluation for:
   - `data_type=1`: Aldrovandi & Pequignot total RR,
   - `data_type=30`: hydrogenic total RR,
@@ -42,6 +44,8 @@ The package currently includes:
   - `data_type=39`: Badnell total DR,
   - `data_type=2`: charge exchange with neutral hydrogen when explicitly requested.
 - Direct-excitation line-emissivity table generation.
+- CSV/HDF5 export bundles for plasma post-processing workflows.
+- Line-based X-ray band emissivity exports via `--bands-kev`.
 - Prototype level-population solver with connected-component diagnostics and source/sink hooks.
 - Prototype radiative-branching cascade redistribution for source-injection experiments.
 
@@ -296,13 +300,60 @@ Use `--linear-solver dense`, `--linear-solver sparse`, or `--linear-solver auto`
 xstar-atomic-export /path/to/atdb.fits \
   --ions "O VIII,Ne IX" \
   --temperatures 1e6 3e6 1e7 \
-  --wavelength-min 1.0 --wavelength-max 30.0 \
+  --wavelength-min 1.0 --wavelength-max 40.0 \
   --formats csv,hdf5 \
   --out-dir atomic_export \
   --print-summary
 ```
 
 This writes per-ion CSV products, optional HDF5 tables, and JSON manifests.  The export is intended for superwind, AGN outflow, and other plasma post-processing workflows.
+
+### 6.8 X-ray band emissivity exports
+
+Line-by-line emissivity tables are useful for detailed diagnostics, but post-processing of simulated outflows often needs integrated X-ray bands.  The export command supports line-based band sums with `--bands-kev`, using band specifications of the form `name:emin:emax` in keV.
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 \
+  --wavelength-max 40.0 \
+  --bands-kev soft:0.5:2.0 osoft:0.3:0.6 med:0.6:1.0 hard:2.0:10.0 \
+  --formats csv,hdf5 \
+  --out-dir atomic_export \
+  --print-summary
+```
+
+For each ion this writes:
+
+```text
+<ion>_band_emissivity.csv
+<ion>_atomic.h5:/band_emissivity
+```
+
+The band-emissivity table contains:
+
+```text
+ion
+band_name
+energy_min_keV
+energy_max_keV
+temperature_K
+n_lines_in_band
+energy_emissivity_coeff_erg_cm3_s
+photon_emissivity_coeff_cm3_s
+methods_used
+```
+
+The coefficients are local line-emissivity coefficients per `n_e n_ion`, summed over the selected lines in each band.  They are not full plasma cooling functions unless combined with ion fractions and abundances.  Zero-line bands are retained with `n_lines_in_band=0`, `methods_used="none"`, and the ion label filled.
+
+A validated Stage-4 test used four bands and three temperatures for O VIII and Ne IX, giving:
+
+```text
+4 bands × 3 temperatures = 12 band-emissivity rows per ion
+```
+
+The real-ATDB validation confirmed that CSV and HDF5 products contain `/band_emissivity`, that all zero-line bands keep the ion label, and that no `methods_used` entries are blank.
 
 ## 7. Testing
 
@@ -312,7 +363,11 @@ The test suite contains lightweight package tests and optional real-database smo
 XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits PYTHONPATH=src pytest -q
 ```
 
-Without `XSTAR_ATDB_FITS`, tests requiring `atdb.fits` are skipped.
+Without `XSTAR_ATDB_FITS`, tests requiring `atdb.fits` are skipped.  The v0.2.17 Stage-4 validation run passed 34 real-ATDB tests:
+
+```text
+34 passed in 113.49s
+```
 
 ## 8. Examples
 
@@ -325,6 +380,9 @@ The `examples/` directory contains runnable scripts:
 04_oxygen_recombination_inventory.py
 05_low_level_atdb_index.py
 06_high_level_api_quickstart.py
+07_collision_decoder_validation.py
+08_compare_xstar_outputs.py
+09_export_band_emissivity.py
 ```
 
 Run them without installing by setting `PYTHONPATH`:

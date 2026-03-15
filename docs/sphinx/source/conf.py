@@ -11,9 +11,9 @@ SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
 project = "xstar-atomic"
-author = "Ashkbiz Danehkar / ChatGPT-assisted development"
-release = "0.2.12"
-version = "0.2.12"
+author = "Ashkbiz Danehkar"
+release = "0.2.18"
+version = "0.2.18"
 
 extensions = [
     "sphinx.ext.autodoc",

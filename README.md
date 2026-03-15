@@ -345,6 +345,8 @@ PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
 
 This writes ``*_band_emissivity.csv`` and, for HDF5 exports, a ``/band_emissivity`` group.
 
+The Stage-4 validation run passed 34 real-ATDB tests and confirmed 12 band-emissivity rows per ion for four bands and three temperatures. Zero-line bands keep nonblank ion labels and use `methods_used="none"`.
+
 
 ### Band-emissivity export notes
 

@@ -47,15 +47,38 @@ The package includes additional scripts under ``examples/``:
 
 * ``07_collision_decoder_validation.py``: inventory and validate collision decoder targets.
 * ``08_compare_xstar_outputs.py``: compare xstar-atomic rows with user-supplied XSTAR output CSVs.
+* ``09_export_band_emissivity.py``: export CSV/HDF5 line-based X-ray band emissivity products.
 
-Superwind export
-----------------
+Plasma export and band emissivity
+---------------------------------
 
-Use the export CLI to write compact CSV/JSON bundles for selected ions::
+Use the export CLI to write compact CSV/JSON/HDF5 bundles for selected ions::
 
    PYTHONPATH=src python -m xstar_atomic.export atdb.fits \
      --ions "O VIII,Ne IX" \
      --temperatures 1e6 3e6 1e7 \
-     --wavelength-min 1.0 --wavelength-max 30.0 \
+     --wavelength-min 1.0 --wavelength-max 40.0 \
+     --formats csv,hdf5 \
      --out-dir atomic_export \
      --print-summary
+
+Line-based broad-band products are enabled with ``--bands-kev``::
+
+   PYTHONPATH=src python -m xstar_atomic.export atdb.fits \
+     --ions "O VIII,Ne IX" \
+     --temperatures 1e6 3e6 1e7 \
+     --wavelength-min 1.0 --wavelength-max 40.0 \
+     --bands-kev soft:0.5:2.0 osoft:0.3:0.6 med:0.6:1.0 hard:2.0:10.0 \
+     --formats csv,hdf5 \
+     --out-dir atomic_export \
+     --print-summary
+
+The band export writes ``*_band_emissivity.csv`` and a ``/band_emissivity``
+group in each per-ion HDF5 file.  Zero-line bands keep the ion label and use
+``methods_used="none"``.
+
+Band-emissivity example
+-----------------------
+
+.. literalinclude:: ../../../examples/09_export_band_emissivity.py
+   :language: python
