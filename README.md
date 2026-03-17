@@ -351,3 +351,33 @@ The Stage-4 validation run passed 34 real-ATDB tests and confirmed 12 band-emiss
 ### Band-emissivity export notes
 
 Band-emissivity rows keep the ion label even for bands with zero selected lines, and use `methods_used="none"` for zero-line bands. This makes CSV/HDF5 exports easier to ingest in simulation post-processing workflows.
+
+### Stage-3 sparse solver and O VII triplet diagnostics
+
+The level-population solver supports dense, sparse, and auto linear solvers:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.solver /path/to/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperatures 1e6 \
+  --electron-densities 1.0 \
+  --electron-density-for-lmixing 1.0 \
+  --component-mode ground \
+  --linear-solver sparse \
+  --summary-json o8_sparse_solver_summary.json \
+  --print-summary
+```
+
+For O VII triplet stress tests, run:
+
+```bash
+PYTHONPATH=src python examples/10_o7_triplet_sparse_solver.py \
+  /path/to/atdb.fits \
+  --out-dir o7_triplet_solver_example
+```
+
+The solver reports sparse/dense matrix diagnostics and can write prototype
+O VII triplet `R=f/i` and `G=(f+i)/r` diagnostics. These are solver validation
+outputs, not final physical line-ratio predictions unless the recombination and
+cascade source model is complete.

@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.19 - 2026-03-16
+
+### Solver
+- Improved Stage-3 level-population solver diagnostics for sparse and dense solves, including matrix nonzero counts, matrix density, singular-value/rank diagnostics, diagonal and row-sum ranges, residual norms, and explicit sparse-use flags.
+- Added optional connectivity pruning with `--prune-unconnected-levels`, preserving ground, output, and explicit source/sink levels.
+- Added source/sink vector summaries to solver JSON output, including nonzero level terms and source/sink totals for recombination/cascade source-file tests.
+- Added O VII triplet diagnostic support with `--triplet-diagnostics` and `--out-triplet-csv`, reporting prototype `R=f/i` and `G=(f+i)/r` ratios when O VII triplet lines are selected.
+
+### Documentation and examples
+- Updated the user guide and examples for sparse solver runs, connectivity pruning, source/sink diagnostics, and O VII triplet diagnostics.
+- Added `examples/10_o7_triplet_sparse_solver.py` as the Stage-3 solver stress-test example.
+
+### Tests
+- Added unit tests for solver diagnostics, pruning, source/sink summaries, and O VII triplet R/G helper calculations.
+
 ## v0.2.18 - 2026-03-15
 
 ### Documentation

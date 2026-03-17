@@ -48,6 +48,7 @@ The package includes additional scripts under ``examples/``:
 * ``07_collision_decoder_validation.py``: inventory and validate collision decoder targets.
 * ``08_compare_xstar_outputs.py``: compare xstar-atomic rows with user-supplied XSTAR output CSVs.
 * ``09_export_band_emissivity.py``: export CSV/HDF5 line-based X-ray band emissivity products.
+* ``10_o7_triplet_sparse_solver.py``: run an O VII sparse-solver/triplet diagnostic stress test.
 
 Plasma export and band emissivity
 ---------------------------------
@@ -81,4 +82,11 @@ Band-emissivity example
 -----------------------
 
 .. literalinclude:: ../../../examples/09_export_band_emissivity.py
+   :language: python
+
+
+O VII sparse solver triplet diagnostic example
+----------------------------------------------
+
+.. literalinclude:: ../../../examples/10_o7_triplet_sparse_solver.py
    :language: python

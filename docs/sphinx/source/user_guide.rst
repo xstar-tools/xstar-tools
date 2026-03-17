@@ -57,3 +57,30 @@ Build the Sphinx documentation:
    python -m pip install -e .[docs]
    cd docs/sphinx
    make html
+
+Stage-3 sparse solver diagnostics
+---------------------------------
+
+Use ``--linear-solver sparse`` with the XSTAR type-63 same-``n`` l-mixing
+impact-parameter density:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python -m xstar_atomic.solver /path/to/atdb.fits \
+     --element O --ion-stage 8 \
+     --wavelength-min 18.8 --wavelength-max 19.1 \
+     --temperatures 1e6 \
+     --electron-densities 1.0 \
+     --electron-density-for-lmixing 1.0 \
+     --component-mode ground \
+     --linear-solver sparse \
+     --summary-json o8_sparse_solver_summary.json \
+     --print-summary
+
+The summary includes matrix nonzero counts, density, singular-value rank,
+condition number, sparse availability/use, and linear residual diagnostics.
+The optional ``--prune-unconnected-levels`` flag removes isolated levels while
+preserving ground, output, and explicit source/sink levels.
+
+For O VII triplet stress tests, ``examples/10_o7_triplet_sparse_solver.py``
+writes prototype ``R=f/i`` and ``G=(f+i)/r`` diagnostic tables.

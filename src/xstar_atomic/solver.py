@@ -378,6 +378,63 @@ def choose_component_levels(level_indices: List[int], component_diag: dict, outp
     return [lev for lev in level_indices if level_to_component.get(lev) in selected_ids]
 
 
+
+
+def prune_unconnected_levels(
+    level_indices: List[int],
+    edges: List[Tuple[int, int, str]],
+    output_lines: List[dict],
+    ground_level: int,
+    source_levels: Optional[Iterable[int]] = None,
+) -> Tuple[List[int], dict]:
+    """Remove isolated levels while preserving ground, output, and source levels.
+
+    This is a lightweight connectivity pruning step. It is not a physical model
+    reduction; it only removes levels with no radiative/collisional graph edge
+    unless those levels are explicitly needed for output or source/sink tests.
+    """
+    connected: set[int] = set()
+    for a, b, _kind in edges:
+        connected.add(a)
+        connected.add(b)
+    keep: set[int] = set(connected)
+    keep.add(int(ground_level))
+    for line in output_lines:
+        lo = maybe_int(line.get("lower_level"))
+        up = maybe_int(line.get("upper_level"))
+        if lo is not None:
+            keep.add(lo)
+        if up is not None:
+            keep.add(up)
+    for lev in source_levels or []:
+        if lev is not None:
+            keep.add(int(lev))
+    pruned = [lev for lev in level_indices if lev in keep]
+    removed = [lev for lev in level_indices if lev not in keep]
+    return pruned, {
+        "enabled": True,
+        "n_levels_before": len(level_indices),
+        "n_levels_after": len(pruned),
+        "n_levels_removed": len(removed),
+        "removed_levels_preview": removed[:50],
+        "removed_levels_truncated": len(removed) > 50,
+    }
+
+
+def collect_explicit_source_levels(args) -> List[int]:
+    """Return levels explicitly mentioned by command-line source/sink options.
+
+    CSV source files are temperature dependent and are applied later, so this
+    helper only captures levels visible from the command line at setup time.
+    """
+    out: set[int] = set()
+    for pairs in (args.source_level or [], args.sink_level or []):
+        try:
+            out.add(int(pairs[0]))
+        except Exception:
+            pass
+    return sorted(out)
+
 def load_level_rate_csv(path: Optional[str], temperature: float, electron_density: float) -> Tuple[Dict[int, float], Dict[int, float], List[str]]:
     """Load level source/sink rates from CSV. Optional columns: temperature_K, electron_density_cm^-3."""
     src: Dict[int, float] = {}
@@ -435,6 +492,25 @@ def build_source_sink_vectors(level_indices: List[int], args, temperature: float
         notes.append("auto recombination/cascade requested but not yet decoded from ATDB records; use --recombination-source-csv for level-resolved sources")
     return source, sink, notes
 
+
+
+
+def summarize_source_sink_vectors(level_indices: List[int], source: np.ndarray, sink: np.ndarray, notes: List[str]) -> dict:
+    """Compact diagnostic summary for level source/sink vectors."""
+    rows = []
+    for k, lev in enumerate(level_indices):
+        s = float(source[k]) if k < len(source) else 0.0
+        t = float(sink[k]) if k < len(sink) else 0.0
+        if s != 0.0 or t != 0.0:
+            rows.append({"level_index": lev, "source_s^-1": s, "sink_s^-1": t})
+    return {
+        "n_source_terms_nonzero": int(np.count_nonzero(source)),
+        "n_sink_terms_nonzero": int(np.count_nonzero(sink)),
+        "source_sum_s^-1": float(np.sum(source)),
+        "sink_sum_s^-1": float(np.sum(sink)),
+        "nonzero_level_terms": rows,
+        "notes": list(notes),
+    }
 
 def build_same_n_lmixing_rows(level_indices: List[int], level_by_index: Dict[int, dict], electron_density: float, coeff_cm3_s: Optional[float]) -> List[dict]:
     """Optional phenomenological same-n adjacent-l mixing; not an XSTAR amcrs port."""
@@ -583,14 +659,28 @@ def solve_steady_state(
     b[-1] = 1.0
 
     requested_solver = str(linear_solver or "dense").lower()
+    nnz = int(np.count_nonzero(M))
+    abs_M = np.abs(M)
+    diag_abs = np.abs(np.diag(M)) if n else np.array([], dtype=float)
+    row_abs_sum = np.sum(abs_M, axis=1) if n else np.array([], dtype=float)
     info = {
         "matrix_size": n,
+        "matrix_nnz": nnz,
+        "matrix_density": float(nnz / (n * n)) if n else None,
         "matrix_rank": None,
+        "matrix_effective_rank_tol": None,
+        "matrix_singular_value_min": None,
+        "matrix_singular_value_max": None,
         "condition_number": None,
+        "diagonal_abs_min": float(np.min(diag_abs)) if diag_abs.size else None,
+        "diagonal_abs_max": float(np.max(diag_abs)) if diag_abs.size else None,
+        "row_abs_sum_min": float(np.min(row_abs_sum)) if row_abs_sum.size else None,
+        "row_abs_sum_max": float(np.max(row_abs_sum)) if row_abs_sum.size else None,
         "solver": None,
         "solver_requested": requested_solver,
         "solver_warning": "",
         "sparse_available": False,
+        "sparse_used": False,
         "n_source_terms_nonzero": int(np.count_nonzero(source_vector)) if source_vector is not None else 0,
         "n_sink_terms_nonzero": int(np.count_nonzero(sink_rates)) if sink_rates is not None else 0,
         "source_sum_s^-1": float(np.sum(source_vector)) if source_vector is not None else 0.0,
@@ -611,21 +701,35 @@ def solve_steady_state(
     # Dense diagnostics are useful but can be expensive for very large matrices.
     if n <= 800:
         try:
-            info["matrix_rank"] = int(np.linalg.matrix_rank(M))
+            sv = np.linalg.svd(M, compute_uv=False)
+            if sv.size:
+                info["matrix_singular_value_min"] = float(np.min(sv))
+                info["matrix_singular_value_max"] = float(np.max(sv))
+                tol = float(max(M.shape) * np.finfo(float).eps * np.max(sv))
+                info["matrix_effective_rank_tol"] = tol
+                info["matrix_rank"] = int(np.sum(sv > tol))
+                if np.min(sv) > 0:
+                    cond = float(np.max(sv) / np.min(sv))
+                    if math.isfinite(cond):
+                        info["condition_number"] = cond
         except Exception:
-            pass
-        try:
-            cond = float(np.linalg.cond(M))
-            if math.isfinite(cond):
-                info["condition_number"] = cond
-        except Exception:
-            pass
+            try:
+                info["matrix_rank"] = int(np.linalg.matrix_rank(M))
+            except Exception:
+                pass
+            try:
+                cond = float(np.linalg.cond(M))
+                if math.isfinite(cond):
+                    info["condition_number"] = cond
+            except Exception:
+                pass
 
     try:
         if use_sparse:
             if scipy_sparse is None or scipy_splinalg is None:
                 raise RuntimeError("SciPy sparse solver requested but scipy is not available")
             info["solver"] = "scipy.sparse.linalg.spsolve"
+            info["sparse_used"] = True
             pop = scipy_splinalg.spsolve(scipy_sparse.csr_matrix(M), b)
             pop = np.asarray(pop, dtype=float)
             if not np.all(np.isfinite(pop)):
@@ -654,6 +758,15 @@ def solve_steady_state(
     info["population_sum"] = float(np.sum(pop))
     info["min_population"] = float(np.min(pop)) if len(pop) else None
     info["max_population"] = float(np.max(pop)) if len(pop) else None
+    try:
+        residual = M @ pop - b
+        info["linear_residual_l2"] = float(np.linalg.norm(residual))
+        info["linear_residual_linf"] = float(np.max(np.abs(residual))) if residual.size else 0.0
+        info["normalization_residual"] = float(abs(np.sum(pop) - 1.0))
+    except Exception:
+        info["linear_residual_l2"] = None
+        info["linear_residual_linf"] = None
+        info["normalization_residual"] = None
     return pop, info
 
 
@@ -726,6 +839,77 @@ def make_line_output_rows(output_lines: List[dict], level_indices: List[int], po
     return rows
 
 
+
+
+def classify_o7_triplet_line(row: dict) -> Optional[str]:
+    """Classify common O VII triplet components by wavelength/upper level.
+
+    Returns ``f`` for the forbidden line near 22.101 Å, ``i`` for the
+    intercombination components near 21.804--21.807 Å, and ``r`` for the
+    resonance line near 21.602 Å.  The classification is intentionally narrow
+    and used only for O VII diagnostic summaries.
+    """
+    wav = maybe_float(row.get("wavelength_A"))
+    upper = maybe_int(row.get("upper_level"))
+    if wav is None:
+        return None
+    if abs(wav - 22.1012) < 0.02 or upper == 2:
+        return "f"
+    if abs(wav - 21.8070) < 0.03 or upper in (3, 5):
+        return "i"
+    if abs(wav - 21.6020) < 0.02 or upper == 7:
+        return "r"
+    return None
+
+
+def make_o7_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
+    """Compute O VII triplet diagnostics R=f/i and G=(f+i)/r.
+
+    The diagnostics use the solver line-energy emissivity per ion. If those
+    quantities are absent, the output values are left as ``None``.  This helper
+    is useful for stress-testing the solver but should not be interpreted as a
+    final physical O VII triplet prediction unless the source/cascade model is
+    physically complete.
+    """
+    grouped: Dict[Tuple[float, float], Dict[str, float]] = {}
+    counts: Dict[Tuple[float, float], Dict[str, int]] = {}
+    for row in line_rows:
+        if str(row.get("element", "")).strip().upper() != "O" or maybe_int(row.get("ion_stage")) != 7:
+            continue
+        kind = classify_o7_triplet_line(row)
+        if not kind:
+            continue
+        T = maybe_float(row.get("temperature_K"))
+        ne = maybe_float(row.get("electron_density_cm^-3"))
+        val = maybe_float(row.get("line_energy_emissivity_per_ion_erg_s^-1"))
+        if T is None or ne is None:
+            continue
+        key = (T, ne)
+        grouped.setdefault(key, {"f": 0.0, "i": 0.0, "r": 0.0})
+        counts.setdefault(key, {"f": 0, "i": 0, "r": 0})
+        if val is not None:
+            grouped[key][kind] += val
+        counts[key][kind] += 1
+    rows: List[dict] = []
+    for (T, ne), vals in sorted(grouped.items()):
+        f = vals.get("f", 0.0)
+        i = vals.get("i", 0.0)
+        r = vals.get("r", 0.0)
+        rows.append({
+            "temperature_K": T,
+            "electron_density_cm^-3": ne,
+            "forbidden_energy_per_ion_erg_s^-1": f,
+            "intercombination_energy_per_ion_erg_s^-1": i,
+            "resonance_energy_per_ion_erg_s^-1": r,
+            "R_f_over_i": (f / i) if i > 0 else None,
+            "G_f_plus_i_over_r": ((f + i) / r) if r > 0 else None,
+            "n_forbidden_components": counts[(T, ne)].get("f", 0),
+            "n_intercombination_components": counts[(T, ne)].get("i", 0),
+            "n_resonance_components": counts[(T, ne)].get("r", 0),
+            "diagnostic_note": "prototype solver diagnostic; requires physical source/cascade model for final interpretation",
+        })
+    return rows
+
 def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: List[dict], collisions: List[dict], collision_eval: List[dict], used_collision_eval: List[dict], line_rows: List[dict], population_rows: List[dict], solve_infos: List[dict]) -> dict:
     matched_pairs = {(maybe_int(r.get("lower_level")), maybe_int(r.get("upper_level"))) for r in used_collision_eval}
     output_pairs = {(maybe_int(r.get("lower_level")), maybe_int(r.get("upper_level"))) for r in output_lines}
@@ -765,6 +949,8 @@ def main(argv=None) -> None:
     p.add_argument("--upper-level", type=int)
     p.add_argument("--levels", type=int, nargs="*", help="Optional explicit levels to include; endpoints connected to them are also included")
     p.add_argument("--max-level", type=int, help="Only include decoded levels with level_index <= this value")
+    p.add_argument("--prune-unconnected-levels", action="store_true",
+                   help="Remove isolated levels before solving while preserving ground, output, and explicit source/sink levels")
     p.add_argument("--component-mode", choices=["all", "ground", "largest", "output"], default="all",
                    help="Restrict matrix to connected component(s): all, ground, largest, or components containing output lines")
     p.add_argument("--ground-level", type=int, default=1, help="Ground/reference level for component-mode=ground")
@@ -789,6 +975,9 @@ def main(argv=None) -> None:
     p.add_argument("--out-lines-csv", default="level_population_lines.csv")
     p.add_argument("--out-populations-csv")
     p.add_argument("--out-transitions-csv")
+    p.add_argument("--out-triplet-csv", help="Write O VII triplet diagnostic CSV with R=f/i and G=(f+i)/r when applicable")
+    p.add_argument("--triplet-diagnostics", choices=["auto", "o7", "none"], default="auto",
+                   help="Compute O VII triplet R/G diagnostics for O VII output lines")
     p.add_argument("--summary-json")
     p.add_argument("--print-summary", action="store_true")
     args = p.parse_args(argv)
@@ -826,6 +1015,20 @@ def main(argv=None) -> None:
     level_indices = choose_component_levels(
         level_indices_initial, component_diagnostics_initial, output_lines, args.component_mode, args.ground_level
     )
+    pruning_diagnostics = {"enabled": False}
+    if args.prune_unconnected_levels:
+        selected_edges_for_pruning = build_graph_edges(
+            build_radiative_transitions(all_lines, set(level_indices), args),
+            collision_eval,
+            set(level_indices),
+        )
+        level_indices, pruning_diagnostics = prune_unconnected_levels(
+            level_indices,
+            selected_edges_for_pruning,
+            output_lines,
+            args.ground_level,
+            collect_explicit_source_levels(args),
+        )
     level_set = set(level_indices)
 
     rad_lines_matrix = build_radiative_transitions(all_lines, level_set, args)
@@ -855,6 +1058,7 @@ def main(argv=None) -> None:
     all_transition_rows: List[dict] = []
     used_collision_eval_rows: List[dict] = []
     solve_infos: List[dict] = []
+    source_sink_summaries: List[dict] = []
 
     for T in args.temperatures:
         for ne in args.electron_densities:
@@ -865,6 +1069,9 @@ def main(argv=None) -> None:
             )
             R, trans_log = assemble_rate_matrix(level_indices, rad_lines_matrix, coll_T, same_n_rows)
             source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(level_indices, args, T, ne)
+            ss_summary = summarize_source_sink_vectors(level_indices, source_vec, sink_vec, source_sink_notes)
+            ss_summary.update({"temperature_K": T, "electron_density_cm^-3": ne})
+            source_sink_summaries.append(ss_summary)
             pop, info = solve_steady_state(R, source_vec, sink_vec, linear_solver=args.linear_solver)
             info.update({
                 "temperature_K": T,
@@ -890,6 +1097,13 @@ def main(argv=None) -> None:
     if args.out_transitions_csv:
         write_csv(args.out_transitions_csv, all_transition_rows)
 
+    do_triplet = args.triplet_diagnostics == "o7" or (
+        args.triplet_diagnostics == "auto" and str(args.element).strip().upper() == "O" and int(args.ion_stage) == 7
+    )
+    triplet_rows = make_o7_triplet_diagnostics(all_line_rows) if do_triplet else []
+    if args.out_triplet_csv:
+        write_csv(args.out_triplet_csv, triplet_rows)
+
     summary = summarize(levels, rad_lines_matrix, output_lines, collisions, collision_eval, used_collision_eval_rows, all_line_rows, all_population_rows, solve_infos)
     summary.update({
         "fitsfile": args.fitsfile,
@@ -901,7 +1115,10 @@ def main(argv=None) -> None:
         "out_lines_csv": args.out_lines_csv,
         "out_populations_csv": args.out_populations_csv,
         "out_transitions_csv": args.out_transitions_csv,
+        "out_triplet_csv": args.out_triplet_csv,
         "component_mode": args.component_mode,
+        "prune_unconnected_levels": bool(args.prune_unconnected_levels),
+        "pruning_diagnostics": pruning_diagnostics,
         "ground_level": args.ground_level,
         "n_components_initial": component_diagnostics_initial.get("n_components"),
         "n_components_selected": component_diagnostics_selected.get("n_components"),
@@ -918,6 +1135,9 @@ def main(argv=None) -> None:
             "recombination_source_csv": args.recombination_source_csv,
             "adjacent_ion_source_csv": args.adjacent_ion_source_csv,
         },
+        "source_sink_summaries": source_sink_summaries,
+        "triplet_diagnostics_enabled": bool(do_triplet),
+        "triplet_diagnostics": triplet_rows,
     })
     if args.summary_json:
         Path(args.summary_json).write_text(json.dumps(summary, indent=2), encoding="utf-8")

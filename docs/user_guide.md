@@ -519,3 +519,43 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
 ```
 
 Use wavelength mode for database/line-identification validation. Absolute comparison of `xstar-atomic` local emissivity coefficients against XSTAR `emit_outward` requires a model-dependent normalization involving ion fractions, density, column, geometry, and radiative transfer.
+
+## Stage-3 sparse level-population solver diagnostics
+
+The level-population solver supports the XSTAR type-63 same-`n` l-mixing
+collision decoder and can solve the statistical-equilibrium matrix with a dense
+or sparse backend:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.solver ../xstar/data/atdb.fits \
+  --element O \
+  --ion-stage 8 \
+  --wavelength-min 18.8 \
+  --wavelength-max 19.1 \
+  --temperatures 1e6 \
+  --electron-densities 1.0 \
+  --electron-density-for-lmixing 1.0 \
+  --component-mode ground \
+  --linear-solver sparse \
+  --summary-json o8_sparse_solver_summary.json \
+  --print-summary
+```
+
+Solver summaries now report matrix nonzero counts, matrix density, singular-value
+rank estimates, condition numbers, residual norms, sparse availability, and
+whether sparse solving was actually used.  The optional
+`--prune-unconnected-levels` flag removes isolated levels before the solve while
+preserving the ground level, output-line levels, and explicit source/sink levels.
+
+For O VII triplet stress tests, use:
+
+```bash
+PYTHONPATH=src python examples/10_o7_triplet_sparse_solver.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_triplet_solver_example
+```
+
+This example writes an O VII triplet diagnostic table containing prototype
+`R=f/i` and `G=(f+i)/r` ratios.  These ratios are useful for solver debugging,
+but they are not final physical predictions unless the source/cascade model is
+physically complete.
