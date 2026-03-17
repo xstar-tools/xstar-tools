@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.20 - 2026-03-17
+
+### Added
+- Added `examples/11_solver_timing.py` to benchmark end-to-end level-population solver execution times.
+- The timing example compares O VIII dense and sparse solver modes and can optionally include the heavier O VII triplet sparse stress test.
+- Timing CSV rows include elapsed wall time, solver used, sparse status, matrix size, nonzero count, density, condition number, and residual diagnostics.
+
+### Documentation
+- Updated the Markdown, LaTeX, and Sphinx user guides with solver timing commands and notes on when a C++ backend could improve performance.
+
 ## v0.2.19 - 2026-03-16
 
 ### Solver

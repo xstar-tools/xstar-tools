@@ -381,3 +381,28 @@ The solver reports sparse/dense matrix diagnostics and can write prototype
 O VII triplet `R=f/i` and `G=(f+i)/r` diagnostics. These are solver validation
 outputs, not final physical line-ratio predictions unless the recombination and
 cascade source model is complete.
+### Solver timing example
+
+Benchmark dense and sparse level-population solver modes end-to-end:
+
+```bash
+PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
+  --repeat 3 \
+  --out-dir solver_timing_example
+```
+
+Include the heavier O VII triplet sparse stress test:
+
+```bash
+PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
+  --include-o7 \
+  --repeat 2 \
+  --out-dir solver_timing_example \
+  --out-csv solver_timing.csv
+```
+
+The timing CSV reports elapsed wall time plus matrix size, nonzero count,
+sparsity, condition number, solver backend, and residual diagnostics.  The
+current sparse solver already uses SciPy's compiled sparse linear algebra; a
+future optional C++ backend would mainly accelerate repeated record filtering,
+rate evaluation, matrix assembly, and production export loops.

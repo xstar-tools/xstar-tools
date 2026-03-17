@@ -559,3 +559,59 @@ This example writes an O VII triplet diagnostic table containing prototype
 `R=f/i` and `G=(f+i)/r` ratios.  These ratios are useful for solver debugging,
 but they are not final physical predictions unless the source/cascade model is
 physically complete.
+
+## Solver execution-time benchmarking
+
+Use `examples/11_solver_timing.py` to compare end-to-end level-population solver
+execution times.  The timing includes ATDB decoding, line/collision selection,
+matrix assembly, the linear solve, and CSV/JSON output writing.  This makes the
+example useful for practical workflow benchmarking rather than only timing the
+linear algebra kernel.
+
+Basic O VIII dense/sparse comparison:
+
+```bash
+PYTHONPATH=src python examples/11_solver_timing.py \
+  ../xstar/data/atdb.fits \
+  --repeat 3 \
+  --out-dir solver_timing_example
+```
+
+Include the heavier O VII triplet sparse stress test:
+
+```bash
+PYTHONPATH=src python examples/11_solver_timing.py \
+  ../xstar/data/atdb.fits \
+  --include-o7 \
+  --repeat 2 \
+  --out-dir solver_timing_example \
+  --out-csv solver_timing.csv
+```
+
+The output CSV contains columns such as:
+
+```text
+case, repeat_index, elapsed_s, solver_requested, solver_used,
+sparse_used, matrix_size, matrix_nnz, matrix_density, condition_number,
+linear_residual_linf, normalization_residual, summary_json
+```
+
+### Notes on a future C++ backend
+
+The current sparse solve uses SciPy's compiled sparse linear-algebra routines,
+so the linear solve itself is already handled by optimized native code when
+`--linear-solver sparse` is available.  A C++ backend could still improve
+performance for repeated production workflows by moving the following steps out
+of pure Python:
+
+- repeated ATDB record filtering and level/transition indexing,
+- type-63/type-51/type-98 rate evaluation loops over many ions and temperatures,
+- sparse matrix assembly for large level systems,
+- repeated line/band emissivity aggregation over many temperature or density
+  grid points,
+- direct HDF5 export of packed numeric arrays.
+
+The best development path is to keep Python as the public API and add an
+optional compiled backend later, for example through `pybind11` or a small C
+ABI extension.  The backend should be optional: the package should continue to
+work in pure Python/SciPy mode for portability.

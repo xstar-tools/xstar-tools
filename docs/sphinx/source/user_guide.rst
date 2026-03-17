@@ -84,3 +84,31 @@ preserving ground, output, and explicit source/sink levels.
 
 For O VII triplet stress tests, ``examples/10_o7_triplet_sparse_solver.py``
 writes prototype ``R=f/i`` and ``G=(f+i)/r`` diagnostic tables.
+Solver timing example
+---------------------
+
+Use ``examples/11_solver_timing.py`` to benchmark end-to-end solver execution.
+The timing includes ATDB decoding, record selection, matrix assembly, the
+linear solve, and output writing.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
+     --repeat 3 \
+     --out-dir solver_timing_example
+
+To include the heavier O VII triplet sparse stress test:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
+     --include-o7 \
+     --repeat 2 \
+     --out-dir solver_timing_example \
+     --out-csv solver_timing.csv
+
+The resulting CSV includes elapsed wall time, solver used, sparse status,
+matrix size, nonzero count, matrix density, condition number, and residual
+metrics.  SciPy already provides a compiled sparse linear solver; a future C++
+backend would be most useful for repeated record filtering, rate evaluation,
+matrix assembly, emissivity aggregation, and direct HDF5 packing.

@@ -538,7 +538,6 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
 
 Use wavelength mode for database and line-identification validation. Absolute comparison of \texttt{xstar-atomic} local emissivity coefficients against XSTAR \texttt{emit\_outward} requires a model-dependent normalization involving ion fractions, density, column, geometry, and radiative transfer.
 
-\end{document}
 
 \section{Stage-3 sparse level-population solver diagnostics}
 
@@ -580,3 +579,48 @@ The O VII diagnostic table includes prototype \(R=f/i\) and
 \(G=(f+i)/r\) ratios.  These ratios are useful for solver debugging, but they
 are not final physical predictions unless the recombination/cascade source model
 is physically complete.
+
+\section{Solver execution-time benchmarking}
+
+Use \texttt{examples/11\_solver\_timing.py} to compare end-to-end
+level-population solver execution times.  The timing includes ATDB decoding,
+line/collision selection, matrix assembly, the linear solve, and CSV/JSON
+output writing.
+
+Basic O~VIII dense/sparse comparison:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/11_solver_timing.py \
+  ../xstar/data/atdb.fits \
+  --repeat 3 \
+  --out-dir solver_timing_example
+\end{lstlisting}
+
+Include the heavier O~VII triplet sparse stress test:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/11_solver_timing.py \
+  ../xstar/data/atdb.fits \
+  --include-o7 \
+  --repeat 2 \
+  --out-dir solver_timing_example \
+  --out-csv solver_timing.csv
+\end{lstlisting}
+
+The output CSV contains columns such as \texttt{case}, \texttt{elapsed\_s},
+\texttt{solver\_used}, \texttt{sparse\_used}, \texttt{matrix\_size},
+\texttt{matrix\_nnz}, \texttt{matrix\_density}, \texttt{condition\_number},
+and residual diagnostics.
+
+\subsection{Notes on a future C++ backend}
+
+The current sparse solve uses SciPy's compiled sparse linear-algebra routines,
+so the linear solve itself is already handled by optimized native code when
+\texttt{--linear-solver sparse} is available.  A C++ backend could still improve
+performance for repeated production workflows by moving repeated ATDB filtering,
+rate-evaluation loops, sparse matrix assembly, emissivity aggregation, and HDF5
+packing out of pure Python.  The recommended design is an optional backend, for
+example through \texttt{pybind11} or a small C ABI extension, while keeping the
+pure Python/SciPy implementation as the portable reference path.
+
+\end{document}
