@@ -624,3 +624,44 @@ example through \texttt{pybind11} or a small C ABI extension, while keeping the
 pure Python/SciPy implementation as the portable reference path.
 
 \end{document}
+
+\section{Solver Step Profiling}
+
+The example \texttt{examples/12\_profile\_solver\_steps.py} measures the main
+stages of a level-population solver run: opening the ATDB file, building the
+record index, extracting levels, lines, and collisions, evaluating collision
+rates, assembling the rate matrix, solving the matrix, and writing outputs.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --out-dir solver_profile_example
+\end{lstlisting}
+
+A future compiled backend can be supplied as an optional shared-object library
+loaded by Python.  The best first targets are ATDB filtering, record unpacking,
+collision-rate evaluation loops, sparse matrix assembly, and export aggregation;
+SciPy already provides compiled dense and sparse linear solvers.
+
+\section{Prototype O VII Recombination/Cascade Workflow}
+
+The example \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py}
+constructs a prototype O VII source/cascade workflow.  It evaluates total
+O VIII to O VII recombination rates, distributes them into selected O VII levels,
+applies approximate radiative-branching cascade redistribution, feeds the source
+CSV into the sparse solver, and reports the O VII triplet diagnostics
+$R=f/i$ and $G=(f+i)/r$.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+\end{lstlisting}
+
+This is a prototype sensitivity workflow.  The decoded oxygen RR/DR records are
+total recombination rates, not true level-resolved recombination-cascade records.

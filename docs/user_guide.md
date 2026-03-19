@@ -615,3 +615,49 @@ The best development path is to keep Python as the public API and add an
 optional compiled backend later, for example through `pybind11` or a small C
 ABI extension.  The backend should be optional: the package should continue to
 work in pure Python/SciPy mode for portability.
+
+## Solver step profiling
+
+The example `examples/12_profile_solver_steps.py` profiles the major stages of a
+single solver run.  It separates wall-clock time for opening the ATDB file,
+building the record index, extracting levels/lines/collisions, evaluating
+collision rates, assembling the matrix, solving the matrix, and writing outputs.
+
+```bash
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --out-dir solver_profile_example
+```
+
+This is the preferred diagnostic before adding an optional C++ backend.  The
+compiled sparse solve itself is already provided by SciPy, so a future shared
+library should first target ATDB filtering, record unpacking, collision-rate
+evaluation loops, matrix assembly, and export aggregation.
+
+## Prototype O VII recombination/cascade workflow
+
+The example `examples/13_o7_recombination_cascade_workflow.py` implements the
+current Stage-6 prototype workflow:
+
+1. evaluate total O VIII -> O VII recombination records;
+2. distribute the total source into selected O VII excited/high levels;
+3. redistribute that prototype source through radiative branching;
+4. feed the cascade source CSV into the sparse level-population solver;
+5. compute O VII triplet `R=f/i` and `G=(f+i)/r` diagnostics;
+6. optionally compare with an XSTAR `xout_lines1.fits` CSV conversion.
+
+```bash
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+```
+
+This workflow is a sensitivity/prototype model.  The decoded oxygen RR/DR
+records are total recombination rates, not true level-resolved recombination
+cascade records.  The outputs should therefore be used to test the solver and
+source-file interface, not as final physical O VII triplet predictions.

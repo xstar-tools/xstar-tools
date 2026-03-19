@@ -406,3 +406,34 @@ sparsity, condition number, solver backend, and residual diagnostics.  The
 current sparse solver already uses SciPy's compiled sparse linear algebra; a
 future optional C++ backend would mainly accelerate repeated record filtering,
 rate evaluation, matrix assembly, and production export loops.
+
+### Solver step profiling and O VII recombination/cascade workflow
+
+`xstar-atomic` includes two solver-development examples that are useful before
+building an optional compiled backend.
+
+Profile individual solver stages:
+
+```bash
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --out-dir solver_profile_example
+```
+
+Prototype O VII recombination/cascade source workflow:
+
+```bash
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+```
+
+A future compiled backend can be distributed as an optional shared-object
+library (`.so`) loaded by Python.  The best first targets are ATDB filtering,
+record unpacking, collision-rate loops, sparse matrix assembly, and band/export
+aggregation; SciPy already provides compiled sparse linear solvers.

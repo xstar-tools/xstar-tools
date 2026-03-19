@@ -91,3 +91,30 @@ O VII sparse solver triplet diagnostic example
 
 .. literalinclude:: ../../../examples/10_o7_triplet_sparse_solver.py
    :language: python
+
+Solver step profiling
+---------------------
+
+Profile the main stages of one O VIII solver run::
+
+   PYTHONPATH=src python examples/12_profile_solver_steps.py \
+     ../xstar/data/atdb.fits \
+     --element O --ion-stage 8 \
+     --wavelength-min 18.8 --wavelength-max 19.1 \
+     --temperature 1e6 --electron-density 1.0 \
+     --linear-solver sparse \
+     --out-dir solver_profile_example
+
+Prototype O VII recombination/cascade workflow
+----------------------------------------------
+
+Run the current Stage-6 prototype source/cascade workflow::
+
+   PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+     ../xstar/data/atdb.fits \
+     --out-dir o7_recomb_cascade_workflow \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+
+The O VII workflow uses total recombination rates and approximate radiative
+branching redistribution.  It is intended for solver/source-file validation and
+sensitivity studies, not final physical triplet predictions.

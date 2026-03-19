@@ -1,0 +1,20 @@
+from pathlib import Path
+
+
+def test_solver_profile_and_stage6_examples_exist():
+    root = Path(__file__).resolve().parents[1]
+    for rel in [
+        "examples/12_profile_solver_steps.py",
+        "examples/13_o7_recombination_cascade_workflow.py",
+    ]:
+        path = root / rel
+        assert path.exists()
+        text = path.read_text(encoding="utf-8")
+        assert "if __name__" in text
+
+
+def test_user_guide_mentions_stage6_workflow():
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "docs/user_guide.md").read_text(encoding="utf-8")
+    assert "Solver step profiling" in text
+    assert "Prototype O VII recombination/cascade workflow" in text
