@@ -623,6 +623,56 @@ packing out of pure Python.  The recommended design is an optional backend, for
 example through \texttt{pybind11} or a small C ABI extension, while keeping the
 pure Python/SciPy implementation as the portable reference path.
 
+
+
+\section{Solver Step Profiling and Stage-6 Cascade Workflow}
+
+The solver profiler separates the wall-clock time spent in the main execution
+stages:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --out-dir solver_profile_example
+\end{lstlisting}
+
+The timing output reports \texttt{open\_read\_atdb}, \texttt{build\_index},
+\texttt{extract\_levels}, \texttt{extract\_lines},
+\texttt{extract\_collisions}, \texttt{evaluate\_collisions},
+\texttt{build\_matrix}, \texttt{solve\_matrix}, \texttt{write\_outputs}, and
+\texttt{total}.  These timings are intended to identify whether future
+optimization should target record filtering, rate evaluation, matrix assembly,
+or output generation.
+
+A future C++ accelerator backend can be implemented as an optional shared-object
+library (\texttt{.so} on Linux) loaded from Python through \texttt{pybind11},
+\texttt{cffi}, or \texttt{ctypes}.  The Python/SciPy backend remains the
+reference path.  The most useful first C++ targets are ATDB record filtering,
+record payload unpacking, collision-rate loops, sparse matrix assembly,
+emissivity aggregation, and HDF5 packing.  The sparse linear solve itself is
+already handled by compiled SciPy backends when SciPy is available.
+
+The prototype Stage-6 O~VII recombination/cascade workflow can be run with:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+\end{lstlisting}
+
+This workflow evaluates total O~VIII $\rightarrow$ O~VII recombination,
+distributes the source over selected O~VII levels, applies an approximate
+radiative-branching cascade redistribution, feeds the resulting source CSV into
+the sparse solver, and writes prototype triplet diagnostics
+$R=f/i$ and $G=(f+i)/r$.  It is useful for source-interface and sensitivity
+tests, but it is not yet a final level-resolved recombination/cascade model.
+
 \end{document}
 
 \section{Solver Step Profiling}

@@ -18,3 +18,14 @@ def test_user_guide_mentions_stage6_workflow():
     text = (root / "docs/user_guide.md").read_text(encoding="utf-8")
     assert "Solver step profiling" in text
     assert "Prototype O VII recombination/cascade workflow" in text
+
+
+def test_profile_solver_namespace_defaults():
+    """The solver profiler should define all source/sink attributes required by solver helpers."""
+    import ast
+    from pathlib import Path
+
+    source = Path("examples/12_profile_solver_steps.py").read_text()
+    assert "auto_recombination_cascade=False" in source
+    assert "recombination_source_csv=None" in source
+    assert "adjacent_ion_source_csv=None" in source

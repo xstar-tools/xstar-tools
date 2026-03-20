@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.2.22 - 2026-03-19
+
+### Fixed
+
+- Fixed `examples/12_profile_solver_steps.py` by adding the missing
+  `auto_recombination_cascade=False` default to the solver argument namespace used
+  by the profiling workflow.
+
+### Documentation
+
+- Documented that an optional C++ backend can be implemented as a shared-object
+  library while preserving the Python/SciPy reference backend.
+- Added notes on the Stage-6 O VII recombination/cascade workflow: total O VIII
+  -> O VII recombination is redistributed over selected O VII levels, radiative
+  branching cascade sources are written to CSV, the sparse solver reads those
+  sources, and prototype R=f/i and G=(f+i)/r diagnostics are compared with XSTAR
+  triplet output ratios.
+
 ## v0.2.21 - 2026-03-18
 
 ### Added

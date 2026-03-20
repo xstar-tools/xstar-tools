@@ -112,3 +112,6 @@ matrix size, nonzero count, matrix density, condition number, and residual
 metrics.  SciPy already provides a compiled sparse linear solver; a future C++
 backend would be most useful for repeated record filtering, rate evaluation,
 matrix assembly, emissivity aggregation, and direct HDF5 packing.
+
+
+Solver profiling and Stage-6 cascade examples are documented in the examples page.

@@ -118,3 +118,33 @@ Run the current Stage-6 prototype source/cascade workflow::
 The O VII workflow uses total recombination rates and approximate radiative
 branching redistribution.  It is intended for solver/source-file validation and
 sensitivity studies, not final physical triplet predictions.
+
+
+Solver profiling and O VII cascade workflow
+-------------------------------------------
+
+The profiling example reports wall-clock timings for ATDB opening, index
+building, level/line/collision extraction, collision evaluation, matrix
+assembly, linear solving, and output writing::
+
+   PYTHONPATH=src python examples/12_profile_solver_steps.py \
+     ../xstar/data/atdb.fits \
+     --element O --ion-stage 8 \
+     --wavelength-min 18.8 --wavelength-max 19.1 \
+     --temperature 1e6 --electron-density 1.0 \
+     --linear-solver sparse \
+     --out-dir solver_profile_example
+
+The Stage-6 prototype O VII recombination/cascade workflow evaluates total
+O VIII -> O VII recombination, redistributes source terms through an approximate
+radiative-branching cascade, feeds the source CSV into the sparse solver, and
+computes prototype R=f/i and G=(f+i)/r diagnostics::
+
+   PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+     ../xstar/data/atdb.fits \
+     --out-dir o7_recomb_cascade_workflow \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --print-summary
+
+This is a source-interface and sensitivity workflow, not yet a final
+level-resolved recombination/cascade model.

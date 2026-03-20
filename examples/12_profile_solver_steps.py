@@ -141,6 +141,7 @@ def main() -> None:
         source_csv=None,
         recombination_source_csv=None,
         adjacent_ion_source_csv=None,
+        auto_recombination_cascade=False,
         phenomenological_same_n_lmixing_rate_coeff=args.phenomenological_same_n_lmixing_rate_coeff,
     )
 
