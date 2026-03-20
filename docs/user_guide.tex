@@ -673,14 +673,12 @@ the sparse solver, and writes prototype triplet diagnostics
 $R=f/i$ and $G=(f+i)/r$.  It is useful for source-interface and sensitivity
 tests, but it is not yet a final level-resolved recombination/cascade model.
 
-\end{document}
 
-\section{Solver Step Profiling}
+\section{ATDB Index Caching}
 
-The example \texttt{examples/12\_profile\_solver\_steps.py} measures the main
-stages of a level-population solver run: opening the ATDB file, building the
-record index, extracting levels, lines, and collisions, evaluating collision
-rates, assembling the rate matrix, solving the matrix, and writing outputs.
+The solver-step profiler showed that repeated workflows are dominated by
+\texttt{build\_index}, not by the sparse linear solve.  Repeated runs can reuse
+an optional on-disk hierarchy cache:
 
 \begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
@@ -689,29 +687,24 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperature 1e6 --electron-density 1.0 \
   --linear-solver sparse \
+  --index-cache \
   --out-dir solver_profile_example
 \end{lstlisting}
 
-A future compiled backend can be supplied as an optional shared-object library
-loaded by Python.  The best first targets are ATDB filtering, record unpacking,
-collision-rate evaluation loops, sparse matrix assembly, and export aggregation;
-SciPy already provides compiled dense and sparse linear solvers.
+The first cached run writes a file such as
+\texttt{atdb.fits.xstar\_atomic\_index.pkl}.  Later runs with
+\texttt{--index-cache} can load that file instead of scanning all records. Use
+\texttt{--rebuild-index-cache} after replacing or modifying \texttt{atdb.fits}.
+The solver and export CLIs also accept \texttt{--index-cache}; their summaries
+report \texttt{index\_cache\_status} and \texttt{index\_cache\_path}.
 
-\section{Prototype O VII Recombination/Cascade Workflow}
+From Python:
 
-The example \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py}
-constructs a prototype O VII source/cascade workflow.  It evaluates total
-O VIII to O VII recombination rates, distributes them into selected O VII levels,
-applies approximate radiative-branching cascade redistribution, feeds the source
-CSV into the sparse solver, and reports the O VII triplet diagnostics
-$R=f/i$ and $G=(f+i)/r$.
+\begin{lstlisting}[language=python]
+from xstar_atomic import XSTARAtomic
 
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_recomb_cascade_workflow \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+db = XSTARAtomic("xstar/data/atdb.fits", index_cache=True)
+print(db.db.index_cache_status)
 \end{lstlisting}
 
-This is a prototype sensitivity workflow.  The decoded oxygen RR/DR records are
-total recombination rates, not true level-resolved recombination-cascade records.
+\end{document}

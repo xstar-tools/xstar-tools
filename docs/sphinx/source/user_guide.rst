@@ -114,4 +114,28 @@ backend would be most useful for repeated record filtering, rate evaluation,
 matrix assembly, emissivity aggregation, and direct HDF5 packing.
 
 
+
+ATDB index caching
+------------------
+
+Repeated solver and export workflows can reuse an on-disk hierarchy index cache.
+The first cached run writes ``atdb.fits.xstar_atomic_index.pkl`` by default; later
+runs with ``--index-cache`` can load that cache instead of scanning all ATDB
+records again.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/12_profile_solver_steps.py \
+     ../xstar/data/atdb.fits \
+     --element O --ion-stage 8 \
+     --wavelength-min 18.8 --wavelength-max 19.1 \
+     --temperature 1e6 --electron-density 1.0 \
+     --linear-solver sparse \
+     --index-cache \
+     --out-dir solver_profile_example
+
+The solver and export CLIs also accept ``--index-cache`` and
+``--rebuild-index-cache``.  Summaries report ``index_cache_status`` and
+``index_cache_path``.
+
 Solver profiling and Stage-6 cascade examples are documented in the examples page.

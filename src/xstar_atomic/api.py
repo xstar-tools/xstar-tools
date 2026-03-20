@@ -176,9 +176,19 @@ class XSTARAtomic:
         If ``True``, build the record/element/ion index at initialization.
     """
 
-    def __init__(self, fitsfile: Union[str, Path], *, load_reals: bool = True, build_index: bool = True):
+    def __init__(
+        self,
+        fitsfile: Union[str, Path],
+        *,
+        load_reals: bool = True,
+        build_index: bool = True,
+        index_cache: Union[bool, str, Path] = False,
+        rebuild_index_cache: bool = False,
+    ):
         self.fitsfile = str(fitsfile)
         self.db = ATDB(self.fitsfile, load_reals=load_reals)
+        self.index_cache = index_cache
+        self.rebuild_index_cache = rebuild_index_cache
         self._records = None
         self._elements = None
         self._ions = None
@@ -213,9 +223,26 @@ class XSTARAtomic:
             self.build_index()
         return self._ions
 
-    def build_index(self):
-        """Build and cache ``(records, elements, ions)`` from the packed ATDB."""
-        self._records, self._elements, self._ions = self.db.build_index()
+    def build_index(self, *, index_cache: Union[bool, str, Path, None] = None, rebuild_index_cache: Optional[bool] = None):
+        """Build and cache ``(records, elements, ions)`` from the packed ATDB.
+
+        Parameters
+        ----------
+        index_cache:
+            ``False`` disables disk caching. ``True`` uses the default cache path
+            next to ``atdb.fits``. A string/path uses that explicit cache file.
+        rebuild_index_cache:
+            If true, ignore an existing cache and rewrite it.
+        """
+        cache_setting = self.index_cache if index_cache is None else index_cache
+        rebuild = self.rebuild_index_cache if rebuild_index_cache is None else bool(rebuild_index_cache)
+        use_cache = bool(cache_setting)
+        cache_path = None if cache_setting is True or cache_setting is False or cache_setting is None else cache_setting
+        self._records, self._elements, self._ions = self.db.build_index(
+            use_cache=use_cache,
+            cache_path=cache_path,
+            rebuild_cache=rebuild,
+        )
         return self._records, self._elements, self._ions
 
     def select(self, ion: IonLike = None, *, element: Optional[Union[str, int]] = None, ion_stage: Optional[int] = None) -> AtomicSelection:

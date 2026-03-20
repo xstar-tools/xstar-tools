@@ -42,6 +42,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import pickle
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -223,6 +225,50 @@ class IonInfo:
     raw_chars: str
 
 
+INDEX_CACHE_FORMAT_VERSION = 1
+
+
+def default_index_cache_path(fitsfile: str | Path) -> Path:
+    """Return the default on-disk index-cache path for an ``atdb.fits`` file."""
+    path = Path(fitsfile)
+    return path.with_name(path.name + ".xstar_atomic_index.pkl")
+
+
+def _file_signature(path: Path) -> dict:
+    """Return stable metadata used to validate an index cache."""
+    st = path.stat()
+    return {
+        "path": str(path.resolve()),
+        "size": int(st.st_size),
+        "mtime_ns": int(st.st_mtime_ns),
+    }
+
+
+def _cache_metadata(db: "ATDB") -> dict:
+    """Build metadata stored alongside cached hierarchy objects."""
+    return {
+        "format_version": INDEX_CACHE_FORMAT_VERSION,
+        "fits_signature": _file_signature(db.filename),
+        "date": db.date,
+        "creator": db.creator,
+        "n_records": db.n_records,
+        "n_reals": db.n_reals,
+        "n_integers": db.n_integers,
+        "n_chars": db.n_chars,
+    }
+
+
+def _cache_metadata_matches(db: "ATDB", metadata: dict) -> bool:
+    """Return True when cache metadata describes the currently opened FITS file."""
+    if not isinstance(metadata, dict):
+        return False
+    expected = _cache_metadata(db)
+    for key in ("format_version", "fits_signature", "n_records", "n_reals", "n_integers", "n_chars"):
+        if metadata.get(key) != expected.get(key):
+            return False
+    return True
+
+
 class ATDB:
     def __init__(self, filename: str | Path, load_reals: bool = False):
         self.filename = Path(filename)
@@ -238,6 +284,11 @@ class ATDB:
         self._reals = None
         self._integers = None
         self._chars = None
+        self._index_records = None
+        self._index_elements = None
+        self._index_ions = None
+        self._last_index_cache_path = None
+        self._last_index_cache_status = "not_used"
         if load_reals:
             self.load_reals()
 
@@ -301,7 +352,55 @@ class ATDB:
             return int(ints[-2])
         return None
 
-    def build_index(self) -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
+    def build_index(
+        self,
+        *,
+        use_cache: bool = False,
+        cache_path: str | Path | None = None,
+        rebuild_cache: bool = False,
+    ) -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
+        """Build the hierarchy index and optionally use an on-disk cache.
+
+        Parameters
+        ----------
+        use_cache:
+            If ``True``, try to load ``(records, elements, ions)`` from a pickle
+            cache before scanning the full ATDB pointer table.
+        cache_path:
+            Optional explicit cache filename.  If omitted and ``use_cache`` is
+            true, the default is ``atdb.fits.xstar_atomic_index.pkl`` next to the
+            FITS file.
+        rebuild_cache:
+            If ``True``, ignore an existing cache and write a fresh one after
+            scanning.
+        """
+        if self._index_records is not None and not rebuild_cache:
+            self._last_index_cache_status = "memory"
+            return self._index_records, self._index_elements, self._index_ions
+
+        cache_file = Path(cache_path) if cache_path is not None else default_index_cache_path(self.filename)
+        if use_cache:
+            self._last_index_cache_path = cache_file
+            if cache_file.exists() and not rebuild_cache:
+                try:
+                    with cache_file.open("rb") as handle:
+                        payload = pickle.load(handle)
+                    if _cache_metadata_matches(self, payload.get("metadata", {})):
+                        self._index_records = payload["records"]
+                        self._index_elements = payload["elements"]
+                        self._index_ions = payload["ions"]
+                        self._last_index_cache_status = "hit"
+                        return self._index_records, self._index_elements, self._index_ions
+                    self._last_index_cache_status = "stale"
+                except Exception:
+                    self._last_index_cache_status = "read_failed"
+            elif rebuild_cache:
+                self._last_index_cache_status = "rebuild_requested"
+            else:
+                self._last_index_cache_status = "miss"
+        else:
+            self._last_index_cache_status = "disabled"
+
         records: List[IndexedRecord] = []
         elements: List[ElementInfo] = []
         ions: List[IonInfo] = []
@@ -408,7 +507,39 @@ class ATDB:
                 rate_type_label=RATE_TYPES.get(h.rate_type, ""),
             ))
 
+        self._index_records = records
+        self._index_elements = elements
+        self._index_ions = ions
+
+        if use_cache:
+            try:
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+                payload = {
+                    "metadata": _cache_metadata(self),
+                    "records": records,
+                    "elements": elements,
+                    "ions": ions,
+                }
+                with tmp_file.open("wb") as handle:
+                    pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                os.replace(tmp_file, cache_file)
+                self._last_index_cache_status = "rebuilt" if rebuild_cache else "written"
+                self._last_index_cache_path = cache_file
+            except Exception as exc:
+                self._last_index_cache_status = f"write_failed:{exc.__class__.__name__}"
+
         return records, elements, ions
+
+    @property
+    def index_cache_status(self) -> str:
+        """Status string from the most recent ``build_index`` call."""
+        return self._last_index_cache_status
+
+    @property
+    def index_cache_path(self) -> Optional[Path]:
+        """Cache path used by the most recent cached ``build_index`` call."""
+        return self._last_index_cache_path
 
     def select_records(self, indexed: List[IndexedRecord], element: Optional[str], ion_stage: Optional[int],
                        data_type: Optional[int], rate_type: Optional[int], limit: Optional[int]) -> List[IndexedRecord]:
@@ -509,13 +640,25 @@ def main() -> None:
     ap.add_argument("--dump", action="store_true")
     ap.add_argument("--no-reals", action="store_true", help="Do not load/dump REALS")
     ap.add_argument("--max-values", type=int, default=20)
+    ap.add_argument("--index-cache", nargs="?", const=True, default=False,
+                    help="Use an on-disk hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+    ap.add_argument("--rebuild-index-cache", action="store_true", help="Rebuild the hierarchy index cache")
     args = ap.parse_args()
 
     with ATDB(args.fitsfile, load_reals=False) as db:
-        records, elements, ions = db.build_index()
+        cache_setting = args.index_cache
+        use_cache = bool(cache_setting) or bool(args.rebuild_index_cache)
+        cache_path = None if cache_setting is True or cache_setting is False else cache_setting
+        records, elements, ions = db.build_index(
+            use_cache=use_cache,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+        )
 
         if args.summary or args.summary_json:
             s = summarize(records, elements, ions, db)
+            s["index_cache_status"] = db.index_cache_status
+            s["index_cache_path"] = str(db.index_cache_path) if db.index_cache_path is not None else None
             if args.summary:
                 print(json.dumps(s, indent=2))
             if args.summary_json:

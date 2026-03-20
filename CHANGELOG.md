@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.2.23 - 2026-03-20
+
+Added:
+- Optional on-disk ATDB hierarchy index caching via ``ATDB.build_index(use_cache=True)``.
+- ``--index-cache`` and ``--rebuild-index-cache`` options for the hierarchy, solver, export, and solver-step profiling workflows.
+- Cache metadata validation against the source ``atdb.fits`` file size, modification time, array lengths, and cache format version.
+- Real-ATDB cache round-trip test for cache creation and cache hits.
+
+Changed:
+- Solver/export/profile summaries now report ``index_cache_status`` and ``index_cache_path`` when caching is used.
+
 ## v0.2.22 - 2026-03-19
 
 ### Fixed

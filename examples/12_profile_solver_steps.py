@@ -113,6 +113,10 @@ def main() -> None:
     parser.add_argument("--out-csv", default="solver_step_profile.csv")
     parser.add_argument("--summary-json", default="solver_step_profile_summary.json")
     parser.add_argument("--print-json", action="store_true")
+    parser.add_argument("--index-cache", nargs="?", const=True, default=False,
+                        help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+    parser.add_argument("--rebuild-index-cache", action="store_true",
+                        help="Rebuild the ATDB hierarchy index cache before profiling")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -153,8 +157,21 @@ def main() -> None:
     stages.append({"stage": "open_read_atdb", "elapsed_s": _elapsed(start)})
 
     start = time.perf_counter()
-    records, _elements, _ions = db.build_index()
-    stages.append({"stage": "build_index", "elapsed_s": _elapsed(start), "n_records": len(records)})
+    cache_setting = args.index_cache
+    use_cache = bool(cache_setting) or bool(args.rebuild_index_cache)
+    cache_path = None if cache_setting is True or cache_setting is False else cache_setting
+    records, _elements, _ions = db.build_index(
+        use_cache=use_cache,
+        cache_path=cache_path,
+        rebuild_cache=args.rebuild_index_cache,
+    )
+    stages.append({
+        "stage": "build_index",
+        "elapsed_s": _elapsed(start),
+        "n_records": len(records),
+        "index_cache_status": db.index_cache_status,
+        "index_cache_path": str(db.index_cache_path) if db.index_cache_path is not None else "",
+    })
 
     start = time.perf_counter()
     levels = extract_levels(db, records, z, args.ion_stage)
@@ -263,6 +280,8 @@ def main() -> None:
         "temperature_K": args.temperature,
         "electron_density_cm^-3": args.electron_density,
         "linear_solver": args.linear_solver,
+        "index_cache_status": db.index_cache_status,
+        "index_cache_path": str(db.index_cache_path) if db.index_cache_path is not None else None,
         "pruning_diagnostics": pruning_diagnostics,
         "source_sink_notes": source_sink_notes,
         "solve_info": solve_info,

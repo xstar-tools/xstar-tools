@@ -407,6 +407,48 @@ current sparse solver already uses SciPy's compiled sparse linear algebra; a
 future optional C++ backend would mainly accelerate repeated record filtering,
 rate evaluation, matrix assembly, and production export loops.
 
+
+### ATDB index caching
+
+The solver-step profiler showed that repeated workflows are dominated by `build_index`, not by the sparse linear solve.  You can enable an optional on-disk hierarchy cache for repeated runs:
+
+```bash
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --index-cache \
+  --out-dir solver_profile_example
+```
+
+The first cached run writes a file named similar to:
+
+```text
+atdb.fits.xstar_atomic_index.pkl
+```
+
+A later run with `--index-cache` should report `index_cache_status="hit"` and skip the full hierarchy scan.  Use `--rebuild-index-cache` after changing or replacing `atdb.fits`.
+
+The same cache options are available in the solver and export CLIs:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.solver /path/to/atdb.fits ... --index-cache
+PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits ... --index-cache
+```
+
+From Python:
+
+```python
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic("xstar/data/atdb.fits", index_cache=True)
+print(db.db.index_cache_status)
+```
+
+The cache stores the decoded hierarchy objects and validates them against the source FITS file size, modification time, array lengths, and cache format version.
+
 ### Solver step profiling and O VII recombination/cascade workflow
 
 `xstar-atomic` includes two solver-development examples that are useful before

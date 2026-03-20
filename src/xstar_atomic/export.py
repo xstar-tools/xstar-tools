@@ -469,10 +469,12 @@ def export_superwind_bundle(
     make_emissivity: bool = True,
     formats: Sequence[str] = ("csv",),
     bands: Sequence[dict] | None = None,
+    index_cache: bool | str | Path = False,
+    rebuild_index_cache: bool = False,
 ) -> dict:
     """Export a multi-ion CSV/JSON bundle for Athena++/superwind use."""
     ion_list = parse_ion_list(ions)
-    with XSTARAtomic(fitsfile) as db:
+    with XSTARAtomic(fitsfile, index_cache=index_cache, rebuild_index_cache=rebuild_index_cache) as db:
         manifests = [
             export_ion_products(
                 db,
@@ -497,6 +499,8 @@ def export_superwind_bundle(
         "electron_density_for_lmixing_cm^-3": electron_density_for_lmixing,
         "formats": list(formats),
         "bands_keV": list(bands or []),
+        "index_cache_status": db.db.index_cache_status,
+        "index_cache_path": str(db.db.index_cache_path) if db.db.index_cache_path is not None else None,
         "manifests": manifests,
     }
     write_json(Path(out_dir) / "atomic_export_manifest.json", bundle)
@@ -522,6 +526,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     p.add_argument("--bands-kev", nargs="*", default=None,
                    help="Optional band specs name:emin:emax in keV, e.g. soft:0.5:2.0 hard:2.0:10.0")
     p.add_argument("--print-summary", action="store_true")
+    p.add_argument("--index-cache", nargs="?", const=True, default=False,
+                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+    p.add_argument("--rebuild-index-cache", action="store_true",
+                   help="Rebuild the ATDB hierarchy index cache before exporting")
     args = p.parse_args(argv)
 
     wavelength = None
@@ -546,6 +554,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         make_emissivity=not args.no_emissivity,
         formats=[x.strip() for x in args.formats.split(",") if x.strip()],
         bands=bands,
+        index_cache=args.index_cache,
+        rebuild_index_cache=args.rebuild_index_cache,
     )
     if args.print_summary:
         print(json.dumps(bundle, indent=2))
