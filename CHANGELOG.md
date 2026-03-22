@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.25 - 2026-03-22
+
+Fixed:
+- Reworked the NPZ index cache into a slimmer numeric v2 layout.
+- Avoided storing large repeated Unicode arrays for each ATDB record in the NPZ cache.
+- Old v0.2.24 NPZ caches are now treated as stale and rebuilt automatically.
+
+Changed:
+- The compact cache still returns normal IndexedRecord objects for decoder compatibility, but reconstructs repeated labels from numeric fields and the small element/ion tables.
+
 ## v0.2.24 - 2026-03-21
 
 Added:

@@ -226,7 +226,7 @@ class IonInfo:
 
 
 INDEX_CACHE_FORMAT_VERSION = 1
-INDEX_CACHE_NPZ_FORMAT_VERSION = 1
+INDEX_CACHE_NPZ_FORMAT_VERSION = 2
 
 
 def default_index_cache_path(fitsfile: str | Path, cache_format: str = "npz") -> Path:
@@ -300,90 +300,157 @@ def _dataclass_dict_list_json(rows: list[object]) -> str:
     return json.dumps([asdict(row) for row in rows], separators=(",", ":"))
 
 
+def _parent_kind_code(row: IndexedRecord) -> int:
+    """Return compact integer code for an indexed-record parent kind."""
+    mapping = {
+        "element": 1,
+        "ion": 2,
+        "level": 3,
+        "continuum_level": 4,
+        "line": 5,
+        "ion_process": 6,
+        "global": 7,
+    }
+    return mapping.get(row.parent_kind, 0)
+
+
+def _parent_kind_from_fields(rate_type: int, ion_global_index: int) -> str:
+    """Reconstruct parent-kind text from compact cached fields."""
+    if rate_type == 11:
+        return "element"
+    if rate_type == 12:
+        return "ion"
+    if rate_type == 13:
+        return "level"
+    if rate_type in (1, 7):
+        return "continuum_level"
+    if rate_type in (4, 9, 14):
+        return "line"
+    return "ion_process" if int(ion_global_index) >= 0 else "global"
+
+
 def _write_npz_index_cache(path: Path, db: "ATDB", records: List[IndexedRecord], elements: List[ElementInfo], ions: List[IonInfo]) -> None:
     """Write a compact NumPy/NPZ hierarchy index cache.
 
-    The full record list is stored column-wise so loading avoids unpickling more
-    than one million Python objects.  Element and ion tables are tiny, so they are
-    stored as compact JSON payloads inside the NPZ file.
+    Version 2 deliberately stores only numeric per-record fields plus the tiny
+    element/ion tables.  Repeated strings such as element symbols, ion labels,
+    charge labels, and data/rate-type descriptions are reconstructed at load
+    time.  This avoids loading large Unicode arrays for every one of the
+    >1-million ATDB records.
     """
     metadata = _cache_metadata(db)
     metadata["format_version"] = INDEX_CACHE_NPZ_FORMAT_VERSION
     metadata["cache_kind"] = "npz"
+    metadata["layout"] = "numeric_v2"
 
     tmp_file = path.with_suffix(path.suffix + ".tmp")
     with tmp_file.open("wb") as handle:
         np.savez(
             handle,
-        metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
-        elements_json=np.asarray(_dataclass_dict_list_json(elements)),
-        ions_json=np.asarray(_dataclass_dict_list_json(ions)),
-        recno=np.asarray([r.recno for r in records], dtype=np.int32),
-        data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
-        rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
-        continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
-        nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
-        nint=np.asarray([r.nint for r in records], dtype=np.int32),
-        nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
-        real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
-        int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
-        char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
-        element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
-        element_symbol=_safe_str_array([r.element_symbol for r in records]),
-        element_name=_safe_str_array([r.element_name for r in records]),
-        element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
-        ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
-        ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
-        ion_label=_safe_str_array([r.ion_label for r in records]),
-        charge_label=_safe_str_array([r.charge_label for r in records]),
-        ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
-        level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
-        parent_kind=_safe_str_array([r.parent_kind for r in records]),
-        data_type_label=_safe_str_array([r.data_type_label for r in records]),
-            rate_type_label=_safe_str_array([r.rate_type_label for r in records]),
+            metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
+            elements_json=np.asarray(_dataclass_dict_list_json(elements)),
+            ions_json=np.asarray(_dataclass_dict_list_json(ions)),
+            recno=np.asarray([r.recno for r in records], dtype=np.int32),
+            data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
+            rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
+            continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
+            nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
+            nint=np.asarray([r.nint for r in records], dtype=np.int32),
+            nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
+            real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
+            int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
+            char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
+            element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
+            element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
+            ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
+            ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
+            ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
+            level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
+            parent_kind_code=np.asarray([_parent_kind_code(r) for r in records], dtype=np.int8),
         )
     os.replace(tmp_file, path)
 
 
 def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
-    """Load a compact NumPy/NPZ hierarchy index cache."""
+    """Load a compact NumPy/NPZ hierarchy index cache.
+
+    The returned record list is still a list of :class:`IndexedRecord` objects
+    for compatibility with the existing decoders, but all repeated text fields
+    are reconstructed from compact numeric arrays rather than read as large
+    Unicode arrays.
+    """
     with np.load(path, allow_pickle=False) as z:
         metadata = json.loads(str(z["metadata_json"].item()))
         metadata_for_check = dict(metadata)
         metadata_for_check["format_version"] = INDEX_CACHE_FORMAT_VERSION
+        if metadata.get("format_version") != INDEX_CACHE_NPZ_FORMAT_VERSION:
+            raise ValueError("stale NPZ index cache version")
         if not _cache_metadata_matches(db, metadata_for_check):
             raise ValueError("stale NPZ index cache")
         elements = [ElementInfo(**row) for row in json.loads(str(z["elements_json"].item()))]
         ions = [IonInfo(**row) for row in json.loads(str(z["ions_json"].item()))]
-        n = len(z["recno"])
-        records = [
-            IndexedRecord(
-                recno=int(z["recno"][i]),
-                data_type=int(z["data_type"][i]),
-                rate_type=int(z["rate_type"][i]),
-                continuation=int(z["continuation"][i]),
-                nreal=int(z["nreal"][i]),
-                nint=int(z["nint"][i]),
-                nchar=int(z["nchar"][i]),
-                real_ptr=int(z["real_ptr"][i]),
-                int_ptr=int(z["int_ptr"][i]),
-                char_ptr=int(z["char_ptr"][i]),
-                element_z=_restore_optional_int(z["element_z"][i]),
-                element_symbol=str(z["element_symbol"][i]),
-                element_name=str(z["element_name"][i]),
-                element_record=_restore_optional_int(z["element_record"][i]),
-                ion_global_index=_restore_optional_int(z["ion_global_index"][i]),
-                ion_stage=_restore_optional_int(z["ion_stage"][i]),
-                ion_label=str(z["ion_label"][i]),
-                charge_label=str(z["charge_label"][i]),
-                ion_record=_restore_optional_int(z["ion_record"][i]),
-                level_index=_restore_optional_int(z["level_index"][i]),
-                parent_kind=str(z["parent_kind"][i]),
-                data_type_label=str(z["data_type_label"][i]),
-                rate_type_label=str(z["rate_type_label"][i]),
+
+        element_names = {int(e.z): e.name for e in elements}
+        element_records = {int(e.z): int(e.record) for e in elements}
+        ion_records_by_global = {int(i.global_index): int(i.record) for i in ions}
+
+        recno = z["recno"]
+        data_type = z["data_type"]
+        rate_type = z["rate_type"]
+        continuation = z["continuation"]
+        nreal = z["nreal"]
+        nint = z["nint"]
+        nchar = z["nchar"]
+        real_ptr = z["real_ptr"]
+        int_ptr = z["int_ptr"]
+        char_ptr = z["char_ptr"]
+        element_z = z["element_z"]
+        element_record = z["element_record"] if "element_record" in z else None
+        ion_global_index = z["ion_global_index"]
+        ion_stage = z["ion_stage"]
+        ion_record = z["ion_record"]
+        level_index = z["level_index"]
+        n = len(recno)
+
+        records: List[IndexedRecord] = []
+        records_append = records.append
+        data_types = DATA_TYPES
+        rate_types = RATE_TYPES
+        elem_symbols = Z_TO_SYMBOL
+        for i in range(n):
+            z_i_raw = int(element_z[i])
+            z_opt = None if z_i_raw < 0 else z_i_raw
+            symbol = elem_symbols.get(z_i_raw, "") if z_i_raw > 0 else ""
+            stage_raw = int(ion_stage[i])
+            stage_opt = None if stage_raw < 0 else stage_raw
+            ig_raw = int(ion_global_index[i])
+            rec = IndexedRecord(
+                recno=int(recno[i]),
+                data_type=int(data_type[i]),
+                rate_type=int(rate_type[i]),
+                continuation=int(continuation[i]),
+                nreal=int(nreal[i]),
+                nint=int(nint[i]),
+                nchar=int(nchar[i]),
+                real_ptr=int(real_ptr[i]),
+                int_ptr=int(int_ptr[i]),
+                char_ptr=int(char_ptr[i]),
+                element_z=z_opt,
+                element_symbol=symbol,
+                element_name=element_names.get(z_i_raw, "") if z_i_raw > 0 else "",
+                element_record=(element_records.get(z_i_raw) if z_i_raw > 0 else None)
+                    if element_record is None else _restore_optional_int(element_record[i]),
+                ion_global_index=None if ig_raw < 0 else ig_raw,
+                ion_stage=stage_opt,
+                ion_label=ion_label(symbol, stage_opt),
+                charge_label=charge_label(symbol, stage_opt),
+                ion_record=_restore_optional_int(ion_record[i]) if int(ion_record[i]) >= 0 else ion_records_by_global.get(ig_raw),
+                level_index=_restore_optional_int(level_index[i]),
+                parent_kind=_parent_kind_from_fields(int(rate_type[i]), ig_raw),
+                data_type_label=data_types.get(int(data_type[i]), ""),
+                rate_type_label=rate_types.get(int(rate_type[i]), ""),
             )
-            for i in range(n)
-        ]
+            records_append(rec)
     return records, elements, ions
 
 
