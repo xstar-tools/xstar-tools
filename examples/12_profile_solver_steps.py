@@ -114,9 +114,11 @@ def main() -> None:
     parser.add_argument("--summary-json", default="solver_step_profile_summary.json")
     parser.add_argument("--print-json", action="store_true")
     parser.add_argument("--index-cache", nargs="?", const=True, default=False,
-                        help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+                        help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.npz")
     parser.add_argument("--rebuild-index-cache", action="store_true",
                         help="Rebuild the ATDB hierarchy index cache before profiling")
+    parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
+                        help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -164,6 +166,7 @@ def main() -> None:
         use_cache=use_cache,
         cache_path=cache_path,
         rebuild_cache=args.rebuild_index_cache,
+        cache_format=getattr(args, "index_cache_format", "npz"),
     )
     stages.append({
         "stage": "build_index",

@@ -184,11 +184,13 @@ class XSTARAtomic:
         build_index: bool = True,
         index_cache: Union[bool, str, Path] = False,
         rebuild_index_cache: bool = False,
+        index_cache_format: str = "npz",
     ):
         self.fitsfile = str(fitsfile)
         self.db = ATDB(self.fitsfile, load_reals=load_reals)
         self.index_cache = index_cache
         self.rebuild_index_cache = rebuild_index_cache
+        self.index_cache_format = index_cache_format
         self._records = None
         self._elements = None
         self._ions = None
@@ -223,7 +225,7 @@ class XSTARAtomic:
             self.build_index()
         return self._ions
 
-    def build_index(self, *, index_cache: Union[bool, str, Path, None] = None, rebuild_index_cache: Optional[bool] = None):
+    def build_index(self, *, index_cache: Union[bool, str, Path, None] = None, rebuild_index_cache: Optional[bool] = None, index_cache_format: Optional[str] = None):
         """Build and cache ``(records, elements, ions)`` from the packed ATDB.
 
         Parameters
@@ -236,12 +238,14 @@ class XSTARAtomic:
         """
         cache_setting = self.index_cache if index_cache is None else index_cache
         rebuild = self.rebuild_index_cache if rebuild_index_cache is None else bool(rebuild_index_cache)
+        fmt = self.index_cache_format if index_cache_format is None else str(index_cache_format)
         use_cache = bool(cache_setting)
         cache_path = None if cache_setting is True or cache_setting is False or cache_setting is None else cache_setting
         self._records, self._elements, self._ions = self.db.build_index(
             use_cache=use_cache,
             cache_path=cache_path,
             rebuild_cache=rebuild,
+            cache_format=fmt,
         )
         return self._records, self._elements, self._ions
 

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.2.24 - 2026-03-21
+
+Added:
+- Added compact NumPy/NPZ hierarchy index cache support for `ATDB.build_index()`.
+- `--index-cache` now defaults to the NPZ cache path `atdb.fits.xstar_atomic_index.npz`.
+- Added `--index-cache-format npz|pickle` to hierarchy, solver, export, and solver-step profiler CLIs.
+- Preserved legacy pickle cache support with `--index-cache-format pickle`.
+
+Changed:
+- `XSTARAtomic(..., index_cache=True)` now uses the NPZ cache by default.
+- Cache status strings now distinguish `npz_hit`, `npz_written`, `pickle_hit`, and related states.
+
 ## v0.2.23 - 2026-03-20
 
 Added:

@@ -707,4 +707,22 @@ db = XSTARAtomic("xstar/data/atdb.fits", index_cache=True)
 print(db.db.index_cache_status)
 \end{lstlisting}
 
+
+
+\section{NumPy/NPZ index cache}
+
+The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use \texttt{--index-cache} to store and reuse a compact NumPy/NPZ hierarchy cache. The default cache file is \texttt{atdb.fits.xstar\_atomic\_index.npz}. The legacy pickle cache is still available with \texttt{--index-cache-format pickle}; use \texttt{--rebuild-index-cache} to force regeneration.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --index-cache \
+  --index-cache-format npz \
+  --out-dir solver_profile_example_npz
+\end{lstlisting}
+
 \end{document}

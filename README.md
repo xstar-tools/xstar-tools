@@ -426,7 +426,7 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
 The first cached run writes a file named similar to:
 
 ```text
-atdb.fits.xstar_atomic_index.pkl
+atdb.fits.xstar_atomic_index.npz
 ```
 
 A later run with `--index-cache` should report `index_cache_status="hit"` and skip the full hierarchy scan.  Use `--rebuild-index-cache` after changing or replacing `atdb.fits`.
@@ -479,3 +479,22 @@ A future compiled backend can be distributed as an optional shared-object
 library (`.so`) loaded by Python.  The best first targets are ATDB filtering,
 record unpacking, collision-rate loops, sparse matrix assembly, and band/export
 aggregation; SciPy already provides compiled sparse linear solvers.
+
+
+### NumPy/NPZ index cache
+
+For repeated workflows, use the compact NumPy index cache to avoid rebuilding the full ATDB hierarchy every run:
+
+```bash
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --index-cache \
+  --index-cache-format npz \
+  --out-dir solver_profile_example_npz
+```
+
+The default cache file is `atdb.fits.xstar_atomic_index.npz`. Legacy pickle caching remains available with `--index-cache-format pickle`.

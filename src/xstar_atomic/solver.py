@@ -981,9 +981,11 @@ def main(argv=None) -> None:
     p.add_argument("--summary-json")
     p.add_argument("--print-summary", action="store_true")
     p.add_argument("--index-cache", nargs="?", const=True, default=False,
-                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.npz")
     p.add_argument("--rebuild-index-cache", action="store_true",
                    help="Rebuild the ATDB hierarchy index cache before solving")
+    p.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
+                   help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
     args = p.parse_args(argv)
 
     z = choose_z(args.element)
@@ -999,6 +1001,7 @@ def main(argv=None) -> None:
         use_cache=use_cache,
         cache_path=cache_path,
         rebuild_cache=args.rebuild_index_cache,
+        cache_format=getattr(args, "index_cache_format", "npz"),
     )
 
     levels = extract_levels(db, records, z, args.ion_stage)

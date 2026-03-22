@@ -119,7 +119,7 @@ ATDB index caching
 ------------------
 
 Repeated solver and export workflows can reuse an on-disk hierarchy index cache.
-The first cached run writes ``atdb.fits.xstar_atomic_index.pkl`` by default; later
+The first cached run writes ``atdb.fits.xstar_atomic_index.npz`` by default; later
 runs with ``--index-cache`` can load that cache instead of scanning all ATDB
 records again.
 
@@ -139,3 +139,25 @@ The solver and export CLIs also accept ``--index-cache`` and
 ``index_cache_path``.
 
 Solver profiling and Stage-6 cascade examples are documented in the examples page.
+
+
+NumPy/NPZ index cache
+---------------------
+
+The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use `--index-cache` to store and reuse a compact NumPy/NPZ hierarchy cache:
+
+.. code-block:: bash
+
+   
+   PYTHONPATH=src python examples/12_profile_solver_steps.py \
+     ../xstar/data/atdb.fits \
+     --element O --ion-stage 8 \
+     --wavelength-min 18.8 --wavelength-max 19.1 \
+     --temperature 1e6 --electron-density 1.0 \
+     --linear-solver sparse \
+     --index-cache \
+     --index-cache-format npz \
+     --out-dir solver_profile_example_npz
+
+
+The default cache file is `atdb.fits.xstar_atomic_index.npz`. The legacy pickle cache is still available with `--index-cache-format pickle`. Use `--rebuild-index-cache` to force regeneration.

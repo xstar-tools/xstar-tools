@@ -226,12 +226,24 @@ class IonInfo:
 
 
 INDEX_CACHE_FORMAT_VERSION = 1
+INDEX_CACHE_NPZ_FORMAT_VERSION = 1
 
 
-def default_index_cache_path(fitsfile: str | Path) -> Path:
-    """Return the default on-disk index-cache path for an ``atdb.fits`` file."""
+def default_index_cache_path(fitsfile: str | Path, cache_format: str = "npz") -> Path:
+    """Return the default on-disk index-cache path for an ``atdb.fits`` file.
+
+    Parameters
+    ----------
+    fitsfile:
+        Path to the packed XSTAR ``atdb.fits`` file.
+    cache_format:
+        ``"npz"`` for the compact NumPy cache or ``"pickle"`` for the
+        legacy Python-object cache.
+    """
     path = Path(fitsfile)
-    return path.with_name(path.name + ".xstar_atomic_index.pkl")
+    fmt = (cache_format or "npz").lower()
+    suffix = ".xstar_atomic_index.pkl" if fmt == "pickle" else ".xstar_atomic_index.npz"
+    return path.with_name(path.name + suffix)
 
 
 def _file_signature(path: Path) -> dict:
@@ -267,6 +279,112 @@ def _cache_metadata_matches(db: "ATDB", metadata: dict) -> bool:
         if metadata.get(key) != expected.get(key):
             return False
     return True
+
+
+def _safe_int_array(values, dtype=np.int64) -> np.ndarray:
+    return np.asarray([(-1 if v is None else int(v)) for v in values], dtype=dtype)
+
+
+def _safe_str_array(values) -> np.ndarray:
+    vals = ["" if v is None else str(v) for v in values]
+    max_len = max((len(v) for v in vals), default=1)
+    return np.asarray(vals, dtype=f"U{max(1, max_len)}")
+
+
+def _restore_optional_int(value: int) -> Optional[int]:
+    value = int(value)
+    return None if value < 0 else value
+
+
+def _dataclass_dict_list_json(rows: list[object]) -> str:
+    return json.dumps([asdict(row) for row in rows], separators=(",", ":"))
+
+
+def _write_npz_index_cache(path: Path, db: "ATDB", records: List[IndexedRecord], elements: List[ElementInfo], ions: List[IonInfo]) -> None:
+    """Write a compact NumPy/NPZ hierarchy index cache.
+
+    The full record list is stored column-wise so loading avoids unpickling more
+    than one million Python objects.  Element and ion tables are tiny, so they are
+    stored as compact JSON payloads inside the NPZ file.
+    """
+    metadata = _cache_metadata(db)
+    metadata["format_version"] = INDEX_CACHE_NPZ_FORMAT_VERSION
+    metadata["cache_kind"] = "npz"
+
+    tmp_file = path.with_suffix(path.suffix + ".tmp")
+    with tmp_file.open("wb") as handle:
+        np.savez(
+            handle,
+        metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
+        elements_json=np.asarray(_dataclass_dict_list_json(elements)),
+        ions_json=np.asarray(_dataclass_dict_list_json(ions)),
+        recno=np.asarray([r.recno for r in records], dtype=np.int32),
+        data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
+        rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
+        continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
+        nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
+        nint=np.asarray([r.nint for r in records], dtype=np.int32),
+        nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
+        real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
+        int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
+        char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
+        element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
+        element_symbol=_safe_str_array([r.element_symbol for r in records]),
+        element_name=_safe_str_array([r.element_name for r in records]),
+        element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
+        ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
+        ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
+        ion_label=_safe_str_array([r.ion_label for r in records]),
+        charge_label=_safe_str_array([r.charge_label for r in records]),
+        ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
+        level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
+        parent_kind=_safe_str_array([r.parent_kind for r in records]),
+        data_type_label=_safe_str_array([r.data_type_label for r in records]),
+            rate_type_label=_safe_str_array([r.rate_type_label for r in records]),
+        )
+    os.replace(tmp_file, path)
+
+
+def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
+    """Load a compact NumPy/NPZ hierarchy index cache."""
+    with np.load(path, allow_pickle=False) as z:
+        metadata = json.loads(str(z["metadata_json"].item()))
+        metadata_for_check = dict(metadata)
+        metadata_for_check["format_version"] = INDEX_CACHE_FORMAT_VERSION
+        if not _cache_metadata_matches(db, metadata_for_check):
+            raise ValueError("stale NPZ index cache")
+        elements = [ElementInfo(**row) for row in json.loads(str(z["elements_json"].item()))]
+        ions = [IonInfo(**row) for row in json.loads(str(z["ions_json"].item()))]
+        n = len(z["recno"])
+        records = [
+            IndexedRecord(
+                recno=int(z["recno"][i]),
+                data_type=int(z["data_type"][i]),
+                rate_type=int(z["rate_type"][i]),
+                continuation=int(z["continuation"][i]),
+                nreal=int(z["nreal"][i]),
+                nint=int(z["nint"][i]),
+                nchar=int(z["nchar"][i]),
+                real_ptr=int(z["real_ptr"][i]),
+                int_ptr=int(z["int_ptr"][i]),
+                char_ptr=int(z["char_ptr"][i]),
+                element_z=_restore_optional_int(z["element_z"][i]),
+                element_symbol=str(z["element_symbol"][i]),
+                element_name=str(z["element_name"][i]),
+                element_record=_restore_optional_int(z["element_record"][i]),
+                ion_global_index=_restore_optional_int(z["ion_global_index"][i]),
+                ion_stage=_restore_optional_int(z["ion_stage"][i]),
+                ion_label=str(z["ion_label"][i]),
+                charge_label=str(z["charge_label"][i]),
+                ion_record=_restore_optional_int(z["ion_record"][i]),
+                level_index=_restore_optional_int(z["level_index"][i]),
+                parent_kind=str(z["parent_kind"][i]),
+                data_type_label=str(z["data_type_label"][i]),
+                rate_type_label=str(z["rate_type_label"][i]),
+            )
+            for i in range(n)
+        ]
+    return records, elements, ions
 
 
 class ATDB:
@@ -358,6 +476,7 @@ class ATDB:
         use_cache: bool = False,
         cache_path: str | Path | None = None,
         rebuild_cache: bool = False,
+        cache_format: str = "npz",
     ) -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
         """Build the hierarchy index and optionally use an on-disk cache.
 
@@ -368,32 +487,46 @@ class ATDB:
             cache before scanning the full ATDB pointer table.
         cache_path:
             Optional explicit cache filename.  If omitted and ``use_cache`` is
-            true, the default is ``atdb.fits.xstar_atomic_index.pkl`` next to the
+            true, the default is ``atdb.fits.xstar_atomic_index.npz`` next to the
             FITS file.
         rebuild_cache:
             If ``True``, ignore an existing cache and write a fresh one after
             scanning.
+        cache_format:
+            ``"npz"`` for the compact NumPy cache, or ``"pickle"`` for the
+            legacy Python-object cache.
         """
         if self._index_records is not None and not rebuild_cache:
             self._last_index_cache_status = "memory"
             return self._index_records, self._index_elements, self._index_ions
 
-        cache_file = Path(cache_path) if cache_path is not None else default_index_cache_path(self.filename)
+        fmt = (cache_format or "npz").lower()
+        if fmt not in {"npz", "pickle"}:
+            raise ValueError(f"Unsupported index cache format: {cache_format!r}")
+        cache_file = Path(cache_path) if cache_path is not None else default_index_cache_path(self.filename, fmt)
         if use_cache:
             self._last_index_cache_path = cache_file
             if cache_file.exists() and not rebuild_cache:
                 try:
-                    with cache_file.open("rb") as handle:
-                        payload = pickle.load(handle)
-                    if _cache_metadata_matches(self, payload.get("metadata", {})):
+                    if fmt == "npz":
+                        records, elements, ions = _load_npz_index_cache(cache_file, self)
+                        self._index_records = records
+                        self._index_elements = elements
+                        self._index_ions = ions
+                    else:
+                        with cache_file.open("rb") as handle:
+                            payload = pickle.load(handle)
+                        if not _cache_metadata_matches(self, payload.get("metadata", {})):
+                            raise ValueError("stale pickle index cache")
                         self._index_records = payload["records"]
                         self._index_elements = payload["elements"]
                         self._index_ions = payload["ions"]
-                        self._last_index_cache_status = "hit"
-                        return self._index_records, self._index_elements, self._index_ions
-                    self._last_index_cache_status = "stale"
+                    self._last_index_cache_status = f"{fmt}_hit"
+                    return self._index_records, self._index_elements, self._index_ions
+                except ValueError:
+                    self._last_index_cache_status = f"{fmt}_stale"
                 except Exception:
-                    self._last_index_cache_status = "read_failed"
+                    self._last_index_cache_status = f"{fmt}_read_failed"
             elif rebuild_cache:
                 self._last_index_cache_status = "rebuild_requested"
             else:
@@ -514,20 +647,23 @@ class ATDB:
         if use_cache:
             try:
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
-                tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
-                payload = {
-                    "metadata": _cache_metadata(self),
-                    "records": records,
-                    "elements": elements,
-                    "ions": ions,
-                }
-                with tmp_file.open("wb") as handle:
-                    pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                os.replace(tmp_file, cache_file)
-                self._last_index_cache_status = "rebuilt" if rebuild_cache else "written"
+                if fmt == "npz":
+                    _write_npz_index_cache(cache_file, self, records, elements, ions)
+                else:
+                    tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+                    payload = {
+                        "metadata": _cache_metadata(self),
+                        "records": records,
+                        "elements": elements,
+                        "ions": ions,
+                    }
+                    with tmp_file.open("wb") as handle:
+                        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    os.replace(tmp_file, cache_file)
+                self._last_index_cache_status = f"{fmt}_rebuilt" if rebuild_cache else f"{fmt}_written"
                 self._last_index_cache_path = cache_file
             except Exception as exc:
-                self._last_index_cache_status = f"write_failed:{exc.__class__.__name__}"
+                self._last_index_cache_status = f"{fmt}_write_failed:{exc.__class__.__name__}"
 
         return records, elements, ions
 
@@ -641,8 +777,10 @@ def main() -> None:
     ap.add_argument("--no-reals", action="store_true", help="Do not load/dump REALS")
     ap.add_argument("--max-values", type=int, default=20)
     ap.add_argument("--index-cache", nargs="?", const=True, default=False,
-                    help="Use an on-disk hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+                    help="Use an on-disk hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.npz")
     ap.add_argument("--rebuild-index-cache", action="store_true", help="Rebuild the hierarchy index cache")
+    ap.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
+                    help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
     args = ap.parse_args()
 
     with ATDB(args.fitsfile, load_reals=False) as db:
@@ -653,6 +791,7 @@ def main() -> None:
             use_cache=use_cache,
             cache_path=cache_path,
             rebuild_cache=args.rebuild_index_cache,
+            cache_format=getattr(args, "index_cache_format", "npz"),
         )
 
         if args.summary or args.summary_json:

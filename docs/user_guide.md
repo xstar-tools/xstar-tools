@@ -661,3 +661,22 @@ This workflow is a sensitivity/prototype model.  The decoded oxygen RR/DR
 records are total recombination rates, not true level-resolved recombination
 cascade records.  The outputs should therefore be used to test the solver and
 source-file interface, not as final physical O VII triplet predictions.
+
+
+## NumPy/NPZ index cache
+
+The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use `--index-cache` to store and reuse a compact NumPy/NPZ hierarchy cache:
+
+```bash
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --index-cache \
+  --index-cache-format npz \
+  --out-dir solver_profile_example_npz
+```
+
+The default cache file is `atdb.fits.xstar_atomic_index.npz`. The legacy pickle cache is still available with `--index-cache-format pickle`. Use `--rebuild-index-cache` to force regeneration.

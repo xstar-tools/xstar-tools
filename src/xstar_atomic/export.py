@@ -471,10 +471,11 @@ def export_superwind_bundle(
     bands: Sequence[dict] | None = None,
     index_cache: bool | str | Path = False,
     rebuild_index_cache: bool = False,
+    index_cache_format: str = "npz",
 ) -> dict:
     """Export a multi-ion CSV/JSON bundle for Athena++/superwind use."""
     ion_list = parse_ion_list(ions)
-    with XSTARAtomic(fitsfile, index_cache=index_cache, rebuild_index_cache=rebuild_index_cache) as db:
+    with XSTARAtomic(fitsfile, index_cache=index_cache, rebuild_index_cache=rebuild_index_cache, index_cache_format=index_cache_format) as db:
         manifests = [
             export_ion_products(
                 db,
@@ -527,9 +528,11 @@ def main(argv: Sequence[str] | None = None) -> None:
                    help="Optional band specs name:emin:emax in keV, e.g. soft:0.5:2.0 hard:2.0:10.0")
     p.add_argument("--print-summary", action="store_true")
     p.add_argument("--index-cache", nargs="?", const=True, default=False,
-                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.pkl")
+                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_atomic_index.npz")
     p.add_argument("--rebuild-index-cache", action="store_true",
                    help="Rebuild the ATDB hierarchy index cache before exporting")
+    p.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
+                   help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
     args = p.parse_args(argv)
 
     wavelength = None
@@ -556,6 +559,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         bands=bands,
         index_cache=args.index_cache,
         rebuild_index_cache=args.rebuild_index_cache,
+        index_cache_format=args.index_cache_format,
     )
     if args.print_summary:
         print(json.dumps(bundle, indent=2))
