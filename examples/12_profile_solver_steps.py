@@ -162,12 +162,24 @@ def main() -> None:
     cache_setting = args.index_cache
     use_cache = bool(cache_setting) or bool(args.rebuild_index_cache)
     cache_path = None if cache_setting is True or cache_setting is False else cache_setting
-    records, _elements, _ions = db.build_index(
-        use_cache=use_cache,
-        cache_path=cache_path,
-        rebuild_cache=args.rebuild_index_cache,
-        cache_format=getattr(args, "index_cache_format", "npz"),
-    )
+    cache_format = getattr(args, "index_cache_format", "npz")
+    if use_cache and cache_format == "npz":
+        records = db.select_records(
+            z=z,
+            ion_stage=args.ion_stage,
+            use_cache=True,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format="npz",
+        )
+        _elements, _ions = db._index_elements or [], db._index_ions or []
+    else:
+        records, _elements, _ions = db.build_index(
+            use_cache=use_cache,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format=cache_format,
+        )
     stages.append({
         "stage": "build_index",
         "elapsed_s": _elapsed(start),

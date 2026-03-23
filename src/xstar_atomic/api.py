@@ -253,6 +253,23 @@ class XSTARAtomic:
         z, stage, symbol = parse_ion(ion, element=element, ion_stage=ion_stage)
         return AtomicSelection(z=z, ion_stage=stage, element=symbol)
 
+    def _records_for_selection(self, sel: AtomicSelection, *, data_type=None, rate_type=None):
+        """Return records for one selection, using array-backed NPZ cache when available."""
+        if self.index_cache and self.index_cache_format == "npz":
+            cache_setting = self.index_cache
+            cache_path = None if cache_setting is True or cache_setting is False or cache_setting is None else cache_setting
+            return self.db.select_records(
+                z=sel.z,
+                ion_stage=sel.ion_stage,
+                data_type=data_type,
+                rate_type=rate_type,
+                use_cache=True,
+                cache_path=cache_path,
+                rebuild_cache=self.rebuild_index_cache,
+                cache_format="npz",
+            )
+        return self.records
+
     def summary(self) -> dict:
         """Return a compact hierarchy summary for the database."""
         from .hierarchy import summarize as hierarchy_summary
@@ -264,7 +281,7 @@ class XSTARAtomic:
         from .lines import extract_levels
 
         sel = self.select(ion, element=element, ion_stage=ion_stage)
-        return extract_levels(self.db, self.records, sel.z, sel.ion_stage)
+        return extract_levels(self.db, self._records_for_selection(sel), sel.z, sel.ion_stage)
 
     def lines(
         self,
@@ -284,7 +301,7 @@ class XSTARAtomic:
         from .lines import extract_lines, filter_lines
 
         sel = self.select(ion, element=element, ion_stage=ion_stage)
-        rows = extract_lines(self.db, self.records, sel.z, sel.ion_stage)
+        rows = extract_lines(self.db, self._records_for_selection(sel), sel.z, sel.ion_stage)
         wmin, wmax = wavelength if wavelength is not None else (None, None)
         emin, emax = energy_kev if energy_kev is not None else (None, None)
         rows = filter_lines(rows, wmin, wmax, emin, emax, lower_level, upper_level, data_type, rate_type)
@@ -312,7 +329,7 @@ class XSTARAtomic:
         )
 
         sel = self.select(ion, element=element, ion_stage=ion_stage)
-        summaries, grids = extract_photoionization(self.db, self.records, sel.z, sel.ion_stage)
+        summaries, grids = extract_photoionization(self.db, self._records_for_selection(sel), sel.z, sel.ion_stage)
         tmin, tmax = threshold_ev if threshold_ev is not None else (None, None)
         summaries = filter_photoionization_summaries(summaries, tmin, tmax, data_type, rate_type, lower_level)
         if include_grid:
@@ -341,7 +358,7 @@ class XSTARAtomic:
 
         sel = self.select(ion, element=element, ion_stage=ion_stage)
         summary_rows, grid_rows, eval_rows = extract_collisions(
-            self.db, self.records, sel.z, sel.ion_stage, temperatures,
+            self.db, self._records_for_selection(sel), sel.z, sel.ion_stage, temperatures,
             electron_density_cm3=electron_density_for_lmixing,
         )
         args = SimpleNamespace(
@@ -396,7 +413,7 @@ class XSTARAtomic:
         )
 
         sel = self.select(ion, element=element, ion_stage=ion_stage)
-        rows = extract_recombination_records(self.db, self.records, sel.z, sel.ion_stage)
+        rows = extract_recombination_records(self.db, self._records_for_selection(sel), sel.z, sel.ion_stage)
         rows = classify_recombination_records(rows)
         eval_rows = evaluate_recombination_records(self.db, rows, temperatures, include_charge_exchange=include_charge_exchange)
         source_levels = list(source_levels or [])
@@ -501,7 +518,7 @@ class XSTARAtomic:
         )
         line_rows = filter_emissivity_lines(line_rows_all, args)
         collision_summary, _collision_grid, collision_eval = extract_collisions(
-            self.db, self.records, sel.z, sel.ion_stage, temperatures,
+            self.db, self._records_for_selection(sel), sel.z, sel.ion_stage, temperatures,
             electron_density_cm3=electron_density_for_lmixing,
         )
         collision_summary = filter_emissivity_collision_rows(collision_summary, args)

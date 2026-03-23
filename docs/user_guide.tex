@@ -725,4 +725,7 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --out-dir solver_profile_example_npz
 \end{lstlisting}
 
+\subsection{Array-backed NPZ index cache}
+Version 0.2.26 adds an array-backed NPZ cache through \texttt{ATDBIndexArrays}. Targeted workflows can load numeric index arrays, select records by element, ion stage, data type, or rate type, and convert only selected rows to \texttt{IndexedRecord} objects. Enable this path with \texttt{--index-cache --index-cache-format npz}.
+
 \end{document}

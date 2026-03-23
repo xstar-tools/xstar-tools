@@ -225,6 +225,123 @@ class IonInfo:
     raw_chars: str
 
 
+@dataclass
+class ATDBIndexArrays:
+    """Array-backed hierarchy index for fast targeted selection.
+
+    This structure stores the per-record hierarchy fields as NumPy arrays.
+    It avoids constructing all 1.2 million :class:`IndexedRecord` Python
+    objects on cache hits.  Targeted workflows can filter these arrays and
+    convert only the selected rows into ``IndexedRecord`` objects.
+    """
+
+    recno: np.ndarray
+    data_type: np.ndarray
+    rate_type: np.ndarray
+    continuation: np.ndarray
+    nreal: np.ndarray
+    nint: np.ndarray
+    nchar: np.ndarray
+    real_ptr: np.ndarray
+    int_ptr: np.ndarray
+    char_ptr: np.ndarray
+    element_z: np.ndarray
+    element_record: np.ndarray
+    ion_global_index: np.ndarray
+    ion_stage: np.ndarray
+    ion_record: np.ndarray
+    level_index: np.ndarray
+    parent_kind_code: np.ndarray
+    elements: List[ElementInfo]
+    ions: List[IonInfo]
+    metadata: dict
+
+    @classmethod
+    def from_records(cls, records: List[IndexedRecord], elements: List[ElementInfo], ions: List[IonInfo], metadata: dict) -> "ATDBIndexArrays":
+        return cls(
+            recno=np.asarray([r.recno for r in records], dtype=np.int32),
+            data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
+            rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
+            continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
+            nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
+            nint=np.asarray([r.nint for r in records], dtype=np.int32),
+            nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
+            real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
+            int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
+            char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
+            element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
+            element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
+            ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
+            ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
+            ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
+            level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
+            parent_kind_code=np.asarray([_parent_kind_code(r) for r in records], dtype=np.int8),
+            elements=elements,
+            ions=ions,
+            metadata=metadata,
+        )
+
+    def select_indices(self, z: Optional[int] = None, ion_stage: Optional[int] = None, data_type: Optional[int | Iterable[int]] = None, rate_type: Optional[int | Iterable[int]] = None) -> np.ndarray:
+        mask = np.ones(len(self.recno), dtype=bool)
+        if z is not None:
+            mask &= self.element_z == int(z)
+        if ion_stage is not None:
+            mask &= self.ion_stage == int(ion_stage)
+        if data_type is not None:
+            vals = np.asarray(list(data_type) if isinstance(data_type, (list, tuple, set)) else [data_type], dtype=self.data_type.dtype)
+            mask &= np.isin(self.data_type, vals)
+        if rate_type is not None:
+            vals = np.asarray(list(rate_type) if isinstance(rate_type, (list, tuple, set)) else [rate_type], dtype=self.rate_type.dtype)
+            mask &= np.isin(self.rate_type, vals)
+        return np.nonzero(mask)[0]
+
+    def to_records(self, indices: Optional[np.ndarray] = None) -> List[IndexedRecord]:
+        if indices is None:
+            indices = np.arange(len(self.recno))
+        element_names = {int(e.z): e.name for e in self.elements}
+        element_records = {int(e.z): int(e.record) for e in self.elements}
+        ion_records_by_global = {int(i.global_index): int(i.record) for i in self.ions}
+        data_types = DATA_TYPES
+        rate_types = RATE_TYPES
+        elem_symbols = Z_TO_SYMBOL
+        out: List[IndexedRecord] = []
+        append = out.append
+        for j in indices:
+            i = int(j)
+            z_i_raw = int(self.element_z[i])
+            z_opt = None if z_i_raw < 0 else z_i_raw
+            symbol = elem_symbols.get(z_i_raw, "") if z_i_raw > 0 else ""
+            stage_raw = int(self.ion_stage[i])
+            stage_opt = None if stage_raw < 0 else stage_raw
+            ig_raw = int(self.ion_global_index[i])
+            append(IndexedRecord(
+                recno=int(self.recno[i]),
+                data_type=int(self.data_type[i]),
+                rate_type=int(self.rate_type[i]),
+                continuation=int(self.continuation[i]),
+                nreal=int(self.nreal[i]),
+                nint=int(self.nint[i]),
+                nchar=int(self.nchar[i]),
+                real_ptr=int(self.real_ptr[i]),
+                int_ptr=int(self.int_ptr[i]),
+                char_ptr=int(self.char_ptr[i]),
+                element_z=z_opt,
+                element_symbol=symbol,
+                element_name=element_names.get(z_i_raw, "") if z_i_raw > 0 else "",
+                element_record=_restore_optional_int(int(self.element_record[i])) if int(self.element_record[i]) >= 0 else element_records.get(z_i_raw),
+                ion_global_index=None if ig_raw < 0 else ig_raw,
+                ion_stage=stage_opt,
+                ion_label=ion_label(symbol, stage_opt),
+                charge_label=charge_label(symbol, stage_opt),
+                ion_record=_restore_optional_int(int(self.ion_record[i])) if int(self.ion_record[i]) >= 0 else ion_records_by_global.get(ig_raw),
+                level_index=_restore_optional_int(int(self.level_index[i])),
+                parent_kind=_parent_kind_from_fields(int(self.rate_type[i]), ig_raw),
+                data_type_label=data_types.get(int(self.data_type[i]), ""),
+                rate_type_label=rate_types.get(int(self.rate_type[i]), ""),
+            ))
+        return out
+
+
 INDEX_CACHE_FORMAT_VERSION = 1
 INDEX_CACHE_NPZ_FORMAT_VERSION = 2
 
@@ -371,13 +488,11 @@ def _write_npz_index_cache(path: Path, db: "ATDB", records: List[IndexedRecord],
     os.replace(tmp_file, path)
 
 
-def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
-    """Load a compact NumPy/NPZ hierarchy index cache.
+def _load_npz_index_arrays(path: Path, db: "ATDB") -> ATDBIndexArrays:
+    """Load a compact NPZ hierarchy index as array-backed data.
 
-    The returned record list is still a list of :class:`IndexedRecord` objects
-    for compatibility with the existing decoders, but all repeated text fields
-    are reconstructed from compact numeric arrays rather than read as large
-    Unicode arrays.
+    Unlike :func:`_load_npz_index_cache`, this function does not reconstruct
+    the full list of Python ``IndexedRecord`` objects.
     """
     with np.load(path, allow_pickle=False) as z:
         metadata = json.loads(str(z["metadata_json"].item()))
@@ -389,69 +504,39 @@ def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], 
             raise ValueError("stale NPZ index cache")
         elements = [ElementInfo(**row) for row in json.loads(str(z["elements_json"].item()))]
         ions = [IonInfo(**row) for row in json.loads(str(z["ions_json"].item()))]
+        return ATDBIndexArrays(
+            recno=np.asarray(z["recno"], dtype=np.int32),
+            data_type=np.asarray(z["data_type"], dtype=np.int16),
+            rate_type=np.asarray(z["rate_type"], dtype=np.int16),
+            continuation=np.asarray(z["continuation"], dtype=np.int16),
+            nreal=np.asarray(z["nreal"], dtype=np.int32),
+            nint=np.asarray(z["nint"], dtype=np.int32),
+            nchar=np.asarray(z["nchar"], dtype=np.int32),
+            real_ptr=np.asarray(z["real_ptr"], dtype=np.int64),
+            int_ptr=np.asarray(z["int_ptr"], dtype=np.int64),
+            char_ptr=np.asarray(z["char_ptr"], dtype=np.int64),
+            element_z=np.asarray(z["element_z"], dtype=np.int16),
+            element_record=np.asarray(z["element_record"], dtype=np.int32),
+            ion_global_index=np.asarray(z["ion_global_index"], dtype=np.int32),
+            ion_stage=np.asarray(z["ion_stage"], dtype=np.int16),
+            ion_record=np.asarray(z["ion_record"], dtype=np.int32),
+            level_index=np.asarray(z["level_index"], dtype=np.int32),
+            parent_kind_code=np.asarray(z["parent_kind_code"], dtype=np.int8) if "parent_kind_code" in z else np.zeros(len(z["recno"]), dtype=np.int8),
+            elements=elements,
+            ions=ions,
+            metadata=metadata,
+        )
 
-        element_names = {int(e.z): e.name for e in elements}
-        element_records = {int(e.z): int(e.record) for e in elements}
-        ion_records_by_global = {int(i.global_index): int(i.record) for i in ions}
 
-        recno = z["recno"]
-        data_type = z["data_type"]
-        rate_type = z["rate_type"]
-        continuation = z["continuation"]
-        nreal = z["nreal"]
-        nint = z["nint"]
-        nchar = z["nchar"]
-        real_ptr = z["real_ptr"]
-        int_ptr = z["int_ptr"]
-        char_ptr = z["char_ptr"]
-        element_z = z["element_z"]
-        element_record = z["element_record"] if "element_record" in z else None
-        ion_global_index = z["ion_global_index"]
-        ion_stage = z["ion_stage"]
-        ion_record = z["ion_record"]
-        level_index = z["level_index"]
-        n = len(recno)
+def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], List[ElementInfo], List[IonInfo]]:
+    """Load a compact NumPy/NPZ hierarchy index cache as Python objects.
 
-        records: List[IndexedRecord] = []
-        records_append = records.append
-        data_types = DATA_TYPES
-        rate_types = RATE_TYPES
-        elem_symbols = Z_TO_SYMBOL
-        for i in range(n):
-            z_i_raw = int(element_z[i])
-            z_opt = None if z_i_raw < 0 else z_i_raw
-            symbol = elem_symbols.get(z_i_raw, "") if z_i_raw > 0 else ""
-            stage_raw = int(ion_stage[i])
-            stage_opt = None if stage_raw < 0 else stage_raw
-            ig_raw = int(ion_global_index[i])
-            rec = IndexedRecord(
-                recno=int(recno[i]),
-                data_type=int(data_type[i]),
-                rate_type=int(rate_type[i]),
-                continuation=int(continuation[i]),
-                nreal=int(nreal[i]),
-                nint=int(nint[i]),
-                nchar=int(nchar[i]),
-                real_ptr=int(real_ptr[i]),
-                int_ptr=int(int_ptr[i]),
-                char_ptr=int(char_ptr[i]),
-                element_z=z_opt,
-                element_symbol=symbol,
-                element_name=element_names.get(z_i_raw, "") if z_i_raw > 0 else "",
-                element_record=(element_records.get(z_i_raw) if z_i_raw > 0 else None)
-                    if element_record is None else _restore_optional_int(element_record[i]),
-                ion_global_index=None if ig_raw < 0 else ig_raw,
-                ion_stage=stage_opt,
-                ion_label=ion_label(symbol, stage_opt),
-                charge_label=charge_label(symbol, stage_opt),
-                ion_record=_restore_optional_int(ion_record[i]) if int(ion_record[i]) >= 0 else ion_records_by_global.get(ig_raw),
-                level_index=_restore_optional_int(level_index[i]),
-                parent_kind=_parent_kind_from_fields(int(rate_type[i]), ig_raw),
-                data_type_label=data_types.get(int(data_type[i]), ""),
-                rate_type_label=rate_types.get(int(rate_type[i]), ""),
-            )
-            records_append(rec)
-    return records, elements, ions
+    This compatibility wrapper reconstructs the full record list.  New targeted
+    workflows should use :func:`_load_npz_index_arrays` and convert only selected
+    rows with :meth:`ATDBIndexArrays.to_records`.
+    """
+    idx = _load_npz_index_arrays(path, db)
+    return idx.to_records(), idx.elements, idx.ions
 
 
 class ATDB:
@@ -472,6 +557,7 @@ class ATDB:
         self._index_records = None
         self._index_elements = None
         self._index_ions = None
+        self._index_arrays = None
         self._last_index_cache_path = None
         self._last_index_cache_status = "not_used"
         if load_reals:
@@ -536,6 +622,107 @@ class ATDB:
         if len(ints) >= 2:
             return int(ints[-2])
         return None
+
+    def build_index_arrays(
+        self,
+        *,
+        use_cache: bool = False,
+        cache_path: str | Path | None = None,
+        rebuild_cache: bool = False,
+        cache_format: str = "npz",
+    ) -> ATDBIndexArrays:
+        """Build or load an array-backed hierarchy index.
+
+        With ``cache_format="npz"`` and an existing cache, this loads the
+        numeric arrays without reconstructing all ``IndexedRecord`` objects.
+        If no suitable NPZ cache exists, the standard hierarchy scan is used
+        once and a compact cache can be written.
+        """
+        fmt = (cache_format or "npz").lower()
+        if fmt != "npz":
+            records, elements, ions = self.build_index(
+                use_cache=use_cache, cache_path=cache_path, rebuild_cache=rebuild_cache, cache_format=fmt
+            )
+            meta = _cache_metadata(self)
+            meta["format_version"] = INDEX_CACHE_NPZ_FORMAT_VERSION
+            self._index_arrays = ATDBIndexArrays.from_records(records, elements, ions, meta)
+            return self._index_arrays
+
+        cache_file = Path(cache_path) if cache_path is not None else default_index_cache_path(self.filename, "npz")
+        if self._index_arrays is not None and not rebuild_cache:
+            self._last_index_cache_status = "array_memory"
+            return self._index_arrays
+        if use_cache:
+            self._last_index_cache_path = cache_file
+            if cache_file.exists() and not rebuild_cache:
+                try:
+                    self._index_arrays = _load_npz_index_arrays(cache_file, self)
+                    self._index_elements = self._index_arrays.elements
+                    self._index_ions = self._index_arrays.ions
+                    self._last_index_cache_status = "npz_array_hit"
+                    return self._index_arrays
+                except ValueError:
+                    self._last_index_cache_status = "npz_stale"
+                except Exception:
+                    self._last_index_cache_status = "npz_read_failed"
+            elif rebuild_cache:
+                self._last_index_cache_status = "rebuild_requested"
+            else:
+                self._last_index_cache_status = "miss"
+
+        records, elements, ions = self.build_index(use_cache=False)
+        meta = _cache_metadata(self)
+        meta["format_version"] = INDEX_CACHE_NPZ_FORMAT_VERSION
+        self._index_arrays = ATDBIndexArrays.from_records(records, elements, ions, meta)
+        if use_cache:
+            try:
+                _write_npz_index_cache(cache_file, self, records, elements, ions)
+                self._last_index_cache_path = cache_file
+                self._last_index_cache_status = "npz_array_rebuilt" if rebuild_cache else "npz_array_written"
+            except Exception as exc:
+                self._last_index_cache_status = f"npz_array_write_failed:{exc.__class__.__name__}"
+        return self._index_arrays
+
+    def select_records(
+        self,
+        *,
+        z: Optional[int] = None,
+        ion_stage: Optional[int] = None,
+        data_type: Optional[int | Iterable[int]] = None,
+        rate_type: Optional[int | Iterable[int]] = None,
+        use_cache: bool = True,
+        cache_path: str | Path | None = None,
+        rebuild_cache: bool = False,
+        cache_format: str = "npz",
+    ) -> List[IndexedRecord]:
+        """Return selected records using the fastest available index path.
+
+        For NPZ caches this filters NumPy arrays and converts only the selected
+        rows to ``IndexedRecord`` objects.
+        """
+        if (cache_format or "npz").lower() == "npz":
+            idx = self.build_index_arrays(
+                use_cache=use_cache, cache_path=cache_path, rebuild_cache=rebuild_cache, cache_format="npz"
+            )
+            indices = idx.select_indices(z=z, ion_stage=ion_stage, data_type=data_type, rate_type=rate_type)
+            return idx.to_records(indices)
+        records, _elements, _ions = self.build_index(
+            use_cache=use_cache, cache_path=cache_path, rebuild_cache=rebuild_cache, cache_format=cache_format
+        )
+        out = []
+        vals_dt = set(data_type) if isinstance(data_type, (list, tuple, set)) else ({data_type} if data_type is not None else None)
+        vals_rt = set(rate_type) if isinstance(rate_type, (list, tuple, set)) else ({rate_type} if rate_type is not None else None)
+        for r in records:
+            if z is not None and r.element_z != z:
+                continue
+            if ion_stage is not None and r.ion_stage != ion_stage:
+                continue
+            if vals_dt is not None and r.data_type not in vals_dt:
+                continue
+            if vals_rt is not None and r.rate_type not in vals_rt:
+                continue
+            out.append(r)
+        return out
 
     def build_index(
         self,

@@ -997,12 +997,27 @@ def main(argv=None) -> None:
     cache_setting = args.index_cache
     use_cache = bool(cache_setting) or bool(args.rebuild_index_cache)
     cache_path = None if cache_setting is True or cache_setting is False else cache_setting
-    records, elements, ions = db.build_index(
-        use_cache=use_cache,
-        cache_path=cache_path,
-        rebuild_cache=args.rebuild_index_cache,
-        cache_format=getattr(args, "index_cache_format", "npz"),
-    )
+    cache_format = getattr(args, "index_cache_format", "npz")
+    if use_cache and cache_format == "npz":
+        # Fast array-backed path: select only records for this ion, then convert
+        # only those rows to IndexedRecord objects.
+        records = db.select_records(
+            z=z,
+            ion_stage=args.ion_stage,
+            use_cache=True,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format="npz",
+        )
+        elements = db._index_elements or []
+        ions = db._index_ions or []
+    else:
+        records, elements, ions = db.build_index(
+            use_cache=use_cache,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format=cache_format,
+        )
 
     levels = extract_levels(db, records, z, args.ion_stage)
     level_by_index: Dict[int, dict] = {maybe_int(r.get("level_index")): r for r in levels if maybe_int(r.get("level_index")) is not None}

@@ -498,3 +498,8 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
 ```
 
 The default cache file is `atdb.fits.xstar_atomic_index.npz`. Legacy pickle caching remains available with `--index-cache-format pickle`.
+
+
+### Array-backed NPZ index cache
+
+`xstar-atomic` v0.2.26 adds an array-backed NPZ index cache. Targeted workflows such as the solver, profiler, and high-level API can load the numeric cache, filter by element/ion/data type, and convert only selected rows to `IndexedRecord` objects. This avoids reconstructing all 1.2 million ATDB records on cache hits. Use `--index-cache --index-cache-format npz` to enable this path.

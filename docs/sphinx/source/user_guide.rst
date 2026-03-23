@@ -161,3 +161,9 @@ The ATDB hierarchy scan is often the dominant startup cost because it walks more
 
 
 The default cache file is `atdb.fits.xstar_atomic_index.npz`. The legacy pickle cache is still available with `--index-cache-format pickle`. Use `--rebuild-index-cache` to force regeneration.
+
+
+Array-backed NPZ index cache
+----------------------------
+
+Version 0.2.26 adds an array-backed NPZ cache through ``ATDBIndexArrays``. For targeted workflows, the package can load numeric index arrays, select records by element, ion stage, data type, or rate type, and convert only those selected rows to ``IndexedRecord`` objects. This is enabled with ``--index-cache --index-cache-format npz`` in the solver, export, and profiling examples.

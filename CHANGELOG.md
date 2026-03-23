@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.2.26 - 2026-03-23
+
+Added:
+- Added `ATDBIndexArrays`, an array-backed hierarchy index for fast targeted selection.
+- Added `ATDB.build_index_arrays(...)` and `ATDB.select_records(...)`.
+- NPZ cache hits can now filter numeric arrays and convert only selected rows to `IndexedRecord` objects.
+- Updated solver, profiler, and high-level API paths to use array-backed selection for NPZ index caches.
+- Added tests for array-backed selection/reconstruction.
+
+Changed:
+- `--index-cache-format npz` now avoids reconstructing all 1.2 million records in targeted solver/profiler/API paths.
+
 ## v0.2.25 - 2026-03-22
 
 Fixed:
