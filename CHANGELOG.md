@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.27 - 2026-03-24
+
+Fixed:
+- Restored the public array-backed `ATDB.select_records(z=..., ion_stage=..., data_type=..., rate_type=...)` API by renaming the legacy materialized-list filter helper to `filter_records`.
+- Fixed `examples/12_profile_solver_steps.py --index-cache --index-cache-format npz`, which failed in v0.2.26 because the legacy helper shadowed the new fast-selection method.
+
 ## v0.2.26 - 2026-03-23
 
 Added:

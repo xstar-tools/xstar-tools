@@ -931,8 +931,14 @@ class ATDB:
         """Cache path used by the most recent cached ``build_index`` call."""
         return self._last_index_cache_path
 
-    def select_records(self, indexed: List[IndexedRecord], element: Optional[str], ion_stage: Optional[int],
+    def filter_records(self, indexed: List[IndexedRecord], element: Optional[str], ion_stage: Optional[int],
                        data_type: Optional[int], rate_type: Optional[int], limit: Optional[int]) -> List[IndexedRecord]:
+        """Filter an already materialized list of IndexedRecord objects.
+
+        This legacy helper is retained for the hierarchy CLI.  New code should
+        prefer :meth:`select_records`, which can use the array-backed NPZ index
+        and avoid reconstructing the full database index on cache hits.
+        """
         z_filter = None
         if element:
             e = element.strip()
@@ -1069,7 +1075,7 @@ def main() -> None:
             print(f"Wrote {args.ions_csv}")
 
         if args.dump or any(x is not None for x in [args.element, args.ion_stage, args.data_type, args.rate_type]):
-            selected = db.select_records(records, args.element, args.ion_stage, args.data_type, args.rate_type, args.limit)
+            selected = db.filter_records(records, args.element, args.ion_stage, args.data_type, args.rate_type, args.limit)
             print(f"Selected {len(selected)} records")
             if args.dump:
                 for r in selected:
