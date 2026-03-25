@@ -103,7 +103,9 @@ Profile the main stages of one O VIII solver run::
      --wavelength-min 18.8 --wavelength-max 19.1 \
      --temperature 1e6 --electron-density 1.0 \
      --linear-solver sparse \
-     --out-dir solver_profile_example
+     --index-cache \
+     --index-cache-format npz \
+     --out-dir solver_profile_npz_arrays_hit
 
 Prototype O VII recombination/cascade workflow
 ----------------------------------------------
@@ -133,7 +135,9 @@ assembly, linear solving, and output writing::
      --wavelength-min 18.8 --wavelength-max 19.1 \
      --temperature 1e6 --electron-density 1.0 \
      --linear-solver sparse \
-     --out-dir solver_profile_example
+     --index-cache \
+     --index-cache-format npz \
+     --out-dir solver_profile_npz_arrays_hit
 
 The Stage-6 prototype O VII recombination/cascade workflow evaluates total
 O VIII -> O VII recombination, redistributes source terms through an approximate

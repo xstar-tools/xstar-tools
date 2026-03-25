@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.2.28 - 2026-03-25
+
+Documentation/examples:
+- Documented the validated array-backed NPZ cache performance from v0.2.27: O VIII sparse solver profile dropped from about 5.31 s uncached to about 0.53 s on an NPZ array-backed cache hit.
+- Made the array-backed NPZ cache the recommended default for repeated solver, export, high-level API, and profiler workflows.
+- Updated README, Markdown user guide, LaTeX user guide, and Sphinx user/examples pages with `--index-cache --index-cache-format npz` examples.
+- Updated `examples/12_profile_solver_steps.py` documentation to use the recommended NPZ cache path.
+
 ## v0.2.27 - 2026-03-24
 
 Fixed:

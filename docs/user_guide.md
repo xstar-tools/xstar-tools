@@ -663,9 +663,9 @@ cascade records.  The outputs should therefore be used to test the solver and
 source-file interface, not as final physical O VII triplet predictions.
 
 
-## NumPy/NPZ index cache
+## Recommended array-backed NPZ index cache
 
-The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use `--index-cache` to store and reuse a compact NumPy/NPZ hierarchy cache:
+The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records.  For repeated targeted workflows, use the array-backed NumPy/NPZ cache:
 
 ```bash
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
@@ -676,12 +676,25 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --linear-solver sparse \
   --index-cache \
   --index-cache-format npz \
-  --out-dir solver_profile_example_npz
+  --out-dir solver_profile_npz_arrays_hit
 ```
 
-The default cache file is `atdb.fits.xstar_atomic_index.npz`. The legacy pickle cache is still available with `--index-cache-format pickle`. Use `--rebuild-index-cache` to force regeneration.
+In the validated O VIII sparse-solver profile, the uncached run took about `5.31 s`, while the NPZ array-backed cache-hit run took about `0.53 s`.  The `build_index` stage dropped from about `5.00 s` to about `0.058 s`.
 
+The default cache file is `atdb.fits.xstar_atomic_index.npz`.  Use `--rebuild-index-cache` after changing or replacing `atdb.fits`.  Legacy pickle caching remains available with `--index-cache-format pickle`, but the NPZ array-backed path is recommended.
 
-### Array-backed NPZ index cache
+The solver, export, high-level API, and profiling examples can all use this cache.  For export workflows:
 
-Version 0.2.26 adds an array-backed NPZ cache through `ATDBIndexArrays`. For targeted workflows, the package can load numeric index arrays, select records by element, ion stage, data type, or rate type, and convert only those selected rows to `IndexedRecord` objects. This is enabled with `--index-cache --index-cache-format npz` in the solver, export, and profiling examples.
+```bash
+PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 40.0 \
+  --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
+  --formats csv,hdf5 \
+  --index-cache --index-cache-format npz \
+  --out-dir atomic_export_cached \
+  --print-summary
+```
+
+The summary reports `index_cache_status` and `index_cache_path`; cache-hit runs should report statuses such as `npz_array_hit` or `array_memory`.

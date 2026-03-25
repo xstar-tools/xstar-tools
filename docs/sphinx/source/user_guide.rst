@@ -115,40 +115,17 @@ matrix assembly, emissivity aggregation, and direct HDF5 packing.
 
 
 
-ATDB index caching
-------------------
+Recommended array-backed NPZ index cache
+----------------------------------------
 
-Repeated solver and export workflows can reuse an on-disk hierarchy index cache.
-The first cached run writes ``atdb.fits.xstar_atomic_index.npz`` by default; later
-runs with ``--index-cache`` can load that cache instead of scanning all ATDB
-records again.
-
-.. code-block:: bash
-
-   PYTHONPATH=src python examples/12_profile_solver_steps.py \
-     ../xstar/data/atdb.fits \
-     --element O --ion-stage 8 \
-     --wavelength-min 18.8 --wavelength-max 19.1 \
-     --temperature 1e6 --electron-density 1.0 \
-     --linear-solver sparse \
-     --index-cache \
-     --out-dir solver_profile_example
-
-The solver and export CLIs also accept ``--index-cache`` and
-``--rebuild-index-cache``.  Summaries report ``index_cache_status`` and
-``index_cache_path``.
-
-Solver profiling and Stage-6 cascade examples are documented in the examples page.
-
-
-NumPy/NPZ index cache
----------------------
-
-The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use `--index-cache` to store and reuse a compact NumPy/NPZ hierarchy cache:
+The ATDB hierarchy scan is often the dominant startup cost because it walks more
+than one million packed records.  For repeated targeted workflows, use the
+array-backed NumPy/NPZ cache.  This cache stores the hierarchy as numeric
+arrays, filters by element, ion stage, data type, and rate type, and converts
+only selected rows to ``IndexedRecord`` objects.
 
 .. code-block:: bash
 
-   
    PYTHONPATH=src python examples/12_profile_solver_steps.py \
      ../xstar/data/atdb.fits \
      --element O --ion-stage 8 \
@@ -157,13 +134,34 @@ The ATDB hierarchy scan is often the dominant startup cost because it walks more
      --linear-solver sparse \
      --index-cache \
      --index-cache-format npz \
-     --out-dir solver_profile_example_npz
+     --out-dir solver_profile_npz_arrays_hit
 
+For the validated O VIII sparse-solver profile, the uncached run took about
+``5.31 s``, while the NPZ array-backed cache-hit run took about ``0.53 s``.
+The ``build_index`` stage dropped from about ``5.00 s`` to about ``0.058 s``.
 
-The default cache file is `atdb.fits.xstar_atomic_index.npz`. The legacy pickle cache is still available with `--index-cache-format pickle`. Use `--rebuild-index-cache` to force regeneration.
+The default cache file is ``atdb.fits.xstar_atomic_index.npz``.  Use
+``--rebuild-index-cache`` after changing or replacing ``atdb.fits``.  Legacy
+pickle caching remains available with ``--index-cache-format pickle``, but the
+NPZ array-backed cache is the recommended path for solver, export, high-level
+API, and profiling workflows.
 
+The same cache should be used for repeated export workflows:
 
-Array-backed NPZ index cache
-----------------------------
+.. code-block:: bash
 
-Version 0.2.26 adds an array-backed NPZ cache through ``ATDBIndexArrays``. For targeted workflows, the package can load numeric index arrays, select records by element, ion stage, data type, or rate type, and convert only those selected rows to ``IndexedRecord`` objects. This is enabled with ``--index-cache --index-cache-format npz`` in the solver, export, and profiling examples.
+   PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
+     --ions "O VIII,Ne IX" \
+     --temperatures 1e6 3e6 1e7 \
+     --wavelength-min 1.0 --wavelength-max 40.0 \
+     --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
+     --formats csv,hdf5 \
+     --index-cache --index-cache-format npz \
+     --out-dir atomic_export_cached \
+     --print-summary
+
+Solver and export summaries report ``index_cache_status`` and
+``index_cache_path``; cache-hit workflows should report statuses such as
+``npz_array_hit`` or ``array_memory``.
+
+Solver profiling and Stage-6 cascade examples are documented in the examples page.

@@ -674,44 +674,14 @@ $R=f/i$ and $G=(f+i)/r$.  It is useful for source-interface and sensitivity
 tests, but it is not yet a final level-resolved recombination/cascade model.
 
 
-\section{ATDB Index Caching}
 
-The solver-step profiler showed that repeated workflows are dominated by
-\texttt{build\_index}, not by the sparse linear solve.  Repeated runs can reuse
-an optional on-disk hierarchy cache:
+\section{Recommended Array-backed NPZ Index Cache}
 
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/12_profile_solver_steps.py \
-  ../xstar/data/atdb.fits \
-  --element O --ion-stage 8 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperature 1e6 --electron-density 1.0 \
-  --linear-solver sparse \
-  --index-cache \
-  --out-dir solver_profile_example
-\end{lstlisting}
-
-The first cached run writes a file such as
-\texttt{atdb.fits.xstar\_atomic\_index.pkl}.  Later runs with
-\texttt{--index-cache} can load that file instead of scanning all records. Use
-\texttt{--rebuild-index-cache} after replacing or modifying \texttt{atdb.fits}.
-The solver and export CLIs also accept \texttt{--index-cache}; their summaries
-report \texttt{index\_cache\_status} and \texttt{index\_cache\_path}.
-
-From Python:
-
-\begin{lstlisting}[language=python]
-from xstar_atomic import XSTARAtomic
-
-db = XSTARAtomic("xstar/data/atdb.fits", index_cache=True)
-print(db.db.index_cache_status)
-\end{lstlisting}
-
-
-
-\section{NumPy/NPZ index cache}
-
-The ATDB hierarchy scan is often the dominant startup cost because it walks more than one million packed records. Use \texttt{--index-cache} to store and reuse a compact NumPy/NPZ hierarchy cache. The default cache file is \texttt{atdb.fits.xstar\_atomic\_index.npz}. The legacy pickle cache is still available with \texttt{--index-cache-format pickle}; use \texttt{--rebuild-index-cache} to force regeneration.
+The ATDB hierarchy scan is often the dominant startup cost because it walks
+more than one million packed records.  For repeated targeted workflows, use the
+array-backed NumPy/NPZ cache.  This cache stores the hierarchy as numeric arrays,
+filters by element, ion stage, data type, and rate type, and converts only the
+selected rows to \texttt{IndexedRecord} objects.
 
 \begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
@@ -722,10 +692,37 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --linear-solver sparse \
   --index-cache \
   --index-cache-format npz \
-  --out-dir solver_profile_example_npz
+  --out-dir solver_profile_npz_arrays_hit
 \end{lstlisting}
 
-\subsection{Array-backed NPZ index cache}
-Version 0.2.26 adds an array-backed NPZ cache through \texttt{ATDBIndexArrays}. Targeted workflows can load numeric index arrays, select records by element, ion stage, data type, or rate type, and convert only selected rows to \texttt{IndexedRecord} objects. Enable this path with \texttt{--index-cache --index-cache-format npz}.
+For the validated O~VIII sparse-solver profile, the uncached run took about
+\texttt{5.31 s}, while the NPZ array-backed cache-hit run took about
+\texttt{0.53 s}.  The \texttt{build\_index} stage dropped from about
+\texttt{5.00 s} to about \texttt{0.058 s}.
+
+The default cache file is
+\texttt{atdb.fits.xstar\_atomic\_index.npz}.  Use
+\texttt{--rebuild-index-cache} after changing or replacing \texttt{atdb.fits}.
+Legacy pickle caching remains available with
+\texttt{--index-cache-format pickle}, but the NPZ array-backed cache is the
+recommended path for solver, export, high-level API, and profiling workflows.
+
+The same cache should be used for repeated export workflows:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 40.0 \
+  --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
+  --formats csv,hdf5 \
+  --index-cache --index-cache-format npz \
+  --out-dir atomic_export_cached \
+  --print-summary
+\end{lstlisting}
+
+Solver and export summaries report \texttt{index\_cache\_status} and
+\texttt{index\_cache\_path}; cache-hit workflows should report statuses such
+as \texttt{npz\_array\_hit} or \texttt{array\_memory}.
 
 \end{document}

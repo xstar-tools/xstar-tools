@@ -26,7 +26,9 @@ Example
     --wavelength-min 18.8 --wavelength-max 19.1 \
     --temperature 1e6 --electron-density 1.0 \
     --linear-solver sparse \
-    --out-dir solver_profile_example
+    --index-cache \
+    --index-cache-format npz \
+    --out-dir solver_profile_npz_arrays_hit
 """
 
 from __future__ import annotations

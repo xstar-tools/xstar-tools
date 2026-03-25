@@ -420,7 +420,8 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --temperature 1e6 --electron-density 1.0 \
   --linear-solver sparse \
   --index-cache \
-  --out-dir solver_profile_example
+  --index-cache-format npz \
+  --out-dir solver_profile_npz_arrays_hit
 ```
 
 The first cached run writes a file named similar to:
@@ -463,7 +464,9 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --wavelength-min 18.8 --wavelength-max 19.1 \
   --temperature 1e6 --electron-density 1.0 \
   --linear-solver sparse \
-  --out-dir solver_profile_example
+  --index-cache \
+  --index-cache-format npz \
+  --out-dir solver_profile_npz_arrays_hit
 ```
 
 Prototype O VII recombination/cascade source workflow:
@@ -481,9 +484,9 @@ record unpacking, collision-rate loops, sparse matrix assembly, and band/export
 aggregation; SciPy already provides compiled sparse linear solvers.
 
 
-### NumPy/NPZ index cache
+### Recommended array-backed NPZ index cache
 
-For repeated workflows, use the compact NumPy index cache to avoid rebuilding the full ATDB hierarchy every run:
+For repeated workflows, use the array-backed NumPy/NPZ cache.  It stores the hierarchy as numeric arrays, filters by element/ion/data type, and converts only selected rows to `IndexedRecord` objects.  This is now the recommended path for solvers, exports, high-level API calls, and profiling.
 
 ```bash
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
@@ -494,12 +497,22 @@ PYTHONPATH=src python examples/12_profile_solver_steps.py \
   --linear-solver sparse \
   --index-cache \
   --index-cache-format npz \
-  --out-dir solver_profile_example_npz
+  --out-dir solver_profile_npz_arrays_hit
 ```
 
-The default cache file is `atdb.fits.xstar_atomic_index.npz`. Legacy pickle caching remains available with `--index-cache-format pickle`.
+On the validated O VIII sparse-solver profile, the cache-hit path reduced the run from about `5.31 s` uncached to about `0.53 s` with an NPZ array-backed cache hit.  The `build_index` stage dropped from about `5.00 s` to about `0.058 s`.
 
+The default cache file is `atdb.fits.xstar_atomic_index.npz`.  Use `--rebuild-index-cache` after replacing or modifying `atdb.fits`.  Legacy pickle caching remains available with `--index-cache-format pickle`, but NPZ array-backed caching is preferred for targeted workflows.
 
-### Array-backed NPZ index cache
+The same cache options are accepted by the solver and export CLIs:
 
-`xstar-atomic` v0.2.26 adds an array-backed NPZ index cache. Targeted workflows such as the solver, profiler, and high-level API can load the numeric cache, filter by element/ion/data type, and convert only selected rows to `IndexedRecord` objects. This avoids reconstructing all 1.2 million ATDB records on cache hits. Use `--index-cache --index-cache-format npz` to enable this path.
+```bash
+PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
+  --ions "O VIII,Ne IX" \
+  --temperatures 1e6 3e6 1e7 \
+  --wavelength-min 1.0 --wavelength-max 40.0 \
+  --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
+  --formats csv,hdf5 \
+  --index-cache --index-cache-format npz \
+  --out-dir atomic_export_cached
+```
