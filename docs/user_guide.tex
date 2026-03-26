@@ -726,3 +726,53 @@ Solver and export summaries report \texttt{index\_cache\_status} and
 as \texttt{npz\_array\_hit} or \texttt{array\_memory}.
 
 \end{document}
+
+\section{Downloading and configuring \texttt{atdb.fits}}
+
+\texttt{xstar-atomic} does not bundle XSTAR's large \texttt{atdb.fits} file.
+The package can remember a local XSTAR data directory in a small text file named
+\texttt{xstar\_atomic/datapath}. Once this file is configured, high-level code
+can use \texttt{ATDB()} or \texttt{XSTARAtomic()} without passing the FITS path
+each time.
+
+Interactive download/configuration:
+
+\begin{lstlisting}[language=bash]
+python -m xstar_atomic.data
+\end{lstlisting}
+
+or, after installation:
+
+\begin{lstlisting}[language=bash]
+xstar-atomic-download-data
+\end{lstlisting}
+
+The helper reports the remote file size, asks whether to download the file
+(pressing Enter means yes), asks for a destination directory, downloads with a
+progress indicator, and stores the destination directory in
+\texttt{xstar\_atomic/datapath}. The default destination is
+\texttt{xstar\_atomic/data}.
+
+The public default URL is:
+
+\begin{lstlisting}
+https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
+\end{lstlisting}
+
+If the file already exists elsewhere, decline the download and enter the full
+path to the local \texttt{atdb.fits}. The parent directory is saved to
+\texttt{datapath}, so future runs can omit the path:
+
+\begin{lstlisting}[language=Python]
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic(index_cache=True, index_cache_format="npz")
+lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+\end{lstlisting}
+
+Configure an existing file non-interactively:
+
+\begin{lstlisting}[language=bash]
+python -m xstar_atomic.data --set-path /path/to/atdb.fits
+python -m xstar_atomic.data --show
+\end{lstlisting}

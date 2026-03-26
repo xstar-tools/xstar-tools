@@ -61,6 +61,49 @@ The table below summarizes the current scientific status of the main decoder pat
 | True level-resolved recombination/cascades | various/unknown | Not yet identified in decoded records | Prototype source/cascade hooks only |
 | Level-population solver | combined | Prototype | Connected-component and source/sink diagnostics |
 
+
+## Data download and path configuration
+
+`xstar-atomic` does not bundle the large XSTAR `atdb.fits` file. You can
+download or configure it interactively:
+
+```bash
+python -m xstar_atomic.data
+# or, after installation
+xstar-atomic-download-data
+```
+
+The helper reports the remote file size, asks whether to download
+(pressing Enter means yes), asks for a destination directory, downloads with a
+progress indicator, and stores the selected data directory in
+`xstar_atomic/datapath`. The default destination is `xstar_atomic/data`.
+
+The default public source is:
+
+```text
+https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
+```
+
+If you already have `atdb.fits`, decline the download and enter the full path,
+or configure it non-interactively:
+
+```bash
+python -m xstar_atomic.data --set-path /path/to/atdb.fits
+python -m xstar_atomic.data --show
+```
+
+After configuration, the high-level API can omit the FITS path:
+
+```python
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic(index_cache=True, index_cache_format="npz")
+lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+```
+
+The resolver checks an explicit path, `XSTAR_ATDB_FITS`, `xstar_atomic/datapath`,
+and then `xstar_atomic/data/atdb.fits`.
+
 ## Installation
 
 From the package directory:

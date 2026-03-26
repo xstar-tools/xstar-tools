@@ -168,7 +168,9 @@ class XSTARAtomic:
     ----------
     fitsfile:
         Path to XSTAR's released packed atomic database, usually
-        ``xstar/data/atdb.fits``.
+        ``xstar/data/atdb.fits``. If omitted, xstar-atomic resolves the path
+        from ``XSTAR_ATDB_FITS``, ``xstar_atomic/datapath``, or by prompting
+        with :func:`xstar_atomic.download_data`.
     load_reals:
         Whether to load/map the REALS array immediately. Most physical decoders
         need real values, so the default is ``True``.
@@ -178,7 +180,7 @@ class XSTARAtomic:
 
     def __init__(
         self,
-        fitsfile: Union[str, Path],
+        fitsfile: Union[str, Path, None] = None,
         *,
         load_reals: bool = True,
         build_index: bool = True,
@@ -186,8 +188,8 @@ class XSTARAtomic:
         rebuild_index_cache: bool = False,
         index_cache_format: str = "npz",
     ):
-        self.fitsfile = str(fitsfile)
-        self.db = ATDB(self.fitsfile, load_reals=load_reals)
+        self.db = ATDB(fitsfile, load_reals=load_reals)
+        self.fitsfile = str(self.db.filename)
         self.index_cache = index_cache
         self.rebuild_index_cache = rebuild_index_cache
         self.index_cache_format = index_cache_format

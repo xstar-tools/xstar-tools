@@ -698,3 +698,67 @@ PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
 ```
 
 The summary reports `index_cache_status` and `index_cache_path`; cache-hit runs should report statuses such as `npz_array_hit` or `array_memory`.
+
+## Downloading and configuring `atdb.fits`
+
+`xstar-atomic` does not bundle XSTAR's large `atdb.fits` file.  The package can
+now remember a local XSTAR data directory in a small text file named
+`xstar_atomic/datapath`.  Once this file is configured, high-level code can use
+`ATDB()` or `XSTARAtomic()` without passing the FITS path each time.
+
+Interactive download/configuration:
+
+```bash
+python -m xstar_atomic.data
+```
+
+or, after installation:
+
+```bash
+xstar-atomic-download-data
+```
+
+The helper reports the remote file size, asks whether to download the file
+(pressing Enter means yes), asks for a destination directory, downloads with a
+progress indicator, and stores the destination directory in `xstar_atomic/datapath`.
+The default destination is:
+
+```text
+xstar_atomic/data
+```
+
+The public default URL is:
+
+```text
+https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
+```
+
+If the file already exists elsewhere, decline the download and enter the full
+path to the local `atdb.fits`.  The parent directory is saved to `datapath`, so
+future runs can omit the path:
+
+```python
+from xstar_atomic import XSTARAtomic
+
+# Uses XSTAR_ATDB_FITS, xstar_atomic/datapath, or xstar_atomic/data/atdb.fits.
+db = XSTARAtomic(index_cache=True, index_cache_format="npz")
+lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+```
+
+You can also configure an existing file non-interactively:
+
+```bash
+python -m xstar_atomic.data --set-path /path/to/atdb.fits
+python -m xstar_atomic.data --show
+```
+
+Programmatic helpers are available from the top-level package:
+
+```python
+from xstar_atomic import download_data, resolve_atdb_path, set_data_path
+
+path = download_data()
+# or
+set_data_path("/path/to/xstar/data/atdb.fits")
+path = resolve_atdb_path()
+```

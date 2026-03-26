@@ -1,0 +1,55 @@
+from pathlib import Path
+
+import pytest
+
+
+def test_data_path_roundtrip(tmp_path, monkeypatch):
+    pytest.importorskip("astropy")
+    import xstar_atomic.data as data
+
+    fake_pkg = tmp_path / "pkg"
+    fake_pkg.mkdir()
+    dp_file = fake_pkg / "datapath"
+    monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    atdb = data_dir / "atdb.fits"
+    atdb.write_bytes(b"fake")
+
+    saved = data.set_data_path(atdb)
+    assert saved == data_dir.resolve()
+    assert data.get_data_path() == data_dir.resolve()
+    assert data.find_atdb_file() == atdb.resolve()
+
+
+def test_resolve_atdb_path_explicit_remembers_parent(tmp_path, monkeypatch):
+    pytest.importorskip("astropy")
+    import xstar_atomic.data as data
+
+    dp_file = tmp_path / "datapath"
+    monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
+    atdb = tmp_path / "atdb.fits"
+    atdb.write_bytes(b"fake")
+
+    resolved = data.resolve_atdb_path(atdb, prompt=False)
+    assert resolved == atdb.resolve()
+    assert data.get_data_path() == tmp_path.resolve()
+
+
+def test_download_data_decline_and_set_existing_path(tmp_path, monkeypatch):
+    pytest.importorskip("astropy")
+    import xstar_atomic.data as data
+
+    dp_file = tmp_path / "datapath"
+    monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
+    monkeypatch.setattr(data, "_remote_file_size", lambda url: 1234)
+    atdb = tmp_path / "existing" / "atdb.fits"
+    atdb.parent.mkdir()
+    atdb.write_bytes(b"fake")
+    answers = iter(["n", str(atdb)])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+
+    resolved = data.download_data(prompt=True)
+    assert resolved == atdb.resolve()
+    assert data.get_data_path() == atdb.parent.resolve()

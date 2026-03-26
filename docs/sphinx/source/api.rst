@@ -93,3 +93,11 @@ XSTAR Output Readers
    :members:
    :undoc-members:
    :show-inheritance:
+
+Data download and path helpers
+------------------------------
+
+.. automodule:: xstar_atomic.data
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -152,3 +152,19 @@ computes prototype R=f/i and G=(f+i)/r diagnostics::
 
 This is a source-interface and sensitivity workflow, not yet a final
 level-resolved recombination/cascade model.
+
+Data download/configuration example
+-----------------------------------
+
+Use ``examples/14_download_or_configure_data.py`` to download ``atdb.fits`` or
+save the path to an existing local copy:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/14_download_or_configure_data.py
+
+or:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/14_download_or_configure_data.py --set-path /path/to/atdb.fits

@@ -7,6 +7,50 @@ directory:
 - ``docs/user_guide.md``
 - ``docs/user_guide.tex``
 
+
+
+Downloading and configuring atdb.fits
+------------------------------------
+
+``xstar-atomic`` does not bundle XSTAR's large ``atdb.fits`` file.  Configure
+or download it interactively with:
+
+.. code-block:: bash
+
+   python -m xstar_atomic.data
+
+After installation, the equivalent command is:
+
+.. code-block:: bash
+
+   xstar-atomic-download-data
+
+The helper reports the remote file size, asks whether to download
+(pressing Enter means yes), asks for a destination directory, downloads with a
+progress indicator, and writes the chosen data directory to
+``xstar_atomic/datapath``.  The default destination is ``xstar_atomic/data``.
+
+If ``atdb.fits`` already exists, decline the download and enter the full path to
+the existing file.  The parent directory is saved, so future Python code can omit
+the path:
+
+.. code-block:: python
+
+   from xstar_atomic import XSTARAtomic
+
+   db = XSTARAtomic(index_cache=True, index_cache_format="npz")
+   lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+
+Non-interactive configuration is also available:
+
+.. code-block:: bash
+
+   python -m xstar_atomic.data --set-path /path/to/atdb.fits
+   python -m xstar_atomic.data --show
+
+The resolver checks, in order: an explicit path, ``XSTAR_ATDB_FITS``, the
+persistent ``xstar_atomic/datapath`` file, and ``xstar_atomic/data/atdb.fits``.
+
 Quick start
 -----------
 

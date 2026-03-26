@@ -51,6 +51,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import numpy as np
 from astropy.io import fits
 
+from .data import resolve_atdb_path
+
 
 ELEMENT_SYMBOLS = [
     "", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg",
@@ -540,8 +542,15 @@ def _load_npz_index_cache(path: Path, db: "ATDB") -> Tuple[List[IndexedRecord], 
 
 
 class ATDB:
-    def __init__(self, filename: str | Path, load_reals: bool = False):
-        self.filename = Path(filename)
+    def __init__(self, filename: str | Path | None = None, load_reals: bool = False, *, prompt_for_data: bool = True):
+        """Open XSTAR's packed ``atdb.fits`` database.
+
+        If ``filename`` is omitted, the path is resolved from ``XSTAR_ATDB_FITS``,
+        the persistent ``xstar_atomic/datapath`` file, or the package data
+        directory.  If no valid file is found, :func:`xstar_atomic.download_data`
+        is invoked interactively.
+        """
+        self.filename = resolve_atdb_path(filename, prompt=prompt_for_data)
         self.hdul = fits.open(self.filename, memmap=True, lazy_load_hdus=True)
         self.date = self.hdul[0].header.get("DATE")
         self.creator = self.hdul[0].header.get("CREATOR")
