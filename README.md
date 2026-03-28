@@ -76,7 +76,7 @@ xstar-atomic-download-data
 The helper reports the remote file size, asks whether to download
 (pressing Enter means yes), asks for a destination directory, downloads with a
 progress indicator, and stores the selected data directory in
-`xstar_atomic/datapath`. The default destination is `xstar_atomic/data`.
+`datapath`. The default destination is `data`.
 
 The default public source is:
 
@@ -101,8 +101,8 @@ db = XSTARAtomic(index_cache=True, index_cache_format="npz")
 lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
 ```
 
-The resolver checks an explicit path, `XSTAR_ATDB_FITS`, `xstar_atomic/datapath`,
-and then `xstar_atomic/data/atdb.fits`.
+The resolver checks an explicit path, `XSTAR_ATDB_FITS`, `datapath`,
+and then `data/atdb.fits`.
 
 ## Installation
 

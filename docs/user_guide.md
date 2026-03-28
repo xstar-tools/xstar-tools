@@ -703,7 +703,7 @@ The summary reports `index_cache_status` and `index_cache_path`; cache-hit runs 
 
 `xstar-atomic` does not bundle XSTAR's large `atdb.fits` file.  The package can
 now remember a local XSTAR data directory in a small text file named
-`xstar_atomic/datapath`.  Once this file is configured, high-level code can use
+`datapath`.  Once this file is configured, high-level code can use
 `ATDB()` or `XSTARAtomic()` without passing the FITS path each time.
 
 Interactive download/configuration:
@@ -720,11 +720,11 @@ xstar-atomic-download-data
 
 The helper reports the remote file size, asks whether to download the file
 (pressing Enter means yes), asks for a destination directory, downloads with a
-progress indicator, and stores the destination directory in `xstar_atomic/datapath`.
+progress indicator, and stores the destination directory in `datapath`.
 The default destination is:
 
 ```text
-xstar_atomic/data
+data
 ```
 
 The public default URL is:
@@ -740,7 +740,7 @@ future runs can omit the path:
 ```python
 from xstar_atomic import XSTARAtomic
 
-# Uses XSTAR_ATDB_FITS, xstar_atomic/datapath, or xstar_atomic/data/atdb.fits.
+# Uses XSTAR_ATDB_FITS, datapath, or data/atdb.fits.
 db = XSTARAtomic(index_cache=True, index_cache_format="npz")
 lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
 ```

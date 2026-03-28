@@ -19,8 +19,30 @@ DEFAULT_ATDB_URL = (
 )
 ATDB_FILENAME = "atdb.fits"
 PACKAGE_DIR = Path(__file__).resolve().parent
-DEFAULT_DATA_DIR = PACKAGE_DIR / "data"
-DATAPATH_FILE = PACKAGE_DIR / "datapath"
+
+
+def _project_root_from_source_tree() -> Optional[Path]:
+    """Return the repository/source-tree root when running from ``src/``.
+
+    In editable or ``PYTHONPATH=src`` development use, ``__file__`` is usually
+    ``<repo>/src/xstar_atomic/data.py``.  Large downloaded data should not be
+    written under ``src/`` because that directory is package source code.  In
+    that case the preferred data directory is ``<repo>/data`` and the datapath
+    file is ``<repo>/datapath``.
+
+    For installed wheels, where the package is not under a ``src`` directory,
+    the fallback remains the package directory itself.
+    """
+    src_dir = PACKAGE_DIR.parent
+    root = src_dir.parent
+    if src_dir.name == "src" and (root / "pyproject.toml").exists():
+        return root
+    return None
+
+
+PROJECT_ROOT = _project_root_from_source_tree()
+DEFAULT_DATA_DIR = (PROJECT_ROOT / "data") if PROJECT_ROOT is not None else (PACKAGE_DIR / "data")
+DATAPATH_FILE = (PROJECT_ROOT / "datapath") if PROJECT_ROOT is not None else (PACKAGE_DIR / "datapath")
 
 
 def _format_bytes(n: Optional[int]) -> str:
@@ -151,7 +173,9 @@ def download_data(
         Public URL to the XSTAR ``atdb.fits`` file.
     destination:
         Destination directory, or full destination filename.  The default is
-        ``xstar_atomic/data`` inside the installed/source package directory.
+        ``data`` at the source-tree root when running from ``PYTHONPATH=src``
+        (for example ``/path/to/xstar_atomic/data``), or ``xstar_atomic/data``
+        inside the installed package otherwise.
     prompt:
         If true, ask before downloading and allow the user to enter an existing
         local ``atdb.fits`` path instead.
@@ -159,7 +183,8 @@ def download_data(
     Notes
     -----
     Pressing Enter at the download prompt means yes.  Pressing Enter at the
-    destination prompt uses ``xstar_atomic/data``.
+    destination prompt uses the project-level ``data`` directory when running
+    from a source tree, not ``src/xstar_atomic/data``.
     """
     size = _remote_file_size(url)
     print(f"XSTAR atdb.fits URL: {url}")

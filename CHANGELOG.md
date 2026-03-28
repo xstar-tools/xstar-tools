@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.30 - 2026-03-27
+
+Fixed:
+- Changed the default interactive ``download_data()`` destination for source-tree use from ``src/xstar_atomic/data`` to the project-level ``data`` directory.
+- Changed the source-tree ``datapath`` file location from ``src/xstar_atomic/datapath`` to the project-level ``datapath`` file, while retaining installed-package fallback behavior.
+
 ## v0.2.28 - 2026-03-25
 
 Documentation/examples:
