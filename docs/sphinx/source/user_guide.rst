@@ -28,7 +28,7 @@ After installation, the equivalent command is:
 The helper reports the remote file size, asks whether to download
 (pressing Enter means yes), asks for a destination directory, downloads with a
 progress indicator, and writes the chosen data directory to
-``datapath``.  The default destination is ``data``.
+``datapath``. In a source checkout this file is stored at the project root (for example ``datapath``), not under ``src/xstar_atomic/``. The default destination is the project-level ``data/`` directory.
 
 If ``atdb.fits`` already exists, decline the download and enter the full path to
 the existing file.  The parent directory is saved, so future Python code can omit

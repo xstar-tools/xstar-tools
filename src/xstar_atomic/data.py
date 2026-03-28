@@ -1,7 +1,7 @@
 """Data-location and download helpers for XSTAR ``atdb.fits``.
 
 The package does not bundle the large XSTAR atomic database.  These helpers
-record a local data directory in ``xstar_atomic/datapath`` and optionally
+record a local data directory in the project-level ``datapath`` file and optionally
 retrieve ``atdb.fits`` from the public HEASARC/LHEASOFT distribution.
 """
 
@@ -28,7 +28,9 @@ def _project_root_from_source_tree() -> Optional[Path]:
     ``<repo>/src/xstar_atomic/data.py``.  Large downloaded data should not be
     written under ``src/`` because that directory is package source code.  In
     that case the preferred data directory is ``<repo>/data`` and the datapath
-    file is ``<repo>/datapath``.
+    file is ``<repo>/datapath`` (for example, in a project checkout named
+    ``xstar_atomic``, this is ``xstar_atomic/datapath`` rather than
+    ``xstar_atomic/src/xstar_atomic/datapath``).
 
     For installed wheels, where the package is not under a ``src`` directory,
     the fallback remains the package directory itself.
@@ -75,7 +77,7 @@ def _normalize_data_dir(path: Union[str, Path]) -> Path:
 
 
 def set_data_path(path: Union[str, Path]) -> Path:
-    """Record the local XSTAR atomic-data directory in ``xstar_atomic/datapath``.
+    """Record the local XSTAR atomic-data directory in the persistent datapath file.
 
     ``path`` may be either a directory containing ``atdb.fits`` or the full path
     to ``atdb.fits``.  The stored value is always the data directory.
@@ -100,7 +102,7 @@ def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = 
 
     The environment variable ``XSTAR_ATDB_FITS`` is honored as a convenience.
     If an explicit path or environment path is valid and ``remember`` is true,
-    its parent directory is written to ``xstar_atomic/datapath``.
+    its parent directory is written to the persistent datapath file.
     """
     candidates: list[tuple[Path, bool]] = []
     if path is not None:

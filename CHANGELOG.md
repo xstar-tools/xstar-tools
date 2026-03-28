@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.31 - 2026-03-28
+
+Fixed:
+- Store the source-tree ``datapath`` file at the project root (for example ``xstar_atomic/datapath``) rather than in ``src/xstar_atomic/``.
+- Removed the packaged ``src/xstar_atomic/datapath`` data file from package-data/MANIFEST entries.
+- Kept the project-level ``data/`` directory as the default ``atdb.fits`` download destination when running from ``PYTHONPATH=src``.
+
 ## v0.2.30 - 2026-03-27
 
 Fixed:

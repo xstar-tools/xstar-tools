@@ -169,7 +169,7 @@ class XSTARAtomic:
     fitsfile:
         Path to XSTAR's released packed atomic database, usually
         ``xstar/data/atdb.fits``. If omitted, xstar-atomic resolves the path
-        from ``XSTAR_ATDB_FITS``, ``xstar_atomic/datapath``, or by prompting
+        from ``XSTAR_ATDB_FITS``, the persistent ``datapath`` file, or by prompting
         with :func:`xstar_atomic.download_data`.
     load_reals:
         Whether to load/map the REALS array immediately. Most physical decoders

@@ -546,7 +546,7 @@ class ATDB:
         """Open XSTAR's packed ``atdb.fits`` database.
 
         If ``filename`` is omitted, the path is resolved from ``XSTAR_ATDB_FITS``,
-        the persistent ``xstar_atomic/datapath`` file, or the package data
+        the persistent the persistent ``datapath`` file file, or the package data
         directory.  If no valid file is found, :func:`xstar_atomic.download_data`
         is invoked interactively.
         """

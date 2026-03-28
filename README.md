@@ -76,7 +76,7 @@ xstar-atomic-download-data
 The helper reports the remote file size, asks whether to download
 (pressing Enter means yes), asks for a destination directory, downloads with a
 progress indicator, and stores the selected data directory in
-`datapath`. The default destination is `data`.
+`datapath`. In a source checkout this file is stored at the project root (for example `datapath`), not under `src/xstar_atomic/`. The default destination is the project-level `data/` directory.
 
 The default public source is:
 

@@ -7,4 +7,5 @@ recursive-include tests/data *.csv
 recursive-include examples/reference_outputs *.csv *.json
 recursive-include xstar_test_run *
 
-include src/xstar_atomic/datapath
+include datapath
+recursive-include data *

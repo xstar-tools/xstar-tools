@@ -731,7 +731,7 @@ as \texttt{npz\_array\_hit} or \texttt{array\_memory}.
 
 \texttt{xstar-atomic} does not bundle XSTAR's large \texttt{atdb.fits} file.
 The package can remember a local XSTAR data directory in a small text file named
-\texttt{xstar\_atomic/datapath}. Once this file is configured, high-level code
+\texttt{datapath}. Once this file is configured, high-level code
 can use \texttt{ATDB()} or \texttt{XSTARAtomic()} without passing the FITS path
 each time.
 
@@ -750,7 +750,7 @@ xstar-atomic-download-data
 The helper reports the remote file size, asks whether to download the file
 (pressing Enter means yes), asks for a destination directory, downloads with a
 progress indicator, and stores the destination directory in
-\texttt{xstar\_atomic/datapath}. The default destination is
+\texttt{datapath}. The default destination is
 \texttt{xstar\_atomic/data}.
 
 The public default URL is:
