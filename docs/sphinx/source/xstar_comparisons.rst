@@ -56,6 +56,67 @@ The O VII triplet/near-triplet wavelength comparison matches XSTAR wavelengths
 near 21.6--22.1 Angstrom.  The wavelength differences are approximately
 ``1e-7`` to ``8e-7`` Angstrom.
 
+
+Planned Ne IX / Ne X Stage-5 runs
+---------------------------------
+
+Stage 5 extends the O VIII and O VII comparisons to neon.  The reproducibility
+README under ``xstar_test_run/README.md`` now includes two direct-XSTAR commands:
+
+* ``xstar_atomic_ne_xi25`` for Ne IX He-like triplet/near-triplet validation.
+* ``xstar_atomic_ne_xi35`` for Ne X Ly-alpha validation.
+
+After running XSTAR, convert and compare the Ne IX region::
+
+   PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+     xstar_runs/ne_xi25/xout_lines1.fits \
+     --ion "Ne IX" \
+     --wavelength-min 13.3 \
+     --wavelength-max 13.8 \
+     --out-csv xstar_ne9_triplet_lines.csv \
+     --print-summary \
+     --print-rows
+
+   PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+     ../xstar/data/atdb.fits \
+     xstar_ne9_triplet_lines.csv \
+     --ion "Ne IX" \
+     --wavelength-column wavelength \
+     --reference-column emit_outward \
+     --mode wavelength \
+     --temperature 1e6 \
+     --wavelength-tolerance 0.02 \
+     --out-csv compare_ne9_triplet_wavelength.csv \
+     --out-json compare_ne9_triplet_wavelength.json \
+     --print-summary
+
+Convert and compare the Ne X Ly-alpha region::
+
+   PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+     xstar_runs/ne_xi35/xout_lines1.fits \
+     --ion "Ne X" \
+     --wavelength-min 12.0 \
+     --wavelength-max 12.3 \
+     --out-csv xstar_ne10_lya_lines.csv \
+     --print-summary \
+     --print-rows
+
+   PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+     ../xstar/data/atdb.fits \
+     xstar_ne10_lya_lines.csv \
+     --ion "Ne X" \
+     --wavelength-column wavelength \
+     --reference-column emit_outward \
+     --mode wavelength \
+     --temperature 1e6 \
+     --wavelength-tolerance 0.02 \
+     --out-csv compare_ne10_lya_wavelength.csv \
+     --out-json compare_ne10_lya_wavelength.json \
+     --print-summary
+
+Save the resulting ``xout_lines1.fits``, converted CSV, and comparison CSV/JSON
+files as validation artifacts once the XSTAR runs are complete.
+
 Reproduction workflow
 ---------------------
 

@@ -62,6 +62,32 @@ The table below summarizes the current scientific status of the main decoder pat
 | Level-population solver | combined | Prototype | Connected-component and source/sink diagnostics |
 
 
+
+## Stage-5 XSTAR comparison runs
+
+The `xstar_test_run/README.md` file records reproducible direct-XSTAR commands
+for validation runs. Current documented runs include:
+
+- O VIII / Ne IX high-ionization line validation.
+- O VII triplet and high-density O VII triplet validation.
+- New Ne IX and Ne X focused runs for Stage-5 wavelength comparisons.
+
+The Ne-focused workflow converts `xout_lines1.fits` to CSV with
+`python -m xstar_atomic.xstar_outputs`, then compares wavelengths with
+`examples/08_compare_xstar_outputs.py`. The first target products are:
+
+```text
+xstar_ne9_triplet_lines.csv
+compare_ne9_triplet_wavelength.csv/json
+xstar_ne10_lya_lines.csv
+compare_ne10_lya_wavelength.csv/json
+```
+
+As with the O VIII and O VII examples, these comparisons validate line
+identification and wavelength decoding. XSTAR `emit_inward`/`emit_outward`
+columns are full model outputs and are not directly normalized to local
+`xstar-atomic` emissivity coefficients.
+
 ## Data download and path configuration
 
 `xstar-atomic` does not bundle the large XSTAR `atdb.fits` file. You can

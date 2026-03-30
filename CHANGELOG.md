@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.33 - 2026-03-30
+
+Documentation/examples:
+- Added dedicated Stage-5 Ne IX and Ne X direct-XSTAR validation run commands to `xstar_test_run/README.md`.
+- Added FITS-to-CSV and `examples/08_compare_xstar_outputs.py` commands for Ne IX He-like triplet/near-triplet and Ne X Ly-alpha wavelength comparisons.
+- Updated XSTAR comparison documentation and Sphinx comparison page to list the planned Ne IX/Ne X validation products.
+
 ## v0.2.32 - 2026-03-29
 
 Fixed:

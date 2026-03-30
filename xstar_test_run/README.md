@@ -50,7 +50,116 @@ xstar \
   mnabund=0 feabund=0 coabund=0 niabund=0 cuabund=0 znabund=0
 ```
 
-## 2. O VII triplet / recombination-cascade validation
+
+## 2. Ne IX / Ne X focused XSTAR comparison runs
+
+The O+Ne high-ionization run above is useful for both O VIII and Ne IX, but
+Stage-5 validation should also include Ne-only runs that make the Ne IX and
+Ne X features easier to inspect. Run each model in a clean directory because
+XSTAR writes fixed output names such as `xout_lines1.fits`.
+
+### 2.1 Ne IX focused run
+
+This run uses neon only, with a moderately high ionization parameter intended
+to keep strong He-like neon lines. A useful directory name is
+`xstar_runs/ne_xi25/`.
+
+```bash
+xstar \
+  spectrum='pow' spectrum_file='spect.dat' spectun=0 \
+  nsteps=10 niter=99 lwrite=1 lprint=1 lstep=0 npass=1 \
+  lcpres=0 emult=0.5 taumax=5.0 xeemin=0.1 critf=1e-6 radexp=0.0 ncn2=9999 \
+  modelname='xstar_atomic_ne_xi25' abundtbl='xdef' \
+  trad=-1 cfrac=1.0 temperature=100 pressure=0.03 density=1e10 \
+  rlrad38=1e6 column=1e20 rlogxi=2.5 vturbi=100 \
+  habund=1 heabund=1 \
+  liabund=0 beabund=0 babund=0 cabund=0 nabund=0 \
+  oabund=0 fabund=0 neabund=1 naabund=0 mgabund=0 \
+  alabund=0 siabund=0 pabund=0 sabund=0 clabund=0 arabund=0 \
+  kabund=0 caabund=0 scabund=0 tiabund=0 vabund=0 crabund=0 \
+  mnabund=0 feabund=0 coabund=0 niabund=0 cuabund=0 znabund=0
+```
+
+### 2.2 Ne X focused run
+
+This run uses neon only and a higher ionization parameter to favor H-like Ne X
+features. A useful directory name is `xstar_runs/ne_xi35/`.
+
+```bash
+xstar \
+  spectrum='pow' spectrum_file='spect.dat' spectun=0 \
+  nsteps=10 niter=99 lwrite=1 lprint=1 lstep=0 npass=1 \
+  lcpres=0 emult=0.5 taumax=5.0 xeemin=0.1 critf=1e-6 radexp=0.0 ncn2=9999 \
+  modelname='xstar_atomic_ne_xi35' abundtbl='xdef' \
+  trad=-1 cfrac=1.0 temperature=100 pressure=0.03 density=1e10 \
+  rlrad38=1e6 column=1e20 rlogxi=3.5 vturbi=100 \
+  habund=1 heabund=1 \
+  liabund=0 beabund=0 babund=0 cabund=0 nabund=0 \
+  oabund=0 fabund=0 neabund=1 naabund=0 mgabund=0 \
+  alabund=0 siabund=0 pabund=0 sabund=0 clabund=0 arabund=0 \
+  kabund=0 caabund=0 scabund=0 tiabund=0 vabund=0 crabund=0 \
+  mnabund=0 feabund=0 coabund=0 niabund=0 cuabund=0 znabund=0
+```
+
+Suggested first-pass line filters after each run:
+
+```bash
+# Ne IX He-like triplet/near-triplet region
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+  xstar_runs/ne_xi25/xout_lines1.fits \
+  --ion "Ne IX" \
+  --wavelength-min 13.3 \
+  --wavelength-max 13.8 \
+  --out-csv xstar_ne9_triplet_lines.csv \
+  --print-summary \
+  --print-rows
+
+# Ne X Ly-alpha region
+PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
+  xstar_runs/ne_xi35/xout_lines1.fits \
+  --ion "Ne X" \
+  --wavelength-min 12.0 \
+  --wavelength-max 12.3 \
+  --out-csv xstar_ne10_lya_lines.csv \
+  --print-summary \
+  --print-rows
+```
+
+Comparison commands:
+
+```bash
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  ../xstar/data/atdb.fits \
+  xstar_ne9_triplet_lines.csv \
+  --ion "Ne IX" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_ne9_triplet_wavelength.csv \
+  --out-json compare_ne9_triplet_wavelength.json \
+  --print-summary
+
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  ../xstar/data/atdb.fits \
+  xstar_ne10_lya_lines.csv \
+  --ion "Ne X" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_ne10_lya_wavelength.csv \
+  --out-json compare_ne10_lya_wavelength.json \
+  --print-summary
+```
+
+If either line list is weak or empty, rerun a small `rlogxi` scan around the
+suggested values; the best ionization balance depends on the SED, density, and
+column used in the XSTAR model.
+
+## 3. O VII triplet / recombination-cascade validation
 
 For O VII, use a lower ionization parameter. This run is mainly for the O VII
 triplet around 21.6--22.1 Angstrom and recombination/cascade behavior.
@@ -73,7 +182,7 @@ xstar \
   mnabund=0 feabund=0 coabund=0 niabund=0 cuabund=0 znabund=0
 ```
 
-## 3. O VII triplet / recombination-cascade validation at higher density
+## 4. O VII triplet / recombination-cascade validation at higher density
 
 This is similar to the second run, but at higher density to test
 density-sensitive level-population effects. It is useful for checking the
