@@ -762,3 +762,9 @@ path = download_data()
 set_data_path("/path/to/xstar/data/atdb.fits")
 path = resolve_atdb_path()
 ```
+
+Download progress is shown on one in-place ASCII progress-bar line, for example:
+
+```text
+xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
+```

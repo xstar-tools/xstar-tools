@@ -134,6 +134,23 @@ def _prompt_yes_default(prompt: str) -> bool:
     return answer in ("", "y", "yes")
 
 
+def _download_progress_bar(done: int, total: Optional[int], *, width: int = 28) -> str:
+    """Return a one-line ASCII progress indicator for ``atdb.fits`` downloads."""
+    if total and total > 0:
+        frac = min(1.0, max(0.0, done / total))
+        pct = int(round(frac * 100.0))
+        nfill = min(width, int(round(frac * width)))
+        bar = "#" * nfill + "-" * (width - nfill)
+        return (
+            f"xstar data: downloading atdb.fits "
+            f"[{bar}] {pct:3d}% ({_format_bytes(done)}/{_format_bytes(total)})"
+        )
+    # Unknown total size: keep a moving indicator with bytes downloaded.
+    blocks = (done // (1024 * 1024)) % (width + 1)
+    bar = "#" * int(blocks) + "-" * (width - int(blocks))
+    return f"xstar data: downloading atdb.fits [{bar}] {_format_bytes(done)}"
+
+
 def _copy_url_with_progress(url: str, destination: Path, expected_size: Optional[int] = None) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp = destination.with_suffix(destination.suffix + ".tmp")
@@ -144,20 +161,26 @@ def _copy_url_with_progress(url: str, destination: Path, expected_size: Optional
             size_header = response.headers.get("Content-Length")
             total = int(size_header) if size_header else None
         done = 0
-        last_pct = -1
+        last_render_len = 0
+        # Print one horizontal progress bar and update it in place.
         while True:
             chunk = response.read(1024 * 1024)
             if not chunk:
                 break
             out.write(chunk)
             done += len(chunk)
-            if total:
-                pct = int(done * 100 / total)
-                if pct >= last_pct + 5 or pct == 100:
-                    print(f"  downloaded {pct:3d}% ({_format_bytes(done)} / {_format_bytes(total)})", file=sys.stderr)
-                    last_pct = pct
-            else:
-                print(f"  downloaded {_format_bytes(done)}", file=sys.stderr, end="\r")
+            line = _download_progress_bar(done, total)
+            padding = " " * max(0, last_render_len - len(line))
+            print("\r" + line + padding, file=sys.stderr, end="", flush=True)
+            last_render_len = len(line)
+        # Ensure the final display reaches 100% when the server reports a total.
+        if total:
+            done_for_display = max(done, total) if done >= total else done
+            line = _download_progress_bar(done_for_display, total)
+        else:
+            line = _download_progress_bar(done, total)
+        padding = " " * max(0, last_render_len - len(line))
+        print("\r" + line + padding, file=sys.stderr, flush=True)
     os.replace(tmp, destination)
 
 

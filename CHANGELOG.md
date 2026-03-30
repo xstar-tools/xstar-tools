@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.32 - 2026-03-29
+
+Fixed:
+  - Replaced multi-line download progress messages with a single in-place ASCII progress bar.
+  - Download progress now displays as: `xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)`.
+
 ## v0.2.31 - 2026-03-28
 
 Fixed:

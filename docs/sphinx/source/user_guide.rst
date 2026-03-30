@@ -209,3 +209,9 @@ Solver and export summaries report ``index_cache_status`` and
 ``npz_array_hit`` or ``array_memory``.
 
 Solver profiling and Stage-6 cascade examples are documented in the examples page.
+
+Download progress is shown on one in-place ASCII progress-bar line, for example:
+
+```text
+xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
+```

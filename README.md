@@ -559,3 +559,9 @@ PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
   --index-cache --index-cache-format npz \
   --out-dir atomic_export_cached
 ```
+
+Download progress is shown on one in-place ASCII progress-bar line, for example:
+
+```text
+xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
+```
