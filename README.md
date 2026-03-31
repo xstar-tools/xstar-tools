@@ -591,3 +591,8 @@ Download progress is shown on one in-place ASCII progress-bar line, for example:
 ```text
 xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
 ```
+
+
+### Ne IX / Ne X Stage-5 XSTAR comparison artifacts
+
+The package includes saved Ne IX and Ne X direct-XSTAR line-output artifacts under `xstar_test_run/`, plus comparison CSV/JSON outputs under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`. The Ne IX triplet/near-triplet and Ne X Ly-alpha wavelength comparisons both match all selected XSTAR lines within 0.02 Angstrom.

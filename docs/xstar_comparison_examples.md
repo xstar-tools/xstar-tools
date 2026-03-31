@@ -35,9 +35,13 @@ xstar_test_run/
   o_ne_xi3/xout_lines1.fits
   o7_xi15/xout_lines1.fits
   o7_xi15_highdens/xout_lines1.fits
+  ne_xi25/xout_lines1.fits
+  ne_xi35/xout_lines1.fits
   xstar_o_ne_xi3_lines.csv
   xstar_o8_lya_lines.csv
   xstar_o7_triplet_lines.csv
+  xstar_ne9_triplet_lines.csv
+  xstar_ne10_lya_lines.csv
 ```
 
 The README in `xstar_test_run/` records the exact direct-XSTAR commands used
@@ -146,32 +150,56 @@ Result summary:
 This validates the decoded O VII triplet/near-triplet wavelengths and level identification. The current direct-emissivity join does not produce local collisional emissivity coefficients for all O VII triplet lines; XSTAR emits these lines through its full plasma model, including population, recombination, cascade, and radiative-transfer physics.
 
 
-## Planned Ne IX / Ne X Stage-5 comparison runs
+## Ne IX / Ne X Stage-5 wavelength validation
 
-Stage 5 extends the existing O VIII and O VII wavelength comparisons to neon.
-The package README under `xstar_test_run/README.md` now includes two direct-XSTAR
-commands for this purpose:
+Saved files:
 
-- `xstar_atomic_ne_xi25`: a neon-only, moderately high-ionization run intended
-  for Ne IX He-like triplet/near-triplet validation.
-- `xstar_atomic_ne_xi35`: a neon-only, higher-ionization run intended for
-  Ne X Ly-alpha validation.
+```text
+docs/validation/xstar_outputs/compare_ne9_triplet_wavelength.csv
+docs/validation/xstar_outputs/compare_ne9_triplet_wavelength.json
+docs/validation/xstar_outputs/compare_ne10_lya_wavelength.csv
+docs/validation/xstar_outputs/compare_ne10_lya_wavelength.json
+```
 
-After running XSTAR, convert the line-output FITS files and compare wavelengths:
+The package now includes the direct-XSTAR neon-only runs used to make these
+comparisons:
+
+```text
+xstar_test_run/ne_xi25/xout_lines1.fits
+xstar_test_run/ne_xi35/xout_lines1.fits
+xstar_test_run/xstar_ne9_triplet_lines.csv
+xstar_test_run/xstar_ne10_lya_lines.csv
+```
+
+The Ne IX run (`xstar_atomic_ne_xi25`, `rlogxi=2.5`) produces five He-like
+triplet/near-triplet lines between 13.3 and 13.8 Angstrom. All five lines match
+`xstar-atomic` within the 0.02 Angstrom tolerance. The maximum wavelength
+difference is approximately `4.41e-05` Angstrom.
+
+| XSTAR wavelength (Angstrom) | xstar-atomic wavelength (Angstrom) | Difference (Angstrom) | Transition |
+|---:|---:|---:|---|
+| 13.6987 | 13.69874287 | `4.29e-05` | `1s2.1S_0 -> 1s1.2s1.3S_1` |
+| 13.4470 | 13.44699955 | `4.50e-07` | `1s2.1S_0 -> 1s1.2p1.1P_1` |
+| 13.5500 | 13.55004406 | `4.41e-05` | `1s2.1S_0 -> 1s1.2p1.3P_2` |
+| 13.5529 | 13.55288982 | `1.02e-05` | `1s2.1S_0 -> 1s1.2p1.3P_1` |
+| 13.5534 | 13.55344105 | `4.10e-05` | `1s2.1S_0 -> 1s1.2p1.3P_0` |
+
+The Ne X run (`xstar_atomic_ne_xi35`, `rlogxi=3.5`) produces the two Ly-alpha
+fine-structure components near 12.13 Angstrom. Both components match
+`xstar-atomic` within the 0.02 Angstrom tolerance. The maximum wavelength
+difference is approximately `1.52e-05` Angstrom.
+
+| XSTAR wavelength (Angstrom) | xstar-atomic wavelength (Angstrom) | Difference (Angstrom) | Transition |
+|---:|---:|---:|---|
+| 12.1321 | 12.13208485 | `1.52e-05` | `1s1.2S_1/2 -> 1s0.2p1.2P_3/2` |
+| 12.1375 | 12.13749313 | `6.87e-06` | `1s1.2S_1/2 -> 1s0.2p1.2P_1/2` |
+
+Example reproduction command for the Ne IX comparison:
 
 ```bash
-PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
-  xstar_runs/ne_xi25/xout_lines1.fits \
-  --ion "Ne IX" \
-  --wavelength-min 13.3 \
-  --wavelength-max 13.8 \
-  --out-csv xstar_ne9_triplet_lines.csv \
-  --print-summary \
-  --print-rows
-
 PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   ../xstar/data/atdb.fits \
-  xstar_ne9_triplet_lines.csv \
+  xstar_test_run/xstar_ne9_triplet_lines.csv \
   --ion "Ne IX" \
   --wavelength-column wavelength \
   --reference-column emit_outward \
@@ -183,19 +211,12 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   --print-summary
 ```
 
-```bash
-PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
-  xstar_runs/ne_xi35/xout_lines1.fits \
-  --ion "Ne X" \
-  --wavelength-min 12.0 \
-  --wavelength-max 12.3 \
-  --out-csv xstar_ne10_lya_lines.csv \
-  --print-summary \
-  --print-rows
+Example reproduction command for the Ne X comparison:
 
+```bash
 PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   ../xstar/data/atdb.fits \
-  xstar_ne10_lya_lines.csv \
+  xstar_test_run/xstar_ne10_lya_lines.csv \
   --ion "Ne X" \
   --wavelength-column wavelength \
   --reference-column emit_outward \
@@ -206,11 +227,6 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   --out-json compare_ne10_lya_wavelength.json \
   --print-summary
 ```
-
-These commands define the next Stage-5 validation products. Once the XSTAR
-outputs are generated, the resulting FITS, converted CSV, and comparison
-CSV/JSON files should be saved and documented in the same way as the existing
-O VIII and O VII examples.
 
 ## How to reproduce from XSTAR outputs
 

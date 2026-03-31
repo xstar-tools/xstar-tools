@@ -13,10 +13,20 @@ xstar_test_run/
   o_ne_xi3/xout_lines1.fits
   o7_xi15/xout_lines1.fits
   o7_xi15_highdens/xout_lines1.fits
+  ne_xi25/xout_lines1.fits
+  ne_xi35/xout_lines1.fits
   xstar_o_ne_xi3_lines.csv
   xstar_o8_lya_lines.csv
   xstar_o7_triplet_lines.csv
+  xstar_ne9_triplet_lines.csv
+  xstar_ne10_lya_lines.csv
 ```
+
+
+The Ne IX / Ne X Stage-5 validation products included here were generated with
+the commands in Section 2. The saved comparisons match all selected Ne IX and
+Ne X lines within 0.02 Angstrom: five Ne IX triplet/near-triplet components and
+two Ne X Ly-alpha components.
 
 The `xout_lines1.fits` table has the XSTAR `XSTAR_LINES` HDU columns:
 
@@ -276,6 +286,40 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   --wavelength-tolerance 0.02 \
   --out-csv compare_o7_triplet_wavelength.csv \
   --out-json compare_o7_triplet_wavelength.json \
+  --print-summary
+```
+
+Ne IX triplet/near-triplet wavelength comparison using the included CSV:
+
+```bash
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  ../xstar/data/atdb.fits \
+  xstar_test_run/xstar_ne9_triplet_lines.csv \
+  --ion "Ne IX" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_ne9_triplet_wavelength.csv \
+  --out-json compare_ne9_triplet_wavelength.json \
+  --print-summary
+```
+
+Ne X Ly-alpha wavelength comparison using the included CSV:
+
+```bash
+PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
+  ../xstar/data/atdb.fits \
+  xstar_test_run/xstar_ne10_lya_lines.csv \
+  --ion "Ne X" \
+  --wavelength-column wavelength \
+  --reference-column emit_outward \
+  --mode wavelength \
+  --temperature 1e6 \
+  --wavelength-tolerance 0.02 \
+  --out-csv compare_ne10_lya_wavelength.csv \
+  --out-json compare_ne10_lya_wavelength.json \
   --print-summary
 ```
 

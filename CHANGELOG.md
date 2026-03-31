@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.2.34 - 2026-03-31
+
+- Added validated Ne IX / Ne X Stage-5 XSTAR comparison artifacts.
+- Added `xstar_test_run/ne_xi25/xout_lines1.fits` and `xstar_test_run/ne_xi35/xout_lines1.fits`.
+- Added converted CSV line lists for Ne IX triplet/near-triplet and Ne X Ly-alpha.
+- Added saved comparison CSV/JSON outputs to `docs/validation/xstar_outputs/` and `examples/reference_outputs/`.
+- Updated XSTAR comparison documentation from planned neon runs to completed validation examples.
+
 ## v0.2.33 - 2026-03-30
 
 Documentation/examples:
