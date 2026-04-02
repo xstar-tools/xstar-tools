@@ -4,7 +4,8 @@
 This example implements the current Stage-6 workflow for O VII triplet tests:
 
 1. evaluate total O VIII -> O VII recombination records;
-2. distribute the total source into selected O VII excited/high levels;
+2. distribute the total source into selected O VII excited/high levels using either
+   statistical or cascade-yield weighting;
 3. redistribute that prototype source through the radiative branching network;
 4. feed the cascade source CSV into the sparse level-population solver;
 5. compute O VII triplet R=f/i and G=(f+i)/r diagnostics;
@@ -12,9 +13,11 @@ This example implements the current Stage-6 workflow for O VII triplet tests:
 
 Important
 ---------
-This is a *prototype source-distribution workflow*.  The XSTAR ATDB records
-currently decoded for oxygen are total recombination rates, not true
-level-resolved recombination-cascade feeds.  The source redistribution is useful
+This is a *prototype source-distribution workflow*.  The default
+``selected-cascade-yield`` mode weights candidate source levels by their
+radiative-cascade probability of feeding selected O VII triplet/cascade target
+levels.  The XSTAR ATDB records currently decoded for oxygen are still total
+recombination rates, not true level-resolved recombination-cascade feeds.  The source redistribution is useful
 for sensitivity tests and solver validation, but it should not yet be treated as
 a final physical O VII triplet model.
 
@@ -111,7 +114,10 @@ def main() -> None:
     parser.add_argument("fitsfile")
     parser.add_argument("--temperature", type=float, default=1.0e6)
     parser.add_argument("--electron-densities", type=float, nargs="+", default=[1.0, 1.0e4, 1.0e8])
-    parser.add_argument("--source-levels", default="2,3,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
+    parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
+    parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
+    parser.add_argument("--cascade-target-levels", default="2:1.0,3:1.0,4:1.0,5:1.0,7:1.0", help="Target levels or level:weight pairs for selected-cascade-yield allocation")
+    parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
@@ -140,8 +146,10 @@ def main() -> None:
         "--ion-stage", "7",
         "--temperatures", f"{args.temperature:g}",
         "--electron-densities", *density_args,
-        "--source-mode", "selected-statistical",
+        "--source-mode", args.source_mode,
         "--source-levels", args.source_levels,
+        "--cascade-target-levels", args.cascade_target_levels,
+        "--cascade-weight-floor", f"{args.cascade_weight_floor:g}",
         "--source-csv", str(initial_source_csv),
         "--cascade-mode", "radiative-branching",
         "--cascade-source-csv", str(cascade_source_csv),
@@ -178,6 +186,9 @@ def main() -> None:
         "temperature_K": args.temperature,
         "electron_densities_cm^-3": args.electron_densities,
         "source_levels": args.source_levels,
+        "source_mode": args.source_mode,
+        "cascade_target_levels": args.cascade_target_levels,
+        "cascade_weight_floor": args.cascade_weight_floor,
         "outputs": {
             "initial_source_csv": str(initial_source_csv),
             "cascade_source_csv": str(cascade_source_csv),

@@ -145,6 +145,23 @@ def parse_level_list(text: Optional[str]) -> List[int]:
     return vals
 
 
+def parse_level_weight_map(text: str, default_weight: float = 1.0) -> Dict[int, float]:
+    """Parse level weights like ``2,3,5`` or ``2:1.0,3:0.5``."""
+    out: Dict[int, float] = {}
+    if not text:
+        return out
+    for part in str(text).replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            level_s, weight_s = part.split(":", 1)
+            out[int(level_s.strip())] = float(weight_s.strip())
+        else:
+            out[int(part)] = float(default_weight)
+    return out
+
+
 def is_recombination_like(r: IndexedRecord) -> bool:
     if r.data_type in RECOMB_DATA_TYPES:
         return True
@@ -414,8 +431,19 @@ def allocation_levels(
     selected_levels: List[int],
     level_rows: List[dict],
     rec: dict,
+    branches_by_upper: Optional[Dict[int, List[dict]]] = None,
+    cascade_target_weights: Optional[Dict[int, float]] = None,
+    cascade_weight_floor: float = 0.0,
 ) -> List[Tuple[int, float, str]]:
-    """Return (level_index, weight, allocation_note), weights normalized later."""
+    """Return (level_index, weight, allocation_note), weights normalized later.
+
+    ``selected-cascade-yield`` is a Stage-6 prototype allocation mode.  It
+    weights each selected seed level by the probability that a purely radiative
+    cascade from that seed visits user-selected target levels, optionally
+    multiplied by the seed statistical weight.  This is still approximate
+    because the decoded oxygen records are total recombination rates, not true
+    level-resolved recombination rates.
+    """
     levels_by_idx = {int(r["level_index"]): r for r in level_rows if r.get("level_index") is not None}
     dest = rec.get("destination_level")
     if mode == "none":
@@ -436,6 +464,34 @@ def allocation_levels(
             if lev:
                 g = safe_float(lev.get("statistical_weight_g")) or 1.0
                 out.append((int(x), g, "statistical_weight_allocation_to_selected_levels"))
+        return out
+    if mode == "selected-cascade-yield":
+        out = []
+        target_weights = cascade_target_weights or {}
+        branches = branches_by_upper or {}
+        for x in selected_levels:
+            lev = levels_by_idx.get(int(x))
+            if not lev:
+                continue
+            g = safe_float(lev.get("statistical_weight_g")) or 1.0
+            score = 0.0
+            if target_weights and branches:
+                visits, _paths = cascade_probabilities_from_seed(int(x), branches, max_depth=50, min_probability=0.0)
+                for target_level, target_weight in target_weights.items():
+                    score += float(visits.get(int(target_level), 0.0)) * float(target_weight)
+            # Keep a configurable floor so levels with no path to the current
+            # diagnostic targets can still receive a controlled small source.
+            weight = g * max(float(cascade_weight_floor), score)
+            if weight > 0.0:
+                out.append((int(x), weight, "cascade_yield_weighted_allocation_to_selected_levels"))
+        if out:
+            return out
+        # Robust fallback if target levels are absent or no radiative paths are found.
+        for x in selected_levels:
+            lev = levels_by_idx.get(int(x))
+            if lev:
+                g = safe_float(lev.get("statistical_weight_g")) or 1.0
+                out.append((int(x), g, "cascade_yield_fallback_statistical_weight_allocation"))
         return out
     if mode == "all-statistical":
         out = []
@@ -459,6 +515,9 @@ def make_source_rows(
     parent_population_scale: float,
     min_alpha: float,
     allow_charge_exchange_sources: bool = False,
+    branches_by_upper: Optional[Dict[int, List[dict]]] = None,
+    cascade_target_weights: Optional[Dict[int, float]] = None,
+    cascade_weight_floor: float = 0.0,
 ) -> List[dict]:
     source_rows: List[dict] = []
     for rec in eval_rows:
@@ -468,7 +527,15 @@ def make_source_rows(
         alpha = float(alpha)
         if alpha < min_alpha:
             continue
-        alloc = allocation_levels(mode, selected_levels, level_rows, rec)
+        alloc = allocation_levels(
+            mode,
+            selected_levels,
+            level_rows,
+            rec,
+            branches_by_upper=branches_by_upper,
+            cascade_target_weights=cascade_target_weights,
+            cascade_weight_floor=cascade_weight_floor,
+        )
         if not alloc:
             continue
         wsum = sum(max(0.0, float(w)) for _lev, w, _note in alloc)
@@ -773,8 +840,10 @@ def main() -> None:
     p.add_argument("--allow-charge-exchange-sources", action="store_true", help="Allow charge-exchange records to create source CSV rows using neutral-H density")
     p.add_argument("--parent-population-scale", type=float, default=1.0, help="Multiplier for parent ion population/fraction in source_s^-1")
     p.add_argument("--min-alpha", type=float, default=0.0, help="Minimum alpha_cm3_s to include in source CSV")
-    p.add_argument("--source-mode", choices=["none", "ground", "record-destination", "selected-equal", "selected-statistical", "all-statistical"], default="none")
+    p.add_argument("--source-mode", choices=["none", "ground", "record-destination", "selected-equal", "selected-statistical", "selected-cascade-yield", "all-statistical"], default="none")
     p.add_argument("--source-levels", default="", help="Comma-separated levels for selected-* source modes")
+    p.add_argument("--cascade-target-levels", default="", help="Comma-separated target levels, or level:weight pairs, used by selected-cascade-yield source allocation")
+    p.add_argument("--cascade-weight-floor", type=float, default=0.0, help="Minimum cascade-yield score used by selected-cascade-yield allocation")
     p.add_argument("--records-csv")
     p.add_argument("--eval-csv")
     p.add_argument("--source-csv")
@@ -804,6 +873,13 @@ def main() -> None:
         else:
             print_records = recomb_records
         eval_rows = evaluate_records(db, recomb_records, args.temperatures, include_charge_exchange=args.include_charge_exchange)
+        line_rows_for_cascade: List[dict] = []
+        branches_by_upper_for_source: Optional[Dict[int, List[dict]]] = None
+        cascade_target_weights = parse_level_weight_map(args.cascade_target_levels)
+        if args.source_mode == "selected-cascade-yield" or args.cascade_mode == "radiative-branching":
+            line_rows_for_cascade = extract_lines(db, records, z, args.ion_stage)
+        if args.source_mode == "selected-cascade-yield":
+            branches_by_upper_for_source, _total_A_for_source = build_radiative_branching(line_rows_for_cascade)
         source_rows = make_source_rows(
             eval_rows,
             level_rows,
@@ -814,11 +890,13 @@ def main() -> None:
             args.parent_population_scale,
             args.min_alpha,
             allow_charge_exchange_sources=args.allow_charge_exchange_sources,
+            branches_by_upper=branches_by_upper_for_source,
+            cascade_target_weights=cascade_target_weights,
+            cascade_weight_floor=args.cascade_weight_floor,
         )
         cascade_source_rows: List[dict] = []
         cascade_path_rows: List[dict] = []
         if args.cascade_mode == "radiative-branching" and source_rows:
-            line_rows_for_cascade = extract_lines(db, records, z, args.ion_stage)
             branches_by_upper, _total_A_by_upper = build_radiative_branching(line_rows_for_cascade)
             cascade_source_rows, cascade_path_rows = make_cascade_rows(
                 source_rows,

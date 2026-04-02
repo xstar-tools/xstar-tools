@@ -596,3 +596,31 @@ xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/
 ### Ne IX / Ne X Stage-5 XSTAR comparison artifacts
 
 The package includes saved Ne IX and Ne X direct-XSTAR line-output artifacts under `xstar_test_run/`, plus comparison CSV/JSON outputs under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`. The Ne IX triplet/near-triplet and Ne X Ly-alpha wavelength comparisons both match all selected XSTAR lines within 0.02 Angstrom.
+
+
+### Stage 6 cascade-yield source allocation
+
+The O VII recombination/cascade workflow now supports a less purely statistical
+source distribution for total O VIII -> O VII recombination.  The new
+`selected-cascade-yield` mode weights each candidate source level by its
+radiative-cascade probability of feeding user-selected target levels, such as
+the O VII triplet upper levels.  This remains a prototype because the decoded
+oxygen recombination records are total rates rather than true level-resolved
+recombination feeds.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --source-mode selected-cascade-yield \
+  --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0 \
+  --cascade-weight-floor 0.02 \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+The workflow writes initial source rows, cascade-redistributed source rows,
+cascade path diagnostics, sparse-solver populations and O VII triplet `R=f/i`
+and `G=(f+i)/r` diagnostics.

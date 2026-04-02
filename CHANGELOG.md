@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.2.35 - 2026-04-01
+
+Stage 6 recombination/cascade improvements:
+- Added `selected-cascade-yield` recombination source allocation mode.
+- Added `--cascade-target-levels` and `--cascade-weight-floor` to `xstar_atomic.recombination`.
+- Updated the O VII recombination/cascade workflow example to use cascade-yield source weighting by default.
+- Added unit coverage for cascade-yield source allocation helpers.
+
 ## v0.2.34 - 2026-03-31
 
 - Added validated Ne IX / Ne X Stage-5 XSTAR comparison artifacts.

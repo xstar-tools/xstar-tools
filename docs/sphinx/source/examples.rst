@@ -168,3 +168,22 @@ or:
 .. code-block:: bash
 
    PYTHONPATH=src python examples/14_download_or_configure_data.py --set-path /path/to/atdb.fits
+
+
+Stage 6 O VII cascade-yield workflow
+------------------------------------
+
+The O VII recombination/cascade workflow can now use ``selected-cascade-yield``
+source allocation.  This weights selected source levels by their radiative
+cascade probability of feeding selected target levels.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+     ../xstar/data/atdb.fits \
+     --source-mode selected-cascade-yield \
+     --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0 \
+     --cascade-weight-floor 0.02 \
+     --out-dir o7_recomb_cascade_workflow \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --print-summary
