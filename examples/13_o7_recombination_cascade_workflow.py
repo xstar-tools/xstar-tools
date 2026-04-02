@@ -116,7 +116,8 @@ def main() -> None:
     parser.add_argument("--electron-densities", type=float, nargs="+", default=[1.0, 1.0e4, 1.0e8])
     parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
     parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
-    parser.add_argument("--cascade-target-levels", default="2:1.0,3:1.0,4:1.0,5:1.0,7:1.0", help="Target levels or level:weight pairs for selected-cascade-yield allocation")
+    parser.add_argument("--cascade-target-levels", default="", help="Target levels or level:weight pairs for selected-cascade-yield allocation; overrides --cascade-target-preset")
+    parser.add_argument("--cascade-target-preset", default="o7-triplet-xstar-tuned", choices=["", "none", "o7-triplet-xstar-tuned"], help="Named cascade target weighting preset for reproducible Stage-6 experiments")
     parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
@@ -149,6 +150,7 @@ def main() -> None:
         "--source-mode", args.source_mode,
         "--source-levels", args.source_levels,
         "--cascade-target-levels", args.cascade_target_levels,
+        "--cascade-target-preset", args.cascade_target_preset,
         "--cascade-weight-floor", f"{args.cascade_weight_floor:g}",
         "--source-csv", str(initial_source_csv),
         "--cascade-mode", "radiative-branching",
@@ -188,6 +190,7 @@ def main() -> None:
         "source_levels": args.source_levels,
         "source_mode": args.source_mode,
         "cascade_target_levels": args.cascade_target_levels,
+        "cascade_target_preset": args.cascade_target_preset,
         "cascade_weight_floor": args.cascade_weight_floor,
         "outputs": {
             "initial_source_csv": str(initial_source_csv),

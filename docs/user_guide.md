@@ -786,7 +786,7 @@ Example:
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   ../xstar/data/atdb.fits \
   --source-mode selected-cascade-yield \
-  --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0 \
+  --cascade-target-preset o7-triplet-xstar-tuned \
   --cascade-weight-floor 0.02 \
   --out-dir o7_recomb_cascade_workflow \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
@@ -796,3 +796,8 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
 The workflow writes initial source rows, cascade-redistributed source rows,
 cascade path diagnostics, sparse-solver populations and O VII triplet `R=f/i`
 and `G=(f+i)/r` diagnostics.
+
+
+### Stage-6 O VII triplet tuned cascade preset
+
+Use ``--cascade-target-preset o7-triplet-xstar-tuned`` to expand to ``2:0.6,3:1.0,4:1.0,5:1.0,7:0.4`` for empirical O VII triplet cascade-source experiments. Manual ``--cascade-target-levels`` overrides the preset.

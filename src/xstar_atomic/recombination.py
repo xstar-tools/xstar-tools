@@ -70,6 +70,31 @@ RECOMB_DATA_TYPES = ELECTRON_RECOMB_DATA_TYPES
 RECOMB_LIKE_RATE_TYPES = {2, 6, 8}
 K_B_EV_PER_1E4K = 0.861707  # k_B * 1e4 K in eV, as used in ucalc.f90
 
+CASCADE_TARGET_PRESETS: Dict[str, str] = {
+    # Empirical O VII triplet prototype preset. It downweights the forbidden
+    # and resonance targets relative to the intercombination targets so the
+    # total triplet-to-resonance balance can be explored reproducibly.
+    "o7-triplet-xstar-tuned": "2:0.6,3:1.0,4:1.0,5:1.0,7:0.4",
+}
+
+
+def resolve_cascade_target_levels(levels_text: str = "", preset: str = "") -> str:
+    """Return cascade-target level text after applying a named preset.
+
+    Manual ``levels_text`` wins over ``preset``. This keeps
+    ``--cascade-target-levels`` as the explicit experimental interface while
+    exposing named presets for reproducible Stage-6 workflows.
+    """
+    if levels_text and levels_text.strip():
+        return levels_text.strip()
+    if not preset or preset.strip().lower() in {"", "none"}:
+        return ""
+    key = preset.strip().lower()
+    if key not in CASCADE_TARGET_PRESETS:
+        known = ", ".join(sorted(CASCADE_TARGET_PRESETS))
+        raise ValueError(f"Unknown cascade target preset {preset!r}; known presets: {known}")
+    return CASCADE_TARGET_PRESETS[key]
+
 
 def choose_z(element: Optional[str]) -> Optional[int]:
     if not element:
@@ -843,6 +868,7 @@ def main() -> None:
     p.add_argument("--source-mode", choices=["none", "ground", "record-destination", "selected-equal", "selected-statistical", "selected-cascade-yield", "all-statistical"], default="none")
     p.add_argument("--source-levels", default="", help="Comma-separated levels for selected-* source modes")
     p.add_argument("--cascade-target-levels", default="", help="Comma-separated target levels, or level:weight pairs, used by selected-cascade-yield source allocation")
+    p.add_argument("--cascade-target-preset", default="", choices=["", "none"] + sorted(CASCADE_TARGET_PRESETS), help="Named cascade target weighting preset; manual --cascade-target-levels overrides this")
     p.add_argument("--cascade-weight-floor", type=float, default=0.0, help="Minimum cascade-yield score used by selected-cascade-yield allocation")
     p.add_argument("--records-csv")
     p.add_argument("--eval-csv")
@@ -875,7 +901,8 @@ def main() -> None:
         eval_rows = evaluate_records(db, recomb_records, args.temperatures, include_charge_exchange=args.include_charge_exchange)
         line_rows_for_cascade: List[dict] = []
         branches_by_upper_for_source: Optional[Dict[int, List[dict]]] = None
-        cascade_target_weights = parse_level_weight_map(args.cascade_target_levels)
+        cascade_target_levels_text = resolve_cascade_target_levels(args.cascade_target_levels, args.cascade_target_preset)
+        cascade_target_weights = parse_level_weight_map(cascade_target_levels_text)
         if args.source_mode == "selected-cascade-yield" or args.cascade_mode == "radiative-branching":
             line_rows_for_cascade = extract_lines(db, records, z, args.ion_stage)
         if args.source_mode == "selected-cascade-yield":

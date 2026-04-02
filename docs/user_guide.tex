@@ -740,7 +740,7 @@ recombination feeds.
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   ../xstar/data/atdb.fits \
   --source-mode selected-cascade-yield \
-  --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0 \
+  --cascade-target-preset o7-triplet-xstar-tuned \
   --cascade-weight-floor 0.02 \
   --out-dir o7_recomb_cascade_workflow \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
@@ -803,3 +803,6 @@ The downloader shows one in-place ASCII progress-bar line, for example:
 egin{verbatim}
 xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
 \end{verbatim}
+
+\paragraph{Stage-6 O VII triplet tuned cascade preset.}
+Use \texttt{--cascade-target-preset o7-triplet-xstar-tuned} to expand to \texttt{2:0.6,3:1.0,4:1.0,5:1.0,7:0.4}. Manual \texttt{--cascade-target-levels} overrides the preset.

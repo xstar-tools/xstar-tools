@@ -7,6 +7,11 @@ def test_data_path_roundtrip(tmp_path, monkeypatch):
     pytest.importorskip("astropy")
     import xstar_atomic.data as data
 
+    # Isolate this datapath round-trip test from the runtime precedence
+    # of XSTAR_ATDB_FITS. In normal runtime use the environment variable
+    # intentionally takes precedence over the saved datapath.
+    monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+
     fake_pkg = tmp_path / "pkg"
     fake_pkg.mkdir()
     dp_file = fake_pkg / "datapath"

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.36 - 2026-04-02
+
+Fixed:
+- Data-path helper round-trip test now removes ``XSTAR_ATDB_FITS`` during the isolated datapath test. This preserves the intended runtime precedence: explicit path, ``XSTAR_ATDB_FITS``, saved ``datapath``, project/package ``data/``, then interactive download/configuration.
+
+Added:
+- ``--cascade-target-preset o7-triplet-xstar-tuned`` for Stage-6 O VII triplet cascade-source experiments.
+- The preset expands to ``2:0.6,3:1.0,4:1.0,5:1.0,7:0.4``.
+- Manual ``--cascade-target-levels`` remains available and overrides the preset.
+
 ## v0.2.35 - 2026-04-01
 
 Stage 6 recombination/cascade improvements:
