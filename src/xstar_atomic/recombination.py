@@ -71,10 +71,17 @@ RECOMB_LIKE_RATE_TYPES = {2, 6, 8}
 K_B_EV_PER_1E4K = 0.861707  # k_B * 1e4 K in eV, as used in ucalc.f90
 
 CASCADE_TARGET_PRESETS: Dict[str, str] = {
-    # Empirical O VII triplet prototype preset. It downweights the forbidden
-    # and resonance targets relative to the intercombination targets so the
-    # total triplet-to-resonance balance can be explored reproducibly.
-    "o7-triplet-xstar-tuned": "2:0.6,3:1.0,4:1.0,5:1.0,7:0.4",
+    # Recommended neutral Stage-6 O VII triplet target map. It gives equal
+    # target weight to the forbidden, intercombination, and resonance upper
+    # levels and preserves the good G=(f+i)/r behavior found in v0.2.35.
+    "o7-triplet-equal": "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0",
+    # Experimental O VII triplet prototype preset. It downweights the
+    # forbidden target while preserving the resonance target.  This is intended
+    # to reduce R=f/i without driving G=(f+i)/r away from the XSTAR reference.
+    "o7-triplet-fdown-rkeep": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
+    # Backward-compatible name for the current forbidden-downweighted,
+    # resonance-preserved experimental preset.
+    "o7-triplet-xstar-tuned": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
 }
 
 

@@ -42,10 +42,16 @@ def test_selected_cascade_yield_prefers_levels_feeding_targets():
 def test_cascade_target_preset_resolution():
     from xstar_atomic.recombination import parse_level_weight_map, resolve_cascade_target_levels
 
-    text = resolve_cascade_target_levels("", "o7-triplet-xstar-tuned")
-    assert text == "2:0.6,3:1.0,4:1.0,5:1.0,7:0.4"
+    text = resolve_cascade_target_levels("", "o7-triplet-fdown-rkeep")
+    assert text == "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0"
     weights = parse_level_weight_map(text)
-    assert weights[2] == 0.6
+    assert weights[2] == 0.5
     assert weights[3] == 1.0
-    assert weights[7] == 0.4
-    assert resolve_cascade_target_levels("2:1.0", "o7-triplet-xstar-tuned") == "2:1.0"
+    assert weights[7] == 1.0
+    assert resolve_cascade_target_levels("2:1.0", "o7-triplet-fdown-rkeep") == "2:1.0"
+
+    equal_text = resolve_cascade_target_levels("", "o7-triplet-equal")
+    assert equal_text == "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0"
+    # Backward-compatible alias now points to the forbidden-downweighted,
+    # resonance-preserved experiment, not the old resonance-downweighted map.
+    assert resolve_cascade_target_levels("", "o7-triplet-xstar-tuned") == text
