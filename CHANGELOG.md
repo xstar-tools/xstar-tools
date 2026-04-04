@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.38 - 2026-04-04
+
+- Fixed `examples/13_o7_recombination_cascade_workflow.py` so the recommended equal O VII target map is only passed when no non-`none` `--cascade-target-preset` is selected.
+- This prevents the default `--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0` from overriding experimental presets such as `o7-triplet-fdown-rkeep`.
+- The recommended Stage-6 baseline remains the equal-target map. The `o7-triplet-fdown-rkeep` preset remains an experimental forbidden-downweighted, resonance-preserved map.
+
 ## v0.2.37 - 2026-04-03
 
 Stage-6 O VII cascade-source tuning update.

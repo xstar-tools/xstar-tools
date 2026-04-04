@@ -116,7 +116,7 @@ def main() -> None:
     parser.add_argument("--electron-densities", type=float, nargs="+", default=[1.0, 1.0e4, 1.0e8])
     parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
     parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
-    parser.add_argument("--cascade-target-levels", default="2:1.0,3:1.0,4:1.0,5:1.0,7:1.0", help="Target levels or level:weight pairs for selected-cascade-yield allocation; overrides --cascade-target-preset")
+    parser.add_argument("--cascade-target-levels", default=None, help="Target levels or level:weight pairs for selected-cascade-yield allocation. If omitted and no preset is selected, the recommended equal O VII triplet map is used.")
     parser.add_argument("--cascade-target-preset", default="none", choices=["", "none", "o7-triplet-equal", "o7-triplet-fdown-rkeep", "o7-triplet-xstar-tuned"], help="Named cascade target weighting preset for reproducible Stage-6 experiments; manual --cascade-target-levels overrides this")
     parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
@@ -141,7 +141,18 @@ def main() -> None:
     combined_summary_json = out_dir / "o7_recomb_cascade_workflow_summary.json"
 
     density_args = [f"{x:g}" for x in args.electron_densities]
-    _run([
+    preset = (args.cascade_target_preset or "none").strip()
+    explicit_target_levels = args.cascade_target_levels
+    default_equal_targets = "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0"
+    effective_target_levels = explicit_target_levels
+    if effective_target_levels is None and preset.lower() in {"", "none"}:
+        # Preserve the recommended Stage-6 baseline for normal runs, but do not
+        # pass this default when a non-none preset is requested.  Otherwise the
+        # recombination CLI correctly treats --cascade-target-levels as an
+        # explicit manual override and the preset would never take effect.
+        effective_target_levels = default_equal_targets
+
+    recomb_cmd = [
         py, "-m", "xstar_atomic.recombination", args.fitsfile,
         "--element", "O",
         "--ion-stage", "7",
@@ -149,8 +160,12 @@ def main() -> None:
         "--electron-densities", *density_args,
         "--source-mode", args.source_mode,
         "--source-levels", args.source_levels,
-        "--cascade-target-levels", args.cascade_target_levels,
-        "--cascade-target-preset", args.cascade_target_preset,
+    ]
+    if effective_target_levels:
+        recomb_cmd += ["--cascade-target-levels", effective_target_levels]
+    if preset and preset.lower() != "none":
+        recomb_cmd += ["--cascade-target-preset", preset]
+    recomb_cmd += [
         "--cascade-weight-floor", f"{args.cascade_weight_floor:g}",
         "--source-csv", str(initial_source_csv),
         "--cascade-mode", "radiative-branching",
@@ -158,7 +173,8 @@ def main() -> None:
         "--cascade-path-csv", str(cascade_path_csv),
         "--summary-json", str(recomb_summary_json),
         "--summary",
-    ])
+    ]
+    _run(recomb_cmd)
 
     _run([
         py, "-m", "xstar_atomic.solver", args.fitsfile,
@@ -189,8 +205,8 @@ def main() -> None:
         "electron_densities_cm^-3": args.electron_densities,
         "source_levels": args.source_levels,
         "source_mode": args.source_mode,
-        "cascade_target_levels": args.cascade_target_levels,
-        "cascade_target_preset": args.cascade_target_preset,
+        "cascade_target_levels": effective_target_levels or "",
+        "cascade_target_preset": preset or "none",
         "cascade_weight_floor": args.cascade_weight_floor,
         "outputs": {
             "initial_source_csv": str(initial_source_csv),
