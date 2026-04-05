@@ -10,7 +10,7 @@ directory:
 
 
 Downloading and configuring atdb.fits
-====================================
+========================================
 
 ``xstar-atomic`` does not bundle XSTAR's large ``atdb.fits`` file.  Configure
 or download it interactively with:

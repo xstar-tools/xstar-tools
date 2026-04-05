@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.2.41 - 2026-04-06
+
+- Fixed Sphinx ``user_guide.rst`` heading underline length for ``Downloading and configuring atdb.fits`` so ``make html`` builds without the title-underline warning.
+
 ## v0.2.40 - 2026-04-06
 
 Fixed:
