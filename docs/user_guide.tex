@@ -18,18 +18,51 @@
   citecolor=blue
 }
 
-\lstdefinestyle{xstaratomic}{
+\definecolor{ctcodebackground}{RGB}{248,248,248}
+\definecolor{ctcodekeyword}{RGB}{0,92,175}
+\definecolor{ctcodestring}{RGB}{163,21,21}
+\definecolor{ctcodecomment}{RGB}{0,128,0}
+
+\lstdefinestyle{ctpython}{
+  language=Python,
   basicstyle=\ttfamily\small,
+  keywordstyle=\color{ctcodekeyword}\bfseries,
+  stringstyle=\color{ctcodestring},
+  commentstyle=\color{ctcodecomment}\itshape,
+  backgroundcolor=\color{ctcodebackground},
   breaklines=true,
   columns=fullflexible,
   frame=single,
-  backgroundcolor=\color{gray!5}
+  framerule=0.4pt,
+  keepspaces=true,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  numbers=none,
+  tabsize=4,
+  upquote=true
 }
-\lstset{style=xstaratomic}
+
+\lstdefinestyle{ctterminal}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{ctcodebackground},
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  framerule=0.4pt,
+  keepspaces=true,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  numbers=none,
+  tabsize=4,
+  upquote=true
+}
+\lstset{style=ctpython}
 
 \title{\texttt{xstar-atomic} User Guide}
 \author{XSTAR ATDB direct decoder, rate evaluator, emissivity tools, and prototype solvers}
-\date{Version 0.2.18}
+\date{Version 0.2.39}
 
 \begin{document}
 \maketitle
@@ -44,7 +77,7 @@ The package is intended for research workflows that need direct access to XSTAR 
 
 The public XSTAR \texttt{atdb.fits} file is not a normal multi-table atomic database. It contains four packed arrays:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 POINTERS
 REALS
 INTEGERS
@@ -53,7 +86,7 @@ CHARS
 
 Each physical database record is reconstructed from these arrays. The package rebuilds the XSTAR hierarchy:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 element -> ion -> levels -> radiative/collisional/photoionization/recombination records
 \end{lstlisting}
 
@@ -119,25 +152,25 @@ This is an alpha-stage research package. Important limitations include:
 
 From the package directory:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 python -m pip install -e .
 \end{lstlisting}
 
 For development and tests:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 python -m pip install -e .[dev]
 \end{lstlisting}
 
 For Sphinx documentation:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 python -m pip install -e .[docs]
 \end{lstlisting}
 
 You can run the package without installing it:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python -m xstar_atomic.lines /path/to/atdb.fits \
   --element O --ion-stage 8 \
   --line-search --wavelength-min 18.8 --wavelength-max 19.1
@@ -147,7 +180,7 @@ PYTHONPATH=src python -m xstar_atomic.lines /path/to/atdb.fits \
 
 \subsection{Open the database}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 from xstar_atomic import XSTARAtomic, ATDB
 
 db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
@@ -155,7 +188,7 @@ db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
 
 \subsection{Low-level database index}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 from xstar_atomic import ATDB
 
 atdb = ATDB("/path/to/xstar/data/atdb.fits")
@@ -165,13 +198,13 @@ print(len(records), len(elements), len(ions))
 
 For the tested XSTAR database this returns approximately:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 1216792 30 465
 \end{lstlisting}
 
 \subsection{Extract O VIII Ly-alpha lines}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 from xstar_atomic import XSTARAtomic
 
 db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
@@ -183,7 +216,7 @@ for line in lines:
 
 The following ion names are accepted as equivalent:
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 db.lines("O VIII")
 db.lines("o viii")
 db.lines("o_viii")
@@ -194,7 +227,7 @@ db.lines("o8")
 
 \subsection{Evaluate collisional excitation rates}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 coll = db.collisions(
     "O VIII",
     lower_level=1,
@@ -210,7 +243,7 @@ The evaluated rows include \texttt{upsilon}, \texttt{q\_excitation\_cm3\_s}, \te
 
 \subsection{Recombination inventory}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 recomb = db.recombination(element="O", temperatures=[1e6])
 print(len(recomb["records"]))
 print(len(recomb["evaluated"]))
@@ -220,7 +253,7 @@ Electron recombination and charge exchange are separated by \texttt{source\_kind
 
 \subsection{Build an O VIII Ly-alpha emissivity table}
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctpython]
 emiss = db.emissivity(
     "O VIII",
     wavelength=(18.8, 19.1),
@@ -244,7 +277,7 @@ where \(B_{ul}\) is the radiative branching ratio. These coefficients are per \(
 
 After installation, the package provides:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-inspect
 xstar-atomic-hierarchy
 xstar-atomic-lines
@@ -257,13 +290,13 @@ xstar-atomic-solver
 
 \subsection{Inspect the database}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-inspect /path/to/atdb.fits --summary
 \end{lstlisting}
 
 \subsection{Search for O VIII Ly-alpha lines}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-lines /path/to/atdb.fits \
   --element O --ion-stage 8 \
   --line-search --wavelength-min 18.8 --wavelength-max 19.1
@@ -271,7 +304,7 @@ xstar-atomic-lines /path/to/atdb.fits \
 
 \subsection{Evaluate collisions}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-collisions /path/to/atdb.fits \
   --element O --ion-stage 8 \
   --search --lower-level 1 \
@@ -281,7 +314,7 @@ xstar-atomic-collisions /path/to/atdb.fits \
 
 \subsection{Build an emissivity CSV}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-emissivity /path/to/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
@@ -292,7 +325,7 @@ xstar-atomic-emissivity /path/to/atdb.fits \
 
 \subsection{Recombination inventory}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-recombination /path/to/atdb.fits \
   --element O \
   --temperatures 1e6 \
@@ -301,7 +334,7 @@ xstar-atomic-recombination /path/to/atdb.fits \
 
 \subsection{Prototype solver}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-solver /path/to/atdb.fits \
   --element O --ion-stage 8 \
   --wavelength-min 18.8 --wavelength-max 19.1 \
@@ -319,7 +352,7 @@ Use \texttt{--linear-solver dense}, \texttt{--linear-solver sparse}, or \texttt{
 
 \subsection{Plasma export bundles}
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 xstar-atomic-export /path/to/atdb.fits \
   --ions "O VIII,Ne IX" \
   --temperatures 1e6 3e6 1e7 \
@@ -335,7 +368,7 @@ This writes per-ion CSV products, optional HDF5 tables, and JSON manifests. The 
 
 Line-by-line emissivity tables are useful for detailed diagnostics, but post-processing of simulated outflows often needs integrated X-ray bands. The export command supports line-based band sums with \texttt{--bands-kev}, using band specifications of the form \texttt{name:emin:emax} in keV.
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
   --ions "O VIII,Ne IX" \
   --temperatures 1e6 3e6 1e7 \
@@ -349,14 +382,14 @@ PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
 
 For each ion this writes:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 <ion>_band_emissivity.csv
 <ion>_atomic.h5:/band_emissivity
 \end{lstlisting}
 
 The band-emissivity table contains:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 ion
 band_name
 energy_min_keV
@@ -380,13 +413,13 @@ band-emissivity rows per ion. The real-ATDB validation confirmed that CSV and HD
 
 The test suite contains lightweight package tests and optional real-database smoke tests. To run tests that require the real XSTAR database:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits PYTHONPATH=src pytest -q
 \end{lstlisting}
 
 Without \texttt{XSTAR\_ATDB\_FITS}, tests requiring \texttt{atdb.fits} are skipped. The v0.2.17 Stage-4 validation run passed 34 real-ATDB tests:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 34 passed in 113.49s
 \end{lstlisting}
 
@@ -394,7 +427,7 @@ Without \texttt{XSTAR\_ATDB\_FITS}, tests requiring \texttt{atdb.fits} are skipp
 
 The \texttt{examples/} directory contains runnable scripts:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 01_o8_lya_lines.py
 02_o8_lya_collisions.py
 03_o8_lya_emissivity.py
@@ -408,7 +441,7 @@ The \texttt{examples/} directory contains runnable scripts:
 
 Run examples without installing by setting \texttt{PYTHONPATH}:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/atdb.fits
 \end{lstlisting}
 
@@ -416,13 +449,13 @@ PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/atdb.fit
 
 The package includes a Sphinx documentation scaffold under:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 docs/sphinx/
 \end{lstlisting}
 
 Build HTML documentation with:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 python -m pip install -e .[docs]
 cd docs/sphinx
 make html
@@ -430,7 +463,7 @@ make html
 
 The generated HTML will be under:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 docs/sphinx/build/html/
 \end{lstlisting}
 
@@ -496,7 +529,7 @@ for comparison against XSTAR model outputs.
 
 Saved XSTAR-vs-\texttt{xstar-atomic} comparison outputs are included under:
 
-\begin{lstlisting}
+\begin{lstlisting}[style=ctterminal]
 docs/validation/xstar_outputs/
 examples/reference_outputs/
 \end{lstlisting}
@@ -517,7 +550,7 @@ File & Purpose\\
 
 The O~VIII Ly-alpha wavelengths agree with XSTAR to approximately $10^{-5}$~\AA. The O~VII triplet and near-triplet wavelengths agree with XSTAR to approximately $10^{-7}$--$8\times10^{-7}$~\AA.
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
   xout_lines1.fits \
   --out-csv xstar_lines.csv \
@@ -545,7 +578,7 @@ The level-population solver supports the XSTAR type-63 same-\(n\) \(l\)-mixing
 collision decoder and can solve the statistical-equilibrium matrix with either a
 dense or sparse backend.
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python -m xstar_atomic.solver ../xstar/data/atdb.fits \
   --element O \
   --ion-stage 8 \
@@ -569,7 +602,7 @@ source/sink levels.
 
 For an O VII triplet stress test, run:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/10_o7_triplet_sparse_solver.py \
   ../xstar/data/atdb.fits \
   --out-dir o7_triplet_solver_example
@@ -589,7 +622,7 @@ output writing.
 
 Basic O~VIII dense/sparse comparison:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/11_solver_timing.py \
   ../xstar/data/atdb.fits \
   --repeat 3 \
@@ -598,7 +631,7 @@ PYTHONPATH=src python examples/11_solver_timing.py \
 
 Include the heavier O~VII triplet sparse stress test:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/11_solver_timing.py \
   ../xstar/data/atdb.fits \
   --include-o7 \
@@ -630,7 +663,7 @@ pure Python/SciPy implementation as the portable reference path.
 The solver profiler separates the wall-clock time spent in the main execution
 stages:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
   ../xstar/data/atdb.fits \
   --element O --ion-stage 8 \
@@ -658,7 +691,7 @@ already handled by compiled SciPy backends when SciPy is available.
 
 The prototype Stage-6 O~VII recombination/cascade workflow can be run with:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   ../xstar/data/atdb.fits \
   --out-dir o7_recomb_cascade_workflow \
@@ -683,7 +716,7 @@ array-backed NumPy/NPZ cache.  This cache stores the hierarchy as numeric arrays
 filters by element, ion stage, data type, and rate type, and converts only the
 selected rows to \texttt{IndexedRecord} objects.
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/12_profile_solver_steps.py \
   ../xstar/data/atdb.fits \
   --element O --ion-stage 8 \
@@ -709,7 +742,7 @@ recommended path for solver, export, high-level API, and profiling workflows.
 
 The same cache should be used for repeated export workflows:
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
   --ions "O VIII,Ne IX" \
   --temperatures 1e6 3e6 1e7 \
@@ -736,7 +769,7 @@ O VII triplet upper levels.  This is still approximate because the decoded
 oxygen recombination records are total rates, not true level-resolved
 recombination feeds.
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   ../xstar/data/atdb.fits \
   --source-mode selected-cascade-yield \
@@ -747,62 +780,80 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   --print-summary
 \end{lstlisting}
 
-\end{document}
 
-\section{Downloading and configuring \texttt{atdb.fits}}
 
-\texttt{xstar-atomic} does not bundle XSTAR's large \texttt{atdb.fits} file.
-The package can remember a local XSTAR data directory in a small text file named
-\texttt{datapath}. Once this file is configured, high-level code
-can use \texttt{ATDB()} or \texttt{XSTARAtomic()} without passing the FITS path
-each time.
 
-Interactive download/configuration:
+\subsection{Stage-6 O VII triplet target maps}
 
-\begin{lstlisting}[language=bash]
-python -m xstar_atomic.data
+The recommended Stage-6 baseline is the equal-target map:
+
+\begin{lstlisting}[style=ctterminal]
+--source-mode selected-cascade-yield \
+--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
 \end{lstlisting}
 
-or, after installation:
+This preserves the good \(G=(f+i)/r\) agreement with the XSTAR O VII reference. The experimental preset
 
-\begin{lstlisting}[language=bash]
+\begin{lstlisting}[style=ctterminal]
+--cascade-target-preset o7-triplet-fdown-rkeep
+\end{lstlisting}
+
+expands to \texttt{2:0.5,3:1.0,4:1.0,5:1.0,7:1.0}. It downweights the forbidden target while preserving the resonance target. In the v0.2.38 test, it reduced \(R=f/i\) from about 5.75 to about 5.20, but it also reduced \(G\) from about 10.56 to about 7.69, so it remains experimental. Manual \texttt{--cascade-target-levels} overrides any preset.
+
+\section{Data download and path configuration}
+
+\texttt{xstar-atomic} does not bundle the large XSTAR \texttt{atdb.fits} file. Use the interactive helper to download it or to save the path to an existing local copy:
+
+\begin{lstlisting}[style=ctterminal]
+python -m xstar_atomic.data
+# or, after installation
 xstar-atomic-download-data
 \end{lstlisting}
 
-The helper reports the remote file size, asks whether to download the file
-(pressing Enter means yes), asks for a destination directory, downloads with a
-progress indicator, and stores the destination directory in
-\texttt{datapath}. The default destination is
-\texttt{xstar\_atomic/data}.
+The helper reports the remote file size, asks whether to download, asks for a destination directory, downloads with a single-line ASCII progress bar, and stores the selected data directory in \texttt{datapath}. In a source checkout, the default destination is the project-level \texttt{data/} directory and the persistent path file is the project-level \texttt{datapath}.
 
-The public default URL is:
+\begin{lstlisting}[style=ctterminal]
+xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
+\end{lstlisting}
 
-\begin{lstlisting}
+The default public source is:
+
+\begin{lstlisting}[style=ctterminal]
 https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
 \end{lstlisting}
 
-If the file already exists elsewhere, decline the download and enter the full
-path to the local \texttt{atdb.fits}. The parent directory is saved to
-\texttt{datapath}, so future runs can omit the path:
+Configure an existing file non-interactively:
 
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[style=ctterminal]
+python -m xstar_atomic.data --set-path /path/to/atdb.fits
+python -m xstar_atomic.data --show
+\end{lstlisting}
+
+Top-level Python helpers are available:
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import (
+    download_data,
+    resolve_atdb_path,
+    find_atdb_file,
+    get_data_path,
+    set_data_path,
+)
+
+path = download_data()
+set_data_path("/path/to/xstar/data/atdb.fits")
+path = resolve_atdb_path()
+\end{lstlisting}
+
+After configuration, the high-level API can omit the FITS path:
+
+\begin{lstlisting}[style=ctpython]
 from xstar_atomic import XSTARAtomic
 
 db = XSTARAtomic(index_cache=True, index_cache_format="npz")
 lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
 \end{lstlisting}
 
-Configure an existing file non-interactively:
+Path resolution order is explicit path, \texttt{XSTAR\_ATDB\_FITS}, \texttt{datapath}, \texttt{data/atdb.fits}, then interactive download/configuration.
 
-\begin{lstlisting}[language=bash]
-python -m xstar_atomic.data --set-path /path/to/atdb.fits
-python -m xstar_atomic.data --show
-\end{lstlisting}
-
-The downloader shows one in-place ASCII progress-bar line, for example:
-egin{verbatim}
-xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
-\end{verbatim}
-
-\paragraph{Stage-6 O VII triplet tuned cascade preset.}
-The recommended Stage-6 default is the equal-target map \texttt{--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0}, because it preserved the good \texttt{G=(f+i)/r} agreement found in v0.2.35. For the next experimental pass, use \texttt{--cascade-target-preset o7-triplet-fdown-rkeep} to expand to \texttt{2:0.5,3:1.0,4:1.0,5:1.0,7:1.0}; this downweights the forbidden target while preserving the resonance target. Manual \texttt{--cascade-target-levels} overrides any preset.
+\end{document}

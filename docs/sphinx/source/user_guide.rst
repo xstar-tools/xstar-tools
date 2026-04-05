@@ -27,8 +27,14 @@ After installation, the equivalent command is:
 
 The helper reports the remote file size, asks whether to download
 (pressing Enter means yes), asks for a destination directory, downloads with a
-progress indicator, and writes the chosen data directory to
-``datapath``. In a source checkout this file is stored at the project root (for example ``datapath``), not under ``src/xstar_atomic/``. The default destination is the project-level ``data/`` directory.
+single-line ASCII progress bar, and writes the chosen data directory to
+``datapath``. In a source checkout this file is stored at the project root
+(for example ``datapath``), not under ``src/xstar_atomic/``. The default
+destination is the project-level ``data/`` directory.
+
+Example progress line::
+
+   xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
 
 If ``atdb.fits`` already exists, decline the download and enter the full path to
 the existing file.  The parent directory is saved, so future Python code can omit
@@ -47,6 +53,22 @@ Non-interactive configuration is also available:
 
    python -m xstar_atomic.data --set-path /path/to/atdb.fits
    python -m xstar_atomic.data --show
+
+Top-level data helpers are available from Python:
+
+.. code-block:: python
+
+   from xstar_atomic import (
+       download_data,
+       resolve_atdb_path,
+       find_atdb_file,
+       get_data_path,
+       set_data_path,
+   )
+
+   path = download_data()
+   set_data_path("/path/to/xstar/data/atdb.fits")
+   path = resolve_atdb_path()
 
 The resolver checks, in order: an explicit path, ``XSTAR_ATDB_FITS``, the
 persistent ``datapath`` file, and ``data/atdb.fits``.

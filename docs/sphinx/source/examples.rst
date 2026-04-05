@@ -189,6 +189,18 @@ cascade probability of feeding selected target levels.
      --print-summary
 
 
-### Stage-6 O VII triplet tuned cascade preset
+Stage-6 O VII triplet target maps
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The recommended Stage-6 default is the equal-target map ``--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0``, because it preserved the good ``G=(f+i)/r`` agreement found in v0.2.35. For the next experimental pass, use ``--cascade-target-preset o7-triplet-fdown-rkeep`` to expand to ``2:0.5,3:1.0,4:1.0,5:1.0,7:1.0``; this downweights the forbidden target while preserving the resonance target. Manual ``--cascade-target-levels`` overrides any preset. In `examples/13_o7_recombination_cascade_workflow.py`, the equal-target default is only passed when no non-`none` preset is selected, so experimental presets are not accidentally overridden.
+The recommended Stage-6 baseline is the equal-target map ``--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0``, because it preserved the good ``G=(f+i)/r`` agreement with the XSTAR O VII reference. The experimental preset ``--cascade-target-preset o7-triplet-fdown-rkeep`` expands to ``2:0.5,3:1.0,4:1.0,5:1.0,7:1.0``. It reduced ``R=f/i`` from about 5.75 to about 5.20 in the v0.2.38 test, but also reduced ``G`` from about 10.56 to about 7.69, so it remains experimental. Manual ``--cascade-target-levels`` overrides any preset.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+     ../xstar/data/atdb.fits \
+     --source-mode selected-cascade-yield \
+     --cascade-target-preset o7-triplet-fdown-rkeep \
+     --cascade-weight-floor 0.02 \
+     --out-dir o7_recomb_cascade_workflow_fdown_rkeep \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --print-summary

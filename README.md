@@ -90,8 +90,7 @@ columns are full model outputs and are not directly normalized to local
 
 ## Data download and path configuration
 
-`xstar-atomic` does not bundle the large XSTAR `atdb.fits` file. You can
-download or configure it interactively:
+`xstar-atomic` does not bundle the large XSTAR `atdb.fits` file. Use the data helper to download it or save the path to an existing copy:
 
 ```bash
 python -m xstar_atomic.data
@@ -99,10 +98,13 @@ python -m xstar_atomic.data
 xstar-atomic-download-data
 ```
 
-The helper reports the remote file size, asks whether to download
-(pressing Enter means yes), asks for a destination directory, downloads with a
-progress indicator, and stores the selected data directory in
-`datapath`. In a source checkout this file is stored at the project root (for example `datapath`), not under `src/xstar_atomic/`. The default destination is the project-level `data/` directory.
+The helper reports the remote file size, asks whether to download (pressing Enter means yes), asks for a destination directory, downloads with a single-line ASCII progress bar, and stores the selected data directory in `datapath`. In a source checkout the default destination is the project-level `data/` directory and the persistent path file is the project-level `datapath`, not `src/xstar_atomic/datapath`.
+
+Example progress line:
+
+```text
+xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
+```
 
 The default public source is:
 
@@ -110,12 +112,30 @@ The default public source is:
 https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
 ```
 
-If you already have `atdb.fits`, decline the download and enter the full path,
-or configure it non-interactively:
+If you already have `atdb.fits`, decline the download and enter the full path, or configure it non-interactively:
 
 ```bash
 python -m xstar_atomic.data --set-path /path/to/atdb.fits
 python -m xstar_atomic.data --show
+```
+
+Programmatic helpers are available from the top-level package:
+
+```python
+from xstar_atomic import (
+    download_data,
+    resolve_atdb_path,
+    find_atdb_file,
+    get_data_path,
+    set_data_path,
+)
+
+# Interactive download/configuration.
+atdb_path = download_data()
+
+# Or save an existing local file for future sessions.
+set_data_path('/path/to/xstar/data/atdb.fits')
+atdb_path = resolve_atdb_path()
 ```
 
 After configuration, the high-level API can omit the FITS path:
@@ -123,12 +143,19 @@ After configuration, the high-level API can omit the FITS path:
 ```python
 from xstar_atomic import XSTARAtomic
 
-db = XSTARAtomic(index_cache=True, index_cache_format="npz")
-lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+db = XSTARAtomic(index_cache=True, index_cache_format='npz')
+lines = db.lines('O VIII', wavelength=(18.8, 19.1), slim=True)
 ```
 
-The resolver checks an explicit path, `XSTAR_ATDB_FITS`, `datapath`,
-and then `data/atdb.fits`.
+Path resolution order is:
+
+```text
+explicit path
+XSTAR_ATDB_FITS
+datapath
+data/atdb.fits
+interactive download/configuration
+```
 
 ## Installation
 
@@ -626,6 +653,19 @@ cascade path diagnostics, sparse-solver populations and O VII triplet `R=f/i`
 and `G=(f+i)/r` diagnostics.
 
 
-### Stage-6 O VII triplet tuned cascade preset
+### Stage-6 O VII triplet target maps
 
-The recommended Stage-6 default is the equal-target map ``--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0``, because it preserved the good ``G=(f+i)/r`` agreement found in v0.2.35. For the next experimental pass, use ``--cascade-target-preset o7-triplet-fdown-rkeep`` to expand to ``2:0.5,3:1.0,4:1.0,5:1.0,7:1.0``; this downweights the forbidden target while preserving the resonance target. Manual ``--cascade-target-levels`` overrides any preset. In `examples/13_o7_recombination_cascade_workflow.py`, the equal-target default is only passed when no non-`none` preset is selected, so experimental presets are not accidentally overridden.
+The recommended Stage-6 baseline remains the equal-target cascade-yield map:
+
+```bash
+--source-mode selected-cascade-yield \
+--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
+```
+
+This baseline preserved the good `G=(f+i)/r` agreement with the XSTAR O VII reference. The experimental preset
+
+```bash
+--cascade-target-preset o7-triplet-fdown-rkeep
+```
+
+expands to `2:0.5,3:1.0,4:1.0,5:1.0,7:1.0`; it downweights the forbidden target while preserving the resonance target. In the v0.2.38 test it reduced `R=f/i` from about 5.75 to about 5.20, but also reduced `G` from about 10.56 to about 7.69, so it remains experimental. Manual `--cascade-target-levels` overrides any preset.
