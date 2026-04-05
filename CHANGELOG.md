@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.40 - 2026-04-06
+
+Fixed:
+
+- Corrected the Sphinx user-guide heading underline for ``Downloading and configuring atdb.fits`` so ``make html`` builds without the title-underline warning.
+- Kept the v0.2.39 documentation updates for ``download_data()``, data-path resolution, NPZ cache performance, and Stage-6 cascade workflow notes.
+
 ## v0.2.39 - 2026-04-05
 
 Documentation and Stage-6 result update.
