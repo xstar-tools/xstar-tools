@@ -71,7 +71,7 @@ for validation runs. Current documented runs include:
 - O VIII / Ne IX high-ionization line validation.
 - O VII triplet and high-density O VII triplet validation.
 - Ne IX and Ne X focused runs for Stage-5 wavelength comparisons.
-- New Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI run recipes for completing Stage-5 heavy-ion validation.
+- Validated Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI Stage-5 wavelength comparisons.
 
 The Ne-focused and Mg/Si/Fe-focused workflows convert `xout_lines1.fits` to CSV with
 `python -m xstar_atomic.xstar_outputs`, then compare wavelengths with
@@ -85,7 +85,7 @@ compare_ne10_lya_wavelength.csv/json
 ```
 
 
-Additional Stage-5 run recipes are documented for:
+Additional Stage-5 validated heavy-ion targets are:
 
 ```text
 Mg XI  He-like triplet region: 9.0--9.4 Angstrom
@@ -96,7 +96,19 @@ Fe XXV K-alpha region:         1.83--1.88 Angstrom
 Fe XXVI Ly-alpha region:       1.76--1.80 Angstrom
 ```
 
-These Mg/Si/Fe recipes are the next Stage-5 validation targets. After each XSTAR run, save `xout_lines1.fits`, convert the selected line region to CSV, run `examples/08_compare_xstar_outputs.py`, and add the comparison CSV/JSON files to the validation archive.
+These Mg/Si/Fe validation products are now included: `xout_lines1.fits` artifacts under `xstar_test_run/`, selected-line CSV files, and comparison CSV/JSON files under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`. All selected Mg/Si/Fe lines match within the 0.02 Angstrom tolerance used for the wavelength checks.
+
+
+Validated Mg/Si/Fe wavelength results included in this release:
+
+```text
+Mg XI   5/5 matched, max |Delta lambda| = 4.52e-6 Angstrom
+Mg XII  2/2 matched, max |Delta lambda| = 1.96e-6 Angstrom
+Si XIII 5/5 matched, max |Delta lambda| = 3.51e-6 Angstrom
+Si XIV  2/2 matched, max |Delta lambda| = 3.89e-6 Angstrom
+Fe XXV  4/4 matched, max |Delta lambda| = 4.10e-6 Angstrom
+Fe XXVI 2/2 matched, max |Delta lambda| = 3.55e-6 Angstrom
+```
 
 As with the O VIII and O VII examples, these comparisons validate line
 identification and wavelength decoding. XSTAR `emit_inward`/`emit_outward`

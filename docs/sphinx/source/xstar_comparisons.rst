@@ -26,7 +26,7 @@ commands.  The test runs are:
 * O VIII / Ne IX high-ionization validation.
 * Ne IX focused Stage-5 validation.
 * Ne X focused Stage-5 validation.
-* Pending Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI Stage-5 run recipes.
+* Validated Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI Stage-5 comparison artifacts.
 * O VII triplet / recombination-cascade validation.
 * O VII triplet validation at higher density.
 
@@ -111,11 +111,10 @@ Reproduce the Ne X comparison::
      --print-summary
 
 
-Pending Mg, Si, and Fe Stage-5 runs
---------------------------------------
+Mg, Si, and Fe Stage-5 wavelength validation
+---------------------------------------------
 
-The next Stage-5 validation targets are documented as XSTAR run recipes in
-``xstar_test_run/README.md``.  The recommended first-pass line windows are::
+The Mg/Si/Fe Stage-5 validation targets are now included as XSTAR run recipes and saved validation artifacts.  The line windows are::
 
    Mg XI   He-like triplet region: 9.0--9.4 Angstrom
    Mg XII  Ly-alpha region:        8.35--8.50 Angstrom
@@ -124,11 +123,17 @@ The next Stage-5 validation targets are documented as XSTAR run recipes in
    Fe XXV  K-alpha region:         1.83--1.88 Angstrom
    Fe XXVI Ly-alpha region:        1.76--1.80 Angstrom
 
-For each ion, run the documented XSTAR command, save ``xout_lines1.fits``,
-convert the selected line region to CSV with ``python -m xstar_atomic.xstar_outputs``,
-and compare with ``examples/08_compare_xstar_outputs.py`` in wavelength mode.
-The Mg/Si/Fe comparisons remain pending until those XSTAR outputs and
-CSV/JSON comparison files are added to the validation archive.
+For each ion, the archive now includes ``xout_lines1.fits``, a selected-line CSV, and wavelength comparison CSV/JSON files.  All selected Mg/Si/Fe lines match the decoded ``xstar-atomic`` wavelengths within the 0.02 Angstrom tolerance used by the comparison workflow.
+
+Validated Mg/Si/Fe wavelength results included in this release::
+
+   Mg XI   5/5 matched, max |Delta lambda| = 4.52e-6 Angstrom
+   Mg XII  2/2 matched, max |Delta lambda| = 1.96e-6 Angstrom
+   Si XIII 5/5 matched, max |Delta lambda| = 3.51e-6 Angstrom
+   Si XIV  2/2 matched, max |Delta lambda| = 3.89e-6 Angstrom
+   Fe XXV  4/4 matched, max |Delta lambda| = 4.10e-6 Angstrom
+   Fe XXVI 2/2 matched, max |Delta lambda| = 3.55e-6 Angstrom
+
 
 Reproduction workflow
 ---------------------

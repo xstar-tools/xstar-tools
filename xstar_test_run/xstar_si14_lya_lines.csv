@@ -1,0 +1,3 @@
+index,ion,lower_level,upper_level,wavelength,emit_inward,emit_outward,depth_inward,depth_outward
+27764,si_xiv,1s1.2S_1/2,1s0.2p1.2P_3/2,6.18042,0.0,0.00123946,0.00022558,0.0
+27763,si_xiv,1s1.2S_1/2,1s0.2p1.2P_1/2,6.18583,0.0,0.000864864,0.000113087,0.0

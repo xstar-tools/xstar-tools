@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.43 - 2026-04-07
+
+Completed Stage-5 heavy-ion XSTAR wavelength validation.
+
+- Added validated Mg XI, Mg XII, Si XIII, Si XIV, Fe XXV, and Fe XXVI XSTAR `xout_lines1.fits` artifacts under `xstar_test_run/`.
+- Added converted selected-line CSV products for Mg/Si/Fe validation under `xstar_test_run/`.
+- Added Mg/Si/Fe wavelength comparison CSV/JSON files under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`.
+- Added tests checking the Mg/Si/Fe validation artifacts and wavelength matches.
+- Updated README and Sphinx/Markdown comparison docs to mark Mg/Si/Fe Stage-5 validation as completed rather than pending.
+
 ## v0.2.42 - 2026-04-06
 
 Stage-5 heavy-ion validation planning update.

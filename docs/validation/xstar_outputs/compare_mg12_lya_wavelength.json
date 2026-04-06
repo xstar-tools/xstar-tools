@@ -1,0 +1,65 @@
+{
+  "summary": {
+    "ion": "Mg XII",
+    "mode": "wavelength",
+    "n_reference_rows": 2,
+    "n_atomic_rows": 2,
+    "n_comparisons": 2,
+    "n_matched_within_tolerance": 2,
+    "wavelength_column": "wavelength",
+    "reference_column": "emit_outward",
+    "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+    "temperature_K": 1000000.0,
+    "wavelength_tolerance_A": 0.02,
+    "notes": [
+      "Wavelength mode validates line identification and wavelength agreement.",
+      "Emissivity ratios compare a local xstar-atomic coefficient to an XSTAR model-output column; ratios are not expected to be unity without matching the full plasma model."
+    ]
+  },
+  "comparisons": [
+    {
+      "ion": "Mg XII",
+      "mode": "wavelength",
+      "match_status": "matched",
+      "reference_wavelength_A": 8.4192,
+      "atomic_wavelength_A": 8.419198036193848,
+      "delta_wavelength_A": -1.963806152360803e-06,
+      "abs_delta_wavelength_A": 1.963806152360803e-06,
+      "wavelength_tolerance_A": 0.02,
+      "reference_column": "emit_outward",
+      "reference_value": 0.00396328,
+      "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+      "atomic_value": null,
+      "atomic_over_reference": null,
+      "atomic_lower_level": 1,
+      "atomic_upper_level": 3,
+      "atomic_lower_label": "1s1.2S_1/2",
+      "atomic_upper_label": "1s0.2p1.2P_3/2",
+      "atomic_eval_method": "type63_anl1_erc_nf_ne_ni_delta_l_1",
+      "xstar_lower_level": "1s1.2S_1/2",
+      "xstar_upper_level": "1s0.2p1.2P_3/2"
+    },
+    {
+      "ion": "Mg XII",
+      "mode": "wavelength",
+      "match_status": "matched",
+      "reference_wavelength_A": 8.42461,
+      "atomic_wavelength_A": 8.42460823059082,
+      "delta_wavelength_A": -1.7694091791753408e-06,
+      "abs_delta_wavelength_A": 1.7694091791753408e-06,
+      "wavelength_tolerance_A": 0.02,
+      "reference_column": "emit_outward",
+      "reference_value": 0.00292318,
+      "atomic_column": "line_energy_emissivity_coeff_erg_cm3_s",
+      "atomic_value": null,
+      "atomic_over_reference": null,
+      "atomic_lower_level": 1,
+      "atomic_upper_level": 2,
+      "atomic_lower_label": "1s1.2S_1/2",
+      "atomic_upper_label": "1s0.2p1.2P_1/2",
+      "atomic_eval_method": "type63_anl1_erc_nf_ne_ni_delta_l_1",
+      "xstar_lower_level": "1s1.2S_1/2",
+      "xstar_upper_level": "1s0.2p1.2P_1/2"
+    }
+  ]
+}

@@ -173,10 +173,22 @@ column used in the XSTAR model.
 ## 3. Mg XI / Mg XII, Si XIII / Si XIV, and Fe XXV / Fe XXVI Stage-5 runs
 
 These runs extend the Stage-5 wavelength-validation workflow from O and Ne to
-Mg, Si, and Fe.  Run each model in a clean directory because XSTAR writes fixed
-output names such as `xout_lines1.fits`.  The `rlogxi` values below are intended
-as first-pass validation points.  If a selected line list is weak or empty, run a
-small `rlogxi` scan around the suggested value.
+Mg, Si, and Fe.  The package now includes the validated `xout_lines1.fits`
+artifacts, selected-line CSV files, and wavelength-comparison CSV/JSON products
+for these Mg/Si/Fe targets.  Run each model in a clean directory because XSTAR
+writes fixed output names such as `xout_lines1.fits`.  The `rlogxi` values below
+are the validation points used for the archived products.
+
+Validation summary for the archived Mg/Si/Fe comparison products:
+
+```text
+Mg XI   5/5 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~4.6e-6 Angstrom
+Mg XII  2/2 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~2.0e-6 Angstrom
+Si XIII 5/5 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~3.6e-6 Angstrom
+Si XIV  2/2 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~3.9e-6 Angstrom
+Fe XXV  4/4 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~4.2e-6 Angstrom
+Fe XXVI 2/2 selected lines matched within 0.02 Angstrom; max |Delta lambda| ~3.6e-6 Angstrom
+```
 
 ### 3.1 Mg XI focused run
 
