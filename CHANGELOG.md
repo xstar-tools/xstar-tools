@@ -1,10 +1,19 @@
 # CHANGELOG
 
-## v0.2.41 - 2026-04-06
+## v0.2.42 - 2026-04-06
+
+Stage-5 heavy-ion validation planning update.
+
+- Added reproducible direct-XSTAR run recipes to `xstar_test_run/README.md` for Mg XI, Mg XII, Si XIII, Si XIV, Fe XXV, and Fe XXVI.
+- Added suggested first-pass wavelength windows and `xstar_atomic.xstar_outputs` FITS-to-CSV commands for Mg/Si/Fe validation products.
+- Added wavelength-comparison command templates for the corresponding `examples/08_compare_xstar_outputs.py` runs.
+- Updated README and XSTAR comparison documentation to mark Mg/Si/Fe as the pending Stage-5 completion targets after the validated O/Ne workflow.
+
+## v0.2.41 - 2026-04-05
 
 - Fixed Sphinx ``user_guide.rst`` heading underline length for ``Downloading and configuring atdb.fits`` so ``make html`` builds without the title-underline warning.
 
-## v0.2.40 - 2026-04-06
+## v0.2.40 - 2026-04-05
 
 Fixed:
 

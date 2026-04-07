@@ -26,6 +26,7 @@ commands.  The test runs are:
 * O VIII / Ne IX high-ionization validation.
 * Ne IX focused Stage-5 validation.
 * Ne X focused Stage-5 validation.
+* Pending Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI Stage-5 run recipes.
 * O VII triplet / recombination-cascade validation.
 * O VII triplet validation at higher density.
 
@@ -108,6 +109,26 @@ Reproduce the Ne X comparison::
      --out-csv compare_ne10_lya_wavelength.csv \
      --out-json compare_ne10_lya_wavelength.json \
      --print-summary
+
+
+Pending Mg, Si, and Fe Stage-5 runs
+--------------------------------------
+
+The next Stage-5 validation targets are documented as XSTAR run recipes in
+``xstar_test_run/README.md``.  The recommended first-pass line windows are::
+
+   Mg XI   He-like triplet region: 9.0--9.4 Angstrom
+   Mg XII  Ly-alpha region:        8.35--8.50 Angstrom
+   Si XIII He-like triplet region: 6.55--6.80 Angstrom
+   Si XIV  Ly-alpha region:        6.10--6.25 Angstrom
+   Fe XXV  K-alpha region:         1.83--1.88 Angstrom
+   Fe XXVI Ly-alpha region:        1.76--1.80 Angstrom
+
+For each ion, run the documented XSTAR command, save ``xout_lines1.fits``,
+convert the selected line region to CSV with ``python -m xstar_atomic.xstar_outputs``,
+and compare with ``examples/08_compare_xstar_outputs.py`` in wavelength mode.
+The Mg/Si/Fe comparisons remain pending until those XSTAR outputs and
+CSV/JSON comparison files are added to the validation archive.
 
 Reproduction workflow
 ---------------------

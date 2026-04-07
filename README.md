@@ -70,11 +70,12 @@ for validation runs. Current documented runs include:
 
 - O VIII / Ne IX high-ionization line validation.
 - O VII triplet and high-density O VII triplet validation.
-- New Ne IX and Ne X focused runs for Stage-5 wavelength comparisons.
+- Ne IX and Ne X focused runs for Stage-5 wavelength comparisons.
+- New Mg XI/Mg XII, Si XIII/Si XIV, and Fe XXV/Fe XXVI run recipes for completing Stage-5 heavy-ion validation.
 
-The Ne-focused workflow converts `xout_lines1.fits` to CSV with
-`python -m xstar_atomic.xstar_outputs`, then compares wavelengths with
-`examples/08_compare_xstar_outputs.py`. The first target products are:
+The Ne-focused and Mg/Si/Fe-focused workflows convert `xout_lines1.fits` to CSV with
+`python -m xstar_atomic.xstar_outputs`, then compare wavelengths with
+`examples/08_compare_xstar_outputs.py`. The first validated Ne target products are:
 
 ```text
 xstar_ne9_triplet_lines.csv
@@ -82,6 +83,20 @@ compare_ne9_triplet_wavelength.csv/json
 xstar_ne10_lya_lines.csv
 compare_ne10_lya_wavelength.csv/json
 ```
+
+
+Additional Stage-5 run recipes are documented for:
+
+```text
+Mg XI  He-like triplet region: 9.0--9.4 Angstrom
+Mg XII Ly-alpha region:        8.35--8.50 Angstrom
+Si XIII He-like triplet region: 6.55--6.80 Angstrom
+Si XIV Ly-alpha region:        6.10--6.25 Angstrom
+Fe XXV K-alpha region:         1.83--1.88 Angstrom
+Fe XXVI Ly-alpha region:       1.76--1.80 Angstrom
+```
+
+These Mg/Si/Fe recipes are the next Stage-5 validation targets. After each XSTAR run, save `xout_lines1.fits`, convert the selected line region to CSV, run `examples/08_compare_xstar_outputs.py`, and add the comparison CSV/JSON files to the validation archive.
 
 As with the O VIII and O VII examples, these comparisons validate line
 identification and wavelength decoding. XSTAR `emit_inward`/`emit_outward`

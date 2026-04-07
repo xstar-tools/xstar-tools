@@ -45,9 +45,10 @@ xstar_test_run/
 ```
 
 The README in `xstar_test_run/` records the exact direct-XSTAR commands used
-for the O VIII/Ne IX high-ionization run, the O VII triplet run, and the
-high-density O VII triplet run. It also records the `xstar_atomic.xstar_outputs`
-commands used to convert each `xout_lines1.fits` file into CSV.
+for the O VIII/Ne IX high-ionization run, the O VII triplet runs, the Ne IX/Ne X
+focused runs, and the Mg/Si/Fe Stage-5 run recipes. It also records the
+`xstar_atomic.xstar_outputs` commands used to convert each `xout_lines1.fits`
+file into CSV.
 
 For example, using the included O VII triplet CSV:
 
@@ -227,6 +228,32 @@ PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
   --out-json compare_ne10_lya_wavelength.json \
   --print-summary
 ```
+
+
+## Pending Mg, Si, and Fe Stage-5 validation runs
+
+The next Stage-5 validation targets are documented as reproducible XSTAR run
+recipes in `xstar_test_run/README.md`:
+
+```text
+Mg XI  He-like triplet region: 9.0--9.4 Angstrom
+Mg XII Ly-alpha region:        8.35--8.50 Angstrom
+Si XIII He-like triplet region: 6.55--6.80 Angstrom
+Si XIV Ly-alpha region:        6.10--6.25 Angstrom
+Fe XXV K-alpha region:         1.83--1.88 Angstrom
+Fe XXVI Ly-alpha region:       1.76--1.80 Angstrom
+```
+
+For each ion, the intended workflow is:
+
+1. Run the documented direct-XSTAR command in a clean `xstar_runs/<model>/` directory.
+2. Save `xout_lines1.fits` under `xstar_test_run/<model>/`.
+3. Convert the selected line region to CSV with `python -m xstar_atomic.xstar_outputs`.
+4. Compare with `examples/08_compare_xstar_outputs.py` in `--mode wavelength`.
+5. Save the comparison CSV/JSON outputs under `docs/validation/xstar_outputs/` and `examples/reference_outputs/`.
+
+These Mg/Si/Fe comparisons are intentionally marked pending until the actual
+XSTAR outputs and wavelength-comparison products are generated and added.
 
 ## How to reproduce from XSTAR outputs
 
