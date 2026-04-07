@@ -75,12 +75,17 @@ CASCADE_TARGET_PRESETS: Dict[str, str] = {
     # target weight to the forbidden, intercombination, and resonance upper
     # levels and preserves the good G=(f+i)/r behavior found in v0.2.35.
     "o7-triplet-equal": "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0",
-    # Experimental O VII triplet prototype preset. It downweights the
-    # forbidden target while preserving the resonance target.  This is intended
-    # to reduce R=f/i without driving G=(f+i)/r away from the XSTAR reference.
+    # Experimental O VII triplet prototype presets. They downweight the
+    # forbidden target while preserving the resonance target.  These are
+    # intended for Stage-6 tuning scans that try to reduce R=f/i without
+    # driving G=(f+i)/r away from the XSTAR reference.
+    "o7-triplet-fdown090-rkeep": "2:0.90,3:1.0,4:1.0,5:1.0,7:1.0",
+    "o7-triplet-fdown085-rkeep": "2:0.85,3:1.0,4:1.0,5:1.0,7:1.0",
+    "o7-triplet-fdown075-rkeep": "2:0.75,3:1.0,4:1.0,5:1.0,7:1.0",
     "o7-triplet-fdown-rkeep": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
-    # Backward-compatible name for the current forbidden-downweighted,
-    # resonance-preserved experimental preset.
+    # Backward-compatible name for the original forbidden-downweighted,
+    # resonance-preserved experiment. The equal map remains the recommended
+    # baseline; this alias is kept only for reproducibility.
     "o7-triplet-xstar-tuned": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
 }
 

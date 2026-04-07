@@ -50,6 +50,17 @@ def test_cascade_target_preset_resolution():
     assert weights[7] == 1.0
     assert resolve_cascade_target_levels("2:1.0", "o7-triplet-fdown-rkeep") == "2:1.0"
 
+
+    text090 = resolve_cascade_target_levels("", "o7-triplet-fdown090-rkeep")
+    text085 = resolve_cascade_target_levels("", "o7-triplet-fdown085-rkeep")
+    text075 = resolve_cascade_target_levels("", "o7-triplet-fdown075-rkeep")
+    assert parse_level_weight_map(text090)[2] == 0.90
+    assert parse_level_weight_map(text085)[2] == 0.85
+    assert parse_level_weight_map(text075)[2] == 0.75
+    assert parse_level_weight_map(text090)[7] == 1.0
+    assert parse_level_weight_map(text085)[7] == 1.0
+    assert parse_level_weight_map(text075)[7] == 1.0
+
     equal_text = resolve_cascade_target_levels("", "o7-triplet-equal")
     assert equal_text == "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0"
     # Backward-compatible alias now points to the forbidden-downweighted,

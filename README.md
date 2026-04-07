@@ -696,3 +696,40 @@ This baseline preserved the good `G=(f+i)/r` agreement with the XSTAR O VII refe
 ```
 
 expands to `2:0.5,3:1.0,4:1.0,5:1.0,7:1.0`; it downweights the forbidden target while preserving the resonance target. In the v0.2.38 test it reduced `R=f/i` from about 5.75 to about 5.20, but also reduced `G` from about 10.56 to about 7.69, so it remains experimental. Manual `--cascade-target-levels` overrides any preset.
+
+### Stage-6 O VII cascade tuning scan
+
+The equal-target `selected-cascade-yield` map remains the recommended Stage-6
+baseline because it preserves the good XSTAR agreement in `G=(f+i)/r`:
+
+```bash
+--source-mode selected-cascade-yield \
+--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
+```
+
+For controlled experiments, the package now also includes forbidden-downweighted
+but resonance-preserved presets:
+
+```text
+o7-triplet-fdown090-rkeep -> 2:0.90,3:1.0,4:1.0,5:1.0,7:1.0
+o7-triplet-fdown085-rkeep -> 2:0.85,3:1.0,4:1.0,5:1.0,7:1.0
+o7-triplet-fdown075-rkeep -> 2:0.75,3:1.0,4:1.0,5:1.0,7:1.0
+o7-triplet-fdown-rkeep    -> 2:0.50,3:1.0,4:1.0,5:1.0,7:1.0
+```
+
+Use the tuning scan helper to run the equal baseline plus the experimental
+presets and summarize `R=f/i` and `G=(f+i)/r` relative to the saved XSTAR O VII
+reference:
+
+```bash
+PYTHONPATH=src python examples/15_o7_cascade_tuning_scan.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_cascade_tuning_scan \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+The scan writes `o7_cascade_tuning_scan.csv` and a JSON summary. The aim is to
+reduce `R` while keeping `G` close to the equal-target/XSTAR value; the equal
+map should remain the baseline unless an experimental preset improves both.
+

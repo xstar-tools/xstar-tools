@@ -39,6 +39,8 @@ import csv
 import json
 import subprocess
 import sys
+
+from xstar_atomic.recombination import CASCADE_TARGET_PRESETS
 from pathlib import Path
 from typing import Optional
 
@@ -117,7 +119,7 @@ def main() -> None:
     parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
     parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
     parser.add_argument("--cascade-target-levels", default=None, help="Target levels or level:weight pairs for selected-cascade-yield allocation. If omitted and no preset is selected, the recommended equal O VII triplet map is used.")
-    parser.add_argument("--cascade-target-preset", default="none", choices=["", "none", "o7-triplet-equal", "o7-triplet-fdown-rkeep", "o7-triplet-xstar-tuned"], help="Named cascade target weighting preset for reproducible Stage-6 experiments; manual --cascade-target-levels overrides this")
+    parser.add_argument("--cascade-target-preset", default="none", choices=["", "none"] + sorted(CASCADE_TARGET_PRESETS), help="Named cascade target weighting preset for reproducible Stage-6 experiments; manual --cascade-target-levels overrides this")
     parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
