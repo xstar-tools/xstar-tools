@@ -192,16 +192,16 @@ cascade probability of feeding selected target levels.
 Stage-6 O VII triplet target maps
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The recommended Stage-6 baseline is the equal-target map ``--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0``, because it preserved the good ``G=(f+i)/r`` agreement with the XSTAR O VII reference. The experimental preset ``--cascade-target-preset o7-triplet-fdown-rkeep`` expands to ``2:0.5,3:1.0,4:1.0,5:1.0,7:1.0``. It reduced ``R=f/i`` from about 5.75 to about 5.20 in the v0.2.38 test, but also reduced ``G`` from about 10.56 to about 7.69, so it remains experimental. Manual ``--cascade-target-levels`` overrides any preset.
+The recommended Stage-6 baseline is the equal-target map ``--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0``, because it preserved the good ``G=(f+i)/r`` agreement with the XSTAR O VII reference. For experiments that try to reduce ``R=f/i`` without strongly changing ``G``, use a forbidden-to-intercombination shift preset such as ``--cascade-target-preset o7-triplet-f2i025-rkeep``. It expands to ``2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0`` and preserves the resonance target plus the approximate total triplet-target weight. Manual ``--cascade-target-levels`` overrides any preset.
 
 .. code-block:: bash
 
    PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
      ../xstar/data/atdb.fits \
      --source-mode selected-cascade-yield \
-     --cascade-target-preset o7-triplet-fdown-rkeep \
+     --cascade-target-preset o7-triplet-f2i025-rkeep \
      --cascade-weight-floor 0.02 \
-     --out-dir o7_recomb_cascade_workflow_fdown_rkeep \
+     --out-dir o7_recomb_cascade_workflow_f2i025_rkeep \
      --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
      --print-summary
 
@@ -214,13 +214,18 @@ baseline because it preserves the good XSTAR agreement in ``G=(f+i)/r``::
   --source-mode selected-cascade-yield \
   --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
 
-For controlled experiments, the package now also includes forbidden-downweighted
-but resonance-preserved presets::
+For controlled experiments, the preferred presets now shift target weight from
+forbidden into intercombination levels while preserving the resonance target and
+the total triplet-target weight. This is intended to reduce ``R=f/i`` without
+strongly moving ``G=(f+i)/r`` away from the equal-target baseline::
 
-  o7-triplet-fdown090-rkeep -> 2:0.90,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown085-rkeep -> 2:0.85,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown075-rkeep -> 2:0.75,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown-rkeep    -> 2:0.50,3:1.0,4:1.0,5:1.0,7:1.0
+  o7-triplet-f2i010-rkeep -> 2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0
+  o7-triplet-f2i015-rkeep -> 2:0.85,3:1.05,4:1.05,5:1.05,7:1.0
+  o7-triplet-f2i025-rkeep -> 2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0
+  o7-triplet-f2i050-rkeep -> 2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0
+
+The older simple ``fdown`` presets remain available for reproducibility, but
+they reduced ``G`` too much in the first tuning scan.
 
 Use the tuning scan helper to run the equal baseline plus the experimental
 presets and summarize ``R=f/i`` and ``G=(f+i)/r`` relative to the saved XSTAR O

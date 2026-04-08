@@ -2,8 +2,10 @@
 """Scan prototype O VII recombination/cascade target maps.
 
 This helper runs ``examples/13_o7_recombination_cascade_workflow.py`` for the
-recommended equal-target Stage-6 baseline and for several forbidden-downweighted
-but resonance-preserved target maps.  It then collects the resulting O VII
+recommended equal-target Stage-6 baseline and for several target maps that shift
+source weight from the forbidden upper level into the intercombination upper
+levels while preserving the resonance target and approximately preserving the
+total triplet/resonance balance.  It then collects the resulting O VII
 triplet diagnostics and compares them with the XSTAR reference ratios when the
 ``xstar_test_run/xstar_o7_triplet_lines.csv`` file is available.
 
@@ -26,6 +28,13 @@ from xstar_atomic.recombination import CASCADE_TARGET_PRESETS
 
 DEFAULT_CASES = [
     ("equal", "o7-triplet-equal"),
+    ("f2i010_rkeep", "o7-triplet-f2i010-rkeep"),
+    ("f2i015_rkeep", "o7-triplet-f2i015-rkeep"),
+    ("f2i025_rkeep", "o7-triplet-f2i025-rkeep"),
+    ("f2i050_rkeep", "o7-triplet-f2i050-rkeep"),
+    # Keep the old simple fdown grid as comparison cases; these usually reduce
+    # R but also move G away from XSTAR because the total triplet/resonance
+    # balance is not preserved.
     ("fdown090_rkeep", "o7-triplet-fdown090-rkeep"),
     ("fdown085_rkeep", "o7-triplet-fdown085-rkeep"),
     ("fdown075_rkeep", "o7-triplet-fdown075-rkeep"),

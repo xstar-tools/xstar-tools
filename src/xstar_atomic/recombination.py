@@ -83,10 +83,19 @@ CASCADE_TARGET_PRESETS: Dict[str, str] = {
     "o7-triplet-fdown085-rkeep": "2:0.85,3:1.0,4:1.0,5:1.0,7:1.0",
     "o7-triplet-fdown075-rkeep": "2:0.75,3:1.0,4:1.0,5:1.0,7:1.0",
     "o7-triplet-fdown-rkeep": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
-    # Backward-compatible name for the original forbidden-downweighted,
-    # resonance-preserved experiment. The equal map remains the recommended
-    # baseline; this alias is kept only for reproducibility.
-    "o7-triplet-xstar-tuned": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
+    # Stage-6 shift presets: preserve the resonance target and keep the total
+    # triplet-target weight close to the equal-target baseline by moving weight
+    # from the forbidden upper level (2) into the intercombination upper levels
+    # (3, 4, 5).  These are preferred over simple fdown presets when the goal is
+    # to reduce R=f/i without strongly changing G=(f+i)/r.
+    "o7-triplet-f2i010-rkeep": "2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0",
+    "o7-triplet-f2i015-rkeep": "2:0.85,3:1.05,4:1.05,5:1.05,7:1.0",
+    "o7-triplet-f2i025-rkeep": "2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0",
+    "o7-triplet-f2i050-rkeep": "2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0",
+    # Backward-compatible name for the current preferred experimental preset:
+    # it shifts source weight from forbidden to intercombination targets while
+    # preserving the resonance target and the total triplet-target weight.
+    "o7-triplet-xstar-tuned": "2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0",
 }
 
 

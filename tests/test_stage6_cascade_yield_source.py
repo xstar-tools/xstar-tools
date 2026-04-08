@@ -63,6 +63,21 @@ def test_cascade_target_preset_resolution():
 
     equal_text = resolve_cascade_target_levels("", "o7-triplet-equal")
     assert equal_text == "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0"
-    # Backward-compatible alias now points to the forbidden-downweighted,
-    # resonance-preserved experiment, not the old resonance-downweighted map.
-    assert resolve_cascade_target_levels("", "o7-triplet-xstar-tuned") == text
+
+    # New Stage-6 shift presets preserve the resonance target and approximately
+    # preserve total target weight by moving source weight from forbidden to
+    # intercombination levels.
+    f2i010 = parse_level_weight_map(resolve_cascade_target_levels("", "o7-triplet-f2i010-rkeep"))
+    f2i025 = parse_level_weight_map(resolve_cascade_target_levels("", "o7-triplet-f2i025-rkeep"))
+    assert f2i010[2] == 0.90
+    assert abs(f2i010[3] - 1.0333333333) < 1e-10
+    assert f2i010[7] == 1.0
+    assert abs(sum(f2i010.values()) - 5.0) < 1e-8
+    assert f2i025[2] == 0.75
+    assert abs(f2i025[3] - 1.0833333333) < 1e-10
+    assert f2i025[7] == 1.0
+    assert abs(sum(f2i025.values()) - 5.0) < 1e-8
+
+    # Backward-compatible alias now points to the preferred forbidden-to-
+    # intercombination shift experiment, not the old resonance-downweighted map.
+    assert resolve_cascade_target_levels("", "o7-triplet-xstar-tuned") == resolve_cascade_target_levels("", "o7-triplet-f2i025-rkeep")

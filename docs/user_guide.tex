@@ -795,10 +795,10 @@ The recommended Stage-6 baseline is the equal-target map:
 This preserves the good \(G=(f+i)/r\) agreement with the XSTAR O VII reference. The experimental preset
 
 \begin{lstlisting}[style=ctterminal]
---cascade-target-preset o7-triplet-fdown-rkeep
+--cascade-target-preset o7-triplet-f2i025-rkeep
 \end{lstlisting}
 
-expands to \texttt{2:0.5,3:1.0,4:1.0,5:1.0,7:1.0}. It downweights the forbidden target while preserving the resonance target. In the v0.2.38 test, it reduced \(R=f/i\) from about 5.75 to about 5.20, but it also reduced \(G\) from about 10.56 to about 7.69, so it remains experimental. Manual \texttt{--cascade-target-levels} overrides any preset.
+expands to \texttt{2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0}. It shifts weight from the forbidden target into the intercombination targets while preserving the resonance target and approximately preserving the total triplet-target weight. Manual \texttt{--cascade-target-levels} overrides any preset.
 
 \section{Data download and path configuration}
 
@@ -866,14 +866,16 @@ The equal-target \texttt{selected-cascade-yield} map remains the recommended Sta
 --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
 \end{lstlisting}
 
-For controlled experiments, the package includes forbidden-downweighted but resonance-preserved presets:
+For controlled experiments, the preferred presets shift target weight from the forbidden upper level into the intercombination upper levels while preserving the resonance target and the total triplet-target weight. This is intended to reduce \(R=f/i\) without strongly moving \(G=(f+i)/r\) away from the equal-target baseline:
 
 \begin{lstlisting}[style=ctterminal]
-o7-triplet-fdown090-rkeep -> 2:0.90,3:1.0,4:1.0,5:1.0,7:1.0
-o7-triplet-fdown085-rkeep -> 2:0.85,3:1.0,4:1.0,5:1.0,7:1.0
-o7-triplet-fdown075-rkeep -> 2:0.75,3:1.0,4:1.0,5:1.0,7:1.0
-o7-triplet-fdown-rkeep    -> 2:0.50,3:1.0,4:1.0,5:1.0,7:1.0
+o7-triplet-f2i010-rkeep -> 2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0
+o7-triplet-f2i015-rkeep -> 2:0.85,3:1.05,4:1.05,5:1.05,7:1.0
+o7-triplet-f2i025-rkeep -> 2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0
+o7-triplet-f2i050-rkeep -> 2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0
 \end{lstlisting}
+
+The older simple \texttt{fdown} presets remain available for reproducibility, but they reduced \(G\) too much in the first tuning scan.
 
 Use the tuning scan helper to run the equal baseline plus the experimental presets and summarize \(R=f/i\) and \(G=(f+i)/r\) relative to the saved XSTAR O VII reference:
 

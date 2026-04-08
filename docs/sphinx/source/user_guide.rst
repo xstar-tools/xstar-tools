@@ -247,13 +247,18 @@ baseline because it preserves the good XSTAR agreement in ``G=(f+i)/r``::
   --source-mode selected-cascade-yield \
   --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
 
-For controlled experiments, the package now also includes forbidden-downweighted
-but resonance-preserved presets::
+For controlled experiments, the preferred presets now shift target weight from
+forbidden into intercombination levels while preserving the resonance target and
+the total triplet-target weight. This is intended to reduce ``R=f/i`` without
+strongly moving ``G=(f+i)/r`` away from the equal-target baseline::
 
-  o7-triplet-fdown090-rkeep -> 2:0.90,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown085-rkeep -> 2:0.85,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown075-rkeep -> 2:0.75,3:1.0,4:1.0,5:1.0,7:1.0
-  o7-triplet-fdown-rkeep    -> 2:0.50,3:1.0,4:1.0,5:1.0,7:1.0
+  o7-triplet-f2i010-rkeep -> 2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0
+  o7-triplet-f2i015-rkeep -> 2:0.85,3:1.05,4:1.05,5:1.05,7:1.0
+  o7-triplet-f2i025-rkeep -> 2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0
+  o7-triplet-f2i050-rkeep -> 2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0
+
+The older simple ``fdown`` presets remain available for reproducibility, but
+they reduced ``G`` too much in the first tuning scan.
 
 Use the tuning scan helper to run the equal baseline plus the experimental
 presets and summarize ``R=f/i`` and ``G=(f+i)/r`` relative to the saved XSTAR O
