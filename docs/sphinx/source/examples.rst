@@ -241,3 +241,25 @@ The scan writes ``o7_cascade_tuning_scan.csv`` and a JSON summary. The aim is to
 reduce ``R`` while keeping ``G`` close to the equal-target/XSTAR value; the equal
 map should remain the baseline unless an experimental preset improves both.
 
+
+
+O VII metastable/intercombination coupling diagnostics
+------------------------------------------------------
+
+The Stage-6 O VII triplet workflow can be followed by an explicit inspection of
+metastable/intercombination coupling rates.  This diagnostic focuses on level
+2 to levels 3, 4, and 5 and compares collisional transfer rates with decoded
+radiative rates as a function of electron density.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
+     ../xstar/data/atdb.fits \
+     --temperature 1e6 \
+     --electron-densities 1 1e4 1e8 1e10 1e12 \
+     --index-cache --index-cache-format npz \
+     --out-dir o7_metastable_coupling \
+     --print-summary
+
+The output files are ``o7_metastable_coupling_rates.csv`` and
+``o7_metastable_coupling_summary.json``.

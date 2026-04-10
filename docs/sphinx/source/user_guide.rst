@@ -274,3 +274,27 @@ The scan writes ``o7_cascade_tuning_scan.csv`` and a JSON summary. The aim is to
 reduce ``R`` while keeping ``G`` close to the equal-target/XSTAR value; the equal
 map should remain the baseline unless an experimental preset improves both.
 
+
+
+Stage-6 O VII metastable/intercombination coupling diagnostic
+--------------------------------------------------------------
+
+The O VII triplet ratio ``R=f/i`` is sensitive to transfer from the
+forbidden-line upper level into the intercombination manifold.  Use
+``examples/16_o7_metastable_coupling_diagnostics.py`` to inspect level 2 ->
+levels 3, 4, and 5 and compare ``C_2j = n_e q_2j`` against decoded radiative
+rates.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
+     ../xstar/data/atdb.fits \
+     --temperature 1e6 \
+     --electron-densities 1 1e4 1e8 1e10 1e12 \
+     --index-cache --index-cache-format npz \
+     --out-dir o7_metastable_coupling \
+     --print-summary
+
+The CSV output reports ``q_2_to_j_cm3_s``, ``C_2_to_j_s^-1``, decoded
+radiative A-values, and density estimates where collisional transfer becomes
+comparable to radiative decay.

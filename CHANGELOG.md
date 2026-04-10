@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.46 - 2026-04-09
+
+Stage-6 diagnostic update.
+
+Added:
+
+- `examples/16_o7_metastable_coupling_diagnostics.py`, a focused O VII diagnostic for level 2 -> levels 3, 4, and 5.
+- The diagnostic compares collisional transfer rates `C_2_to_j = n_e q_2j` with decoded radiative rates as a function of electron density.
+- Outputs `o7_metastable_coupling_rates.csv` and `o7_metastable_coupling_summary.json`.
+
+Notes:
+
+- The equal-target `selected-cascade-yield` map remains the documented Stage-6 baseline.
+- The new diagnostic is intended to determine whether the remaining high O VII `R=f/i` ratio is caused by under-coupled metastable/intercombination transfer or by source/cascade feeding.
+
 ## v0.2.45 - 2026-04-08
 
 Stage-6 O VII cascade tuning update.
