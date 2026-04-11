@@ -41,7 +41,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from xstar_atomic.hierarchy import ATDB, SYMBOL_TO_Z
 from xstar_atomic.lines import extract_levels, extract_lines, write_csv
-from xstar_atomic.collisions import extract_collisions
+from xstar_atomic.collisions import extract_collisions, COLLISION_DATA_TYPES
 
 DEFAULT_SOURCE_LEVEL = 2
 DEFAULT_TARGET_LEVELS = [3, 4, 5]
@@ -156,6 +156,51 @@ def summarize_collision_pair(eval_rows: List[dict], source_level: int, target_le
     }
 
 
+
+def collision_inventory_for_levels(summary_rows: List[dict], eval_rows: List[dict], levels_of_interest: List[int]) -> List[dict]:
+    """Inventory decoded collision records touching any selected level."""
+    by_record_eval = {}
+    for row in eval_rows:
+        by_record_eval.setdefault(row.get("record"), []).append(row)
+    wanted = set(int(v) for v in levels_of_interest)
+    out = []
+    for row in summary_rows:
+        lo = maybe_int(row.get("lower_level"))
+        up = maybe_int(row.get("upper_level"))
+        if lo not in wanted and up not in wanted:
+            continue
+        evals = by_record_eval.get(row.get("record"), [])
+        # One inventory row per evaluated temperature; if no evaluated row exists,
+        # keep a structural row so missing decoders are visible.
+        if not evals:
+            evals = [{}]
+        for erow in evals:
+            out.append({
+                "record": row.get("record"),
+                "data_type": row.get("data_type"),
+                "rate_type": row.get("rate_type"),
+                "source_format": row.get("source_format"),
+                "lower_level": row.get("lower_level"),
+                "upper_level": row.get("upper_level"),
+                "lower_label": row.get("lower_label"),
+                "upper_label": row.get("upper_label"),
+                "wavelength_from_levels_A": row.get("wavelength_from_levels_A"),
+                "delta_e_level_eV": row.get("delta_e_level_eV"),
+                "temperature_K": erow.get("temperature_K"),
+                "electron_density_for_lmixing_cm^-3": erow.get("electron_density_for_lmixing_cm^-3"),
+                "upsilon": erow.get("upsilon"),
+                "q_excitation_cm3_s": erow.get("q_excitation_cm3_s"),
+                "q_deexcitation_cm3_s": erow.get("q_deexcitation_cm3_s"),
+                "eval_method": erow.get("eval_method", "not_evaluated"),
+                "eval_diagnostic": erow.get("eval_diagnostic", ""),
+                "notes": row.get("notes"),
+                "raw_ints": row.get("raw_ints"),
+                "raw_reals": row.get("raw_reals"),
+            })
+    out.sort(key=lambda r: (r.get("lower_level") or 9999, r.get("upper_level") or 9999, r.get("data_type") or 9999, r.get("record") or 0))
+    return out
+
+
 def parse_level_list(text: str) -> List[int]:
     return [int(x.strip()) for x in text.split(",") if x.strip()]
 
@@ -204,8 +249,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     rows: List[dict] = []
     by_density: Dict[str, List[dict]] = {}
-    for ne in args.electron_densities:
-        _summary_rows, _grid_rows, eval_rows = extract_collisions(
+    first_summary_rows: List[dict] = []
+    first_eval_rows: List[dict] = []
+    for ine, ne in enumerate(args.electron_densities):
+        summary_rows, _grid_rows, eval_rows = extract_collisions(
             db,
             records,
             z,
@@ -213,6 +260,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             [args.temperature],
             electron_density_cm3=float(ne),
         )
+        if ine == 0:
+            first_summary_rows = summary_rows
+            first_eval_rows = eval_rows
         density_rows = []
         for target in targets:
             target_row = level_by_index.get(target, {})
@@ -249,6 +299,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     rate_csv = out_dir / "o7_metastable_coupling_rates.csv"
     write_csv(rate_csv, rows)
+
+    inventory_levels = [source] + targets
+    inventory_rows = collision_inventory_for_levels(first_summary_rows, first_eval_rows, inventory_levels)
+    inventory_csv = out_dir / "o7_metastable_coupling_collision_inventory.csv"
+    write_csv(inventory_csv, inventory_rows)
 
     line_summary = {
         "source_level": source,

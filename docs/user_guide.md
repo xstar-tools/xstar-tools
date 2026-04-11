@@ -893,3 +893,19 @@ PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
 ```
 
 The CSV output reports `q_2_to_j_cm3_s`, `C_2_to_j_s^-1`, decoded radiative A-values, and density estimates where collisional transfer becomes comparable to radiative decay.
+
+## He-like collisional coupling diagnostics
+
+Version 0.2.47 adds XSTAR He-like collision decoders for data types 67, 68, and 69. These are used to test whether O VII metastable/intercombination coupling is stored in ATDB outside the type-63 records. The diagnostic example writes both rate summaries and a full collision inventory for levels 2, 3, 4, and 5.
+
+```bash
+PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
+  ../xstar/data/atdb.fits \
+  --temperature 1e6 \
+  --electron-densities 1 1e4 1e8 1e10 1e12 \
+  --index-cache --index-cache-format npz \
+  --out-dir o7_metastable_coupling \
+  --print-summary
+```
+
+Outputs include `o7_metastable_coupling_rates.csv`, `o7_metastable_coupling_collision_inventory.csv`, and `o7_metastable_coupling_summary.json`.

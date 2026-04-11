@@ -14,6 +14,9 @@ Implemented data types
   ``log10(T/K)``.
 * Type 63: Bautista n,l algorithmic collision records, including both
   the shell-changing branch and the same-n l-mixing branch.
+* Type 67: He-like Keenan, McCann, & Kingston effective collision-strength fit.
+* Type 68: He-like Zhang & Sampson effective collision-strength fit.
+* Type 69: He-like Kato & Nakazaki effective collision-strength fit.
 * Type 98: CHIANTI-2016 Burgess--Tully effective collision strengths.
 
 Rate convention
@@ -65,7 +68,7 @@ RYD_EV = 13.605692
 KB_EV_PER_K = 8.61707e-5
 QCOEF = 8.626e-6  # cm^3 s^-1 K^1/2, XSTAR 8.626e-8 with t=T/1e4
 
-COLLISION_DATA_TYPES = {51, 56, 63, 98}
+COLLISION_DATA_TYPES = {51, 56, 63, 67, 68, 69, 98}
 
 
 def choose_z(element: Optional[str]) -> Optional[int]:
@@ -293,6 +296,95 @@ def upsil_bt_general(k: int, eij_ryd: float, c: float, xgrid: Sequence[float], y
     else:
         ups = None
     return None if ups is None else float(ups)
+
+
+# ----------------------------------------------------------------------
+# He-like collision-strength fits from XSTAR calt67/68/69
+# ----------------------------------------------------------------------
+
+def calt67_upsilon(reals: Sequence[float], temperature_k: float) -> Optional[float]:
+    """Evaluate XSTAR ``calt67.f90`` for He-like type-67 records.
+
+    XSTAR uses the Keenan, McCann, & Kingston form
+    ``gamma = a + b log10(T) + c log10(T)^2`` with ``T`` in Kelvin.
+    The returned ``gamma`` is the effective collision strength ``Upsilon``.
+    """
+    if temperature_k <= 0 or len(reals) < 3:
+        return None
+    try:
+        tp = math.log10(float(temperature_k))
+        gamma = float(reals[0]) + float(reals[1]) * tp + float(reals[2]) * tp * tp
+        return max(0.0, float(gamma))
+    except Exception:
+        return None
+
+
+def calt68_upsilon(reals: Sequence[float], ints: Sequence[int], temperature_k: float) -> Optional[float]:
+    """Evaluate XSTAR ``calt68.f90`` for He-like type-68 records.
+
+    XSTAR uses ``z = idat[3]`` in Fortran 1-based indexing, i.e. Python
+    ``ints[2]``, and ``tt = log10(T / z^3)``.  The returned value is the
+    effective collision strength ``Upsilon``.
+    """
+    if temperature_k <= 0 or len(reals) < 3 or len(ints) < 3:
+        return None
+    try:
+        zval = float(ints[2])
+        if zval <= 0:
+            return None
+        tt = math.log10(float(temperature_k) / (zval ** 3))
+        gamma = float(reals[0]) + float(reals[1]) * tt + float(reals[2]) * tt * tt
+        return max(0.0, float(gamma))
+    except Exception:
+        return None
+
+
+def calt69_upsilon(reals: Sequence[float], temperature_k: float) -> Optional[float]:
+    """Evaluate XSTAR ``calt69.f90`` for He-like type-69 records.
+
+    This translates the Kato & Nakazaki He-like collision-strength fit used by
+    XSTAR.  ``reals[0]`` is the transition energy in eV in XSTAR's ATDB record,
+    and the remaining coefficients follow the two formula branches in
+    ``calt69.f90`` for ``m == 6`` and ``m > 6``.
+    """
+    if temperature_k <= 0 or len(reals) < 6:
+        return None
+    try:
+        eboltz = 1.160443e4
+        dele = float(reals[0])
+        if dele <= 0:
+            return None
+        y = dele / float(temperature_k) * eboltz
+        if y < 1.0e-20:
+            return None
+        if y > 1.0e20:
+            return 0.0
+        y = min(max(y, 5.0e-2), 77.0)
+        # XSTAR expint returns em1 = y*exp(y)*E1(y), not E1 itself.
+        em1 = expint_scaled_py(y)
+        a, b, c, d, e = [float(v) for v in reals[1:6]]
+        m = len(reals)
+        if m == 6:
+            gamma = y * ((a / y + c) + d * 0.5 * (1.0 - y))
+            gamma += em1 * (b - c * y + d * y * y * 0.5 + e / y)
+        else:
+            if len(reals) < 9:
+                return None
+            pcoef = float(reals[6])
+            qcoef = float(reals[7])
+            x1 = float(reals[8])
+            if x1 <= 0.0 or y <= 0.0:
+                return None
+            em1x = expint_scaled_py(y * x1)
+            gnr = a / y + c / x1 + d * 0.5 * (1.0 / (x1*x1) - y / x1) + e / y * math.log(x1)
+            gnr += em1x / y / x1 * (b - c*y + d*y*y*0.5 + e/y)
+            gnr = gnr * y * xstar_expo(y * (1.0 - x1))
+            gr = pcoef * (1.0 + 1.0/y) * (1.0 - xstar_expo(y * (1.0 - x1)) * (x1 + 1.0/y) / (1.0 + 1.0/y))
+            gr += qcoef * (1.0 - xstar_expo(y * (1.0 - x1)))
+            gamma = gnr + gr
+        return max(0.0, float(gamma))
+    except Exception:
+        return None
 
 
 def interp_type56_upsilon(logT_grid: Sequence[float], ups_grid: Sequence[float], temperature_k: float) -> Optional[float]:
@@ -945,6 +1037,8 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
     ups_grid = []
     grid_rows: List[dict] = []
     notes = ""
+    helike_fit_reals: List[float] = []
+    helike_fit_ints: List[int] = []
 
     if r.data_type == 51:
         source_format = "BT_CHIANTI_pre2016_type51"
@@ -975,6 +1069,25 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
         notes = "tabulated Upsilon(log10 T[K]); linear interpolation follows ucalc type 56"
         for j, (lt, u) in enumerate(zip(logT_grid, ups_grid), start=1):
             grid_rows.append({"grid_index": j, "grid_kind": "logT_Upsilon", "log10_T_K": lt, "temperature_K": 10.0**lt, "upsilon": u})
+    elif r.data_type in (67, 68, 69):
+        if r.data_type == 67:
+            source_format = "helike_keenan_mccann_kingston_type67"
+            notes = "He-like effective collision strength; XSTAR calt67 polynomial in log10(T)"
+        elif r.data_type == 68:
+            source_format = "helike_zhang_sampson_type68"
+            notes = "He-like effective collision strength; XSTAR calt68 polynomial in log10(T/Z^3)"
+        else:
+            source_format = "helike_kato_nakazaki_type69"
+            notes = "He-like effective collision strength; XSTAR calt69 Kato-Nakazaki fit"
+        lev_a = safe_int(it[0]) if len(it) > 0 else None
+        lev_b = safe_int(it[1]) if len(it) > 1 else None
+        lower, upper = physical_order(lev_a, lev_b, energies)
+        # Type 67 and 69 commonly store the transition energy as rdat[0].
+        # Type 68 computes the separation from the level table in ucalc.
+        eij_ev = safe_float(rd[0]) if len(rd) > 0 and r.data_type in (67, 69) else None
+        eij_ryd = (eij_ev / RYD_EV) if eij_ev is not None and eij_ev > 0 else None
+        helike_fit_reals = rd[:]
+        helike_fit_ints = it[:]
     elif r.data_type == 98:
         source_format = "BT_CHIANTI2016_type98"
         lev_a = safe_int(it[0]) if len(it) > 0 else None
@@ -1067,6 +1180,8 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
         "nchar": r.nchar,
         "raw_reals": preview_list(rd),
         "raw_ints": preview_list(it),
+        "helike_fit_reals": preview_list(helike_fit_reals),
+        "helike_fit_ints": preview_list(helike_fit_ints),
     }
 
     if bt_y:
@@ -1105,6 +1220,37 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
                 method = "BT_general_upsiln_type51"
         if ups is None:
             diagnostic = "missing_or_invalid_BT_inputs"
+    elif dt == 67:
+        # Keenan, McCann, & Kingston He-like fit; raw coefficients are stored
+        # in a JSON preview string for table portability.
+        try:
+            reals = json.loads(row.get("helike_fit_reals") or "[]")
+        except Exception:
+            reals = []
+        ups = calt67_upsilon(reals, temperature_k)
+        method = "helike_calt67_keenan_polynomial"
+        if ups is None:
+            diagnostic = "missing_or_invalid_calt67_inputs"
+    elif dt == 68:
+        try:
+            reals = json.loads(row.get("helike_fit_reals") or "[]")
+            ints = json.loads(row.get("helike_fit_ints") or "[]")
+        except Exception:
+            reals = []
+            ints = []
+        ups = calt68_upsilon(reals, ints, temperature_k)
+        method = "helike_calt68_zhang_sampson"
+        if ups is None:
+            diagnostic = "missing_or_invalid_calt68_inputs"
+    elif dt == 69:
+        try:
+            reals = json.loads(row.get("helike_fit_reals") or "[]")
+        except Exception:
+            reals = []
+        ups = calt69_upsilon(reals, temperature_k)
+        method = "helike_calt69_kato_nakazaki"
+        if ups is None:
+            diagnostic = "missing_or_invalid_calt69_inputs"
     elif dt == 98:
         bt_x = [g["bt_x"] for g in grid_rows_for_record if g.get("grid_kind") == "BT_scaled"]
         bt_y = [g["bt_y"] for g in grid_rows_for_record if g.get("grid_kind") == "BT_scaled"]

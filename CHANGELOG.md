@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.47 - 2026-04-10
+
+- Added He-like collisional-excitation decoders/evaluators for XSTAR data types 67, 68, and 69.
+  - Type 67 follows `calt67`: `gamma = a + b log10(T) + c log10(T)^2`.
+  - Type 68 follows `calt68`: `gamma = a + b log10(T/Z^3) + c log10(T/Z^3)^2`.
+  - Type 69 follows `calt69`: Kato--Nakazaki He-like collision-strength fit.
+- Extended `COLLISION_DATA_TYPES` to include 67, 68, and 69.
+- Updated the O VII metastable/intercombination coupling diagnostic to write `o7_metastable_coupling_collision_inventory.csv`, which inventories all decoded/evaluated collision records involving the selected source/target levels.
+- Added unit tests for the type-67/68/69 helper evaluators.
+
 ## v0.2.46 - 2026-04-09
 
 Stage-6 diagnostic update.
