@@ -83,6 +83,20 @@ CASCADE_TARGET_PRESETS: Dict[str, str] = {
     "o7-triplet-fdown085-rkeep": "2:0.85,3:1.0,4:1.0,5:1.0,7:1.0",
     "o7-triplet-fdown075-rkeep": "2:0.75,3:1.0,4:1.0,5:1.0,7:1.0",
     "o7-triplet-fdown-rkeep": "2:0.5,3:1.0,4:1.0,5:1.0,7:1.0",
+    # Type-68-aware Stage-6 scans: after adding He-like type 68/69
+    # collisions, the O VII G ratio can become too small because the resonance
+    # line is too strong relative to the triplet sum. These presets preserve
+    # the equal triplet target weights and progressively downweight the
+    # resonance target (level 7) to restore G while retaining the physical
+    # density-sensitive metastable/intercombination coupling.
+    "o7-triplet-type68-r095": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.95",
+    "o7-triplet-type68-r090": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.90",
+    "o7-triplet-type68-r085": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.85",
+    "o7-triplet-type68-r080": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.80",
+    "o7-triplet-type68-r075": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.75",
+    "o7-triplet-type68-r070": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.70",
+    "o7-triplet-type68-r060": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.60",
+    "o7-triplet-type68-r050": "2:1.0,3:1.0,4:1.0,5:1.0,7:0.50",
     # Stage-6 shift presets: preserve the resonance target and keep the total
     # triplet-target weight close to the equal-target baseline by moving weight
     # from the forbidden upper level (2) into the intercombination upper levels

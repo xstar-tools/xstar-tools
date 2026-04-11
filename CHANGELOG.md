@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.2.48 - 2026-04-11
+
+### Added
+- Added type-68-aware O VII cascade tuning presets that preserve equal triplet target weights while progressively downweighting the resonance target level 7: `o7-triplet-type68-r095`, `r090`, `r085`, `r080`, `r075`, `r070`, `r060`, and `r050`.
+- Added `examples/17_o7_type68_cascade_tuning_scan.py` to run the equal baseline plus the type-68-aware resonance-weight grid, writing compact and all-density CSV/JSON summaries.
+
+### Changed
+- Documentation now distinguishes the pre-type-68 f2i/fdown scans from the type-68-aware resonance-weight scan needed after He-like collision types 67/68/69 are enabled.
+
 ## v0.2.47 - 2026-04-10
 
 - Added He-like collisional-excitation decoders/evaluators for XSTAR data types 67, 68, and 69.

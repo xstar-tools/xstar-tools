@@ -315,3 +315,38 @@ Version 0.2.47 adds XSTAR He-like collision decoders for data types 67, 68, and 
      --print-summary
 
 Outputs include ``o7_metastable_coupling_rates.csv``, ``o7_metastable_coupling_collision_inventory.csv``, and ``o7_metastable_coupling_summary.json``.
+
+
+Type-68-aware O VII cascade tuning scan
+---------------------------------------
+
+After He-like collision data types 67/68/69 are enabled, O VII includes the
+metastable-to-intercombination coupling from level 2 into levels 3, 4, and 5.
+This gives the expected density-sensitive behavior in ``R=f/i``, but it can make
+the low-density ``G=(f+i)/r`` too small for the previous cascade-source map.
+The type-68-aware scan keeps the equal triplet weights fixed and progressively
+downweights the resonance target level 7::
+
+  o7-triplet-type68-r095 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.95
+  o7-triplet-type68-r090 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.90
+  o7-triplet-type68-r085 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.85
+  o7-triplet-type68-r080 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.80
+  o7-triplet-type68-r075 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.75
+  o7-triplet-type68-r070 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.70
+  o7-triplet-type68-r060 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.60
+  o7-triplet-type68-r050 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.50
+
+Run the scan with::
+
+  PYTHONPATH=src python examples/17_o7_type68_cascade_tuning_scan.py \
+    ../xstar/data/atdb.fits \
+    --out-dir o7_type68_cascade_tuning_scan \
+    --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+    --print-summary
+
+The scan writes ``o7_type68_cascade_tuning_scan.csv``,
+``o7_type68_cascade_tuning_scan_all_densities.csv``, and a JSON summary. Use this
+scan after the type-67/68/69 He-like collision decoders are active. The equal
+target map remains the reference baseline; the type-68-aware presets are
+experiments for restoring ``G`` while preserving the density-sensitive ``R``
+physics.
