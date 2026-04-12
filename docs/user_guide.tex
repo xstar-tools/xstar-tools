@@ -958,4 +958,32 @@ PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
 
 Outputs include \texttt{o7\_metastable\_coupling\_rates.csv}, \texttt{o7\_metastable\_coupling\_collision\_inventory.csv}, and \texttt{o7\_metastable\_coupling\_summary.json}.
 
+
+\section{Stage-6 two-parameter O VII type-68 cascade scan}
+
+The equal-target \texttt{selected-cascade-yield} map remains the recommended Stage-6 baseline:
+
+\begin{lstlisting}[style=ctterminal]
+--source-mode selected-cascade-yield \
+--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
+\end{lstlisting}
+
+After enabling the He-like type 67/68/69 collision decoders, use the broader two-parameter scan to vary both forbidden/intercombination redistribution and resonance suppression:
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/18_o7_type68_2d_cascade_tuning_scan.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_type68_2d_cascade_tuning_scan \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+\end{lstlisting}
+
+For a forbidden-to-intercombination shift \texttt{d} and resonance weight \texttt{r}, the scan uses target maps of the form:
+
+\begin{lstlisting}[style=ctterminal]
+2:(1-d),3:(1+d/3),4:(1+d/3),5:(1+d/3),7:r
+\end{lstlisting}
+
+It writes compact, ranked, and all-density CSV tables plus a JSON summary. The ranked table uses a simple relative squared-error score in \texttt{R=f/i} and \texttt{G=(f+i)/r} relative to the saved XSTAR O VII reference.
+
 \end{document}

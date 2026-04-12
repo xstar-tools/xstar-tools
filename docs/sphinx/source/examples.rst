@@ -298,3 +298,31 @@ scan after the type-67/68/69 He-like collision decoders are active. The equal
 target map remains the reference baseline; the type-68-aware presets are
 experiments for restoring ``G`` while preserving the density-sensitive ``R``
 physics.
+
+
+Type-68-aware two-parameter O VII cascade scan
+------------------------------------------------
+
+The broader Stage-6 scan varies both forbidden/intercombination redistribution
+and resonance suppression after He-like type 67/68/69 collision coupling is
+enabled.  For a forbidden-to-intercombination shift ``d`` and resonance weight
+``r``, it scans target maps of the form::
+
+  2:(1-d),3:(1+d/3),4:(1+d/3),5:(1+d/3),7:r
+
+Run it with::
+
+  PYTHONPATH=src python examples/18_o7_type68_2d_cascade_tuning_scan.py \
+    ../xstar/data/atdb.fits \
+    --out-dir o7_type68_2d_cascade_tuning_scan \
+    --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+    --print-summary
+
+The helper writes compact, ranked, and all-density CSV tables plus a JSON
+summary.  The equal-target map remains the baseline; this scan is for testing
+whether a combined resonance-suppression and forbidden-to-intercombination
+redistribution improves both ``R=f/i`` and ``G=(f+i)/r`` relative to the saved
+XSTAR O VII reference.
+
+.. literalinclude:: ../../../examples/18_o7_type68_2d_cascade_tuning_scan.py
+   :language: python

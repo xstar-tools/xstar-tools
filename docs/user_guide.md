@@ -945,3 +945,40 @@ PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
 ```
 
 Outputs include `o7_metastable_coupling_rates.csv`, `o7_metastable_coupling_collision_inventory.csv`, and `o7_metastable_coupling_summary.json`.
+
+
+## Stage-6 two-parameter O VII type-68 cascade scan
+
+The equal-target `selected-cascade-yield` map remains the recommended Stage-6 baseline:
+
+```bash
+--source-mode selected-cascade-yield \
+--cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
+```
+
+After the type 67/68/69 He-like collision decoders are enabled, the remaining O VII triplet mismatch should be explored with a two-parameter scan.  The helper
+
+```bash
+PYTHONPATH=src python examples/18_o7_type68_2d_cascade_tuning_scan.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_type68_2d_cascade_tuning_scan \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+scans maps of the form
+
+```text
+2:(1-d),3:(1+d/3),4:(1+d/3),5:(1+d/3),7:r
+```
+
+where `d` shifts source weight from the forbidden level into the intercombination levels and `r` controls resonance feeding.  The output files are:
+
+```text
+o7_type68_2d_cascade_tuning_scan.csv
+o7_type68_2d_cascade_tuning_scan_ranked.csv
+o7_type68_2d_cascade_tuning_scan_all_densities.csv
+o7_type68_2d_cascade_tuning_scan_summary.json
+```
+
+The ranked table uses a simple relative squared-error score in `R=f/i` and `G=(f+i)/r` relative to the saved XSTAR O VII reference.

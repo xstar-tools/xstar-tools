@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.49 - 2026-04-12
+
+- Added `examples/18_o7_type68_2d_cascade_tuning_scan.py`, a broader Stage-6 O VII type-68-aware tuning scan.
+- The new scan varies both forbidden-to-intercombination redistribution and resonance-target suppression using maps of the form `2:(1-d),3:(1+d/3),4:(1+d/3),5:(1+d/3),7:r`.
+- The scan writes compact, ranked, all-density CSV tables plus a JSON summary, so the best compromise against the XSTAR O VII `R=f/i` and `G=(f+i)/r` reference can be identified.
+- Kept the equal-target `selected-cascade-yield` map as the documented Stage-6 baseline.
+
 ## v0.2.48 - 2026-04-11
 
 ### Added
