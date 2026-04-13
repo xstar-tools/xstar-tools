@@ -326,3 +326,24 @@ XSTAR O VII reference.
 
 .. literalinclude:: ../../../examples/18_o7_type68_2d_cascade_tuning_scan.py
    :language: python
+
+Stage-6 cascade source-fit diagnostic
+-------------------------------------
+
+The example ``examples/19_o7_cascade_source_fit.py`` builds a radiative cascade
+matrix ``Y(source level -> forbidden, intercombination, resonance)`` and solves
+for nonnegative source weights that best reproduce the saved XSTAR O VII triplet
+ratios.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/19_o7_cascade_source_fit.py \
+     ../xstar/data/atdb.fits \
+     --index-cache --index-cache-format npz \
+     --out-dir o7_cascade_source_fit \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --print-summary
+
+The example writes ``o7_cascade_yield_matrix.csv``,
+``o7_source_fit_weights.csv``, and ``o7_source_fit_summary.json``.  The result is
+a diagnostic for source-level feeding, not a final physical recombination model.

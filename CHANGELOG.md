@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# v0.2.50 - 2026-04-13
+
+- Added `examples/19_o7_cascade_source_fit.py`, a Stage-6 diagnostic for level-resolved O VII cascade-source construction from radiative yield matrices.
+- The example builds `Y(source_level -> forbidden, intercombination, resonance)`, writes `o7_cascade_yield_matrix.csv`, fits nonnegative source weights against the saved XSTAR O VII `R=f/i` and `G=(f+i)/r` ratios, and writes `o7_source_fit_weights.csv` plus `o7_source_fit_summary.json`.
+- Added helper tests for the nonnegative simplex projection and source-fit optimizer used by the diagnostic.
+
 ## v0.2.49 - 2026-04-12
 
 - Added `examples/18_o7_type68_2d_cascade_tuning_scan.py`, a broader Stage-6 O VII type-68-aware tuning scan.

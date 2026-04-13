@@ -826,3 +826,32 @@ For a forbidden-to-intercombination shift `d` and resonance weight `r`, the scan
 ```
 
 It writes compact, ranked, and all-density CSV tables plus a JSON summary.
+
+### Stage-6 cascade source-fit diagnostic
+
+For O VII, empirical target-weight scans indicate that the remaining mismatch is likely tied to the unknown level-resolved recombination source distribution. The diagnostic example `examples/19_o7_cascade_source_fit.py` builds a radiative cascade yield matrix,
+
+```text
+Y(source level -> forbidden, intercombination, resonance)
+```
+
+then solves for nonnegative source weights that best reproduce the saved XSTAR O VII triplet ratios `R=f/i` and `G=(f+i)/r`.
+
+```bash
+PYTHONPATH=src python examples/19_o7_cascade_source_fit.py \
+  ../xstar/data/atdb.fits \
+  --index-cache --index-cache-format npz \
+  --out-dir o7_cascade_source_fit \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+Outputs:
+
+```text
+o7_cascade_source_fit/o7_cascade_yield_matrix.csv
+o7_cascade_source_fit/o7_source_fit_weights.csv
+o7_cascade_source_fit/o7_source_fit_summary.json
+```
+
+This is a diagnostic tool, not a final physical recombination model. It asks what source-level distribution would be required by the current radiative cascade network to reproduce XSTAR-like O VII triplet ratios.

@@ -982,3 +982,32 @@ o7_type68_2d_cascade_tuning_scan_summary.json
 ```
 
 The ranked table uses a simple relative squared-error score in `R=f/i` and `G=(f+i)/r` relative to the saved XSTAR O VII reference.
+
+## Stage-6 cascade source-fit diagnostic
+
+The example `examples/19_o7_cascade_source_fit.py` is a diagnostic tool for the remaining O VII recombination/cascade problem. It builds a radiative cascade yield matrix,
+
+```text
+Y(source level -> forbidden, intercombination, resonance)
+```
+
+where the forbidden component uses level 2, the intercombination component uses levels 3, 4, and 5, and the resonance component uses level 7 by default. It then compares simple statistical source weights with a fitted nonnegative source-weight vector that best reproduces the saved XSTAR O VII triplet ratios.
+
+```bash
+PYTHONPATH=src python examples/19_o7_cascade_source_fit.py \
+  ../xstar/data/atdb.fits \
+  --index-cache --index-cache-format npz \
+  --out-dir o7_cascade_source_fit \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+Outputs:
+
+```text
+o7_cascade_yield_matrix.csv
+o7_source_fit_weights.csv
+o7_source_fit_summary.json
+```
+
+The fitted weights are not a final physical recombination model. They are intended to show which source levels would need enhanced or suppressed recombination feeding if the current radiative cascade network is forced to reproduce the XSTAR O VII `R=f/i` and `G=(f+i)/r` ratios.
