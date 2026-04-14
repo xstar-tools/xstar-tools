@@ -347,3 +347,26 @@ ratios.
 The example writes ``o7_cascade_yield_matrix.csv``,
 ``o7_source_fit_weights.csv``, and ``o7_source_fit_summary.json``.  The result is
 a diagnostic for source-level feeding, not a final physical recombination model.
+
+
+### Stage-6 empirical source-fit mode
+
+The O VII cascade source-fit diagnostic writes `o7_source_fit_weights.csv`. These weights can be reused as an empirical diagnostic source allocation with:
+
+```bash
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --source-mode selected-fit-weights \
+  --source-fit-weights-csv o7_cascade_source_fit/o7_source_fit_weights.csv \
+  --out-dir o7_recomb_cascade_workflow_fit_weights \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+A convenience diagnostic mode is also available:
+
+```bash
+--source-mode o7-xstar-fit
+```
+
+When no explicit `--source-fit-weights-csv` is supplied, this mode looks for the packaged/source-tree reference file `xstar_test_run/o7_source_fit_weights.csv`. These fitted weights are empirical diagnostics derived from the current O VII/XSTAR comparison, not true level-resolved recombination rates.

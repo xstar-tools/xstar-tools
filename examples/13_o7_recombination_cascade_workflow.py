@@ -117,7 +117,9 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=1.0e6)
     parser.add_argument("--electron-densities", type=float, nargs="+", default=[1.0, 1.0e4, 1.0e8])
     parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
-    parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
+    parser.add_argument("--source-mode", default="selected-cascade-yield", choices=["selected-statistical", "selected-cascade-yield", "selected-fit-weights", "o7-xstar-fit"], help="Prototype source allocation mode for total O VIII -> O VII recombination")
+    parser.add_argument("--source-fit-weights-csv", default="", help="CSV with source_level and fit_weight_norm columns for selected-fit-weights/o7-xstar-fit modes")
+    parser.add_argument("--source-fit-weight-column", default="fit_weight_norm", help="Weight column to read from --source-fit-weights-csv")
     parser.add_argument("--cascade-target-levels", default=None, help="Target levels or level:weight pairs for selected-cascade-yield allocation. If omitted and no preset is selected, the recommended equal O VII triplet map is used.")
     parser.add_argument("--cascade-target-preset", default="none", choices=["", "none"] + sorted(CASCADE_TARGET_PRESETS), help="Named cascade target weighting preset for reproducible Stage-6 experiments; manual --cascade-target-levels overrides this")
     parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
@@ -167,6 +169,10 @@ def main() -> None:
         recomb_cmd += ["--cascade-target-levels", effective_target_levels]
     if preset and preset.lower() != "none":
         recomb_cmd += ["--cascade-target-preset", preset]
+    if args.source_fit_weights_csv:
+        recomb_cmd += ["--source-fit-weights-csv", args.source_fit_weights_csv]
+    if args.source_fit_weight_column:
+        recomb_cmd += ["--source-fit-weight-column", args.source_fit_weight_column]
     recomb_cmd += [
         "--cascade-weight-floor", f"{args.cascade_weight_floor:g}",
         "--source-csv", str(initial_source_csv),

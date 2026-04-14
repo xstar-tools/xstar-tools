@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Export decoded XSTAR atomic data for superwind/Athena++ workflows.
 
 This module provides a lightweight export layer on top of the high-level

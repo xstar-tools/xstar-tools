@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Photoionization and bound-free record extraction for XSTAR ``atdb.fits``.
 
 This module decodes a conservative subset of photoionization-like

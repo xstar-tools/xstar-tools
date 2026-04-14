@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 xstar_atomic_hierarchy.py
 

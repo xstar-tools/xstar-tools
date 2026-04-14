@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 xstar_atomic_level_population_solver_v2.py
 

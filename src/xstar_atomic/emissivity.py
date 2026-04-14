@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 xstar_atomic_make_emissivity_table_v1.py
 

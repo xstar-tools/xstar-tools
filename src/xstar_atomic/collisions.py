@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Collisional-excitation record extraction and evaluation.
 
 This module decodes XSTAR bound-bound collisional records with

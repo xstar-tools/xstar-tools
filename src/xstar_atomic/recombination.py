@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Recombination, charge-exchange, and cascade-source tools.
 
 This module inventories and evaluates recombination-like records from
@@ -129,6 +128,57 @@ def resolve_cascade_target_levels(levels_text: str = "", preset: str = "") -> st
         known = ", ".join(sorted(CASCADE_TARGET_PRESETS))
         raise ValueError(f"Unknown cascade target preset {preset!r}; known presets: {known}")
     return CASCADE_TARGET_PRESETS[key]
+
+
+
+
+
+def read_source_fit_weights_csv(path: str | Path, weight_column: str = "fit_weight_norm") -> Dict[int, float]:
+    """Read empirical/diagnostic level-source weights from a CSV file.
+
+    The source-fit diagnostic in ``examples/19_o7_cascade_source_fit.py`` writes
+    ``o7_source_fit_weights.csv`` with ``source_level`` and ``fit_weight_norm``
+    columns.  This helper also accepts ``level_index`` as an alias for the level
+    column and normalizes positive weights later in ``make_source_rows``.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"source fit weights CSV not found: {path}")
+    weights: Dict[int, float] = {}
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            return weights
+        fields = set(reader.fieldnames)
+        level_col = "source_level" if "source_level" in fields else "level_index" if "level_index" in fields else None
+        if level_col is None:
+            raise ValueError(f"{path} does not contain source_level or level_index column")
+        wcol = weight_column if weight_column in fields else "fit_weight_norm" if "fit_weight_norm" in fields else "weight" if "weight" in fields else None
+        if wcol is None:
+            raise ValueError(f"{path} does not contain {weight_column!r}, fit_weight_norm, or weight column")
+        for row in reader:
+            try:
+                lev = int(float(str(row.get(level_col, "")).strip()))
+                w = float(str(row.get(wcol, "0")).strip())
+            except Exception:
+                continue
+            if math.isfinite(w) and w > 0.0:
+                weights[lev] = weights.get(lev, 0.0) + w
+    return weights
+
+
+def default_o7_source_fit_weights_path() -> Optional[Path]:
+    """Return a likely project-local O VII source-fit weights path if present."""
+    candidates = [
+        Path("xstar_test_run/o7_source_fit_weights.csv"),
+        Path("examples/reference_outputs/o7_source_fit_weights.csv"),
+        Path(__file__).resolve().parents[2] / "xstar_test_run" / "o7_source_fit_weights.csv",
+        Path(__file__).resolve().parents[2] / "examples" / "reference_outputs" / "o7_source_fit_weights.csv",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path.resolve()
+    return None
 
 
 def choose_z(element: Optional[str]) -> Optional[int]:
@@ -494,6 +544,7 @@ def allocation_levels(
     branches_by_upper: Optional[Dict[int, List[dict]]] = None,
     cascade_target_weights: Optional[Dict[int, float]] = None,
     cascade_weight_floor: float = 0.0,
+    source_fit_weights: Optional[Dict[int, float]] = None,
 ) -> List[Tuple[int, float, str]]:
     """Return (level_index, weight, allocation_note), weights normalized later.
 
@@ -517,6 +568,17 @@ def allocation_levels(
         return [(int(dest), 1.0, "allocated_to_record_destination_level")]
     if mode == "selected-equal":
         return [(int(x), 1.0, "equal_allocation_to_selected_levels") for x in selected_levels if int(x) in levels_by_idx]
+    if mode in {"selected-fit-weights", "o7-xstar-fit"}:
+        weights = source_fit_weights or {}
+        out = []
+        candidate_levels = selected_levels or sorted(weights)
+        for x in candidate_levels:
+            lev = int(x)
+            if lev in levels_by_idx:
+                w = float(weights.get(lev, 0.0))
+                if w > 0.0:
+                    out.append((lev, w, f"diagnostic_fit_weight_allocation:{mode}"))
+        return out
     if mode == "selected-statistical":
         out = []
         for x in selected_levels:
@@ -578,6 +640,7 @@ def make_source_rows(
     branches_by_upper: Optional[Dict[int, List[dict]]] = None,
     cascade_target_weights: Optional[Dict[int, float]] = None,
     cascade_weight_floor: float = 0.0,
+    source_fit_weights: Optional[Dict[int, float]] = None,
 ) -> List[dict]:
     source_rows: List[dict] = []
     for rec in eval_rows:
@@ -595,6 +658,7 @@ def make_source_rows(
             branches_by_upper=branches_by_upper,
             cascade_target_weights=cascade_target_weights,
             cascade_weight_floor=cascade_weight_floor,
+            source_fit_weights=source_fit_weights,
         )
         if not alloc:
             continue
@@ -900,8 +964,10 @@ def main() -> None:
     p.add_argument("--allow-charge-exchange-sources", action="store_true", help="Allow charge-exchange records to create source CSV rows using neutral-H density")
     p.add_argument("--parent-population-scale", type=float, default=1.0, help="Multiplier for parent ion population/fraction in source_s^-1")
     p.add_argument("--min-alpha", type=float, default=0.0, help="Minimum alpha_cm3_s to include in source CSV")
-    p.add_argument("--source-mode", choices=["none", "ground", "record-destination", "selected-equal", "selected-statistical", "selected-cascade-yield", "all-statistical"], default="none")
+    p.add_argument("--source-mode", choices=["none", "ground", "record-destination", "selected-equal", "selected-statistical", "selected-cascade-yield", "selected-fit-weights", "o7-xstar-fit", "all-statistical"], default="none")
     p.add_argument("--source-levels", default="", help="Comma-separated levels for selected-* source modes")
+    p.add_argument("--source-fit-weights-csv", default="", help="CSV with source_level and fit_weight_norm columns for selected-fit-weights/o7-xstar-fit modes")
+    p.add_argument("--source-fit-weight-column", default="fit_weight_norm", help="Weight column to read from --source-fit-weights-csv")
     p.add_argument("--cascade-target-levels", default="", help="Comma-separated target levels, or level:weight pairs, used by selected-cascade-yield source allocation")
     p.add_argument("--cascade-target-preset", default="", choices=["", "none"] + sorted(CASCADE_TARGET_PRESETS), help="Named cascade target weighting preset; manual --cascade-target-levels overrides this")
     p.add_argument("--cascade-weight-floor", type=float, default=0.0, help="Minimum cascade-yield score used by selected-cascade-yield allocation")
@@ -921,6 +987,18 @@ def main() -> None:
 
     z = choose_z(args.element)
     selected_levels = parse_level_list(args.source_levels)
+    source_fit_weights: Dict[int, float] = {}
+    source_fit_weights_path: Optional[Path] = None
+    if args.source_mode in {"selected-fit-weights", "o7-xstar-fit"}:
+        if args.source_fit_weights_csv:
+            source_fit_weights_path = Path(args.source_fit_weights_csv)
+        elif args.source_mode == "o7-xstar-fit":
+            source_fit_weights_path = default_o7_source_fit_weights_path()
+        if source_fit_weights_path is None:
+            p.error("--source-fit-weights-csv is required for selected-fit-weights, or provide xstar_test_run/o7_source_fit_weights.csv for o7-xstar-fit")
+        source_fit_weights = read_source_fit_weights_csv(source_fit_weights_path, args.source_fit_weight_column)
+        if not selected_levels:
+            selected_levels = sorted(source_fit_weights)
 
     if args.ion_stage is None and args.source_mode != "none":
         p.error("--ion-stage is required when --source-mode is not none, because solver source CSV level indices are ion-local")
@@ -955,6 +1033,7 @@ def main() -> None:
             branches_by_upper=branches_by_upper_for_source,
             cascade_target_weights=cascade_target_weights,
             cascade_weight_floor=args.cascade_weight_floor,
+            source_fit_weights=source_fit_weights,
         )
         cascade_source_rows: List[dict] = []
         cascade_path_rows: List[dict] = []
