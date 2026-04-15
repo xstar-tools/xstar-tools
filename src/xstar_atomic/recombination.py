@@ -133,6 +133,46 @@ def resolve_cascade_target_levels(levels_text: str = "", preset: str = "") -> st
 
 
 
+def resolve_source_fit_weights_path(path: str | Path) -> Path:
+    """Resolve an empirical/diagnostic source-fit weights CSV path.
+
+    Explicit paths are honored when they exist.  For convenience and
+    reproducibility, a missing relative path whose filename is packaged as a
+    reference product (for example ``o7_source_fit_weights.csv``) is also
+    resolved against the source-tree/reference-output locations used by the
+    examples and documentation.  This keeps old commands that used the
+    generated ``o7_cascade_source_fit/o7_source_fit_weights.csv`` path usable
+    after unpacking a source distribution that already contains the reference
+    CSV elsewhere.
+    """
+    requested = Path(path)
+    if requested.exists():
+        return requested
+    if requested.is_absolute():
+        raise FileNotFoundError(f"source fit weights CSV not found: {requested}")
+
+    root = Path(__file__).resolve().parents[2]
+    candidates = [
+        Path.cwd() / requested,
+        Path.cwd() / "xstar_test_run" / requested.name,
+        Path.cwd() / "examples" / "reference_outputs" / requested.name,
+        Path.cwd() / "docs" / "validation" / "xstar_outputs" / requested.name,
+        root / requested,
+        root / "xstar_test_run" / requested.name,
+        root / "examples" / "reference_outputs" / requested.name,
+        root / "docs" / "validation" / "xstar_outputs" / requested.name,
+    ]
+    seen: set[Path] = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"source fit weights CSV not found: {requested}")
+
+
 def read_source_fit_weights_csv(path: str | Path, weight_column: str = "fit_weight_norm") -> Dict[int, float]:
     """Read empirical/diagnostic level-source weights from a CSV file.
 
@@ -141,9 +181,7 @@ def read_source_fit_weights_csv(path: str | Path, weight_column: str = "fit_weig
     columns.  This helper also accepts ``level_index`` as an alias for the level
     column and normalizes positive weights later in ``make_source_rows``.
     """
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"source fit weights CSV not found: {path}")
+    path = resolve_source_fit_weights_path(path)
     weights: Dict[int, float] = {}
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -991,7 +1029,7 @@ def main() -> None:
     source_fit_weights_path: Optional[Path] = None
     if args.source_mode in {"selected-fit-weights", "o7-xstar-fit"}:
         if args.source_fit_weights_csv:
-            source_fit_weights_path = Path(args.source_fit_weights_csv)
+            source_fit_weights_path = resolve_source_fit_weights_path(args.source_fit_weights_csv)
         elif args.source_mode == "o7-xstar-fit":
             source_fit_weights_path = default_o7_source_fit_weights_path()
         if source_fit_weights_path is None:

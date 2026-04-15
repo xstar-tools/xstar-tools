@@ -123,6 +123,17 @@ def main() -> None:
     parser.add_argument("--cascade-target-levels", default=None, help="Target levels or level:weight pairs for selected-cascade-yield allocation. If omitted and no preset is selected, the recommended equal O VII triplet map is used.")
     parser.add_argument("--cascade-target-preset", default="none", choices=["", "none"] + sorted(CASCADE_TARGET_PRESETS), help="Named cascade target weighting preset for reproducible Stage-6 experiments; manual --cascade-target-levels overrides this")
     parser.add_argument("--cascade-weight-floor", type=float, default=0.02, help="Small fallback source weight for selected levels that do not feed target levels")
+    parser.add_argument(
+        "--solver-source-csv-mode",
+        default="auto",
+        choices=["auto", "initial", "cascade"],
+        help=(
+            "Which recombination source CSV to feed to the level-population solver. "
+            "auto uses initial sources for fitted-source modes, because the solver already "
+            "contains the radiative cascade network, and cascade-redistributed sources for "
+            "older cascade-yield experiments."
+        ),
+    )
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
@@ -184,6 +195,17 @@ def main() -> None:
     ]
     _run(recomb_cmd)
 
+    solver_source_csv = cascade_source_csv
+    solver_source_mode_note = "cascade"
+    if args.solver_source_csv_mode == "initial" or (
+        args.solver_source_csv_mode == "auto" and args.source_mode in {"selected-fit-weights", "o7-xstar-fit"}
+    ):
+        # Fitted weights were solved as source-level weights for the radiative
+        # network.  Feeding the cascade-redistributed CSV to the solver applies
+        # the radiative cascade twice and does not reproduce the diagnostic fit.
+        solver_source_csv = initial_source_csv
+        solver_source_mode_note = "initial"
+
     _run([
         py, "-m", "xstar_atomic.solver", args.fitsfile,
         "--element", "O",
@@ -196,7 +218,7 @@ def main() -> None:
         "--component-mode", "ground",
         "--prune-unconnected-levels",
         "--linear-solver", "sparse",
-        "--recombination-source-csv", str(cascade_source_csv),
+        "--recombination-source-csv", str(solver_source_csv),
         "--out-lines-csv", str(solver_lines_csv),
         "--out-populations-csv", str(solver_pop_csv),
         "--out-triplet-csv", str(solver_rg_csv),
@@ -216,10 +238,13 @@ def main() -> None:
         "cascade_target_levels": effective_target_levels or "",
         "cascade_target_preset": preset or "none",
         "cascade_weight_floor": args.cascade_weight_floor,
+        "solver_source_csv_mode": args.solver_source_csv_mode,
+        "solver_source_csv_used": solver_source_mode_note,
         "outputs": {
             "initial_source_csv": str(initial_source_csv),
             "cascade_source_csv": str(cascade_source_csv),
             "cascade_path_csv": str(cascade_path_csv),
+            "solver_recombination_source_csv": str(solver_source_csv),
             "recombination_summary_json": str(recomb_summary_json),
             "solver_summary_json": str(solver_summary_json),
             "solver_lines_csv": str(solver_lines_csv),

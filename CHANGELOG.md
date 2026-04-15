@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.2.53 - 2026-04-15
+
+Fixed:
+  - examples/13_o7_recombination_cascade_workflow.py now feeds the initial fitted source CSV to the level-population solver for selected-fit-weights and o7-xstar-fit modes by default.
+  - Added --solver-source-csv-mode auto|initial|cascade to make this behavior explicit and reproducible.
+  - This avoids applying the radiative cascade twice: once in recombination.py and again inside the solver radiative network.
+
+## v0.2.52 - 2026-04-14
+
+Fixed:
+- Resolved a path bug in `selected-fit-weights` workflows: missing relative weight CSV paths such as `o7_cascade_source_fit/o7_source_fit_weights.csv` are now resolved against packaged reference locations (`xstar_test_run/`, `examples/reference_outputs/`, and `docs/validation/xstar_outputs/`) when the basename exists there.
+- Updated the explicit `selected-fit-weights` documentation examples to use the packaged reference file `xstar_test_run/o7_source_fit_weights.csv`.
+
 ## v0.2.51 - 2026-04-14
 
 - Added diagnostic source mode `selected-fit-weights`, which reads fitted level-source weights from `--source-fit-weights-csv`.

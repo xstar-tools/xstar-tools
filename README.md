@@ -850,7 +850,7 @@ Outputs:
 
 ```text
 o7_cascade_source_fit/o7_cascade_yield_matrix.csv
-o7_cascade_source_fit/o7_source_fit_weights.csv
+xstar_test_run/o7_source_fit_weights.csv
 o7_cascade_source_fit/o7_source_fit_summary.json
 ```
 
@@ -865,7 +865,7 @@ The O VII cascade source-fit diagnostic writes `o7_source_fit_weights.csv`. Thes
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   ../xstar/data/atdb.fits \
   --source-mode selected-fit-weights \
-  --source-fit-weights-csv o7_cascade_source_fit/o7_source_fit_weights.csv \
+  --source-fit-weights-csv xstar_test_run/o7_source_fit_weights.csv \
   --out-dir o7_recomb_cascade_workflow_fit_weights \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
   --print-summary
