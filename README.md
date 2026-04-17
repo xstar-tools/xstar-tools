@@ -857,6 +857,35 @@ o7_cascade_source_fit/o7_source_fit_summary.json
 This is a diagnostic tool, not a final physical recombination model. It asks what source-level distribution would be required by the current radiative cascade network to reproduce XSTAR-like O VII triplet ratios.
 
 
+
+### Stage-6 full-solver source-fit diagnostic
+
+The cascade-yield fit in `examples/19_o7_cascade_source_fit.py` is useful for testing the radiative branching network, but its fitted weights are not guaranteed to reproduce the same R/G ratios when injected into the full statistical-equilibrium solver.  For that stricter test, use:
+
+```bash
+PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
+  ../xstar/data/atdb.fits \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --index-cache \
+  --out-dir o7_solver_source_fit \
+  --print-summary
+```
+
+The compatible output weights can then be used with the recombination/cascade workflow:
+
+```bash
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --source-mode selected-fit-weights \
+  --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
+  --solver-source-csv-mode initial \
+  --out-dir o7_recomb_cascade_workflow_solver_fit \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+```
+
+These weights are empirical diagnostics, not physical level-resolved recombination rates.
+
 ### Stage-6 empirical source-fit mode
 
 The O VII cascade source-fit diagnostic writes `o7_source_fit_weights.csv`. These weights can be reused as an empirical diagnostic source allocation with:
