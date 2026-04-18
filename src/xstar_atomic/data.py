@@ -97,6 +97,33 @@ def get_data_path() -> Optional[Path]:
     return Path(text).expanduser().resolve()
 
 
+def _atdb_file_problem(path: Path) -> Optional[str]:
+    """Return a short validation problem for an ``atdb.fits`` candidate.
+
+    This lightweight check catches the common case where a relative path points
+    to a zero-byte placeholder or interrupted download before ``astropy`` emits
+    a lower-level FITS error.  It intentionally avoids opening the full 830 MB
+    file.
+    """
+    try:
+        if not path.exists():
+            return "does not exist"
+        if not path.is_file():
+            return "is not a regular file"
+        size = path.stat().st_size
+        if size <= 0:
+            return "is empty"
+        if size < 2880:
+            return f"is too small to be a FITS file ({size} bytes)"
+        with path.open("rb") as handle:
+            header = handle.read(80)
+        if not header.startswith(b"SIMPLE"):
+            return "does not start with a FITS SIMPLE header"
+    except OSError as exc:
+        return f"could not be read: {exc}"
+    return None
+
+
 def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = True) -> Optional[Path]:
     """Find ``atdb.fits`` from an explicit path, environment, datapath, or default.
 
@@ -122,7 +149,7 @@ def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = 
             c = candidate.resolve()
         except Exception:
             c = candidate
-        if c.exists() and c.is_file():
+        if c.exists() and c.is_file() and _atdb_file_problem(c) is None:
             if should_remember:
                 set_data_path(c.parent)
             return c
@@ -254,7 +281,19 @@ def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool =
         return found
     if path is not None:
         p = Path(path).expanduser()
-        raise FileNotFoundError(f"atdb.fits not found: {p}")
+        candidate = p / ATDB_FILENAME if p.is_dir() else p
+        try:
+            candidate = candidate.resolve()
+        except Exception:
+            pass
+        problem = _atdb_file_problem(candidate)
+        if problem is None:
+            problem = "was not accepted by the xstar-atomic data resolver"
+        raise FileNotFoundError(
+            f"atdb.fits not found or invalid: {candidate} ({problem}). "
+            "Check the relative path, set XSTAR_ATDB_FITS to the real 830 MB atdb.fits, "
+            "or run: python -m xstar_atomic.data --set-path /path/to/atdb.fits"
+        )
     return download_data(prompt=prompt)
 
 
@@ -271,8 +310,9 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     if args.set_path:
         path = Path(args.set_path).expanduser().resolve()
-        if not path.exists() or not path.is_file():
-            raise FileNotFoundError(f"atdb.fits not found: {path}")
+        problem = _atdb_file_problem(path)
+        if problem is not None:
+            raise FileNotFoundError(f"atdb.fits not found or invalid: {path} ({problem})")
         data_dir = set_data_path(path.parent)
         print(f"Saved data path: {data_dir}")
         print(path)
