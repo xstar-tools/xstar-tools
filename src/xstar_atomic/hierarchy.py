@@ -43,6 +43,7 @@ import csv
 import json
 import os
 import pickle
+import tempfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -447,46 +448,91 @@ def _parent_kind_from_fields(rate_type: int, ion_global_index: int) -> str:
     return "ion_process" if int(ion_global_index) >= 0 else "global"
 
 
+def _same_resolved_path(a: Path, b: Path) -> bool:
+    """Return True when two paths resolve to the same filesystem target."""
+    try:
+        return a.resolve() == b.resolve()
+    except Exception:
+        return os.path.abspath(os.fspath(a)) == os.path.abspath(os.fspath(b))
+
+
+def _assert_cache_path_safe(cache_path: Path, fits_path: Path) -> None:
+    """Guard against accidentally using the FITS file itself as an index cache."""
+    cache_path = Path(cache_path)
+    fits_path = Path(fits_path)
+    if _same_resolved_path(cache_path, fits_path):
+        raise ValueError(f"Refusing to use FITS file as index cache: {cache_path}")
+    if cache_path.name == fits_path.name:
+        raise ValueError(f"Refusing suspicious index-cache path with FITS filename: {cache_path}")
+
+
 def _write_npz_index_cache(path: Path, db: "ATDB", records: List[IndexedRecord], elements: List[ElementInfo], ions: List[IonInfo]) -> None:
-    """Write a compact NumPy/NPZ hierarchy index cache.
+    """Write a compact NumPy/NPZ hierarchy index cache safely.
 
     Version 2 deliberately stores only numeric per-record fields plus the tiny
-    element/ion tables.  Repeated strings such as element symbols, ion labels,
-    charge labels, and data/rate-type descriptions are reconstructed at load
-    time.  This avoids loading large Unicode arrays for every one of the
-    >1-million ATDB records.
+    element/ion tables.  The cache writer must never open, replace, or truncate
+    the input ``atdb.fits`` file.  v0.2.57 adds explicit guards and a unique
+    temporary filename in the cache directory so the cache cannot collide with
+    the FITS path or with another process writing the same cache.
     """
+    path = Path(path)
+    fits_path = Path(db.filename)
+    _assert_cache_path_safe(path, fits_path)
+    before_signature = _file_signature(fits_path)
+
     metadata = _cache_metadata(db)
     metadata["format_version"] = INDEX_CACHE_NPZ_FORMAT_VERSION
     metadata["cache_kind"] = "npz"
     metadata["layout"] = "numeric_v2"
 
-    tmp_file = path.with_suffix(path.suffix + ".tmp")
-    with tmp_file.open("wb") as handle:
-        np.savez(
-            handle,
-            metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
-            elements_json=np.asarray(_dataclass_dict_list_json(elements)),
-            ions_json=np.asarray(_dataclass_dict_list_json(ions)),
-            recno=np.asarray([r.recno for r in records], dtype=np.int32),
-            data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
-            rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
-            continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
-            nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
-            nint=np.asarray([r.nint for r in records], dtype=np.int32),
-            nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
-            real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
-            int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
-            char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
-            element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
-            element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
-            ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
-            ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
-            ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
-            level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
-            parent_kind_code=np.asarray([_parent_kind_code(r) for r in records], dtype=np.int8),
-        )
-    os.replace(tmp_file, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(path.parent),
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_name = handle.name
+            tmp_path = Path(tmp_name)
+            _assert_cache_path_safe(tmp_path, fits_path)
+            np.savez(
+                handle,
+                metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
+                elements_json=np.asarray(_dataclass_dict_list_json(elements)),
+                ions_json=np.asarray(_dataclass_dict_list_json(ions)),
+                recno=np.asarray([r.recno for r in records], dtype=np.int32),
+                data_type=np.asarray([r.data_type for r in records], dtype=np.int16),
+                rate_type=np.asarray([r.rate_type for r in records], dtype=np.int16),
+                continuation=np.asarray([r.continuation for r in records], dtype=np.int16),
+                nreal=np.asarray([r.nreal for r in records], dtype=np.int32),
+                nint=np.asarray([r.nint for r in records], dtype=np.int32),
+                nchar=np.asarray([r.nchar for r in records], dtype=np.int32),
+                real_ptr=np.asarray([r.real_ptr for r in records], dtype=np.int64),
+                int_ptr=np.asarray([r.int_ptr for r in records], dtype=np.int64),
+                char_ptr=np.asarray([r.char_ptr for r in records], dtype=np.int64),
+                element_z=_safe_int_array([r.element_z for r in records], dtype=np.int16),
+                element_record=_safe_int_array([r.element_record for r in records], dtype=np.int32),
+                ion_global_index=_safe_int_array([r.ion_global_index for r in records], dtype=np.int32),
+                ion_stage=_safe_int_array([r.ion_stage for r in records], dtype=np.int16),
+                ion_record=_safe_int_array([r.ion_record for r in records], dtype=np.int32),
+                level_index=_safe_int_array([r.level_index for r in records], dtype=np.int32),
+                parent_kind_code=np.asarray([_parent_kind_code(r) for r in records], dtype=np.int8),
+            )
+        if _file_signature(fits_path) != before_signature:
+            raise RuntimeError(f"FITS file changed while writing index cache: {fits_path}")
+        os.replace(tmp_path, path)
+        if _file_signature(fits_path) != before_signature:
+            raise RuntimeError(f"FITS file changed after writing index cache: {fits_path}")
+    except Exception:
+        if tmp_name:
+            try:
+                Path(tmp_name).unlink(missing_ok=True)
+            except Exception:
+                pass
+        raise
 
 
 def _load_npz_index_arrays(path: Path, db: "ATDB") -> ATDBIndexArrays:

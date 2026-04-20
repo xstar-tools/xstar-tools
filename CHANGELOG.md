@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## v0.2.57 - 2026-04-19
+
+Safety fix:
+- Hardened NPZ hierarchy index-cache writing so it never uses or replaces the input `atdb.fits` path.
+- The cache writer now rejects cache paths that resolve to the FITS file, uses a unique temporary filename in the cache directory, and verifies that the FITS file signature is unchanged before and after cache replacement.
+- Added `--index-cache-path` to `examples/20_o7_solver_source_fit.py` so repeated unit-source solver runs can use an explicit cache file away from the XSTAR data file.
+
+Recommended safe usage:
+
+```bash
+PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
+  ../xstar/data/atdb.fits \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit \
+  --print-summary
+```
+
 ## v0.2.56 - 2026-04-18
 
 Fixed:

@@ -200,6 +200,7 @@ def main() -> None:
     parser.add_argument("--xstar-value-column", default="emit_outward")
     parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto"], default="sparse")
     parser.add_argument("--index-cache", action="store_true")
+    parser.add_argument("--index-cache-path", help="Explicit hierarchy index-cache filename passed to xstar_atomic.solver. Use this to keep the cache away from atdb.fits.")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
     parser.add_argument("--out-dir", default="o7_solver_source_fit")
     parser.add_argument("--keep-unit-runs", action="store_true")
@@ -241,7 +242,10 @@ def main() -> None:
             "--summary-json", str(summary_json),
         ]
         if args.index_cache:
-            cmd += ["--index-cache", "--index-cache-format", args.index_cache_format]
+            if args.index_cache_path:
+                cmd += ["--index-cache", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
+            else:
+                cmd += ["--index-cache", "--index-cache-format", args.index_cache_format]
         subprocess.run(cmd, check=True)
         trip = read_triplet_csv(triplet_csv)
         raw = np.asarray([trip["forbidden"], trip["intercombination"], trip["resonance"]], dtype=float)

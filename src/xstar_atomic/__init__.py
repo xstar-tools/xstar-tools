@@ -15,4 +15,4 @@ __all__ = [
     "set_data_path",
 ]
 
-__version__ = "0.2.56"
+__version__ = "0.2.57"
