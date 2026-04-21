@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.59 - 2026-04-21
+
+- Captures SciPy `MatrixRankWarning` during sparse statistical-equilibrium solves and falls back to the existing least-squares solver instead of printing repeated warning spam.
+- This is especially useful for the O VII solver-response source-fit diagnostic, where some unit-source response matrices are rank-deficient because selected source levels do not independently constrain a unique sparse solution.
+- The warning/fallback remains recorded in the solver summary via `solver_warning`; fitted source-response diagnostics should still be judged from the output summary ratios.
+
 ## v0.2.58 - 2026-04-20
 
 - Added source-amplitude controls to `examples/13_o7_recombination_cascade_workflow.py`:

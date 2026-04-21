@@ -75,6 +75,7 @@ import argparse
 import csv
 import json
 import math
+import warnings
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -729,7 +730,11 @@ def solve_steady_state(
                 raise RuntimeError("SciPy sparse solver requested but scipy is not available")
             info["solver"] = "scipy.sparse.linalg.spsolve"
             info["sparse_used"] = True
-            pop = scipy_splinalg.spsolve(scipy_sparse.csr_matrix(M), b)
+            matrix_rank_warning = getattr(scipy_splinalg, "MatrixRankWarning", None)
+            with warnings.catch_warnings():
+                if matrix_rank_warning is not None:
+                    warnings.filterwarnings("error", category=matrix_rank_warning)
+                pop = scipy_splinalg.spsolve(scipy_sparse.csr_matrix(M), b)
             pop = np.asarray(pop, dtype=float)
             if not np.all(np.isfinite(pop)):
                 raise RuntimeError("sparse solve returned non-finite populations")
