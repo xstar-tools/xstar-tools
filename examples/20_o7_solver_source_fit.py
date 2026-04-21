@@ -11,7 +11,11 @@ those full statistical-equilibrium responses.
 The fitted weights remain empirical/diagnostic.  They are intended for testing
 whether the current radiative+collisional solver network can reproduce the
 XSTAR O VII triplet ratios when supplied with a fitted level-source distribution.
-They are not physical level-resolved recombination rates.
+They are not physical level-resolved recombination rates.  Because the current
+solver keeps a normalized O VII population while adding external source terms,
+the fitted weights are valid for the source amplitude used in this script.  When
+passing them to ``examples/13_o7_recombination_cascade_workflow.py``, use
+``--solver-source-total-rate`` to match that amplitude.
 """
 from __future__ import annotations
 
@@ -284,6 +288,7 @@ def main() -> None:
             "fit_weight_norm": float(fit_weights[idx]),
             "solver_fit_weight_norm": float(fit_weights[idx]),
             "uniform_weight_norm": float(uniform_weights[idx]),
+            "fit_source_rate_s^-1": float(args.source_rate),
             "response_forbidden_norm": float(Y[idx, 0]),
             "response_intercombination_norm": float(Y[idx, 1]),
             "response_resonance_norm": float(Y[idx, 2]),
@@ -309,6 +314,8 @@ def main() -> None:
         "temperature_K": args.temperature,
         "electron_density_cm^-3": args.electron_density,
         "source_levels": valid_levels,
+        "source_rate_s^-1": float(args.source_rate),
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
         "xstar_reference": xstar,
         "target_components_normalized": {
             "forbidden": float(target[0]),

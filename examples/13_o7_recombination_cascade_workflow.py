@@ -30,6 +30,11 @@ Example
     ../xstar/data/atdb.fits \
     --out-dir o7_recomb_cascade_workflow \
     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv
+
+For solver-response fitted weights produced with the default
+``examples/20_o7_solver_source_fit.py --source-rate=1.0``, also pass
+``--solver-source-total-rate 1.0`` so the combined solver uses the same
+effective source amplitude as the fit.
 """
 
 from __future__ import annotations
@@ -43,6 +48,47 @@ import sys
 from xstar_atomic.recombination import CASCADE_TARGET_PRESETS
 from pathlib import Path
 from typing import Optional
+
+
+def _scale_source_csv(in_path: Path, out_path: Path, scale: float) -> dict:
+    """Write a copy of a level source CSV with source/sink terms scaled."""
+    rows = []
+    with in_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        for row in reader:
+            for key in ("source_s^-1", "sink_s^-1"):
+                if key in row and str(row.get(key, "")).strip() != "":
+                    try:
+                        row[key] = f"{float(row[key]) * scale:.16g}"
+                    except Exception:
+                        pass
+            rows.append(row)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return {"path": str(out_path), "scale": float(scale), "n_rows": len(rows)}
+
+
+def _source_sum_for_first_density(path: Path) -> Optional[float]:
+    """Return source sum for the first T/ne block in a source CSV."""
+    first_T = None
+    first_ne = None
+    total = 0.0
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            T = row.get("temperature_K")
+            ne = row.get("electron_density_cm^-3")
+            if first_T is None:
+                first_T, first_ne = T, ne
+            if T == first_T and ne == first_ne:
+                try:
+                    total += float(row.get("source_s^-1") or 0.0)
+                except Exception:
+                    pass
+    return total if total > 0.0 else None
 
 
 def _run(cmd: list[str]) -> None:
@@ -134,6 +180,25 @@ def main() -> None:
             "older cascade-yield experiments."
         ),
     )
+    parser.add_argument(
+        "--solver-source-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Multiply the source/sink CSV passed to the solver by this factor. "
+            "Useful for fitted-source diagnostics because solver-response weights "
+            "are valid only at the source amplitude used during the fit."
+        ),
+    )
+    parser.add_argument(
+        "--solver-source-total-rate",
+        type=float,
+        default=None,
+        help=(
+            "Rescale the source CSV passed to the solver so the first T/ne block has this total source rate. "
+            "For weights from examples/20_o7_solver_source_fit.py with default --source-rate=1.0, use 1.0."
+        ),
+    )
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
@@ -206,6 +271,20 @@ def main() -> None:
         solver_source_csv = initial_source_csv
         solver_source_mode_note = "initial"
 
+    solver_source_scale_info = {"requested_scale": float(args.solver_source_scale), "requested_total_rate": args.solver_source_total_rate}
+    source_scale = float(args.solver_source_scale)
+    if args.solver_source_total_rate is not None:
+        current_total = _source_sum_for_first_density(solver_source_csv)
+        solver_source_scale_info["unscaled_first_block_total_source_s^-1"] = current_total
+        if current_total is None or current_total <= 0.0:
+            raise SystemExit(f"Cannot apply --solver-source-total-rate because {solver_source_csv} has no positive first-block source sum")
+        source_scale *= float(args.solver_source_total_rate) / float(current_total)
+    solver_source_scale_info["applied_scale"] = float(source_scale)
+    if abs(source_scale - 1.0) > 0.0:
+        scaled_source_csv = out_dir / (solver_source_csv.stem + "_scaled.csv")
+        solver_source_scale_info.update(_scale_source_csv(solver_source_csv, scaled_source_csv, source_scale))
+        solver_source_csv = scaled_source_csv
+
     _run([
         py, "-m", "xstar_atomic.solver", args.fitsfile,
         "--element", "O",
@@ -240,6 +319,7 @@ def main() -> None:
         "cascade_weight_floor": args.cascade_weight_floor,
         "solver_source_csv_mode": args.solver_source_csv_mode,
         "solver_source_csv_used": solver_source_mode_note,
+        "solver_source_scale": solver_source_scale_info,
         "outputs": {
             "initial_source_csv": str(initial_source_csv),
             "cascade_source_csv": str(cascade_source_csv),

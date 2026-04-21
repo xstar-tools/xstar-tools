@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.2.58 - 2026-04-20
+
+- Added source-amplitude controls to `examples/13_o7_recombination_cascade_workflow.py`:
+  - `--solver-source-scale` multiplies the source/sink CSV passed to the solver.
+  - `--solver-source-total-rate` rescales the solver source CSV so the first T/ne block has a requested total source rate.
+- This fixes the diagnostic mismatch where solver-response fitted weights from `examples/20_o7_solver_source_fit.py` were derived with unit source rate `1.0 s^-1`, but the cascade workflow applied them at the physical RR source scale (`~1.345e-12 s^-1` at ne=1), causing baseline collisional excitation to dominate.
+- `examples/20_o7_solver_source_fit.py` now records `source_rate_s^-1`, `source_rate_note`, and `fit_source_rate_s^-1` in its outputs so the required workflow source amplitude is explicit.
+- Recommended fitted-source workflow now uses `--solver-source-total-rate 1.0` when consuming default solver-response weights.
+
 ## v0.2.57 - 2026-04-19
 
 Safety fix:
