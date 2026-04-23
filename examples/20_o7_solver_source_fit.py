@@ -13,7 +13,9 @@ whether the current radiative+collisional solver network can reproduce the
 XSTAR O VII triplet ratios when supplied with a fitted level-source distribution.
 They are not physical level-resolved recombination rates.  Because the current
 solver keeps a normalized O VII population while adding external source terms,
-the fitted weights are valid for the source amplitude used in this script.  When
+the fitted weights are valid for the source amplitude used in this script.  The
+fit is performed with the raw triplet response amplitudes, then the combined
+triplet vector is normalized only when comparing to the XSTAR R/G target.  When
 passing them to ``examples/13_o7_recombination_cascade_workflow.py``, use
 ``--solver-source-total-rate`` to match that amplitude.
 """
@@ -151,6 +153,69 @@ def fit_nonnegative_simplex(Y: np.ndarray, target: np.ndarray, max_iter: int = 5
     }
 
 
+def fit_raw_response_simplex(raw_response: np.ndarray, target_norm: np.ndarray, max_iter: int = 50000, tol: float = 1e-13) -> Tuple[np.ndarray, dict]:
+    """Fit simplex weights using raw full-solver triplet amplitudes.
+
+    The v0.2.54--v0.2.59 solver-source diagnostic fitted weights to per-level
+    normalized response fractions.  That can reproduce R/G inside the diagnostic
+    table but not necessarily when the same weights are injected simultaneously
+    into the solver, because different source levels have different raw triplet
+    yields per unit source.
+
+    For a combined raw response p = sum_i w_i y_i, matching the XSTAR triplet
+    fractions t requires p to be parallel to t, i.e.
+
+        sum_i w_i (y_i - t sum_j y_ij) = 0.
+
+    This is a linear least-squares problem on the nonnegative simplex after the
+    rows are globally rescaled for numerical conditioning.
+    """
+    Y = np.asarray(raw_response, dtype=float)
+    n = int(Y.shape[0])
+    if n == 0:
+        return np.array([], dtype=float), {"status": "empty_response_matrix"}
+    target = np.asarray(target_norm, dtype=float)
+    target = target / max(float(target.sum()), 1e-300)
+    row_sums = np.sum(Y, axis=1)
+    scale = float(np.nanmax(np.where(np.isfinite(row_sums) & (row_sums > 0.0), row_sums, 0.0)))
+    if not np.isfinite(scale) or scale <= 0.0:
+        return np.full(n, 1.0 / n, dtype=float), {"status": "zero_raw_response_matrix"}
+    Ys = Y / scale
+    Z = Ys - np.sum(Ys, axis=1)[:, None] * target[None, :]
+    w = np.full(n, 1.0 / n, dtype=float)
+    try:
+        spectral = float(np.linalg.norm(Z, ord=2))
+    except Exception:
+        spectral = float(np.linalg.norm(Z))
+    step = 1.0 / max(2.0 * spectral * spectral, 1e-30)
+    prev = float("inf")
+    status = "max_iter"
+    it = 0
+    for it in range(int(max_iter)):
+        resid = w @ Z
+        obj = float(np.dot(resid, resid))
+        if abs(prev - obj) < tol * max(1.0, prev):
+            status = "converged"
+            break
+        prev = obj
+        grad = 2.0 * (Z @ resid)
+        w = project_to_simplex(w - step * grad)
+    final_raw = w @ Y
+    final_norm = normalize_positive(final_raw)
+    final_centered = w @ Z
+    return w, {
+        "status": status,
+        "iterations": int(it + 1),
+        "objective": float(np.dot(final_centered, final_centered)),
+        "step": step,
+        "raw_response_scale": scale,
+        "combined_raw_triplet_sum": float(np.sum(final_raw)),
+        "combined_normalized_forbidden": float(final_norm[0]),
+        "combined_normalized_intercombination": float(final_norm[1]),
+        "combined_normalized_resonance": float(final_norm[2]),
+    }
+
+
 def ratios_from_components(vec: Sequence[float]) -> dict:
     f, i, r = [float(x) for x in vec]
     return {
@@ -227,6 +292,7 @@ def main() -> None:
 
     response_rows: List[dict] = []
     Y_rows: List[List[float]] = []
+    raw_rows: List[List[float]] = []
     valid_levels: List[int] = []
     for lev in source_levels:
         triplet_csv = unit_dir / f"level_{lev}_triplet.csv"
@@ -256,6 +322,7 @@ def main() -> None:
         response = normalize_positive(raw)
         valid_levels.append(int(lev))
         Y_rows.append([float(response[0]), float(response[1]), float(response[2])])
+        raw_rows.append([float(raw[0]), float(raw[1]), float(raw[2])])
         response_rows.append({
             "source_level": int(lev),
             "unit_source_rate_s^-1": float(args.source_rate),
@@ -273,10 +340,13 @@ def main() -> None:
         })
 
     Y = np.asarray(Y_rows, dtype=float)
-    fit_weights, fit_info = fit_nonnegative_simplex(Y, target)
+    Y_raw = np.asarray(raw_rows, dtype=float)
+    fit_weights, fit_info = fit_raw_response_simplex(Y_raw, target)
     uniform_weights = np.full(len(valid_levels), 1.0 / len(valid_levels), dtype=float) if valid_levels else np.array([])
-    fit_pred = fit_weights @ Y if len(fit_weights) else np.zeros(3)
-    uniform_pred = uniform_weights @ Y if len(uniform_weights) else np.zeros(3)
+    fit_pred_raw = fit_weights @ Y_raw if len(fit_weights) else np.zeros(3)
+    uniform_pred_raw = uniform_weights @ Y_raw if len(uniform_weights) else np.zeros(3)
+    fit_pred = normalize_positive(fit_pred_raw)
+    uniform_pred = normalize_positive(uniform_pred_raw)
     fit_ratios = ratios_from_components(fit_pred)
     uniform_ratios = ratios_from_components(uniform_pred)
     target_ratios = ratios_from_components(target)
@@ -292,6 +362,12 @@ def main() -> None:
             "response_forbidden_norm": float(Y[idx, 0]),
             "response_intercombination_norm": float(Y[idx, 1]),
             "response_resonance_norm": float(Y[idx, 2]),
+            "raw_forbidden_per_unit_source": float(Y_raw[idx, 0]),
+            "raw_intercombination_per_unit_source": float(Y_raw[idx, 1]),
+            "raw_resonance_per_unit_source": float(Y_raw[idx, 2]),
+            "fit_raw_contribution_forbidden": float(fit_weights[idx] * Y_raw[idx, 0]),
+            "fit_raw_contribution_intercombination": float(fit_weights[idx] * Y_raw[idx, 1]),
+            "fit_raw_contribution_resonance": float(fit_weights[idx] * Y_raw[idx, 2]),
             "fit_contribution_forbidden": float(fit_weights[idx] * Y[idx, 0]),
             "fit_contribution_intercombination": float(fit_weights[idx] * Y[idx, 1]),
             "fit_contribution_resonance": float(fit_weights[idx] * Y[idx, 2]),
@@ -329,17 +405,27 @@ def main() -> None:
                 "intercombination": float(uniform_pred[1]),
                 "resonance": float(uniform_pred[2]),
             },
+            "raw_components": {
+                "forbidden": float(uniform_pred_raw[0]),
+                "intercombination": float(uniform_pred_raw[1]),
+                "resonance": float(uniform_pred_raw[2]),
+            },
             **uniform_ratios,
             "R_over_xstar": (uniform_ratios.get("R_f_over_i") / R_x) if uniform_ratios.get("R_f_over_i") is not None else None,
             "G_over_xstar": (uniform_ratios.get("G_f_plus_i_over_r") / G_x) if uniform_ratios.get("G_f_plus_i_over_r") is not None else None,
         },
         "fitted_prediction": {
-            "method": "projected-gradient nonnegative simplex fit to full solver unit-source response matrix",
+            "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
             "fit_info": fit_info,
             "components": {
                 "forbidden": float(fit_pred[0]),
                 "intercombination": float(fit_pred[1]),
                 "resonance": float(fit_pred[2]),
+            },
+            "raw_components": {
+                "forbidden": float(fit_pred_raw[0]),
+                "intercombination": float(fit_pred_raw[1]),
+                "resonance": float(fit_pred_raw[2]),
             },
             **fit_ratios,
             "R_over_xstar": (fit_ratios.get("R_f_over_i") / R_x) if fit_ratios.get("R_f_over_i") is not None else None,
