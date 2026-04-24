@@ -199,6 +199,16 @@ def main() -> None:
             "For weights from examples/20_o7_solver_source_fit.py with default --source-rate=1.0, use 1.0."
         ),
     )
+    parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="svd")
+    parser.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="svd")
+    parser.add_argument("--negative-population-action", choices=["clip", "zero-small", "keep", "reject"], default="keep")
+    parser.add_argument("--negative-population-tol", type=float, default=1.0e-8)
+    parser.add_argument("--residual-l2-max", type=float)
+    parser.add_argument("--residual-linf-max", type=float)
+    parser.add_argument("--reject-large-residual", action="store_true")
+    parser.add_argument("--prune-null-rate-levels", action="store_true", default=True)
+    parser.add_argument("--no-prune-null-rate-levels", dest="prune_null_rate_levels", action="store_false")
+    parser.add_argument("--null-rate-floor", type=float, default=0.0)
     parser.add_argument("--out-dir", default="o7_recomb_cascade_workflow")
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
@@ -296,14 +306,20 @@ def main() -> None:
         "--electron-density-for-lmixing", f"{args.electron_densities[0]:g}",
         "--component-mode", "ground",
         "--prune-unconnected-levels",
-        "--linear-solver", "sparse",
+        "--linear-solver", args.linear_solver,
+        "--rank-deficient-action", args.rank_deficient_action,
+        "--negative-population-action", args.negative_population_action,
+        "--negative-population-tol", f"{float(args.negative_population_tol):.16g}",
         "--recombination-source-csv", str(solver_source_csv),
         "--out-lines-csv", str(solver_lines_csv),
         "--out-populations-csv", str(solver_pop_csv),
         "--out-triplet-csv", str(solver_rg_csv),
         "--summary-json", str(solver_summary_json),
         "--print-summary",
-    ])
+    ] + (["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"] if args.prune_null_rate_levels else [])
+      + (["--residual-l2-max", f"{float(args.residual_l2_max):.16g}"] if args.residual_l2_max is not None else [])
+      + (["--residual-linf-max", f"{float(args.residual_linf_max):.16g}"] if args.residual_linf_max is not None else [])
+      + (["--reject-large-residual"] if args.reject_large_residual else []))
 
     xstar_ratios = _xstar_o7_triplet_ratios(Path(args.xstar_lines_csv), args.xstar_value_column)
     xstar_ratio_json.write_text(json.dumps(xstar_ratios, indent=2), encoding="utf-8")
@@ -320,6 +336,17 @@ def main() -> None:
         "solver_source_csv_mode": args.solver_source_csv_mode,
         "solver_source_csv_used": solver_source_mode_note,
         "solver_source_scale": solver_source_scale_info,
+        "solver_matrix_treatment": {
+            "linear_solver": args.linear_solver,
+            "rank_deficient_action": args.rank_deficient_action,
+            "negative_population_action": args.negative_population_action,
+            "negative_population_tol": float(args.negative_population_tol),
+            "residual_l2_max": args.residual_l2_max,
+            "residual_linf_max": args.residual_linf_max,
+            "reject_large_residual": bool(args.reject_large_residual),
+            "prune_null_rate_levels": bool(args.prune_null_rate_levels),
+            "null_rate_floor_s^-1": float(args.null_rate_floor),
+        },
         "outputs": {
             "initial_source_csv": str(initial_source_csv),
             "cascade_source_csv": str(cascade_source_csv),

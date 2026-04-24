@@ -267,7 +267,17 @@ def main() -> None:
     parser.add_argument("--wavelength-max", type=float, default=22.2)
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
-    parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto"], default="sparse")
+    parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="svd")
+    parser.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="svd")
+    parser.add_argument("--negative-population-action", choices=["clip", "zero-small", "keep", "reject"], default="keep",
+                        help="Diagnostic default is keep so the fitted response remains a linear solver response rather than a clipped nonlinear response.")
+    parser.add_argument("--negative-population-tol", type=float, default=1.0e-8)
+    parser.add_argument("--residual-l2-max", type=float)
+    parser.add_argument("--residual-linf-max", type=float)
+    parser.add_argument("--reject-large-residual", action="store_true")
+    parser.add_argument("--prune-null-rate-levels", action="store_true", default=True)
+    parser.add_argument("--no-prune-null-rate-levels", dest="prune_null_rate_levels", action="store_false")
+    parser.add_argument("--null-rate-floor", type=float, default=0.0)
     parser.add_argument("--index-cache", action="store_true")
     parser.add_argument("--index-cache-path", help="Explicit hierarchy index-cache filename passed to xstar_atomic.solver. Use this to keep the cache away from atdb.fits.")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
@@ -307,10 +317,21 @@ def main() -> None:
             "--wavelength-max", f"{float(args.wavelength_max):.16g}",
             "--source-level", str(int(lev)), f"{float(args.source_rate):.16g}",
             "--linear-solver", args.linear_solver,
+            "--rank-deficient-action", args.rank_deficient_action,
+            "--negative-population-action", args.negative_population_action,
+            "--negative-population-tol", f"{float(args.negative_population_tol):.16g}",
             "--out-lines-csv", str(lines_csv),
             "--out-triplet-csv", str(triplet_csv),
             "--summary-json", str(summary_json),
         ]
+        if args.residual_l2_max is not None:
+            cmd += ["--residual-l2-max", f"{float(args.residual_l2_max):.16g}"]
+        if args.residual_linf_max is not None:
+            cmd += ["--residual-linf-max", f"{float(args.residual_linf_max):.16g}"]
+        if args.reject_large_residual:
+            cmd += ["--reject-large-residual"]
+        if args.prune_null_rate_levels:
+            cmd += ["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"]
         if args.index_cache:
             if args.index_cache_path:
                 cmd += ["--index-cache", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
@@ -391,6 +412,17 @@ def main() -> None:
         "electron_density_cm^-3": args.electron_density,
         "source_levels": valid_levels,
         "source_rate_s^-1": float(args.source_rate),
+        "solver_matrix_treatment": {
+            "linear_solver": args.linear_solver,
+            "rank_deficient_action": args.rank_deficient_action,
+            "negative_population_action": args.negative_population_action,
+            "negative_population_tol": float(args.negative_population_tol),
+            "residual_l2_max": args.residual_l2_max,
+            "residual_linf_max": args.residual_linf_max,
+            "reject_large_residual": bool(args.reject_large_residual),
+            "prune_null_rate_levels": bool(args.prune_null_rate_levels),
+            "null_rate_floor_s^-1": float(args.null_rate_floor),
+        },
         "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
         "xstar_reference": xstar,
         "target_components_normalized": {

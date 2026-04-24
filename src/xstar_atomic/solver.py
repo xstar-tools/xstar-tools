@@ -611,12 +611,85 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
     return R, transition_log
 
 
+
+def prune_null_rate_levels_for_solve(
+    level_indices: List[int],
+    R: np.ndarray,
+    source: np.ndarray,
+    sink: np.ndarray,
+    output_lines: List[dict],
+    ground_level: int,
+    *,
+    rate_floor: float = 0.0,
+) -> Tuple[List[int], dict]:
+    """Remove levels with no effective rates for a particular T/ne solve.
+
+    Unlike graph pruning, this is evaluated after collision rates and optional
+    source/sink vectors have been built.  A level is kept if it is the ground
+    level, appears in a requested output line, has a nonzero source/sink term,
+    or has an incoming/outgoing rate above ``rate_floor``.
+    """
+    n = len(level_indices)
+    if n == 0:
+        return level_indices, {"enabled": True, "n_levels_before": 0, "n_levels_after": 0, "n_levels_removed": 0}
+    floor = max(float(rate_floor or 0.0), 0.0)
+    rate_activity = np.sum(np.abs(R), axis=0) + np.sum(np.abs(R), axis=1)
+    protected: set[int] = {int(ground_level)}
+    for line in output_lines:
+        lo = maybe_int(line.get("lower_level"))
+        up = maybe_int(line.get("upper_level"))
+        if lo is not None:
+            protected.add(lo)
+        if up is not None:
+            protected.add(up)
+    keep_mask = np.zeros(n, dtype=bool)
+    for k, lev in enumerate(level_indices):
+        if lev in protected:
+            keep_mask[k] = True
+        elif rate_activity[k] > floor:
+            keep_mask[k] = True
+        elif k < len(source) and abs(float(source[k])) > floor:
+            keep_mask[k] = True
+        elif k < len(sink) and abs(float(sink[k])) > floor:
+            keep_mask[k] = True
+    pruned = [lev for k, lev in enumerate(level_indices) if keep_mask[k]]
+    removed = [lev for k, lev in enumerate(level_indices) if not keep_mask[k]]
+    return pruned, {
+        "enabled": True,
+        "rate_floor_s^-1": floor,
+        "n_levels_before": len(level_indices),
+        "n_levels_after": len(pruned),
+        "n_levels_removed": len(removed),
+        "removed_levels_preview": removed[:50],
+        "removed_levels_truncated": len(removed) > 50,
+        "protected_levels": sorted(protected),
+    }
+
+
+def _svd_lstsq(M: np.ndarray, b: np.ndarray, rcond: Optional[float] = None) -> np.ndarray:
+    """Small explicit SVD least-squares helper for rank-deficient diagnostics."""
+    U, svals, Vt = np.linalg.svd(M, full_matrices=False)
+    if svals.size == 0:
+        return np.zeros(M.shape[1], dtype=float)
+    if rcond is None:
+        tol = max(M.shape) * np.finfo(float).eps * float(np.max(svals))
+    else:
+        tol = float(rcond) * float(np.max(svals))
+    inv = np.array([1.0 / x if x > tol else 0.0 for x in svals], dtype=float)
+    return Vt.T @ (inv * (U.T @ b))
+
 def solve_steady_state(
     R: np.ndarray,
     source_vector: Optional[np.ndarray] = None,
     sink_rates: Optional[np.ndarray] = None,
     *,
     linear_solver: str = "dense",
+    rank_deficient_action: str = "lstsq",
+    negative_population_action: str = "clip",
+    negative_population_tol: float = 1.0e-8,
+    residual_l2_max: Optional[float] = None,
+    residual_linf_max: Optional[float] = None,
+    reject_large_residual: bool = False,
 ) -> Tuple[np.ndarray, dict]:
     """Solve statistical equilibrium for ``R[i, j] = rate j -> i``.
 
@@ -678,6 +751,12 @@ def solve_steady_state(
         "row_abs_sum_max": float(np.max(row_abs_sum)) if row_abs_sum.size else None,
         "solver": None,
         "solver_requested": requested_solver,
+        "rank_deficient_action": str(rank_deficient_action or "lstsq").lower(),
+        "negative_population_action": str(negative_population_action or "clip").lower(),
+        "negative_population_tol": float(negative_population_tol),
+        "residual_l2_max": residual_l2_max,
+        "residual_linf_max": residual_linf_max,
+        "reject_large_residual": bool(reject_large_residual),
         "solver_warning": "",
         "sparse_available": False,
         "sparse_used": False,
@@ -697,6 +776,9 @@ def solve_steady_state(
         pass
 
     use_sparse = requested_solver == "sparse" or (requested_solver == "auto" and info["sparse_available"] and n >= 64)
+    if requested_solver in {"lstsq", "svd"}:
+        use_sparse = False
+        rank_deficient_action = requested_solver
 
     # Dense diagnostics are useful but can be expensive for very large matrices.
     if n <= 800:
@@ -724,8 +806,26 @@ def solve_steady_state(
             except Exception:
                 pass
 
+    rank = info.get("matrix_rank")
+    rank_deficient = bool(rank is not None and int(rank) < int(n))
+    info["matrix_rank_deficient"] = rank_deficient
+    rank_action = str(rank_deficient_action or "lstsq").lower()
+    if rank_deficient:
+        info["solver_warning"] = (info.get("solver_warning", "") + f"; matrix rank deficient ({rank}/{n})").strip("; ")
+        if rank_action == "reject":
+            raise RuntimeError(f"statistical-equilibrium matrix rank deficient ({rank}/{n})")
+        if rank_action in {"lstsq", "svd"}:
+            use_sparse = False
+            requested_solver = rank_action
+
     try:
-        if use_sparse:
+        if requested_solver == "svd" or (rank_deficient and rank_action == "svd"):
+            info["solver"] = "numpy.linalg.svd_lstsq"
+            pop = _svd_lstsq(M, b)
+        elif requested_solver == "lstsq" or (rank_deficient and rank_action == "lstsq"):
+            info["solver"] = "numpy.linalg.lstsq_rank_deficient" if rank_deficient else "numpy.linalg.lstsq"
+            pop, *_ = np.linalg.lstsq(M, b, rcond=None)
+        elif use_sparse:
             if scipy_sparse is None or scipy_splinalg is None:
                 raise RuntimeError("SciPy sparse solver requested but scipy is not available")
             info["solver"] = "scipy.sparse.linalg.spsolve"
@@ -743,14 +843,41 @@ def solve_steady_state(
             pop = np.linalg.solve(M, b)
     except Exception as exc:
         info["solver"] = "numpy.linalg.lstsq"
-        info["solver_warning"] = f"solve failed: {exc}; used least-squares"
+        info["solver_warning"] = (info.get("solver_warning", "") + f"; solve failed: {exc}; used least-squares").strip("; ")
         pop, *_ = np.linalg.lstsq(M, b, rcond=None)
 
-    # Clean tiny numerical negatives and renormalize.
-    pop[np.abs(pop) < 1e-300] = 0.0
-    if np.any(pop < -1e-8):
+    pop = np.asarray(pop, dtype=float)
+    info["raw_population_sum"] = float(np.sum(pop)) if len(pop) else 0.0
+    info["raw_min_population"] = float(np.min(pop)) if len(pop) else None
+    info["raw_max_population"] = float(np.max(pop)) if len(pop) else None
+    neg_tol = abs(float(negative_population_tol))
+    neg_mask = pop < -neg_tol
+    tiny_neg_mask = (pop < 0.0) & ~neg_mask
+    info["n_negative_populations_raw"] = int(np.count_nonzero(neg_mask))
+    info["n_tiny_negative_populations_raw"] = int(np.count_nonzero(tiny_neg_mask))
+    info["negative_population_abs_sum_raw"] = float(np.sum(np.abs(pop[pop < 0.0]))) if np.any(pop < 0.0) else 0.0
+
+    neg_action = str(negative_population_action or "clip").lower()
+    if np.any(neg_mask):
         info["solver_warning"] = (info.get("solver_warning", "") + "; negative populations present").strip("; ")
-    pop = np.where(pop < 0.0, 0.0, pop)
+        if neg_action == "reject":
+            raise RuntimeError(f"negative populations exceed tolerance ({int(np.count_nonzero(neg_mask))} entries < -{neg_tol:g})")
+    # Clean tiny numerical negatives and optionally handle larger negatives.
+    pop[np.abs(pop) < 1e-300] = 0.0
+    if neg_action in {"clip", "zero-small"}:
+        if neg_action == "clip":
+            pop = np.where(pop < 0.0, 0.0, pop)
+            info["negative_population_handling"] = "clipped_all_negative_entries_to_zero"
+        else:
+            pop = np.where(tiny_neg_mask, 0.0, pop)
+            info["negative_population_handling"] = "zeroed_only_tiny_negative_entries"
+    elif neg_action == "keep":
+        info["negative_population_handling"] = "kept_raw_negative_entries"
+    elif neg_action == "reject":
+        info["negative_population_handling"] = "reject_if_below_tolerance"
+    else:
+        raise ValueError(f"unknown negative_population_action: {negative_population_action!r}")
+
     s = float(np.sum(pop))
     if s > 0:
         pop /= s
@@ -767,10 +894,22 @@ def solve_steady_state(
         info["linear_residual_l2"] = float(np.linalg.norm(residual))
         info["linear_residual_linf"] = float(np.max(np.abs(residual))) if residual.size else 0.0
         info["normalization_residual"] = float(abs(np.sum(pop) - 1.0))
+        large = False
+        if residual_l2_max is not None and info["linear_residual_l2"] is not None and info["linear_residual_l2"] > float(residual_l2_max):
+            large = True
+            info["solver_warning"] = (info.get("solver_warning", "") + f"; linear_residual_l2 exceeds threshold ({info['linear_residual_l2']:.6g} > {float(residual_l2_max):.6g})").strip("; ")
+        if residual_linf_max is not None and info["linear_residual_linf"] is not None and info["linear_residual_linf"] > float(residual_linf_max):
+            large = True
+            info["solver_warning"] = (info.get("solver_warning", "") + f"; linear_residual_linf exceeds threshold ({info['linear_residual_linf']:.6g} > {float(residual_linf_max):.6g})").strip("; ")
+        info["large_residual"] = bool(large)
+        if large and reject_large_residual:
+            raise RuntimeError("linear residual exceeds requested threshold")
     except Exception:
-        info["linear_residual_l2"] = None
-        info["linear_residual_linf"] = None
-        info["normalization_residual"] = None
+        if reject_large_residual:
+            raise
+        info["linear_residual_l2"] = info.get("linear_residual_l2")
+        info["linear_residual_linf"] = info.get("linear_residual_linf")
+        info["normalization_residual"] = info.get("normalization_residual")
     return pop, info
 
 
@@ -972,8 +1111,24 @@ def main(argv=None) -> None:
                    help="Optional experimental same-n adjacent-l mixing coefficient in cm^3 s^-1; not an XSTAR amcrs port")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
-    p.add_argument("--linear-solver", choices=["dense", "sparse", "auto"], default="dense",
-                   help="Linear algebra backend for the statistical-equilibrium solve. Sparse uses scipy.sparse.linalg.spsolve when available.")
+    p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
+                   help="Linear algebra backend for the statistical-equilibrium solve. sparse uses scipy.sparse.linalg.spsolve when available; lstsq/svd use rank-aware least-squares.")
+    p.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="lstsq",
+                   help="How to handle rank-deficient statistical-equilibrium matrices. Default uses least-squares instead of a direct inverse.")
+    p.add_argument("--negative-population-action", choices=["clip", "zero-small", "keep", "reject"], default="clip",
+                   help="How to handle negative populations after solving. The action and raw negative diagnostics are always reported.")
+    p.add_argument("--negative-population-tol", type=float, default=1.0e-8,
+                   help="Tolerance used to classify significant negative populations for reporting/rejection.")
+    p.add_argument("--residual-l2-max", type=float,
+                   help="Optional maximum allowed L2 residual for M n - b. Reported in summary; combine with --reject-large-residual to fail.")
+    p.add_argument("--residual-linf-max", type=float,
+                   help="Optional maximum allowed L-infinity residual for M n - b. Reported in summary; combine with --reject-large-residual to fail.")
+    p.add_argument("--reject-large-residual", action="store_true",
+                   help="Exit with an error when requested residual thresholds are exceeded.")
+    p.add_argument("--prune-null-rate-levels", action="store_true",
+                   help="For each T/ne solve, remove levels with no effective radiative/collisional/source/sink rate while preserving ground and output levels.")
+    p.add_argument("--null-rate-floor", type=float, default=0.0,
+                   help="Rate floor in s^-1 for --prune-null-rate-levels.")
     p.add_argument("--include-two-photon", action="store_true")
     p.add_argument("--include-superlevel", action="store_true")
     p.add_argument("--out-lines-csv", default="level_population_lines.csv")
@@ -1095,20 +1250,52 @@ def main(argv=None) -> None:
 
     for T in args.temperatures:
         for ne in args.electron_densities:
-            coll_T = build_collision_rates_for_T(collision_eval, level_set, T, ne)
-            used_collision_eval_rows.extend(coll_T)
+            local_level_indices = list(level_indices)
+            local_level_set = set(local_level_indices)
+            local_rad_lines_matrix = rad_lines_matrix
+            local_output_lines = output_lines
+            coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne)
             same_n_rows = build_same_n_lmixing_rows(
-                level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
+                local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
             )
-            R, trans_log = assemble_rate_matrix(level_indices, rad_lines_matrix, coll_T, same_n_rows)
-            source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(level_indices, args, T, ne)
-            ss_summary = summarize_source_sink_vectors(level_indices, source_vec, sink_vec, source_sink_notes)
-            ss_summary.update({"temperature_K": T, "electron_density_cm^-3": ne})
+            R, trans_log = assemble_rate_matrix(local_level_indices, local_rad_lines_matrix, coll_T, same_n_rows)
+            source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(local_level_indices, args, T, ne)
+            null_pruning_diagnostics = {"enabled": False}
+            if args.prune_null_rate_levels:
+                pruned_levels, null_pruning_diagnostics = prune_null_rate_levels_for_solve(
+                    local_level_indices, R, source_vec, sink_vec, local_output_lines, args.ground_level,
+                    rate_floor=args.null_rate_floor,
+                )
+                if len(pruned_levels) != len(local_level_indices):
+                    local_level_indices = pruned_levels
+                    local_level_set = set(local_level_indices)
+                    local_rad_lines_matrix = build_radiative_transitions(all_lines, local_level_set, args)
+                    local_output_lines = [r for r in output_lines if maybe_int(r.get("lower_level")) in local_level_set and maybe_int(r.get("upper_level")) in local_level_set]
+                    coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne)
+                    same_n_rows = build_same_n_lmixing_rows(
+                        local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
+                    )
+                    R, trans_log = assemble_rate_matrix(local_level_indices, local_rad_lines_matrix, coll_T, same_n_rows)
+                    source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(local_level_indices, args, T, ne)
+            used_collision_eval_rows.extend(coll_T)
+            ss_summary = summarize_source_sink_vectors(local_level_indices, source_vec, sink_vec, source_sink_notes)
+            ss_summary.update({"temperature_K": T, "electron_density_cm^-3": ne, "null_rate_pruning_diagnostics": null_pruning_diagnostics})
             source_sink_summaries.append(ss_summary)
-            pop, info = solve_steady_state(R, source_vec, sink_vec, linear_solver=args.linear_solver)
+            pop, info = solve_steady_state(
+                R, source_vec, sink_vec,
+                linear_solver=args.linear_solver,
+                rank_deficient_action=args.rank_deficient_action,
+                negative_population_action=args.negative_population_action,
+                negative_population_tol=args.negative_population_tol,
+                residual_l2_max=args.residual_l2_max,
+                residual_linf_max=args.residual_linf_max,
+                reject_large_residual=args.reject_large_residual,
+            )
             info.update({
                 "temperature_K": T,
                 "electron_density_cm^-3": ne,
+                "n_levels_in_this_solve": len(local_level_indices),
+                "null_rate_pruning_diagnostics": null_pruning_diagnostics,
                 "n_radiative_transitions_in_matrix": len([x for x in trans_log if x.get("kind") == "radiative_decay"]),
                 "n_collisional_transitions_in_matrix": len([x for x in trans_log if str(x.get("kind", "")).startswith("collisional")]),
                 "n_phenomenological_same_n_lmixing_transitions": len([x for x in trans_log if x.get("kind") == "phenomenological_same_n_lmixing"]),
@@ -1116,8 +1303,8 @@ def main(argv=None) -> None:
                 "auto_recombination_cascade_status": "not_implemented_use_recombination_source_csv" if args.auto_recombination_cascade else "not_requested",
             })
             solve_infos.append(info)
-            all_population_rows.extend(make_population_rows(level_indices, level_by_index, pop, T, ne, info))
-            all_line_rows.extend(make_line_output_rows(output_lines, level_indices, pop, T, ne, info, level_by_index, rad_rates_from_upper))
+            all_population_rows.extend(make_population_rows(local_level_indices, level_by_index, pop, T, ne, info))
+            all_line_rows.extend(make_line_output_rows(local_output_lines, local_level_indices, pop, T, ne, info, level_by_index, rad_rates_from_upper))
             for tr in trans_log:
                 tr = dict(tr)
                 tr["temperature_K"] = T
@@ -1151,6 +1338,8 @@ def main(argv=None) -> None:
         "out_triplet_csv": args.out_triplet_csv,
         "component_mode": args.component_mode,
         "prune_unconnected_levels": bool(args.prune_unconnected_levels),
+        "prune_null_rate_levels": bool(args.prune_null_rate_levels),
+        "null_rate_floor_s^-1": float(args.null_rate_floor),
         "pruning_diagnostics": pruning_diagnostics,
         "ground_level": args.ground_level,
         "n_components_initial": component_diagnostics_initial.get("n_components"),

@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.2.61 - 2026-04-23
+
+Numerical solver hardening for Stage-6 O VII diagnostics.
+
+Added:
+- Rank-aware matrix handling in `xstar_atomic.solver` via `--rank-deficient-action warn|lstsq|svd|reject`.
+- Explicit least-squares/SVD solver choices through `--linear-solver lstsq|svd` in addition to `dense|sparse|auto`.
+- Per-solve null-rate pruning with `--prune-null-rate-levels` and `--null-rate-floor`, preserving ground, output, and source/sink levels.
+- Negative-population controls: `--negative-population-action clip|zero-small|keep|reject` and `--negative-population-tol`.
+- Residual diagnostics and optional rejection: `--residual-l2-max`, `--residual-linf-max`, and `--reject-large-residual`.
+- Raw population diagnostics before any negative-population handling, including counts and absolute negative-population sum.
+- `examples/20_o7_solver_source_fit.py` now defaults to SVD/rank-aware diagnostic solving, keeps raw negative populations by default, and passes null-rate pruning to unit-source solves.
+- `examples/13_o7_recombination_cascade_workflow.py` now exposes the same solver-matrix treatment options and records them in the workflow summary.
+
+Changed:
+- Rank-deficient matrices are no longer treated as ordinary direct-solve cases by default; the default action is least-squares in the solver CLI and SVD in the O VII diagnostic examples.
+- Negative populations are no longer clipped silently: the chosen action and raw negative-population diagnostics are always written to solver summaries.
+
+Notes:
+- The default library/CLI behavior remains compatible for general use (`clip` remains the solver default), while the O VII empirical diagnostic examples use `keep` to avoid introducing nonlinear clipping into response-matrix fits.
+
 ## v0.2.60 - 2026-04-22
 
 - Corrected `examples/20_o7_solver_source_fit.py` so the empirical solver-response weights are fitted against the **raw full-solver triplet response amplitudes**, with the combined triplet vector normalized only for comparison to the XSTAR R/G target.
