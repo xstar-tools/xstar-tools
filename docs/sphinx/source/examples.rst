@@ -373,21 +373,47 @@ When no explicit `--source-fit-weights-csv` is supplied, this mode looks for the
 
 ### Stage-6 full-solver source-fit diagnostic
 
-The cascade-yield fit in `examples/19_o7_cascade_source_fit.py` is useful for testing the radiative branching network, but its fitted weights are not guaranteed to reproduce the same R/G ratios when injected into the full statistical-equilibrium solver.  For that stricter test, use:
+The cascade-yield fit in `examples/19_o7_cascade_source_fit.py` is useful for testing the radiative branching network, but its fitted weights are not guaranteed to reproduce the same R/G ratios when injected into the full statistical-equilibrium solver.  For the stricter full-solver diagnostic, use the rank-aware SVD treatment that was validated against the saved XSTAR O VII triplet reference:
 
 ```bash
 PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
   ../xstar/data/atdb.fits \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
   --index-cache \
   --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
   --out-dir o7_solver_source_fit \
   --print-summary
 ```
 
-The script also performs an automatic combined-source validation solve after fitting the weights.  Its summary reports the XSTAR R/G target, the fitted linear-response R/G prediction, and the actual simultaneous-solver R/G result, together with matrix rank, condition number, residuals, and negative-population diagnostics.  Use `--skip-combined-validation` only when you want the older response-matrix-only behavior.
+The recommended diagnostic solver settings are:
 
-The compatible output weights can then be used with the recombination/cascade workflow:
+```text
+linear_solver = svd
+rank_deficient_action = svd
+negative_population_action = keep
+prune_null_rate_levels = true
+source_total_rate = 1.0 s^-1
+```
+
+These settings are important because the O VII statistical-equilibrium matrix is rank-deficient and highly ill-conditioned.  In the validation run, the combined-source solve used `numpy.linalg.svd_lstsq`, had matrix rank `231/238`, condition number about `3.1e18`, residuals `linear_residual_l2 ~ 0.0032` and `linear_residual_linf ~ 0.0032`, and one raw negative population retained for diagnostic linearity.  Null-rate pruning removed levels `44`, `45`, and `241`.
+
+The script automatically performs a combined-source validation solve after fitting the weights.  Its summary reports the XSTAR R/G target, the fitted linear-response R/G prediction, and the actual simultaneous-solver R/G result, together with matrix rank, condition number, residuals, null-rate pruning diagnostics, source/sink summaries, and negative-population diagnostics.  Use `--skip-combined-validation` only when you want the older response-matrix-only behavior.
+
+A validated v0.2.62 run gave:
+
+```text
+XSTAR R=3.20837 G=10.5622
+Fitted linear-response R=3.20838 G=10.5622
+Combined simultaneous-solver R=3.20838 G=10.5622
+R/R_XSTAR = 1.00000146
+G/G_XSTAR = 0.99999836
+```
+
+The compatible output weights can then be used with the recombination/cascade workflow.  Use the same SVD/rank-aware solver treatment and scale the solver source CSV to the same total source rate used by the fit:
 
 ```bash
 PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
@@ -396,9 +422,14 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
   --solver-source-csv-mode initial \
   --solver-source-total-rate 1.0 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
   --out-dir o7_recomb_cascade_workflow_solver_fit \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
   --print-summary
 ```
 
-These weights are empirical diagnostics, not physical level-resolved recombination rates.
+These weights are empirical diagnostics, not physical level-resolved recombination rates.  The recommended SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
+

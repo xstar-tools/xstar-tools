@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.63 - 2026-04-25
+
+Documentation update for the validated O VII full-solver source-fit path.
+
+Changed:
+- Updated README and Markdown user guide with the validated O VII solver settings: `--linear-solver svd`, `--rank-deficient-action svd`, `--negative-population-action keep`, and `--prune-null-rate-levels`.
+- Documented that the combined-source validation in `examples/20_o7_solver_source_fit.py` matches the saved XSTAR O VII triplet ratios with `R/R_XSTAR = 1.00000146` and `G/G_XSTAR = 0.99999836` in the v0.2.62 validation run.
+- Added the same validated command sequence to the recombination/cascade workflow documentation, including `--solver-source-total-rate 1.0` and the SVD/rank-aware solver controls.
+- Updated the LaTeX user guide with a dedicated Stage-6 full-solver source-fit section and a compact diagnostic summary table.
+- Updated Sphinx examples documentation with the same validated workflow and diagnostic caveats.
+
+Notes:
+- The fitted source weights remain empirical/diagnostic, not true level-resolved recombination rates.
+- Direct dense or sparse solvers are not recommended for this O VII diagnostic unless residuals and combined-source validation are explicitly checked, because the matrix is rank-deficient and highly ill-conditioned.
+
 ## v0.2.62 - 2026-04-24
 
 Automatic combined-source validation for the O VII solver-response source-fit diagnostic.
