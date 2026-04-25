@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.2.62 - 2026-04-24
+
+Automatic combined-source validation for the O VII solver-response source-fit diagnostic.
+
+Added:
+- `examples/20_o7_solver_source_fit.py` now runs one simultaneous combined-source validation solve after fitting the nonnegative source weights, unless `--skip-combined-validation` is supplied.
+- The validation writes `combined_source_validation/o7_combined_fitted_sources.csv`, `o7_combined_solver_lines.csv`, `o7_combined_solver_triplet.csv`, and `o7_combined_solver_summary.json`.
+- The top-level `o7_solver_source_fit_summary.json` now reports three R/G comparisons in one place: XSTAR reference, fitted linear-response prediction, and combined simultaneous-solver validation.
+- Combined validation diagnostics include matrix rank/size, condition number, linear residuals, source/sink summary, null-rate pruning diagnostics, and raw negative-population counts/minimum/sum diagnostics.
+- New options: `--skip-combined-validation` and `--combined-source-total-rate` for controlling the simultaneous validation solve.
+
+Purpose:
+- This prevents confusion between an exact response-matrix fit and the actual behavior when the fitted sources are injected together into the full statistical-equilibrium solver.
+
 ## v0.2.61 - 2026-04-23
 
 Numerical solver hardening for Stage-6 O VII diagnostics.

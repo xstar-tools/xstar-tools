@@ -380,9 +380,12 @@ PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
   ../xstar/data/atdb.fits \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
   --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
   --out-dir o7_solver_source_fit \
   --print-summary
 ```
+
+The script also performs an automatic combined-source validation solve after fitting the weights.  Its summary reports the XSTAR R/G target, the fitted linear-response R/G prediction, and the actual simultaneous-solver R/G result, together with matrix rank, condition number, residuals, and negative-population diagnostics.  Use `--skip-combined-validation` only when you want the older response-matrix-only behavior.
 
 The compatible output weights can then be used with the recombination/cascade workflow:
 
@@ -392,6 +395,7 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
   --source-mode selected-fit-weights \
   --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
   --solver-source-csv-mode initial \
+  --solver-source-total-rate 1.0 \
   --out-dir o7_recomb_cascade_workflow_solver_fit \
   --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
   --print-summary

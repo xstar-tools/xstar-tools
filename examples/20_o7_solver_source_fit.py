@@ -15,9 +15,11 @@ They are not physical level-resolved recombination rates.  Because the current
 solver keeps a normalized O VII population while adding external source terms,
 the fitted weights are valid for the source amplitude used in this script.  The
 fit is performed with the raw triplet response amplitudes, then the combined
-triplet vector is normalized only when comparing to the XSTAR R/G target.  When
-passing them to ``examples/13_o7_recombination_cascade_workflow.py``, use
-``--solver-source-total-rate`` to match that amplitude.
+triplet vector is normalized only when comparing to the XSTAR R/G target.  After
+fitting, the script also runs one simultaneous combined-source validation solve
+using the fitted weights and reports its R/G values and matrix diagnostics.
+When passing the weights to ``examples/13_o7_recombination_cascade_workflow.py``,
+use ``--solver-source-total-rate`` to match the source amplitude used here.
 """
 from __future__ import annotations
 
@@ -254,6 +256,115 @@ def read_triplet_csv(path: Path) -> dict:
     }
 
 
+def _first_solve_info(summary: dict) -> dict:
+    solves = summary.get("solves") or []
+    return dict(solves[0]) if solves else {}
+
+
+def _extract_solver_diagnostics(summary: dict) -> dict:
+    info = _first_solve_info(summary)
+    keys = [
+        "solver",
+        "solver_warning",
+        "matrix_rank",
+        "matrix_size",
+        "condition_number",
+        "linear_residual_l2",
+        "linear_residual_linf",
+        "residual_l2_threshold",
+        "residual_linf_threshold",
+        "residual_rejected",
+        "negative_population_action",
+        "negative_population_tol",
+        "n_negative_populations_raw",
+        "n_significant_negative_populations_raw",
+        "min_population_raw",
+        "sum_negative_populations_raw_abs",
+        "n_levels_in_this_solve",
+        "null_rate_pruning_diagnostics",
+    ]
+    out = {key: info.get(key) for key in keys if key in info}
+    ss = summary.get("source_sink_summaries") or []
+    if ss:
+        out["source_sink_summary"] = ss[0]
+    return out
+
+
+def write_combined_source_csv(path: Path, levels: Sequence[int], weights: Sequence[float], total_rate: float, temperature: float, electron_density: float) -> None:
+    rows = []
+    for lev, w in zip(levels, weights):
+        rate = float(total_rate) * float(w)
+        if rate <= 0.0:
+            continue
+        rows.append({
+            "temperature_K": float(temperature),
+            "electron_density_cm^-3": float(electron_density),
+            "level_index": int(lev),
+            "source_s^-1": rate,
+            "fit_weight_norm": float(w),
+        })
+    write_csv(path, rows)
+
+
+def run_combined_source_validation(args, levels: Sequence[int], weights: Sequence[float], out_dir: Path) -> dict:
+    validation_dir = out_dir / "combined_source_validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    source_csv = validation_dir / "o7_combined_fitted_sources.csv"
+    lines_csv = validation_dir / "o7_combined_solver_lines.csv"
+    triplet_csv = validation_dir / "o7_combined_solver_triplet.csv"
+    summary_json = validation_dir / "o7_combined_solver_summary.json"
+    total_rate = float(args.combined_source_total_rate if args.combined_source_total_rate is not None else args.source_rate)
+    write_combined_source_csv(source_csv, levels, weights, total_rate, args.temperature, args.electron_density)
+    cmd = [
+        sys.executable, "-m", "xstar_atomic.solver", str(args.fitsfile),
+        "--element", str(args.element), "--ion-stage", str(int(args.ion_stage)),
+        "--temperatures", f"{float(args.temperature):.16g}",
+        "--electron-densities", f"{float(args.electron_density):.16g}",
+        "--wavelength-min", f"{float(args.wavelength_min):.16g}",
+        "--wavelength-max", f"{float(args.wavelength_max):.16g}",
+        "--source-csv", str(source_csv),
+        "--linear-solver", args.linear_solver,
+        "--rank-deficient-action", args.rank_deficient_action,
+        "--negative-population-action", args.negative_population_action,
+        "--negative-population-tol", f"{float(args.negative_population_tol):.16g}",
+        "--out-lines-csv", str(lines_csv),
+        "--out-triplet-csv", str(triplet_csv),
+        "--summary-json", str(summary_json),
+    ]
+    if args.residual_l2_max is not None:
+        cmd += ["--residual-l2-max", f"{float(args.residual_l2_max):.16g}"]
+    if args.residual_linf_max is not None:
+        cmd += ["--residual-linf-max", f"{float(args.residual_linf_max):.16g}"]
+    if args.reject_large_residual:
+        cmd += ["--reject-large-residual"]
+    if args.prune_null_rate_levels:
+        cmd += ["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"]
+    if args.index_cache:
+        if args.index_cache_path:
+            cmd += ["--index-cache", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
+        else:
+            cmd += ["--index-cache", "--index-cache-format", args.index_cache_format]
+    subprocess.run(cmd, check=True)
+    trip = read_triplet_csv(triplet_csv)
+    summary = json.loads(summary_json.read_text(encoding="utf-8")) if summary_json.exists() else {}
+    return {
+        "enabled": True,
+        "source_total_rate_s^-1": total_rate,
+        "source_csv": str(source_csv),
+        "lines_csv": str(lines_csv),
+        "triplet_csv": str(triplet_csv),
+        "summary_json": str(summary_json),
+        "triplet_components": {
+            "forbidden": trip.get("forbidden"),
+            "intercombination": trip.get("intercombination"),
+            "resonance": trip.get("resonance"),
+        },
+        "R_f_over_i": trip.get("R_f_over_i"),
+        "G_f_plus_i_over_r": trip.get("G_f_plus_i_over_r"),
+        "solver_diagnostics": _extract_solver_diagnostics(summary),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fitsfile")
@@ -263,6 +374,10 @@ def main() -> None:
     parser.add_argument("--electron-density", type=float, default=1.0)
     parser.add_argument("--source-levels", default="2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20")
     parser.add_argument("--source-rate", type=float, default=1.0, help="Unit source rate injected into each level while building the response matrix")
+    parser.add_argument("--skip-combined-validation", action="store_true",
+                        help="Skip the simultaneous combined-source validation solve after fitting weights")
+    parser.add_argument("--combined-source-total-rate", type=float,
+                        help="Total source rate used for the combined validation solve; defaults to --source-rate")
     parser.add_argument("--wavelength-min", type=float, default=21.5)
     parser.add_argument("--wavelength-max", type=float, default=22.2)
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
@@ -400,6 +515,15 @@ def main() -> None:
     out_weights = out_dir / "o7_solver_source_fit_weights.csv"
     out_weights_compat = out_dir / "o7_source_fit_weights.csv"
     out_summary = out_dir / "o7_solver_source_fit_summary.json"
+    combined_validation = {"enabled": False, "reason": "disabled_by_--skip-combined-validation"}
+    if not args.skip_combined_validation:
+        combined_validation = run_combined_source_validation(args, valid_levels, fit_weights, out_dir)
+        combined_R = combined_validation.get("R_f_over_i")
+        combined_G = combined_validation.get("G_f_plus_i_over_r")
+        combined_validation["R_over_xstar"] = (combined_R / R_x) if combined_R is not None else None
+        combined_validation["G_over_xstar"] = (combined_G / G_x) if combined_G is not None else None
+        combined_validation["delta_R_vs_fitted_linear_response"] = (combined_R - fit_ratios.get("R_f_over_i")) if combined_R is not None and fit_ratios.get("R_f_over_i") is not None else None
+        combined_validation["delta_G_vs_fitted_linear_response"] = (combined_G - fit_ratios.get("G_f_plus_i_over_r")) if combined_G is not None and fit_ratios.get("G_f_plus_i_over_r") is not None else None
     write_csv(out_response, response_rows)
     write_csv(out_weights, weight_rows)
     write_csv(out_weights_compat, weight_rows)
@@ -463,11 +587,13 @@ def main() -> None:
             "R_over_xstar": (fit_ratios.get("R_f_over_i") / R_x) if fit_ratios.get("R_f_over_i") is not None else None,
             "G_over_xstar": (fit_ratios.get("G_f_plus_i_over_r") / G_x) if fit_ratios.get("G_f_plus_i_over_r") is not None else None,
         },
+        "combined_source_validation": combined_validation,
         "outputs": {
             "solver_response_matrix_csv": str(out_response),
             "solver_source_fit_weights_csv": str(out_weights),
             "source_fit_weights_compatible_csv": str(out_weights_compat),
             "summary_json": str(out_summary),
+            "combined_validation_dir": str(out_dir / "combined_source_validation"),
         },
         "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates.",
     }
@@ -493,7 +619,18 @@ def main() -> None:
     print(f"Wrote summary: {out_summary}")
     print(f"XSTAR R={R_x:.6g} G={G_x:.6g}")
     print(f"Uniform R={uniform_ratios.get('R_f_over_i'):.6g} G={uniform_ratios.get('G_f_plus_i_over_r'):.6g}")
-    print(f"Fitted R={fit_ratios.get('R_f_over_i'):.6g} G={fit_ratios.get('G_f_plus_i_over_r'):.6g}")
+    print(f"Fitted linear-response R={fit_ratios.get('R_f_over_i'):.6g} G={fit_ratios.get('G_f_plus_i_over_r'):.6g}")
+    if combined_validation.get("enabled"):
+        print(f"Combined simultaneous-solver R={combined_validation.get('R_f_over_i'):.6g} G={combined_validation.get('G_f_plus_i_over_r'):.6g}")
+        diag = combined_validation.get("solver_diagnostics") or {}
+        print(
+            "Combined diagnostics: "
+            f"rank={diag.get('matrix_rank')}/{diag.get('matrix_size')} "
+            f"cond={diag.get('condition_number')} "
+            f"resid_l2={diag.get('linear_residual_l2')} "
+            f"resid_linf={diag.get('linear_residual_linf')} "
+            f"nneg={diag.get('n_significant_negative_populations_raw')}"
+        )
     if args.print_summary:
         print(json.dumps(summary, indent=2))
 
