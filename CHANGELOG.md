@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.2.64 - 2026-04-26
+
+Regression/reference checks for the validated O VII solver-source-fit workflow.
+
+Added:
+- Added compact saved reference output `examples/reference_outputs/o7_solver_source_fit_summary_reference.json` for the validated O VII full-solver source-fit diagnostic.  This reference stores the XSTAR R/G target, fitted linear-response R/G, combined simultaneous-solver R/G, SVD solver diagnostics, null-rate pruning diagnostics, and negative-population handling without requiring the full 830 MB `atdb.fits` in CI.
+- Added `tests/test_o7_solver_source_fit_reference.py` with CI-friendly tests that verify:
+  - fitted linear-response R/G matches the saved XSTAR reference,
+  - combined-source validation agrees with the fitted linear-response prediction to tight tolerance,
+  - the validated diagnostic path uses `linear_solver=svd`, `rank_deficient_action=svd`, `negative_population_action=keep`, and null-rate pruning,
+  - the raw-response simplex fitting helper remains numerically reproducible.
+- Added a warning in `examples/13_o7_recombination_cascade_workflow.py` when `selected-fit-weights` or `o7-xstar-fit` is used without `--solver-source-total-rate`.  The warning tells users to pass `--solver-source-total-rate 1.0` when consuming weights produced by `examples/20_o7_solver_source_fit.py` with the default `--source-rate=1.0`.
+- Workflow summaries from `examples/13_o7_recombination_cascade_workflow.py` now include a `warnings` list so this source-amplitude warning is preserved in machine-readable outputs.
+
+Notes:
+- These tests are reference/regression tests for the validated diagnostic output, not full physical ATDB tests.  Full real-ATDB validation is still done by running examples 20 and 13 locally with the real XSTAR `atdb.fits`.
+- The empirical fitted-source mode remains diagnostic and amplitude-dependent, not a physical level-resolved recombination model.
+
 ## v0.2.63 - 2026-04-25
 
 Documentation update for the validated O VII full-solver source-fit path.

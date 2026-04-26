@@ -1097,3 +1097,5 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
 
 These weights are empirical diagnostics, not physical level-resolved recombination rates.  The recommended SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
 
+For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as `examples/reference_outputs/o7_solver_source_fit_summary_reference.json`.  The lightweight CI tests in `tests/test_o7_solver_source_fit_reference.py` verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full `atdb.fits` file.  When using `examples/13_o7_recombination_cascade_workflow.py` with `selected-fit-weights` or `o7-xstar-fit`, v0.2.64 emits a warning unless `--solver-source-total-rate` is supplied, because the empirical weights are amplitude-dependent.
+

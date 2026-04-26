@@ -1,0 +1,49 @@
+{
+  "description": "Reference O VII solver-source-fit diagnostic output from v0.2.62 using the validated SVD/rank-aware solver path. This file is intentionally compact and is used by CI tests without requiring the full XSTAR atdb.fits file.",
+  "solver_matrix_treatment": {
+    "linear_solver": "svd",
+    "rank_deficient_action": "svd",
+    "negative_population_action": "keep",
+    "prune_null_rate_levels": true,
+    "source_rate_s^-1": 1.0
+  },
+  "xstar_reference": {
+    "R_f_over_i": 3.2083715159846578,
+    "G_f_plus_i_over_r": 10.562172865716734
+  },
+  "fitted_prediction": {
+    "R_f_over_i": 3.2083762032250287,
+    "G_f_plus_i_over_r": 10.562155398987608,
+    "R_over_xstar": 1.000001460940651,
+    "G_over_xstar": 0.9999983462939541
+  },
+  "combined_source_validation": {
+    "enabled": true,
+    "source_total_rate_s^-1": 1.0,
+    "R_f_over_i": 3.20837620412073,
+    "G_f_plus_i_over_r": 10.56215552648634,
+    "R_over_xstar": 1.0000014612198271,
+    "G_over_xstar": 0.9999983583652138,
+    "delta_R_vs_fitted_linear_response": 8.957012909149853e-10,
+    "delta_G_vs_fitted_linear_response": 1.2749873157247293e-7,
+    "solver_diagnostics": {
+      "solver": "numpy.linalg.svd_lstsq",
+      "solver_warning": "matrix rank deficient (231/238); negative populations present",
+      "matrix_rank": 231,
+      "matrix_size": 238,
+      "condition_number": 3.111991765622385e+18,
+      "linear_residual_l2": 0.003231933984676083,
+      "linear_residual_linf": 0.0032135865743913392,
+      "negative_population_action": "keep",
+      "n_negative_populations_raw": 1,
+      "null_rate_pruning_diagnostics": {
+        "enabled": true,
+        "n_levels_before": 241,
+        "n_levels_after": 238,
+        "n_levels_removed": 3,
+        "removed_levels_preview": [44, 45, 241]
+      }
+    }
+  },
+  "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+}

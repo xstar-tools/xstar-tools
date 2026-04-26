@@ -44,8 +44,17 @@ import csv
 import json
 import subprocess
 import sys
+import warnings
 
-from xstar_atomic.recombination import CASCADE_TARGET_PRESETS
+try:
+    from xstar_atomic.recombination import CASCADE_TARGET_PRESETS
+except Exception:
+    # Keep helper/test imports lightweight in environments without optional FITS dependencies.
+    # Normal command-line runs with PYTHONPATH=src use the package definition.
+    CASCADE_TARGET_PRESETS = {
+        "o7-triplet-equal": "2:1.0,3:1.0,4:1.0,5:1.0,7:1.0",
+        "o7-triplet-xstar-tuned": "2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0",
+    }
 from pathlib import Path
 from typing import Optional
 
@@ -157,6 +166,30 @@ def _load_json(path: Path) -> dict:
         return json.load(handle)
 
 
+
+def _selected_fit_source_amplitude_warning(args) -> Optional[str]:
+    """Return a warning for fitted-source runs without matched source amplitude.
+
+    The empirical O VII solver-response weights from examples/20 are fitted at a
+    specific total source rate, usually 1.0 s^-1.  If examples/13 feeds those
+    weights at the physical recombination source scale, the normalized baseline
+    solver population can dominate and the XSTAR-fitted R/G ratios are not
+    reproduced.
+    """
+    source_mode = str(getattr(args, "source_mode", ""))
+    if source_mode not in {"selected-fit-weights", "o7-xstar-fit"}:
+        return None
+    if getattr(args, "solver_source_total_rate", None) is not None:
+        return None
+    if str(getattr(args, "solver_source_csv_mode", "auto")) not in {"auto", "initial"}:
+        return None
+    return (
+        "selected-fit-weights/o7-xstar-fit uses empirical solver-response weights. "
+        "For weights from examples/20_o7_solver_source_fit.py with the default "
+        "--source-rate=1.0, pass --solver-source-total-rate 1.0 so examples/13 "
+        "uses the same source amplitude as the fitted diagnostic."
+    )
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fitsfile")
@@ -214,6 +247,11 @@ def main() -> None:
     parser.add_argument("--xstar-value-column", default="emit_outward")
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
+
+    amplitude_warning = _selected_fit_source_amplitude_warning(args)
+    if amplitude_warning:
+        warnings.warn(amplitude_warning, RuntimeWarning, stacklevel=2)
+        print(f"WARNING: {amplitude_warning}", file=sys.stderr)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -362,6 +400,7 @@ def main() -> None:
         "recombination_summary": _load_json(recomb_summary_json),
         "solver_triplet_diagnostics": _load_json(solver_summary_json).get("triplet_diagnostics", []),
         "xstar_triplet_reference": xstar_ratios,
+        "warnings": ([amplitude_warning] if amplitude_warning else []),
         "status_note": "Prototype Stage-6 workflow: total recombination is redistributed over selected levels and radiative cascades; not yet a true level-resolved recombination model.",
     }
     combined_summary_json.write_text(json.dumps(workflow_summary, indent=2), encoding="utf-8")
