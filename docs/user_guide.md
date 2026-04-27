@@ -1277,3 +1277,35 @@ PYTHONPATH=src python examples/25_o7_high_density_expanded_source_scan.py \
 ```
 
 The output `o7_high_density_expanded_source_scan.csv` lists the fitted R/G values, R/XSTAR and G/XSTAR ratios, reachability flag, top fitted source level, effective number of source weights, and matrix diagnostics for each source set.  The scan remains empirical/diagnostic; it does not turn the fitted source weights into physical recombination rates.
+
+### O VII high-density rate-sensitivity diagnostic
+
+`examples/26_o7_high_density_rate_sensitivity.py` scans temporary diagnostic
+scale factors for selected collision-rate families after the expanded source
+scan has shown that source-level expansion alone does not recover the
+`ne=1e12 cm^-3` XSTAR O VII target.  It supports scans of the symmetric
+level-2-to-3/4/5 metastable coupling and the XSTAR type-68/type-69 decoded
+collision blocks.  These scale factors are diagnostics only; they do not change
+the atomic database.
+
+```bash
+PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --families metastable,type68,type69 \
+  --scales 0.1,0.2,0.5,1,2,5,10 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_high_density_rate_sensitivity \
+  --print-summary
+```
+
+The output `o7_high_density_rate_sensitivity_scan.csv` reports the best R/G,
+R/XSTAR, G/XSTAR, component mismatch, and solver diagnostics for each scaled
+network.

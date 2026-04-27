@@ -587,3 +587,29 @@ O VII high-density expanded source scan
 ---------------------------------------
 
 ``examples/25_o7_high_density_expanded_source_scan.py`` scans expanded empirical source-level sets for the high-density O VII mismatch and reports reachability, source-weight collapse, component mismatch, and solver diagnostics for each source basis.
+
+O VII high-density rate-sensitivity diagnostic
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``examples/26_o7_high_density_rate_sensitivity.py`` scans temporary diagnostic
+collision-rate scale factors for the high-density O VII mismatch.  The built-in
+families include level-2-to-3/4/5 metastable coupling and XSTAR type-68/type-69
+collision blocks.  These scale factors are sensitivity probes only.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
+     ../xstar/data/atdb.fits \
+     --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+     --density 1e12 \
+     --families metastable,type68,type69 \
+     --scales 0.1,0.2,0.5,1,2,5,10 \
+     --linear-solver svd \
+     --rank-deficient-action svd \
+     --negative-population-action keep \
+     --prune-null-rate-levels \
+     --combined-source-total-rate 1.0 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_high_density_rate_sensitivity \
+     --print-summary

@@ -306,6 +306,17 @@ def write_combined_source_csv(path: Path, levels: Sequence[int], weights: Sequen
     write_csv(path, rows)
 
 
+
+
+def append_collision_scale_args(cmd: List[str], args) -> None:
+    """Append diagnostic collision-rate scaling options for solver subprocesses."""
+    if getattr(args, "collision_rate_scale", 1.0) not in (None, 1.0):
+        cmd += ["--collision-rate-scale", f"{float(args.collision_rate_scale):.16g}"]
+    for spec in getattr(args, "collision_data_type_scale", []) or []:
+        cmd += ["--collision-data-type-scale", str(spec)]
+    for spec in getattr(args, "collision_pair_scale", []) or []:
+        cmd += ["--collision-pair-scale", str(spec)]
+
 def run_combined_source_validation(args, levels: Sequence[int], weights: Sequence[float], out_dir: Path) -> dict:
     validation_dir = out_dir / "combined_source_validation"
     validation_dir.mkdir(parents=True, exist_ok=True)
@@ -339,6 +350,7 @@ def run_combined_source_validation(args, levels: Sequence[int], weights: Sequenc
         cmd += ["--reject-large-residual"]
     if args.prune_null_rate_levels:
         cmd += ["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"]
+    append_collision_scale_args(cmd, args)
     if args.index_cache:
         if args.index_cache_path:
             cmd += ["--index-cache", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
@@ -393,6 +405,12 @@ def main() -> None:
     parser.add_argument("--prune-null-rate-levels", action="store_true", default=True)
     parser.add_argument("--no-prune-null-rate-levels", dest="prune_null_rate_levels", action="store_false")
     parser.add_argument("--null-rate-floor", type=float, default=0.0)
+    parser.add_argument("--collision-rate-scale", type=float, default=1.0,
+                        help="Diagnostic scale factor passed to xstar_atomic.solver for all electron-impact collision rates.")
+    parser.add_argument("--collision-data-type-scale", action="append", default=[], metavar="DATA_TYPE:SCALE",
+                        help="Diagnostic scale passed to xstar_atomic.solver for one collision data type, e.g. 68:0.5. May be repeated.")
+    parser.add_argument("--collision-pair-scale", action="append", default=[], metavar="LEVEL1:LEVEL2:SCALE",
+                        help="Diagnostic symmetric pair-rate scale passed to xstar_atomic.solver, e.g. 2:4:0.5. May be repeated.")
     parser.add_argument("--index-cache", action="store_true")
     parser.add_argument("--index-cache-path", help="Explicit hierarchy index-cache filename passed to xstar_atomic.solver. Use this to keep the cache away from atdb.fits.")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
@@ -447,6 +465,7 @@ def main() -> None:
             cmd += ["--reject-large-residual"]
         if args.prune_null_rate_levels:
             cmd += ["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"]
+        append_collision_scale_args(cmd, args)
         if args.index_cache:
             if args.index_cache_path:
                 cmd += ["--index-cache", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
@@ -546,6 +565,9 @@ def main() -> None:
             "reject_large_residual": bool(args.reject_large_residual),
             "prune_null_rate_levels": bool(args.prune_null_rate_levels),
             "null_rate_floor_s^-1": float(args.null_rate_floor),
+            "collision_rate_scale": float(args.collision_rate_scale),
+            "collision_data_type_scale": list(args.collision_data_type_scale or []),
+            "collision_pair_scale": list(args.collision_pair_scale or []),
         },
         "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
         "xstar_reference": xstar,

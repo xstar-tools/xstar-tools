@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.73 - 2026-04-27
+
+Added:
+- Added `examples/26_o7_high_density_rate_sensitivity.py`, a high-density O VII rate-network sensitivity diagnostic for the `ne=1e12 cm^-3` mismatch.
+- Added diagnostic collision-rate scaling controls to `xstar_atomic.solver`:
+  - `--collision-rate-scale` for global evaluated electron-impact rates,
+  - `--collision-data-type-scale DATA_TYPE:SCALE`,
+  - `--collision-pair-scale LEVEL1:LEVEL2:SCALE`.
+- Propagated the diagnostic collision-rate scaling options through `examples/20_o7_solver_source_fit.py` so empirical source fits can be repeated for scaled rate networks.
+- Added `tests/test_o7_high_density_rate_sensitivity.py` for scan-case construction and scale specification checks.
+
+Notes:
+- The new rate scales are diagnostic sensitivity factors only. They do not modify the packaged atomic data and should not be interpreted as recommended physical rate corrections.
+- The primary goal is to determine whether the high-density O VII mismatch is driven by type-68/69 or level-2-to-3/4/5 collisional coupling, or whether additional physics is required.
+
 ## v0.2.72 - 2026-04-27
 
 Added:

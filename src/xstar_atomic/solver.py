@@ -122,6 +122,54 @@ def maybe_int(x) -> Optional[int]:
             return None
 
 
+
+
+def parse_scale_specs(values: Optional[Sequence[str]]) -> Dict[object, float]:
+    """Parse RATE-SCALE specs used by diagnostic collision sensitivity runs.
+
+    Accepts either ``KEY:SCALE`` or ``A:B:SCALE``.  ``KEY`` can be a data
+    type integer for data-type scaling; ``A:B`` is an unordered level pair.
+    This diagnostic scaling is intentionally applied symmetrically to the
+    excitation and de-excitation rates of the selected pair so detailed-balance
+    ratios are not changed by the scale factor itself.
+    """
+    out: Dict[object, float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) == 2:
+            try:
+                out[int(float(parts[0]))] = float(parts[1])
+            except Exception as exc:
+                raise ValueError(f"invalid scale spec {text!r}; expected DATA_TYPE:SCALE") from exc
+        elif len(parts) == 3:
+            try:
+                a = int(float(parts[0])); b = int(float(parts[1])); scale = float(parts[2])
+                out[tuple(sorted((a, b)))] = scale
+            except Exception as exc:
+                raise ValueError(f"invalid pair scale spec {text!r}; expected LEVEL1:LEVEL2:SCALE") from exc
+        else:
+            raise ValueError(f"invalid scale spec {text!r}")
+    return out
+
+
+def collision_scale_for_row(row: dict, args) -> float:
+    """Return the diagnostic collision-rate scale for one evaluated row."""
+    scale = float(getattr(args, 'collision_rate_scale', 1.0) or 1.0)
+    dt_scales = getattr(args, '_collision_data_type_scales', {}) or {}
+    pair_scales = getattr(args, '_collision_pair_scales', {}) or {}
+    dt = maybe_int(row.get('data_type'))
+    if dt in dt_scales:
+        scale *= float(dt_scales[dt])
+    ll = maybe_int(row.get('lower_level'))
+    ul = maybe_int(row.get('upper_level'))
+    if ll is not None and ul is not None:
+        key = tuple(sorted((int(ll), int(ul))))
+        if key in pair_scales:
+            scale *= float(pair_scales[key])
+    if not math.isfinite(scale) or scale < 0.0:
+        raise ValueError(f"invalid diagnostic collision scale {scale!r} for row {row}")
+    return scale
+
 def write_csv(path: str | Path, rows: List[dict]) -> None:
     path = Path(path)
     if not rows:
@@ -243,7 +291,7 @@ def build_radiative_transitions(lines: List[dict], level_set: set[int], args) ->
     return trans
 
 
-def build_collision_rates_for_T(collision_eval: List[dict], level_set: set[int], temperature: float, electron_density: float) -> List[dict]:
+def build_collision_rates_for_T(collision_eval: List[dict], level_set: set[int], temperature: float, electron_density: float, args=None) -> List[dict]:
     rows = []
     for row in collision_eval:
         T = maybe_float(row.get("temperature_K"))
@@ -260,8 +308,10 @@ def build_collision_rates_for_T(collision_eval: List[dict], level_set: set[int],
         if (qij is None or qij <= 0) and (qji is None or qji <= 0):
             continue
         rr = dict(row)
-        rr["C_excitation_s^-1"] = (electron_density * qij) if qij is not None else None
-        rr["C_deexcitation_s^-1"] = (electron_density * qji) if qji is not None else None
+        rate_scale = collision_scale_for_row(row, args) if args is not None else 1.0
+        rr["collision_rate_scale_applied"] = rate_scale
+        rr["C_excitation_s^-1"] = (electron_density * qij * rate_scale) if qij is not None else None
+        rr["C_deexcitation_s^-1"] = (electron_density * qji * rate_scale) if qji is not None else None
         rows.append(rr)
     return rows
 
@@ -1073,6 +1123,7 @@ def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: Li
         "collision_counts_by_data_type": counts_by(collisions, "data_type"),
         "collision_eval_counts_by_method_total": counts_by(collision_eval, "eval_method"),
         "collision_eval_counts_by_method_used": counts_by(used_collision_eval, "eval_method"),
+        "collision_rate_scale_applied_values": sorted({str(r.get("collision_rate_scale_applied", 1.0)) for r in used_collision_eval}),
         "solves": solve_infos,
     }
 
@@ -1109,6 +1160,12 @@ def main(argv=None) -> None:
                    help="Record a diagnostic that automatic ATDB recombination/cascade decoding is requested but not yet implemented")
     p.add_argument("--phenomenological-same-n-lmixing-rate-coeff", type=float,
                    help="Optional experimental same-n adjacent-l mixing coefficient in cm^3 s^-1; not an XSTAR amcrs port")
+    p.add_argument("--collision-rate-scale", type=float, default=1.0,
+                   help="Diagnostic scale factor applied to all evaluated electron-impact collision rates. Default 1.0.")
+    p.add_argument("--collision-data-type-scale", action="append", default=[], metavar="DATA_TYPE:SCALE",
+                   help="Diagnostic scale for evaluated collision rows of one XSTAR data type, e.g. 68:0.5. May be repeated.")
+    p.add_argument("--collision-pair-scale", action="append", default=[], metavar="LEVEL1:LEVEL2:SCALE",
+                   help="Diagnostic symmetric scale for evaluated collision rates connecting one level pair, e.g. 2:4:0.5. May be repeated.")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
     p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
@@ -1146,6 +1203,11 @@ def main(argv=None) -> None:
     p.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
                    help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
     args = p.parse_args(argv)
+    try:
+        args._collision_data_type_scales = parse_scale_specs(args.collision_data_type_scale)
+        args._collision_pair_scales = parse_scale_specs(args.collision_pair_scale)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     z = choose_z(args.element)
     if z is None:
@@ -1254,7 +1316,7 @@ def main(argv=None) -> None:
             local_level_set = set(local_level_indices)
             local_rad_lines_matrix = rad_lines_matrix
             local_output_lines = output_lines
-            coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne)
+            coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne, args)
             same_n_rows = build_same_n_lmixing_rows(
                 local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
             )
@@ -1271,7 +1333,7 @@ def main(argv=None) -> None:
                     local_level_set = set(local_level_indices)
                     local_rad_lines_matrix = build_radiative_transitions(all_lines, local_level_set, args)
                     local_output_lines = [r for r in output_lines if maybe_int(r.get("lower_level")) in local_level_set and maybe_int(r.get("upper_level")) in local_level_set]
-                    coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne)
+                    coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne, args)
                     same_n_rows = build_same_n_lmixing_rows(
                         local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
                     )
@@ -1350,6 +1412,12 @@ def main(argv=None) -> None:
         "component_diagnostics_selected_summary": component_diagnostics_selected.get("components", [])[:10],
         "recombination_cascade_auto_status": "not_implemented_use_recombination_source_csv" if args.auto_recombination_cascade else "not_requested",
         "same_n_lmixing_status": ("phenomenological_extra_enabled_on_top_of_xstar_amcrs" if args.phenomenological_same_n_lmixing_rate_coeff else "xstar_amcrs_collision_decoder_enabled"),
+        "diagnostic_collision_rate_scaling": {
+            "collision_rate_scale": float(args.collision_rate_scale),
+            "collision_data_type_scale": list(args.collision_data_type_scale or []),
+            "collision_pair_scale": list(args.collision_pair_scale or []),
+            "note": "Diagnostic sensitivity only; these scale evaluated collision rates and are not physical atomic-data edits.",
+        },
         "source_sink_interface": {
             "manual_source_terms": args.source_level or [],
             "manual_sink_terms": args.sink_level or [],
