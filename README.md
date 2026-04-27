@@ -954,7 +954,7 @@ o7_solver_source_fit_density_grid/o7_solver_source_fit_density_grid.csv
 o7_solver_source_fit_density_grid/o7_solver_source_fit_density_grid_summary.json
 ```
 
-The CSV reports the XSTAR R/G reference, fixed-`ne=1` R/G, refitted linear-response R/G, refitted combined simultaneous-solver R/G, matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+The CSV reports the reused low-density XSTAR R/G reference, fixed-`ne=1` R/G, refitted linear-response R/G, refitted combined simultaneous-solver R/G, matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  In v0.2.66 it also adds `fit_success_vs_xstar` and `target_reachable` feasibility flags; `refitted_R_over_xstar`, `refitted_G_over_xstar`, `fixed_R_over_refitted`, and `fixed_G_over_refitted` ratio columns; and per-density warnings when the fit objective is large or the refitted combined R/G ratios remain outside tolerance.  The XSTAR target label is written explicitly as a low-density reference reused at all densities unless a later density-dependent XSTAR reference-table option is added.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
 
 
 ### Stage-6 empirical source-fit mode

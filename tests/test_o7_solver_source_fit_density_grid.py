@@ -53,3 +53,71 @@ def test_example21_dry_run_reorders_reference_density_first(tmp_path):
     assert "densities: 1, 10000, 1e+08" in result.stdout
     first_cmd = result.stdout.splitlines()[0]
     assert "--electron-density 1 " in first_cmd
+
+
+def test_example21_flatten_row_adds_feasibility_flags_and_ratios():
+    mod = _load_example21()
+
+    class Args:
+        xstar_target_label = "low-density XSTAR O VII reference reused at all densities"
+        rg_tolerance = 5.0e-3
+        reachable_rg_tolerance = 5.0e-2
+        fit_objective_warn = 1.0e-4
+        high_density_warning_threshold = 1.0e12
+
+    xstar = {"R_f_over_i": 3.0, "G_f_plus_i_over_r": 10.0}
+    fixed = {"R_f_over_i": 2.7, "G_f_plus_i_over_r": 8.0, "solver_diagnostics": {}}
+    fit_summary = {
+        "fitted_prediction": {
+            "R_f_over_i": 3.0,
+            "G_f_plus_i_over_r": 10.0,
+            "fit_info": {"status": "converged", "objective": 1.0e-8},
+        },
+        "combined_source_validation": {
+            "R_f_over_i": 3.003,
+            "G_f_plus_i_over_r": 9.99,
+            "solver_diagnostics": {},
+        },
+    }
+    row = mod.flatten_row(1.0, xstar, 1.0, fixed, fit_summary, {}, Path("fit"), Path("fixed"), Args())
+    assert row["fit_success_vs_xstar"] is True
+    assert row["target_reachable"] is True
+    assert abs(row["refitted_R_over_xstar"] - 1.001) < 1e-12
+    assert abs(row["refitted_G_over_xstar"] - 0.999) < 1e-12
+    assert abs(row["fixed_R_over_refitted"] - (2.7 / 3.003)) < 1e-12
+    assert abs(row["fixed_G_over_refitted"] - (8.0 / 9.99)) < 1e-12
+    assert row["xstar_target_is_reused_low_density_reference"] is True
+    assert row["density_warning"] is None
+
+
+def test_example21_flatten_row_warns_when_target_unreachable():
+    mod = _load_example21()
+
+    class Args:
+        xstar_target_label = "low-density XSTAR O VII reference reused at all densities"
+        rg_tolerance = 5.0e-3
+        reachable_rg_tolerance = 5.0e-2
+        fit_objective_warn = 1.0e-4
+        high_density_warning_threshold = 1.0e12
+
+    xstar = {"R_f_over_i": 3.0, "G_f_plus_i_over_r": 10.0}
+    fixed = {"R_f_over_i": 0.1, "G_f_plus_i_over_r": 2.0, "solver_diagnostics": {}}
+    fit_summary = {
+        "fitted_prediction": {
+            "R_f_over_i": 0.1,
+            "G_f_plus_i_over_r": 0.7,
+            "fit_info": {"status": "converged", "objective": 0.14},
+        },
+        "combined_source_validation": {
+            "R_f_over_i": 0.1,
+            "G_f_plus_i_over_r": 0.7,
+            "solver_diagnostics": {},
+        },
+    }
+    row = mod.flatten_row(1.0e12, xstar, 1.0, fixed, fit_summary, {}, Path("fit"), Path("fixed"), Args())
+    assert row["fit_success_vs_xstar"] is False
+    assert row["target_reachable"] is False
+    assert "high-density type-68" in row["density_warning"]
+    assert "fit objective" in row["density_warning"]
+    assert "R/XSTAR" in row["density_warning"]
+    assert "G/XSTAR" in row["density_warning"]

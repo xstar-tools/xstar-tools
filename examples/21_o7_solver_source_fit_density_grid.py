@@ -10,6 +10,12 @@ This Stage-6 diagnostic extends ``20_o7_solver_source_fit.py`` from one density
    the fitted weights change and how well does the simultaneous combined-source
    validation reproduce the XSTAR R/G target?
 
+By default the same low-density XSTAR reference is reused at all densities.
+This is intentional: the diagnostic tests whether the low-density target is
+still reachable once the density-sensitive type-68 coupling changes the solver
+response.  A future extension can accept density-dependent XSTAR reference
+tables.
+
 The fitted source weights remain empirical/diagnostic.  They are not physical
 level-resolved recombination rates.  This script is intended to expose the
 stability, density dependence, and numerical diagnostics of the fitted source
@@ -270,7 +276,61 @@ def run_fixed_weight_validation(args, density: float, weights: Dict[int, float],
     }
 
 
-def flatten_row(density: float, xstar: dict, reference_density: float, fixed: dict, fit_summary: dict, weight_cmp: dict, fit_dir: Path, fixed_dir: Path) -> dict:
+
+def _safe_ratio(value: Optional[float], reference: Optional[float]) -> Optional[float]:
+    if value is None or reference is None or reference == 0.0:
+        return None
+    return float(value) / float(reference)
+
+
+def _within_fraction(value: Optional[float], reference: Optional[float], tolerance: float) -> bool:
+    ratio = _safe_ratio(value, reference)
+    if ratio is None:
+        return False
+    return abs(ratio - 1.0) <= float(tolerance)
+
+
+def _fit_objective_from_summary(fit_summary: dict) -> Optional[float]:
+    fitted = fit_summary.get("fitted_prediction") or {}
+    fit_info = fitted.get("fit_info") or {}
+    return _maybe_float(fit_info.get("objective"))
+
+
+def _make_density_warning(
+    density: float,
+    fit_objective: Optional[float],
+    fit_objective_warn: float,
+    refitted_R_over_xstar: Optional[float],
+    refitted_G_over_xstar: Optional[float],
+    tolerance: float,
+    high_density_warn: float,
+) -> Optional[str]:
+    messages: List[str] = []
+    if fit_objective is not None and fit_objective > fit_objective_warn:
+        messages.append(f"fit objective {fit_objective:.6g} exceeds warning threshold {fit_objective_warn:.6g}")
+    if refitted_R_over_xstar is None or abs(refitted_R_over_xstar - 1.0) > tolerance:
+        messages.append(f"refitted R/XSTAR mismatch exceeds tolerance {tolerance:.6g}")
+    if refitted_G_over_xstar is None or abs(refitted_G_over_xstar - 1.0) > tolerance:
+        messages.append(f"refitted G/XSTAR mismatch exceeds tolerance {tolerance:.6g}")
+    if messages:
+        prefix = f"density ne={float(density):.6g} cm^-3"
+        if float(density) >= float(high_density_warn):
+            prefix += " (high-density type-68 coupling regime)"
+        return prefix + ": " + "; ".join(messages)
+    return None
+
+
+def flatten_row(
+    density: float,
+    xstar: dict,
+    reference_density: float,
+    fixed: dict,
+    fit_summary: dict,
+    weight_cmp: dict,
+    fit_dir: Path,
+    fixed_dir: Path,
+    args,
+) -> dict:
     fitted = fit_summary.get("fitted_prediction") or {}
     combined = fit_summary.get("combined_source_validation") or {}
     fit_info = fitted.get("fit_info") or {}
@@ -278,26 +338,60 @@ def flatten_row(density: float, xstar: dict, reference_density: float, fixed: di
     diag_combined = combined.get("solver_diagnostics") or {}
     R_x = xstar.get("R_f_over_i")
     G_x = xstar.get("G_f_plus_i_over_r")
+    fixed_R = fixed.get("R_f_over_i")
+    fixed_G = fixed.get("G_f_plus_i_over_r")
+    refit_R = combined.get("R_f_over_i")
+    refit_G = combined.get("G_f_plus_i_over_r")
+    refit_R_over_xstar = _safe_ratio(refit_R, R_x)
+    refit_G_over_xstar = _safe_ratio(refit_G, G_x)
+    fit_objective = _fit_objective_from_summary(fit_summary)
+    fit_success_vs_xstar = (
+        _within_fraction(refit_R, R_x, args.rg_tolerance)
+        and _within_fraction(refit_G, G_x, args.rg_tolerance)
+        and (fit_objective is None or fit_objective <= args.fit_objective_warn)
+    )
+    target_reachable = (
+        _within_fraction(refit_R, R_x, args.reachable_rg_tolerance)
+        and _within_fraction(refit_G, G_x, args.reachable_rg_tolerance)
+    )
+    warning = _make_density_warning(
+        density,
+        fit_objective,
+        args.fit_objective_warn,
+        refit_R_over_xstar,
+        refit_G_over_xstar,
+        args.rg_tolerance,
+        args.high_density_warning_threshold,
+    )
     row = {
         "electron_density_cm^-3": float(density),
         "reference_weight_density_cm^-3": float(reference_density),
+        "xstar_target_label": args.xstar_target_label,
+        "xstar_target_is_reused_low_density_reference": True,
         "xstar_R_f_over_i": R_x,
         "xstar_G_f_plus_i_over_r": G_x,
-        "fixed_ne1_R_f_over_i": fixed.get("R_f_over_i"),
-        "fixed_ne1_G_f_plus_i_over_r": fixed.get("G_f_plus_i_over_r"),
-        "fixed_ne1_R_over_xstar": (fixed.get("R_f_over_i") / R_x) if fixed.get("R_f_over_i") is not None and R_x else None,
-        "fixed_ne1_G_over_xstar": (fixed.get("G_f_plus_i_over_r") / G_x) if fixed.get("G_f_plus_i_over_r") is not None and G_x else None,
+        "fixed_ne1_R_f_over_i": fixed_R,
+        "fixed_ne1_G_f_plus_i_over_r": fixed_G,
+        "fixed_ne1_R_over_xstar": _safe_ratio(fixed_R, R_x),
+        "fixed_ne1_G_over_xstar": _safe_ratio(fixed_G, G_x),
         "refitted_linear_R_f_over_i": fitted.get("R_f_over_i"),
         "refitted_linear_G_f_plus_i_over_r": fitted.get("G_f_plus_i_over_r"),
-        "refitted_combined_R_f_over_i": combined.get("R_f_over_i"),
-        "refitted_combined_G_f_plus_i_over_r": combined.get("G_f_plus_i_over_r"),
-        "refitted_combined_R_over_xstar": combined.get("R_over_xstar"),
-        "refitted_combined_G_over_xstar": combined.get("G_over_xstar"),
+        "refitted_combined_R_f_over_i": refit_R,
+        "refitted_combined_G_f_plus_i_over_r": refit_G,
+        "refitted_R_over_xstar": refit_R_over_xstar,
+        "refitted_G_over_xstar": refit_G_over_xstar,
+        "refitted_combined_R_over_xstar": refit_R_over_xstar,
+        "refitted_combined_G_over_xstar": refit_G_over_xstar,
+        "fixed_R_over_refitted": _safe_ratio(fixed_R, refit_R),
+        "fixed_G_over_refitted": _safe_ratio(fixed_G, refit_G),
+        "fit_success_vs_xstar": bool(fit_success_vs_xstar),
+        "target_reachable": bool(target_reachable),
+        "density_warning": warning,
         "delta_R_combined_minus_linear": combined.get("delta_R_vs_fitted_linear_response"),
         "delta_G_combined_minus_linear": combined.get("delta_G_vs_fitted_linear_response"),
         "fit_status": fit_info.get("status"),
         "fit_iterations": fit_info.get("iterations"),
-        "fit_objective": fit_info.get("objective"),
+        "fit_objective": fit_objective,
         "weight_delta_l1_vs_ne1": weight_cmp.get("weight_delta_l1"),
         "weight_delta_l2_vs_ne1": weight_cmp.get("weight_delta_l2"),
         "weight_delta_max_abs_vs_ne1": weight_cmp.get("weight_delta_max_abs"),
@@ -339,6 +433,15 @@ def main() -> None:
     parser.add_argument("--wavelength-max", type=float, default=22.2)
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
+    parser.add_argument(
+        "--xstar-target-label",
+        default="low-density XSTAR O VII reference reused at all densities",
+        help="Label written to outputs to clarify the XSTAR target used for every density.",
+    )
+    parser.add_argument("--rg-tolerance", type=float, default=5.0e-3, help="Fractional R/G tolerance for fit_success_vs_xstar")
+    parser.add_argument("--reachable-rg-tolerance", type=float, default=5.0e-2, help="Fractional R/G tolerance for target_reachable")
+    parser.add_argument("--fit-objective-warn", type=float, default=1.0e-4, help="Warn when the source-fit objective exceeds this value")
+    parser.add_argument("--high-density-warning-threshold", type=float, default=1.0e12, help="Density threshold used to annotate high-density warnings")
     parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="svd")
     parser.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="svd")
     parser.add_argument("--negative-population-action", choices=["clip", "zero-small", "keep", "reject"], default="keep")
@@ -398,7 +501,7 @@ def main() -> None:
             raise RuntimeError("Reference weights were not initialized")
         fixed_validation = run_fixed_weight_validation(args, density, reference_weights, fixed_dir)
         weight_cmp = compare_weights(reference_weights, current_weights)
-        row = flatten_row(density, xstar_reference, float(args.reference_density), fixed_validation, fit_summary, weight_cmp, fit_dir, fixed_dir)
+        row = flatten_row(density, xstar_reference, float(args.reference_density), fixed_validation, fit_summary, weight_cmp, fit_dir, fixed_dir, args)
         rows.append(row)
         density_summaries.append({
             "electron_density_cm^-3": float(density),
@@ -406,6 +509,9 @@ def main() -> None:
             "weights_csv": str(weights_path),
             "fixed_validation": fixed_validation,
             "weight_comparison_vs_reference_density": weight_cmp,
+            "fit_success_vs_xstar": row.get("fit_success_vs_xstar"),
+            "target_reachable": row.get("target_reachable"),
+            "density_warning": row.get("density_warning"),
             "fit_summary": fit_summary,
         })
 
@@ -431,7 +537,15 @@ def main() -> None:
                 "prune_null_rate_levels": bool(args.prune_null_rate_levels),
                 "null_rate_floor_s^-1": float(args.null_rate_floor),
             },
+            "xstar_target_label": args.xstar_target_label,
+            "xstar_target_is_reused_low_density_reference": True,
             "xstar_reference": xstar_reference,
+            "fit_feasibility_tolerances": {
+                "rg_tolerance_fraction": float(args.rg_tolerance),
+                "reachable_rg_tolerance_fraction": float(args.reachable_rg_tolerance),
+                "fit_objective_warn": float(args.fit_objective_warn),
+            },
+            "warnings": [row.get("density_warning") for row in rows if row.get("density_warning")],
             "density_rows_csv": str(out_csv),
             "density_summaries": density_summaries,
             "note": "Diagnostic only: density-dependent fitted source weights are empirical solver-response weights, not physical recombination rates.",
@@ -445,7 +559,7 @@ def main() -> None:
     print(f"wrote: {out_csv}")
     print(f"wrote: {out_summary}")
     if args.print_summary and rows:
-        print("density      fixed R/G              refitted combined R/G      weight L1")
+        print("density      fixed R/G              refitted combined R/G      weight L1      reachable")
         def _fmt(value):
             return "nan" if value is None else f"{float(value):.6g}"
         for row in rows:
@@ -453,8 +567,14 @@ def main() -> None:
                 f"{float(row['electron_density_cm^-3']):.6g}  "
                 f"{_fmt(row.get('fixed_ne1_R_f_over_i'))}/{_fmt(row.get('fixed_ne1_G_f_plus_i_over_r'))}  "
                 f"{_fmt(row.get('refitted_combined_R_f_over_i'))}/{_fmt(row.get('refitted_combined_G_f_plus_i_over_r'))}  "
-                f"{_fmt(row.get('weight_delta_l1_vs_ne1'))}"
+                f"{_fmt(row.get('weight_delta_l1_vs_ne1'))}      "
+                f"{row.get('target_reachable')}"
             )
+        warnings = [row.get("density_warning") for row in rows if row.get("density_warning")]
+        if warnings:
+            print("warnings:")
+            for message in warnings:
+                print(f"  WARNING: {message}")
 
 
 if __name__ == "__main__":

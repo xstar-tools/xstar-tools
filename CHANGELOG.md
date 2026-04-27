@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.66 - 2026-04-27
+
+Density-grid feasibility flags and clearer XSTAR-target labeling.
+
+Changed:
+- Updated `examples/21_o7_solver_source_fit_density_grid.py` so the reused XSTAR target is explicitly labeled as a low-density XSTAR O VII reference reused at all densities.
+- Added fit-feasibility columns: `fit_success_vs_xstar` and `target_reachable`.
+- Added ratio columns: `refitted_R_over_xstar`, `refitted_G_over_xstar`, `fixed_R_over_refitted`, and `fixed_G_over_refitted`.
+- Added warning generation when the source-fit objective is large or the refitted combined R/G ratios remain outside tolerance, with explicit high-density wording for the type-68 coupling regime.
+- The density-grid summary JSON now records the XSTAR target label, feasibility tolerances, warnings, and per-density feasibility flags.
+- Added tests for the new density-grid feasibility logic and warning behavior without requiring full `atdb.fits`.
+
+Notes:
+- The current density-grid example still uses one XSTAR reference at all densities.  A later extension should allow density-dependent XSTAR references, for example `--xstar-lines-csv-by-density` or `--xstar-grid-summary-csv`.
+
 ## v0.2.65 - 2026-04-27
 
 Density-grid O VII solver-source-fit diagnostic.

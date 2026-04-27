@@ -458,8 +458,13 @@ default grid is ``ne = 1, 1e4, 1e8, 1e10, 1e12 cm^-3``.
      --print-summary
 
 The diagnostic writes ``o7_solver_source_fit_density_grid.csv`` and
-``o7_solver_source_fit_density_grid_summary.json``.  It reports the XSTAR R/G
-reference, fixed-``ne=1`` R/G, separately refitted R/G at each density, matrix
-rank, residuals, negative-population diagnostics, and source-weight changes.
+``o7_solver_source_fit_density_grid_summary.json``.  It reports the reused
+low-density XSTAR R/G reference, fixed-``ne=1`` R/G, separately refitted R/G at
+each density, matrix rank, residuals, negative-population diagnostics, and
+source-weight changes.  v0.2.66 also adds ``fit_success_vs_xstar`` and
+``target_reachable`` flags, R/G ratio columns comparing refitted, fixed, and
+XSTAR targets, and per-density warnings for large fit objectives or unreachable
+R/G targets.  A future extension may add density-dependent XSTAR reference
+inputs such as ``--xstar-lines-csv-by-density`` or ``--xstar-grid-summary-csv``.
 The weights remain empirical diagnostics, not physical level-resolved
 recombination rates.
