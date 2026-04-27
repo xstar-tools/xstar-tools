@@ -1110,3 +1110,20 @@ PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
   --out-dir o7_solver_source_fit_density_xstar_grid \
   --print-summary
 ```
+
+### O VII high-density mismatch diagnostic
+
+After running the density-dependent XSTAR-grid comparison, use `examples/24_o7_high_density_mismatch_diagnostics.py` to focus on the high-density failure case, usually `ne=1e12 cm^-3`:
+
+```bash
+PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --reference-density 1 \
+  --index-cache \
+  --out-dir o7_high_density_mismatch \
+  --print-summary
+```
+
+The diagnostic reads the outputs from examples 21/22 and writes component, source-weight, collision-rate, and JSON summaries.  It reports which normalized triplet component drives the mismatch, whether the XSTAR target is reachable, whether fitted source weights collapse onto a small number of levels, solver rank/residual/negative-population diagnostics, and type-68/69 level-2 to level-3/4/5 collision rates when `atdb.fits` is supplied.  This remains an empirical diagnostic; it does not provide physical level-resolved recombination rates.

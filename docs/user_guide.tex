@@ -1223,3 +1223,20 @@ PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
 \end{lstlisting}
 
 The helper writes \texttt{xstar\_runs/o7\_ne*/run\_xstar.sh} scripts containing the full XSTAR commands, \texttt{convert\_o7\_triplet.sh} conversion scripts, the mapping file \texttt{xstar\_o7\_density\_grid\_references.csv}, and \texttt{xstar\_runs/README\_o7\_density\_grid.md} with the complete workflow.  Run XSTAR externally, convert each \texttt{xout\_lines1.fits}, then run example 22 with the generated mapping CSV.  The empirical O VII fitted source weights remain diagnostic rather than physical level-resolved recombination rates.
+
+\subsection{O VII high-density mismatch diagnostic}
+
+After running the density-dependent XSTAR-grid comparison, use \texttt{examples/24\_o7\_high\_density\_mismatch\_diagnostics.py} to focus on the high-density failure case, usually \(n_e=10^{12}\,\mathrm{cm^{-3}}\):
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --reference-density 1 \
+  --index-cache \
+  --out-dir o7_high_density_mismatch \
+  --print-summary
+\end{lstlisting}
+
+The diagnostic reads the outputs from examples 21/22 and writes \texttt{o7\_high\_density\_component\_mismatch.csv}, \texttt{o7\_high\_density\_source\_weight\_changes.csv}, optional \texttt{o7\_high\_density\_collision\_rates.csv}, and \texttt{o7\_high\_density\_mismatch\_summary.json}.  It reports the normalized forbidden/intercombination/resonance component mismatch, source-weight collapse relative to the reference density, solver rank/residual/negative-population diagnostics, and type-68/69 level-2 to level-3/4/5 collisional rates when \texttt{atdb.fits} is supplied.  This remains an empirical diagnostic and should not be interpreted as physical level-resolved recombination modeling.

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.71 - 2026-04-27
+
+Added:
+- Added `examples/24_o7_high_density_mismatch_diagnostics.py` to investigate the O VII high-density (`ne=1e12 cm^-3`) density-grid mismatch.
+- The new diagnostic reads outputs from `examples/21`/`examples/22` and writes component, source-weight, collision-rate, and JSON summary diagnostics.
+- It reports which triplet component drives the mismatch, whether the target is reachable, source-weight collapse metrics, solver diagnostics, and optional type-68/69 level-2 -> level-3/4/5 collision rates when `atdb.fits` is supplied.
+
+Updated:
+- Documented the high-density mismatch workflow in README, Markdown, LaTeX, and Sphinx example documentation.
+
 ## v0.2.70 - 2026-04-27
 
 Added:
