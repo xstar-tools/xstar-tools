@@ -1127,3 +1127,7 @@ PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
 ```
 
 The diagnostic reads the outputs from examples 21/22 and writes component, source-weight, collision-rate, and JSON summaries.  It reports which normalized triplet component drives the mismatch, whether the XSTAR target is reachable, whether fitted source weights collapse onto a small number of levels, solver rank/residual/negative-population diagnostics, and type-68/69 level-2 to level-3/4/5 collision rates when `atdb.fits` is supplied.  This remains an empirical diagnostic; it does not provide physical level-resolved recombination rates.
+
+### O VII high-density expanded source scan
+
+`examples/25_o7_high_density_expanded_source_scan.py` tests whether the high-density O VII mismatch can be removed by expanding the empirical source-level set beyond the validated baseline.  It scans baseline, `n<=5`, `n<=6`, `n<=8`, and all-level source proxies against the density-specific XSTAR target from the density-grid workflow.

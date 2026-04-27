@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.72 - 2026-04-27
+
+Added:
+- `examples/25_o7_high_density_expanded_source_scan.py` for expanded O VII high-density source-level scans.
+- The new diagnostic tests whether larger source bases (`baseline`, `n<=5`, `n<=6`, `n<=8`, and `all_levels`) can reach the density-specific XSTAR target at `ne=1e12 cm^-3`.
+- `tests/test_o7_high_density_expanded_source_scan.py` dry-run coverage for CI-friendly source-set planning.
+
 ## v0.2.71 - 2026-04-27
 
 Added:

@@ -582,3 +582,8 @@ is responsible for the mismatch, whether fitted weights collapse onto a small
 number of levels, solver rank/residual diagnostics, and type-68/69 level-2 to
 level-3/4/5 collision rates when ``atdb.fits`` is supplied.  The output remains
 empirical and diagnostic, not a physical level-resolved recombination model.
+
+O VII high-density expanded source scan
+---------------------------------------
+
+``examples/25_o7_high_density_expanded_source_scan.py`` scans expanded empirical source-level sets for the high-density O VII mismatch and reports reachability, source-weight collapse, component mismatch, and solver diagnostics for each source basis.

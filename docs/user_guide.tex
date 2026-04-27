@@ -1240,3 +1240,7 @@ PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
 \end{lstlisting}
 
 The diagnostic reads the outputs from examples 21/22 and writes \texttt{o7\_high\_density\_component\_mismatch.csv}, \texttt{o7\_high\_density\_source\_weight\_changes.csv}, optional \texttt{o7\_high\_density\_collision\_rates.csv}, and \texttt{o7\_high\_density\_mismatch\_summary.json}.  It reports the normalized forbidden/intercombination/resonance component mismatch, source-weight collapse relative to the reference density, solver rank/residual/negative-population diagnostics, and type-68/69 level-2 to level-3/4/5 collisional rates when \texttt{atdb.fits} is supplied.  This remains an empirical diagnostic and should not be interpreted as physical level-resolved recombination modeling.
+
+\subsection{O VII high-density expanded source-level scan}
+
+Version 0.2.72 adds \texttt{examples/25\_o7\_high\_density\_expanded\_source\_scan.py}.  This diagnostic reruns the empirical O VII solver-response fit at high density with progressively larger source-level sets, including the validated baseline, \texttt{n<=5}, \texttt{n<=6}, \texttt{n<=8}, and an all-level source proxy.  It reports whether any expanded empirical basis can reach the density-specific XSTAR triplet target and writes \texttt{o7\_high\_density\_expanded\_source\_scan.csv}.  The fitted weights remain diagnostic source proxies, not physical level-resolved recombination rates.

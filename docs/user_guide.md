@@ -1255,3 +1255,25 @@ The diagnostic reads the outputs from examples 21/22 and writes:
 - `o7_high_density_mismatch_summary.json`, collecting the component, weight, solver, and collision diagnostics.
 
 This is intended to identify whether the high-density mismatch is driven by a triplet-component imbalance, source-weight collapse, metastable/intercombination collisional coupling, or a missing high-n/source-level contribution.  The fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+
+### O VII high-density expanded source-level scan
+
+Version 0.2.72 adds `examples/25_o7_high_density_expanded_source_scan.py`, a diagnostic for the remaining high-density (`ne=1e12 cm^-3`) O VII mismatch.  It reruns the validated solver-response fit with progressively larger empirical source-level sets, such as the validated baseline, `n<=5`, `n<=6`, `n<=8`, and an all-level source proxy, and reports whether any set can reach the density-specific XSTAR R/G target.
+
+```bash
+PYTHONPATH=src python examples/25_o7_high_density_expanded_source_scan.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_high_density_expanded_source_scan \
+  --print-summary
+```
+
+The output `o7_high_density_expanded_source_scan.csv` lists the fitted R/G values, R/XSTAR and G/XSTAR ratios, reachability flag, top fitted source level, effective number of source weights, and matrix diagnostics for each source set.  The scan remains empirical/diagnostic; it does not turn the fitted source weights into physical recombination rates.
