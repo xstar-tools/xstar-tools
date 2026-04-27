@@ -1297,3 +1297,23 @@ PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
 \end{lstlisting}
 
 The record- and pair-specific collision scaling is diagnostic only and does not alter the packaged atomic data.
+
+\subsection{O VII type-69 record audit}
+
+Version 0.2.75 adds \texttt{examples/28\_o7\_type69\_record\_audit.py} to inspect the raw XSTAR type-69 records that control the high-density O VII mismatch.  The default records are \texttt{22490--22495}, including the record \texttt{22490} level \texttt{1 -> 7} channel identified by the transition-sensitivity diagnostic.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
+  ../xstar/data/atdb.fits \
+  --records 22490,22491,22492,22493,22494,22495 \
+  --density 1e12 \
+  --audit-temperature 1e6 \
+  --temperature-grid 1e5,3e5,1e6,3e6,1e7 \
+  --transition-sensitivity o7_type69_transition_sensitivity \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_record_audit \
+  --print-summary
+\end{lstlisting}
+
+The audit writes raw-record, one-row summary, and temperature-grid CSV files, plus a JSON summary.  It reports raw \texttt{idat}/\texttt{rdat}, decoded level metadata, Kato--Nakazaki \texttt{calt69} rates, detailed-balance checks, and optional annotations from the v0.2.74 transition-sensitivity scan.  It is diagnostic only and does not modify the atomic data.

@@ -1187,3 +1187,23 @@ PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
 ```
 
 This scan writes `o7_type69_transitions.csv`, `o7_type69_transition_sensitivity.csv`, and `o7_type69_transition_sensitivity_summary.json`. The record/pair scaling is diagnostic only and does not modify the atomic data.
+
+### v0.2.75 O VII type-69 record audit
+
+After `examples/27_o7_type69_transition_sensitivity.py` identifies the individual type-69 records that control the high-density O VII mismatch, version 0.2.75 adds a raw-record audit:
+
+```bash
+PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
+  ../xstar/data/atdb.fits \
+  --records 22490,22491,22492,22493,22494,22495 \
+  --density 1e12 \
+  --audit-temperature 1e6 \
+  --temperature-grid 1e5,3e5,1e6,3e6,1e7 \
+  --transition-sensitivity o7_type69_transition_sensitivity \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_record_audit \
+  --print-summary
+```
+
+The audit writes `o7_type69_record_audit.csv`, `o7_type69_record_raw_audit.csv`, `o7_type69_record_temperature_grid.csv`, and `o7_type69_record_audit_summary.json`. These files expose the raw `idat`/`rdat` fields, decoded lower/upper levels, level labels, energy separations, statistical weights, `calt69` Upsilon values, excitation/de-excitation rates, detailed-balance checks, and any record-level sensitivity results inherited from the v0.2.74 scan. This is diagnostic only; it does not apply a physical correction.

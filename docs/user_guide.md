@@ -1333,3 +1333,23 @@ PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
 ```
 
 The scan writes an inventory of decoded type-69 transitions and a table of record- or pair-specific sensitivity cases. The collision scaling is a diagnostic probe, not a physical correction.
+
+### O VII type-69 record audit
+
+Version 0.2.75 adds `examples/28_o7_type69_record_audit.py` for auditing the specific type-69 records identified by the transition-sensitivity diagnostic. The default target is records `22490`--`22495`, with particular emphasis on the `22490` level `1 -> 7` channel.
+
+```bash
+PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
+  ../xstar/data/atdb.fits \
+  --records 22490,22491,22492,22493,22494,22495 \
+  --density 1e12 \
+  --audit-temperature 1e6 \
+  --temperature-grid 1e5,3e5,1e6,3e6,1e7 \
+  --transition-sensitivity o7_type69_transition_sensitivity \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_record_audit \
+  --print-summary
+```
+
+The output tables contain raw `idat`/`rdat`, decoded level metadata, Kato--Nakazaki `calt69` rates, density-scaled excitation/de-excitation rates, detailed-balance checks, and optional annotations from the v0.2.74 sensitivity scan. This audit is intended to determine whether the record-level decoding is internally consistent before any physical reinterpretation of the high-density type-69 network is attempted.

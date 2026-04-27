@@ -636,3 +636,22 @@ Version 0.2.74 adds ``examples/27_o7_type69_transition_sensitivity.py`` to scan 
      --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
      --out-dir o7_type69_transition_sensitivity \
      --print-summary
+
+O VII type-69 record audit
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Version 0.2.75 adds ``examples/28_o7_type69_record_audit.py`` to inspect the raw XSTAR type-69 records that control the high-density O VII mismatch.  It reports raw ``idat``/``rdat`` fields, decoded level metadata, ``calt69`` rates, detailed-balance checks, and optional annotations from the v0.2.74 transition-sensitivity scan.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
+     ../xstar/data/atdb.fits \
+     --records 22490,22491,22492,22493,22494,22495 \
+     --density 1e12 \
+     --audit-temperature 1e6 \
+     --temperature-grid 1e5,3e5,1e6,3e6,1e7 \
+     --transition-sensitivity o7_type69_transition_sensitivity \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_type69_record_audit \
+     --print-summary
