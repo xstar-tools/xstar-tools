@@ -3,6 +3,13 @@ from pathlib import Path
 import pytest
 
 
+def _write_minimal_fits_like_file(path: Path) -> None:
+    # Lightweight resolver validation only checks a FITS SIMPLE card and a
+    # minimum FITS block length; these tests do not need a real ATDB table.
+    header = b"SIMPLE  =                    T"
+    path.write_bytes(header + b" " * (2880 - len(header)))
+
+
 def test_data_path_roundtrip(tmp_path, monkeypatch):
     pytest.importorskip("astropy")
     import xstar_atomic.data as data
@@ -20,7 +27,7 @@ def test_data_path_roundtrip(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     atdb = data_dir / "atdb.fits"
-    atdb.write_bytes(b"fake")
+    _write_minimal_fits_like_file(atdb)
 
     saved = data.set_data_path(atdb)
     assert saved == data_dir.resolve()
@@ -32,10 +39,12 @@ def test_resolve_atdb_path_explicit_remembers_parent(tmp_path, monkeypatch):
     pytest.importorskip("astropy")
     import xstar_atomic.data as data
 
+    monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+
     dp_file = tmp_path / "datapath"
     monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
     atdb = tmp_path / "atdb.fits"
-    atdb.write_bytes(b"fake")
+    _write_minimal_fits_like_file(atdb)
 
     resolved = data.resolve_atdb_path(atdb, prompt=False)
     assert resolved == atdb.resolve()
@@ -46,12 +55,14 @@ def test_download_data_decline_and_set_existing_path(tmp_path, monkeypatch):
     pytest.importorskip("astropy")
     import xstar_atomic.data as data
 
+    monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+
     dp_file = tmp_path / "datapath"
     monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
     monkeypatch.setattr(data, "_remote_file_size", lambda url: 1234)
     atdb = tmp_path / "existing" / "atdb.fits"
     atdb.parent.mkdir()
-    atdb.write_bytes(b"fake")
+    _write_minimal_fits_like_file(atdb)
     answers = iter(["n", str(atdb)])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
 

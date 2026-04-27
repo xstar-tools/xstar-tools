@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.2.67 - 2026-04-27
+
+Data-path resolver and test isolation fixes.
+
+Fixed:
+- `resolve_atdb_path(path, prompt=False)` now treats an explicitly supplied path as strict precedence.  If that path is invalid, it raises a clear error instead of silently falling back to `XSTAR_ATDB_FITS` or a saved datapath.
+- Updated data-path helper tests to use a minimal FITS-like file that passes the lightweight resolver validation added for zero-byte/truncated-file protection.
+- Isolated data-path helper tests from the `XSTAR_ATDB_FITS` environment variable so full-suite runs with a real ATDB configured do not mask explicit-path behavior.
+
+Notes:
+- This is a bug-fix release for the v0.2.66 test failures observed when running `XSTAR_ATDB_FITS=../xstar/data/atdb.fits PYTHONPATH=src pytest -q`.
+
 ## v0.2.66 - 2026-04-27
 
 Density-grid feasibility flags and clearer XSTAR-target labeling.

@@ -275,10 +275,14 @@ def download_data(
 
 
 def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool = True) -> Path:
-    """Resolve an ``atdb.fits`` path, prompting/download if needed."""
-    found = find_atdb_file(path)
-    if found is not None:
-        return found
+    """Resolve an ``atdb.fits`` path, prompting/download if needed.
+
+    An explicitly supplied path has strict precedence over any configured
+    environment or saved datapath.  If the explicit path is invalid, raise a
+    clear error rather than silently falling back to ``XSTAR_ATDB_FITS``; this
+    avoids surprising behavior in scripts and tests that intentionally pass a
+    path argument.
+    """
     if path is not None:
         p = Path(path).expanduser()
         candidate = p / ATDB_FILENAME if p.is_dir() else p
@@ -288,12 +292,17 @@ def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool =
             pass
         problem = _atdb_file_problem(candidate)
         if problem is None:
-            problem = "was not accepted by the xstar-atomic data resolver"
+            set_data_path(candidate.parent)
+            return candidate
         raise FileNotFoundError(
             f"atdb.fits not found or invalid: {candidate} ({problem}). "
             "Check the relative path, set XSTAR_ATDB_FITS to the real 830 MB atdb.fits, "
             "or run: python -m xstar_atomic.data --set-path /path/to/atdb.fits"
         )
+
+    found = find_atdb_file(None)
+    if found is not None:
+        return found
     return download_data(prompt=prompt)
 
 
