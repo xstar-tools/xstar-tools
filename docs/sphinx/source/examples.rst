@@ -613,3 +613,26 @@ collision blocks.  These scale factors are sensitivity probes only.
      --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
      --out-dir o7_high_density_rate_sensitivity \
      --print-summary
+
+O VII type-69 transition sensitivity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Version 0.2.74 adds ``examples/27_o7_type69_transition_sensitivity.py`` to scan individual type-69 collision records or level pairs at high density. This is a diagnostic probe used after the rate-family scan has shown sensitivity to type-69 rates.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
+     ../xstar/data/atdb.fits \
+     --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+     --density 1e12 \
+     --scan-mode record \
+     --scales 0.1,0.2,0.5,2,5,10 \
+     --linear-solver svd \
+     --rank-deficient-action svd \
+     --negative-population-action keep \
+     --prune-null-rate-levels \
+     --combined-source-total-rate 1.0 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_type69_transition_sensitivity \
+     --print-summary

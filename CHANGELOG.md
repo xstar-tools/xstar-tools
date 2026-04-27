@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.74 - 2026-04-27
+
+Added:
+- Added `examples/27_o7_type69_transition_sensitivity.py`, a high-density O VII diagnostic that scans individual XSTAR type-69 collision records or level pairs to identify which transitions drive the `ne=1e12 cm^-3` triplet mismatch.
+- Added diagnostic collision record scaling to `xstar_atomic.solver` via `--collision-record-scale RECORD:SCALE`; the existing O VII solver-source-fit example now propagates this option to all unit-source and combined-source solver calls.
+- Added `tests/test_o7_type69_transition_sensitivity.py` for the transition-sensitivity helper logic.
+
+Notes:
+- This is a diagnostic sensitivity scan only. Record-specific or pair-specific scaling is not a physical correction by itself; it is intended to isolate the type-69 transition(s) that make the high-density XSTAR target reachable.
+
 ## v0.2.73 - 2026-04-27
 
 Added:

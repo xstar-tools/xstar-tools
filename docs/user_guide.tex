@@ -1273,3 +1273,27 @@ The diagnostic reads the outputs from examples 21/22 and writes \texttt{o7\_high
 \subsection{O VII high-density expanded source-level scan}
 
 Version 0.2.72 adds \texttt{examples/25\_o7\_high\_density\_expanded\_source\_scan.py}.  This diagnostic reruns the empirical O VII solver-response fit at high density with progressively larger source-level sets, including the validated baseline, \texttt{n<=5}, \texttt{n<=6}, \texttt{n<=8}, and an all-level source proxy.  It reports whether any expanded empirical basis can reach the density-specific XSTAR triplet target and writes \texttt{o7\_high\_density\_expanded\_source\_scan.csv}.  The fitted weights remain diagnostic source proxies, not physical level-resolved recombination rates.
+
+\subsection{O VII type-69 transition-sensitivity diagnostic}
+
+Version 0.2.74 adds \texttt{examples/27\_o7\_type69\_transition\_sensitivity.py} to isolate which type-69 collision records or level pairs drive the high-density O VII mismatch. It should be run after the density-dependent XSTAR-grid and rate-family diagnostics have identified a high-density mismatch that is sensitive to type-69 scaling.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --scan-mode record \
+  --scales 0.1,0.2,0.5,2,5,10 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_transition_sensitivity \
+  --print-summary
+\end{lstlisting}
+
+The record- and pair-specific collision scaling is diagnostic only and does not alter the packaged atomic data.

@@ -1163,3 +1163,27 @@ PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
 The output `o7_high_density_rate_sensitivity_scan.csv` reports the best R/G,
 R/XSTAR, G/XSTAR, component mismatch, and solver diagnostics for each scaled
 network.
+
+### O VII high-density type-69 transition sensitivity
+
+After the high-density rate-family scan showed that reducing type-69 collision rates can recover the `ne=1e12 cm^-3` XSTAR O VII triplet target, v0.2.74 adds an individual-transition diagnostic:
+
+```bash
+PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --scan-mode record \
+  --scales 0.1,0.2,0.5,2,5,10 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_transition_sensitivity \
+  --print-summary
+```
+
+This scan writes `o7_type69_transitions.csv`, `o7_type69_transition_sensitivity.csv`, and `o7_type69_transition_sensitivity_summary.json`. The record/pair scaling is diagnostic only and does not modify the atomic data.

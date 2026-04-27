@@ -152,14 +152,32 @@ def parse_scale_specs(values: Optional[Sequence[str]]) -> Dict[object, float]:
     return out
 
 
+def parse_record_scale_specs(values: Optional[Sequence[str]]) -> Dict[int, float]:
+    """Parse RECORD:SCALE diagnostic collision-rate scaling specs."""
+    out: Dict[int, float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) != 2:
+            raise ValueError(f"invalid record scale spec {text!r}; expected RECORD:SCALE")
+        try:
+            out[int(float(parts[0]))] = float(parts[1])
+        except Exception as exc:
+            raise ValueError(f"invalid record scale spec {text!r}; expected RECORD:SCALE") from exc
+    return out
+
+
 def collision_scale_for_row(row: dict, args) -> float:
     """Return the diagnostic collision-rate scale for one evaluated row."""
     scale = float(getattr(args, 'collision_rate_scale', 1.0) or 1.0)
     dt_scales = getattr(args, '_collision_data_type_scales', {}) or {}
     pair_scales = getattr(args, '_collision_pair_scales', {}) or {}
+    record_scales = getattr(args, '_collision_record_scales', {}) or {}
     dt = maybe_int(row.get('data_type'))
     if dt in dt_scales:
         scale *= float(dt_scales[dt])
+    rec = maybe_int(row.get('record'))
+    if rec in record_scales:
+        scale *= float(record_scales[rec])
     ll = maybe_int(row.get('lower_level'))
     ul = maybe_int(row.get('upper_level'))
     if ll is not None and ul is not None:
@@ -1166,6 +1184,8 @@ def main(argv=None) -> None:
                    help="Diagnostic scale for evaluated collision rows of one XSTAR data type, e.g. 68:0.5. May be repeated.")
     p.add_argument("--collision-pair-scale", action="append", default=[], metavar="LEVEL1:LEVEL2:SCALE",
                    help="Diagnostic symmetric scale for evaluated collision rates connecting one level pair, e.g. 2:4:0.5. May be repeated.")
+    p.add_argument("--collision-record-scale", action="append", default=[], metavar="RECORD:SCALE",
+                   help="Diagnostic scale for one collision record number, e.g. 12345:0.5. May be repeated.")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
     p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
@@ -1206,6 +1226,7 @@ def main(argv=None) -> None:
     try:
         args._collision_data_type_scales = parse_scale_specs(args.collision_data_type_scale)
         args._collision_pair_scales = parse_scale_specs(args.collision_pair_scale)
+        args._collision_record_scales = parse_record_scale_specs(args.collision_record_scale)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
@@ -1416,6 +1437,7 @@ def main(argv=None) -> None:
             "collision_rate_scale": float(args.collision_rate_scale),
             "collision_data_type_scale": list(args.collision_data_type_scale or []),
             "collision_pair_scale": list(args.collision_pair_scale or []),
+            "collision_record_scale": list(args.collision_record_scale or []),
             "note": "Diagnostic sensitivity only; these scale evaluated collision rates and are not physical atomic-data edits.",
         },
         "source_sink_interface": {
