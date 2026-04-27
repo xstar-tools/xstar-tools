@@ -47,6 +47,128 @@ def _maybe_float(value) -> Optional[float]:
     return out
 
 
+
+
+def _density_key(value: float) -> str:
+    """Return a stable key for matching density-grid references."""
+    return f"{float(value):.12g}"
+
+
+def _parse_density_value(value: str) -> float:
+    text = str(value).strip()
+    if not text:
+        raise ValueError("empty density value")
+    return float(text)
+
+
+def _split_density_path_spec(spec: str) -> Tuple[float, str]:
+    """Parse DENSITY:PATH while allowing ':' characters inside the path."""
+    text = str(spec).strip()
+    if ":" not in text:
+        raise ValueError(f"expected DENSITY:PATH specification, got {spec!r}")
+    density_text, path_text = text.split(":", 1)
+    density = _parse_density_value(density_text)
+    path = path_text.strip()
+    if not path:
+        raise ValueError(f"missing XSTAR CSV path in specification {spec!r}")
+    return density, path
+
+
+def _find_density_column(row: dict) -> Optional[str]:
+    for key in (
+        "electron_density_cm^-3",
+        "electron_density_cm-3",
+        "electron_density",
+        "density_cm^-3",
+        "density_cm-3",
+        "density",
+        "ne_cm^-3",
+        "ne_cm-3",
+        "ne",
+    ):
+        if key in row and str(row.get(key, "")).strip():
+            return key
+    return None
+
+
+def read_xstar_reference_grid_csv(path: Path) -> Dict[str, dict]:
+    """Read a density-to-XSTAR-lines mapping CSV.
+
+    Accepted density columns include ``electron_density_cm^-3``, ``density``,
+    and ``ne``.  Accepted path columns include ``xstar_lines_csv``, ``path``,
+    and ``xstar_csv``.  Optional columns are ``xstar_value_column`` and
+    ``xstar_target_label``.
+    """
+    refs: Dict[str, dict] = {}
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            dcol = _find_density_column(row)
+            if dcol is None:
+                raise ValueError(f"XSTAR grid CSV {path} is missing a density column")
+            density = _parse_density_value(row[dcol])
+            xpath = (
+                row.get("xstar_lines_csv")
+                or row.get("xstar_csv")
+                or row.get("path")
+                or row.get("filename")
+                or row.get("file")
+            )
+            if not xpath or not str(xpath).strip():
+                raise ValueError(f"XSTAR grid CSV {path} row for density {density:g} is missing xstar_lines_csv/path")
+            refs[_density_key(density)] = {
+                "electron_density_cm^-3": float(density),
+                "xstar_lines_csv": str(xpath).strip(),
+                "xstar_value_column": str(row.get("xstar_value_column") or row.get("value_column") or "").strip() or None,
+                "xstar_target_label": str(row.get("xstar_target_label") or row.get("target_label") or "").strip() or None,
+            }
+    return refs
+
+
+def build_xstar_reference_map(args) -> Dict[str, dict]:
+    """Build a density-specific XSTAR reference map from CLI options."""
+    refs: Dict[str, dict] = {}
+    if getattr(args, "xstar_grid_summary_csv", None):
+        refs.update(read_xstar_reference_grid_csv(Path(args.xstar_grid_summary_csv)))
+    for spec in getattr(args, "xstar_lines_csv_by_density", []) or []:
+        density, path = _split_density_path_spec(spec)
+        refs[_density_key(density)] = {
+            "electron_density_cm^-3": float(density),
+            "xstar_lines_csv": path,
+            "xstar_value_column": None,
+            "xstar_target_label": None,
+        }
+    return refs
+
+
+def select_xstar_reference(args, density: float, xstar_reference_map: Dict[str, dict]) -> dict:
+    """Return the XSTAR reference configuration for one density."""
+    key = _density_key(density)
+    if xstar_reference_map:
+        if key not in xstar_reference_map:
+            available = ", ".join(sorted(xstar_reference_map))
+            raise KeyError(
+                f"no density-specific XSTAR reference for ne={float(density):.12g}; "
+                f"available density keys: {available}"
+            )
+        ref = dict(xstar_reference_map[key])
+        return {
+            "xstar_lines_csv": ref["xstar_lines_csv"],
+            "xstar_value_column": ref.get("xstar_value_column") or args.xstar_value_column,
+            "xstar_target_label": ref.get("xstar_target_label")
+                or f"density-specific XSTAR O VII reference at ne={float(density):.6g} cm^-3",
+            "xstar_target_is_reused_low_density_reference": False,
+            "xstar_reference_density_cm^-3": float(density),
+        }
+    return {
+        "xstar_lines_csv": str(args.xstar_lines_csv),
+        "xstar_value_column": args.xstar_value_column,
+        "xstar_target_label": args.xstar_target_label,
+        "xstar_target_is_reused_low_density_reference": True,
+        "xstar_reference_density_cm^-3": float(args.reference_density),
+    }
+
+
 def _run(cmd: Sequence[str], dry_run: bool = False) -> None:
     print("$ " + " ".join(str(x) for x in cmd))
     if not dry_run:
@@ -203,7 +325,7 @@ def add_solver_cache_args(cmd: List[str], args) -> List[str]:
     return cmd
 
 
-def run_fit_for_density(args, density: float, fit_dir: Path) -> dict:
+def run_fit_for_density(args, density: float, fit_dir: Path, xstar_ref: dict) -> dict:
     cmd = [
         sys.executable, "examples/20_o7_solver_source_fit.py", str(args.fitsfile),
         "--element", args.element,
@@ -215,8 +337,8 @@ def run_fit_for_density(args, density: float, fit_dir: Path) -> dict:
         "--combined-source-total-rate", f"{float(args.combined_source_total_rate):.16g}",
         "--wavelength-min", f"{float(args.wavelength_min):.16g}",
         "--wavelength-max", f"{float(args.wavelength_max):.16g}",
-        "--xstar-lines-csv", str(args.xstar_lines_csv),
-        "--xstar-value-column", args.xstar_value_column,
+        "--xstar-lines-csv", str(xstar_ref["xstar_lines_csv"]),
+        "--xstar-value-column", str(xstar_ref["xstar_value_column"]),
         "--out-dir", str(fit_dir),
     ]
     if args.keep_unit_runs:
@@ -229,7 +351,16 @@ def run_fit_for_density(args, density: float, fit_dir: Path) -> dict:
     summary_path = fit_dir / "o7_solver_source_fit_summary.json"
     if args.dry_run:
         return {"summary_path": str(summary_path), "dry_run": True}
-    return json.loads(summary_path.read_text(encoding="utf-8"))
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["_density_xstar_reference"] = dict(xstar_ref)
+    if isinstance(summary.get("xstar_reference"), dict):
+        summary["xstar_reference"].update({
+            "target_label": xstar_ref.get("xstar_target_label"),
+            "target_is_reused_low_density_reference": xstar_ref.get("xstar_target_is_reused_low_density_reference"),
+            "reference_density_cm^-3": xstar_ref.get("xstar_reference_density_cm^-3"),
+            "path": str(xstar_ref.get("xstar_lines_csv")),
+        })
+    return summary
 
 
 def run_fixed_weight_validation(args, density: float, weights: Dict[int, float], out_dir: Path) -> dict:
@@ -366,8 +497,10 @@ def flatten_row(
     row = {
         "electron_density_cm^-3": float(density),
         "reference_weight_density_cm^-3": float(reference_density),
-        "xstar_target_label": args.xstar_target_label,
-        "xstar_target_is_reused_low_density_reference": True,
+        "xstar_target_label": xstar.get("target_label") or args.xstar_target_label,
+        "xstar_target_is_reused_low_density_reference": bool(xstar.get("target_is_reused_low_density_reference", True)),
+        "xstar_reference_density_cm^-3": xstar.get("reference_density_cm^-3"),
+        "xstar_lines_csv": xstar.get("path"),
         "xstar_R_f_over_i": R_x,
         "xstar_G_f_plus_i_over_r": G_x,
         "fixed_ne1_R_f_over_i": fixed_R,
@@ -432,6 +565,8 @@ def main() -> None:
     parser.add_argument("--wavelength-min", type=float, default=21.5)
     parser.add_argument("--wavelength-max", type=float, default=22.2)
     parser.add_argument("--xstar-lines-csv", default="xstar_test_run/xstar_o7_triplet_lines.csv")
+    parser.add_argument("--xstar-lines-csv-by-density", action="append", default=[], metavar="DENSITY:CSV", help="Density-specific XSTAR line CSV. May be repeated. Example: 1e10:xstar_o7_ne1e10_lines.csv")
+    parser.add_argument("--xstar-grid-summary-csv", help="CSV mapping densities to XSTAR line CSVs. Columns: density/ne/electron_density_cm^-3 and xstar_lines_csv/path; optional xstar_value_column and xstar_target_label.")
     parser.add_argument("--xstar-value-column", default="emit_outward")
     parser.add_argument(
         "--xstar-target-label",
@@ -464,6 +599,7 @@ def main() -> None:
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    xstar_reference_map = build_xstar_reference_map(args)
 
     ref_density = float(args.reference_density)
     # Always run the reference density first so fixed-weight validation is defined
@@ -487,11 +623,11 @@ def main() -> None:
         name = _safe_name(density)
         fit_dir = out_dir / f"fit_ne_{name}"
         fixed_dir = out_dir / f"fixed_ne1_validation_ne_{name}"
-        fit_summary = run_fit_for_density(args, density, fit_dir)
+        xstar_ref_for_density = select_xstar_reference(args, density, xstar_reference_map)
+        fit_summary = run_fit_for_density(args, density, fit_dir, xstar_ref_for_density)
         if args.dry_run:
             continue
-        if not xstar_reference:
-            xstar_reference = fit_summary.get("xstar_reference") or {}
+        xstar_reference = fit_summary.get("xstar_reference") or {}
         weights_path = fit_dir / "o7_source_fit_weights.csv"
         current_weights = read_weights_csv(weights_path)
         if abs(density - float(args.reference_density)) <= 0.0:
@@ -512,6 +648,7 @@ def main() -> None:
             "fit_success_vs_xstar": row.get("fit_success_vs_xstar"),
             "target_reachable": row.get("target_reachable"),
             "density_warning": row.get("density_warning"),
+            "xstar_reference": xstar_reference,
             "fit_summary": fit_summary,
         })
 
@@ -537,9 +674,10 @@ def main() -> None:
                 "prune_null_rate_levels": bool(args.prune_null_rate_levels),
                 "null_rate_floor_s^-1": float(args.null_rate_floor),
             },
-            "xstar_target_label": args.xstar_target_label,
-            "xstar_target_is_reused_low_density_reference": True,
-            "xstar_reference": xstar_reference,
+            "xstar_target_label": args.xstar_target_label if not xstar_reference_map else "density-specific XSTAR O VII references",
+            "xstar_target_is_reused_low_density_reference": not bool(xstar_reference_map),
+            "xstar_reference_map": xstar_reference_map,
+            "last_xstar_reference": xstar_reference,
             "fit_feasibility_tolerances": {
                 "rg_tolerance_fraction": float(args.rg_tolerance),
                 "reachable_rg_tolerance_fraction": float(args.reachable_rg_tolerance),
@@ -556,6 +694,10 @@ def main() -> None:
     print("------------------------------------------------")
     print("densities:", ", ".join(f"{x:.6g}" for x in densities))
     print(f"reference density: {float(args.reference_density):.6g} cm^-3")
+    if xstar_reference_map:
+        print("XSTAR target mode: density-specific references")
+    else:
+        print("XSTAR target mode: reused low-density reference")
     print(f"wrote: {out_csv}")
     print(f"wrote: {out_summary}")
     if args.print_summary and rows:

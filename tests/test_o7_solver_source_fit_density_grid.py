@@ -121,3 +121,75 @@ def test_example21_flatten_row_warns_when_target_unreachable():
     assert "fit objective" in row["density_warning"]
     assert "R/XSTAR" in row["density_warning"]
     assert "G/XSTAR" in row["density_warning"]
+
+
+def test_example21_parses_density_specific_xstar_reference_grid(tmp_path):
+    mod = _load_example21()
+    grid = tmp_path / "xstar_grid.csv"
+    grid.write_text(
+        "electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label\n"
+        "1,xstar_o7_ne1.csv,emit_outward,low-density reference\n"
+        "1e12,xstar_o7_ne1e12.csv,emit_inward,high-density reference\n",
+        encoding="utf-8",
+    )
+    refs = mod.read_xstar_reference_grid_csv(grid)
+    assert refs[mod._density_key(1.0)]["xstar_lines_csv"] == "xstar_o7_ne1.csv"
+    assert refs[mod._density_key(1.0e12)]["xstar_value_column"] == "emit_inward"
+    assert refs[mod._density_key(1.0e12)]["xstar_target_label"] == "high-density reference"
+
+
+def test_example21_selects_density_specific_xstar_reference():
+    mod = _load_example21()
+
+    class Args:
+        xstar_lines_csv = "default.csv"
+        xstar_value_column = "emit_outward"
+        xstar_target_label = "reused low-density target"
+        reference_density = 1.0
+
+    refs = {
+        mod._density_key(1.0e10): {
+            "electron_density_cm^-3": 1.0e10,
+            "xstar_lines_csv": "xstar_o7_ne1e10.csv",
+            "xstar_value_column": None,
+            "xstar_target_label": None,
+        }
+    }
+    selected = mod.select_xstar_reference(Args(), 1.0e10, refs)
+    assert selected["xstar_lines_csv"] == "xstar_o7_ne1e10.csv"
+    assert selected["xstar_value_column"] == "emit_outward"
+    assert selected["xstar_target_is_reused_low_density_reference"] is False
+    assert "ne=1e+10" in selected["xstar_target_label"]
+
+
+def test_example21_dry_run_accepts_density_specific_reference_mapping(tmp_path):
+    script = ROOT / "examples" / "21_o7_solver_source_fit_density_grid.py"
+    cmd = [
+        sys.executable,
+        str(script),
+        "dummy_atdb.fits",
+        "--dry-run",
+        "--electron-densities",
+        "1",
+        "1e4",
+        "--xstar-lines-csv-by-density",
+        "1:xstar_o7_ne1.csv",
+        "--xstar-lines-csv-by-density",
+        "1e4:xstar_o7_ne1e4.csv",
+        "--out-dir",
+        str(tmp_path / "grid"),
+    ]
+    result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, check=True)
+    assert "--xstar-lines-csv xstar_o7_ne1.csv" in result.stdout
+    assert "--xstar-lines-csv xstar_o7_ne1e4.csv" in result.stdout
+    assert "XSTAR target mode: density-specific references" in result.stdout
+
+
+def test_example22_exists_and_requires_density_xstar_grid():
+    path = ROOT / "examples" / "22_o7_solver_source_fit_density_xstar_grid.py"
+    text = path.read_text(encoding="utf-8")
+    assert "density-dependent XSTAR references" in text
+    assert "21_o7_solver_source_fit_density_grid.py" in text
+    result = subprocess.run([sys.executable, str(path), "dummy_atdb.fits", "--dry-run"], cwd=ROOT, text=True, capture_output=True)
+    assert result.returncode != 0
+    assert "requires density-dependent XSTAR references" in result.stderr

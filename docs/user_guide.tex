@@ -1102,6 +1102,50 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
 These weights are empirical diagnostics, not physical level-resolved recombination rates.  The SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
 
 For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_summary\_reference.json}.  The lightweight CI tests in \texttt{tests/test\_o7\_solver\_source\_fit\_reference.py} verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full \texttt{atdb.fits} file.  When using \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py} with \texttt{selected-fit-weights} or \texttt{o7-xstar-fit}, v0.2.64 emits a warning unless \texttt{--solver-source-total-rate} is supplied, because the empirical weights are amplitude-dependent.
+
+\subsection{Validated O VII diagnostic commands}
+
+The validated O VII empirical solver-source-fit path is:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
+  ../xstar/data/atdb.fits \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit \
+  --print-summary
+\end{lstlisting}
+
+The matching cascade-workflow validation should use the same total source amplitude:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --source-mode selected-fit-weights \
+  --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
+  --solver-source-csv-mode initial \
+  --solver-source-total-rate 1.0 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --out-dir o7_recomb_cascade_workflow_solver_fit \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+\end{lstlisting}
+
+Reference snapshots for the density-grid diagnostic are saved in \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_density\_grid.csv} and \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_density\_grid\_summary.json}.
+
+\subsection{Known limitation of empirical O VII weights}
+
+The O VII fitted source weights in these examples are empirical diagnostics.  They are fitted to reproduce XSTAR triplet ratios for a specified solver setup, density, source-level set, and total source amplitude.  They are not physical level-resolved recombination rates and should not be used as a substitute for a recombination/cascade source model derived from atomic data.
+
 \subsection{O VII density-grid source-fit diagnostic}
 
 After validating the empirical O VII full-solver source fit at \(n_e=1~\mathrm{cm^{-3}}\), use \texttt{examples/21\_o7\_solver\_source\_fit\_density\_grid.py} to test whether the fitted source distribution is stable with density.  The default grid is \(n_e=1,10^4,10^8,10^{10},10^{12}~\mathrm{cm^{-3}}\).
@@ -1123,7 +1167,38 @@ PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
 
 This script runs the validated \texttt{examples/20\_o7\_solver\_source\_fit.py} workflow at each density, then also validates the fixed \(n_e=1~\mathrm{cm^{-3}}\) source weights at every density.  It writes \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid.csv} and \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid\_summary.json}.
 
-The density-grid CSV reports the reused low-density XSTAR \(R/G\) reference, fixed-\(n_e=1\) \(R/G\), refitted linear-response \(R/G\), refitted combined simultaneous-solver \(R/G\), matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  In v0.2.66 it also adds 	exttt{fit\_success\_vs\_xstar} and 	exttt{target\_reachable} feasibility flags; 	exttt{refitted\_R\_over\_xstar}, 	exttt{refitted\_G\_over\_xstar}, 	exttt{fixed\_R\_over\_refitted}, and 	exttt{fixed\_G\_over\_refitted} ratio columns; and per-density warnings when the fit objective is large or the refitted combined \(R/G\) ratios remain outside tolerance.  The XSTAR target label is written explicitly as a low-density reference reused at all densities unless a later density-dependent XSTAR reference-table option is added.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+The density-grid CSV reports the reused low-density XSTAR \(R/G\) reference, fixed-\(n_e=1\) \(R/G\), refitted linear-response \(R/G\), refitted combined simultaneous-solver \(R/G\), matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  In v0.2.66 it also adds \texttt{fit\_success\_vs\_xstar} and \texttt{target\_reachable} feasibility flags; \texttt{refitted\_R\_over\_xstar}, \texttt{refitted\_G\_over\_xstar}, \texttt{fixed\_R\_over\_refitted}, and \texttt{fixed\_G\_over\_refitted} ratio columns; and per-density warnings when the fit objective is large or the refitted combined \(R/G\) ratios remain outside tolerance.  The XSTAR target label is written explicitly as a low-density reference reused at all densities unless a later density-dependent XSTAR reference-table option is added.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+
+
+For density-dependent XSTAR reference products, use \texttt{examples/22\_o7\_solver\_source\_fit\_density\_xstar\_grid.py}.  This front end calls the same density-grid machinery but requires one XSTAR line CSV per density, so each density is compared against its own XSTAR target rather than against the reused low-density reference.
+
+A mapping CSV can be written as:
+
+\begin{lstlisting}[language=bash]
+electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label
+1,xstar_o7_ne1_lines.csv,emit_outward,O VII XSTAR ne=1
+1e10,xstar_o7_ne1e10_lines.csv,emit_outward,O VII XSTAR ne=1e10
+1e12,xstar_o7_ne1e12_lines.csv,emit_outward,O VII XSTAR ne=1e12
+\end{lstlisting}
+
+Run:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+  ../xstar/data/atdb.fits \
+  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit_density_xstar_grid \
+  --print-summary
+\end{lstlisting}
+
+Alternatively, supply repeated \texttt{--xstar-lines-csv-by-density DENSITY:CSV} arguments.  The output CSV keeps \texttt{xstar\_target\_is\_reused\_low\_density\_reference=false} and records the XSTAR CSV path and target label used for each density.
 
 
 \end{document}

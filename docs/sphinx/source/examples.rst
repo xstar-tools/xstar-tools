@@ -435,6 +435,33 @@ These weights are empirical diagnostics, not physical level-resolved recombinati
 
 
 
+
+Validated O VII diagnostic commands
+-----------------------------------
+
+The validated O VII empirical solver-source-fit path uses SVD/rank-aware solving,
+keeps raw negative populations for diagnostic linearity, prunes null-rate levels,
+and uses a total fitted-source amplitude of ``1.0 s^-1``.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
+     ../xstar/data/atdb.fits \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --linear-solver svd \
+     --rank-deficient-action svd \
+     --negative-population-action keep \
+     --prune-null-rate-levels \
+     --combined-source-total-rate 1.0 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_solver_source_fit \
+     --print-summary
+
+Known limitation: the O VII fitted source weights are empirical diagnostics, not
+physical level-resolved recombination rates.  Reference snapshots for the
+density-grid diagnostic are saved under ``examples/reference_outputs/``.
+
 O VII solver-source-fit density grid
 ------------------------------------
 
@@ -468,3 +495,41 @@ R/G targets.  A future extension may add density-dependent XSTAR reference
 inputs such as ``--xstar-lines-csv-by-density`` or ``--xstar-grid-summary-csv``.
 The weights remain empirical diagnostics, not physical level-resolved
 recombination rates.
+
+
+O VII density-dependent XSTAR reference grid
+--------------------------------------------
+
+Use ``examples/22_o7_solver_source_fit_density_xstar_grid.py`` when separate
+XSTAR triplet CSVs are available for each density.  This compares each density
+against its own XSTAR target instead of reusing the low-density reference.
+
+A mapping CSV can contain columns such as ``electron_density_cm^-3`` and
+``xstar_lines_csv``:
+
+.. code-block:: text
+
+   electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label
+   1,xstar_o7_ne1_lines.csv,emit_outward,O VII XSTAR ne=1
+   1e10,xstar_o7_ne1e10_lines.csv,emit_outward,O VII XSTAR ne=1e10
+   1e12,xstar_o7_ne1e12_lines.csv,emit_outward,O VII XSTAR ne=1e12
+
+Run:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+     ../xstar/data/atdb.fits \
+     --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+     --linear-solver svd \
+     --rank-deficient-action svd \
+     --negative-population-action keep \
+     --prune-null-rate-levels \
+     --combined-source-total-rate 1.0 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_solver_source_fit_density_xstar_grid \
+     --print-summary
+
+Repeated ``--xstar-lines-csv-by-density DENSITY:CSV`` arguments can be used
+instead of a mapping CSV.

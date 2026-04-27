@@ -1,0 +1,2015 @@
+{
+  "fitsfile": "../xstar/data/atdb.fits",
+  "element": "O",
+  "ion_stage": 7,
+  "temperature_K": 1000000.0,
+  "electron_densities_cm^-3": [
+    1.0,
+    10000.0,
+    100000000.0,
+    10000000000.0,
+    1000000000000.0
+  ],
+  "reference_density_cm^-3": 1.0,
+  "reference_fit_dir": "o7_solver_source_fit_density_grid/fit_ne_1",
+  "source_rate_s^-1": 1.0,
+  "combined_source_total_rate_s^-1": 1.0,
+  "solver_matrix_treatment": {
+    "linear_solver": "svd",
+    "rank_deficient_action": "svd",
+    "negative_population_action": "keep",
+    "negative_population_tol": 1e-08,
+    "prune_null_rate_levels": true,
+    "null_rate_floor_s^-1": 0.0
+  },
+  "xstar_target_label": "low-density XSTAR O VII reference reused at all densities",
+  "xstar_target_is_reused_low_density_reference": true,
+  "xstar_reference": {
+    "available": true,
+    "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+    "value_column": "emit_outward",
+    "forbidden": 72.9739,
+    "intercombination": 22.744841,
+    "resonance": 9.06241,
+    "R_f_over_i": 3.2083715159846578,
+    "G_f_plus_i_over_r": 10.562172865716734,
+    "counts": {
+      "f": 1,
+      "i": 3,
+      "r": 1
+    },
+    "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+  },
+  "fit_feasibility_tolerances": {
+    "rg_tolerance_fraction": 0.005,
+    "reachable_rg_tolerance_fraction": 0.05,
+    "fit_objective_warn": 0.0001
+  },
+  "warnings": [
+    "density ne=1e+12 cm^-3 (high-density type-68 coupling regime): fit objective 0.140911 exceeds warning threshold 0.0001; refitted R/XSTAR mismatch exceeds tolerance 0.005; refitted G/XSTAR mismatch exceeds tolerance 0.005"
+  ],
+  "density_rows_csv": "o7_solver_source_fit_density_grid/o7_solver_source_fit_density_grid.csv",
+  "density_summaries": [
+    {
+      "electron_density_cm^-3": 1.0,
+      "fit_summary_json": "o7_solver_source_fit_density_grid/fit_ne_1/o7_solver_source_fit_summary.json",
+      "weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1/o7_source_fit_weights.csv",
+      "fixed_validation": {
+        "enabled": true,
+        "source_total_rate_s^-1": 1.0,
+        "source_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1/o7_fixed_ne1_sources.csv",
+        "lines_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1/o7_fixed_ne1_solver_lines.csv",
+        "triplet_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1/o7_fixed_ne1_solver_triplet.csv",
+        "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1/o7_fixed_ne1_solver_summary.json",
+        "triplet_components": {
+          "forbidden": 5.890384288789776e-10,
+          "intercombination": 1.8359394021781396e-10,
+          "resonance": 7.315101416182383e-11
+        },
+        "R_f_over_i": 3.208376203376585,
+        "G_f_plus_i_over_r": 10.562155261273388,
+        "solver_diagnostics": {
+          "solver": "numpy.linalg.svd_lstsq",
+          "solver_warning": "matrix rank deficient (231/238); negative populations present",
+          "matrix_rank": 231,
+          "matrix_size": 238,
+          "condition_number": 1.4772548463214175e+18,
+          "linear_residual_l2": 0.0032375566461937027,
+          "linear_residual_linf": 0.003216388576641852,
+          "negative_population_action": "keep",
+          "n_negative_populations_raw": 1,
+          "null_rate_pruning_diagnostics": {
+            "enabled": true,
+            "rate_floor_s^-1": 0.0,
+            "n_levels_before": 241,
+            "n_levels_after": 238,
+            "n_levels_removed": 3,
+            "removed_levels_preview": [
+              44,
+              45,
+              241
+            ],
+            "removed_levels_truncated": false,
+            "protected_levels": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "source_sum_s^-1": 1.0
+        }
+      },
+      "weight_comparison_vs_reference_density": {
+        "weight_delta_l1": 0.0,
+        "weight_delta_l2": 0.0,
+        "weight_delta_max_abs": 0.0,
+        "top_weight_changes": [
+          {
+            "source_level": 2,
+            "reference_weight": 0.04715901172891584,
+            "fitted_weight": 0.04715901172891584,
+            "delta": 0.0
+          },
+          {
+            "source_level": 3,
+            "reference_weight": 0.04750458180705176,
+            "fitted_weight": 0.04750458180705176,
+            "delta": 0.0
+          },
+          {
+            "source_level": 4,
+            "reference_weight": 0.11854233874670224,
+            "fitted_weight": 0.11854233874670224,
+            "delta": 0.0
+          },
+          {
+            "source_level": 5,
+            "reference_weight": 0.04750461499989641,
+            "fitted_weight": 0.04750461499989641,
+            "delta": 0.0
+          },
+          {
+            "source_level": 7,
+            "reference_weight": 0.026549029483307538,
+            "fitted_weight": 0.026549029483307538,
+            "delta": 0.0
+          },
+          {
+            "source_level": 8,
+            "reference_weight": 0.07118384517396675,
+            "fitted_weight": 0.07118384517396675,
+            "delta": 0.0
+          },
+          {
+            "source_level": 9,
+            "reference_weight": 0.04716336858050452,
+            "fitted_weight": 0.04716336858050452,
+            "delta": 0.0
+          },
+          {
+            "source_level": 10,
+            "reference_weight": 0.04716336858050513,
+            "fitted_weight": 0.04716336858050513,
+            "delta": 0.0
+          }
+        ]
+      },
+      "fit_success_vs_xstar": true,
+      "target_reachable": true,
+      "density_warning": null,
+      "fit_summary": {
+        "fitsfile": "../xstar/data/atdb.fits",
+        "element": "O",
+        "ion_stage": 7,
+        "temperature_K": 1000000.0,
+        "electron_density_cm^-3": 1.0,
+        "source_levels": [
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "source_rate_s^-1": 1.0,
+        "solver_matrix_treatment": {
+          "linear_solver": "svd",
+          "rank_deficient_action": "svd",
+          "negative_population_action": "keep",
+          "negative_population_tol": 1e-08,
+          "residual_l2_max": null,
+          "residual_linf_max": null,
+          "reject_large_residual": false,
+          "prune_null_rate_levels": true,
+          "null_rate_floor_s^-1": 0.0
+        },
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
+        "xstar_reference": {
+          "available": true,
+          "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+          "value_column": "emit_outward",
+          "forbidden": 72.9739,
+          "intercombination": 22.744841,
+          "resonance": 9.06241,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716734,
+          "counts": {
+            "f": 1,
+            "i": 3,
+            "r": 1
+          },
+          "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+        },
+        "target_components_normalized": {
+          "forbidden": 0.6964410994110954,
+          "intercombination": 0.21706996709742196,
+          "resonance": 0.08648893349148265,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716736
+        },
+        "uniform_prediction": {
+          "components": {
+            "forbidden": 0.6823799013465853,
+            "intercombination": 0.13828289434479235,
+            "resonance": 0.1793372043086223
+          },
+          "raw_components": {
+            "forbidden": 5.827323801878354e-10,
+            "intercombination": 1.180895275517145e-10,
+            "resonance": 1.5314870164957643e-10
+          },
+          "forbidden": 0.6823799013465853,
+          "intercombination": 0.13828289434479235,
+          "resonance": 0.1793372043086223,
+          "R_f_over_i": 4.934666030674411,
+          "G_f_plus_i_over_r": 4.576087816553084,
+          "R_over_xstar": 1.5380594192689523,
+          "G_over_xstar": 0.43325250161417017
+        },
+        "fitted_prediction": {
+          "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
+          "fit_info": {
+            "status": "converged",
+            "iterations": 45,
+            "objective": 9.444870784283813e-14,
+            "step": 0.10955718231061878,
+            "raw_response_scale": 9.197963358887576e-10,
+            "combined_raw_triplet_sum": 8.457829365768518e-10,
+            "combined_normalized_forbidden": 0.6964412415660814,
+            "combined_normalized_intercombination": 0.21706969428979972,
+            "combined_normalized_resonance": 0.08648906414411876
+          },
+          "components": {
+            "forbidden": 0.6964412415660814,
+            "intercombination": 0.21706969428979972,
+            "resonance": 0.08648906414411876
+          },
+          "raw_components": {
+            "forbidden": 5.89038118444989e-10,
+            "intercombination": 1.8359384347826628e-10,
+            "resonance": 7.315097465359647e-11
+          },
+          "forbidden": 0.6964412415660814,
+          "intercombination": 0.21706969428979972,
+          "resonance": 0.08648906414411876,
+          "R_f_over_i": 3.2083762030654306,
+          "G_f_plus_i_over_r": 10.562155399596836,
+          "R_over_xstar": 1.0000014608909067,
+          "G_over_xstar": 0.9999983463516343
+        },
+        "combined_source_validation": {
+          "enabled": true,
+          "source_total_rate_s^-1": 1.0,
+          "source_csv": "o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation/o7_combined_fitted_sources.csv",
+          "lines_csv": "o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation/o7_combined_solver_lines.csv",
+          "triplet_csv": "o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation/o7_combined_solver_triplet.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation/o7_combined_solver_summary.json",
+          "triplet_components": {
+            "forbidden": 5.890384288789777e-10,
+            "intercombination": 1.8359394021781398e-10,
+            "resonance": 7.315101416182384e-11
+          },
+          "R_f_over_i": 3.208376203376585,
+          "G_f_plus_i_over_r": 10.562155261273388,
+          "solver_diagnostics": {
+            "solver": "numpy.linalg.svd_lstsq",
+            "solver_warning": "matrix rank deficient (231/238); negative populations present",
+            "matrix_rank": 231,
+            "matrix_size": 238,
+            "condition_number": 1.4772548463214175e+18,
+            "linear_residual_l2": 0.0032375566461936944,
+            "linear_residual_linf": 0.0032163885766418516,
+            "negative_population_action": "keep",
+            "negative_population_tol": 1e-08,
+            "n_negative_populations_raw": 1,
+            "n_levels_in_this_solve": 238,
+            "null_rate_pruning_diagnostics": {
+              "enabled": true,
+              "rate_floor_s^-1": 0.0,
+              "n_levels_before": 241,
+              "n_levels_after": 238,
+              "n_levels_removed": 3,
+              "removed_levels_preview": [
+                44,
+                45,
+                241
+              ],
+              "removed_levels_truncated": false,
+              "protected_levels": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ]
+            },
+            "source_sink_summary": {
+              "n_source_terms_nonzero": 18,
+              "n_sink_terms_nonzero": 0,
+              "source_sum_s^-1": 1.0,
+              "sink_sum_s^-1": 0.0,
+              "nonzero_level_terms": [
+                {
+                  "level_index": 2,
+                  "source_s^-1": 0.04715901172891585,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 3,
+                  "source_s^-1": 0.04750458180705178,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 4,
+                  "source_s^-1": 0.11854233874670227,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 5,
+                  "source_s^-1": 0.04750461499989642,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 7,
+                  "source_s^-1": 0.026549029483307545,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 8,
+                  "source_s^-1": 0.07118384517396677,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 9,
+                  "source_s^-1": 0.04716336858050453,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 10,
+                  "source_s^-1": 0.04716336858050514,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 11,
+                  "source_s^-1": 0.04716336858050419,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 12,
+                  "source_s^-1": 0.02654902948330801,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 13,
+                  "source_s^-1": 0.07118368438052662,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 14,
+                  "source_s^-1": 0.07118368438052669,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 15,
+                  "source_s^-1": 0.07118368438052665,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 16,
+                  "source_s^-1": 0.0265735817019382,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 17,
+                  "source_s^-1": 0.06362474824927992,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 18,
+                  "source_s^-1": 0.06135244972534468,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 19,
+                  "source_s^-1": 0.05420780500859773,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 20,
+                  "source_s^-1": 0.05420780500859712,
+                  "sink_s^-1": 0.0
+                }
+              ],
+              "notes": [
+                "loaded level source/sink CSV: o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation/o7_combined_fitted_sources.csv"
+              ],
+              "temperature_K": 1000000.0,
+              "electron_density_cm^-3": 1.0,
+              "null_rate_pruning_diagnostics": {
+                "enabled": true,
+                "rate_floor_s^-1": 0.0,
+                "n_levels_before": 241,
+                "n_levels_after": 238,
+                "n_levels_removed": 3,
+                "removed_levels_preview": [
+                  44,
+                  45,
+                  241
+                ],
+                "removed_levels_truncated": false,
+                "protected_levels": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  7
+                ]
+              }
+            }
+          },
+          "R_over_xstar": 1.0000014609878887,
+          "G_over_xstar": 0.9999983332555176,
+          "delta_R_vs_fitted_linear_response": 3.111542135059153e-10,
+          "delta_G_vs_fitted_linear_response": -1.3832344869513236e-07
+        },
+        "outputs": {
+          "solver_response_matrix_csv": "o7_solver_source_fit_density_grid/fit_ne_1/o7_solver_response_matrix.csv",
+          "solver_source_fit_weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1/o7_solver_source_fit_weights.csv",
+          "source_fit_weights_compatible_csv": "o7_solver_source_fit_density_grid/fit_ne_1/o7_source_fit_weights.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1/o7_solver_source_fit_summary.json",
+          "combined_validation_dir": "o7_solver_source_fit_density_grid/fit_ne_1/combined_source_validation"
+        },
+        "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+      }
+    },
+    {
+      "electron_density_cm^-3": 10000.0,
+      "fit_summary_json": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_solver_source_fit_summary.json",
+      "weights_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_source_fit_weights.csv",
+      "fixed_validation": {
+        "enabled": true,
+        "source_total_rate_s^-1": 1.0,
+        "source_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_10000/o7_fixed_ne1_sources.csv",
+        "lines_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_10000/o7_fixed_ne1_solver_lines.csv",
+        "triplet_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_10000/o7_fixed_ne1_solver_triplet.csv",
+        "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_10000/o7_fixed_ne1_solver_summary.json",
+        "triplet_components": {
+          "forbidden": 6.288829063414782e-10,
+          "intercombination": 1.9416484254624365e-10,
+          "resonance": 9.329925260883561e-11
+        },
+        "R_f_over_i": 3.2389123493955867,
+        "G_f_plus_i_over_r": 8.821589947117944,
+        "solver_diagnostics": {
+          "solver": "numpy.linalg.svd_lstsq",
+          "solver_warning": "matrix rank deficient (233/238); negative populations present",
+          "matrix_rank": 233,
+          "matrix_size": 238,
+          "condition_number": 2.0255622422180812e+16,
+          "linear_residual_l2": 0.04124416636717598,
+          "linear_residual_linf": 0.032567660641438144,
+          "negative_population_action": "keep",
+          "n_negative_populations_raw": 1,
+          "null_rate_pruning_diagnostics": {
+            "enabled": true,
+            "rate_floor_s^-1": 0.0,
+            "n_levels_before": 241,
+            "n_levels_after": 238,
+            "n_levels_removed": 3,
+            "removed_levels_preview": [
+              44,
+              45,
+              241
+            ],
+            "removed_levels_truncated": false,
+            "protected_levels": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "source_sum_s^-1": 1.0
+        }
+      },
+      "weight_comparison_vs_reference_density": {
+        "weight_delta_l1": 0.030676810291620633,
+        "weight_delta_l2": 0.010172572582217319,
+        "weight_delta_max_abs": 0.005114099312283012,
+        "top_weight_changes": [
+          {
+            "source_level": 7,
+            "reference_weight": 0.026549029483307538,
+            "fitted_weight": 0.021434930171024526,
+            "delta": -0.005114099312283012
+          },
+          {
+            "source_level": 12,
+            "reference_weight": 0.026549029483308003,
+            "fitted_weight": 0.02143493017128493,
+            "delta": -0.0051140993120230745
+          },
+          {
+            "source_level": 16,
+            "reference_weight": 0.026573581701938194,
+            "fitted_weight": 0.02146337518043399,
+            "delta": -0.0051102065215042035
+          },
+          {
+            "source_level": 4,
+            "reference_weight": 0.11854233874670224,
+            "fitted_weight": 0.12207008212680667,
+            "delta": 0.003527743380104434
+          },
+          {
+            "source_level": 8,
+            "reference_weight": 0.07118384517396675,
+            "fitted_weight": 0.07265799090546958,
+            "delta": 0.0014741457315028267
+          },
+          {
+            "source_level": 15,
+            "reference_weight": 0.07118368438052664,
+            "fitted_weight": 0.07265782313993586,
+            "delta": 0.0014741387594092298
+          },
+          {
+            "source_level": 14,
+            "reference_weight": 0.07118368438052668,
+            "fitted_weight": 0.07265782313993577,
+            "delta": 0.001474138759409091
+          },
+          {
+            "source_level": 13,
+            "reference_weight": 0.07118368438052661,
+            "fitted_weight": 0.07265782313993567,
+            "delta": 0.0014741387594090632
+          }
+        ]
+      },
+      "fit_success_vs_xstar": true,
+      "target_reachable": true,
+      "density_warning": null,
+      "fit_summary": {
+        "fitsfile": "../xstar/data/atdb.fits",
+        "element": "O",
+        "ion_stage": 7,
+        "temperature_K": 1000000.0,
+        "electron_density_cm^-3": 10000.0,
+        "source_levels": [
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "source_rate_s^-1": 1.0,
+        "solver_matrix_treatment": {
+          "linear_solver": "svd",
+          "rank_deficient_action": "svd",
+          "negative_population_action": "keep",
+          "negative_population_tol": 1e-08,
+          "residual_l2_max": null,
+          "residual_linf_max": null,
+          "reject_large_residual": false,
+          "prune_null_rate_levels": true,
+          "null_rate_floor_s^-1": 0.0
+        },
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
+        "xstar_reference": {
+          "available": true,
+          "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+          "value_column": "emit_outward",
+          "forbidden": 72.9739,
+          "intercombination": 22.744841,
+          "resonance": 9.06241,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716734,
+          "counts": {
+            "f": 1,
+            "i": 3,
+            "r": 1
+          },
+          "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+        },
+        "target_components_normalized": {
+          "forbidden": 0.6964410994110954,
+          "intercombination": 0.21706996709742196,
+          "resonance": 0.08648893349148265,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716736
+        },
+        "uniform_prediction": {
+          "components": {
+            "forbidden": 0.6733727482825649,
+            "intercombination": 0.13904063972140993,
+            "resonance": 0.18758661199602514
+          },
+          "raw_components": {
+            "forbidden": 6.22565714223545e-10,
+            "intercombination": 1.2854980453995817e-10,
+            "resonance": 1.7343290677257162e-10
+          },
+          "forbidden": 0.6733727482825649,
+          "intercombination": 0.13904063972140993,
+          "resonance": 0.18758661199602514,
+          "R_f_over_i": 4.842992305212163,
+          "G_f_plus_i_over_r": 4.330870840724973,
+          "R_over_xstar": 1.5094861306066159,
+          "G_over_xstar": 0.4100359742058706
+        },
+        "fitted_prediction": {
+          "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
+          "fit_info": {
+            "status": "converged",
+            "iterations": 46,
+            "objective": 7.532753594208506e-14,
+            "step": 0.1250917980356456,
+            "raw_response_scale": 9.90534929930782e-10,
+            "combined_raw_triplet_sum": 9.153989678748016e-10,
+            "combined_normalized_forbidden": 0.6964412257308995,
+            "combined_normalized_intercombination": 0.2170697246810575,
+            "combined_normalized_resonance": 0.08648904958804295
+          },
+          "components": {
+            "forbidden": 0.6964412257308995,
+            "intercombination": 0.2170697246810575,
+            "resonance": 0.08648904958804295
+          },
+          "raw_components": {
+            "forbidden": 6.375215792195272e-10,
+            "intercombination": 1.9870540192990738e-10,
+            "resonance": 7.917198672536705e-11
+          },
+          "forbidden": 0.6964412257308995,
+          "intercombination": 0.2170697246810575,
+          "resonance": 0.08648904958804295,
+          "R_f_over_i": 3.2083756809208968,
+          "G_f_plus_i_over_r": 10.562157345503415,
+          "R_over_xstar": 1.0000012981464952,
+          "G_over_xstar": 0.9999985305851821
+        },
+        "combined_source_validation": {
+          "enabled": true,
+          "source_total_rate_s^-1": 1.0,
+          "source_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation/o7_combined_fitted_sources.csv",
+          "lines_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation/o7_combined_solver_lines.csv",
+          "triplet_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation/o7_combined_solver_triplet.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation/o7_combined_solver_summary.json",
+          "triplet_components": {
+            "forbidden": 6.375225234033111e-10,
+            "intercombination": 1.98705572886434e-10,
+            "resonance": 7.917199985570583e-11
+          },
+          "R_f_over_i": 3.2083776722642487,
+          "G_f_plus_i_over_r": 10.562169678848642,
+          "solver_diagnostics": {
+            "solver": "numpy.linalg.svd_lstsq",
+            "solver_warning": "matrix rank deficient (233/238); negative populations present",
+            "matrix_rank": 233,
+            "matrix_size": 238,
+            "condition_number": 2.0255622422180812e+16,
+            "linear_residual_l2": 0.04124734727407506,
+            "linear_residual_linf": 0.03256736771185395,
+            "negative_population_action": "keep",
+            "negative_population_tol": 1e-08,
+            "n_negative_populations_raw": 1,
+            "n_levels_in_this_solve": 238,
+            "null_rate_pruning_diagnostics": {
+              "enabled": true,
+              "rate_floor_s^-1": 0.0,
+              "n_levels_before": 241,
+              "n_levels_after": 238,
+              "n_levels_removed": 3,
+              "removed_levels_preview": [
+                44,
+                45,
+                241
+              ],
+              "removed_levels_truncated": false,
+              "protected_levels": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ]
+            },
+            "source_sink_summary": {
+              "n_source_terms_nonzero": 18,
+              "n_sink_terms_nonzero": 0,
+              "source_sum_s^-1": 1.0,
+              "sink_sum_s^-1": 0.0,
+              "nonzero_level_terms": [
+                {
+                  "level_index": 2,
+                  "source_s^-1": 0.047591407448940276,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 3,
+                  "source_s^-1": 0.04795196177191159,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 4,
+                  "source_s^-1": 0.1220700821268067,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 5,
+                  "source_s^-1": 0.04795199659458398,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 7,
+                  "source_s^-1": 0.02143493017102453,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 8,
+                  "source_s^-1": 0.0726579909054696,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 9,
+                  "source_s^-1": 0.04759595321759593,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 10,
+                  "source_s^-1": 0.047595953217616366,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 11,
+                  "source_s^-1": 0.04759595321771761,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 12,
+                  "source_s^-1": 0.021434930171284932,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 13,
+                  "source_s^-1": 0.07265782313993568,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 14,
+                  "source_s^-1": 0.07265782313993578,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 15,
+                  "source_s^-1": 0.07265782313993588,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 16,
+                  "source_s^-1": 0.021463375180433994,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 17,
+                  "source_s^-1": 0.06439001932253254,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 18,
+                  "source_s^-1": 0.062400289740881645,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 19,
+                  "source_s^-1": 0.05494584374687984,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 20,
+                  "source_s^-1": 0.05494584374651329,
+                  "sink_s^-1": 0.0
+                }
+              ],
+              "notes": [
+                "loaded level source/sink CSV: o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation/o7_combined_fitted_sources.csv"
+              ],
+              "temperature_K": 1000000.0,
+              "electron_density_cm^-3": 10000.0,
+              "null_rate_pruning_diagnostics": {
+                "enabled": true,
+                "rate_floor_s^-1": 0.0,
+                "n_levels_before": 241,
+                "n_levels_after": 238,
+                "n_levels_removed": 3,
+                "removed_levels_preview": [
+                  44,
+                  45,
+                  241
+                ],
+                "removed_levels_truncated": false,
+                "protected_levels": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  7
+                ]
+              }
+            }
+          },
+          "R_over_xstar": 1.000001918817556,
+          "G_over_xstar": 0.9999996982753329,
+          "delta_R_vs_fitted_linear_response": 1.9913433519924695e-06,
+          "delta_G_vs_fitted_linear_response": 1.2333345226878123e-05
+        },
+        "outputs": {
+          "solver_response_matrix_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_solver_response_matrix.csv",
+          "solver_source_fit_weights_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_solver_source_fit_weights.csv",
+          "source_fit_weights_compatible_csv": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_source_fit_weights.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_10000/o7_solver_source_fit_summary.json",
+          "combined_validation_dir": "o7_solver_source_fit_density_grid/fit_ne_10000/combined_source_validation"
+        },
+        "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+      }
+    },
+    {
+      "electron_density_cm^-3": 100000000.0,
+      "fit_summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_solver_source_fit_summary.json",
+      "weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_source_fit_weights.csv",
+      "fixed_validation": {
+        "enabled": true,
+        "source_total_rate_s^-1": 1.0,
+        "source_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e08/o7_fixed_ne1_sources.csv",
+        "lines_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e08/o7_fixed_ne1_solver_lines.csv",
+        "triplet_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e08/o7_fixed_ne1_solver_triplet.csv",
+        "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e08/o7_fixed_ne1_solver_summary.json",
+        "triplet_components": {
+          "forbidden": 5.886007379945444e-10,
+          "intercombination": 1.8406467068837749e-10,
+          "resonance": 7.603775651523933e-11
+        },
+        "R_f_over_i": 3.1977931223480076,
+        "G_f_plus_i_over_r": 10.161601868514701,
+        "solver_diagnostics": {
+          "solver": "numpy.linalg.svd_lstsq",
+          "solver_warning": "negative populations present",
+          "matrix_rank": 238,
+          "matrix_size": 238,
+          "condition_number": 5003735180801.917,
+          "linear_residual_l2": 2.9044575813620853e-05,
+          "linear_residual_linf": 1.887762360010259e-05,
+          "negative_population_action": "keep",
+          "n_negative_populations_raw": 1,
+          "null_rate_pruning_diagnostics": {
+            "enabled": true,
+            "rate_floor_s^-1": 0.0,
+            "n_levels_before": 241,
+            "n_levels_after": 238,
+            "n_levels_removed": 3,
+            "removed_levels_preview": [
+              44,
+              45,
+              241
+            ],
+            "removed_levels_truncated": false,
+            "protected_levels": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "source_sum_s^-1": 1.0
+        }
+      },
+      "weight_comparison_vs_reference_density": {
+        "weight_delta_l1": 0.008715126845574243,
+        "weight_delta_l2": 0.002583082994000279,
+        "weight_delta_max_abs": 0.0017038212097594124,
+        "top_weight_changes": [
+          {
+            "source_level": 17,
+            "reference_weight": 0.06362474824927991,
+            "fitted_weight": 0.0619209270395205,
+            "delta": -0.0017038212097594124
+          },
+          {
+            "source_level": 16,
+            "reference_weight": 0.026573581701938194,
+            "fitted_weight": 0.02568874814302005,
+            "delta": -0.0008848335589181425
+          },
+          {
+            "source_level": 7,
+            "reference_weight": 0.026549029483307538,
+            "fitted_weight": 0.025664574258841142,
+            "delta": -0.0008844552244663961
+          },
+          {
+            "source_level": 12,
+            "reference_weight": 0.026549029483308003,
+            "fitted_weight": 0.025664576053664907,
+            "delta": -0.0008844534296430957
+          },
+          {
+            "source_level": 2,
+            "reference_weight": 0.04715901172891584,
+            "fitted_weight": 0.047521346221251405,
+            "delta": 0.000362334492335567
+          },
+          {
+            "source_level": 11,
+            "reference_weight": 0.04716336858050418,
+            "fitted_weight": 0.047525688820313966,
+            "delta": 0.0003623202398097894
+          },
+          {
+            "source_level": 10,
+            "reference_weight": 0.04716336858050513,
+            "fitted_weight": 0.04752568784997633,
+            "delta": 0.00036231926947120213
+          },
+          {
+            "source_level": 9,
+            "reference_weight": 0.04716336858050452,
+            "fitted_weight": 0.047525687655909025,
+            "delta": 0.00036231907540450886
+          }
+        ]
+      },
+      "fit_success_vs_xstar": true,
+      "target_reachable": true,
+      "density_warning": null,
+      "fit_summary": {
+        "fitsfile": "../xstar/data/atdb.fits",
+        "element": "O",
+        "ion_stage": 7,
+        "temperature_K": 1000000.0,
+        "electron_density_cm^-3": 100000000.0,
+        "source_levels": [
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "source_rate_s^-1": 1.0,
+        "solver_matrix_treatment": {
+          "linear_solver": "svd",
+          "rank_deficient_action": "svd",
+          "negative_population_action": "keep",
+          "negative_population_tol": 1e-08,
+          "residual_l2_max": null,
+          "residual_linf_max": null,
+          "reject_large_residual": false,
+          "prune_null_rate_levels": true,
+          "null_rate_floor_s^-1": 0.0
+        },
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
+        "xstar_reference": {
+          "available": true,
+          "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+          "value_column": "emit_outward",
+          "forbidden": 72.9739,
+          "intercombination": 22.744841,
+          "resonance": 9.06241,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716734,
+          "counts": {
+            "f": 1,
+            "i": 3,
+            "r": 1
+          },
+          "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+        },
+        "target_components_normalized": {
+          "forbidden": 0.6964410994110954,
+          "intercombination": 0.21706996709742196,
+          "resonance": 0.08648893349148265,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716736
+        },
+        "uniform_prediction": {
+          "components": {
+            "forbidden": 0.6798353500800784,
+            "intercombination": 0.1384112947476038,
+            "resonance": 0.1817533551723178
+          },
+          "raw_components": {
+            "forbidden": 5.822798611253102e-10,
+            "intercombination": 1.1854945388514422e-10,
+            "resonance": 1.556719849833205e-10
+          },
+          "forbidden": 0.6798353500800784,
+          "intercombination": 0.1384112947476038,
+          "resonance": 0.1817533551723178,
+          "R_f_over_i": 4.911704289160606,
+          "G_f_plus_i_over_r": 4.501961705476711,
+          "R_over_xstar": 1.5309025979970374,
+          "G_over_xstar": 0.4262344275853901
+        },
+        "fitted_prediction": {
+          "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
+          "fit_info": {
+            "status": "converged",
+            "iterations": 45,
+            "objective": 1.0253162868209269e-13,
+            "step": 0.10949780056369963,
+            "raw_response_scale": 9.19637688336003e-10,
+            "combined_raw_triplet_sum": 8.501075286232953e-10,
+            "combined_normalized_forbidden": 0.6964412465914873,
+            "combined_normalized_intercombination": 0.21706968434638876,
+            "combined_normalized_resonance": 0.08648906906212389
+          },
+          "components": {
+            "forbidden": 0.6964412465914873,
+            "intercombination": 0.21706968434638876,
+            "resonance": 0.08648906906212389
+          },
+          "raw_components": {
+            "forbidden": 5.920499469712163e-10,
+            "intercombination": 1.8453257289874737e-10,
+            "resonance": 7.352500875333165e-11
+          },
+          "forbidden": 0.6964412465914873,
+          "intercombination": 0.21706968434638876,
+          "resonance": 0.08648906906212389,
+          "R_f_over_i": 3.2083763731841146,
+          "G_f_plus_i_over_r": 10.562154742141043,
+          "R_over_xstar": 1.000001513914281,
+          "G_over_xstar": 0.999998284105371
+        },
+        "combined_source_validation": {
+          "enabled": true,
+          "source_total_rate_s^-1": 1.0,
+          "source_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation/o7_combined_fitted_sources.csv",
+          "lines_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation/o7_combined_solver_lines.csv",
+          "triplet_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation/o7_combined_solver_triplet.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation/o7_combined_solver_summary.json",
+          "triplet_components": {
+            "forbidden": 5.920499469953316e-10,
+            "intercombination": 1.8453257289680784e-10,
+            "resonance": 7.352500874775482e-11
+          },
+          "R_f_over_i": 3.208376373348519,
+          "G_f_plus_i_over_r": 10.562154743243786,
+          "solver_diagnostics": {
+            "solver": "numpy.linalg.svd_lstsq",
+            "solver_warning": "negative populations present",
+            "matrix_rank": 238,
+            "matrix_size": 238,
+            "condition_number": 5003735180801.917,
+            "linear_residual_l2": 2.9033510068056597e-05,
+            "linear_residual_linf": 1.8887204315601314e-05,
+            "negative_population_action": "keep",
+            "negative_population_tol": 1e-08,
+            "n_negative_populations_raw": 1,
+            "n_levels_in_this_solve": 238,
+            "null_rate_pruning_diagnostics": {
+              "enabled": true,
+              "rate_floor_s^-1": 0.0,
+              "n_levels_before": 241,
+              "n_levels_after": 238,
+              "n_levels_removed": 3,
+              "removed_levels_preview": [
+                44,
+                45,
+                241
+              ],
+              "removed_levels_truncated": false,
+              "protected_levels": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ]
+            },
+            "source_sink_summary": {
+              "n_source_terms_nonzero": 18,
+              "n_sink_terms_nonzero": 0,
+              "source_sum_s^-1": 0.9999999999999999,
+              "sink_sum_s^-1": 0.0,
+              "nonzero_level_terms": [
+                {
+                  "level_index": 2,
+                  "source_s^-1": 0.0475213462212514,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 3,
+                  "source_s^-1": 0.047865658528464805,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 4,
+                  "source_s^-1": 0.11864485641295669,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 5,
+                  "source_s^-1": 0.04786569176616657,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 7,
+                  "source_s^-1": 0.02566457425884114,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 8,
+                  "source_s^-1": 0.0714587355281887,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 9,
+                  "source_s^-1": 0.04752568765590902,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 10,
+                  "source_s^-1": 0.04752568784997632,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 11,
+                  "source_s^-1": 0.04752568882031396,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 12,
+                  "source_s^-1": 0.025664576053664904,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 13,
+                  "source_s^-1": 0.07145857532335316,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 14,
+                  "source_s^-1": 0.07145857532335326,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 15,
+                  "source_s^-1": 0.07145857532335326,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 16,
+                  "source_s^-1": 0.025688748143020048,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 17,
+                  "source_s^-1": 0.06192092703952049,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 18,
+                  "source_s^-1": 0.061663122554098275,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 19,
+                  "source_s^-1": 0.0545444883487892,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 20,
+                  "source_s^-1": 0.054544484848778683,
+                  "sink_s^-1": 0.0
+                }
+              ],
+              "notes": [
+                "loaded level source/sink CSV: o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation/o7_combined_fitted_sources.csv"
+              ],
+              "temperature_K": 1000000.0,
+              "electron_density_cm^-3": 100000000.0,
+              "null_rate_pruning_diagnostics": {
+                "enabled": true,
+                "rate_floor_s^-1": 0.0,
+                "n_levels_before": 241,
+                "n_levels_after": 238,
+                "n_levels_removed": 3,
+                "removed_levels_preview": [
+                  44,
+                  45,
+                  241
+                ],
+                "removed_levels_truncated": false,
+                "protected_levels": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  7
+                ]
+              }
+            }
+          },
+          "R_over_xstar": 1.0000015139655234,
+          "G_over_xstar": 0.9999982842097759,
+          "delta_R_vs_fitted_linear_response": 1.6440449002175228e-10,
+          "delta_G_vs_fitted_linear_response": 1.102742785974442e-09
+        },
+        "outputs": {
+          "solver_response_matrix_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_solver_response_matrix.csv",
+          "solver_source_fit_weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_solver_source_fit_weights.csv",
+          "source_fit_weights_compatible_csv": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_source_fit_weights.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e08/o7_solver_source_fit_summary.json",
+          "combined_validation_dir": "o7_solver_source_fit_density_grid/fit_ne_1e08/combined_source_validation"
+        },
+        "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+      }
+    },
+    {
+      "electron_density_cm^-3": 10000000000.0,
+      "fit_summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_solver_source_fit_summary.json",
+      "weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_source_fit_weights.csv",
+      "fixed_validation": {
+        "enabled": true,
+        "source_total_rate_s^-1": 1.0,
+        "source_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e10/o7_fixed_ne1_sources.csv",
+        "lines_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e10/o7_fixed_ne1_solver_lines.csv",
+        "triplet_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e10/o7_fixed_ne1_solver_triplet.csv",
+        "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e10/o7_fixed_ne1_solver_summary.json",
+        "triplet_components": {
+          "forbidden": 5.49742350103032e-10,
+          "intercombination": 2.2458792021363954e-10,
+          "resonance": 8.13494435127986e-11
+        },
+        "R_f_over_i": 2.4477823632726503,
+        "G_f_plus_i_over_r": 9.518568743433963,
+        "solver_diagnostics": {
+          "solver": "numpy.linalg.svd_lstsq",
+          "solver_warning": "negative populations present",
+          "matrix_rank": 238,
+          "matrix_size": 238,
+          "condition_number": 4742479680654.767,
+          "linear_residual_l2": 3.4829173289827275e-06,
+          "linear_residual_linf": 3.0231414697989845e-06,
+          "negative_population_action": "keep",
+          "n_negative_populations_raw": 1,
+          "null_rate_pruning_diagnostics": {
+            "enabled": true,
+            "rate_floor_s^-1": 0.0,
+            "n_levels_before": 241,
+            "n_levels_after": 238,
+            "n_levels_removed": 3,
+            "removed_levels_preview": [
+              44,
+              45,
+              241
+            ],
+            "removed_levels_truncated": false,
+            "protected_levels": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "source_sum_s^-1": 1.0
+        }
+      },
+      "weight_comparison_vs_reference_density": {
+        "weight_delta_l1": 0.17567658686952334,
+        "weight_delta_l2": 0.05780880620975297,
+        "weight_delta_max_abs": 0.0456819725775139,
+        "top_weight_changes": [
+          {
+            "source_level": 4,
+            "reference_weight": 0.11854233874670224,
+            "fitted_weight": 0.07286036616918834,
+            "delta": -0.0456819725775139
+          },
+          {
+            "source_level": 2,
+            "reference_weight": 0.04715901172891584,
+            "fitted_weight": 0.059539295155592135,
+            "delta": 0.012380283426676297
+          },
+          {
+            "source_level": 11,
+            "reference_weight": 0.04716336858050418,
+            "fitted_weight": 0.05954013826631479,
+            "delta": 0.012376769685810612
+          },
+          {
+            "source_level": 10,
+            "reference_weight": 0.04716336858050513,
+            "fitted_weight": 0.05954012009258821,
+            "delta": 0.012376751512083083
+          },
+          {
+            "source_level": 9,
+            "reference_weight": 0.04716336858050452,
+            "fitted_weight": 0.05954011645782528,
+            "delta": 0.012376747877320765
+          },
+          {
+            "source_level": 3,
+            "reference_weight": 0.04750458180705176,
+            "fitted_weight": 0.05960376682303031,
+            "delta": 0.01209918501597855
+          },
+          {
+            "source_level": 5,
+            "reference_weight": 0.04750461499989641,
+            "fitted_weight": 0.05960378961440361,
+            "delta": 0.0120991746145072
+          },
+          {
+            "source_level": 8,
+            "reference_weight": 0.07118384517396675,
+            "fitted_weight": 0.06402264011447777,
+            "delta": -0.007161205059488987
+          }
+        ]
+      },
+      "fit_success_vs_xstar": true,
+      "target_reachable": true,
+      "density_warning": null,
+      "fit_summary": {
+        "fitsfile": "../xstar/data/atdb.fits",
+        "element": "O",
+        "ion_stage": 7,
+        "temperature_K": 1000000.0,
+        "electron_density_cm^-3": 10000000000.0,
+        "source_levels": [
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "source_rate_s^-1": 1.0,
+        "solver_matrix_treatment": {
+          "linear_solver": "svd",
+          "rank_deficient_action": "svd",
+          "negative_population_action": "keep",
+          "negative_population_tol": 1e-08,
+          "residual_l2_max": null,
+          "residual_linf_max": null,
+          "reject_large_residual": false,
+          "prune_null_rate_levels": true,
+          "null_rate_floor_s^-1": 0.0
+        },
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
+        "xstar_reference": {
+          "available": true,
+          "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+          "value_column": "emit_outward",
+          "forbidden": 72.9739,
+          "intercombination": 22.744841,
+          "resonance": 9.06241,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716734,
+          "counts": {
+            "f": 1,
+            "i": 3,
+            "r": 1
+          },
+          "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+        },
+        "target_components_normalized": {
+          "forbidden": 0.6964410994110954,
+          "intercombination": 0.21706996709742196,
+          "resonance": 0.08648893349148265,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716736
+        },
+        "uniform_prediction": {
+          "components": {
+            "forbidden": 0.6298544128056983,
+            "intercombination": 0.18373007372439573,
+            "resonance": 0.18641551346990595
+          },
+          "raw_components": {
+            "forbidden": 5.438621325999147e-10,
+            "intercombination": 1.5864591513041378e-10,
+            "resonance": 1.6096471921794234e-10
+          },
+          "forbidden": 0.6298544128056983,
+          "intercombination": 0.18373007372439573,
+          "resonance": 0.18641551346990595,
+          "R_f_over_i": 3.428150873931022,
+          "G_f_plus_i_over_r": 4.3643604085635035,
+          "R_over_xstar": 1.0685018417759244,
+          "G_over_xstar": 0.4132066823796814
+        },
+        "fitted_prediction": {
+          "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
+          "fit_info": {
+            "status": "converged",
+            "iterations": 43,
+            "objective": 1.140090143184399e-13,
+            "step": 0.11471436431735887,
+            "raw_response_scale": 9.261594911143917e-10,
+            "combined_raw_triplet_sum": 8.601809733242882e-10,
+            "combined_normalized_forbidden": 0.696441275121367,
+            "combined_normalized_intercombination": 0.21706967204877395,
+            "combined_normalized_resonance": 0.08648905282985911
+          },
+          "components": {
+            "forbidden": 0.696441275121367,
+            "intercombination": 0.21706967204877395,
+            "resonance": 0.08648905282985911
+          },
+          "raw_components": {
+            "forbidden": 5.990655338971059e-10,
+            "intercombination": 1.8671920178209842e-10,
+            "resonance": 7.439623764508399e-11
+          },
+          "forbidden": 0.696441275121367,
+          "intercombination": 0.21706967204877395,
+          "resonance": 0.08648905282985911,
+          "R_f_over_i": 3.20837668637967,
+          "G_f_plus_i_over_r": 10.56215691212616,
+          "R_over_xstar": 1.0000016115325132,
+          "G_over_xstar": 0.9999984895541119
+        },
+        "combined_source_validation": {
+          "enabled": true,
+          "source_total_rate_s^-1": 1.0,
+          "source_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation/o7_combined_fitted_sources.csv",
+          "lines_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation/o7_combined_solver_lines.csv",
+          "triplet_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation/o7_combined_solver_triplet.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation/o7_combined_solver_summary.json",
+          "triplet_components": {
+            "forbidden": 5.990655377160914e-10,
+            "intercombination": 1.8671920100830807e-10,
+            "resonance": 7.439623583933139e-11
+          },
+          "R_f_over_i": 3.208376720128724,
+          "G_f_plus_i_over_r": 10.562157209423964,
+          "solver_diagnostics": {
+            "solver": "numpy.linalg.svd_lstsq",
+            "solver_warning": "negative populations present",
+            "matrix_rank": 238,
+            "matrix_size": 238,
+            "condition_number": 4742479680654.767,
+            "linear_residual_l2": 3.795120225801095e-06,
+            "linear_residual_linf": 3.293840106451118e-06,
+            "negative_population_action": "keep",
+            "negative_population_tol": 1e-08,
+            "n_negative_populations_raw": 1,
+            "n_levels_in_this_solve": 238,
+            "null_rate_pruning_diagnostics": {
+              "enabled": true,
+              "rate_floor_s^-1": 0.0,
+              "n_levels_before": 241,
+              "n_levels_after": 238,
+              "n_levels_removed": 3,
+              "removed_levels_preview": [
+                44,
+                45,
+                241
+              ],
+              "removed_levels_truncated": false,
+              "protected_levels": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ]
+            },
+            "source_sink_summary": {
+              "n_source_terms_nonzero": 18,
+              "n_sink_terms_nonzero": 0,
+              "source_sum_s^-1": 1.0,
+              "sink_sum_s^-1": 0.0,
+              "nonzero_level_terms": [
+                {
+                  "level_index": 2,
+                  "source_s^-1": 0.059539295155592135,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 3,
+                  "source_s^-1": 0.05960376682303031,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 4,
+                  "source_s^-1": 0.07286036616918834,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 5,
+                  "source_s^-1": 0.05960378961440361,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 7,
+                  "source_s^-1": 0.024065285607564282,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 8,
+                  "source_s^-1": 0.06402264011447777,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 9,
+                  "source_s^-1": 0.05954011645782528,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 10,
+                  "source_s^-1": 0.05954012009258821,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 11,
+                  "source_s^-1": 0.05954013826631479,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 12,
+                  "source_s^-1": 0.024065451448257558,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 13,
+                  "source_s^-1": 0.06402261017151241,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 14,
+                  "source_s^-1": 0.06402261017151235,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 15,
+                  "source_s^-1": 0.06402261017151241,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 16,
+                  "source_s^-1": 0.024087626759535772,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 17,
+                  "source_s^-1": 0.057566131931760064,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 18,
+                  "source_s^-1": 0.06218795110223715,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 19,
+                  "source_s^-1": 0.0608547777462585,
+                  "sink_s^-1": 0.0
+                },
+                {
+                  "level_index": 20,
+                  "source_s^-1": 0.06085471219642908,
+                  "sink_s^-1": 0.0
+                }
+              ],
+              "notes": [
+                "loaded level source/sink CSV: o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation/o7_combined_fitted_sources.csv"
+              ],
+              "temperature_K": 1000000.0,
+              "electron_density_cm^-3": 10000000000.0,
+              "null_rate_pruning_diagnostics": {
+                "enabled": true,
+                "rate_floor_s^-1": 0.0,
+                "n_levels_before": 241,
+                "n_levels_after": 238,
+                "n_levels_removed": 3,
+                "removed_levels_preview": [
+                  44,
+                  45,
+                  241
+                ],
+                "removed_levels_truncated": false,
+                "protected_levels": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  7
+                ]
+              }
+            }
+          },
+          "R_over_xstar": 1.0000016220515737,
+          "G_over_xstar": 0.9999985177015213,
+          "delta_R_vs_fitted_linear_response": 3.374905421793528e-08,
+          "delta_G_vs_fitted_linear_response": 2.9729780415266305e-07
+        },
+        "outputs": {
+          "solver_response_matrix_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_solver_response_matrix.csv",
+          "solver_source_fit_weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_solver_source_fit_weights.csv",
+          "source_fit_weights_compatible_csv": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_source_fit_weights.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e10/o7_solver_source_fit_summary.json",
+          "combined_validation_dir": "o7_solver_source_fit_density_grid/fit_ne_1e10/combined_source_validation"
+        },
+        "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+      }
+    },
+    {
+      "electron_density_cm^-3": 1000000000000.0,
+      "fit_summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_solver_source_fit_summary.json",
+      "weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_source_fit_weights.csv",
+      "fixed_validation": {
+        "enabled": true,
+        "source_total_rate_s^-1": 1.0,
+        "source_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e12/o7_fixed_ne1_sources.csv",
+        "lines_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e12/o7_fixed_ne1_solver_lines.csv",
+        "triplet_csv": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e12/o7_fixed_ne1_solver_triplet.csv",
+        "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e12/o7_fixed_ne1_solver_summary.json",
+        "triplet_components": {
+          "forbidden": 9.632277429095157e-11,
+          "intercombination": 9.525331732557362e-10,
+          "resonance": 4.670830757973607e-10
+        },
+        "R_f_over_i": 0.10112275036230242,
+        "G_f_plus_i_over_r": 2.2455447475937307,
+        "solver_diagnostics": {
+          "solver": "numpy.linalg.svd_lstsq",
+          "solver_warning": "negative populations present",
+          "matrix_rank": 238,
+          "matrix_size": 238,
+          "condition_number": 4742286956532.945,
+          "linear_residual_l2": 3.4763364028555865e-07,
+          "linear_residual_linf": 1.7280318664880667e-07,
+          "negative_population_action": "keep",
+          "n_negative_populations_raw": 1,
+          "null_rate_pruning_diagnostics": {
+            "enabled": true,
+            "rate_floor_s^-1": 0.0,
+            "n_levels_before": 241,
+            "n_levels_after": 238,
+            "n_levels_removed": 3,
+            "removed_levels_preview": [
+              44,
+              45,
+              241
+            ],
+            "removed_levels_truncated": false,
+            "protected_levels": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "source_sum_s^-1": 1.0
+        }
+      },
+      "weight_comparison_vs_reference_density": {
+        "weight_delta_l1": 1.87275050350144,
+        "weight_delta_l2": 0.9676191592732833,
+        "weight_delta_max_abs": 0.9363752517507201,
+        "top_weight_changes": [
+          {
+            "source_level": 17,
+            "reference_weight": 0.06362474824927991,
+            "fitted_weight": 1.0,
+            "delta": 0.9363752517507201
+          },
+          {
+            "source_level": 4,
+            "reference_weight": 0.11854233874670224,
+            "fitted_weight": 0.0,
+            "delta": -0.11854233874670224
+          },
+          {
+            "source_level": 8,
+            "reference_weight": 0.07118384517396675,
+            "fitted_weight": 0.0,
+            "delta": -0.07118384517396675
+          },
+          {
+            "source_level": 14,
+            "reference_weight": 0.07118368438052668,
+            "fitted_weight": 0.0,
+            "delta": -0.07118368438052668
+          },
+          {
+            "source_level": 15,
+            "reference_weight": 0.07118368438052664,
+            "fitted_weight": 0.0,
+            "delta": -0.07118368438052664
+          },
+          {
+            "source_level": 13,
+            "reference_weight": 0.07118368438052661,
+            "fitted_weight": 0.0,
+            "delta": -0.07118368438052661
+          },
+          {
+            "source_level": 18,
+            "reference_weight": 0.06135244972534466,
+            "fitted_weight": 0.0,
+            "delta": -0.06135244972534466
+          },
+          {
+            "source_level": 19,
+            "reference_weight": 0.05420780500859772,
+            "fitted_weight": 0.0,
+            "delta": -0.05420780500859772
+          }
+        ]
+      },
+      "fit_success_vs_xstar": false,
+      "target_reachable": false,
+      "density_warning": "density ne=1e+12 cm^-3 (high-density type-68 coupling regime): fit objective 0.140911 exceeds warning threshold 0.0001; refitted R/XSTAR mismatch exceeds tolerance 0.005; refitted G/XSTAR mismatch exceeds tolerance 0.005",
+      "fit_summary": {
+        "fitsfile": "../xstar/data/atdb.fits",
+        "element": "O",
+        "ion_stage": 7,
+        "temperature_K": 1000000.0,
+        "electron_density_cm^-3": 1000000000000.0,
+        "source_levels": [
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "source_rate_s^-1": 1.0,
+        "solver_matrix_treatment": {
+          "linear_solver": "svd",
+          "rank_deficient_action": "svd",
+          "negative_population_action": "keep",
+          "negative_population_tol": 1e-08,
+          "residual_l2_max": null,
+          "residual_linf_max": null,
+          "reject_large_residual": false,
+          "prune_null_rate_levels": true,
+          "null_rate_floor_s^-1": 0.0
+        },
+        "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
+        "xstar_reference": {
+          "available": true,
+          "path": "xstar_test_run/xstar_o7_triplet_lines.csv",
+          "value_column": "emit_outward",
+          "forbidden": 72.9739,
+          "intercombination": 22.744841,
+          "resonance": 9.06241,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716734,
+          "counts": {
+            "f": 1,
+            "i": 3,
+            "r": 1
+          },
+          "note": "XSTAR model-output ratio; not directly normalized to local xstar-atomic emissivity coefficients."
+        },
+        "target_components_normalized": {
+          "forbidden": 0.6964410994110954,
+          "intercombination": 0.21706996709742196,
+          "resonance": 0.08648893349148265,
+          "R_f_over_i": 3.2083715159846578,
+          "G_f_plus_i_over_r": 10.562172865716736
+        },
+        "uniform_prediction": {
+          "components": {
+            "forbidden": 0.06273357931665692,
+            "intercombination": 0.5786140951700159,
+            "resonance": 0.35865232551332726
+          },
+          "raw_components": {
+            "forbidden": 9.558484261856274e-11,
+            "intercombination": 8.816129706953146e-10,
+            "resonance": 5.464653294518856e-10
+          },
+          "forbidden": 0.06273357931665692,
+          "intercombination": 0.5786140951700159,
+          "resonance": 0.35865232551332726,
+          "R_f_over_i": 0.10842041326045422,
+          "G_f_plus_i_over_r": 1.7882155749826327,
+          "R_over_xstar": 0.03379297338861323,
+          "G_over_xstar": 0.16930375953104485
+        },
+        "fitted_prediction": {
+          "method": "projected-gradient nonnegative simplex fit to raw full-solver unit-source response amplitudes; combined response normalized for R/G comparison",
+          "fit_info": {
+            "status": "converged",
+            "iterations": 56,
+            "objective": 0.1409109891887776,
+            "step": 0.0484953558613316,
+            "raw_response_scale": 1.5812005369826331e-09,
+            "combined_raw_triplet_sum": 7.078304709521879e-10,
+            "combined_normalized_forbidden": 0.039492780941902346,
+            "combined_normalized_intercombination": 0.37851382543016715,
+            "combined_normalized_resonance": 0.5819933936279305
+          },
+          "components": {
+            "forbidden": 0.039492780941902346,
+            "intercombination": 0.37851382543016715,
+            "resonance": 0.5819933936279305
+          },
+          "raw_components": {
+            "forbidden": 2.795419373331833e-11,
+            "intercombination": 2.6792361931614946e-10,
+            "resonance": 4.1195265790272013e-10
+          },
+          "forbidden": 0.039492780941902346,
+          "intercombination": 0.37851382543016715,
+          "resonance": 0.5819933936279305,
+          "R_f_over_i": 0.10433642918332042,
+          "G_f_plus_i_over_r": 0.7182325623429704,
+          "R_over_xstar": 0.03252005843571994,
+          "G_over_xstar": 0.06800045515958635
+        },
+        "combined_source_validation": {
+          "enabled": true,
+          "source_total_rate_s^-1": 1.0,
+          "source_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation/o7_combined_fitted_sources.csv",
+          "lines_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation/o7_combined_solver_lines.csv",
+          "triplet_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation/o7_combined_solver_triplet.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation/o7_combined_solver_summary.json",
+          "triplet_components": {
+            "forbidden": 2.795419373331833e-11,
+            "intercombination": 2.6792361931614946e-10,
+            "resonance": 4.1195265790272013e-10
+          },
+          "R_f_over_i": 0.10433642918332044,
+          "G_f_plus_i_over_r": 0.7182325623429704,
+          "solver_diagnostics": {
+            "solver": "numpy.linalg.svd_lstsq",
+            "solver_warning": "negative populations present",
+            "matrix_rank": 238,
+            "matrix_size": 238,
+            "condition_number": 4742286956532.945,
+            "linear_residual_l2": 1.9059166792206818e-07,
+            "linear_residual_linf": 1.772014281975487e-07,
+            "negative_population_action": "keep",
+            "negative_population_tol": 1e-08,
+            "n_negative_populations_raw": 1,
+            "n_levels_in_this_solve": 238,
+            "null_rate_pruning_diagnostics": {
+              "enabled": true,
+              "rate_floor_s^-1": 0.0,
+              "n_levels_before": 241,
+              "n_levels_after": 238,
+              "n_levels_removed": 3,
+              "removed_levels_preview": [
+                44,
+                45,
+                241
+              ],
+              "removed_levels_truncated": false,
+              "protected_levels": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ]
+            },
+            "source_sink_summary": {
+              "n_source_terms_nonzero": 1,
+              "n_sink_terms_nonzero": 0,
+              "source_sum_s^-1": 1.0,
+              "sink_sum_s^-1": 0.0,
+              "nonzero_level_terms": [
+                {
+                  "level_index": 17,
+                  "source_s^-1": 1.0,
+                  "sink_s^-1": 0.0
+                }
+              ],
+              "notes": [
+                "loaded level source/sink CSV: o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation/o7_combined_fitted_sources.csv"
+              ],
+              "temperature_K": 1000000.0,
+              "electron_density_cm^-3": 1000000000000.0,
+              "null_rate_pruning_diagnostics": {
+                "enabled": true,
+                "rate_floor_s^-1": 0.0,
+                "n_levels_before": 241,
+                "n_levels_after": 238,
+                "n_levels_removed": 3,
+                "removed_levels_preview": [
+                  44,
+                  45,
+                  241
+                ],
+                "removed_levels_truncated": false,
+                "protected_levels": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  7
+                ]
+              }
+            }
+          },
+          "R_over_xstar": 0.03252005843571994,
+          "G_over_xstar": 0.06800045515958635,
+          "delta_R_vs_fitted_linear_response": 1.3877787807814457e-17,
+          "delta_G_vs_fitted_linear_response": 0.0
+        },
+        "outputs": {
+          "solver_response_matrix_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_solver_response_matrix.csv",
+          "solver_source_fit_weights_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_solver_source_fit_weights.csv",
+          "source_fit_weights_compatible_csv": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_source_fit_weights.csv",
+          "summary_json": "o7_solver_source_fit_density_grid/fit_ne_1e12/o7_solver_source_fit_summary.json",
+          "combined_validation_dir": "o7_solver_source_fit_density_grid/fit_ne_1e12/combined_source_validation"
+        },
+        "note": "Diagnostic only: these are empirical solver-response weights, not true level-resolved recombination rates."
+      }
+    }
+  ],
+  "note": "Diagnostic only: density-dependent fitted source weights are empirical solver-response weights, not physical recombination rates."
+}

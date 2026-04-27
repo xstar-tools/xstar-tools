@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.68 - 2026-04-27
+
+Density-dependent XSTAR references for the O VII density-grid diagnostic.
+
+Added:
+- Added `examples/22_o7_solver_source_fit_density_xstar_grid.py`, a density-dependent XSTAR reference front end for the O VII density-grid source-fit diagnostic.
+- Added `--xstar-lines-csv-by-density DENSITY:CSV` and `--xstar-grid-summary-csv` support to `examples/21_o7_solver_source_fit_density_grid.py`, allowing each density to be compared against its own XSTAR line CSV instead of reusing a single low-density reference.
+- Added reference snapshots for the O VII density-grid diagnostic under `examples/reference_outputs/` and `docs/validation/xstar_outputs/`.
+- Added lightweight tests for density-specific XSTAR reference parsing, dry-run command generation, and the new example-22 front end.
+
+Documentation:
+- Added a short validated O VII diagnostic commands section to README, Markdown guide, LaTeX guide, and Sphinx examples.
+- Added a top-level known-limitation note that empirical O VII fitted source weights are diagnostic and are not physical level-resolved recombination rates.
+- Documented the density-dependent XSTAR mapping CSV format and repeated `--xstar-lines-csv-by-density` syntax.
+
 ## v0.2.67 - 2026-04-27
 
 Data-path resolver and test isolation fixes.
