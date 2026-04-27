@@ -540,3 +540,22 @@ Then run the density-specific grid::
 
 Repeated ``--xstar-lines-csv-by-density DENSITY:CSV`` arguments can be used
 instead of a mapping CSV.
+
+Preparing O VII XSTAR density-grid runs
+---------------------------------------
+
+Use ``examples/23_prepare_o7_xstar_density_grid.py`` when the density-specific
+XSTAR runs required by ``examples/22_o7_solver_source_fit_density_xstar_grid.py``
+do not exist yet.  It writes one clean run directory per density, full XSTAR
+``run_xstar.sh`` scripts, O VII triplet conversion scripts, and the mapping CSV
+used by the density-dependent comparison.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
+     --root . \
+     --mapping-csv xstar_o7_density_grid_references.csv \
+     --print-summary
+
+After running the generated XSTAR scripts externally and converting each
+``xout_lines1.fits``, run example 22 with the generated mapping CSV.

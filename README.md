@@ -1062,3 +1062,51 @@ A convenience diagnostic mode is also available:
 ```
 
 When no explicit `--source-fit-weights-csv` is supplied, this mode looks for the packaged/source-tree reference file `xstar_test_run/o7_source_fit_weights.csv`. These fitted weights are empirical diagnostics derived from the current O VII/XSTAR comparison, not true level-resolved recombination rates.
+
+## Preparing O VII density-dependent XSTAR references
+
+Use `examples/23_prepare_o7_xstar_density_grid.py` to create the real XSTAR run plan needed by the density-dependent O VII comparison.  The helper writes one clean XSTAR run directory per density, each with a `run_xstar.sh` script containing the full XSTAR command, plus conversion scripts and the mapping CSV consumed by `examples/22_o7_solver_source_fit_density_xstar_grid.py`.
+
+```bash
+PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
+  --root . \
+  --mapping-csv xstar_o7_density_grid_references.csv \
+  --print-summary
+```
+
+Run the generated XSTAR scripts externally:
+
+```bash
+bash xstar_runs/o7_ne1/run_xstar.sh
+bash xstar_runs/o7_ne1e4/run_xstar.sh
+bash xstar_runs/o7_ne1e8/run_xstar.sh
+bash xstar_runs/o7_ne1e10/run_xstar.sh
+bash xstar_runs/o7_ne1e12/run_xstar.sh
+```
+
+After each run produces `xout_lines1.fits`, convert the line files:
+
+```bash
+bash xstar_runs/o7_ne1/convert_o7_triplet.sh
+bash xstar_runs/o7_ne1e4/convert_o7_triplet.sh
+bash xstar_runs/o7_ne1e8/convert_o7_triplet.sh
+bash xstar_runs/o7_ne1e10/convert_o7_triplet.sh
+bash xstar_runs/o7_ne1e12/convert_o7_triplet.sh
+```
+
+Then run the true density-dependent XSTAR-grid comparison:
+
+```bash
+PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+  ../xstar/data/atdb.fits \
+  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit_density_xstar_grid \
+  --print-summary
+```

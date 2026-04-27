@@ -1210,3 +1210,16 @@ Alternatively, supply repeated \texttt{--xstar-lines-csv-by-density DENSITY:CSV}
 
 
 \end{document}
+
+\subsection{Preparing real O VII XSTAR density-grid references}
+
+The density-dependent O VII comparison in \texttt{examples/22\_o7\_solver\_source\_fit\_density\_xstar\_grid.py} requires one converted XSTAR O VII triplet CSV file per density.  If those XSTAR runs do not exist yet, generate the run plan with:
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
+  --root . \
+  --mapping-csv xstar_o7_density_grid_references.csv \
+  --print-summary
+\end{lstlisting}
+
+The helper writes \texttt{xstar\_runs/o7\_ne*/run\_xstar.sh} scripts containing the full XSTAR commands, \texttt{convert\_o7\_triplet.sh} conversion scripts, the mapping file \texttt{xstar\_o7\_density\_grid\_references.csv}, and \texttt{xstar\_runs/README\_o7\_density\_grid.md} with the complete workflow.  Run XSTAR externally, convert each \texttt{xout\_lines1.fits}, then run example 22 with the generated mapping CSV.  The empirical O VII fitted source weights remain diagnostic rather than physical level-resolved recombination rates.

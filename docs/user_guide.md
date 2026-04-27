@@ -1218,3 +1218,16 @@ PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
 Alternatively, supply repeated `--xstar-lines-csv-by-density DENSITY:CSV` arguments.  The output CSV keeps `xstar_target_is_reused_low_density_reference=false` and records the XSTAR CSV path and target label used for each density.
 
 
+
+### Preparing real O VII XSTAR density-grid references
+
+`examples/22_o7_solver_source_fit_density_xstar_grid.py` needs one converted XSTAR O VII triplet CSV per density.  If those runs do not exist yet, generate the run plan with:
+
+```bash
+PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
+  --root . \
+  --mapping-csv xstar_o7_density_grid_references.csv \
+  --print-summary
+```
+
+The helper writes `xstar_runs/o7_ne*/run_xstar.sh` scripts with the full XSTAR commands, `convert_o7_triplet.sh` conversion scripts, `xstar_o7_density_grid_references.csv`, and `xstar_runs/README_o7_density_grid.md` containing the complete workflow.  Run XSTAR externally, convert each `xout_lines1.fits`, then run example 22 with the generated mapping CSV.  The empirical O VII fitted source weights remain diagnostic, not physical level-resolved recombination rates.
