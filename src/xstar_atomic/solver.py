@@ -166,6 +166,42 @@ def parse_record_scale_specs(values: Optional[Sequence[str]]) -> Dict[int, float
     return out
 
 
+def parse_record_direction_scale_specs(values: Optional[Sequence[str]]) -> Dict[Tuple[int, str], float]:
+    """Parse RECORD:DIRECTION:SCALE diagnostic collision scaling specs.
+
+    ``DIRECTION`` may be ``exc``, ``excitation``, ``up`` for the lower->upper
+    excitation direction, or ``deexc``, ``deexcitation``, ``down`` for the
+    upper->lower de-excitation direction.  This deliberately breaks detailed
+    balance and is intended only for physical-interpretation diagnostics.
+    """
+    aliases = {
+        "exc": "excitation",
+        "ex": "excitation",
+        "excitation": "excitation",
+        "up": "excitation",
+        "lower_to_upper": "excitation",
+        "deexc": "deexcitation",
+        "deex": "deexcitation",
+        "deexcitation": "deexcitation",
+        "down": "deexcitation",
+        "upper_to_lower": "deexcitation",
+    }
+    out: Dict[Tuple[int, str], float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) != 3:
+            raise ValueError(f"invalid record direction scale spec {text!r}; expected RECORD:DIRECTION:SCALE")
+        try:
+            rec = int(float(parts[0]))
+            direction = aliases.get(parts[1].strip().lower())
+            if direction is None:
+                raise ValueError(parts[1])
+            out[(rec, direction)] = float(parts[2])
+        except Exception as exc:
+            raise ValueError(f"invalid record direction scale spec {text!r}; expected RECORD:DIRECTION:SCALE") from exc
+    return out
+
+
 def collision_scale_for_row(row: dict, args) -> float:
     """Return the diagnostic collision-rate scale for one evaluated row."""
     scale = float(getattr(args, 'collision_rate_scale', 1.0) or 1.0)
@@ -187,6 +223,21 @@ def collision_scale_for_row(row: dict, args) -> float:
     if not math.isfinite(scale) or scale < 0.0:
         raise ValueError(f"invalid diagnostic collision scale {scale!r} for row {row}")
     return scale
+
+def collision_direction_scales_for_row(row: dict, args) -> Tuple[float, float]:
+    """Return extra excitation/de-excitation diagnostic scale factors."""
+    rec = maybe_int(row.get('record'))
+    direction_scales = getattr(args, '_collision_record_direction_scales', {}) or {}
+    exc_scale = 1.0
+    deexc_scale = 1.0
+    if rec is not None:
+        exc_scale *= float(direction_scales.get((rec, 'excitation'), 1.0))
+        deexc_scale *= float(direction_scales.get((rec, 'deexcitation'), 1.0))
+    for val in (exc_scale, deexc_scale):
+        if not math.isfinite(val) or val < 0.0:
+            raise ValueError(f"invalid diagnostic direction collision scale {val!r} for row {row}")
+    return exc_scale, deexc_scale
+
 
 def write_csv(path: str | Path, rows: List[dict]) -> None:
     path = Path(path)
@@ -327,9 +378,14 @@ def build_collision_rates_for_T(collision_eval: List[dict], level_set: set[int],
             continue
         rr = dict(row)
         rate_scale = collision_scale_for_row(row, args) if args is not None else 1.0
+        exc_dir_scale, deexc_dir_scale = collision_direction_scales_for_row(row, args) if args is not None else (1.0, 1.0)
+        exc_scale = rate_scale * exc_dir_scale
+        deexc_scale = rate_scale * deexc_dir_scale
         rr["collision_rate_scale_applied"] = rate_scale
-        rr["C_excitation_s^-1"] = (electron_density * qij * rate_scale) if qij is not None else None
-        rr["C_deexcitation_s^-1"] = (electron_density * qji * rate_scale) if qji is not None else None
+        rr["collision_excitation_direction_scale_applied"] = exc_dir_scale
+        rr["collision_deexcitation_direction_scale_applied"] = deexc_dir_scale
+        rr["C_excitation_s^-1"] = (electron_density * qij * exc_scale) if qij is not None else None
+        rr["C_deexcitation_s^-1"] = (electron_density * qji * deexc_scale) if qji is not None else None
         rows.append(rr)
     return rows
 
@@ -1186,6 +1242,8 @@ def main(argv=None) -> None:
                    help="Diagnostic symmetric scale for evaluated collision rates connecting one level pair, e.g. 2:4:0.5. May be repeated.")
     p.add_argument("--collision-record-scale", action="append", default=[], metavar="RECORD:SCALE",
                    help="Diagnostic scale for one collision record number, e.g. 12345:0.5. May be repeated.")
+    p.add_argument("--collision-record-direction-scale", action="append", default=[], metavar="RECORD:DIRECTION:SCALE",
+                   help="Diagnostic direction-specific scale for one collision record, e.g. 22490:deexcitation:0.0. This intentionally breaks detailed balance and is for diagnostics only.")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
     p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
@@ -1227,6 +1285,7 @@ def main(argv=None) -> None:
         args._collision_data_type_scales = parse_scale_specs(args.collision_data_type_scale)
         args._collision_pair_scales = parse_scale_specs(args.collision_pair_scale)
         args._collision_record_scales = parse_record_scale_specs(args.collision_record_scale)
+        args._collision_record_direction_scales = parse_record_direction_scale_specs(args.collision_record_direction_scale)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
@@ -1438,6 +1497,7 @@ def main(argv=None) -> None:
             "collision_data_type_scale": list(args.collision_data_type_scale or []),
             "collision_pair_scale": list(args.collision_pair_scale or []),
             "collision_record_scale": list(args.collision_record_scale or []),
+            "collision_record_direction_scale": list(args.collision_record_direction_scale or []),
             "note": "Diagnostic sensitivity only; these scale evaluated collision rates and are not physical atomic-data edits.",
         },
         "source_sink_interface": {

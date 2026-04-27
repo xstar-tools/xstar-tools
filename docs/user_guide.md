@@ -1353,3 +1353,13 @@ PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
 ```
 
 The output tables contain raw `idat`/`rdat`, decoded level metadata, Kato--Nakazaki `calt69` rates, density-scaled excitation/de-excitation rates, detailed-balance checks, and optional annotations from the v0.2.74 sensitivity scan. This audit is intended to determine whether the record-level decoding is internally consistent before any physical reinterpretation of the high-density type-69 network is attempted.
+
+### v0.2.76 O VII type-69 ground-coupling diagnostic
+
+`examples/29_o7_type69_ground_coupling_diagnostic.py` follows the v0.2.74 and
+v0.2.75 diagnostics by focusing on type-69 record 22490, the ground--resonance
+O VII channel.  It repeats the solver-source fit for baseline, record-scaled,
+all-type-69-scaled, record-removed, excitation-only, de-excitation-only, and
+direction-specific cases.  The new diagnostic solver switch
+`--collision-record-direction-scale RECORD:DIRECTION:SCALE` is deliberately for
+interpretation only, since it can break detailed balance.

@@ -1207,3 +1207,33 @@ PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
 ```
 
 The audit writes `o7_type69_record_audit.csv`, `o7_type69_record_raw_audit.csv`, `o7_type69_record_temperature_grid.csv`, and `o7_type69_record_audit_summary.json`. These files expose the raw `idat`/`rdat` fields, decoded lower/upper levels, level labels, energy separations, statistical weights, `calt69` Upsilon values, excitation/de-excitation rates, detailed-balance checks, and any record-level sensitivity results inherited from the v0.2.74 scan. This is diagnostic only; it does not apply a physical correction.
+
+### v0.2.76 O VII type-69 ground-coupling diagnostic
+
+After the type-69 record audit, the next diagnostic isolates whether the
+high-density O VII mismatch is caused by the whole record-22490 pair, by its
+excitation direction, or by its de-excitation direction:
+
+```bash
+PYTHONPATH=src python examples/29_o7_type69_ground_coupling_diagnostic.py \
+  ../xstar/data/atdb.fits \
+  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --density 1e12 \
+  --record 22490 \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_type69_ground_coupling_diagnostic \
+  --print-summary
+```
+
+The script writes `o7_type69_ground_coupling_diagnostic.csv` and a JSON
+summary.  Direction-specific cases use the diagnostic solver option
+`--collision-record-direction-scale RECORD:DIRECTION:SCALE`; these cases are
+not physical corrections by themselves, because they intentionally break
+detailed balance to separate the lower-to-upper excitation and upper-to-lower
+de-excitation influence of a single ATDB collision record.

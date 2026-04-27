@@ -655,3 +655,12 @@ Version 0.2.75 adds ``examples/28_o7_type69_record_audit.py`` to inspect the raw
      --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
      --out-dir o7_type69_record_audit \
      --print-summary
+
+v0.2.76 O VII type-69 ground-coupling diagnostic
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``examples/29_o7_type69_ground_coupling_diagnostic.py`` isolates whether the
+high-density O VII mismatch is driven by the whole type-69 record 22490, by its
+excitation direction, or by its de-excitation direction.  It uses the diagnostic
+``--collision-record-direction-scale`` solver option; this option is for
+interpretation only and is not a physical correction.

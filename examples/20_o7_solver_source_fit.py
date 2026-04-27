@@ -318,6 +318,8 @@ def append_collision_scale_args(cmd: List[str], args) -> None:
         cmd += ["--collision-pair-scale", str(spec)]
     for spec in getattr(args, "collision_record_scale", []) or []:
         cmd += ["--collision-record-scale", str(spec)]
+    for spec in getattr(args, "collision_record_direction_scale", []) or []:
+        cmd += ["--collision-record-direction-scale", str(spec)]
 
 def run_combined_source_validation(args, levels: Sequence[int], weights: Sequence[float], out_dir: Path) -> dict:
     validation_dir = out_dir / "combined_source_validation"
@@ -415,6 +417,8 @@ def main() -> None:
                         help="Diagnostic symmetric pair-rate scale passed to xstar_atomic.solver, e.g. 2:4:0.5. May be repeated.")
     parser.add_argument("--collision-record-scale", action="append", default=[], metavar="RECORD:SCALE",
                         help="Diagnostic collision-record scale passed to xstar_atomic.solver, e.g. 12345:0.5. May be repeated.")
+    parser.add_argument("--collision-record-direction-scale", action="append", default=[], metavar="RECORD:DIRECTION:SCALE",
+                        help="Diagnostic direction-specific record scale passed to xstar_atomic.solver, e.g. 22490:deexcitation:0.0. May be repeated.")
     parser.add_argument("--index-cache", action="store_true")
     parser.add_argument("--index-cache-path", help="Explicit hierarchy index-cache filename passed to xstar_atomic.solver. Use this to keep the cache away from atdb.fits.")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
@@ -573,6 +577,7 @@ def main() -> None:
             "collision_data_type_scale": list(args.collision_data_type_scale or []),
             "collision_pair_scale": list(args.collision_pair_scale or []),
             "collision_record_scale": list(args.collision_record_scale or []),
+            "collision_record_direction_scale": list(args.collision_record_direction_scale or []),
         },
         "source_rate_note": "The fitted weights are amplitude-dependent because the solver also has a normalized baseline population. When using these weights in examples/13, scale the solver source CSV so the first T/ne block has this same total source rate, e.g. --solver-source-total-rate equal to this value.",
         "xstar_reference": xstar,

@@ -202,18 +202,32 @@ def read_json(path: Path) -> dict:
 
 
 def find_transition_scan_rows(path: Optional[str]) -> Dict[int, List[dict]]:
-    """Read v0.2.74 transition-sensitivity rows keyed by record number."""
+    """Read v0.2.74 transition-sensitivity rows keyed by record number.
+
+    The transition scan may be supplied either as the CSV itself, as the output
+    directory containing the CSV, or as a parent directory containing the output
+    directory.  Older shell workflows commonly passed just
+    ``o7_type69_transition_sensitivity``; this helper now searches
+    recursively as a fallback so the annotation columns are not silently empty.
+    """
     if not path:
         return {}
     p = Path(path)
-    if p.is_dir():
-        p = p / "o7_type69_transition_sensitivity.csv"
-    if not p.exists():
+    candidates: List[Path] = []
+    if p.is_file():
+        candidates.append(p)
+    elif p.is_dir():
+        candidates.append(p / "o7_type69_transition_sensitivity.csv")
+        candidates.extend(sorted(p.rglob("o7_type69_transition_sensitivity.csv")))
+    else:
+        candidates.append(p)
+    csv_path = next((c for c in candidates if c.exists() and c.is_file()), None)
+    if csv_path is None:
         return {}
     out: Dict[int, List[dict]] = {}
-    with p.open(newline="", encoding="utf-8") as handle:
+    with csv_path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            rec = maybe_int(row.get("record"))
+            rec = maybe_int(row.get("record") or row.get("transition_record") or row.get("collision_record"))
             if rec is None:
                 continue
             out.setdefault(rec, []).append(row)
@@ -479,6 +493,8 @@ def main() -> None:
         "n_records": len(raw_rows),
         "primary_record": primary,
         "transition_sensitivity_input": str(args.transition_sensitivity),
+        "transition_sensitivity_records_matched": sorted(int(k) for k in scan_by_record),
+        "transition_sensitivity_rows_matched": sum(len(v) for v in scan_by_record.values()),
         "raw_audit_csv": str(raw_csv),
         "audit_csv": str(audit_csv),
         "temperature_grid_csv": str(temp_csv),

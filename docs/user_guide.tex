@@ -1317,3 +1317,14 @@ PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
 \end{lstlisting}
 
 The audit writes raw-record, one-row summary, and temperature-grid CSV files, plus a JSON summary.  It reports raw \texttt{idat}/\texttt{rdat}, decoded level metadata, Kato--Nakazaki \texttt{calt69} rates, detailed-balance checks, and optional annotations from the v0.2.74 transition-sensitivity scan.  It is diagnostic only and does not modify the atomic data.
+
+\subsection{v0.2.76 O VII type-69 ground-coupling diagnostic}
+
+Version 0.2.76 adds \texttt{examples/29\_o7\_type69\_ground\_coupling\_diagnostic.py}.
+This example focuses on type-69 record 22490, the O VII ground--resonance
+channel identified by the transition-sensitivity scan.  It compares baseline,
+record-scaled, all-type-69-scaled, record-removed, excitation-only,
+de-excitation-only, and direction-specific cases.  The diagnostic solver option
+\texttt{--collision-record-direction-scale RECORD:DIRECTION:SCALE} is intended
+only for interpretation, because it can deliberately break detailed balance in
+order to isolate excitation and de-excitation effects.
