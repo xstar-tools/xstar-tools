@@ -1,0 +1,6 @@
+electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label,note
+1,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,PLACEHOLDER: replace with O VII XSTAR reference at ne=1 cm^-3,Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.
+10000,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,PLACEHOLDER: replace with O VII XSTAR reference at ne=10000 cm^-3,Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.
+100000000,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,PLACEHOLDER: replace with O VII XSTAR reference at ne=1e+08 cm^-3,Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.
+10000000000,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,PLACEHOLDER: replace with O VII XSTAR reference at ne=1e+10 cm^-3,Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.
+1e+12,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,PLACEHOLDER: replace with O VII XSTAR reference at ne=1e+12 cm^-3,Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.

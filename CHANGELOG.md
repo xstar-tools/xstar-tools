@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.2.69 - 2026-04-27
+
+Fixed:
+- Improved `examples/22_o7_solver_source_fit_density_xstar_grid.py` when the requested `--xstar-grid-summary-csv` file is missing. The wrapper now writes a template density-to-XSTAR-lines mapping CSV and exits with a clear message instead of failing with a raw `FileNotFoundError`.
+
+Added:
+- `--write-template-grid-csv` to create a starter density-reference mapping CSV.
+- `--allow-placeholder-grid` for low-density-placeholder smoke tests only.
+- Packaged template CSVs under `examples/reference_inputs/` and `docs/validation/xstar_inputs/`.
+
+Notes:
+- The template intentionally reuses the packaged low-density O VII reference as a placeholder for every row. Replace each `xstar_lines_csv` entry with a converted density-specific XSTAR line CSV before using it for scientific validation.
+
+# CHANGELOG
+
 ## v0.2.68 - 2026-04-27
 
 Density-dependent XSTAR references for the O VII density-grid diagnostic.

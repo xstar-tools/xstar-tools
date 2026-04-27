@@ -518,7 +518,14 @@ Run:
 
 .. code-block:: bash
 
-   PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+   Create a starter density-reference mapping CSV and edit its placeholder paths before using it for science validation::
+
+  PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+    --write-template-grid-csv xstar_o7_density_grid_references.csv
+
+Then run the density-specific grid::
+
+  PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
      ../xstar/data/atdb.fits \
      --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
      --linear-solver svd \

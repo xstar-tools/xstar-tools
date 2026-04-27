@@ -193,3 +193,46 @@ def test_example22_exists_and_requires_density_xstar_grid():
     result = subprocess.run([sys.executable, str(path), "dummy_atdb.fits", "--dry-run"], cwd=ROOT, text=True, capture_output=True)
     assert result.returncode != 0
     assert "requires density-dependent XSTAR references" in result.stderr
+
+
+def test_example22_writes_template_grid_csv(tmp_path):
+    path = ROOT / "examples" / "22_o7_solver_source_fit_density_xstar_grid.py"
+    out = tmp_path / "xstar_o7_density_grid_references.csv"
+    result = subprocess.run(
+        [sys.executable, str(path), "--write-template-grid-csv", str(out)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert out.exists()
+    text = out.read_text(encoding="utf-8")
+    assert "electron_density_cm^-3" in text
+    assert "xstar_lines_csv" in text
+    assert "PLACEHOLDER" in text
+    assert "Wrote template" in result.stdout
+
+
+def test_example22_missing_grid_writes_template_and_exits_cleanly(tmp_path):
+    path = ROOT / "examples" / "22_o7_solver_source_fit_density_xstar_grid.py"
+    grid = tmp_path / "missing_grid.csv"
+    result = subprocess.run(
+        [sys.executable, str(path), "dummy_atdb.fits", "--xstar-grid-summary-csv", str(grid), "--dry-run"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=20,
+    )
+    assert result.returncode != 0
+    assert grid.exists()
+    assert "template was written" in result.stderr
+    assert "Wrote template" in result.stdout
+
+
+def test_packaged_xstar_grid_template_exists():
+    path = ROOT / "examples" / "reference_inputs" / "xstar_o7_density_grid_references_template.csv"
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "electron_density_cm^-3" in text
+    assert "xstar_test_run/xstar_o7_triplet_lines.csv" in text
+    assert "PLACEHOLDER" in text

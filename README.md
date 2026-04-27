@@ -1015,6 +1015,15 @@ electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label
 Run:
 
 ```bash
+Before running the density-specific grid, create a starter mapping CSV and replace each placeholder `xstar_lines_csv` value with the converted XSTAR line CSV for that density:
+
+```bash
+PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+  --write-template-grid-csv xstar_o7_density_grid_references.csv
+```
+
+Then run the grid with the edited mapping file:
+
 PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
   ../xstar/data/atdb.fits \
   --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \

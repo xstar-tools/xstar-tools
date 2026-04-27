@@ -26,6 +26,7 @@ level-resolved recombination rates.
 from __future__ import annotations
 
 import argparse
+import csv
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,43 @@ def _has_option(argv: Sequence[str], *names: str) -> bool:
     return any(arg in names or any(arg.startswith(name + "=") for name in names) for arg in argv)
 
 
+def write_xstar_grid_template(path: Path, densities: Sequence[float] = (1.0, 1.0e4, 1.0e8, 1.0e10, 1.0e12)) -> None:
+    """Write a template density-to-XSTAR-lines mapping CSV.
+
+    The template intentionally points to the packaged low-density O VII reference
+    as a placeholder for every row.  Users should replace the path column with
+    CSV files converted from density-specific XSTAR runs before using the grid
+    for science validation.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "electron_density_cm^-3",
+                "xstar_lines_csv",
+                "xstar_value_column",
+                "xstar_target_label",
+                "note",
+            ],
+        )
+        writer.writeheader()
+        for density in densities:
+            writer.writerow({
+                "electron_density_cm^-3": f"{float(density):.12g}",
+                "xstar_lines_csv": "xstar_test_run/xstar_o7_triplet_lines.csv",
+                "xstar_value_column": "emit_outward",
+                "xstar_target_label": f"PLACEHOLDER: replace with O VII XSTAR reference at ne={float(density):.6g} cm^-3",
+                "note": "Template row; replace xstar_lines_csv with a density-specific converted XSTAR line CSV.",
+            })
+
+
+def print_template_message(path: Path) -> None:
+    print(f"Wrote template XSTAR density-grid mapping: {path}")
+    print("Edit this CSV so each density points to the correct converted XSTAR O VII line CSV, then rerun the command.")
+    print("For a quick low-density-placeholder test only, pass --allow-placeholder-grid to continue with the template as written.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -44,6 +82,8 @@ def main() -> None:
     parser.add_argument("--help", action="store_true")
     parser.add_argument("--xstar-grid-summary-csv")
     parser.add_argument("--xstar-lines-csv-by-density", action="append", default=[])
+    parser.add_argument("--write-template-grid-csv", help="Write a template density-to-XSTAR-lines CSV and exit")
+    parser.add_argument("--allow-placeholder-grid", action="store_true", help="Allow running with an auto-created placeholder grid that reuses the packaged low-density O VII reference; diagnostic only")
     known, remaining = parser.parse_known_args()
 
     script = Path(__file__).resolve().with_name("21_o7_solver_source_fit_density_grid.py")
@@ -51,6 +91,13 @@ def main() -> None:
         subprocess.run([sys.executable, str(script), "--help"], check=True)
         print("\nDensity-dependent XSTAR front end:")
         print("  Provide --xstar-grid-summary-csv or repeated --xstar-lines-csv-by-density DENSITY:CSV.")
+        print("  To create a starter CSV, run: --write-template-grid-csv xstar_o7_density_grid_references.csv")
+        return
+
+    if known.write_template_grid_csv:
+        template_path = Path(known.write_template_grid_csv)
+        write_xstar_grid_template(template_path)
+        print_template_message(template_path)
         return
 
     if not known.xstar_grid_summary_csv and not known.xstar_lines_csv_by_density:
@@ -61,6 +108,17 @@ def main() -> None:
 
     cmd = [sys.executable, str(script)] + remaining
     if known.xstar_grid_summary_csv:
+        grid_path = Path(known.xstar_grid_summary_csv)
+        if not grid_path.exists():
+            write_xstar_grid_template(grid_path)
+            print_template_message(grid_path)
+            if not known.allow_placeholder_grid:
+                raise SystemExit(
+                    f"XSTAR density-grid mapping CSV was missing, so a template was written to {grid_path}. "
+                    "Edit it with real density-specific XSTAR CSV paths and rerun, or pass "
+                    "--allow-placeholder-grid for a low-density-placeholder smoke test only."
+                )
+            print("WARNING: continuing with placeholder grid that reuses the low-density O VII XSTAR reference at all densities.")
         cmd += ["--xstar-grid-summary-csv", known.xstar_grid_summary_csv]
     for item in known.xstar_lines_csv_by_density:
         cmd += ["--xstar-lines-csv-by-density", item]
