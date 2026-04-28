@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# v0.2.88 - 2026-04-28
+
+- Generalized the XSTAR He-like triplet reference reader used by `examples/20_o7_solver_source_fit.py` and the density-grid wrappers so converted C V, Mg XI, Ca XIX, and other He-like triplet CSVs can be classified from `lower_level`/`upper_level` labels rather than O VII-only wavelengths.
+- Fixed non-O VII density-grid validation runs such as C V, which previously failed with `Could not read XSTAR O VII triplet R/G reference` even when the converted XSTAR triplet CSV contained the correct five He-like components.
+- Kept the O VII wavelength fallback for older O VII reference files while using label-based f/i/r classification for all He-like ions.
+
 # v0.2.87 - 2026-04-28
 
 - Added `examples/32_prepare_helike_xstar_density_grids.py`, a run-plan generator for density-specific XSTAR triplet grids for the non-O VII candidate ions identified by the He-like type-69 audit.

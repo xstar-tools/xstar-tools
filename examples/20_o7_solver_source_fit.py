@@ -55,31 +55,91 @@ def parse_level_list(text: str) -> List[int]:
     return out
 
 
-def _classify_o7_wavelength(wavelength: float) -> Optional[str]:
-    if abs(wavelength - 22.1012) < 0.03:
-        return "f"
-    if abs(wavelength - 21.8070) < 0.04 or abs(wavelength - 21.8044) < 0.04:
-        return "i"
-    if abs(wavelength - 21.6020) < 0.03:
-        return "r"
+def _roman_to_int(text: str) -> Optional[int]:
+    text = str(text).strip().upper()
+    if not text:
+        return None
+    values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
+    total = 0
+    prev = 0
+    for ch in reversed(text):
+        val = values.get(ch)
+        if val is None:
+            return None
+        if val < prev:
+            total -= val
+        else:
+            total += val
+            prev = val
+    return total
+
+
+def _expected_ion_aliases(element: str, ion_stage: int) -> set[str]:
+    symbol = str(element).strip().lower()
+    aliases = {f"{symbol}{int(ion_stage)}"}
+    roman = {
+        1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii",
+        8: "viii", 9: "ix", 10: "x", 11: "xi", 12: "xii", 13: "xiii",
+        14: "xiv", 15: "xv", 16: "xvi", 17: "xvii", 18: "xviii", 19: "xix",
+        20: "xx", 21: "xxi", 22: "xxii", 23: "xxiii", 24: "xxiv", 25: "xxv",
+    }.get(int(ion_stage))
+    if roman:
+        aliases.add(f"{symbol}{roman}")
+    return aliases
+
+
+def _normalize_ion_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "").replace("_", "")
+
+
+def _classify_helike_triplet_row(row: dict, wavelength: Optional[float] = None,
+                                  element: str = "O", ion_stage: int = 7) -> Optional[str]:
+    """Classify He-like f/i/r components from XSTAR line labels.
+
+    The converted XSTAR line CSVs for O VII, C V, Mg XI, and similar He-like
+    ions carry lower/upper configuration labels.  Use those labels first so the
+    reader is ion-generic; retain O VII wavelength matching only as a fallback
+    for old O VII reference CSVs that did not include labels.
+    """
+    lower = str(row.get("lower_level", "") or row.get("lower", "")).replace(" ", "")
+    upper = str(row.get("upper_level", "") or row.get("upper", "")).replace(" ", "")
+    if "1s2.1S_0" in lower or "1s2" in lower:
+        if "1s1.2s1.3S_1" in upper or "2s1.3S_1" in upper:
+            return "f"
+        if "1s1.2p1.1P_1" in upper or "2p1.1P_1" in upper:
+            return "r"
+        if "1s1.2p1.3P_" in upper or "2p1.3P_" in upper:
+            return "i"
+    # Backward-compatible O VII wavelength fallback.
+    if str(element).strip().lower() == "o" and int(ion_stage) == 7 and wavelength is not None:
+        if abs(wavelength - 22.1012) < 0.03:
+            return "f"
+        if abs(wavelength - 21.8070) < 0.04 or abs(wavelength - 21.8044) < 0.04:
+            return "i"
+        if abs(wavelength - 21.6020) < 0.03:
+            return "r"
     return None
 
 
-def read_xstar_triplet_ratios(path: Path, value_column: str = "emit_outward") -> dict:
+def read_xstar_triplet_ratios(path: Path, value_column: str = "emit_outward",
+                              element: str = "O", ion_stage: int = 7) -> dict:
     totals = {"f": 0.0, "i": 0.0, "r": 0.0}
     counts = {"f": 0, "i": 0, "r": 0}
     if not path.exists():
         return {"available": False, "path": str(path)}
+    aliases = _expected_ion_aliases(element, int(ion_stage))
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            ion_text = str(row.get("ion", "")).strip().lower().replace(" ", "").replace("_", "")
-            if ion_text not in {"ovii", "o7"}:
+            ion_text = _normalize_ion_text(row.get("ion", ""))
+            if ion_text and ion_text not in aliases:
+                # Some hand-written references omit ion labels; real converted
+                # XSTAR CSVs include them and should match the requested ion.
                 continue
             wav = _maybe_float(row.get("wavelength") or row.get("wavelength_A"))
             val = _maybe_float(row.get(value_column))
-            if wav is None or val is None:
+            if val is None:
                 continue
-            kind = _classify_o7_wavelength(wav)
+            kind = _classify_helike_triplet_row(row, wav, element=element, ion_stage=int(ion_stage))
             if kind is None:
                 continue
             totals[kind] += val
@@ -88,6 +148,8 @@ def read_xstar_triplet_ratios(path: Path, value_column: str = "emit_outward") ->
     return {
         "available": True,
         "path": str(path),
+        "element": element,
+        "ion_stage": int(ion_stage),
         "value_column": value_column,
         "forbidden": f,
         "intercombination": i,
@@ -442,9 +504,9 @@ def main() -> None:
     unit_dir.mkdir(parents=True, exist_ok=True)
 
     source_levels = parse_level_list(args.source_levels)
-    xstar = read_xstar_triplet_ratios(Path(args.xstar_lines_csv), args.xstar_value_column)
+    xstar = read_xstar_triplet_ratios(Path(args.xstar_lines_csv), args.xstar_value_column, element=args.element, ion_stage=args.ion_stage)
     if not xstar.get("available") or xstar.get("R_f_over_i") is None or xstar.get("G_f_plus_i_over_r") is None:
-        raise SystemExit(f"Could not read XSTAR O VII triplet R/G reference from {args.xstar_lines_csv}")
+        raise SystemExit(f"Could not read XSTAR He-like triplet R/G reference for {args.element} {args.ion_stage} from {args.xstar_lines_csv}")
     R_x = float(xstar["R_f_over_i"])
     G_x = float(xstar["G_f_plus_i_over_r"])
     target_raw = np.asarray([R_x, 1.0, (R_x + 1.0) / G_x], dtype=float)
@@ -653,7 +715,7 @@ def main() -> None:
         except OSError:
             pass
 
-    print("O VII full-solver source-fit diagnostic")
+    print(f"{args.element} {args.ion_stage} full-solver source-fit diagnostic")
     print("--------------------------------------")
     print(f"Wrote response matrix: {out_response}")
     print(f"Wrote solver-fit weights: {out_weights}")
