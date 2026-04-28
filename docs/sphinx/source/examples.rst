@@ -656,6 +656,11 @@ Version 0.2.75 adds ``examples/28_o7_type69_record_audit.py`` to inspect the raw
      --out-dir o7_type69_record_audit \
      --print-summary
 
+v0.2.77 ground-coupling diagnostic hotfix
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Version 0.2.77 fixes the ground-coupling diagnostic introduced in v0.2.76. Empty or directory-valued fitted-weights paths are now ignored, and the diagnostic falls back to the standard per-case output CSV files.
+
 v0.2.76 O VII type-69 ground-coupling diagnostic
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

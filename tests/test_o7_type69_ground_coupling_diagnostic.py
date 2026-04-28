@@ -40,3 +40,23 @@ def test_type69_record_audit_annotation_lookup_recursive(tmp_path):
     best = mod.best_scan_effect(rows[22490])
     assert best["sensitivity_best_case"] == "record_22490_x0p1"
     assert best["sensitivity_n_reachable"] == 1
+
+
+def test_ground_coupling_top_weight_ignores_empty_directory_path(tmp_path):
+    mod = load_example("29_o7_type69_ground_coupling_diagnostic.py")
+    fit_dir = tmp_path / "fit_case"
+    fit_dir.mkdir()
+    weights = fit_dir / "o7_source_fit_weights.csv"
+    with weights.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["level_index", "weight"])
+        writer.writeheader()
+        writer.writerow({"level_index": "4", "weight": "1.0"})
+        writer.writerow({"level_index": "7", "weight": "0.0"})
+
+    # Empty summary path used to become Path("") == '.', causing
+    # IsADirectoryError.  The diagnostic should ignore it and use the
+    # standard case-output weights CSV in fit_dir.
+    top_level, top_weight, neff = mod.top_weight({"compatible_weights_csv": ""}, fit_dir)
+    assert top_level == 4
+    assert top_weight == 1.0
+    assert neff == 1.0

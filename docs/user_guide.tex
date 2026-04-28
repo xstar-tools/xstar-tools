@@ -1318,6 +1318,10 @@ PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
 
 The audit writes raw-record, one-row summary, and temperature-grid CSV files, plus a JSON summary.  It reports raw \texttt{idat}/\texttt{rdat}, decoded level metadata, Kato--Nakazaki \texttt{calt69} rates, detailed-balance checks, and optional annotations from the v0.2.74 transition-sensitivity scan.  It is diagnostic only and does not modify the atomic data.
 
+\subsection{v0.2.77 ground-coupling diagnostic hotfix}
+
+Version 0.2.77 fixes the ground-coupling diagnostic introduced in v0.2.76. Some example-20 summaries do not include a usable fitted-weights CSV path; the diagnostic now treats empty or directory paths as missing and falls back to the standard per-case outputs, \texttt{o7\_source\_fit\_weights.csv} and \texttt{o7\_solver\_source\_fit\_weights.csv}.
+
 \subsection{v0.2.76 O VII type-69 ground-coupling diagnostic}
 
 Version 0.2.76 adds \texttt{examples/29\_o7\_type69\_ground\_coupling\_diagnostic.py}.

@@ -1354,6 +1354,10 @@ PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
 
 The output tables contain raw `idat`/`rdat`, decoded level metadata, Kato--Nakazaki `calt69` rates, density-scaled excitation/de-excitation rates, detailed-balance checks, and optional annotations from the v0.2.74 sensitivity scan. This audit is intended to determine whether the record-level decoding is internally consistent before any physical reinterpretation of the high-density type-69 network is attempted.
 
+### v0.2.77 ground-coupling diagnostic hotfix
+
+Version 0.2.77 fixes the ground-coupling diagnostic introduced in v0.2.76.  Some example-20 summaries do not include a usable fitted-weights CSV path; the diagnostic now treats empty or directory paths as missing and falls back to the standard per-case outputs (`o7_source_fit_weights.csv` and `o7_solver_source_fit_weights.csv`).
+
 ### v0.2.76 O VII type-69 ground-coupling diagnostic
 
 `examples/29_o7_type69_ground_coupling_diagnostic.py` follows the v0.2.74 and

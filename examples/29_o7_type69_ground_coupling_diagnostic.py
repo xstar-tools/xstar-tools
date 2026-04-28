@@ -143,11 +143,46 @@ def worst_component(summary: dict) -> Tuple[Optional[str], Optional[float]]:
     return worst_name, worst_delta
 
 
-def top_weight(summary: dict) -> Tuple[Optional[int], Optional[float], Optional[float]]:
-    path = Path(summary.get("compatible_weights_csv") or summary.get("weights_csv") or "")
-    if not path.exists():
+def top_weight(summary: dict, fit_dir: Optional[Path] = None) -> Tuple[Optional[int], Optional[float], Optional[float]]:
+    """Return dominant fitted source level and effective source count.
+
+    Older/newer example-20 summaries may omit the weights CSV path, store an
+    empty string, or store a path relative to the fit directory.  In Python,
+    Path("") resolves to '.', which caused the v0.2.76 ground-coupling
+    diagnostic to try opening the current directory as a CSV.  Treat empty,
+    missing, and directory paths as invalid and fall back to the standard
+    example-20 output filenames inside the case fit directory.
+    """
+    candidates: List[Path] = []
+    for key in ("compatible_weights_csv", "weights_csv", "source_fit_weights_csv"):
+        raw = summary.get(key)
+        if raw:
+            path = Path(str(raw))
+            candidates.append(path)
+            if fit_dir is not None and not path.is_absolute():
+                candidates.append(fit_dir / path)
+    if fit_dir is not None:
+        candidates.extend([
+            fit_dir / "o7_source_fit_weights.csv",
+            fit_dir / "o7_solver_source_fit_weights.csv",
+        ])
+
+    rows = None
+    seen = set()
+    for path in candidates:
+        try:
+            resolved_key = str(path)
+        except Exception:
+            resolved_key = repr(path)
+        if resolved_key in seen:
+            continue
+        seen.add(resolved_key)
+        if not path.exists() or path.is_dir():
+            continue
+        rows = read_csv_rows(path)
+        break
+    if rows is None:
         return None, None, None
-    rows = read_csv_rows(path)
     vals = []
     for row in rows:
         lev = row.get("level_index") or row.get("source_level")
@@ -239,7 +274,7 @@ def run_fit_case(args, case: dict, xstar_csv: str, xstar_col: str, out_dir: Path
     r = maybe_float(pred.get("R_f_over_i"))
     g = maybe_float(pred.get("G_f_plus_i_over_r"))
     worst, worst_delta = worst_component(summary)
-    top_lev, top_w, neff = top_weight(summary)
+    top_lev, top_w, neff = top_weight(summary, fit_dir)
     row = {
         "case": case["case"],
         "family": case.get("family"),
