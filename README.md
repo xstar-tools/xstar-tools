@@ -1291,3 +1291,6 @@ PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
 ```
 
 The option is diagnostic and should not yet be treated as a final physical correction.  It makes the v0.2.77 conclusion reproducible with a single switch: the high-density O VII XSTAR target is recovered when the ground-to-resonance type-69 excitation path is suppressed while de-excitation is retained.
+
+
+Generated density-grid output directories are intentionally not bundled as package inputs. In particular, `o7_solver_source_fit_density_xstar_grid/`, `o7_high_density_rate_sensitivity/`, and `o7_density_grid_type69_mode_compare/` are reproducible outputs created by the examples, while the compact density-specific XSTAR line CSVs live under `xstar_test_run/o7_ne*/`.
