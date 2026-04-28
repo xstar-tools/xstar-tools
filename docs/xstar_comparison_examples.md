@@ -348,3 +348,18 @@ PYTHONPATH=src python examples/31_helike_type69_ground_resonance_validation.py \
 ```
 
 This keeps `suppress-resonance` as a diagnostic/experimental O VII benchmark mode until similar density-grid XSTAR validation exists for other He-like ions.
+
+
+### Preparing non-O VII He-like XSTAR density grids
+
+Example 32 prepares the external XSTAR density-grid runs needed to test whether the O VII `suppress-resonance` behavior also appears for other candidate He-like ions.  By default it prepares C V, Mg XI, and Ca XIX, the non-O VII ions with candidate type-69 ground-to-resonance records in the audit.  The helper writes run scripts and conversion scripts only; it does not run XSTAR and does not validate those ions by itself.
+
+```bash
+PYTHONPATH=src python examples/32_prepare_helike_xstar_density_grids.py \
+  --ions "C V,Mg XI,Ca XIX" \
+  --densities 1 1e4 1e8 1e10 1e12 \
+  --root . \
+  --print-summary
+```
+
+After running XSTAR externally and converting `xout_lines1.fits`, the generated per-ion mappings, such as `xstar_test_run/xstar_c5_density_grid_references.csv`, `xstar_test_run/xstar_mg11_density_grid_references.csv`, and `xstar_test_run/xstar_ca19_density_grid_references.csv`, can be used for ion-specific density-grid comparisons.  Until those converted XSTAR triplet grids are supplied and compared, only O VII should be treated as validated.

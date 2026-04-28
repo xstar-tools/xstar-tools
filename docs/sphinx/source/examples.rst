@@ -707,3 +707,19 @@ Example 31 audits candidate type-69 ground-to-resonance records across several H
      --index-cache-path .xstar_atomic_cache/atdb_helike_index.npz \
      --out-dir helike_type69_ground_resonance_validation \
      --print-summary
+
+
+Preparing non-O VII He-like XSTAR density grids
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Example 32 prepares external XSTAR run directories for candidate non-O VII He-like ions from the type-69 audit. It writes run scripts, conversion scripts, per-ion mapping CSVs, and a README, but it does not run XSTAR or mark those ions validated.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/32_prepare_helike_xstar_density_grids.py \
+     --ions "C V,Mg XI,Ca XIX" \
+     --densities 1 1e4 1e8 1e10 1e12 \
+     --root . \
+     --print-summary
+
+Only after the XSTAR triplet CSVs are generated should these mappings be used for include-vs-suppress-resonance comparisons beyond O VII.
