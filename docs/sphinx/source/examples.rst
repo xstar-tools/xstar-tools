@@ -433,3 +433,33 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
 
 These weights are empirical diagnostics, not physical level-resolved recombination rates.  The recommended SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
 
+
+
+O VII solver-source-fit density grid
+------------------------------------
+
+Use ``examples/21_o7_solver_source_fit_density_grid.py`` to test whether the
+empirical O VII solver-response source weights are stable with density.  The
+default grid is ``ne = 1, 1e4, 1e8, 1e10, 1e12 cm^-3``.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
+     ../xstar/data/atdb.fits \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+     --linear-solver svd \
+     --rank-deficient-action svd \
+     --negative-population-action keep \
+     --prune-null-rate-levels \
+     --combined-source-total-rate 1.0 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+     --out-dir o7_solver_source_fit_density_grid \
+     --print-summary
+
+The diagnostic writes ``o7_solver_source_fit_density_grid.csv`` and
+``o7_solver_source_fit_density_grid_summary.json``.  It reports the XSTAR R/G
+reference, fixed-``ne=1`` R/G, separately refitted R/G at each density, matrix
+rank, residuals, negative-population diagnostics, and source-weight changes.
+The weights remain empirical diagnostics, not physical level-resolved
+recombination rates.

@@ -6,6 +6,7 @@ def test_solver_profile_and_stage6_examples_exist():
     for rel in [
         "examples/12_profile_solver_steps.py",
         "examples/13_o7_recombination_cascade_workflow.py",
+        "examples/21_o7_solver_source_fit_density_grid.py",
     ]:
         path = root / rel
         assert path.exists()
@@ -18,6 +19,7 @@ def test_user_guide_mentions_stage6_workflow():
     text = (root / "docs/user_guide.md").read_text(encoding="utf-8")
     assert "Solver step profiling" in text
     assert "Prototype O VII recombination/cascade workflow" in text
+    assert "O VII density-grid source-fit diagnostic" in text
 
 
 def test_profile_solver_namespace_defaults():

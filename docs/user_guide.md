@@ -1099,3 +1099,38 @@ These weights are empirical diagnostics, not physical level-resolved recombinati
 
 For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as `examples/reference_outputs/o7_solver_source_fit_summary_reference.json`.  The lightweight CI tests in `tests/test_o7_solver_source_fit_reference.py` verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full `atdb.fits` file.  When using `examples/13_o7_recombination_cascade_workflow.py` with `selected-fit-weights` or `o7-xstar-fit`, v0.2.64 emits a warning unless `--solver-source-total-rate` is supplied, because the empirical weights are amplitude-dependent.
 
+### O VII density-grid source-fit diagnostic
+
+After validating the empirical O VII full-solver source fit at `ne = 1 cm^-3`, use `examples/21_o7_solver_source_fit_density_grid.py` to test whether the fitted source distribution is stable with density.  The default grid is:
+
+```text
+ne = 1, 1e4, 1e8, 1e10, 1e12 cm^-3
+```
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit_density_grid \
+  --print-summary
+```
+
+This script runs the validated `examples/20_o7_solver_source_fit.py` workflow at each density, then also validates the fixed `ne=1 cm^-3` source weights at every density.  It writes:
+
+```text
+o7_solver_source_fit_density_grid/o7_solver_source_fit_density_grid.csv
+o7_solver_source_fit_density_grid/o7_solver_source_fit_density_grid_summary.json
+```
+
+The CSV reports the XSTAR R/G reference, fixed-`ne=1` R/G, refitted linear-response R/G, refitted combined simultaneous-solver R/G, matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+
+

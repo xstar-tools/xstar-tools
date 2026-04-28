@@ -1101,6 +1101,29 @@ PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
 
 These weights are empirical diagnostics, not physical level-resolved recombination rates.  The SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
 
-For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as 	exttt{examples/reference\_outputs/o7\_solver\_source\_fit\_summary\_reference.json}.  The lightweight CI tests in 	exttt{tests/test\_o7\_solver\_source\_fit\_reference.py} verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full 	exttt{atdb.fits} file.  When using 	exttt{examples/13\_o7\_recombination\_cascade\_workflow.py} with 	exttt{selected-fit-weights} or 	exttt{o7-xstar-fit}, v0.2.64 emits a warning unless 	exttt{--solver-source-total-rate} is supplied, because the empirical weights are amplitude-dependent.
+For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_summary\_reference.json}.  The lightweight CI tests in \texttt{tests/test\_o7\_solver\_source\_fit\_reference.py} verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full \texttt{atdb.fits} file.  When using \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py} with \texttt{selected-fit-weights} or \texttt{o7-xstar-fit}, v0.2.64 emits a warning unless \texttt{--solver-source-total-rate} is supplied, because the empirical weights are amplitude-dependent.
+\subsection{O VII density-grid source-fit diagnostic}
+
+After validating the empirical O VII full-solver source fit at \(n_e=1~\mathrm{cm^{-3}}\), use \texttt{examples/21\_o7\_solver\_source\_fit\_density\_grid.py} to test whether the fitted source distribution is stable with density.  The default grid is \(n_e=1,10^4,10^8,10^{10},10^{12}~\mathrm{cm^{-3}}\).
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit_density_grid \
+  --print-summary
+\end{lstlisting}
+
+This script runs the validated \texttt{examples/20\_o7\_solver\_source\_fit.py} workflow at each density, then also validates the fixed \(n_e=1~\mathrm{cm^{-3}}\) source weights at every density.  It writes \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid.csv} and \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid\_summary.json}.
+
+The density-grid CSV reports the XSTAR \(R/G\) reference, fixed-\(n_e=1\) \(R/G\), refitted linear-response \(R/G\), refitted combined simultaneous-solver \(R/G\), matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+
 
 \end{document}
