@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.2.11"
+version = "0.2.65"
 description = "Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -27,6 +27,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7", "build>=1.0"]
 docs = ["sphinx>=7", "sphinx-rtd-theme>=2"]
+hdf5 = ["h5py>=3"]
+sparse = ["scipy>=1.8"]
 
 [project.scripts]
 xstar-atomic-inspect = "xstar_atomic.inspect:main"
@@ -38,8 +40,11 @@ xstar-atomic-recombination = "xstar_atomic.recombination:main"
 xstar-atomic-emissivity = "xstar_atomic.emissivity:main"
 xstar-atomic-solver = "xstar_atomic.solver:main"
 xstar-atomic-validate-collisions = "xstar_atomic.validation:main"
+xstar-atomic-export = "xstar_atomic.export:main"
 xstar-atomic-export-superwind = "xstar_atomic.export:main"
 xstar-atomic-xstar-outputs = "xstar_atomic.xstar_outputs:main"
+xstar-atomic-download-data = "xstar_atomic.data:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
