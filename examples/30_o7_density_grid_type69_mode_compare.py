@@ -171,8 +171,7 @@ def run_mode(args, mode: str, mode_dir: Path) -> None:
         sys.executable,
         str(script),
         str(args.fitsfile),
-        "--xstar-grid-summary-csv",
-        str(args.xstar_grid_summary_csv),
+        *( ["--xstar-grid-summary-csv", str(args.xstar_grid_summary_csv)] if Path(str(args.xstar_grid_summary_csv)).exists() else ["--auto-xstar-test-run-grid"] ),
         "--collision-type69-ground-excitation-mode",
         str(mode),
         "--linear-solver",
@@ -273,7 +272,8 @@ def build_comparison_rows(include_dir: Path, suppress_dir: Path) -> List[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fitsfile")
-    parser.add_argument("--xstar-grid-summary-csv", required=True)
+    parser.add_argument("--xstar-grid-summary-csv", default="xstar_test_run/xstar_o7_density_grid_references.csv", help="Optional mapping CSV. If missing, the comparison uses --auto-xstar-test-run-grid for example 22.")
+    parser.add_argument("--auto-xstar-test-run-grid", action="store_true", default=True, help="Use packaged xstar_test_run/o7_ne*/ converted references when the mapping CSV is absent; default true")
     parser.add_argument("--out-dir", default="o7_density_grid_type69_mode_compare")
     parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="svd")
     parser.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="svd")

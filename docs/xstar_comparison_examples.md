@@ -318,7 +318,7 @@ Example command:
 ```bash
 PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --linear-solver svd \
   --rank-deficient-action svd \
   --negative-population-action keep \

@@ -521,13 +521,13 @@ Run:
    Create a starter density-reference mapping CSV and edit its placeholder paths before using it for science validation::
 
   PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
-    --write-template-grid-csv xstar_o7_density_grid_references.csv
+    --write-template-grid-csv xstar_test_run/xstar_o7_density_grid_references.template.csv
 
 Then run the density-specific grid::
 
   PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
      ../xstar/data/atdb.fits \
-     --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+     --auto-xstar-test-run-grid \
      --linear-solver svd \
      --rank-deficient-action svd \
      --negative-population-action keep \
@@ -554,7 +554,7 @@ used by the density-dependent comparison.
 
    PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
      --root . \
-     --mapping-csv xstar_o7_density_grid_references.csv \
+     --mapping-csv xstar_test_run/xstar_o7_density_grid_references.csv \
      --print-summary
 
 After running the generated XSTAR scripts externally and converting each
@@ -569,7 +569,7 @@ high-density failure case, usually ``ne=1e12 cm^-3``::
 
   PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
     ../xstar/data/atdb.fits \
-    --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+    --auto-xstar-test-run-grid \
     --density 1e12 \
     --reference-density 1 \
     --index-cache \
@@ -600,7 +600,7 @@ collision blocks.  These scale factors are sensitivity probes only.
 
    PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
      ../xstar/data/atdb.fits \
-     --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+     --auto-xstar-test-run-grid \
      --density 1e12 \
      --families metastable,type68,type69 \
      --scales 0.1,0.2,0.5,1,2,5,10 \
@@ -623,7 +623,7 @@ Version 0.2.74 adds ``examples/27_o7_type69_transition_sensitivity.py`` to scan 
 
    PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
      ../xstar/data/atdb.fits \
-     --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+     --auto-xstar-test-run-grid \
      --density 1e12 \
      --scan-mode record \
      --scales 0.1,0.2,0.5,2,5,10 \

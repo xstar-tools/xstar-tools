@@ -23,7 +23,7 @@ def test_prepare_o7_xstar_density_grid_writes_commands(tmp_path):
     )
     assert 'Prepared O VII XSTAR density-grid run plan' in result.stdout
 
-    mapping = tmp_path / 'xstar_o7_density_grid_references.csv'
+    mapping = tmp_path / 'xstar_test_run/xstar_o7_density_grid_references.csv'
     summary = tmp_path / 'xstar_runs/o7_density_grid_run_plan.csv'
     readme = tmp_path / 'xstar_runs/README_o7_density_grid.md'
     assert mapping.exists()

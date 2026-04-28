@@ -1,6 +1,6 @@
 {
   "fitsfile": "../xstar/data/atdb.fits",
-  "xstar_grid_summary_csv": "xstar_o7_density_grid_references.csv",
+  "xstar_grid_summary_csv": "xstar_test_run/xstar_o7_density_grid_references.csv",
   "include_dir": "o7_density_grid_type69_mode_compare/mode_include",
   "suppress_resonance_dir": "o7_density_grid_type69_mode_compare/mode_suppress_resonance",
   "comparison_csv": "o7_density_grid_type69_mode_compare/o7_density_grid_type69_mode_compare.csv",

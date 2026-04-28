@@ -1196,14 +1196,14 @@ Before running the density-specific grid, create a starter mapping CSV and repla
 
 ```bash
 PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
-  --write-template-grid-csv xstar_o7_density_grid_references.csv
+  --write-template-grid-csv xstar_test_run/xstar_o7_density_grid_references.template.csv
 ```
 
 Then run the grid with the edited mapping file:
 
 PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --linear-solver svd \
   --rank-deficient-action svd \
   --negative-population-action keep \
@@ -1226,11 +1226,13 @@ Alternatively, supply repeated `--xstar-lines-csv-by-density DENSITY:CSV` argume
 ```bash
 PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
   --root . \
-  --mapping-csv xstar_o7_density_grid_references.csv \
+  --mapping-csv xstar_test_run/xstar_o7_density_grid_references.csv \
   --print-summary
 ```
 
 The helper writes `xstar_runs/o7_ne*/run_xstar.sh` scripts with the full XSTAR commands, `convert_o7_triplet.sh` conversion scripts, `xstar_o7_density_grid_references.csv`, and `xstar_runs/README_o7_density_grid.md` containing the complete workflow.  Run XSTAR externally, convert each `xout_lines1.fits`, then run example 22 with the generated mapping CSV.  The empirical O VII fitted source weights remain diagnostic, not physical level-resolved recombination rates.
+
+The compact density-specific XSTAR reference inputs are stored under `xstar_test_run/o7_ne*/xstar_o7_triplet_lines.csv`. The density-grid solver directories such as `o7_solver_source_fit_density_xstar_grid/` are generated outputs and are not required package inputs.
 
 ### O VII high-density mismatch diagnostic
 
@@ -1239,7 +1241,7 @@ After running the density-dependent XSTAR-grid comparison, use `examples/24_o7_h
 ```bash
 PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --reference-density 1 \
   --index-cache \
@@ -1263,7 +1265,7 @@ Version 0.2.72 adds `examples/25_o7_high_density_expanded_source_scan.py`, a dia
 ```bash
 PYTHONPATH=src python examples/25_o7_high_density_expanded_source_scan.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --linear-solver svd \
   --rank-deficient-action svd \
@@ -1291,7 +1293,7 @@ the atomic database.
 ```bash
 PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --families metastable,type68,type69 \
   --scales 0.1,0.2,0.5,1,2,5,10 \
@@ -1317,7 +1319,7 @@ Version 0.2.74 adds `examples/27_o7_type69_transition_sensitivity.py` to isolate
 ```bash
 PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --scan-mode record \
   --scales 0.1,0.2,0.5,2,5,10 \
@@ -1383,7 +1385,7 @@ Example density-grid rerun using the targeted switch:
 ```bash
 PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --collision-type69-ground-excitation-mode suppress-resonance \
   --linear-solver svd \
   --rank-deficient-action svd \
@@ -1405,6 +1407,11 @@ The option is diagnostic and should not yet be treated as a final physical corre
 
 The `suppress-resonance` mode suppresses type-69 excitation from the ground level into the He-like resonance upper level while preserving de-excitation.  For the O VII benchmark this corresponds to record 22490 (`1s2.1S_0 -> 1s.2p 1P_1`).  This mode is diagnostic/experimental: it is validated for the O VII high-density benchmark and should not be treated as a general physical default.
 
+
+### v0.2.83 density-grid input layout
+
+The density-dependent O VII examples no longer require a root-level `xstar_o7_density_grid_references.csv` or a pre-existing `o7_solver_source_fit_density_xstar_grid/` directory.  The compact packaged inputs are the converted XSTAR triplet CSVs under `xstar_test_run/o7_ne*/xstar_o7_triplet_lines.csv`.  Use `--auto-xstar-test-run-grid` to discover those inputs.  Density-grid solver directories remain generated outputs.  Example 26 also validates the selected `ne=1e12` XSTAR target when reading a generated density-grid directory, so stale placeholder outputs fail clearly instead of silently using the wrong target.
+
 #### O VII high-density benchmark result snapshot (v0.2.82)
 
 The v0.2.81 comparison output is now packaged as a reference validation snapshot under `examples/reference_outputs/` and `docs/validation/xstar_outputs/`:
@@ -1424,7 +1431,7 @@ Example command:
 ```bash
 PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --linear-solver svd \
   --rank-deficient-action svd \
   --negative-population-action keep \

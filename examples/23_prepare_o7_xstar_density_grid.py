@@ -221,7 +221,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="Repository/root directory where xstar_runs/ and xstar_test_run/ will be created")
     parser.add_argument("--densities", nargs="*", default=[], help="Density grid values in cm^-3, e.g. 1 1e4 1e8 1e10 1e12")
-    parser.add_argument("--mapping-csv", default="xstar_o7_density_grid_references.csv", help="Output density-to-XSTAR-lines mapping CSV")
+    parser.add_argument("--mapping-csv", default="xstar_test_run/xstar_o7_density_grid_references.csv", help="Output density-to-XSTAR-lines mapping CSV")
     parser.add_argument("--summary-csv", default="xstar_runs/o7_density_grid_run_plan.csv", help="Output run-plan summary CSV")
     parser.add_argument("--readme", default="xstar_runs/README_o7_density_grid.md", help="Output Markdown file with all commands")
     parser.add_argument("--print-summary", action="store_true", help="Print generated files and commands summary")

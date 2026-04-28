@@ -50,6 +50,60 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 BASELINE_LEVELS = "2,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19,20"
 
 
+def discover_xstar_test_run_grid(base: Path = Path("xstar_test_run")) -> Dict[float, Path]:
+    entries = {
+        1.0: base / "o7_ne1" / "xstar_o7_triplet_lines.csv",
+        1.0e4: base / "o7_ne1e4" / "xstar_o7_triplet_lines.csv",
+        1.0e8: base / "o7_ne1e8" / "xstar_o7_triplet_lines.csv",
+        1.0e10: base / "o7_ne1e10" / "xstar_o7_triplet_lines.csv",
+        1.0e12: base / "o7_ne1e12" / "xstar_o7_triplet_lines.csv",
+    }
+    missing = [str(path) for path in entries.values() if not path.exists()]
+    if missing:
+        raise SystemExit("Missing packaged O VII density-grid XSTAR references: " + ", ".join(missing))
+    return entries
+
+
+def density_spec_from_mapping_csv(mapping_csv: Path, density: float) -> Tuple[str, str, dict]:
+    rows = read_csv_rows(mapping_csv)
+    row = find_density_row(rows, density)
+    xstar_csv = row.get("xstar_lines_csv") or row.get("path") or row.get("csv") or ""
+    if not xstar_csv:
+        raise SystemExit(f"Mapping row for ne={density:g} does not contain xstar_lines_csv/path")
+    xstar_path = Path(xstar_csv)
+    if not xstar_path.exists():
+        for cand in [mapping_csv.parent / xstar_path, Path.cwd() / xstar_path]:
+            if cand.exists():
+                xstar_path = cand
+                break
+    if not xstar_path.exists():
+        raise SystemExit(f"XSTAR CSV for ne={density:g} not found: {xstar_csv}")
+    return str(xstar_path), str(row.get("xstar_value_column") or "emit_outward"), row
+
+
+def expected_o7_high_density_target(density: float) -> Optional[Tuple[float, float]]:
+    if density_equal(float(density), 1.0e12, rel=1e-6):
+        return 0.0830641, 4.51966
+    return None
+
+
+def validate_density_grid_target(row: dict, density: float, allow_unexpected: bool = False) -> None:
+    expected = expected_o7_high_density_target(density)
+    if expected is None or allow_unexpected:
+        return
+    rx = maybe_float(row.get("xstar_R_f_over_i"))
+    gx = maybe_float(row.get("xstar_G_f_plus_i_over_r"))
+    if rx is None or gx is None:
+        return
+    er, eg = expected
+    if abs(rx / er - 1.0) > 5.0e-3 or abs(gx / eg - 1.0) > 5.0e-3:
+        raise SystemExit(
+            f"Density-grid directory appears stale or placeholder-based for ne={density:g}: "
+            f"found XSTAR R/G={rx:.6g}/{gx:.6g}, expected about {er:.6g}/{eg:.6g}. "
+            "Regenerate example 22 with --auto-xstar-test-run-grid or pass --allow-unexpected-xstar-target."
+        )
+
+
 def maybe_float(value) -> Optional[float]:
     try:
         if value is None or value == "":
@@ -115,9 +169,10 @@ def resolve_density_grid_csv(grid_dir: Path) -> Path:
     raise SystemExit(f"Could not find density-grid CSV in {grid_dir}")
 
 
-def xstar_reference_for_density(grid_dir: Path, density: float) -> Tuple[str, str, dict]:
+def xstar_reference_for_density(grid_dir: Path, density: float, allow_unexpected: bool = False) -> Tuple[str, str, dict]:
     csv_path = resolve_density_grid_csv(grid_dir)
     row = find_density_row(read_csv_rows(csv_path), density)
+    validate_density_grid_target(row, density, allow_unexpected=allow_unexpected)
     xstar_csv = row.get("xstar_lines_csv") or ""
     if not xstar_csv:
         # Fall back to the per-density fit summary if needed.
@@ -307,7 +362,10 @@ def run_case(args, case: dict, xstar_csv: str, xstar_col: str, out_dir: Path) ->
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fitsfile")
-    parser.add_argument("--density-grid-dir", default="o7_solver_source_fit_density_xstar_grid")
+    parser.add_argument("--density-grid-dir", default=None, help="Generated output directory from example 22; optional when --auto-xstar-test-run-grid or --xstar-grid-summary-csv is supplied")
+    parser.add_argument("--xstar-grid-summary-csv", help="Density-to-XSTAR-lines mapping CSV used directly for the selected target density")
+    parser.add_argument("--auto-xstar-test-run-grid", action="store_true", help="Use packaged converted O VII density-specific XSTAR CSVs under xstar_test_run/o7_ne*/ instead of requiring a generated density-grid directory")
+    parser.add_argument("--allow-unexpected-xstar-target", action="store_true", help="Allow a generated density-grid directory whose ne=1e12 target does not match the validated density-specific XSTAR reference; diagnostic only")
     parser.add_argument("--density", type=float, default=1.0e12)
     parser.add_argument("--temperature", type=float, default=1.0e6)
     parser.add_argument("--source-levels", default=BASELINE_LEVELS)
@@ -338,7 +396,21 @@ def main() -> None:
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    xstar_csv, xstar_col, density_row = xstar_reference_for_density(Path(args.density_grid_dir), float(args.density))
+    if args.auto_xstar_test_run_grid:
+        grid = discover_xstar_test_run_grid()
+        match = None
+        for den, path in grid.items():
+            if density_equal(den, float(args.density)):
+                match = path
+                break
+        if match is None:
+            raise SystemExit(f"No packaged xstar_test_run density reference for ne={float(args.density):g}")
+        xstar_csv, xstar_col, density_row = str(match), "emit_outward", {"source": "auto-xstar-test-run-grid", "xstar_lines_csv": str(match)}
+    elif args.xstar_grid_summary_csv:
+        xstar_csv, xstar_col, density_row = density_spec_from_mapping_csv(Path(args.xstar_grid_summary_csv), float(args.density))
+    else:
+        grid_dir = Path(args.density_grid_dir or "o7_solver_source_fit_density_xstar_grid")
+        xstar_csv, xstar_col, density_row = xstar_reference_for_density(grid_dir, float(args.density), allow_unexpected=args.allow_unexpected_xstar_target)
     families = [part.strip() for part in args.families.split(",") if part.strip()]
     scales = parse_float_list(args.scales)
     cases = build_scan_cases(families, scales)
@@ -356,7 +428,9 @@ def main() -> None:
         "fitsfile": args.fitsfile,
         "temperature_K": float(args.temperature),
         "electron_density_cm^-3": float(args.density),
-        "density_grid_dir": str(args.density_grid_dir),
+        "density_grid_dir": str(args.density_grid_dir) if args.density_grid_dir else None,
+        "xstar_grid_summary_csv": str(args.xstar_grid_summary_csv) if args.xstar_grid_summary_csv else None,
+        "auto_xstar_test_run_grid": bool(args.auto_xstar_test_run_grid),
         "xstar_lines_csv": xstar_csv,
         "xstar_value_column": xstar_col,
         "density_grid_row": density_row,

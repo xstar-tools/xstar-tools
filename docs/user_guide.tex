@@ -1181,20 +1181,19 @@ electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label
 1e12,xstar_o7_ne1e12_lines.csv,emit_outward,O VII XSTAR ne=1e12
 \end{lstlisting}
 
-Run:
-
-\begin{lstlisting}[language=bash]
 Before running the density-specific grid, create a starter mapping CSV and replace each placeholder \texttt{xstar\_lines\_csv} value with the converted XSTAR line CSV for that density:
 
 \begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \\n  --write-template-grid-csv xstar_o7_density_grid_references.csv
+PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+  --write-template-grid-csv xstar_test_run/xstar_o7_density_grid_references.template.csv
 \end{lstlisting}
 
 Then run the grid with the edited mapping file:
 
+\begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --linear-solver svd \
   --rank-deficient-action svd \
   --negative-population-action keep \
@@ -1220,10 +1219,10 @@ the symmetric level-2-to-3/4/5 metastable coupling and the XSTAR type-68/type-69
 decoded collision blocks.  These scale factors are diagnostic only and do not
 modify the atomic database.
 
-egin{lstlisting}[language=bash]
+\begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --families metastable,type68,type69 \
   --scales 0.1,0.2,0.5,1,2,5,10 \
@@ -1261,7 +1260,7 @@ physical default.
 \begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
   ../xstar/data/atdb.fits \
-  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --auto-xstar-test-run-grid \
   --linear-solver svd \
   --rank-deficient-action svd \
   --negative-population-action keep \
@@ -1280,7 +1279,7 @@ The v0.2.81 comparison output is packaged as reference validation snapshots unde
 The snapshot records that the default \texttt{include} network remains reachable through \(n_e=10^{10}\,\mathrm{cm}^{-3}\) but fails at \(n_e=10^{12}\,\mathrm{cm}^{-3}\).  The diagnostic/experimental \texttt{suppress-resonance} mode reaches the \(n_e=10^{12}\,\mathrm{cm}^{-3}\) density-specific XSTAR target with approximately \(R/G = 0.08307 / 4.5197\).  This is an O VII benchmark result only and should not be treated as a general physical default.
 
 
-\end{document}
+
 
 \subsection{Preparing real O VII XSTAR density-grid references}
 
@@ -1289,7 +1288,7 @@ The density-dependent O VII comparison in \texttt{examples/22\_o7\_solver\_sourc
 \begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
   --root . \
-  --mapping-csv xstar_o7_density_grid_references.csv \
+  --mapping-csv xstar_test_run/xstar_o7_density_grid_references.csv \
   --print-summary
 \end{lstlisting}
 
@@ -1302,7 +1301,7 @@ After running the density-dependent XSTAR-grid comparison, use \texttt{examples/
 \begin{lstlisting}[style=ctterminal]
 PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --reference-density 1 \
   --index-cache \
@@ -1323,7 +1322,7 @@ Version 0.2.74 adds \texttt{examples/27\_o7\_type69\_transition\_sensitivity.py}
 \begin{lstlisting}[language=bash]
 PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
   ../xstar/data/atdb.fits \
-  --density-grid-dir o7_solver_source_fit_density_xstar_grid \
+  --auto-xstar-test-run-grid \
   --density 1e12 \
   --scan-mode record \
   --scales 0.1,0.2,0.5,2,5,10 \
@@ -1384,3 +1383,10 @@ Version 0.2.78 adds a controlled diagnostic/experimental solver option for the h
 \end{lstlisting}
 
 The default, \texttt{include}, preserves the original v0.2.77 behavior.  \texttt{suppress-resonance} suppresses only type-69 excitation from the ground level into the He-like resonance upper level while preserving the reverse/de-excitation rate.  For the validated O VII high-density case this is record 22490, level \texttt{1 -> 7}.  \texttt{suppress-all} suppresses all type-69 excitation out of the ground level and is broader.  This switch is diagnostic and should not yet be treated as a final physical correction.
+
+
+\subsubsection*{v0.2.83 density-grid input layout}
+
+The density-dependent O VII examples no longer require a root-level \texttt{xstar\_o7\_density\_grid\_references.csv} or a pre-existing \texttt{o7\_solver\_source\_fit\_density\_xstar\_grid/} directory.  The compact packaged inputs are the converted XSTAR triplet CSVs under \texttt{xstar\_test\_run/o7\_ne*/xstar\_o7\_triplet\_lines.csv}.  Use \texttt{--auto-xstar-test-run-grid} to discover those inputs.  Density-grid solver directories remain generated outputs.  Example 26 validates the selected \(n_e=10^{12}\,\mathrm{cm}^{-3}\) XSTAR target when reading a generated density-grid directory, so stale placeholder outputs fail clearly instead of silently using the wrong target.
+
+\end{document}

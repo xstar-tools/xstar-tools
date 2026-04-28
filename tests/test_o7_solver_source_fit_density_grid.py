@@ -185,14 +185,15 @@ def test_example21_dry_run_accepts_density_specific_reference_mapping(tmp_path):
     assert "XSTAR target mode: density-specific references" in result.stdout
 
 
-def test_example22_exists_and_requires_density_xstar_grid():
+def test_example22_exists_and_auto_discovers_packaged_density_grid():
     path = ROOT / "examples" / "22_o7_solver_source_fit_density_xstar_grid.py"
     text = path.read_text(encoding="utf-8")
     assert "density-dependent XSTAR references" in text
     assert "21_o7_solver_source_fit_density_grid.py" in text
     result = subprocess.run([sys.executable, str(path), "dummy_atdb.fits", "--dry-run"], cwd=ROOT, text=True, capture_output=True)
-    assert result.returncode != 0
-    assert "requires density-dependent XSTAR references" in result.stderr
+    assert result.returncode == 0
+    assert "Auto-discovered packaged O VII density-grid XSTAR references" in (result.stdout + result.stderr)
+    assert "xstar_test_run/o7_ne1e12/xstar_o7_triplet_lines.csv" in result.stdout
 
 
 def test_example22_writes_template_grid_csv(tmp_path):
