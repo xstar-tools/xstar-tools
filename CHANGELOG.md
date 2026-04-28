@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# v0.2.86 - 2026-04-28
+
+- Fixed the He-like type-69 ground-resonance validation audit for multi-letter element symbols.
+  The audit now normalizes symbols before looking them up in the ATDB element table, so
+  `Ne`, `Mg`, `Si`, `Ar`, `Ca`, and `Fe` are no longer reported as unknown symbols.
+- Added regression coverage for normalized ATDB element lookup in
+  `examples/31_helike_type69_ground_resonance_validation.py`.
+- Clarified that zero-candidate or pending statuses for non-O VII ions are audit results
+  and must not be interpreted as validation until density-specific XSTAR triplet grids are supplied.
+
 # v0.2.85 - 2026-04-28
 
 - Added `examples/31_helike_type69_ground_resonance_validation.py`, a broader He-like type-69 ground-resonance audit/validation-status tool.

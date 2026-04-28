@@ -205,7 +205,7 @@ def audit_ion(fitsfile: str, symbol: str, stage: int, temperatures: Sequence[flo
     from xstar_atomic.collisions import extract_collisions
     from xstar_atomic.solver import is_type69_ground_resonance_excitation_row
 
-    z = SYMBOL_TO_Z.get(symbol)
+    z = SYMBOL_TO_Z.get(symbol.upper())
     if z is None:
         raise ValueError(f"unknown element symbol {symbol!r}")
     ion_name = f"{symbol} {HELIKE_ROMAN_BY_Z.get(z, stage)}"

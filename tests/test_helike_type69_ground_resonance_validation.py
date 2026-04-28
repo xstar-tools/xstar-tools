@@ -42,3 +42,11 @@ def test_non_o7_status_pending_without_references(tmp_path):
     assert status == "pending_xstar_density_grid"
     assert nrefs == 0
     assert "xstar" in note.lower()
+
+
+def test_multiletter_symbols_are_normalized_and_uppercase_lookup_is_used():
+    mod = load_module()
+    for symbol in ["Ne", "Mg", "Si", "Ar", "Ca", "Fe"]:
+        assert mod.normalize_symbol(symbol) == symbol
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "SYMBOL_TO_Z.get(symbol.upper())" in source
