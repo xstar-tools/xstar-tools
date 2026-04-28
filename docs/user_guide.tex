@@ -1332,3 +1332,13 @@ de-excitation-only, and direction-specific cases.  The diagnostic solver option
 \texttt{--collision-record-direction-scale RECORD:DIRECTION:SCALE} is intended
 only for interpretation, because it can deliberately break detailed balance in
 order to isolate excitation and de-excitation effects.
+
+\subsection{v0.2.78 diagnostic type-69 ground-excitation suppression switch}
+
+Version 0.2.78 adds a controlled diagnostic/experimental solver option for the high-density O VII investigation:
+
+\begin{lstlisting}[language=bash]
+--collision-type69-ground-excitation-mode include|suppress-resonance|suppress-all
+\end{lstlisting}
+
+The default, \texttt{include}, preserves the original v0.2.77 behavior.  \texttt{suppress-resonance} suppresses only type-69 excitation from the ground level into the He-like resonance upper level while preserving the reverse/de-excitation rate.  For the validated O VII high-density case this is record 22490, level \texttt{1 -> 7}.  \texttt{suppress-all} suppresses all type-69 excitation out of the ground level and is broader.  This switch is diagnostic and should not yet be treated as a final physical correction.

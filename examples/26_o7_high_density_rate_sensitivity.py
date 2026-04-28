@@ -246,6 +246,9 @@ def run_case(args, case: dict, xstar_csv: str, xstar_col: str, out_dir: Path) ->
         cmd += ["--collision-data-type-scale", str(spec)]
     for spec in case.get("pair_scales") or []:
         cmd += ["--collision-pair-scale", str(spec)]
+    mode = getattr(args, "collision_type69_ground_excitation_mode", "include") or "include"
+    if mode != "include":
+        cmd += ["--collision-type69-ground-excitation-mode", str(mode)]
     if args.index_cache:
         if args.index_cache_path:
             cmd += ["--index-cache", "--index-cache-path", str(args.index_cache_path), "--index-cache-format", args.index_cache_format]
@@ -327,6 +330,8 @@ def main() -> None:
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
     parser.add_argument("--out-dir", default="o7_high_density_rate_sensitivity")
     parser.add_argument("--keep-unit-runs", action="store_true")
+    parser.add_argument("--collision-type69-ground-excitation-mode", choices=["include", "suppress-resonance", "suppress-all"], default="include",
+                        help="Diagnostic/experimental type-69 ground-excitation mode forwarded to example 20/solver for every case.")
     parser.add_argument("--print-subprocess-summary", action="store_true")
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
@@ -357,6 +362,7 @@ def main() -> None:
         "density_grid_row": density_row,
         "families": families,
         "scales": scales,
+        "collision_type69_ground_excitation_mode": args.collision_type69_ground_excitation_mode,
         "n_cases": len(rows),
         "n_reachable": len(reachable),
         "best_case": best,

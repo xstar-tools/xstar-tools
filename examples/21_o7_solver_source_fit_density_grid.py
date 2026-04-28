@@ -303,6 +303,9 @@ def add_solver_args(cmd: List[str], args) -> List[str]:
         cmd += ["--reject-large-residual"]
     if args.prune_null_rate_levels:
         cmd += ["--prune-null-rate-levels", "--null-rate-floor", f"{float(args.null_rate_floor):.16g}"]
+    mode = getattr(args, "collision_type69_ground_excitation_mode", "include") or "include"
+    if mode != "include":
+        cmd += ["--collision-type69-ground-excitation-mode", str(mode)]
     return cmd
 
 
@@ -587,6 +590,8 @@ def main() -> None:
     parser.add_argument("--prune-null-rate-levels", action="store_true", default=True)
     parser.add_argument("--no-prune-null-rate-levels", dest="prune_null_rate_levels", action="store_false")
     parser.add_argument("--null-rate-floor", type=float, default=0.0)
+    parser.add_argument("--collision-type69-ground-excitation-mode", choices=["include", "suppress-resonance", "suppress-all"], default="include",
+                        help="Diagnostic/experimental type-69 ground-excitation mode forwarded to example 20/solver.")
     parser.add_argument("--index-cache", action="store_true")
     parser.add_argument("--index-cache-path")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")

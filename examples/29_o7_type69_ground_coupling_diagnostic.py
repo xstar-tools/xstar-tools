@@ -220,6 +220,8 @@ def build_cases(record: int, record_scales: Sequence[float], type69_scales: Sequ
             cases.append({"case": safe_name(f"record_{record}_deexcitation_x{scale:g}"), "family": "deexcitation_direction", "record_scales": [], "data_type_scales": [], "direction_scales": [f"{record}:deexcitation:{float(scale):.16g}"], "scale": float(scale), "note": "scale only upper->lower de-excitation for this record"})
     cases.append({"case": f"record_{record}_excitation_only", "family": "direction_isolation", "record_scales": [], "data_type_scales": [], "direction_scales": [f"{record}:deexcitation:0"], "scale": 0.0, "note": "keep excitation, remove de-excitation"})
     cases.append({"case": f"record_{record}_deexcitation_only", "family": "direction_isolation", "record_scales": [], "data_type_scales": [], "direction_scales": [f"{record}:excitation:0"], "scale": 0.0, "note": "keep de-excitation, remove excitation"})
+    cases.append({"case": "type69_ground_resonance_suppressed", "family": "ground_excitation_mode", "record_scales": [], "data_type_scales": [], "direction_scales": [], "ground_excitation_mode": "suppress-resonance", "scale": 0.0, "note": "solver switch: suppress type-69 ground -> resonance excitation while preserving de-excitation"})
+    cases.append({"case": "type69_ground_excitation_suppressed_all", "family": "ground_excitation_mode", "record_scales": [], "data_type_scales": [], "direction_scales": [], "ground_excitation_mode": "suppress-all", "scale": 0.0, "note": "solver switch: suppress all type-69 excitation out of the ground level"})
     return cases
 
 
@@ -262,6 +264,9 @@ def run_fit_case(args, case: dict, xstar_csv: str, xstar_col: str, out_dir: Path
         cmd += ["--collision-record-scale", str(spec)]
     for spec in case.get("direction_scales") or []:
         cmd += ["--collision-record-direction-scale", str(spec)]
+    mode = case.get("ground_excitation_mode") or "include"
+    if mode != "include":
+        cmd += ["--collision-type69-ground-excitation-mode", str(mode)]
     if args.print_commands:
         print("$ " + " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
@@ -283,6 +288,7 @@ def run_fit_case(args, case: dict, xstar_csv: str, xstar_col: str, out_dir: Path
         "collision_data_type_scale": ";".join(case.get("data_type_scales") or []),
         "collision_record_scale": ";".join(case.get("record_scales") or []),
         "collision_record_direction_scale": ";".join(case.get("direction_scales") or []),
+        "collision_type69_ground_excitation_mode": case.get("ground_excitation_mode") or "include",
         "note": case.get("note"),
         "xstar_R_f_over_i": r_x,
         "xstar_G_f_plus_i_over_r": g_x,

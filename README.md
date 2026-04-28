@@ -1241,3 +1241,33 @@ summary.  Direction-specific cases use the diagnostic solver option
 not physical corrections by themselves, because they intentionally break
 detailed balance to separate the lower-to-upper excitation and upper-to-lower
 de-excitation influence of a single ATDB collision record.
+
+### v0.2.78 diagnostic type-69 ground-excitation suppression switch
+
+Version 0.2.78 adds a controlled diagnostic/experimental solver option for the high-density O VII investigation:
+
+```bash
+--collision-type69-ground-excitation-mode include|suppress-resonance|suppress-all
+```
+
+The default, `include`, preserves the original v0.2.77 behavior.  `suppress-resonance` suppresses only type-69 excitation from the ground level into the He-like resonance upper level while preserving the reverse/de-excitation rate.  For the validated O VII high-density case this is record 22490, level `1 -> 7` (`1s2.1S_0 -> 1s.2p 1P_1`).  `suppress-all` suppresses all type-69 excitation out of the ground level and is broader.
+
+Example density-grid rerun using the targeted switch:
+
+```bash
+PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
+  ../xstar/data/atdb.fits \
+  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --collision-type69-ground-excitation-mode suppress-resonance \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_solver_source_fit_density_xstar_grid_type69_suppressed \
+  --print-summary
+```
+
+The option is diagnostic and should not yet be treated as a final physical correction.  It makes the v0.2.77 conclusion reproducible with a single switch: the high-density O VII XSTAR target is recovered when the ground-to-resonance type-69 excitation path is suppressed while de-excitation is retained.

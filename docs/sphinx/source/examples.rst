@@ -669,3 +669,9 @@ high-density O VII mismatch is driven by the whole type-69 record 22490, by its
 excitation direction, or by its de-excitation direction.  It uses the diagnostic
 ``--collision-record-direction-scale`` solver option; this option is for
 interpretation only and is not a physical correction.
+
+
+v0.2.78 diagnostic type-69 ground-excitation suppression switch
+-----------------------------------------------------------------
+
+Version 0.2.78 adds ``--collision-type69-ground-excitation-mode include|suppress-resonance|suppress-all``.  The targeted ``suppress-resonance`` mode suppresses type-69 excitation from the ground level into the He-like resonance upper level while preserving de-excitation; for O VII this targets record 22490, level 1 -> 7.  The option is diagnostic/experimental and is propagated through examples 20, 21/22, 26, and 29.

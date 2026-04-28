@@ -22,6 +22,8 @@ def test_ground_coupling_case_builder_includes_direction_isolation():
     assert "record_22490_removed" in names
     assert "record_22490_excitation_only" in names
     assert "record_22490_deexcitation_only" in names
+    assert "type69_ground_resonance_suppressed" in names
+    assert "type69_ground_excitation_suppressed_all" in names
     assert any("22490:deexcitation:0" in ";".join(c.get("direction_scales") or []) for c in cases)
     assert any("22490:excitation:0" in ";".join(c.get("direction_scales") or []) for c in cases)
 
@@ -60,3 +62,11 @@ def test_ground_coupling_top_weight_ignores_empty_directory_path(tmp_path):
     assert top_level == 4
     assert top_weight == 1.0
     assert neff == 1.0
+
+
+def test_ground_coupling_case_builder_includes_solver_switch_modes():
+    mod = load_example("29_o7_type69_ground_coupling_diagnostic.py")
+    cases = mod.build_cases(22490, [0.1], [0.1], [0.0])
+    by_name = {c["case"]: c for c in cases}
+    assert by_name["type69_ground_resonance_suppressed"]["ground_excitation_mode"] == "suppress-resonance"
+    assert by_name["type69_ground_excitation_suppressed_all"]["ground_excitation_mode"] == "suppress-all"

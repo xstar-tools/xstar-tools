@@ -202,6 +202,36 @@ def parse_record_direction_scale_specs(values: Optional[Sequence[str]]) -> Dict[
     return out
 
 
+def _text_contains_resonance_1p1(value: object) -> bool:
+    text = str(value or "").replace(" ", "").lower()
+    return ("1p" in text and "1p_1" in text) or "1s1.2p1.1p_1" in text or "1p1" in text
+
+
+def is_type69_ground_resonance_excitation_row(row: dict) -> bool:
+    """Return True for diagnostic type-69 ground -> resonance-upper excitation rows.
+
+    For the O VII ATDB records studied in v0.2.74--v0.2.77 this is record
+    22490, level 1 -> 7.  The level-label checks keep the option somewhat more
+    general for He-like ions when labels are available, while the level-1/7
+    fallback preserves the validated O VII diagnostic behavior.
+    """
+    if maybe_int(row.get("data_type")) != 69:
+        return False
+    lower = maybe_int(row.get("lower_level"))
+    upper = maybe_int(row.get("upper_level"))
+    if lower != 1 or upper is None:
+        return False
+    upper_label = row.get("upper_label") or row.get("upper_level_label") or row.get("level_upper_label") or row.get("label_upper")
+    if _text_contains_resonance_1p1(upper_label):
+        return True
+    # Validated O VII fallback: level 7 is 1s.2p 1P_1 in the current ATDB decode.
+    return upper == 7
+
+
+def _type69_ground_excitation_mode(args) -> str:
+    return str(getattr(args, "collision_type69_ground_excitation_mode", "include") or "include").strip().lower()
+
+
 def collision_scale_for_row(row: dict, args) -> float:
     """Return the diagnostic collision-rate scale for one evaluated row."""
     scale = float(getattr(args, 'collision_rate_scale', 1.0) or 1.0)
@@ -233,6 +263,13 @@ def collision_direction_scales_for_row(row: dict, args) -> Tuple[float, float]:
     if rec is not None:
         exc_scale *= float(direction_scales.get((rec, 'excitation'), 1.0))
         deexc_scale *= float(direction_scales.get((rec, 'deexcitation'), 1.0))
+    mode = _type69_ground_excitation_mode(args)
+    if mode == "suppress-all" and maybe_int(row.get("data_type")) == 69 and maybe_int(row.get("lower_level")) == 1:
+        exc_scale *= 0.0
+    elif mode == "suppress-resonance" and is_type69_ground_resonance_excitation_row(row):
+        exc_scale *= 0.0
+    elif mode != "include":
+        raise ValueError(f"invalid --collision-type69-ground-excitation-mode {mode!r}")
     for val in (exc_scale, deexc_scale):
         if not math.isfinite(val) or val < 0.0:
             raise ValueError(f"invalid diagnostic direction collision scale {val!r} for row {row}")
@@ -1244,6 +1281,8 @@ def main(argv=None) -> None:
                    help="Diagnostic scale for one collision record number, e.g. 12345:0.5. May be repeated.")
     p.add_argument("--collision-record-direction-scale", action="append", default=[], metavar="RECORD:DIRECTION:SCALE",
                    help="Diagnostic direction-specific scale for one collision record, e.g. 22490:deexcitation:0.0. This intentionally breaks detailed balance and is for diagnostics only.")
+    p.add_argument("--collision-type69-ground-excitation-mode", choices=["include", "suppress-resonance", "suppress-all"], default="include",
+                   help="Diagnostic/experimental handling of type-69 excitation from the ground level. suppress-resonance suppresses only ground -> 1s.2p 1P1 resonance-upper excitation, validated for O VII record 22490; suppress-all suppresses all type-69 ground-level excitation while preserving de-excitation.")
     p.add_argument("--electron-density-for-lmixing", type=float, default=None,
                    help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
     p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
@@ -1498,6 +1537,7 @@ def main(argv=None) -> None:
             "collision_pair_scale": list(args.collision_pair_scale or []),
             "collision_record_scale": list(args.collision_record_scale or []),
             "collision_record_direction_scale": list(args.collision_record_direction_scale or []),
+            "collision_type69_ground_excitation_mode": args.collision_type69_ground_excitation_mode,
             "note": "Diagnostic sensitivity only; these scale evaluated collision rates and are not physical atomic-data edits.",
         },
         "source_sink_interface": {
