@@ -21,3 +21,10 @@ def test_type69_ground_resonance_row_helper_is_present_in_source():
     assert "lower != 1" in text
     assert "upper == 7" in text
     assert "data_type" in text and "!= 69" in text
+
+
+def test_example20_exposes_type69_ground_excitation_mode_option():
+    text = (Path(__file__).resolve().parents[1] / "examples" / "20_o7_solver_source_fit.py").read_text()
+    assert "--collision-type69-ground-excitation-mode" in text
+    assert "collision_type69_ground_excitation_mode" in text
+    assert "suppress-resonance" in text

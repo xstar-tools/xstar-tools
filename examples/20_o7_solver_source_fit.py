@@ -422,6 +422,12 @@ def main() -> None:
                         help="Diagnostic collision-record scale passed to xstar_atomic.solver, e.g. 12345:0.5. May be repeated.")
     parser.add_argument("--collision-record-direction-scale", action="append", default=[], metavar="RECORD:DIRECTION:SCALE",
                         help="Diagnostic direction-specific record scale passed to xstar_atomic.solver, e.g. 22490:deexcitation:0.0. May be repeated.")
+    parser.add_argument("--collision-type69-ground-excitation-mode",
+                        choices=["include", "suppress-resonance", "suppress-all"],
+                        default="include",
+                        help=("Diagnostic/experimental handling of type-69 excitation out of the ground level. "
+                              "suppress-resonance suppresses ground -> He-like resonance-upper-level excitation "
+                              "while preserving de-excitation; suppress-all suppresses all type-69 ground excitation."))
     parser.add_argument("--index-cache", action="store_true")
     parser.add_argument("--index-cache-path", help="Explicit hierarchy index-cache filename passed to xstar_atomic.solver. Use this to keep the cache away from atdb.fits.")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
