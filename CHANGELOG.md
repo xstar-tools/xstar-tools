@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.2.80 - 2026-04-28
+
+- Fixed `--collision-type69-ground-excitation-mode suppress-resonance` in `xstar_atomic.solver`.
+  v0.2.79 validated the command-line propagation through examples 22 -> 21 -> 20, but the row-level
+  mode handler incorrectly raised an error for non-resonance collision rows whenever the mode was
+  `suppress-resonance`. The handler now validates the mode once, then applies suppression only to
+  matching type-69 ground-to-resonance rows and leaves all other collision rows unchanged.
+- Added a regression test that `suppress-resonance` leaves unrelated type-69 rows valid while suppressing
+  the O VII ground-to-resonance excitation row.
+
 ## v0.2.79 - 2026-04-27
 
 - Fixed propagation of `--collision-type69-ground-excitation-mode` through the chained O VII density-grid workflow.  In v0.2.78, examples 21/22 forwarded the option to `examples/20_o7_solver_source_fit.py`, but example 20 did not expose the corresponding CLI parser option, causing an `unrecognized arguments` failure.

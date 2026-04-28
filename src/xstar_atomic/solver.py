@@ -264,12 +264,13 @@ def collision_direction_scales_for_row(row: dict, args) -> Tuple[float, float]:
         exc_scale *= float(direction_scales.get((rec, 'excitation'), 1.0))
         deexc_scale *= float(direction_scales.get((rec, 'deexcitation'), 1.0))
     mode = _type69_ground_excitation_mode(args)
+    valid_modes = {"include", "suppress-resonance", "suppress-all"}
+    if mode not in valid_modes:
+        raise ValueError(f"invalid --collision-type69-ground-excitation-mode {mode!r}")
     if mode == "suppress-all" and maybe_int(row.get("data_type")) == 69 and maybe_int(row.get("lower_level")) == 1:
         exc_scale *= 0.0
     elif mode == "suppress-resonance" and is_type69_ground_resonance_excitation_row(row):
         exc_scale *= 0.0
-    elif mode != "include":
-        raise ValueError(f"invalid --collision-type69-ground-excitation-mode {mode!r}")
     for val in (exc_scale, deexc_scale):
         if not math.isfinite(val) or val < 0.0:
             raise ValueError(f"invalid diagnostic direction collision scale {val!r} for row {row}")

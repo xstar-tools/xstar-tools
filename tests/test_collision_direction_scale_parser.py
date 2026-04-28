@@ -28,3 +28,11 @@ def test_example20_exposes_type69_ground_excitation_mode_option():
     assert "--collision-type69-ground-excitation-mode" in text
     assert "collision_type69_ground_excitation_mode" in text
     assert "suppress-resonance" in text
+
+
+def test_suppress_resonance_mode_validates_once_then_leaves_unrelated_rows():
+    text = (Path(__file__).resolve().parents[1] / "src" / "xstar_atomic" / "solver.py").read_text()
+    assert 'valid_modes = {"include", "suppress-resonance", "suppress-all"}' in text
+    assert 'if mode not in valid_modes:' in text
+    assert 'elif mode == "suppress-resonance" and is_type69_ground_resonance_excitation_row(row):' in text
+    assert 'elif mode != "include":' not in text

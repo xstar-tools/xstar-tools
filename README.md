@@ -1,5 +1,10 @@
 # xstar-atomic
 
+### v0.2.80 note
+
+This release fixes the row-level handling of `--collision-type69-ground-excitation-mode suppress-resonance`, so the full density-grid chain can now pass the diagnostic switch through to `xstar_atomic.solver` without rejecting unrelated collision rows.
+
+
 `xstar-atomic` is an early research Python package for direct access to XSTAR's packed atomic database FITS file, usually:
 
 ```text
