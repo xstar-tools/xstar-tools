@@ -1427,4 +1427,8 @@ PYTHONPATH=src python examples/32_prepare_helike_xstar_density_grids.py \
 
 After running XSTAR externally and converting \texttt{xout\_lines1.fits}, the generated per-ion mappings, such as \texttt{xstar\_test\_run/xstar\_c5\_density\_grid\_references.csv}, \texttt{xstar\_test\_run/xstar\_mg11\_density\_grid\_references.csv}, and \texttt{xstar\_test\_run/xstar\_ca19\_density\_grid\_references.csv}, can be used for ion-specific density-grid comparisons.  Until those converted XSTAR triplet grids are supplied and compared, only O VII should be treated as validated.
 
+
+
+Version 0.2.89 note: the He-like density-grid front end now detects stale non-O~VII mapping CSVs that still point to the O~VII placeholder file and repairs them when the correct converted per-density files exist under 	exttt{xstar\_test\_run/<ion>\_ne*/}.  For example, a C~V mapping is repaired to use 	exttt{xstar\_test\_run/c5\_ne*/xstar\_c5\_triplet\_lines.csv}, with the original mapping saved as a 	exttt{.bak} file.
+
 \end{document}

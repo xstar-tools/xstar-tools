@@ -1,0 +1,35 @@
+import csv
+import importlib.util
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[1] / "examples" / "22_o7_solver_source_fit_density_xstar_grid.py"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("density_xstar_grid", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_repair_stale_c5_mapping(tmp_path, monkeypatch):
+    mod = load_module()
+    monkeypatch.chdir(tmp_path)
+    for dirname in ["c5_ne1", "c5_ne1e12"]:
+        p = tmp_path / "xstar_test_run" / dirname / "xstar_c5_triplet_lines.csv"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("ion,lower_level,upper_level,wavelength,emit_outward\n", encoding="utf-8")
+    mapping = tmp_path / "xstar_test_run" / "xstar_c5_density_grid_references.csv"
+    mapping.parent.mkdir(parents=True, exist_ok=True)
+    mapping.write_text(
+        "electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label\n"
+        "1,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,stale\n"
+        "1e12,xstar_test_run/xstar_o7_triplet_lines.csv,emit_outward,stale\n",
+        encoding="utf-8",
+    )
+    mod._repair_stale_helike_grid_csv(mapping, ["--element", "C", "--ion-stage", "5"])
+    rows = list(csv.DictReader(mapping.open(newline="", encoding="utf-8")))
+    assert rows[0]["xstar_lines_csv"] == "xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv"
+    assert rows[1]["xstar_lines_csv"] == "xstar_test_run/c5_ne1e12/xstar_c5_triplet_lines.csv"
+    assert mapping.with_suffix(mapping.suffix + ".bak").exists()

@@ -37,6 +37,97 @@ def _has_option(argv: Sequence[str], *names: str) -> bool:
     return any(arg in names or any(arg.startswith(name + "=") for name in names) for arg in argv)
 
 
+def _get_option_value(argv: Sequence[str], name: str, default: str | None = None) -> str | None:
+    prefix = name + "="
+    for i, arg in enumerate(argv):
+        if arg == name and i + 1 < len(argv):
+            return str(argv[i + 1])
+        if str(arg).startswith(prefix):
+            return str(arg)[len(prefix):]
+    return default
+
+
+def _density_tag_for_path(density: float) -> str:
+    mapping = {1.0: "ne1", 1.0e4: "ne1e4", 1.0e8: "ne1e8", 1.0e10: "ne1e10", 1.0e12: "ne1e12"}
+    for key, tag in mapping.items():
+        if abs(float(density) - key) <= max(1e-12 * max(abs(key), 1.0), 1e-9):
+            return tag
+    text = f"{float(density):.12g}".replace("+", "")
+    return "ne" + text.replace(".", "p")
+
+
+def _find_csv_density_column(row: dict) -> str | None:
+    for key in ("electron_density_cm^-3", "electron_density_cm-3", "electron_density", "density", "ne"):
+        if key in row and str(row[key]).strip():
+            return key
+    return None
+
+
+def _repair_stale_helike_grid_csv(path: Path, argv: Sequence[str]) -> None:
+    """Repair old candidate-ion mapping CSVs that still point to O VII placeholders.
+
+    v0.2.87 could leave ``xstar_c5_density_grid_references.csv`` style files
+    pointing to ``xstar_test_run/xstar_o7_triplet_lines.csv``.  If the expected
+    per-density converted He-like triplet CSVs already exist, repair the mapping
+    in place and keep a ``.bak`` copy.
+    """
+    element = _get_option_value(argv, "--element", "O") or "O"
+    stage_text = _get_option_value(argv, "--ion-stage", "7") or "7"
+    try:
+        stage = int(float(stage_text))
+    except ValueError:
+        return
+    symbol = element.strip()
+    tag = f"{symbol.lower()}{stage}"
+    if symbol.upper() == "O" and stage == 7:
+        return
+    if not path.exists():
+        return
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        fieldnames = list(reader.fieldnames or [])
+    if not rows:
+        return
+    changed = False
+    for row in rows:
+        dcol = _find_csv_density_column(row)
+        if dcol is None:
+            continue
+        try:
+            density = float(row[dcol])
+        except ValueError:
+            continue
+        expected = Path("xstar_test_run") / f"{tag}_{_density_tag_for_path(density)}" / f"xstar_{tag}_triplet_lines.csv"
+        current = str(row.get("xstar_lines_csv") or row.get("path") or "").strip()
+        if current == str(expected):
+            continue
+        if expected.exists() and ("xstar_o7_triplet_lines.csv" in current or not Path(current).exists()):
+            if "xstar_lines_csv" not in fieldnames:
+                fieldnames.append("xstar_lines_csv")
+            row["xstar_lines_csv"] = str(expected)
+            if "xstar_value_column" in fieldnames or not row.get("xstar_value_column"):
+                if "xstar_value_column" not in fieldnames:
+                    fieldnames.append("xstar_value_column")
+                row["xstar_value_column"] = "emit_outward"
+            if "xstar_target_label" in fieldnames or not row.get("xstar_target_label"):
+                if "xstar_target_label" not in fieldnames:
+                    fieldnames.append("xstar_target_label")
+                row["xstar_target_label"] = f"{symbol} {stage} XSTAR ne={density:.12g} cm^-3"
+            changed = True
+    if changed:
+        backup = path.with_suffix(path.suffix + ".bak")
+        if not backup.exists():
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key: row.get(key, "") for key in fieldnames})
+        print(f"Repaired stale He-like density-grid mapping CSV: {path}")
+        print(f"Original mapping saved as: {backup}")
+
+
 def discover_xstar_test_run_grid(base: Path = Path("xstar_test_run")) -> List[str]:
     """Return DENSITY:CSV specs for packaged converted O VII density-grid references.
 
@@ -141,6 +232,7 @@ def main() -> None:
     cmd = [sys.executable, str(script)] + remaining
     if known.xstar_grid_summary_csv:
         grid_path = Path(known.xstar_grid_summary_csv)
+        _repair_stale_helike_grid_csv(grid_path, remaining)
         if not grid_path.exists():
             write_xstar_grid_template(grid_path)
             print_template_message(grid_path)
