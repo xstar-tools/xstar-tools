@@ -689,3 +689,21 @@ O VII high-density benchmark result snapshot (v0.2.82)
 The v0.2.81 comparison output is packaged as reference validation snapshots under ``examples/reference_outputs/`` and ``docs/validation/xstar_outputs/``: ``o7_density_grid_type69_mode_compare.csv`` and ``o7_density_grid_type69_mode_compare_summary.json``.
 
 The snapshot records that the default ``include`` network remains reachable through ``ne=1e10 cm^-3`` but fails at ``ne=1e12 cm^-3``.  The diagnostic/experimental ``suppress-resonance`` mode reaches the ``ne=1e12 cm^-3`` density-specific XSTAR target with approximately ``R/G = 0.08307 / 4.5197``.  This is an O VII benchmark result only and should not be treated as a general physical default.
+
+
+He-like type-69 ground-resonance validation audit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Example 31 audits candidate type-69 ground-to-resonance records across several He-like ions and reports whether each ion has density-specific XSTAR triplet references available for validation.  O VII is currently validated by the packaged density-grid benchmark; other ions remain pending until their XSTAR density grids are supplied.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/31_helike_type69_ground_resonance_validation.py \
+     ../xstar/data/atdb.fits \
+     --ions "C V,N VI,O VII,Ne IX,Mg XI,Si XIII,S XV,Ar XVII,Ca XIX,Fe XXV" \
+     --temperature-grid 1e6 \
+     --density 1e12 \
+     --index-cache \
+     --index-cache-path .xstar_atomic_cache/atdb_helike_index.npz \
+     --out-dir helike_type69_ground_resonance_validation \
+     --print-summary

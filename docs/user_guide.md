@@ -1442,3 +1442,22 @@ PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
   --out-dir o7_density_grid_type69_mode_compare \
   --print-summary
 ```
+
+
+### He-like type-69 ground-resonance validation audit
+
+Example 31 broadens the O VII type-69 investigation to other He-like ions.  It audits candidate type-69 ground-to-resonance excitation records for ions such as C V, N VI, O VII, Ne IX, Mg XI, Si XIII, S XV, Ar XVII, Ca XIX, and Fe XXV, and writes candidate and validation-status tables.  The script does not mark non-O VII ions as validated unless density-specific XSTAR triplet grids are supplied; without those external references they remain `pending_xstar_density_grid`.  O VII is the currently validated benchmark because the package includes compact converted density-specific XSTAR references under `xstar_test_run/o7_ne*/`.
+
+```bash
+PYTHONPATH=src python examples/31_helike_type69_ground_resonance_validation.py \
+  ../xstar/data/atdb.fits \
+  --ions "C V,N VI,O VII,Ne IX,Mg XI,Si XIII,S XV,Ar XVII,Ca XIX,Fe XXV" \
+  --temperature-grid 1e6 \
+  --density 1e12 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_helike_index.npz \
+  --out-dir helike_type69_ground_resonance_validation \
+  --print-summary
+```
+
+This keeps `suppress-resonance` as a diagnostic/experimental O VII benchmark mode until similar density-grid XSTAR validation exists for other He-like ions.
