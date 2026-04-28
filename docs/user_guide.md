@@ -1397,3 +1397,27 @@ PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
 ```
 
 The option is diagnostic and should not yet be treated as a final physical correction.  It makes the v0.2.77 conclusion reproducible with a single switch: the high-density O VII XSTAR target is recovered when the ground-to-resonance type-69 excitation path is suppressed while de-excitation is retained.
+
+
+### O VII type-69 mode comparison (v0.2.81)
+
+`examples/30_o7_density_grid_type69_mode_compare.py` runs the density-dependent O VII source-fit grid twice: once with the original type-69 handling (`include`) and once with the diagnostic/experimental `suppress-resonance` mode.  It merges the two grid outputs into `o7_density_grid_type69_mode_compare.csv`, including density, XSTAR R/G targets, include-mode R/G and reachability, suppress-resonance R/G and reachability, mismatch-improvement factors, source-weight L1 changes, and top fitted source levels.
+
+The `suppress-resonance` mode suppresses type-69 excitation from the ground level into the He-like resonance upper level while preserving de-excitation.  For the O VII benchmark this corresponds to record 22490 (`1s2.1S_0 -> 1s.2p 1P_1`).  This mode is diagnostic/experimental: it is validated for the O VII high-density benchmark and should not be treated as a general physical default.
+
+Example command:
+
+```bash
+PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
+  ../xstar/data/atdb.fits \
+  --xstar-grid-summary-csv xstar_o7_density_grid_references.csv \
+  --linear-solver svd \
+  --rank-deficient-action svd \
+  --negative-population-action keep \
+  --prune-null-rate-levels \
+  --combined-source-total-rate 1.0 \
+  --index-cache \
+  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
+  --out-dir o7_density_grid_type69_mode_compare \
+  --print-summary
+```

@@ -675,3 +675,9 @@ v0.2.78 diagnostic type-69 ground-excitation suppression switch
 -----------------------------------------------------------------
 
 Version 0.2.78 adds ``--collision-type69-ground-excitation-mode include|suppress-resonance|suppress-all``.  The targeted ``suppress-resonance`` mode suppresses type-69 excitation from the ground level into the He-like resonance upper level while preserving de-excitation; for O VII this targets record 22490, level 1 -> 7.  The option is diagnostic/experimental and is propagated through examples 20, 21/22, 26, and 29.
+
+
+O VII type-69 mode comparison (v0.2.81)
+----------------------------------------
+
+``examples/30_o7_density_grid_type69_mode_compare.py`` runs the O VII density-grid benchmark with both the original ``include`` type-69 network and the diagnostic/experimental ``suppress-resonance`` mode, then writes a merged CSV comparing R/G ratios, reachability, mismatch-improvement factors, source-weight changes, and top fitted source levels.  The suppress-resonance mode is validated for the O VII high-density benchmark only and is not a general physical default.

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.2.81 - 2026-04-28
+
+- Added `examples/30_o7_density_grid_type69_mode_compare.py`, a side-by-side O VII density-grid comparison of the original type-69 network (`include`) and the diagnostic `suppress-resonance` mode.
+- The comparison runs the density-dependent XSTAR grid workflow for both modes, then writes `o7_density_grid_type69_mode_compare.csv` and a JSON summary with per-density R/G ratios, reachability flags, mismatch-improvement factors, source-weight L1 changes, and top fitted source levels.
+- Documented that `--collision-type69-ground-excitation-mode suppress-resonance` is diagnostic/experimental: it is validated for the O VII high-density benchmark but is not a general physical default.
+
 ## v0.2.80 - 2026-04-28
 
 - Fixed `--collision-type69-ground-excitation-mode suppress-resonance` in `xstar_atomic.solver`.
