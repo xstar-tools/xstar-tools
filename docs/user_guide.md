@@ -1405,6 +1405,20 @@ The option is diagnostic and should not yet be treated as a final physical corre
 
 The `suppress-resonance` mode suppresses type-69 excitation from the ground level into the He-like resonance upper level while preserving de-excitation.  For the O VII benchmark this corresponds to record 22490 (`1s2.1S_0 -> 1s.2p 1P_1`).  This mode is diagnostic/experimental: it is validated for the O VII high-density benchmark and should not be treated as a general physical default.
 
+#### O VII high-density benchmark result snapshot (v0.2.82)
+
+The v0.2.81 comparison output is now packaged as a reference validation snapshot under `examples/reference_outputs/` and `docs/validation/xstar_outputs/`:
+
+```text
+o7_density_grid_type69_mode_compare.csv
+o7_density_grid_type69_mode_compare_summary.json
+```
+
+The snapshot records the side-by-side result for the density-specific XSTAR grid.  In the default `include` mode, all rows through `ne=1e10 cm^-3` remain reachable, but the `ne=1e12 cm^-3` row fails with approximately `R/G = 0.0378 / 3.202`.  In the diagnostic/experimental `suppress-resonance` mode, the high-density row becomes reachable with approximately `R/G = 0.08307 / 4.5197`, matching the XSTAR target `R/G = 0.083064 / 4.51966`.
+
+This is a benchmark validation result for O VII only.  The `suppress-resonance` option should remain explicitly diagnostic/experimental until tested against additional He-like ions, temperatures, and full XSTAR model configurations.
+
+
 Example command:
 
 ```bash

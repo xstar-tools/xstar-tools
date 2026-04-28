@@ -681,3 +681,11 @@ O VII type-69 mode comparison (v0.2.81)
 ----------------------------------------
 
 ``examples/30_o7_density_grid_type69_mode_compare.py`` runs the O VII density-grid benchmark with both the original ``include`` type-69 network and the diagnostic/experimental ``suppress-resonance`` mode, then writes a merged CSV comparing R/G ratios, reachability, mismatch-improvement factors, source-weight changes, and top fitted source levels.  The suppress-resonance mode is validated for the O VII high-density benchmark only and is not a general physical default.
+
+
+O VII high-density benchmark result snapshot (v0.2.82)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The v0.2.81 comparison output is packaged as reference validation snapshots under ``examples/reference_outputs/`` and ``docs/validation/xstar_outputs/``: ``o7_density_grid_type69_mode_compare.csv`` and ``o7_density_grid_type69_mode_compare_summary.json``.
+
+The snapshot records that the default ``include`` network remains reachable through ``ne=1e10 cm^-3`` but fails at ``ne=1e12 cm^-3``.  The diagnostic/experimental ``suppress-resonance`` mode reaches the ``ne=1e12 cm^-3`` density-specific XSTAR target with approximately ``R/G = 0.08307 / 4.5197``.  This is an O VII benchmark result only and should not be treated as a general physical default.

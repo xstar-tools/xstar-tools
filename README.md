@@ -1,6 +1,10 @@
 # xstar-atomic
 
 
+### v0.2.82 note
+
+This release freezes the v0.2.81 O VII type-69 mode comparison as a reference validation snapshot.  The packaged snapshots under `examples/reference_outputs/` and `docs/validation/xstar_outputs/` record that the default `include` network fails only at `ne=1e12 cm^-3`, while the diagnostic/experimental `suppress-resonance` mode reaches the density-specific XSTAR target there without degrading the lower-density benchmark rows.  The suppress-resonance mode remains validated only for this O VII high-density benchmark and is not a general physical default.
+
 ### v0.2.81 note
 
 This release adds `examples/30_o7_density_grid_type69_mode_compare.py`, which runs the O VII density-grid source-fit benchmark in both type-69 modes: the original `include` network and the diagnostic/experimental `suppress-resonance` network.  It writes one merged CSV with the density, include/suppress-resonance R/G ratios, reachability flags, mismatch-improvement factors, source-weight L1 changes, and top fitted source levels.

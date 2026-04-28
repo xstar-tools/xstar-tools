@@ -1273,6 +1273,13 @@ PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
   --print-summary
 \end{lstlisting}
 
+\subsubsection*{O VII high-density benchmark result snapshot (v0.2.82)}
+
+The v0.2.81 comparison output is packaged as reference validation snapshots under \texttt{examples/reference\_outputs/} and \texttt{docs/validation/xstar\_outputs/}: \texttt{o7\_density\_grid\_type69\_mode\_compare.csv} and \texttt{o7\_density\_grid\_type69\_mode\_compare\_summary.json}.
+
+The snapshot records that the default \texttt{include} network remains reachable through \(n_e=10^{10}\,\mathrm{cm}^{-3}\) but fails at \(n_e=10^{12}\,\mathrm{cm}^{-3}\).  The diagnostic/experimental \texttt{suppress-resonance} mode reaches the \(n_e=10^{12}\,\mathrm{cm}^{-3}\) density-specific XSTAR target with approximately \(R/G = 0.08307 / 4.5197\).  This is an O VII benchmark result only and should not be treated as a general physical default.
+
+
 \end{document}
 
 \subsection{Preparing real O VII XSTAR density-grid references}
