@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.99 - 2026-04-29
+
+- Added `examples/35_compare_helike_response_matrices.py`, an offline diagnostic that compares fitted source vectors, response matrices, and combined-solver validation behavior across He-like density-grid runs.
+- The new comparison writes density-level CSV, run-level CSV, JSON, and Markdown reports identifying why O VII is reachable while C V, Mg XI, and Ca XIX grids are not.
+- The diagnostic records XSTAR R/G ranges, fitted and combined R/G availability, simultaneous-solver residuals, response-matrix active-source counts, response-matrix conditioning, top fitted source levels, and a concise failure diagnosis.
+- Added a regression test for the new comparison utility.
+
 ## v0.2.98 - 2026-04-29
 
 - Improved `examples/34_summarize_helike_validation_runs.py` reporting for multi-condition He-like validation grids.
