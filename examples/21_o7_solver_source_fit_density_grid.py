@@ -29,9 +29,25 @@ import json
 import math
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+
+
+
+def ion_output_prefix(element: str, ion_stage: int) -> str:
+    return f"{str(element).strip().lower()}{int(ion_stage)}"
+
+
+def write_ion_specific_alias(src: Path, prefix: str, legacy_stem: str) -> Path | None:
+    if prefix == "o7" or not src.exists():
+        return None
+    alias = src.with_name(src.name.replace(legacy_stem, prefix, 1))
+    if alias == src:
+        return None
+    shutil.copy2(src, alias)
+    return alias
 
 def _safe_name(value: float) -> str:
     return (f"{float(value):.6g}".replace("+", "").replace("-", "m").replace(".", "p"))
@@ -657,6 +673,7 @@ def main() -> None:
             "fit_summary": fit_summary,
         })
 
+    output_prefix = ion_output_prefix(args.element, int(args.ion_stage))
     out_csv = out_dir / "o7_solver_source_fit_density_grid.csv"
     out_summary = out_dir / "o7_solver_source_fit_density_grid_summary.json"
     if not args.dry_run:
@@ -679,7 +696,7 @@ def main() -> None:
                 "prune_null_rate_levels": bool(args.prune_null_rate_levels),
                 "null_rate_floor_s^-1": float(args.null_rate_floor),
             },
-            "xstar_target_label": args.xstar_target_label if not xstar_reference_map else "density-specific XSTAR O VII references",
+            "xstar_target_label": args.xstar_target_label if not xstar_reference_map else f"density-specific XSTAR {args.element} {int(args.ion_stage)} references",
             "xstar_target_is_reused_low_density_reference": not bool(xstar_reference_map),
             "xstar_reference_map": xstar_reference_map,
             "last_xstar_reference": xstar_reference,
@@ -694,8 +711,20 @@ def main() -> None:
             "note": "Diagnostic only: density-dependent fitted source weights are empirical solver-response weights, not physical recombination rates.",
         }
         out_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        alias_csv = write_ion_specific_alias(out_csv, output_prefix, "o7")
+        alias_summary = write_ion_specific_alias(out_summary, output_prefix, "o7")
+        summary["outputs"] = {
+            "legacy_density_rows_csv": str(out_csv),
+            "legacy_summary_json": str(out_summary),
+            "ion_output_prefix": output_prefix,
+            "ion_specific_density_rows_csv": str(alias_csv) if alias_csv else str(out_csv),
+            "ion_specific_summary_json": str(alias_summary) if alias_summary else str(out_summary),
+        }
+        out_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        if alias_summary:
+            alias_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    print("O VII solver-source-fit density-grid diagnostic")
+    print(f"{args.element} {int(args.ion_stage)} solver-source-fit density-grid diagnostic")
     print("------------------------------------------------")
     print("densities:", ", ".join(f"{x:.6g}" for x in densities))
     print(f"reference density: {float(args.reference_density):.6g} cm^-3")

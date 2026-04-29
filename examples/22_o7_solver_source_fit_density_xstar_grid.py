@@ -47,6 +47,86 @@ def _get_option_value(argv: Sequence[str], name: str, default: str | None = None
     return default
 
 
+
+
+def _maybe_float(value) -> float | None:
+    try:
+        out = float(value)
+    except Exception:
+        return None
+    if out != out or out in (float("inf"), float("-inf")):
+        return None
+    return out
+
+
+def _normalize_ion_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "").replace("_", "")
+
+
+def _roman_stage(stage: int) -> str | None:
+    return {
+        1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii",
+        8: "viii", 9: "ix", 10: "x", 11: "xi", 12: "xii", 13: "xiii",
+        14: "xiv", 15: "xv", 16: "xvi", 17: "xvii", 18: "xviii", 19: "xix",
+        20: "xx", 21: "xxi", 22: "xxii", 23: "xxiii", 24: "xxiv", 25: "xxv",
+    }.get(int(stage))
+
+
+def _expected_ion_aliases(element: str, stage: int) -> set[str]:
+    symbol = str(element).strip().lower()
+    aliases = {f"{symbol}{int(stage)}"}
+    roman = _roman_stage(int(stage))
+    if roman:
+        aliases.add(f"{symbol}{roman}")
+    return aliases
+
+
+def _classify_helike_row(row: dict) -> str | None:
+    lower = str(row.get("lower_level", "") or row.get("lower", "")).replace(" ", "")
+    upper = str(row.get("upper_level", "") or row.get("upper", "")).replace(" ", "")
+    if "1s2" not in lower:
+        return None
+    if "2s1.3S_1" in upper:
+        return "f"
+    if "2p1.1P_1" in upper:
+        return "r"
+    if "2p1.3P_" in upper:
+        return "i"
+    return None
+
+
+def _triplet_csv_status(path: Path, element: str, stage: int, value_column: str = "emit_outward") -> tuple[bool, str]:
+    if not path.exists():
+        return False, "missing"
+    aliases = _expected_ion_aliases(element, stage)
+    counts = {"f": 0, "i": 0, "r": 0}
+    value_sums = {"f": 0.0, "i": 0.0, "r": 0.0}
+    n_rows = 0
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            n_rows += 1
+            ion_text = _normalize_ion_text(row.get("ion", ""))
+            if ion_text and ion_text not in aliases:
+                continue
+            kind = _classify_helike_row(row)
+            if kind is None:
+                continue
+            val = _maybe_float(row.get(value_column))
+            if val is None:
+                continue
+            counts[kind] += 1
+            value_sums[kind] += max(val, 0.0)
+    if n_rows == 0:
+        return False, "empty CSV: converter found zero matching XSTAR lines"
+    missing_components = [name for name, key in [("forbidden", "f"), ("intercombination", "i"), ("resonance", "r")] if counts[key] == 0]
+    if missing_components:
+        return False, "missing He-like component(s): " + ", ".join(missing_components)
+    zero_components = [name for name, key in [("forbidden", "f"), ("intercombination", "i"), ("resonance", "r")] if value_sums[key] <= 0.0]
+    if zero_components:
+        return False, "non-positive XSTAR emissivity for component(s): " + ", ".join(zero_components)
+    return True, f"ok counts={counts}"
+
 def _density_tag_for_path(density: float) -> str:
     mapping = {1.0: "ne1", 1.0e4: "ne1e4", 1.0e8: "ne1e8", 1.0e10: "ne1e10", 1.0e12: "ne1e12"}
     for key, tag in mapping.items():
@@ -244,6 +324,7 @@ def _validate_grid_csv_paths(path: Path, argv: Sequence[str]) -> None:
     tag = _ion_tag(element, stage)
     missing: List[str] = []
     stale_o7: List[str] = []
+    invalid: List[str] = []
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
@@ -252,8 +333,14 @@ def _validate_grid_csv_paths(path: Path, argv: Sequence[str]) -> None:
                 continue
             if tag != "o7" and "xstar_o7_triplet_lines.csv" in ref:
                 stale_o7.append(ref)
-            if not Path(ref).exists():
+            ref_path = Path(ref)
+            if not ref_path.exists():
                 missing.append(ref)
+                continue
+            value_column = str(row.get("xstar_value_column") or "emit_outward").strip() or "emit_outward"
+            ok, reason = _triplet_csv_status(ref_path, element, stage, value_column=value_column)
+            if not ok:
+                invalid.append(f"{ref} ({reason})")
     if stale_o7:
         raise SystemExit(
             f"Density-grid mapping {path} still references O VII triplet CSVs for {element} {stage}: "
@@ -267,6 +354,13 @@ def _validate_grid_csv_paths(path: Path, argv: Sequence[str]) -> None:
             + ", ".join(sorted(set(missing)))
             + ". Run the XSTAR/convert scripts from example 32 in this package tree, or copy the converted files "
             + f"into xstar_test_run/{tag}_ne*/ before rerunning. If the files exist in another version directory, copy those {tag}_ne* folders here."
+        )
+    if invalid:
+        raise SystemExit(
+            f"Density-grid mapping {path} references converted XSTAR triplet CSV file(s) that cannot provide a complete He-like R/G target for {element} {stage}: "
+            + "; ".join(sorted(set(invalid)))
+            + ". Re-run the converter with a wavelength range/ion selection that produces the forbidden, intercombination, and resonance rows, "
+            + "or remove this ion from the validation grid until XSTAR outputs usable triplet lines."
         )
 
 

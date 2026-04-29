@@ -83,3 +83,44 @@ def test_validate_c5_mapping_reports_stale_o7_path(tmp_path, monkeypatch):
     msg = str(exc.value)
     assert "still references O VII" in msg
     assert "expected paths look like xstar_test_run/c5_ne*/xstar_c5_triplet_lines.csv" in msg
+
+
+def test_validate_c5_mapping_rejects_empty_converted_csv(tmp_path, monkeypatch):
+    mod = load_module()
+    monkeypatch.chdir(tmp_path)
+    csv_path = tmp_path / "xstar_test_run" / "c5_ne1" / "xstar_c5_triplet_lines.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_text("ion,lower_level,upper_level,wavelength,emit_outward\n", encoding="utf-8")
+    mapping = tmp_path / "xstar_test_run" / "xstar_c5_density_grid_references.csv"
+    mapping.write_text(
+        "electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label\n"
+        "1,xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv,emit_outward,C 5\n",
+        encoding="utf-8",
+    )
+    import pytest
+    with pytest.raises(SystemExit) as exc:
+        mod._validate_grid_csv_paths(mapping, ["--element", "C", "--ion-stage", "5"])
+    msg = str(exc.value)
+    assert "cannot provide a complete He-like R/G target" in msg
+    assert "empty CSV" in msg
+
+
+def test_validate_c5_mapping_accepts_complete_converted_csv(tmp_path, monkeypatch):
+    mod = load_module()
+    monkeypatch.chdir(tmp_path)
+    csv_path = tmp_path / "xstar_test_run" / "c5_ne1" / "xstar_c5_triplet_lines.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_text(
+        "ion,lower_level,upper_level,wavelength,emit_outward\n"
+        "c_v,1s2.1S_0,1s1.2s1.3S_1,41.47,6\n"
+        "c_v,1s2.1S_0,1s1.2p1.3P_1,40.73,0.1\n"
+        "c_v,1s2.1S_0,1s1.2p1.1P_1,40.27,1.3\n",
+        encoding="utf-8",
+    )
+    mapping = tmp_path / "xstar_test_run" / "xstar_c5_density_grid_references.csv"
+    mapping.write_text(
+        "electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label\n"
+        "1,xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv,emit_outward,C 5\n",
+        encoding="utf-8",
+    )
+    mod._validate_grid_csv_paths(mapping, ["--element", "C", "--ion-stage", "5"])

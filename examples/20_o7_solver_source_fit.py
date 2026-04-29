@@ -29,6 +29,7 @@ import json
 import math
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
@@ -51,6 +52,30 @@ def _fmt_float(value, precision: int = 6) -> str:
         return "NA"
     return f"{value:.{precision}g}"
 
+
+
+
+def ion_output_prefix(element: str, ion_stage: int) -> str:
+    return f"{str(element).strip().lower()}{int(ion_stage)}"
+
+
+def write_ion_specific_alias(src: Path, prefix: str, legacy_stem: str) -> Path | None:
+    """Write a non-O VII alias next to a legacy o7_* output file.
+
+    The Stage-6 workflow historically used o7_* filenames.  Keep those names
+    for backward compatibility with downstream examples, but for candidate
+    non-O VII He-like ions also create clearer aliases such as
+    c5_solver_source_fit_summary.json.
+    """
+    if prefix == "o7":
+        return None
+    if not src.exists():
+        return None
+    alias = src.with_name(src.name.replace(legacy_stem, prefix, 1))
+    if alias == src:
+        return None
+    shutil.copy2(src, alias)
+    return alias
 
 def parse_level_list(text: str) -> List[int]:
     out: List[int] = []
@@ -630,6 +655,7 @@ def main() -> None:
         weight_rows.append(row)
     weight_rows.sort(key=lambda row: float(row.get("fit_weight_norm") or 0.0), reverse=True)
 
+    output_prefix = ion_output_prefix(args.element, int(args.ion_stage))
     out_response = out_dir / "o7_solver_response_matrix.csv"
     out_weights = out_dir / "o7_solver_source_fit_weights.csv"
     out_weights_compat = out_dir / "o7_source_fit_weights.csv"
@@ -724,6 +750,21 @@ def main() -> None:
     }
     out_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
+    alias_response = write_ion_specific_alias(out_response, output_prefix, "o7")
+    alias_weights = write_ion_specific_alias(out_weights, output_prefix, "o7")
+    alias_weights_compat = write_ion_specific_alias(out_weights_compat, output_prefix, "o7")
+    alias_summary = write_ion_specific_alias(out_summary, output_prefix, "o7")
+    summary["outputs"].update({
+        "ion_output_prefix": output_prefix,
+        "ion_specific_solver_response_matrix_csv": str(alias_response) if alias_response else str(out_response),
+        "ion_specific_solver_source_fit_weights_csv": str(alias_weights) if alias_weights else str(out_weights),
+        "ion_specific_source_fit_weights_compatible_csv": str(alias_weights_compat) if alias_weights_compat else str(out_weights_compat),
+        "ion_specific_summary_json": str(alias_summary) if alias_summary else str(out_summary),
+    })
+    out_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if alias_summary:
+        alias_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
     if not args.keep_unit_runs:
         # Keep the top-level response/weights/summary, but remove bulky per-level solver files.
         for p in unit_dir.glob("*"):
@@ -742,6 +783,8 @@ def main() -> None:
     print(f"Wrote solver-fit weights: {out_weights}")
     print(f"Wrote compatible weights: {out_weights_compat}")
     print(f"Wrote summary: {out_summary}")
+    if output_prefix != "o7":
+        print(f"Wrote ion-specific summary alias: {out_dir / (output_prefix + '_solver_source_fit_summary.json')}")
     print(f"XSTAR R={R_x:.6g} G={G_x:.6g}")
     print(
         "Uniform "

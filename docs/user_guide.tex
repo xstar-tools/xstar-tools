@@ -1437,4 +1437,8 @@ Version 0.2.89 note: the He-like density-grid front end now detects stale non-O~
 
 Starting in v0.2.91, the density-grid front end validates non-O VII mapping CSVs before launching the solver-fit subprocess chain.  For candidate ions such as C V, Mg XI, and Ca XIX, the mapping must point to converted triplet files in the current working tree, for example \texttt{xstar\_test\_run/c5\_ne1/xstar\_c5\_triplet\_lines.csv}.  If the files were generated in an older package directory, copy the corresponding \texttt{c5\_ne*}, \texttt{mg11\_ne*}, or \texttt{ca19\_ne*} folders into the current \texttt{xstar\_test\_run/} directory before rerunning the density-grid fit.
 
+
+\subsection*{v0.2.94 He-like density-grid workflow note}
+The non-O VII He-like density-grid front end now validates converted XSTAR triplet CSV files before launching the solver-fit subprocess chain.  Each mapped CSV must contain usable forbidden, intercombination, and resonance rows with positive emissivity.  Empty converted files, such as a Ca XIX extraction that finds zero matching triplet rows, are rejected early with an actionable message.  Diagnostic outputs preserve the historical \texttt{o7\_*} filenames for compatibility and also write ion-specific aliases for candidate He-like ions such as C V and Mg XI.
+
 \end{document}

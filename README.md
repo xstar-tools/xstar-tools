@@ -1,5 +1,10 @@
 # xstar-atomic
 
+### v0.2.94 note
+
+The non-O VII He-like validation workflow now performs stronger preflight checks on converted XSTAR triplet CSVs.  A mapping row must point to an existing CSV that contains usable forbidden, intercombination, and resonance rows with positive emissivity.  This catches cases such as Ca XIX where XSTAR ran but the converter produced zero matching triplet lines.  Non-O VII runs also now write ion-specific aliases for the legacy `o7_*` diagnostic filenames, for example `c5_solver_source_fit_summary.json` and `mg11_solver_source_fit_density_grid.csv`.  These C V/Mg XI/Ca XIX workflows remain exploratory; only the O VII density-grid suppress-resonance benchmark is currently validated.
+
+
 ### v0.2.83 note
 
 This release standardizes the O VII density-grid benchmark inputs.  The package now keeps only compact density-specific converted XSTAR CSVs under `xstar_test_run/o7_ne*/xstar_o7_triplet_lines.csv`; solver-fit directories such as `o7_solver_source_fit_density_xstar_grid/` are generated outputs, not required inputs.  `examples/22_o7_solver_source_fit_density_xstar_grid.py` and the high-density diagnostics can use `--auto-xstar-test-run-grid`, and `examples/26_o7_high_density_rate_sensitivity.py` now rejects stale `ne=1e12` density-grid outputs whose XSTAR target is inconsistent with the validated density-specific reference.
