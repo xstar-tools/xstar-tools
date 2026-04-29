@@ -45,6 +45,13 @@ def _maybe_float(value) -> Optional[float]:
     return out
 
 
+def _fmt_float(value, precision: int = 6) -> str:
+    value = _maybe_float(value)
+    if value is None:
+        return "NA"
+    return f"{value:.{precision}g}"
+
+
 def parse_level_list(text: str) -> List[int]:
     out: List[int] = []
     for part in str(text).replace(';', ',').split(','):

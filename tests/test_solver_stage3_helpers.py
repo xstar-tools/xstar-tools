@@ -57,3 +57,19 @@ def test_o7_triplet_diagnostics_compute_R_and_G():
     assert len(diag) == 1
     assert diag[0]["R_f_over_i"] == 2.0
     assert diag[0]["G_f_plus_i_over_r"] == 3.0
+
+
+def test_helike_triplet_diagnostics_compute_generic_c_v():
+    from xstar_atomic.solver import make_helike_triplet_diagnostics
+    rows = [
+        {"element": "C", "ion_stage": 5, "temperature_K": 1e6, "electron_density_cm^-3": 1.0, "lower_label": "1s2.1S_0", "upper_label": "1s1.2s1.3S_1", "line_energy_emissivity_per_ion_erg_s^-1": 6.0},
+        {"element": "C", "ion_stage": 5, "temperature_K": 1e6, "electron_density_cm^-3": 1.0, "lower_label": "1s2.1S_0", "upper_label": "1s1.2p1.1P_1", "line_energy_emissivity_per_ion_erg_s^-1": 2.0},
+        {"element": "C", "ion_stage": 5, "temperature_K": 1e6, "electron_density_cm^-3": 1.0, "lower_label": "1s2.1S_0", "upper_label": "1s1.2p1.3P_2", "line_energy_emissivity_per_ion_erg_s^-1": 1.0},
+        {"element": "C", "ion_stage": 5, "temperature_K": 1e6, "electron_density_cm^-3": 1.0, "lower_label": "1s2.1S_0", "upper_label": "1s1.2p1.3P_1", "line_energy_emissivity_per_ion_erg_s^-1": 1.0},
+    ]
+    diag = make_helike_triplet_diagnostics(rows)
+    assert len(diag) == 1
+    assert diag[0]["element"] == "C"
+    assert diag[0]["ion_stage"] == 5
+    assert diag[0]["R_f_over_i"] == 3.0
+    assert diag[0]["G_f_plus_i_over_r"] == 4.0

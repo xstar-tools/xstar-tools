@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# v0.2.92 - 2026-04-29
+
+- Generalized solver-side He-like triplet diagnostics in `src/xstar_atomic/solver.py` so combined simultaneous-solver validation can report R=f/i and G=(f+i)/r for C V, Mg XI, Ca XIX, and other He-like ions, not only O VII.
+- The solver now classifies He-like triplet components from `upper_label`/level-label strings such as `1s1.2s1.3S_1`, `1s1.2p1.3P_J`, and `1s1.2p1.1P_1`, while preserving the historical O VII wavelength/level-number fallback.
+- Fixed `examples/20_o7_solver_source_fit.py` printing so missing combined-validation R/G values are reported as `NA` instead of raising a `TypeError`.
+- Added regression coverage for generic solver-side C V triplet diagnostics.
+
 # v0.2.91 - 2026-04-28
 
 - Added preflight validation for He-like density-grid mapping CSVs before launching the solver-fit subprocess chain.

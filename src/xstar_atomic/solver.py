@@ -1146,61 +1146,85 @@ def make_line_output_rows(output_lines: List[dict], level_indices: List[int], po
 
 
 
-def classify_o7_triplet_line(row: dict) -> Optional[str]:
-    """Classify common O VII triplet components by wavelength/upper level.
+def classify_helike_triplet_line(row: dict) -> Optional[str]:
+    """Classify He-like triplet components by level labels, with O VII fallback.
 
-    Returns ``f`` for the forbidden line near 22.101 Å, ``i`` for the
-    intercombination components near 21.804--21.807 Å, and ``r`` for the
-    resonance line near 21.602 Å.  The classification is intentionally narrow
-    and used only for O VII diagnostic summaries.
+    Returns ``f`` for 1s2 1S0 -> 1s2s 3S1, ``i`` for the 1s2p 3P_J
+    intercombination components, and ``r`` for 1s2p 1P1.  XSTAR's converted
+    line CSVs use labels such as ``1s1.2s1.3S_1`` and ``1s1.2p1.1P_1``; the
+    ATDB solver output also includes upper labels when available.  The O VII
+    wavelength/level-number fallback preserves the historical diagnostic.
     """
-    wav = maybe_float(row.get("wavelength_A"))
+    upper_label = str(row.get("upper_label") or row.get("upper_level_label") or row.get("upper_config") or row.get("upper_level") or "")
+    lower_label = str(row.get("lower_label") or row.get("lower_level_label") or row.get("lower_config") or "")
+    norm_upper = upper_label.replace(" ", "").lower()
+    norm_lower = lower_label.replace(" ", "").lower()
+
+    # Prefer spectroscopic labels; these are ion-generic for He-like triplets.
+    if ("1s2" in norm_lower or not norm_lower):
+        if "2s1.3s_1" in norm_upper or "1s1.2s1.3s_1" in norm_upper:
+            return "f"
+        if "2p1.1p_1" in norm_upper or "1s1.2p1.1p_1" in norm_upper:
+            return "r"
+        if "2p1.3p_" in norm_upper or "1s1.2p1.3p_" in norm_upper:
+            return "i"
+
+    # Historical O VII fallback by wavelength or current level indices.
+    wav = maybe_float(row.get("wavelength_A") or row.get("wavelength"))
     upper = maybe_int(row.get("upper_level"))
-    if wav is None:
-        return None
-    if abs(wav - 22.1012) < 0.02 or upper == 2:
-        return "f"
-    if abs(wav - 21.8070) < 0.03 or upper in (3, 5):
-        return "i"
-    if abs(wav - 21.6020) < 0.02 or upper == 7:
-        return "r"
+    elem = str(row.get("element", "")).strip().upper()
+    ion = maybe_int(row.get("ion_stage"))
+    if elem == "O" and ion == 7:
+        if wav is not None:
+            if abs(wav - 22.1012) < 0.02:
+                return "f"
+            if abs(wav - 21.8070) < 0.03 or abs(wav - 21.8044) < 0.03:
+                return "i"
+            if abs(wav - 21.6020) < 0.02:
+                return "r"
+        if upper == 2:
+            return "f"
+        if upper in (3, 5):
+            return "i"
+        if upper == 7:
+            return "r"
     return None
 
 
-def make_o7_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
-    """Compute O VII triplet diagnostics R=f/i and G=(f+i)/r.
+def make_helike_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
+    """Compute He-like triplet diagnostics R=f/i and G=(f+i)/r.
 
-    The diagnostics use the solver line-energy emissivity per ion. If those
-    quantities are absent, the output values are left as ``None``.  This helper
-    is useful for stress-testing the solver but should not be interpreted as a
-    final physical O VII triplet prediction unless the source/cascade model is
-    physically complete.
+    The diagnostics use the solver line-energy emissivity per ion. They are
+    intended for source-fit and collision-network validation, not as a final
+    physical triplet prediction unless the source/cascade model is complete.
     """
-    grouped: Dict[Tuple[float, float], Dict[str, float]] = {}
-    counts: Dict[Tuple[float, float], Dict[str, int]] = {}
+    grouped: Dict[Tuple[str, int, float, float], Dict[str, float]] = {}
+    counts: Dict[Tuple[str, int, float, float], Dict[str, int]] = {}
     for row in line_rows:
-        if str(row.get("element", "")).strip().upper() != "O" or maybe_int(row.get("ion_stage")) != 7:
-            continue
-        kind = classify_o7_triplet_line(row)
+        kind = classify_helike_triplet_line(row)
         if not kind:
             continue
+        elem = str(row.get("element", "")).strip()
+        ion = maybe_int(row.get("ion_stage"))
         T = maybe_float(row.get("temperature_K"))
         ne = maybe_float(row.get("electron_density_cm^-3"))
         val = maybe_float(row.get("line_energy_emissivity_per_ion_erg_s^-1"))
-        if T is None or ne is None:
+        if not elem or ion is None or T is None or ne is None:
             continue
-        key = (T, ne)
+        key = (elem, int(ion), T, ne)
         grouped.setdefault(key, {"f": 0.0, "i": 0.0, "r": 0.0})
         counts.setdefault(key, {"f": 0, "i": 0, "r": 0})
         if val is not None:
             grouped[key][kind] += val
         counts[key][kind] += 1
     rows: List[dict] = []
-    for (T, ne), vals in sorted(grouped.items()):
+    for (elem, ion, T, ne), vals in sorted(grouped.items(), key=lambda x: (x[0][0], x[0][1], x[0][2], x[0][3])):
         f = vals.get("f", 0.0)
         i = vals.get("i", 0.0)
         r = vals.get("r", 0.0)
         rows.append({
+            "element": elem,
+            "ion_stage": ion,
             "temperature_K": T,
             "electron_density_cm^-3": ne,
             "forbidden_energy_per_ion_erg_s^-1": f,
@@ -1208,12 +1232,21 @@ def make_o7_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
             "resonance_energy_per_ion_erg_s^-1": r,
             "R_f_over_i": (f / i) if i > 0 else None,
             "G_f_plus_i_over_r": ((f + i) / r) if r > 0 else None,
-            "n_forbidden_components": counts[(T, ne)].get("f", 0),
-            "n_intercombination_components": counts[(T, ne)].get("i", 0),
-            "n_resonance_components": counts[(T, ne)].get("r", 0),
-            "diagnostic_note": "prototype solver diagnostic; requires physical source/cascade model for final interpretation",
+            "n_forbidden_components": counts[(elem, ion, T, ne)].get("f", 0),
+            "n_intercombination_components": counts[(elem, ion, T, ne)].get("i", 0),
+            "n_resonance_components": counts[(elem, ion, T, ne)].get("r", 0),
+            "diagnostic_note": "prototype He-like triplet solver diagnostic; requires physical source/cascade model for final interpretation",
         })
     return rows
+
+
+# Backward-compatible aliases used by older tests/scripts.
+def classify_o7_triplet_line(row: dict) -> Optional[str]:
+    return classify_helike_triplet_line(row)
+
+
+def make_o7_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
+    return [r for r in make_helike_triplet_diagnostics(line_rows) if str(r.get("element", "")).strip().upper() == "O" and maybe_int(r.get("ion_stage")) == 7]
 
 def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: List[dict], collisions: List[dict], collision_eval: List[dict], used_collision_eval: List[dict], line_rows: List[dict], population_rows: List[dict], solve_infos: List[dict]) -> dict:
     matched_pairs = {(maybe_int(r.get("lower_level")), maybe_int(r.get("upper_level"))) for r in used_collision_eval}
@@ -1309,9 +1342,9 @@ def main(argv=None) -> None:
     p.add_argument("--out-lines-csv", default="level_population_lines.csv")
     p.add_argument("--out-populations-csv")
     p.add_argument("--out-transitions-csv")
-    p.add_argument("--out-triplet-csv", help="Write O VII triplet diagnostic CSV with R=f/i and G=(f+i)/r when applicable")
-    p.add_argument("--triplet-diagnostics", choices=["auto", "o7", "none"], default="auto",
-                   help="Compute O VII triplet R/G diagnostics for O VII output lines")
+    p.add_argument("--out-triplet-csv", help="Write He-like triplet diagnostic CSV with R=f/i and G=(f+i)/r when applicable")
+    p.add_argument("--triplet-diagnostics", choices=["auto", "helike", "o7", "none"], default="auto",
+                   help="Compute He-like triplet R/G diagnostics for He-like output lines; o7 preserves the historical O VII-only mode")
     p.add_argument("--summary-json")
     p.add_argument("--print-summary", action="store_true")
     p.add_argument("--index-cache", nargs="?", const=True, default=False,
@@ -1499,10 +1532,16 @@ def main(argv=None) -> None:
     if args.out_transitions_csv:
         write_csv(args.out_transitions_csv, all_transition_rows)
 
-    do_triplet = args.triplet_diagnostics == "o7" or (
-        args.triplet_diagnostics == "auto" and str(args.element).strip().upper() == "O" and int(args.ion_stage) == 7
-    )
-    triplet_rows = make_o7_triplet_diagnostics(all_line_rows) if do_triplet else []
+    # He-like ions have ion_stage = Z - 1.  In auto mode compute generic
+    # He-like triplet diagnostics when the selected ion is He-like.
+    do_triplet = False
+    triplet_rows = []
+    if args.triplet_diagnostics == "o7":
+        do_triplet = str(args.element).strip().upper() == "O" and int(args.ion_stage) == 7
+        triplet_rows = make_o7_triplet_diagnostics(all_line_rows) if do_triplet else []
+    elif args.triplet_diagnostics in ("auto", "helike"):
+        do_triplet = int(args.ion_stage) == int(z) - 1
+        triplet_rows = make_helike_triplet_diagnostics(all_line_rows) if do_triplet else []
     if args.out_triplet_csv:
         write_csv(args.out_triplet_csv, triplet_rows)
 

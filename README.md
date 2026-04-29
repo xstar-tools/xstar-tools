@@ -1339,3 +1339,7 @@ Version 0.2.90 note: the density-grid front end now writes ion-specific He-like 
 Version 0.2.89 note: the He-like density-grid front end now detects stale non-O VII mapping CSVs that still point to the O VII placeholder file and repairs them when the correct converted per-density files exist under `xstar_test_run/<ion>_ne*/`.  For example, a C V mapping is repaired to use `xstar_test_run/c5_ne*/xstar_c5_triplet_lines.csv`, with the original mapping saved as a `.bak` file.
 
 Version 0.2.91 note: the He-like density-grid front end now validates mapping CSV paths before launching the solver-fit subprocesses.  If a C V, Mg XI, or Ca XIX mapping points to files that are not present in the current package tree, the script stops with a clear message telling you to run the example 32 XSTAR/convert scripts in this tree, or to copy the converted `<ion>_ne*` folders from the tree where you generated them.  This prevents confusing downstream failures from missing files such as `xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv`.
+
+### v0.2.92 He-like combined-solver triplet diagnostics
+
+The solver-side triplet diagnostics are now generic for He-like ions. Combined simultaneous-solver validation can report R=f/i and G=(f+i)/r for C V, Mg XI, Ca XIX, and other He-like ions using level labels such as `1s1.2s1.3S_1`, `1s1.2p1.3P_J`, and `1s1.2p1.1P_1`. O VII wavelength-based fallback remains available for legacy O VII outputs.
