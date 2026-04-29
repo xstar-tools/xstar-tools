@@ -33,3 +33,16 @@ def test_repair_stale_c5_mapping(tmp_path, monkeypatch):
     assert rows[0]["xstar_lines_csv"] == "xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv"
     assert rows[1]["xstar_lines_csv"] == "xstar_test_run/c5_ne1e12/xstar_c5_triplet_lines.csv"
     assert mapping.with_suffix(mapping.suffix + ".bak").exists()
+
+
+def test_write_c5_template_uses_c5_paths(tmp_path, monkeypatch):
+    mod = load_module()
+    monkeypatch.chdir(tmp_path)
+    mapping = tmp_path / "xstar_test_run" / "xstar_c5_density_grid_references.csv"
+    mod.write_xstar_grid_template(mapping, element="C", ion_stage=5)
+    rows = list(csv.DictReader(mapping.open(newline="", encoding="utf-8")))
+    assert rows[0]["xstar_lines_csv"] == "xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv"
+    assert rows[1]["xstar_lines_csv"] == "xstar_test_run/c5_ne1e4/xstar_c5_triplet_lines.csv"
+    assert rows[-1]["xstar_lines_csv"] == "xstar_test_run/c5_ne1e12/xstar_c5_triplet_lines.csv"
+    assert all("O VII" not in row["xstar_target_label"] for row in rows)
+    assert rows[-1]["xstar_target_label"] == "C 5 XSTAR ne=1e+12 cm^-3"
