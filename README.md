@@ -1,5 +1,22 @@
 # xstar-atomic
 
+### v0.2.97 note: He-like multi-ion validation summaries
+
+The package now includes `examples/34_summarize_helike_validation_runs.py`, which summarizes completed He-like density-grid validation directories and optional XSTAR line-audit directories into CSV, JSON, and Markdown reports.  This is useful after running O VII, C V, Mg XI, or high-ionization Ca XIX grids because it records whether each density is reachable and whether complete XSTAR triplet targets were available.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/34_summarize_helike_validation_runs.py \
+  c5_solver_source_fit_density_xstar_grid \
+  mg11_solver_source_fit_density_xstar_grid \
+  ca19_xi3_solver_source_fit_density_xstar_grid \
+  ca19_xi4_solver_source_fit_density_xstar_grid \
+  --audit-dirs ca19_line_audit_ne1 ca19_line_audit_xi3_ne1 \
+  --out-dir helike_validation_summary \
+  --print-summary
+```
+
 ### v0.2.96 note: Ca XIX ionization scans
 
 For high-Z He-like ions such as Ca XIX, the default `log xi=1.5` XSTAR setup can produce lower charge states but no `ca_xix` triplet rows. Use the new `--rlogxi-grid` option in `examples/32_prepare_helike_xstar_density_grids.py` to prepare xi-tagged run directories and mapping files, for example:
