@@ -62,13 +62,34 @@ def _read_json(path: Path) -> dict[str, Any]:
         return json.load(handle)
 
 
+def _strip_known_suffixes(name: str) -> str:
+    """Return a stable run/audit tag from a generated output directory name."""
+    suffixes = (
+        "_solver_source_fit_density_xstar_grid",
+        "_source_fit_density_xstar_grid",
+        "_density_xstar_grid",
+    )
+    for suffix in suffixes:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def _infer_tag_from_dir(path: Path, summary: dict[str, Any]) -> str:
+    """Infer a human-facing run tag.
+
+    Prefer the directory stem because it can carry conditions such as xi3/xi4
+    that are not represented in older summary JSON files.  Fall back to the
+    element+ion-stage pair only for generic/legacy directory names.
+    """
+    dirname_tag = _strip_known_suffixes(path.name)
+    if dirname_tag and dirname_tag not in {"solver", "o7"}:
+        return dirname_tag
     element = str(summary.get("element") or "").lower()
     ion_stage = summary.get("ion_stage")
     if element and ion_stage is not None:
         return f"{element}{ion_stage}"
-    name = path.name
-    return name.replace("_solver_source_fit_density_xstar_grid", "")
+    return dirname_tag or path.name
 
 
 def _ratio_range(rows: list[dict[str, str]], column: str) -> tuple[float | None, float | None]:
@@ -152,12 +173,13 @@ def summarize_audit_dir(audit_dir: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"No line-audit summary JSON found in {audit_dir}")
     data = _read_json(summary_path)
     summary = data.get("summary", data)
+    dirname_tag = _strip_known_suffixes(audit_dir.name)
     expected = str(summary.get("expected_ion", "")).replace(" ", "_").lower()
     return {
         "audit_dir": str(audit_dir),
         "summary_json": str(summary_path),
         "expected_ion": summary.get("expected_ion", ""),
-        "tag": expected,
+        "tag": dirname_tag or expected,
         "n_all_lines": summary.get("n_all_lines", ""),
         "n_expected_ion_rows_any_wavelength": summary.get("n_expected_ion_rows_any_wavelength", ""),
         "n_expected_ion_rows_in_window": summary.get("n_expected_ion_rows_in_window", ""),
@@ -205,10 +227,10 @@ def write_markdown(path: Path, run_rows: list[dict[str, Any]], audit_rows: list[
             )
         lines.append("")
     if audit_rows:
-        lines += ["## XSTAR line audits", "", "| expected ion | complete triplet | rows in window | He-like n=2 rows | rows any wavelength |", "|---|---:|---:|---:|---:|"]
+        lines += ["## XSTAR line audits", "", "| tag | expected ion | complete triplet | rows in window | He-like n=2 rows | rows any wavelength |", "|---|---|---:|---:|---:|---:|"]
         for row in audit_rows:
             lines.append(
-                f"| {row['expected_ion']} | {row['has_complete_triplet_target']} | {row['n_expected_ion_rows_in_window']} | {row['n_helike_like_rows_expected_ion']} | {row['n_expected_ion_rows_any_wavelength']} |"
+                f"| {row['tag']} | {row['expected_ion']} | {row['has_complete_triplet_target']} | {row['n_expected_ion_rows_in_window']} | {row['n_helike_like_rows_expected_ion']} | {row['n_expected_ion_rows_any_wavelength']} |"
             )
         lines.append("")
     path.write_text("\n".join(lines) + "\n")
@@ -243,7 +265,7 @@ def main() -> None:
             )
         for row in audit_rows:
             print(
-                f"audit {row['expected_ion']}: complete_triplet={row['has_complete_triplet_target']} "
+                f"audit {row['tag']} ({row['expected_ion']}): complete_triplet={row['has_complete_triplet_target']} "
                 f"rows_in_window={row['n_expected_ion_rows_in_window']}"
             )
         print(f"wrote: {args.out_dir / 'helike_validation_summary.md'}")

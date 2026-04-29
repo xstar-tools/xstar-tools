@@ -1,5 +1,10 @@
 # xstar-atomic
 
+### He-like validation summary tagging
+
+`examples/34_summarize_helike_validation_runs.py` preserves condition-specific directory tags such as `ca19_xi3` and `ca19_xi4` in summary CSV/JSON/Markdown outputs.  This avoids merging multiple Ca XIX ionization-parameter grids into a single ambiguous `ca19` label.
+
+
 ### v0.2.97 note: He-like multi-ion validation summaries
 
 The package now includes `examples/34_summarize_helike_validation_runs.py`, which summarizes completed He-like density-grid validation directories and optional XSTAR line-audit directories into CSV, JSON, and Markdown reports.  This is useful after running O VII, C V, Mg XI, or high-ionization Ca XIX grids because it records whether each density is reachable and whether complete XSTAR triplet targets were available.

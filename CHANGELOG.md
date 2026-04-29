@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.2.98 - 2026-04-29
+
+- Improved `examples/34_summarize_helike_validation_runs.py` reporting for multi-condition He-like validation grids.
+- Density-grid summaries now prefer the output-directory stem as the run tag, preserving condition labels such as `ca19_xi3` and `ca19_xi4` instead of collapsing both to `ca19`.
+- Line-audit summaries now use the audit-directory stem as the audit tag, so low-ionization and high-ionization Ca XIX audits remain distinct in console, CSV, JSON, and Markdown output.
+- Updated the validation-summary regression test to require distinct Ca XIX xi/audit tags.
+
 ## v0.2.97 - 2026-04-29
 
 - Added `examples/34_summarize_helike_validation_runs.py`, a lightweight reporting utility for completed He-like density-grid validation products.

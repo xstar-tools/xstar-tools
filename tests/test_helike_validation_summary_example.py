@@ -76,11 +76,12 @@ def test_helike_validation_summary_example(tmp_path):
         "--print-summary",
     ]
     completed = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[1], check=True, text=True, capture_output=True)
-    assert "ca19: status=not_validated reachable=0/2" in completed.stdout
-    assert "audit Ca XIX: complete_triplet=True" in completed.stdout
+    assert "ca19_xi3: status=not_validated reachable=0/2" in completed.stdout
+    assert "audit ca19_line_audit_xi3_ne1 (Ca XIX): complete_triplet=True" in completed.stdout
     data = json.loads((out_dir / "helike_validation_summary.json").read_text())
-    assert data["density_grid_runs"][0]["tag"] == "ca19"
+    assert data["density_grid_runs"][0]["tag"] == "ca19_xi3"
     assert data["density_grid_runs"][0]["n_complete_xstar_targets"] == 2
     assert data["density_grid_runs"][0]["n_reachable"] == 0
+    assert data["line_audits"][0]["tag"] == "ca19_line_audit_xi3_ne1"
     assert data["line_audits"][0]["has_complete_triplet_target"] is True
     assert (out_dir / "helike_validation_summary.md").exists()
