@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# v0.2.91 - 2026-04-28
+
+- Added preflight validation for He-like density-grid mapping CSVs before launching the solver-fit subprocess chain.
+- Non-O VII density-grid mappings now fail early with a clear message if converted XSTAR triplet CSVs such as `xstar_test_run/c5_ne*/xstar_c5_triplet_lines.csv` are missing in the current package tree.
+- Stale non-O VII mappings that still point to `xstar_test_run/xstar_o7_triplet_lines.csv` are now rejected with an explicit diagnostic and regeneration/copy instructions.
+- This avoids the confusing downstream `Could not read XSTAR He-like triplet R/G reference` error when users generated C V, Mg XI, or Ca XIX XSTAR products in a different working directory.
+
 # v0.2.90 - 2026-04-28
 
 - Fixed non-O VII density-grid template generation in `examples/22_o7_solver_source_fit_density_xstar_grid.py`.

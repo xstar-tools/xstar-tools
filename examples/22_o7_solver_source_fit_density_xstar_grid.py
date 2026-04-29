@@ -231,6 +231,45 @@ def print_template_message(path: Path, element: str = "O", ion_stage: int = 7) -
     print("If those files are missing, run XSTAR and the converter scripts from example 32, then rerun this command.")
 
 
+def _validate_grid_csv_paths(path: Path, argv: Sequence[str]) -> None:
+    """Fail early if a density-grid mapping references missing line CSVs.
+
+    This prevents a confusing downstream error from example 20, especially for
+    non-O VII candidate ions where the mapping template may have been written
+    before the external XSTAR/convert workflow was run in the current tree.
+    """
+    if not path.exists():
+        return
+    element, stage = _element_stage_from_argv(argv)
+    tag = _ion_tag(element, stage)
+    missing: List[str] = []
+    stale_o7: List[str] = []
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            ref = str(row.get("xstar_lines_csv") or row.get("path") or "").strip()
+            if not ref:
+                continue
+            if tag != "o7" and "xstar_o7_triplet_lines.csv" in ref:
+                stale_o7.append(ref)
+            if not Path(ref).exists():
+                missing.append(ref)
+    if stale_o7:
+        raise SystemExit(
+            f"Density-grid mapping {path} still references O VII triplet CSVs for {element} {stage}: "
+            + ", ".join(sorted(set(stale_o7)))
+            + ". Regenerate the mapping with --write-template-grid-csv or delete it and rerun example 22; "
+            + f"expected paths look like xstar_test_run/{tag}_ne*/xstar_{tag}_triplet_lines.csv."
+        )
+    if missing:
+        raise SystemExit(
+            f"Density-grid mapping {path} references missing converted XSTAR triplet CSV file(s): "
+            + ", ".join(sorted(set(missing)))
+            + ". Run the XSTAR/convert scripts from example 32 in this package tree, or copy the converted files "
+            + f"into xstar_test_run/{tag}_ne*/ before rerunning. If the files exist in another version directory, copy those {tag}_ne* folders here."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -270,6 +309,8 @@ def main() -> None:
     if known.xstar_grid_summary_csv:
         grid_path = Path(known.xstar_grid_summary_csv)
         _repair_stale_helike_grid_csv(grid_path, remaining)
+        if grid_path.exists():
+            _validate_grid_csv_paths(grid_path, remaining)
         if not grid_path.exists():
             element, stage = _element_stage_from_argv(remaining)
             write_xstar_grid_template(grid_path, element=element, ion_stage=stage)

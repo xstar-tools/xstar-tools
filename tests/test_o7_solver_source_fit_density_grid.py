@@ -210,7 +210,8 @@ def test_example22_writes_template_grid_csv(tmp_path):
     text = out.read_text(encoding="utf-8")
     assert "electron_density_cm^-3" in text
     assert "xstar_lines_csv" in text
-    assert "PLACEHOLDER" in text
+    assert "xstar_test_run/o7_ne1/xstar_o7_triplet_lines.csv" in text
+    assert "PLACEHOLDER" not in text
     assert "Wrote template" in result.stdout
 
 
@@ -235,5 +236,5 @@ def test_packaged_xstar_grid_template_exists():
     assert path.exists()
     text = path.read_text(encoding="utf-8")
     assert "electron_density_cm^-3" in text
-    assert "xstar_test_run/xstar_o7_triplet_lines.csv" in text
-    assert "PLACEHOLDER" in text
+    assert "xstar_test_run/o7_ne1/xstar_o7_triplet_lines.csv" in text
+    assert "PLACEHOLDER" not in text

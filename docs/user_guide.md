@@ -1482,3 +1482,7 @@ After running XSTAR externally and converting `xout_lines1.fits`, the generated 
 
 
 Version 0.2.89 note: the He-like density-grid front end now detects stale non-O VII mapping CSVs that still point to the O VII placeholder file and repairs them when the correct converted per-density files exist under `xstar_test_run/<ion>_ne*/`.  For example, a C V mapping is repaired to use `xstar_test_run/c5_ne*/xstar_c5_triplet_lines.csv`, with the original mapping saved as a `.bak` file.
+
+### He-like density-grid mapping preflight checks
+
+Starting in v0.2.91, the density-grid front end validates non-O VII mapping CSVs before launching the solver-fit subprocess chain.  For candidate ions such as C V, Mg XI, and Ca XIX, the mapping must point to converted triplet files in the current working tree, for example `xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv`.  If the files were generated in an older package directory, copy the corresponding `c5_ne*`, `mg11_ne*`, or `ca19_ne*` folders into the current `xstar_test_run/` directory before rerunning the density-grid fit.
