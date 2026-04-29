@@ -298,6 +298,20 @@ def ratios_from_components(vec: Sequence[float]) -> dict:
     }
 
 
+def format_optional_float(value, precision: int = 6) -> str:
+    """Format a diagnostic value that may be missing.
+
+    Non-O VII exploratory He-like runs can legitimately have incomplete
+    solver-side triplet diagnostics while the XSTAR target was read
+    successfully.  Printing these values must not abort the density-grid
+    workflow; the summary JSON/CSV keep the missing values as null/blank.
+    """
+    val = _maybe_float(value)
+    if val is None:
+        return "NA"
+    return f"{val:.{int(precision)}g}"
+
+
 def write_csv(path: Path, rows: List[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields: List[str] = []
@@ -729,10 +743,22 @@ def main() -> None:
     print(f"Wrote compatible weights: {out_weights_compat}")
     print(f"Wrote summary: {out_summary}")
     print(f"XSTAR R={R_x:.6g} G={G_x:.6g}")
-    print(f"Uniform R={uniform_ratios.get('R_f_over_i'):.6g} G={uniform_ratios.get('G_f_plus_i_over_r'):.6g}")
-    print(f"Fitted linear-response R={fit_ratios.get('R_f_over_i'):.6g} G={fit_ratios.get('G_f_plus_i_over_r'):.6g}")
+    print(
+        "Uniform "
+        f"R={format_optional_float(uniform_ratios.get('R_f_over_i'))} "
+        f"G={format_optional_float(uniform_ratios.get('G_f_plus_i_over_r'))}"
+    )
+    print(
+        "Fitted linear-response "
+        f"R={format_optional_float(fit_ratios.get('R_f_over_i'))} "
+        f"G={format_optional_float(fit_ratios.get('G_f_plus_i_over_r'))}"
+    )
     if combined_validation.get("enabled"):
-        print(f"Combined simultaneous-solver R={combined_validation.get('R_f_over_i'):.6g} G={combined_validation.get('G_f_plus_i_over_r'):.6g}")
+        print(
+            "Combined simultaneous-solver "
+            f"R={format_optional_float(combined_validation.get('R_f_over_i'))} "
+            f"G={format_optional_float(combined_validation.get('G_f_plus_i_over_r'))}"
+        )
         diag = combined_validation.get("solver_diagnostics") or {}
         print(
             "Combined diagnostics: "

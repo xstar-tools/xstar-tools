@@ -1343,3 +1343,7 @@ Version 0.2.91 note: the He-like density-grid front end now validates mapping CS
 ### v0.2.92 He-like combined-solver triplet diagnostics
 
 The solver-side triplet diagnostics are now generic for He-like ions. Combined simultaneous-solver validation can report R=f/i and G=(f+i)/r for C V, Mg XI, Ca XIX, and other He-like ions using level labels such as `1s1.2s1.3S_1`, `1s1.2p1.3P_J`, and `1s1.2p1.1P_1`. O VII wavelength-based fallback remains available for legacy O VII outputs.
+
+### v0.2.93 robust printing for exploratory non-O VII He-like fits
+
+The C V density-grid validation path can read the XSTAR C V triplet target, but some exploratory solver-side response matrices may have incomplete triplet diagnostics, for example a missing resonance component in a uniform or fitted response.  `examples/20_o7_solver_source_fit.py` now prints `NA` for missing uniform, fitted, or combined R/G values instead of formatting `None` as a floating-point value and aborting.  The JSON and CSV outputs continue to store missing values as `null`/blank so downstream density-grid summaries can mark the target as not reached rather than crashing.
