@@ -33,6 +33,7 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 DEFAULT_IONS = "C V,Mg XI,Ca XIX"
 DEFAULT_DENSITIES: Tuple[float, ...] = (1.0, 1.0e4, 1.0e8, 1.0e10, 1.0e12)
+DEFAULT_RLOGXI: Tuple[float, ...] = (1.5,)
 
 ABUNDANCE_KEYS = [
     "h", "he", "li", "be", "b", "c", "n", "o", "f", "ne", "na", "mg", "al",
@@ -116,15 +117,11 @@ def parse_ions(text: str) -> List[Tuple[str, int]]:
 
 
 def parse_densities(values: Sequence[str]) -> List[float]:
-    if not values:
-        return list(DEFAULT_DENSITIES)
-    out: List[float] = []
-    for item in values:
-        for part in str(item).replace(";", ",").split(","):
-            part = part.strip()
-            if part:
-                out.append(float(part))
-    return out
+    return parse_float_grid(values, DEFAULT_DENSITIES)
+
+
+def parse_rlogxi_grid(values: Sequence[str]) -> List[float]:
+    return parse_float_grid(values, DEFAULT_RLOGXI)
 
 
 def density_tag(value: float) -> str:
@@ -139,6 +136,23 @@ def density_tag(value: float) -> str:
 
 def density_label(value: float) -> str:
     return f"{float(value):.12g}"
+
+
+def xi_tag(value: float) -> str:
+    text = f"{float(value):.12g}"
+    return "xi" + text.replace("+", "").replace("-", "m").replace(".", "p")
+
+
+def parse_float_grid(values: Sequence[str], default: Sequence[float]) -> List[float]:
+    if not values:
+        return list(default)
+    out: List[float] = []
+    for item in values:
+        for part in str(item).replace(";", ",").split(","):
+            part = part.strip()
+            if part:
+                out.append(float(part))
+    return out
 
 
 def ion_tag(symbol: str, stage: int) -> str:
@@ -217,71 +231,80 @@ def write_summary_csv(path: Path, rows: Sequence[dict]) -> None:
         writer.writerows(rows)
 
 
-def write_density_scripts(root: Path, ions: Sequence[Tuple[str, int]], densities: Sequence[float], rlogxi: float, column: float, vturbi: float, temperature: float) -> List[dict]:
+def write_density_scripts(root: Path, ions: Sequence[Tuple[str, int]], densities: Sequence[float], rlogxi_values: Sequence[float], column: float, vturbi: float, temperature: float) -> List[dict]:
     rows: List[dict] = []
+    if isinstance(rlogxi_values, (int, float)):
+        rlogxi_list = [float(rlogxi_values)]
+    else:
+        rlogxi_list = list(rlogxi_values)
+    multi_xi = len(rlogxi_list) > 1
     for symbol, stage in ions:
         tag = ion_tag(symbol, stage)
         label = ion_label(symbol, stage)
         wmin, wmax = window_for(symbol, stage)
-        ion_rows: List[dict] = []
-        for density in densities:
-            dtag = density_tag(density)
-            run_dir = root / "xstar_runs" / "helike_type69" / f"{tag}_{dtag}"
-            csv_dir = root / "xstar_test_run" / f"{tag}_{dtag}"
-            modelname = f"xstar_atomic_{tag}_xi{str(rlogxi).replace('.', 'p')}_{dtag}"
-            run_script = run_dir / "run_xstar.sh"
-            convert_script = run_dir / f"convert_{tag}_triplet.sh"
-            xout = run_dir / "xout_lines1.fits"
-            out_csv = csv_dir / f"xstar_{tag}_triplet_lines.csv"
-            write_executable(
-                run_script,
-                "#!/usr/bin/env bash\nset -euo pipefail\ncd \"$(dirname \"$0\")\"\n\n"
-                + xstar_command(symbol, stage, density, modelname, rlogxi, column, vturbi, temperature)
-                + "\n",
-            )
-            rel_xout = os.path.relpath(xout, root)
-            rel_out_csv = os.path.relpath(out_csv, root)
-            write_executable(
-                convert_script,
-                f"""#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")/../../.."
-mkdir -p "{os.path.dirname(rel_out_csv)}"
-PYTHONPATH=src python -m xstar_atomic.xstar_outputs \\
-  {rel_xout} \\
-  --ion "{label}" \\
-  --wavelength-min {wmin:.8g} \\
-  --wavelength-max {wmax:.8g} \\
-  --out-csv {rel_out_csv} \\
-  --print-summary \\
-  --print-rows
-""",
-            )
-            row = {
-                "ion": label,
-                "element": symbol,
-                "ion_stage": stage,
-                "ion_tag": tag,
-                "electron_density_cm^-3": density_label(density),
-                "density_tag": dtag,
-                "wavelength_min_A": wmin,
-                "wavelength_max_A": wmax,
-                "run_dir": os.path.relpath(run_dir, root),
-                "run_script": os.path.relpath(run_script, root),
-                "xout_lines_fits": rel_xout,
-                "convert_script": os.path.relpath(convert_script, root),
-                "xstar_lines_csv": rel_out_csv,
-                "xstar_value_column": "emit_outward",
-                "xstar_target_label": f"{label} XSTAR ne={density_label(density)} cm^-3",
-            }
-            rows.append(row)
-            ion_rows.append(row)
-        mapping = root / "xstar_test_run" / f"xstar_{tag}_density_grid_references.csv"
-        write_mapping_csv(mapping, ion_rows)
-        for row in ion_rows:
-            row["mapping_csv"] = os.path.relpath(mapping, root)
+        for rlogxi in rlogxi_list:
+            xtag = xi_tag(rlogxi)
+            ion_rows: List[dict] = []
+            for density in densities:
+                dtag = density_tag(density)
+                stem = f"{tag}_{xtag}_{dtag}" if multi_xi else f"{tag}_{dtag}"
+                run_dir = root / "xstar_runs" / "helike_type69" / stem
+                csv_dir = root / "xstar_test_run" / stem
+                modelname = f"xstar_atomic_{tag}_{xtag}_{dtag}"
+                run_script = run_dir / "run_xstar.sh"
+                convert_script = run_dir / f"convert_{tag}_triplet.sh"
+                xout = run_dir / "xout_lines1.fits"
+                out_csv = csv_dir / f"xstar_{tag}_triplet_lines.csv"
+                write_executable(
+                    run_script,
+                    "#!/usr/bin/env bash\nset -euo pipefail\ncd \"$(dirname \"$0\")\"\n\n"
+                    + xstar_command(symbol, stage, density, modelname, rlogxi, column, vturbi, temperature)
+                    + "\n",
+                )
+                rel_xout = os.path.relpath(xout, root)
+                rel_out_csv = os.path.relpath(out_csv, root)
+                convert_text = (
+                    "#!/usr/bin/env bash\n"
+                    "set -euo pipefail\n"
+                    "cd \"$(dirname \"$0\")/../../..\"\n"
+                    f"mkdir -p \"{os.path.dirname(rel_out_csv)}\"\n"
+                    "PYTHONPATH=src python -m xstar_atomic.xstar_outputs \\\n"
+                    f"  {rel_xout} \\\n"
+                    f"  --ion \"{label}\" \\\n"
+                    f"  --wavelength-min {wmin:.8g} \\\n"
+                    f"  --wavelength-max {wmax:.8g} \\\n"
+                    f"  --out-csv {rel_out_csv} \\\n"
+                    "  --print-summary \\\n"
+                    "  --print-rows\n"
+                )
+                write_executable(convert_script, convert_text)
+                row = {
+                    "ion": label,
+                    "element": symbol,
+                    "ion_stage": stage,
+                    "ion_tag": tag,
+                    "rlogxi": density_label(rlogxi),
+                    "xi_tag": xtag,
+                    "electron_density_cm^-3": density_label(density),
+                    "density_tag": dtag,
+                    "wavelength_min_A": wmin,
+                    "wavelength_max_A": wmax,
+                    "run_dir": os.path.relpath(run_dir, root),
+                    "run_script": os.path.relpath(run_script, root),
+                    "xout_lines_fits": rel_xout,
+                    "convert_script": os.path.relpath(convert_script, root),
+                    "xstar_lines_csv": rel_out_csv,
+                    "xstar_value_column": "emit_outward",
+                    "xstar_target_label": f"{label} XSTAR logxi={density_label(rlogxi)} ne={density_label(density)} cm^-3",
+                }
+                rows.append(row)
+                ion_rows.append(row)
+            mapping_name = f"xstar_{tag}_{xtag}_density_grid_references.csv" if multi_xi else f"xstar_{tag}_density_grid_references.csv"
+            mapping = root / "xstar_test_run" / mapping_name
+            write_mapping_csv(mapping, ion_rows)
+            for row in ion_rows:
+                row["mapping_csv"] = os.path.relpath(mapping, root)
     return rows
-
 
 def write_readme(path: Path, rows: Sequence[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -340,7 +363,8 @@ def main() -> None:
     parser.add_argument("--root", default=".", help="Repository/root directory where xstar_runs/ and xstar_test_run/ will be created")
     parser.add_argument("--ions", default=DEFAULT_IONS, help="Comma-separated candidate He-like ions, e.g. 'C V,Mg XI,Ca XIX'")
     parser.add_argument("--densities", nargs="*", default=[], help="Density grid values in cm^-3, e.g. 1 1e4 1e8 1e10 1e12")
-    parser.add_argument("--rlogxi", type=float, default=1.5, help="XSTAR log ionization parameter")
+    parser.add_argument("--rlogxi", type=float, default=None, help="Single XSTAR log ionization parameter. Kept for backward compatibility; equivalent to --rlogxi-grid VALUE")
+    parser.add_argument("--rlogxi-grid", nargs="*", default=[], help="One or more XSTAR log ionization parameters, e.g. 1.5 2 2.5 3 3.5 4. Useful when an ion such as Ca XIX is absent at the default log xi")
     parser.add_argument("--column", type=float, default=1.0e20, help="XSTAR column density")
     parser.add_argument("--vturbi", type=float, default=100.0, help="XSTAR turbulent velocity")
     parser.add_argument("--temperature", type=float, default=100.0, help="Initial XSTAR temperature parameter")
@@ -352,7 +376,8 @@ def main() -> None:
     root = Path(args.root).resolve()
     ions = parse_ions(args.ions)
     densities = parse_densities(args.densities)
-    rows = write_density_scripts(root, ions, densities, args.rlogxi, args.column, args.vturbi, args.temperature)
+    rlogxi_values = [float(args.rlogxi)] if args.rlogxi is not None else parse_rlogxi_grid(args.rlogxi_grid)
+    rows = write_density_scripts(root, ions, densities, rlogxi_values, args.column, args.vturbi, args.temperature)
     summary = root / args.summary_csv
     readme = root / args.readme
     write_summary_csv(summary, rows)
@@ -363,6 +388,7 @@ def main() -> None:
         print(f"root: {root}")
         print("ions:", ", ".join(ion_label(s, st) for s, st in ions))
         print("densities:", ", ".join(density_label(d) for d in densities))
+        print("log xi values:", ", ".join(density_label(x) for x in rlogxi_values))
         print(f"summary CSV: {summary}")
         print(f"README: {readme}")
         print("per-ion mapping CSVs:")

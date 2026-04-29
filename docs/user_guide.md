@@ -1508,3 +1508,8 @@ PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
 ```
 
 The audit reports the XSTAR ion labels present in the file, rows in the wavelength window regardless of ion label, rows for the expected ion at any wavelength, and rows whose level labels look like He-like ground-to-`n=2` forbidden/intercombination/resonance transitions.  If no complete triplet target is found, the ion remains not testable for the density-grid validation.
+
+
+### He-like XSTAR ionization-parameter scans (v0.2.96)
+
+`examples/32_prepare_helike_xstar_density_grids.py` supports `--rlogxi-grid` for ions whose default XSTAR run does not produce the expected He-like triplet rows. This is especially useful for Ca XIX: the default `log xi=1.5` run can finish successfully while `xout_lines1.fits` contains no `ca_xix` rows. A scan such as `--rlogxi-grid 1.5 2 2.5 3 3.5 4` writes xi-tagged run directories and mapping CSVs so each ionization condition can be audited independently before a density-grid solver comparison is attempted.

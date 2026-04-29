@@ -45,8 +45,22 @@ def test_write_density_scripts_creates_mapping_and_scripts(tmp_path):
     with c_mapping.open(newline="", encoding="utf-8") as handle:
         c_rows = list(csv.DictReader(handle))
     assert c_rows[0]["xstar_lines_csv"] == "xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv"
-    assert c_rows[1]["xstar_target_label"] == "C V XSTAR ne=1e+12 cm^-3"
+    assert c_rows[1]["xstar_target_label"] == "C V XSTAR logxi=1.5 ne=1e+12 cm^-3"
     convert_text = (tmp_path / "xstar_runs" / "helike_type69" / "mg11_ne1e12" / "convert_mg11_triplet.sh").read_text()
     assert '--ion "Mg XI"' in convert_text
     assert "--wavelength-min 9.05" in convert_text
     assert "--wavelength-max 9.4" in convert_text
+
+
+def test_write_density_scripts_rlogxi_grid_uses_xi_specific_paths(tmp_path):
+    mod = load_module()
+    rows = mod.write_density_scripts(tmp_path, [("Ca", 19)], [1.0, 1.0e12], [1.5, 3.0], 1.0e20, 100.0, 100.0)
+    assert len(rows) == 4
+    assert (tmp_path / "xstar_runs" / "helike_type69" / "ca19_xi1p5_ne1" / "run_xstar.sh").exists()
+    assert (tmp_path / "xstar_runs" / "helike_type69" / "ca19_xi3_ne1e12" / "convert_ca19_triplet.sh").exists()
+    assert (tmp_path / "xstar_test_run" / "xstar_ca19_xi1p5_density_grid_references.csv").exists()
+    assert (tmp_path / "xstar_test_run" / "xstar_ca19_xi3_density_grid_references.csv").exists()
+    with (tmp_path / "xstar_test_run" / "xstar_ca19_xi3_density_grid_references.csv").open(newline="", encoding="utf-8") as handle:
+        rows_xi3 = list(csv.DictReader(handle))
+    assert rows_xi3[0]["xstar_lines_csv"] == "xstar_test_run/ca19_xi3_ne1/xstar_ca19_triplet_lines.csv"
+    assert "logxi=3" in rows_xi3[0]["xstar_target_label"]

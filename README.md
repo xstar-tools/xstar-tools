@@ -1,5 +1,21 @@
 # xstar-atomic
 
+### v0.2.96 note: Ca XIX ionization scans
+
+For high-Z He-like ions such as Ca XIX, the default `log xi=1.5` XSTAR setup can produce lower charge states but no `ca_xix` triplet rows. Use the new `--rlogxi-grid` option in `examples/32_prepare_helike_xstar_density_grids.py` to prepare xi-tagged run directories and mapping files, for example:
+
+```bash
+PYTHONPATH=src python examples/32_prepare_helike_xstar_density_grids.py \
+  --ions "Ca XIX" \
+  --densities 1 1e4 1e8 1e10 1e12 \
+  --rlogxi-grid 1.5 2 2.5 3 3.5 4 \
+  --root . \
+  --print-summary
+```
+
+This creates directories such as `xstar_runs/helike_type69/ca19_xi3_ne1/` and mapping files such as `xstar_test_run/xstar_ca19_xi3_density_grid_references.csv`. Run XSTAR and convert each xi grid, then audit with `examples/33_audit_helike_xstar_lines.py` to identify a grid that actually contains a complete Ca XIX f/i/r triplet target.
+
+
 ### v0.2.94 note
 
 The non-O VII He-like validation workflow now performs stronger preflight checks on converted XSTAR triplet CSVs.  A mapping row must point to an existing CSV that contains usable forbidden, intercombination, and resonance rows with positive emissivity.  This catches cases such as Ca XIX where XSTAR ran but the converter produced zero matching triplet lines.  Non-O VII runs also now write ion-specific aliases for the legacy `o7_*` diagnostic filenames, for example `c5_solver_source_fit_summary.json` and `mg11_solver_source_fit_density_grid.csv`.  These C V/Mg XI/Ca XIX workflows remain exploratory; only the O VII density-grid suppress-resonance benchmark is currently validated.
