@@ -1491,3 +1491,20 @@ Starting in v0.2.91, the density-grid front end validates non-O VII mapping CSVs
 ### v0.2.94 He-like density-grid workflow note
 
 Non-O VII He-like density-grid mappings are now checked before the solver-fit subprocess chain starts.  Each converted XSTAR CSV must contain usable forbidden, intercombination, and resonance triplet rows; empty converted files, such as a Ca XIX extraction that finds zero rows, are rejected early with an actionable message.  Diagnostic outputs keep backward-compatible `o7_*` filenames but also provide ion-specific aliases for C V, Mg XI, Ca XIX, and other candidate He-like ions.
+
+
+### v0.2.95 auditing empty He-like XSTAR line conversions
+
+When a prepared non-O VII He-like XSTAR run completes but the converter reports `n_lines=0`/`n_rows=0`, use Example 33 to inspect the raw `xout_lines1.fits` line table before attempting the solver chain.  This is especially useful for Ca XIX, where the current prepared grid may complete in XSTAR but produce empty converted triplet CSVs.
+
+```bash
+PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
+  xstar_runs/helike_type69/ca19_ne1/xout_lines1.fits \
+  --expected-ion "Ca XIX" \
+  --wavelength-min 3.0 \
+  --wavelength-max 3.4 \
+  --out-dir ca19_line_audit_ne1 \
+  --print-rows
+```
+
+The audit reports the XSTAR ion labels present in the file, rows in the wavelength window regardless of ion label, rows for the expected ion at any wavelength, and rows whose level labels look like He-like ground-to-`n=2` forbidden/intercombination/resonance transitions.  If no complete triplet target is found, the ion remains not testable for the density-grid validation.

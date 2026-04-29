@@ -723,3 +723,19 @@ Example 32 prepares external XSTAR run directories for candidate non-O VII He-li
      --print-summary
 
 Only after the XSTAR triplet CSVs are generated should these mappings be used for include-vs-suppress-resonance comparisons beyond O VII.
+
+
+Example 33: audit empty He-like XSTAR line conversions
+-------------------------------------------------------
+
+Use ``examples/33_audit_helike_xstar_lines.py`` when XSTAR completes but a generated He-like triplet converter writes an empty CSV.  The audit lists XSTAR ion labels, nearby wavelength-window rows, expected-ion rows, and rows with He-like ground-to-``n=2`` level labels.  This is diagnostic only; an ion such as Ca XIX remains not testable until a complete forbidden/intercombination/resonance triplet target is located.
+
+::
+
+   PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
+     xstar_runs/helike_type69/ca19_ne1/xout_lines1.fits \
+     --expected-ion "Ca XIX" \
+     --wavelength-min 3.0 \
+     --wavelength-max 3.4 \
+     --out-dir ca19_line_audit_ne1 \
+     --print-rows

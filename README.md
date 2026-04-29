@@ -1352,3 +1352,20 @@ The solver-side triplet diagnostics are now generic for He-like ions. Combined s
 ### v0.2.93 robust printing for exploratory non-O VII He-like fits
 
 The C V density-grid validation path can read the XSTAR C V triplet target, but some exploratory solver-side response matrices may have incomplete triplet diagnostics, for example a missing resonance component in a uniform or fitted response.  `examples/20_o7_solver_source_fit.py` now prints `NA` for missing uniform, fitted, or combined R/G values instead of formatting `None` as a floating-point value and aborting.  The JSON and CSV outputs continue to store missing values as `null`/blank so downstream density-grid summaries can mark the target as not reached rather than crashing.
+
+
+### Auditing empty He-like XSTAR triplet conversions
+
+If a prepared He-like density grid runs in XSTAR but the converter reports `n_lines=0`/`n_rows=0`, inspect the raw `xout_lines1.fits` file before trying the solver.  For example, for Ca XIX:
+
+```bash
+PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
+  xstar_runs/helike_type69/ca19_ne1/xout_lines1.fits \
+  --expected-ion "Ca XIX" \
+  --wavelength-min 3.0 \
+  --wavelength-max 3.4 \
+  --out-dir ca19_line_audit_ne1 \
+  --print-rows
+```
+
+This reports all XSTAR ion labels, nearby rows in the wavelength window, and rows whose lower/upper labels look like He-like ground-to-`n=2` forbidden/intercombination/resonance transitions.  It is diagnostic only; an ion with empty triplet CSVs remains not testable until a complete XSTAR triplet target is found.
