@@ -226,21 +226,63 @@ def parse_component_weights(text: str, target_norm: Sequence[float], floor: floa
     return vals
 
 
-def absolute_candidate_rejection_reasons(norm: Sequence[float], args) -> List[str]:
+def effective_absolute_fit_constraints(args, target_norm: Optional[Sequence[float]] = None) -> dict:
+    """Return the effective per-column constraints for absolute-response fitting.
+
+    In ``fixed`` mode the values are those supplied on the command line.  In
+    ``target-aware`` mode the intercombination cap is derived from the XSTAR
+    target at the current density.  This keeps low-density fits from selecting
+    pure-i columns when the target i fraction is tiny, while allowing i-rich
+    columns at high density where the target itself is i-rich.
+    """
+    constraints = {
+        "mode": str(getattr(args, "absolute_fit_constraint_mode", "fixed")),
+        "reject_pure_i": bool(getattr(args, "absolute_fit_reject_pure_i", False)),
+        "pure_i_threshold": float(getattr(args, "absolute_fit_pure_i_threshold", 0.95)),
+        "max_intercombination_fraction": float(getattr(args, "absolute_fit_max_intercombination_fraction", 1.0)),
+        "max_forbidden_fraction": float(getattr(args, "absolute_fit_max_forbidden_fraction", 1.0)),
+        "max_resonance_fraction": float(getattr(args, "absolute_fit_max_resonance_fraction", 1.0)),
+        "min_forbidden_fraction": float(getattr(args, "absolute_fit_min_forbidden_fraction", 0.0)),
+        "min_resonance_fraction": float(getattr(args, "absolute_fit_min_resonance_fraction", 0.0)),
+        "target_intercombination_fraction": None,
+    }
+    if constraints["mode"] == "target-aware" and target_norm is not None:
+        target = np.asarray(target_norm, dtype=float)
+        tsum = float(np.sum(np.where(np.isfinite(target) & (target > 0.0), target, 0.0)))
+        if tsum > 0.0:
+            target = np.where(np.isfinite(target) & (target > 0.0), target, 0.0) / tsum
+            ti = float(target[1])
+            constraints["target_intercombination_fraction"] = ti
+            floor = float(getattr(args, "absolute_fit_target_i_floor", 0.05))
+            factor = float(getattr(args, "absolute_fit_target_i_factor", 3.0))
+            cap = max(floor, factor * ti)
+            cap = min(1.0, cap)
+            # User-supplied fixed cap remains a hard upper bound when it is
+            # stricter than the target-aware value.
+            constraints["target_aware_max_intercombination_fraction"] = cap
+            constraints["max_intercombination_fraction"] = min(constraints["max_intercombination_fraction"], cap)
+            low_i = float(getattr(args, "absolute_fit_low_target_i_threshold", 0.05))
+            if ti <= low_i:
+                constraints["reject_pure_i"] = True
+    return constraints
+
+
+def absolute_candidate_rejection_reasons(norm: Sequence[float], args, target_norm: Optional[Sequence[float]] = None) -> List[str]:
     """Return reasons why an absolute-response column should be excluded."""
     f, i, r = [float(x) for x in norm]
+    c = effective_absolute_fit_constraints(args, target_norm)
     reasons: List[str] = []
-    if args.absolute_fit_reject_pure_i and i >= float(args.absolute_fit_pure_i_threshold):
+    if c["reject_pure_i"] and i >= float(c["pure_i_threshold"]):
         reasons.append("pure_intercombination")
-    if i > float(args.absolute_fit_max_intercombination_fraction):
+    if i > float(c["max_intercombination_fraction"]):
         reasons.append("max_intercombination_fraction")
-    if f > float(args.absolute_fit_max_forbidden_fraction):
+    if f > float(c["max_forbidden_fraction"]):
         reasons.append("max_forbidden_fraction")
-    if r > float(args.absolute_fit_max_resonance_fraction):
+    if r > float(c["max_resonance_fraction"]):
         reasons.append("max_resonance_fraction")
-    if f < float(args.absolute_fit_min_forbidden_fraction):
+    if f < float(c["min_forbidden_fraction"]):
         reasons.append("min_forbidden_fraction")
-    if r < float(args.absolute_fit_min_resonance_fraction):
+    if r < float(c["min_resonance_fraction"]):
         reasons.append("min_resonance_fraction")
     return reasons
 
@@ -561,6 +603,10 @@ def main() -> None:
     parser.add_argument("--absolute-fit-min-triplet-sum", type=float, default=0.0, help="Minimum positive absolute injected f+i+r sum required for a source level to enter the absolute-response fit.")
     parser.add_argument("--absolute-fit-component-weights", default="uniform", help="Component weights for absolute-response fitting: uniform, auto, or comma-separated f,i,r weights.")
     parser.add_argument("--absolute-fit-weight-floor", type=float, default=1.0e-3, help="Floor used by --absolute-fit-component-weights auto.")
+    parser.add_argument("--absolute-fit-constraint-mode", choices=["fixed", "target-aware"], default="fixed", help="Column-constraint mode for absolute-response fitting. target-aware derives the intercombination cap from the XSTAR target at this density.")
+    parser.add_argument("--absolute-fit-target-i-factor", type=float, default=3.0, help="target-aware mode: maximum i fraction is at least this factor times the target i fraction.")
+    parser.add_argument("--absolute-fit-target-i-floor", type=float, default=0.05, help="target-aware mode: floor for the maximum allowed i fraction when the target i fraction is tiny.")
+    parser.add_argument("--absolute-fit-low-target-i-threshold", type=float, default=0.05, help="target-aware mode: automatically reject pure-i columns when target i fraction is at or below this value.")
     parser.add_argument("--absolute-fit-reject-pure-i", action="store_true", help="Reject absolute-response columns that are nearly pure intercombination.")
     parser.add_argument("--absolute-fit-pure-i-threshold", type=float, default=0.95, help="Intercombination fraction above which a column is pure-i when --absolute-fit-reject-pure-i is set.")
     parser.add_argument("--absolute-fit-max-intercombination-fraction", type=float, default=1.0, help="Maximum allowed absolute normalized intercombination fraction for a fit column.")
@@ -642,7 +688,7 @@ def main() -> None:
                         rejection_counts["min_triplet_sum"] = rejection_counts.get("min_triplet_sum", 0) + 1
                         continue
                     norm = normalize_positive(abs_pos)
-                    reasons = absolute_candidate_rejection_reasons(norm, args)
+                    reasons = absolute_candidate_rejection_reasons(norm, args, target)
                     if reasons:
                         for reason in reasons:
                             rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
@@ -650,6 +696,7 @@ def main() -> None:
                     fit_candidates.append(row)
                     Y_abs.append([float(x) for x in abs_pos])
                 Y = np.asarray(Y_abs, dtype=float)
+                effective_constraints = effective_absolute_fit_constraints(args, target)
                 component_weights = parse_component_weights(args.absolute_fit_component_weights, target, floor=float(args.absolute_fit_weight_floor))
                 weights, fit_info = fit_raw_response_simplex(Y, target, max_iter=int(args.fit_max_iter), component_weights=component_weights)
                 pred_raw = weights @ Y if weights.size else np.zeros(3, dtype=float)
@@ -669,11 +716,13 @@ def main() -> None:
                     "component_weights": [float(x) for x in component_weights],
                     "component_weights_mode": str(args.absolute_fit_component_weights),
                     "constraint_rejection_counts": rejection_counts,
-                    "reject_pure_i": bool(args.absolute_fit_reject_pure_i),
-                    "pure_i_threshold": float(args.absolute_fit_pure_i_threshold),
-                    "max_intercombination_fraction": float(args.absolute_fit_max_intercombination_fraction),
-                    "min_forbidden_fraction": float(args.absolute_fit_min_forbidden_fraction),
-                    "min_resonance_fraction": float(args.absolute_fit_min_resonance_fraction),
+                    "constraint_mode": str(args.absolute_fit_constraint_mode),
+                    "effective_constraints": effective_constraints,
+                    "reject_pure_i": bool(effective_constraints.get("reject_pure_i")),
+                    "pure_i_threshold": float(effective_constraints.get("pure_i_threshold", args.absolute_fit_pure_i_threshold)),
+                    "max_intercombination_fraction": float(effective_constraints.get("max_intercombination_fraction", args.absolute_fit_max_intercombination_fraction)),
+                    "min_forbidden_fraction": float(effective_constraints.get("min_forbidden_fraction", args.absolute_fit_min_forbidden_fraction)),
+                    "min_resonance_fraction": float(effective_constraints.get("min_resonance_fraction", args.absolute_fit_min_resonance_fraction)),
                     "component_l1_error": l1,
                     "component_l2_error": l2,
                     "pred_forbidden": float(pred[0]),
@@ -746,7 +795,7 @@ def main() -> None:
             print(
                 f"absolute_response_fit status={fit.get('status')} candidates={fit.get('n_candidate_source_levels', 'NA')} "
                 f"l2={_fmt(fit.get('component_l2_error'))} top={fit.get('top_source_levels', [])} "
-                f"rejected={fit.get('constraint_rejection_counts', {})}"
+                f"mode={fit.get('constraint_mode', 'fixed')} constraints={fit.get('effective_constraints', {})} rejected={fit.get('constraint_rejection_counts', {})}"
             )
         elif fit.get("status"):
             print(f"absolute_response_fit status={fit.get('status')}")

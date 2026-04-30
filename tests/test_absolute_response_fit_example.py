@@ -64,6 +64,26 @@ def test_absolute_response_constraint_helpers():
     reasons = mod.absolute_candidate_rejection_reasons([0.0, 1.0, 0.0], Args())
     assert "pure_intercombination" in reasons
     assert "max_intercombination_fraction" in reasons
+
+    class TargetAwareArgs(Args):
+        absolute_fit_constraint_mode = "target-aware"
+        absolute_fit_reject_pure_i = False
+        absolute_fit_max_intercombination_fraction = 1.0
+        absolute_fit_target_i_factor = 3.0
+        absolute_fit_target_i_floor = 0.05
+        absolute_fit_low_target_i_threshold = 0.05
+
+    effective = mod.effective_absolute_fit_constraints(TargetAwareArgs(), [0.8077, 0.0066, 0.1857])
+    assert effective["mode"] == "target-aware"
+    assert effective["reject_pure_i"] is True
+    assert abs(effective["max_intercombination_fraction"] - 0.05) < 1e-12
+    reasons = mod.absolute_candidate_rejection_reasons([0.8, 0.06, 0.14], TargetAwareArgs(), [0.8077, 0.0066, 0.1857])
+    assert "max_intercombination_fraction" in reasons
+
+    high_i = mod.effective_absolute_fit_constraints(TargetAwareArgs(), [0.01, 0.75, 0.24])
+    assert high_i["reject_pure_i"] is False
+    assert high_i["max_intercombination_fraction"] == 1.0
+
     w = mod.parse_component_weights("auto", [0.8, 0.001, 0.199], floor=1e-3)
     assert len(w) == 3
     assert w[1] > w[0]

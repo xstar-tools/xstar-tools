@@ -1535,12 +1535,11 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
 
 Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.
 
+### v0.3.13 target-aware absolute-response constraints
 
-### v0.3.12 constrained absolute-response fitting
+`examples/40_audit_signed_triplet_response.py` and `examples/41_fit_absolute_response_density_grid.py` now support target-aware absolute-response constraints. This mode uses the XSTAR target triplet fractions at each density to choose the allowed intercombination range for source-response columns. It is intended for C V-like cases where low-density targets require strict rejection of intercombination-rich columns, but high-density targets must allow intercombination-rich columns.
 
-`examples/40_audit_signed_triplet_response.py` and `examples/41_fit_absolute_response_density_grid.py` now support constrained absolute-response fitting.  This mode still avoids baseline-subtracted negative response columns, but can also reject pathological source columns such as nearly pure intercombination responses and can upweight weak target components.
-
-Example:
+Example C V density-grid run:
 
 ```bash
 PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
@@ -1552,12 +1551,13 @@ PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
   --source-levels 2:80 \
   --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
   --absolute-fit-component-weights auto \
-  --absolute-fit-reject-pure-i \
-  --absolute-fit-max-intercombination-fraction 0.8 \
+  --absolute-fit-constraint-mode target-aware \
+  --absolute-fit-target-i-factor 3 \
+  --absolute-fit-target-i-floor 0.05 \
   --index-cache \
   --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
-  --out-dir c5_absolute_response_density_grid_constrained \
+  --out-dir c5_absolute_response_density_grid_target_aware \
   --print-summary
 ```
 
-Passing an explicit `../xstar/data/atdb.fits` path in examples remains supported and does not rewrite the persistent `datapath`; only explicit setup commands update that path.
+The explicit `../xstar/data/atdb.fits` path is passed through for the run and does not rewrite persistent `datapath`.

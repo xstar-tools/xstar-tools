@@ -1470,4 +1470,28 @@ Version 0.3.4 adds \texttt{examples/38\_discover\_helike\_source\_basis.py}, an 
 \subsection*{v0.3.8 signed/absolute triplet-response audit}
 The script \texttt{examples/40\_audit\_signed\_triplet\_response.py} compares baseline, source-injected, absolute, and delta He-like triplet emissivities for each requested source level.  It reports component-wise f/i/r increases and decreases, signed normalized delta response vectors, and whether negative responses are caused by baseline subtraction.  This diagnostic is intended to distinguish destructive population redistribution from response-matrix construction or normalization artifacts in non-O VII He-like tests.
 
+
+\subsection*{v0.3.13 target-aware absolute-response constraints}
+
+The absolute-response diagnostics now support target-aware source-column constraints via \texttt{--absolute-fit-constraint-mode target-aware}.  In this mode the maximum allowed intercombination fraction is derived from the XSTAR target triplet fractions at each density.  Low-density cases with tiny target intercombination fractions reject intercombination-rich source columns, while high-density cases can retain such columns when the target is itself intercombination-rich.  Explicit paths such as \texttt{../xstar/data/atdb.fits} remain normal run-time inputs and do not rewrite the persistent \texttt{datapath}.
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --element C --ion-stage 5 \
+  --temperature 1000000 \
+  --electron-densities 1,1e4,1e8,1e10,1e12 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
+  --absolute-fit-component-weights auto \
+  --absolute-fit-constraint-mode target-aware \
+  --absolute-fit-target-i-factor 3 \
+  --absolute-fit-target-i-floor 0.05 \
+  --index-cache \
+  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
+  --out-dir c5_absolute_response_density_grid_target_aware \
+  --print-summary
+\end{lstlisting}
+
 \end{document}

@@ -123,6 +123,10 @@ def command_for_density(args, density: float, index: int, xstar_csv: str, out_di
         "--absolute-fit-min-triplet-sum", f"{float(args.absolute_fit_min_triplet_sum):.16g}",
         "--absolute-fit-component-weights", str(args.absolute_fit_component_weights),
         "--absolute-fit-weight-floor", f"{float(args.absolute_fit_weight_floor):.16g}",
+        "--absolute-fit-constraint-mode", str(args.absolute_fit_constraint_mode),
+        "--absolute-fit-target-i-factor", f"{float(args.absolute_fit_target_i_factor):.16g}",
+        "--absolute-fit-target-i-floor", f"{float(args.absolute_fit_target_i_floor):.16g}",
+        "--absolute-fit-low-target-i-threshold", f"{float(args.absolute_fit_low_target_i_threshold):.16g}",
         "--absolute-fit-pure-i-threshold", f"{float(args.absolute_fit_pure_i_threshold):.16g}",
         "--absolute-fit-max-intercombination-fraction", f"{float(args.absolute_fit_max_intercombination_fraction):.16g}",
         "--absolute-fit-max-forbidden-fraction", f"{float(args.absolute_fit_max_forbidden_fraction):.16g}",
@@ -208,6 +212,8 @@ def summarize_density(density: float, tag: str, run_dir: Path, rc: int, xstar_cs
         "component_weights": ";".join(str(x) for x in (fit.get("component_weights") or [])),
         "component_weights_mode": fit.get("component_weights_mode"),
         "constraint_rejection_counts": json.dumps(fit.get("constraint_rejection_counts") or {}, sort_keys=True),
+        "constraint_mode": fit.get("constraint_mode"),
+        "effective_constraints": json.dumps(fit.get("effective_constraints") or {}, sort_keys=True),
         "target_forbidden": fit.get("target_forbidden"),
         "target_intercombination": fit.get("target_intercombination"),
         "target_resonance": fit.get("target_resonance"),
@@ -248,6 +254,7 @@ def write_markdown(path: Path, rows: List[dict], args) -> None:
     lines.append(f"Element/ion: `{args.element} {args.ion_stage}`")
     lines.append(f"T = `{float(args.temperature):g}` K")
     lines.append(f"Source levels: `{args.source_levels}`")
+    lines.append(f"Constraint mode: `{args.absolute_fit_constraint_mode}`")
     lines.append("")
     lines.append("| ne | status | candidates | L2 | target f/i/r | predicted f/i/r | target R/G | predicted R/G | top levels |")
     lines.append("|---:|---|---:|---:|---|---|---|---|---|")
@@ -278,6 +285,10 @@ def main() -> None:
     parser.add_argument("--absolute-fit-min-triplet-sum", type=float, default=0.0)
     parser.add_argument("--absolute-fit-component-weights", default="uniform", help="Component weights for child absolute-response fits: uniform, auto, or comma-separated f,i,r weights.")
     parser.add_argument("--absolute-fit-weight-floor", type=float, default=1.0e-3)
+    parser.add_argument("--absolute-fit-constraint-mode", choices=["fixed", "target-aware"], default="fixed", help="Column-constraint mode passed to child absolute-response fits.")
+    parser.add_argument("--absolute-fit-target-i-factor", type=float, default=3.0)
+    parser.add_argument("--absolute-fit-target-i-floor", type=float, default=0.05)
+    parser.add_argument("--absolute-fit-low-target-i-threshold", type=float, default=0.05)
     parser.add_argument("--absolute-fit-reject-pure-i", action="store_true", help="Reject nearly pure intercombination columns in child fits.")
     parser.add_argument("--absolute-fit-pure-i-threshold", type=float, default=0.95)
     parser.add_argument("--absolute-fit-max-intercombination-fraction", type=float, default=1.0)

@@ -1546,3 +1546,30 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
   --out-dir c5_signed_triplet_response_audit \
   --print-summary
 ```
+
+### v0.3.13 target-aware absolute-response constraints
+
+`examples/40_audit_signed_triplet_response.py` and `examples/41_fit_absolute_response_density_grid.py` now support target-aware absolute-response constraints. This mode uses the XSTAR target triplet fractions at each density to choose the allowed intercombination range for source-response columns. It is intended for C V-like cases where low-density targets require strict rejection of intercombination-rich columns, but high-density targets must allow intercombination-rich columns.
+
+Example C V density-grid run:
+
+```bash
+PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --element C --ion-stage 5 \
+  --temperature 1000000 \
+  --electron-densities 1,1e4,1e8,1e10,1e12 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
+  --absolute-fit-component-weights auto \
+  --absolute-fit-constraint-mode target-aware \
+  --absolute-fit-target-i-factor 3 \
+  --absolute-fit-target-i-floor 0.05 \
+  --index-cache \
+  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
+  --out-dir c5_absolute_response_density_grid_target_aware \
+  --print-summary
+```
+
+The explicit `../xstar/data/atdb.fits` path is passed through for the run and does not rewrite persistent `datapath`.
