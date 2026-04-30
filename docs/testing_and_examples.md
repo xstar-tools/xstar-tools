@@ -63,3 +63,8 @@ The API pages use `sphinx.ext.autodoc`, so public modules/classes/functions shou
 ```bash
 PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/xstar/data/atdb.fits
 ```
+
+
+### Source-level failure diagnostics
+
+`examples/36_source_level_failure_diagnostics.py` compares He-like source-fit outputs level by level. It is intended for the post-validation question of why O VII remains reachable while C V, Mg XI, and Ca XIX are not. It reports source level labels, fitted weights, f/i/r response contributions, zero-response flags, optional component populations, dominant radiative and collisional paths, and weak/pruned-level indicators.

@@ -1513,3 +1513,8 @@ The audit reports the XSTAR ion labels present in the file, rows in the waveleng
 ### He-like XSTAR ionization-parameter scans (v0.2.96)
 
 `examples/32_prepare_helike_xstar_density_grids.py` supports `--rlogxi-grid` for ions whose default XSTAR run does not produce the expected He-like triplet rows. This is especially useful for Ca XIX: the default `log xi=1.5` run can finish successfully while `xout_lines1.fits` contains no `ca_xix` rows. A scan such as `--rlogxi-grid 1.5 2 2.5 3 3.5 4` writes xi-tagged run directories and mapping CSVs so each ionization condition can be audited independently before a density-grid solver comparison is attempted.
+
+
+### Source-level failure diagnostics
+
+`examples/36_source_level_failure_diagnostics.py` compares He-like source-fit outputs level by level. It is intended for the post-validation question of why O VII remains reachable while C V, Mg XI, and Ca XIX are not. It reports source level labels, fitted weights, f/i/r response contributions, zero-response flags, optional component populations, dominant radiative and collisional paths, and weak/pruned-level indicators.

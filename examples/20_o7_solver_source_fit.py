@@ -438,6 +438,8 @@ def run_combined_source_validation(args, levels: Sequence[int], weights: Sequenc
     source_csv = validation_dir / "o7_combined_fitted_sources.csv"
     lines_csv = validation_dir / "o7_combined_solver_lines.csv"
     triplet_csv = validation_dir / "o7_combined_solver_triplet.csv"
+    populations_csv = validation_dir / "o7_combined_solver_populations.csv"
+    transitions_csv = validation_dir / "o7_combined_solver_transitions.csv"
     summary_json = validation_dir / "o7_combined_solver_summary.json"
     total_rate = float(args.combined_source_total_rate if args.combined_source_total_rate is not None else args.source_rate)
     write_combined_source_csv(source_csv, levels, weights, total_rate, args.temperature, args.electron_density)
@@ -454,6 +456,8 @@ def run_combined_source_validation(args, levels: Sequence[int], weights: Sequenc
         "--negative-population-action", args.negative_population_action,
         "--negative-population-tol", f"{float(args.negative_population_tol):.16g}",
         "--out-lines-csv", str(lines_csv),
+        "--out-populations-csv", str(populations_csv),
+        "--out-transitions-csv", str(transitions_csv),
         "--out-triplet-csv", str(triplet_csv),
         "--summary-json", str(summary_json),
     ]
@@ -480,6 +484,8 @@ def run_combined_source_validation(args, levels: Sequence[int], weights: Sequenc
         "source_csv": str(source_csv),
         "lines_csv": str(lines_csv),
         "triplet_csv": str(triplet_csv),
+        "populations_csv": str(populations_csv),
+        "transitions_csv": str(transitions_csv),
         "summary_json": str(summary_json),
         "triplet_components": {
             "forbidden": trip.get("forbidden"),

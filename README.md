@@ -1407,3 +1407,33 @@ PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
 ```
 
 This reports all XSTAR ion labels, nearby rows in the wavelength window, and rows whose lower/upper labels look like He-like ground-to-`n=2` forbidden/intercombination/resonance transitions.  It is diagnostic only; an ion with empty triplet CSVs remains not testable until a complete XSTAR triplet target is found.
+
+
+### He-like source-level failure diagnostics (v0.3.0)
+
+After running the density-grid source-fit workflows, compare the fitted source vectors and response matrices at source-level resolution:
+
+```bash
+PYTHONPATH=src python examples/36_source_level_failure_diagnostics.py \
+  o7_solver_source_fit_density_xstar_grid_type69_suppressed \
+  c5_solver_source_fit_density_xstar_grid \
+  mg11_solver_source_fit_density_xstar_grid \
+  ca19_xi3_solver_source_fit_density_xstar_grid \
+  ca19_xi4_solver_source_fit_density_xstar_grid \
+  --out-dir helike_source_level_failure_diagnostics \
+  --print-summary
+```
+
+For deeper atomic-rate annotation, pass the real XSTAR database:
+
+```bash
+PYTHONPATH=src python examples/36_source_level_failure_diagnostics.py \
+  c5_solver_source_fit_density_xstar_grid \
+  mg11_solver_source_fit_density_xstar_grid \
+  ca19_xi3_solver_source_fit_density_xstar_grid \
+  --fitsfile ../xstar/data/atdb.fits \
+  --out-dir helike_source_level_failure_diagnostics \
+  --print-summary
+```
+
+The output CSV/JSON/Markdown tables report the source level label/configuration, fitted weight, f/i/r response contribution, zero-response flags, optional source-component population, dominant radiative decay path, dominant collisional sink/source, and pruning/weak-connectivity flags. Older v0.2.x archives lack combined-solver population CSVs; rerunning the v0.3.0 workflows fills those population columns.
