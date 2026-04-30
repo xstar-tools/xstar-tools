@@ -1534,3 +1534,22 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
 ```
 
 Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.
+
+### v0.3.10 absolute-response fitting
+
+`examples/40_audit_signed_triplet_response.py` can now fit a converted XSTAR He-like triplet target using positive source-injected absolute triplet emissivities instead of baseline-subtracted signed deltas.  This is useful when many source levels have negative delta-response columns because the baseline emissivity is larger than the source-injected emissivity.
+
+```bash
+PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
+  --element C --ion-stage 5 \
+  --temperature 1000000 --electron-density 1e8 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --xstar-lines-csv xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv \
+  --fit-mode absolute-response \
+  --out-dir c5_signed_triplet_response_audit \
+  --print-summary
+```
+
+The fit writes `helike_absolute_response_fit_weights.csv` and stores the predicted/target f/i/r fractions and residuals in `helike_signed_triplet_response_summary.json`.
+

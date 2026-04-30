@@ -113,6 +113,146 @@ def read_triplet_csv(path: Path) -> Dict[str, Optional[float]]:
     }
 
 
+
+
+_ROMAN_BY_STAGE = {
+    1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii", 8: "viii",
+    9: "ix", 10: "x", 11: "xi", 12: "xii", 13: "xiii", 14: "xiv", 15: "xv",
+    16: "xvi", 17: "xvii", 18: "xviii", 19: "xix", 20: "xx", 21: "xxi",
+    22: "xxii", 23: "xxiii", 24: "xxiv", 25: "xxv",
+}
+
+
+def expected_ion_aliases(element: str, ion_stage: int) -> set[str]:
+    sym = str(element).strip().lower()
+    aliases = {f"{sym}{int(ion_stage)}"}
+    roman = _ROMAN_BY_STAGE.get(int(ion_stage))
+    if roman:
+        aliases.add(f"{sym}{roman}")
+    return aliases
+
+
+def normalize_ion_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "").replace("_", "")
+
+
+def classify_helike_triplet_row(row: dict) -> Optional[str]:
+    lower = str(row.get("lower_level", "") or row.get("lower", "")).replace(" ", "")
+    upper = str(row.get("upper_level", "") or row.get("upper", "")).replace(" ", "")
+    if "1s2.1S_0" in lower or "1s2" in lower:
+        if "1s1.2s1.3S_1" in upper or "2s1.3S_1" in upper:
+            return "forbidden"
+        if "1s1.2p1.1P_1" in upper or "2p1.1P_1" in upper:
+            return "resonance"
+        if "1s1.2p1.3P_" in upper or "2p1.3P_" in upper:
+            return "intercombination"
+    return None
+
+
+def read_xstar_triplet_reference(path: Path, element: str, ion_stage: int, value_column: str) -> dict:
+    totals = {name: 0.0 for name in COMPONENTS}
+    counts = {name: 0 for name in COMPONENTS}
+    if not path.exists():
+        return {"available": False, "reason": "missing_file", "path": str(path)}
+    aliases = expected_ion_aliases(element, int(ion_stage))
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            ion_text = normalize_ion_text(row.get("ion", ""))
+            if ion_text and ion_text not in aliases:
+                continue
+            val = _maybe_float(row.get(value_column))
+            if val is None:
+                continue
+            kind = classify_helike_triplet_row(row)
+            if kind is None:
+                continue
+            totals[kind] += float(val)
+            counts[kind] += 1
+    missing = [name for name in COMPONENTS if counts[name] <= 0]
+    if missing:
+        return {"available": False, "reason": "incomplete_triplet", "missing_components": missing, "counts": counts, "path": str(path)}
+    vec = np.asarray([totals[name] for name in COMPONENTS], dtype=float)
+    norm = normalize_positive(vec)
+    out = {"available": True, "path": str(path), "counts": counts, "value_column": value_column}
+    out.update(component_flags("target", vec))
+    out.update(component_flags("target_norm", norm))
+    out.update({f"target_{k}": v for k, v in ratios(vec).items()})
+    return out
+
+
+def project_to_simplex(v: np.ndarray) -> np.ndarray:
+    v = np.asarray(v, dtype=float)
+    if v.size == 0:
+        return v
+    u = np.sort(v)[::-1]
+    cssv = np.cumsum(u)
+    rho_candidates = u * np.arange(1, len(u) + 1) > (cssv - 1.0)
+    if not np.any(rho_candidates):
+        return np.full_like(v, 1.0 / len(v))
+    rho = np.nonzero(rho_candidates)[0][-1]
+    theta = (cssv[rho] - 1.0) / float(rho + 1)
+    w = np.maximum(v - theta, 0.0)
+    sw = float(w.sum())
+    return w / sw if sw > 0.0 else np.full_like(v, 1.0 / len(v))
+
+
+def fit_raw_response_simplex(raw_response: np.ndarray, target_norm: np.ndarray, max_iter: int = 50000, tol: float = 1e-13) -> Tuple[np.ndarray, dict]:
+    """Fit nonnegative simplex weights to positive absolute triplet responses.
+
+    This is intentionally based on source-injected absolute emissivities, not
+    on injected-minus-baseline deltas.  It therefore avoids the negative
+    baseline-subtracted response columns that triggered the non-O VII failures.
+    """
+    Y = np.asarray(raw_response, dtype=float)
+    n = int(Y.shape[0]) if Y.ndim == 2 else 0
+    if n == 0:
+        return np.array([], dtype=float), {"status": "empty_response_matrix", "objective": None}
+    target = np.asarray(target_norm, dtype=float)
+    tsum = float(np.sum(target))
+    if not math.isfinite(tsum) or tsum <= 0.0:
+        return np.full(n, 1.0 / n, dtype=float), {"status": "invalid_target", "objective": None}
+    target = target / tsum
+    Y = np.where(np.isfinite(Y) & (Y > 0.0), Y, 0.0)
+    row_sums = np.sum(Y, axis=1)
+    scale = float(np.nanmax(np.where(np.isfinite(row_sums) & (row_sums > 0.0), row_sums, 0.0))) if Y.size else 0.0
+    if not np.isfinite(scale) or scale <= 0.0:
+        return np.full(n, 1.0 / n, dtype=float), {"status": "zero_absolute_response_matrix", "objective": None}
+    Ys = Y / scale
+    Z = Ys - np.sum(Ys, axis=1)[:, None] * target[None, :]
+    w = np.full(n, 1.0 / n, dtype=float)
+    try:
+        spectral = float(np.linalg.norm(Z, ord=2))
+    except Exception:
+        spectral = float(np.linalg.norm(Z))
+    step = 1.0 / max(2.0 * spectral * spectral, 1e-30)
+    prev = float("inf")
+    status = "max_iter"
+    it = 0
+    for it in range(int(max_iter)):
+        resid = w @ Z
+        obj = float(np.dot(resid, resid))
+        if abs(prev - obj) < tol * max(1.0, prev):
+            status = "converged"
+            break
+        prev = obj
+        grad = 2.0 * (Z @ resid)
+        w = project_to_simplex(w - step * grad)
+    final_raw = w @ Y
+    final_norm = normalize_positive(final_raw)
+    final_centered = w @ Z
+    info = {
+        "status": status,
+        "iterations": int(it + 1),
+        "objective": float(np.dot(final_centered, final_centered)),
+        "step": step,
+        "absolute_response_scale": scale,
+        "combined_absolute_triplet_sum": float(np.sum(final_raw)),
+        "combined_normalized_forbidden": float(final_norm[0]),
+        "combined_normalized_intercombination": float(final_norm[1]),
+        "combined_normalized_resonance": float(final_norm[2]),
+    }
+    return w, info
+
 def vec_from_triplet(trip: Dict[str, Optional[float]]) -> np.ndarray:
     return np.asarray([_maybe_float(trip.get(k)) or 0.0 for k in COMPONENTS], dtype=float)
 
@@ -304,6 +444,12 @@ def write_markdown(path: Path, rows: List[dict], summary: dict, args) -> None:
     lines.append(f"- Sign-pattern counts: `{summary.get('sign_pattern_counts', {})}`")
     lines.append(f"- Negative responses caused by baseline subtraction: {summary.get('n_negative_due_to_baseline_subtraction', 0)}")
     lines.append(f"- Levels increasing f/i/r: {summary.get('n_increases_forbidden', 0)} / {summary.get('n_increases_intercombination', 0)} / {summary.get('n_increases_resonance', 0)}")
+    fit = summary.get("absolute_response_fit") or {}
+    if fit.get("enabled"):
+        lines.append(f"- Absolute-response fit status: `{fit.get('status')}`")
+        lines.append(f"- Absolute-response fit candidates: {fit.get('n_candidate_source_levels', 'NA')}")
+        lines.append(f"- Absolute-response fit L2 error: {_fmt(fit.get('component_l2_error'))}")
+        lines.append(f"- Absolute-response top levels: `{fit.get('top_source_levels', [])}`")
     lines.append("")
     lines.append("## Per-level overview")
     lines.append("")
@@ -349,6 +495,11 @@ def main() -> None:
     parser.add_argument("--index-cache-path")
     parser.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz")
     parser.add_argument("--zero-tol", type=float, default=0.0)
+    parser.add_argument("--fit-mode", choices=["none", "absolute-response"], default="none", help="Optional fit mode. absolute-response fits XSTAR target fractions using positive absolute source-injected triplet emissivities, not baseline-subtracted deltas.")
+    parser.add_argument("--xstar-lines-csv", help="Converted XSTAR He-like triplet line CSV used as the target for --fit-mode absolute-response.")
+    parser.add_argument("--xstar-value-column", default="emit_outward", help="XSTAR line CSV value column used for the target triplet.")
+    parser.add_argument("--absolute-fit-min-triplet-sum", type=float, default=0.0, help="Minimum positive absolute injected f+i+r sum required for a source level to enter the absolute-response fit.")
+    parser.add_argument("--fit-max-iter", type=int, default=50000, help="Maximum projected-gradient iterations for absolute-response fitting.")
     parser.add_argument("--out-dir", default="helike_signed_triplet_response_audit")
     parser.add_argument("--dry-run", action="store_true", help="Write commands and output skeleton without running xstar_atomic.solver")
     parser.add_argument("--print-summary", action="store_true")
@@ -395,6 +546,90 @@ def main() -> None:
         })
         rows.append(row)
 
+
+    absolute_fit_summary: dict = {"enabled": False, "mode": args.fit_mode}
+    absolute_fit_rows: List[dict] = []
+    if args.fit_mode == "absolute-response":
+        if not args.xstar_lines_csv:
+            absolute_fit_summary = {"enabled": False, "mode": args.fit_mode, "status": "missing_--xstar-lines-csv"}
+        elif args.dry_run:
+            absolute_fit_summary = {"enabled": True, "mode": args.fit_mode, "status": "dry_run", "xstar_lines_csv": str(args.xstar_lines_csv)}
+        else:
+            target_ref = read_xstar_triplet_reference(Path(args.xstar_lines_csv), args.element, int(args.ion_stage), args.xstar_value_column)
+            if not target_ref.get("available"):
+                absolute_fit_summary = {"enabled": True, "mode": args.fit_mode, "status": "invalid_xstar_target", "xstar_reference": target_ref}
+            else:
+                target = np.asarray([target_ref[f"target_norm_{name}"] for name in COMPONENTS], dtype=float)
+                fit_candidates: List[dict] = []
+                Y_abs: List[List[float]] = []
+                for row in rows:
+                    if row.get("run_status") != "ok":
+                        continue
+                    injected = np.asarray([_maybe_float(row.get(f"injected_{name}")) or 0.0 for name in COMPONENTS], dtype=float)
+                    abs_pos = np.where(np.isfinite(injected) & (injected > 0.0), injected, 0.0)
+                    abs_sum = float(np.sum(abs_pos))
+                    if abs_sum <= float(args.absolute_fit_min_triplet_sum):
+                        continue
+                    fit_candidates.append(row)
+                    Y_abs.append([float(x) for x in abs_pos])
+                Y = np.asarray(Y_abs, dtype=float)
+                weights, fit_info = fit_raw_response_simplex(Y, target, max_iter=int(args.fit_max_iter))
+                pred_raw = weights @ Y if weights.size else np.zeros(3, dtype=float)
+                pred = normalize_positive(pred_raw)
+                l2 = float(np.linalg.norm(pred - target)) if pred.size == 3 else None
+                l1 = float(np.sum(np.abs(pred - target))) if pred.size == 3 else None
+                pred_ratios = ratios(pred)
+                target_ratios = ratios(target)
+                absolute_fit_summary = {
+                    "enabled": True,
+                    "mode": args.fit_mode,
+                    "status": fit_info.get("status"),
+                    "xstar_reference": target_ref,
+                    "n_candidate_source_levels": len(fit_candidates),
+                    "n_input_source_levels": len(source_levels),
+                    "min_triplet_sum": float(args.absolute_fit_min_triplet_sum),
+                    "component_l1_error": l1,
+                    "component_l2_error": l2,
+                    "pred_forbidden": float(pred[0]),
+                    "pred_intercombination": float(pred[1]),
+                    "pred_resonance": float(pred[2]),
+                    "target_forbidden": float(target[0]),
+                    "target_intercombination": float(target[1]),
+                    "target_resonance": float(target[2]),
+                    "pred_R_f_over_i": pred_ratios.get("R_f_over_i"),
+                    "pred_G_f_plus_i_over_r": pred_ratios.get("G_f_plus_i_over_r"),
+                    "target_R_f_over_i": target_ratios.get("R_f_over_i"),
+                    "target_G_f_plus_i_over_r": target_ratios.get("G_f_plus_i_over_r"),
+                    "fit_info": fit_info,
+                    "top_source_levels": [],
+                }
+                for idx, row in enumerate(fit_candidates):
+                    lev = int(row.get("source_level"))
+                    inj = np.asarray([_maybe_float(row.get(f"injected_{name}")) or 0.0 for name in COMPONENTS], dtype=float)
+                    abs_pos = np.where(np.isfinite(inj) & (inj > 0.0), inj, 0.0)
+                    norm = normalize_positive(abs_pos)
+                    weight = float(weights[idx]) if idx < len(weights) else 0.0
+                    out = {
+                        "source_level": lev,
+                        "absolute_fit_weight_norm": weight,
+                        "absolute_fit_basis_member": bool(weight > 0.0),
+                        "absolute_forbidden": float(abs_pos[0]),
+                        "absolute_intercombination": float(abs_pos[1]),
+                        "absolute_resonance": float(abs_pos[2]),
+                        "absolute_triplet_sum": float(np.sum(abs_pos)),
+                        "absolute_norm_forbidden": float(norm[0]),
+                        "absolute_norm_intercombination": float(norm[1]),
+                        "absolute_norm_resonance": float(norm[2]),
+                        "sign_pattern": row.get("sign_pattern"),
+                        "negative_response_caused_by_baseline_subtraction": row.get("negative_response_caused_by_baseline_subtraction"),
+                        "fit_raw_contribution_forbidden": float(weight * abs_pos[0]),
+                        "fit_raw_contribution_intercombination": float(weight * abs_pos[1]),
+                        "fit_raw_contribution_resonance": float(weight * abs_pos[2]),
+                    }
+                    absolute_fit_rows.append(out)
+                absolute_fit_rows.sort(key=lambda r: float(r.get("absolute_fit_weight_norm") or 0.0), reverse=True)
+                absolute_fit_summary["top_source_levels"] = [int(r["source_level"]) for r in absolute_fit_rows[:10] if float(r.get("absolute_fit_weight_norm") or 0.0) > 0.0]
+
     summary = summarize_rows([r for r in rows if r.get("run_status") in ("ok", "dry_run")])
     summary.update({
         "fitsfile": str(args.fitsfile),
@@ -406,10 +641,12 @@ def main() -> None:
         "source_levels": source_levels,
         "baseline_triplet": {k: float(v) for k, v in zip(COMPONENTS, baseline)},
         "dry_run": bool(args.dry_run),
+        "absolute_response_fit": absolute_fit_summary,
     })
 
     write_csv(out_dir / "helike_signed_triplet_response_audit.csv", rows)
     write_csv(out_dir / "helike_signed_triplet_response_commands.csv", command_rows)
+    write_csv(out_dir / "helike_absolute_response_fit_weights.csv", absolute_fit_rows)
     (out_dir / "helike_signed_triplet_response_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     write_markdown(out_dir / "helike_signed_triplet_response_audit.md", rows, summary, args)
 
@@ -418,6 +655,14 @@ def main() -> None:
         print("------------------------------------------------")
         print(f"baseline f/i/r={_fmt(baseline[0])}/{_fmt(baseline[1])}/{_fmt(baseline[2])}")
         print(f"levels={len(source_levels)} patterns={summary.get('sign_pattern_counts', {})} baseline_sub_neg={summary.get('n_negative_due_to_baseline_subtraction', 0)}")
+        fit = summary.get("absolute_response_fit") or {}
+        if fit.get("enabled"):
+            print(
+                f"absolute_response_fit status={fit.get('status')} candidates={fit.get('n_candidate_source_levels', 'NA')} "
+                f"l2={_fmt(fit.get('component_l2_error'))} top={fit.get('top_source_levels', [])}"
+            )
+        elif fit.get("status"):
+            print(f"absolute_response_fit status={fit.get('status')}")
         for row in rows:
             if row.get("run_status") == "failed":
                 print(f"level {row.get('source_level')}: failed; see {row.get('stderr_log')}")
