@@ -1,5 +1,26 @@
 # xstar-atomic
 
+### v0.3.11 note: absolute-response density-grid scans
+
+`examples/41_fit_absolute_response_density_grid.py` runs the v0.3.10 absolute-response triplet fit across a density grid and writes merged CSV/JSON/Markdown summaries of target versus predicted f/i/r, R, G, L1/L2 errors, and top source levels.  Explicit ATDB paths such as `../xstar/data/atdb.fits` may still be used in examples; they are passed through and do not rewrite the saved `datapath`.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --element C --ion-stage 5 \
+  --temperature 1000000 \
+  --electron-densities 1,1e4,1e8,1e10,1e12 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
+  --index-cache \
+  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
+  --out-dir c5_absolute_response_density_grid \
+  --print-summary
+```
+
 ### He-like validation summary tagging
 
 `examples/34_summarize_helike_validation_runs.py` preserves condition-specific directory tags such as `ca19_xi3` and `ca19_xi4` in summary CSV/JSON/Markdown outputs.  This avoids merging multiple Ca XIX ionization-parameter grids into a single ambiguous `ca19` label.
@@ -1534,22 +1555,3 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
 ```
 
 Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.
-
-### v0.3.10 absolute-response fitting
-
-`examples/40_audit_signed_triplet_response.py` can now fit a converted XSTAR He-like triplet target using positive source-injected absolute triplet emissivities instead of baseline-subtracted signed deltas.  This is useful when many source levels have negative delta-response columns because the baseline emissivity is larger than the source-injected emissivity.
-
-```bash
-PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
-  --element C --ion-stage 5 \
-  --temperature 1000000 --electron-density 1e8 \
-  --wavelength-min 40 --wavelength-max 42 \
-  --source-levels 2:80 \
-  --xstar-lines-csv xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv \
-  --fit-mode absolute-response \
-  --out-dir c5_signed_triplet_response_audit \
-  --print-summary
-```
-
-The fit writes `helike_absolute_response_fit_weights.csv` and stores the predicted/target f/i/r fractions and residuals in `helike_signed_triplet_response_summary.json`.
-

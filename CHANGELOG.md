@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.11 - absolute-response density-grid target scan - 2026-04-30
+
+- Added `examples/41_fit_absolute_response_density_grid.py`, which runs the v0.3.10 absolute-response triplet fit across a list of electron densities and aggregates target/predicted f/i/r, R, G, L1/L2 errors, top source levels, and fit status.
+- The new density-grid wrapper preserves explicit `../xstar/data/atdb.fits` usage in example commands while relying on the v0.3.9 datapath-safe resolver behavior: ordinary explicit paths are passed through and do not rewrite `datapath`.
+- Added per-density command and log capture plus merged CSV/JSON/Markdown outputs for comparing absolute-response behavior over a full XSTAR density grid.
+- Added dry-run regression coverage for the new density-grid wrapper.
+
 ## v0.3.10 - Absolute-response source fitting - 2026-04-30
 
 - Added an absolute-response fitting mode to `examples/40_audit_signed_triplet_response.py`.
