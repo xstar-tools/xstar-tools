@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.4 - ion-specific He-like source-basis discovery - 2026-04-30
+
+- Added `examples/38_discover_helike_source_basis.py`, an offline diagnostic that ranks sampled source levels by their raw forbidden/intercombination/resonance response and discovers ion-specific positive, nonzero source bases.
+- The new utility writes per-source, per-density, and per-run CSV/JSON/Markdown reports, including discovered source-level lists that can be reused with `--source-levels` in follow-up example 20/22 runs.
+- This diagnostic follows the v0.3.3 result that strict filtering of the reused O VII source-level basis leaves no positive nonzero source levels for C V, Mg XI, or Ca XIX in the current sampled basis.
+- Added regression coverage for discovered-basis classification, summary output, and empty-run warnings.
+
 ## v0.3.3 - response-basis filter comparison - 2026-04-29
 
 - Added `examples/37_filter_source_basis_response.py`, an offline diagnostic that refits He-like triplet targets after filtering the source-level response basis.

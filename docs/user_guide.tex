@@ -1462,4 +1462,8 @@ PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
 \subsection*{He-like XSTAR ionization-parameter scans (v0.2.96)}
 The helper 	exttt{examples/32\_prepare\_helike\_xstar\_density\_grids.py} supports 	exttt{--rlogxi-grid} for ions whose default XSTAR run does not produce the expected He-like triplet rows. This is especially useful for Ca XIX: the default 	exttt{log xi=1.5} run can finish successfully while 	exttt{xout\_lines1.fits} contains no 	exttt{ca\_xix} rows. A scan such as 	exttt{--rlogxi-grid 1.5 2 2.5 3 3.5 4} writes xi-tagged run directories and mapping CSVs so each ionization condition can be audited independently before a density-grid solver comparison is attempted.
 
+
+\subsection*{Ion-specific He-like source-basis discovery (v0.3.4)}
+Version 0.3.4 adds \texttt{examples/38\_discover\_helike\_source\_basis.py}, an exploratory diagnostic that reads existing source-response matrices and classifies each sampled source level by its raw forbidden/intercombination/resonance response. It writes per-level, per-density, and per-run CSV/JSON/Markdown summaries, including discovered positive nonzero source-level lists that can be reused with \texttt{--source-levels} in follow-up runs.
+
 \end{document}

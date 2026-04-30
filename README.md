@@ -1468,3 +1468,20 @@ PYTHONPATH=src python examples/37_filter_source_basis_response.py \
 ```
 
 The utility writes CSV, JSON, and Markdown reports and compares `all`, `drop_zero_response`, `drop_negative_response`, and `positive_nonzero_response` bases.
+
+### v0.3.4 ion-specific source-basis discovery
+
+`examples/38_discover_helike_source_basis.py` discovers an ion-specific He-like source basis from existing solver response matrices. It classifies each sampled source level as zero, positive nonzero, negative, or mixed-negative in raw f/i/r response, ranks useful levels by total triplet response, and writes candidate `--source-levels` lists for follow-up source-fit runs.
+
+```bash
+PYTHONPATH=src python examples/38_discover_helike_source_basis.py \
+  o7_solver_source_fit_density_xstar_grid_type69_suppressed \
+  c5_solver_source_fit_density_xstar_grid_v031 \
+  mg11_solver_source_fit_density_xstar_grid \
+  ca19_xi3_solver_source_fit_density_xstar_grid \
+  ca19_xi4_solver_source_fit_density_xstar_grid \
+  --out-dir helike_discovered_source_basis \
+  --print-summary
+```
+
+If a non-O VII run reports `no_positive_nonzero_basis`, rerun example 20 or 22 with a broader `--source-levels` candidate list, then run the discovery diagnostic again.

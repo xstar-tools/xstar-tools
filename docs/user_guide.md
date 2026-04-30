@@ -1523,3 +1523,8 @@ The audit reports the XSTAR ion labels present in the file, rows in the waveleng
 ### v0.3.3 response-basis filter comparison
 
 `examples/37_filter_source_basis_response.py` refits completed He-like density-grid outputs after removing zero-response and/or negative-response source levels. This diagnostic tests whether non-O VII failures are caused by a contaminated source basis or by the target lying outside the clean positive-response source span.
+
+
+### v0.3.4 ion-specific source-basis discovery
+
+Use `examples/38_discover_helike_source_basis.py` after response-matrix generation to classify sampled source levels by raw f/i/r response and write ion-specific discovered source-level candidate lists. This is diagnostic/exploratory and does not change default solver physics.
