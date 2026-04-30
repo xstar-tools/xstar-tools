@@ -1437,3 +1437,7 @@ PYTHONPATH=src python examples/36_source_level_failure_diagnostics.py \
 ```
 
 The output CSV/JSON/Markdown tables report the source level label/configuration, fitted weight, f/i/r response contribution, zero-response flags, optional source-component population, dominant radiative decay path, dominant collisional sink/source, and pruning/weak-connectivity flags. Older v0.2.x archives lack combined-solver population CSVs; rerunning the v0.3.0 workflows fills those population columns.
+#### v0.3.1 diagnostic notes
+
+`examples/36_source_level_failure_diagnostics.py` now reports template-only or otherwise empty density-grid directories explicitly instead of silently writing empty tables.  When population exports are absent, the summary prints `pop=unavailable` rather than `pop=0`.  Supplying `--fitsfile` uses the current `ATDB.build_index()` API to annotate dominant radiative and collisional paths.
+

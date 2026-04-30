@@ -46,3 +46,24 @@ def test_source_level_failure_diagnostics_fake_run(tmp_path: Path):
     assert len(rows) == 2
     assert any("zero f/i/r response" in row["level_failure_flags"] for row in rows)
     assert (out / "helike_source_level_diagnostics.md").exists()
+
+
+def test_source_level_failure_diagnostics_empty_run_reports_warning(tmp_path: Path):
+    run = tmp_path / "c5_solver_source_fit_density_xstar_grid_v030"
+    run.mkdir()
+    out = tmp_path / "empty_diag"
+    completed = subprocess.run([
+        sys.executable, "examples/36_source_level_failure_diagnostics.py", str(run), "--out-dir", str(out), "--print-summary"
+    ], check=True, capture_output=True, text=True)
+    assert "levels=0" in completed.stdout
+    assert "warning=No fit_ne_* directories found" in completed.stdout
+    rows = list(csv.DictReader((out / "helike_source_level_density_summary.csv").open()))
+    assert len(rows) == 1
+    assert rows[0]["n_source_levels"] == "0"
+    assert "No fit_ne_* directories found" in rows[0]["run_warning"]
+
+
+def test_source_level_failure_diagnostics_uses_build_index_api():
+    text = Path("examples/36_source_level_failure_diagnostics.py").read_text()
+    assert "db.build_index()" in text
+    assert "db.index_records()" not in text.split("if hasattr(db, \"index_records\"):", 1)[0]

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.1 - Source-level diagnostic robustness - 2026-04-29
+
+- Fixed `examples/36_source_level_failure_diagnostics.py` to use the current `ATDB.build_index()` API when `--fitsfile` is supplied, with a defensive fallback for older local trees.
+- Added explicit empty-run reporting when a density-grid directory contains no `fit_ne_*` outputs, which commonly means `examples/22` only wrote a template XSTAR mapping and exited.
+- Changed source-level diagnostic summaries to report population availability as `available`/`unavailable` instead of misleading `pop=0` for older or incomplete run folders.
+- Updated the Markdown interpretation guide for missing population/transition exports and template-only density-grid runs.
+
 ## v0.3.0 - He-like source-level failure diagnostics - 2026-04-29
 
 - Added `examples/36_source_level_failure_diagnostics.py` to compare fitted source vectors and response matrices at the individual source-level level across O VII, C V, Mg XI, and Ca XIX density-grid runs.

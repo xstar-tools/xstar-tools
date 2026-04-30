@@ -244,7 +244,15 @@ def _build_atdb_context(fitsfile: str | None, element: str, ion_stage: int, temp
     if ATDB is None:
         raise RuntimeError("xstar_atomic modules are not importable; cannot use --fitsfile context")
     db = ATDB(fitsfile)
-    records = db.index_records()
+    # ATDB exposes build_index() in current xstar_atomic versions.  Some
+    # early development notes referred to index_records(); keep a defensive
+    # fallback so the diagnostic works across local trees.
+    if hasattr(db, "build_index"):
+        records, _elements, _ions = db.build_index()
+    elif hasattr(db, "index_records"):
+        records = db.index_records()  # type: ignore[attr-defined]
+    else:  # pragma: no cover - protects against incompatible external ATDB APIs
+        raise AttributeError("ATDB object has neither build_index() nor index_records()")
     z = choose_z(element)  # type: ignore[misc]
     levels = extract_levels(db, records, z, ion_stage)  # type: ignore[misc]
     lines = extract_lines(db, records, z, ion_stage)  # type: ignore[misc]
@@ -505,6 +513,7 @@ def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple
         "n_partial_zero_response": sum(1 for r in rows if any(r.get(f"response_{c}_is_zero") for c in TRIPLET_COMPONENTS) and not all(r.get(f"response_{c}_is_zero") for c in TRIPLET_COMPONENTS)),
         "n_negative_raw_response": sum(1 for r in rows if any((_as_float(r.get(f"response_{c}_raw")) or 0.0) < -NEGATIVE_RAW_TOL for c in TRIPLET_COMPONENTS)),
         "n_population_available": sum(1 for r in rows if r.get("solver_population_source_level") not in (None, "")),
+        "population_status": "available" if any(r.get("solver_population_source_level") not in (None, "") for r in rows) else "unavailable",
         "n_weakly_connected": sum(1 for r in rows if r.get("weakly_connected")),
         "max_fit_weight_level": max(rows, key=lambda r: _as_float(r.get("fitted_source_weight")) or -1).get("source_level") if rows else None,
         "max_fit_weight": max((_as_float(r.get("fitted_source_weight")) or 0.0) for r in rows) if rows else None,
@@ -523,6 +532,30 @@ def _collect_run(run_dir: Path, fitsfile: str | None, densities: set[float] | No
     tag = _infer_tag(run_dir, first_summary)
     all_rows: list[dict[str, Any]] = []
     summaries: list[dict[str, Any]] = []
+    if not fit_dirs:
+        summaries.append({
+            "tag": tag,
+            "fit_dir": "",
+            "density_cm^-3": None,
+            "element": first_summary.get("element", ""),
+            "ion_stage": first_summary.get("ion_stage", ""),
+            "n_source_levels": 0,
+            "n_nonzero_fitted_weights": 0,
+            "n_levels_with_failure_flags": 0,
+            "n_all_zero_response": 0,
+            "n_partial_zero_response": 0,
+            "n_negative_raw_response": 0,
+            "n_population_available": None,
+            "population_status": "unavailable",
+            "n_weakly_connected": 0,
+            "max_fit_weight_level": None,
+            "max_fit_weight": None,
+            "combined_R": None,
+            "combined_G": None,
+            "combined_solver_residual_l2": None,
+            "run_warning": f"No fit_ne_* directories found under {run_dir}; run examples/22 after the XSTAR mapping CSV points to converted triplet files.",
+        })
+        return all_rows, summaries
     for fit_dir in fit_dirs:
         rows, summary = _collect_fit_dir(tag, fit_dir, fitsfile)
         all_rows.extend(rows)
@@ -538,14 +571,14 @@ def _write_markdown(path: Path, summaries: list[dict[str, Any]], rows: list[dict
         "",
         "## Density-level summary",
         "",
-        "| tag | density | levels | nonzero weights | all-zero response | partial-zero response | negative raw response | weakly connected | population available | combined R/G | residual L2 |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| tag | density | levels | nonzero weights | all-zero response | partial-zero response | negative raw response | weakly connected | population | combined R/G | residual L2 | warning |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|",
     ]
     for s in summaries:
         lines.append(
             f"| {s['tag']} | {_fmt(s['density_cm^-3'])} | {s['n_source_levels']} | {s['n_nonzero_fitted_weights']} | "
             f"{s['n_all_zero_response']} | {s['n_partial_zero_response']} | {s['n_negative_raw_response']} | "
-            f"{s['n_weakly_connected']} | {s['n_population_available']} | {_fmt(s['combined_R'])}/{_fmt(s['combined_G'])} | {_fmt(s['combined_solver_residual_l2'])} |"
+            f"{s['n_weakly_connected']} | {s.get('population_status', s.get('n_population_available', 'unavailable'))} | {_fmt(s['combined_R'])}/{_fmt(s['combined_G'])} | {_fmt(s['combined_solver_residual_l2'])} | {s.get('run_warning','')} |"
         )
     lines += ["", "## Highest-weight source levels with failure flags", "", "| tag | density | level | label | weight | response f/i/r | contribution f/i/r | component population | dominant radiative | dominant collision | flags |", "|---|---:|---:|---|---:|---:|---:|---:|---|---|---|"]
     top_rows = sorted(rows, key=lambda r: (_as_float(r.get("fitted_source_weight")) or 0.0), reverse=True)[:top_n]
@@ -556,7 +589,16 @@ def _write_markdown(path: Path, summaries: list[dict[str, Any]], rows: list[dict
             f"{_fmt(r['fit_contribution_forbidden'])}/{_fmt(r['fit_contribution_intercombination'])}/{_fmt(r['fit_contribution_resonance'])} | "
             f"{_fmt(r.get('solver_population_source_component'))} | {r.get('dominant_radiative_path','')} | {r.get('dominant_collision_path','')} | {r.get('level_failure_flags','')} |"
         )
-    lines += ["", "## Interpretation guide", "", "- `all-zero response` means the source level contributes no usable f/i/r response in the unit-source matrix.", "- `partial-zero response` means at least one of f, i, or r is missing; these levels can make R or G undefined even when the formal fit has nonzero weight.", "- `negative raw response` indicates the linearized response is not physically positive for one or more components; this commonly correlates with rank-deficient/ill-conditioned simultaneous solves.", "- `population available = 0` on older runs means the archive predates v0.3.0 population export; rerunning examples/20--22 with v0.3.0 will fill those columns."]
+    lines += [
+        "",
+        "## Interpretation guide",
+        "",
+        "- `all-zero response` means the source level contributes no usable f/i/r response in the unit-source matrix.",
+        "- `partial-zero response` means at least one of f, i, or r is missing; these levels can make R or G undefined even when the formal fit has nonzero weight.",
+        "- `negative raw response` indicates the linearized response is not physically positive for one or more components; this commonly correlates with rank-deficient/ill-conditioned simultaneous solves.",
+        "- `population = unavailable` means the run folder does not contain the v0.3.0 combined-solver population export; rerunning examples/20--22 with v0.3.1 or newer will fill those columns.",
+        "- A row with `levels = 0` means no `fit_ne_*` output directories were found; usually the density-grid driver only wrote a template mapping and exited before running fits.",
+    ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
 
@@ -595,7 +637,8 @@ def main() -> None:
                 f"levels={s['n_source_levels']} nonzero={s['n_nonzero_fitted_weights']} "
                 f"zero={s['n_all_zero_response']} partial_zero={s['n_partial_zero_response']} "
                 f"negative={s['n_negative_raw_response']} weak={s['n_weakly_connected']} "
-                f"pop={s['n_population_available']} residual={_fmt(s['combined_solver_residual_l2'])}"
+                f"pop={s.get('population_status', s.get('n_population_available', 'unavailable'))} residual={_fmt(s['combined_solver_residual_l2'])}"
+                + (f" warning={s.get('run_warning')}" if s.get('run_warning') else "")
             )
         print(f"wrote: {args.out_dir / 'helike_source_level_diagnostics.md'}")
 
