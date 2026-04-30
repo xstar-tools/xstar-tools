@@ -410,3 +410,21 @@ The audit reports the XSTAR ion labels present in the file, rows in the waveleng
 ### v0.3.4 ion-specific source-basis discovery
 
 Use `examples/38_discover_helike_source_basis.py` after response-matrix generation to classify sampled source levels by raw f/i/r response and write ion-specific discovered source-level candidate lists. This is diagnostic/exploratory and does not change default solver physics.
+
+### v0.3.8 signed/absolute triplet-response audit
+
+`examples/40_audit_signed_triplet_response.py` runs a baseline solver calculation and one source-injected calculation per requested level. It writes `helike_signed_triplet_response_audit.csv`, `helike_signed_triplet_response_commands.csv`, `helike_signed_triplet_response_summary.json`, and `helike_signed_triplet_response_audit.md`. The audit compares baseline f/i/r emissivities, source-injected f/i/r emissivities, delta responses, signed normalized delta vectors, sign patterns, and component-wise increase/decrease flags. It is designed to test whether negative non-O VII response columns are caused by baseline subtraction, normalization artifacts, or genuinely destructive population redistribution.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
+  ../xstar/data/atdb.fits \
+  --element C --ion-stage 5 \
+  --temperature 1000000 --electron-density 1e8 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --index-cache --index-cache-path .xstar_atomic_cache/atdb_c5_index.npz \
+  --out-dir c5_signed_triplet_response_audit \
+  --print-summary
+```

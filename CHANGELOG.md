@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.8 - signed/absolute He-like triplet response audit - 2026-04-30
+
+- Added `examples/40_audit_signed_triplet_response.py`, a diagnostic that compares baseline, source-injected, absolute, and delta f/i/r triplet emissivities for each source level.
+- The audit reports raw baseline and injected triplet components, normalized injected fractions, signed normalized delta responses, component-wise increase/decrease flags, sign patterns, and whether negative responses are caused by baseline subtraction.
+- This diagnostic is intended to distinguish genuinely destructive population redistribution from response-matrix construction artifacts, normalization artifacts, or missing recombination/cascade source physics in non-O VII He-like ions.
+- Added regression coverage for the new diagnostic's dry-run command/output path.
+
 ## v0.3.7 - Robust He-like block-scan preflight and XSTAR reference diagnostics - 2026-04-30
 
 - Fixed `examples/39_scan_helike_source_level_blocks.py` source-level preflight, which incorrectly imported a non-existent `parse_element` helper from `xstar_atomic.lines`.

@@ -1466,4 +1466,8 @@ The helper 	exttt{examples/32\_prepare\_helike\_xstar\_density\_grids.py} suppor
 \subsection*{Ion-specific He-like source-basis discovery (v0.3.4)}
 Version 0.3.4 adds \texttt{examples/38\_discover\_helike\_source\_basis.py}, an exploratory diagnostic that reads existing source-response matrices and classifies each sampled source level by its raw forbidden/intercombination/resonance response. It writes per-level, per-density, and per-run CSV/JSON/Markdown summaries, including discovered positive nonzero source-level lists that can be reused with \texttt{--source-levels} in follow-up runs.
 
+
+\subsection*{v0.3.8 signed/absolute triplet-response audit}
+The script \texttt{examples/40\_audit\_signed\_triplet\_response.py} compares baseline, source-injected, absolute, and delta He-like triplet emissivities for each requested source level.  It reports component-wise f/i/r increases and decreases, signed normalized delta response vectors, and whether negative responses are caused by baseline subtraction.  This diagnostic is intended to distinguish destructive population redistribution from response-matrix construction or normalization artifacts in non-O VII He-like tests.
+
 \end{document}
