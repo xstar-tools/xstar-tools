@@ -24,8 +24,22 @@ from typing import Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
 
+
 COMPONENTS = ["forbidden", "intercombination", "resonance"]
 
+
+
+def resolve_optional_fitsfile(path: Optional[str]) -> str:
+    """Resolve optional atdb.fits path without rewriting datapath.
+
+    If a path is supplied, return it unchanged; this avoids changing the
+    persistent datapath during ordinary example runs.  If omitted, defer to the
+    package data resolver, which uses XSTAR_ATDB_FITS, datapath, or data/.
+    """
+    if path is not None:
+        return str(path)
+    from xstar_atomic.data import resolve_atdb_path
+    return str(resolve_atdb_path(None, prompt=False, remember_explicit=False))
 
 def _maybe_float(value) -> Optional[float]:
     try:
@@ -306,7 +320,7 @@ def write_markdown(path: Path, rows: List[dict], summary: dict, args) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("fitsfile")
+    parser.add_argument("fitsfile", nargs="?", default=None, help="Optional XSTAR atdb.fits path. If omitted, use XSTAR_ATDB_FITS, datapath, or data/atdb.fits.")
     parser.add_argument("--element", default="O")
     parser.add_argument("--ion-stage", type=int, default=7)
     parser.add_argument("--temperature", type=float, default=1.0e6)
@@ -339,6 +353,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Write commands and output skeleton without running xstar_atomic.solver")
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
+    args.fitsfile = resolve_optional_fitsfile(args.fitsfile)
 
     out_dir = Path(args.out_dir)
     run_dir = out_dir / "solver_runs"

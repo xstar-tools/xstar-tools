@@ -1509,3 +1509,28 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
   --out-dir c5_signed_triplet_response_audit \
   --print-summary
 ```
+
+
+### v0.3.9 datapath-safe ATDB resolution
+
+Examples that were added for the He-like response diagnostics no longer need a positional `../xstar/data/atdb.fits` once the package data path has been configured. Configure it once with:
+
+```bash
+PYTHONPATH=src python -m xstar_atomic.data --set-path /path/to/atdb.fits
+PYTHONPATH=src python -m xstar_atomic.data --show
+```
+
+Then run diagnostics without the positional FITS argument, for example:
+
+```bash
+PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
+  --element C --ion-stage 5 \
+  --temperature 1000000 --electron-density 1e8 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --index-cache --index-cache-path .xstar_atomic_cache/atdb_c5_index.npz \
+  --out-dir c5_signed_triplet_response_audit \
+  --print-summary
+```
+
+Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.

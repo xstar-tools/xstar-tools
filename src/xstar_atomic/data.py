@@ -129,12 +129,14 @@ def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = 
 
     The environment variable ``XSTAR_ATDB_FITS`` is honored as a convenience.
     If an explicit path or environment path is valid and ``remember`` is true,
-    its parent directory is written to the persistent datapath file.
+    its parent directory is written to the persistent datapath file.  General
+    command-line examples now call :func:`resolve_atdb_path` with the default
+    ``remember_explicit=False`` so normal runs do not overwrite ``datapath``.
     """
     candidates: list[tuple[Path, bool]] = []
     if path is not None:
         p = Path(path).expanduser()
-        candidates.append((p / ATDB_FILENAME if p.is_dir() else p, True))
+        candidates.append((p / ATDB_FILENAME if p.is_dir() else p, remember))
     env_path = os.environ.get("XSTAR_ATDB_FITS")
     if env_path:
         p = Path(env_path).expanduser()
@@ -274,7 +276,12 @@ def download_data(
     return out_path
 
 
-def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool = True) -> Path:
+def resolve_atdb_path(
+    path: Optional[Union[str, Path]] = None,
+    *,
+    prompt: bool = True,
+    remember_explicit: bool = False,
+) -> Path:
     """Resolve an ``atdb.fits`` path, prompting/download if needed.
 
     An explicitly supplied path has strict precedence over any configured
@@ -282,6 +289,13 @@ def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool =
     clear error rather than silently falling back to ``XSTAR_ATDB_FITS``; this
     avoids surprising behavior in scripts and tests that intentionally pass a
     path argument.
+
+    By default, ordinary explicit path use does **not** rewrite the persistent
+    ``datapath`` file.  Use :func:`set_data_path`, ``python -m xstar_atomic.data
+    --set-path ...``, or pass ``remember_explicit=True`` when the user is
+    deliberately configuring the shared data location.  This keeps diagnostic
+    examples from changing ``datapath`` simply because a command line included
+    ``../xstar/data/atdb.fits``.
     """
     if path is not None:
         p = Path(path).expanduser()
@@ -292,7 +306,8 @@ def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool =
             pass
         problem = _atdb_file_problem(candidate)
         if problem is None:
-            set_data_path(candidate.parent)
+            if remember_explicit:
+                set_data_path(candidate.parent)
             return candidate
         raise FileNotFoundError(
             f"atdb.fits not found or invalid: {candidate} ({problem}). "
@@ -303,6 +318,11 @@ def resolve_atdb_path(path: Optional[Union[str, Path]] = None, *, prompt: bool =
     found = find_atdb_file(None)
     if found is not None:
         return found
+    if not prompt:
+        raise FileNotFoundError(
+            "No valid atdb.fits was found from XSTAR_ATDB_FITS, datapath, or the default data directory. "
+            "Configure it once with: python -m xstar_atomic.data --set-path /path/to/atdb.fits"
+        )
     return download_data(prompt=prompt)
 
 

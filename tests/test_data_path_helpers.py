@@ -35,7 +35,7 @@ def test_data_path_roundtrip(tmp_path, monkeypatch):
     assert data.find_atdb_file() == atdb.resolve()
 
 
-def test_resolve_atdb_path_explicit_remembers_parent(tmp_path, monkeypatch):
+def test_resolve_atdb_path_explicit_does_not_remember_parent_by_default(tmp_path, monkeypatch):
     pytest.importorskip("astropy")
     import xstar_atomic.data as data
 
@@ -48,6 +48,10 @@ def test_resolve_atdb_path_explicit_remembers_parent(tmp_path, monkeypatch):
 
     resolved = data.resolve_atdb_path(atdb, prompt=False)
     assert resolved == atdb.resolve()
+    assert data.get_data_path() is None
+
+    remembered = data.resolve_atdb_path(atdb, prompt=False, remember_explicit=True)
+    assert remembered == atdb.resolve()
     assert data.get_data_path() == tmp_path.resolve()
 
 
