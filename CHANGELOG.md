@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.5 - 2026-04-30
+
+- Added `examples/39_scan_helike_source_level_blocks.py`, a broad source-level block-scan wrapper that runs `examples/20_o7_solver_source_fit.py` over inclusive level ranges such as `2:40`, `41:80`, then applies the discovered-basis diagnostic from example 38.
+- The block scan writes exact child commands, per-block fit status, discovery summaries, source-level tables, JSON, and Markdown reports.
+- Added dry-run support for planning expensive ATDB/XSTAR scans without executing solver runs.
+- Added tests for the block-scan command generation and summary outputs.
+
 ## v0.3.4 - ion-specific He-like source-basis discovery - 2026-04-30
 
 - Added `examples/38_discover_helike_source_basis.py`, an offline diagnostic that ranks sampled source levels by their raw forbidden/intercombination/resonance response and discovers ion-specific positive, nonzero source bases.
