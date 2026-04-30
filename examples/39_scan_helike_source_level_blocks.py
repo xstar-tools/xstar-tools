@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scan broad He-like source-level blocks for positive triplet-response bases.
 
-This v0.3.5 diagnostic automates the follow-up after
+This v0.3.6 diagnostic automates the follow-up after
 ``examples/37_filter_source_basis_response.py`` and
 ``examples/38_discover_helike_source_basis.py``.  The previous diagnostics show
 whether an already-sampled source-level list contains a clean positive nonzero
@@ -23,7 +23,7 @@ import math
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 def _maybe_float(value) -> Optional[float]:
@@ -42,6 +42,58 @@ def _fmt(value, precision: int = 6) -> str:
         return "NA"
     return f"{val:.{precision}g}"
 
+
+
+def _discover_available_source_levels(args: argparse.Namespace) -> Tuple[Optional[set[int]], List[str]]:
+    """Return available level indices for the requested ion, when ATDB can be read.
+
+    This is intentionally best-effort.  The block scanner should still be able to
+    write commands in dry-run mode or in environments where the ATDB file is not
+    available.
+    """
+    warnings: List[str] = []
+    fits_path = Path(str(args.fitsfile))
+    if args.dry_run or not getattr(args, "skip_invalid_source_levels", True):
+        return None, warnings
+    if not fits_path.exists():
+        warnings.append(f"source-level preflight skipped because ATDB file does not exist: {fits_path}")
+        return None, warnings
+    try:
+        from xstar_atomic.hierarchy import ATDB
+        from xstar_atomic.lines import extract_levels, parse_element
+    except Exception as exc:  # pragma: no cover - import failures are environment-specific
+        warnings.append(f"source-level preflight skipped because xstar_atomic imports failed: {exc}")
+        return None, warnings
+    try:
+        z = parse_element(str(args.element))
+        use_cache = bool(args.index_cache) or bool(args.index_cache_path)
+        with ATDB(fits_path) as db:
+            records, _elements, _ions = db.build_index(
+                use_cache=use_cache,
+                cache_path=args.index_cache_path,
+                cache_format=args.index_cache_format,
+            )
+            levels = extract_levels(db, records, z, int(args.ion_stage))
+        available = {int(row["level_index"]) for row in levels if row.get("level_index") not in (None, "")}
+        if not available:
+            warnings.append(f"source-level preflight found no levels for {args.element} {args.ion_stage}; using requested blocks unchanged")
+            return None, warnings
+        warnings.append(
+            f"source-level preflight found {len(available)} available levels for {args.element} {args.ion_stage} "
+            f"(min={min(available)}, max={max(available)})"
+        )
+        return available, warnings
+    except Exception as exc:
+        warnings.append(f"source-level preflight failed; using requested blocks unchanged: {exc}")
+        return None, warnings
+
+
+def _filter_levels_for_preflight(levels: Sequence[int], available: Optional[set[int]]) -> Tuple[List[int], List[int]]:
+    if available is None:
+        return [int(x) for x in levels], []
+    kept = [int(x) for x in levels if int(x) in available]
+    skipped = [int(x) for x in levels if int(x) not in available]
+    return kept, skipped
 
 def write_csv(path: Path, rows: List[dict], default_fields: Optional[List[str]] = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,7 +276,7 @@ def summarize_block_scan(scan_rows: List[dict], discovery_run_rows: List[dict], 
 
 def write_markdown(path: Path, summary_rows: List[dict], scan_rows: List[dict], warnings: List[str]) -> None:
     lines = ["# He-like source-level block scan", ""]
-    lines.append("This diagnostic scans broad source-level blocks by running example 20 for each block and then applying the source-basis discovery diagnostic from example 38.")
+    lines.append("This diagnostic scans broad source-level blocks by running example 20 for each block and then applying the source-basis discovery diagnostic from example 38. In v0.3.6 the scanner can preflight the ATDB level table and skip source levels that do not exist for the requested ion.")
     lines.append("")
     if warnings:
         lines.append("## Warnings")
@@ -246,7 +298,7 @@ def write_markdown(path: Path, summary_rows: List[dict], scan_rows: List[dict], 
     lines.append("")
     lines.append("## Commands")
     lines.append("")
-    lines.append("The `helike_source_level_block_scan.csv` file contains the exact example-20 command used for each block. If `--dry-run` was used, copy a command from that file to execute one block manually.")
+    lines.append("The `helike_source_level_block_scan.csv` file contains the exact example-20 command used for each block, the requested levels, any skipped invalid levels, and stdout/stderr log paths. If `--dry-run` was used, copy a command from that file to execute one block manually.")
     lines.append("")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -288,6 +340,8 @@ def main() -> None:
     parser.add_argument("--out-dir", default="helike_source_level_block_scan")
     parser.add_argument("--force", action="store_true", help="Re-run a block even if its response matrix already exists.")
     parser.add_argument("--dry-run", action="store_true", help="Write commands and summary files but do not execute example 20 or discovery.")
+    parser.add_argument("--skip-invalid-source-levels", action="store_true", default=True, help="Preflight ATDB level table and remove requested source levels that do not exist for this ion before running each block. Default: true.")
+    parser.add_argument("--no-skip-invalid-source-levels", dest="skip_invalid_source_levels", action="store_false", help="Do not preflight/filter requested source levels.")
     parser.add_argument("--print-child-summary", action="store_true", help="Pass --print-summary to child examples.")
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
@@ -299,39 +353,54 @@ def main() -> None:
     block_run_dirs: List[Path] = []
     warnings: List[str] = []
     dens_token = density_token(float(args.electron_density))
+    available_levels, preflight_warnings = _discover_available_source_levels(args)
+    warnings.extend(preflight_warnings)
 
     for block in blocks:
-        levels = block_levels(block)
+        requested_levels = block_levels(block)
+        levels, skipped_levels = _filter_levels_for_preflight(requested_levels, available_levels)
         tag = block_tag(block)
         run_dir = out_dir / tag
         fit_dir = run_dir / f"fit_ne_{dens_token}"
         block_run_dirs.append(run_dir)
-        cmd = build_example20_command(args, levels, fit_dir)
+        cmd = build_example20_command(args, levels, fit_dir) if levels else []
         row = {
             "block_tag": tag,
             "source_level_start": block[0],
             "source_level_stop": block[1],
             "n_source_levels": len(levels),
+            "n_requested_source_levels": len(requested_levels),
+            "n_skipped_invalid_source_levels": len(skipped_levels),
             "source_levels": ",".join(str(x) for x in levels),
+            "requested_source_levels": ",".join(str(x) for x in requested_levels),
+            "skipped_invalid_source_levels": ",".join(str(x) for x in skipped_levels),
             "fit_dir": str(fit_dir),
             "command": " ".join(cmd),
+            "stdout_log": str(run_dir / "example20.stdout.log"),
+            "stderr_log": str(run_dir / "example20.stderr.log"),
             "status": "pending",
             "returncode": None,
         }
         response_matrix = fit_dir / "o7_solver_response_matrix.csv"
-        if args.dry_run:
+        if not levels:
+            row["status"] = "skipped_no_valid_source_levels"
+            warnings.append(f"{tag}: no requested source levels are present for {args.element} {args.ion_stage}; skipped block")
+        elif args.dry_run:
             row["status"] = "dry_run"
         elif response_matrix.exists() and not args.force:
             row["status"] = "existing"
             row["returncode"] = 0
         else:
+            run_dir.mkdir(parents=True, exist_ok=True)
             completed = subprocess.run(cmd, cwd=Path.cwd(), text=True, capture_output=True)
+            (run_dir / "example20.stdout.log").write_text(completed.stdout or "", encoding="utf-8")
+            (run_dir / "example20.stderr.log").write_text(completed.stderr or "", encoding="utf-8")
             row["returncode"] = completed.returncode
             row["stdout_tail"] = "\n".join((completed.stdout or "").splitlines()[-20:])
             row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
             row["status"] = "ok" if completed.returncode == 0 and response_matrix.exists() else "failed"
             if row["status"] == "failed":
-                warnings.append(f"{tag}: example 20 failed or did not write {response_matrix}")
+                warnings.append(f"{tag}: example 20 failed or did not write {response_matrix}; see {run_dir / 'example20.stderr.log'}")
         scan_rows.append(row)
 
     discovery_run_rows: List[dict] = []

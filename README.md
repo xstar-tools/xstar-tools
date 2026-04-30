@@ -1469,7 +1469,16 @@ PYTHONPATH=src python examples/37_filter_source_basis_response.py \
 
 The utility writes CSV, JSON, and Markdown reports and compares `all`, `drop_zero_response`, `drop_negative_response`, and `positive_nonzero_response` bases.
 
-### v0.3.5 broad He-like source-level block scans
+### v0.3.6 robust source-level block preflight
 
-Use `examples/39_scan_helike_source_level_blocks.py` to scan wider candidate source-level ranges for non-O VII He-like ions.  It runs example 20 for blocks such as `2:40`, `41:80`, and then applies the source-basis discovery diagnostic to determine whether any block contains positive, nonzero f/i/r response levels.  Use `--dry-run` first to inspect the generated commands before launching expensive ATDB solver scans.
+`examples/39_scan_helike_source_level_blocks.py` now preflights the ATDB level table before running each block.  This avoids the Ca XIX failure mode where a requested block such as `2:40` includes level indices outside the levels available for Ca XIX.  Invalid levels are skipped by default and recorded in `helike_source_level_block_scan.csv`.
+
+Each block also writes child-process logs:
+
+```text
+<out-dir>/<block-tag>/example20.stdout.log
+<out-dir>/<block-tag>/example20.stderr.log
+```
+
+Use `--no-skip-invalid-source-levels` to restore the old behavior when deliberately testing invalid or edge-case level lists.
 
