@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.7 - Robust He-like block-scan preflight and XSTAR reference diagnostics - 2026-04-30
+
+- Fixed `examples/39_scan_helike_source_level_blocks.py` source-level preflight, which incorrectly imported a non-existent `parse_element` helper from `xstar_atomic.lines`.
+  The scanner now uses the existing `choose_z()` API.
+- Added an explicit preflight check for the converted XSTAR triplet reference CSV supplied with `--xstar-lines-csv`.
+  The scan now warns clearly when the CSV is missing, empty, has no matching ion rows, or lacks one of the f/i/r components needed to compute XSTAR R and G.
+- Kept the v0.3.6 invalid-source-level filtering behavior, but improved the failure path so block-fit failures caused by missing/invalid XSTAR references are easier to diagnose before expensive scans are attempted.
+- Documentation updated to mention the new v0.3.7 reference-preflight warning.
+
 ## v0.3.6 - robust He-like source-level block preflight - 2026-04-30
 
 - Hardened `examples/39_scan_helike_source_level_blocks.py` after Ca XIX block scans failed before discovery when requested blocks included source levels not present for Ca XIX.

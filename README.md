@@ -1482,3 +1482,12 @@ Each block also writes child-process logs:
 
 Use `--no-skip-invalid-source-levels` to restore the old behavior when deliberately testing invalid or edge-case level lists.
 
+
+### v0.3.7 block-scan preflight diagnostics
+
+`examples/39_scan_helike_source_level_blocks.py` now performs two best-effort preflight checks before launching block fits:
+
+1. the ATDB level table is inspected, when available, so invalid source levels can be skipped;
+2. the converted XSTAR triplet CSV supplied with `--xstar-lines-csv` is checked for matching ion rows and complete f/i/r components.
+
+This makes failures such as a missing `xstar_test_run/ca19_xi3_ne1e8/xstar_ca19_triplet_lines.csv` file explicit before the scan falls through to `examples/20_o7_solver_source_fit.py`.

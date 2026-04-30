@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scan broad He-like source-level blocks for positive triplet-response bases.
 
-This v0.3.6 diagnostic automates the follow-up after
+This v0.3.7 diagnostic automates the follow-up after
 ``examples/37_filter_source_basis_response.py`` and
 ``examples/38_discover_helike_source_basis.py``.  The previous diagnostics show
 whether an already-sampled source-level list contains a clean positive nonzero
@@ -60,12 +60,12 @@ def _discover_available_source_levels(args: argparse.Namespace) -> Tuple[Optiona
         return None, warnings
     try:
         from xstar_atomic.hierarchy import ATDB
-        from xstar_atomic.lines import extract_levels, parse_element
+        from xstar_atomic.lines import extract_levels, choose_z
     except Exception as exc:  # pragma: no cover - import failures are environment-specific
         warnings.append(f"source-level preflight skipped because xstar_atomic imports failed: {exc}")
         return None, warnings
     try:
-        z = parse_element(str(args.element))
+        z = choose_z(str(args.element))
         use_cache = bool(args.index_cache) or bool(args.index_cache_path)
         with ATDB(fits_path) as db:
             records, _elements, _ions = db.build_index(
@@ -94,6 +94,81 @@ def _filter_levels_for_preflight(levels: Sequence[int], available: Optional[set[
     kept = [int(x) for x in levels if int(x) in available]
     skipped = [int(x) for x in levels if int(x) not in available]
     return kept, skipped
+
+
+
+def _normalize_ion_text(text: str) -> str:
+    return str(text or "").strip().lower().replace(" ", "").replace("_", "")
+
+
+def _expected_ion_aliases(element: str, ion_stage: int) -> set[str]:
+    # Minimal aliases matching the converter output used by examples/20/33.
+    roman_map = {
+        1: "i", 2: "ii", 3: "iii", 4: "iv", 5: "v", 6: "vi", 7: "vii", 8: "viii", 9: "ix", 10: "x",
+        11: "xi", 12: "xii", 13: "xiii", 14: "xiv", 15: "xv", 16: "xvi", 17: "xvii", 18: "xviii", 19: "xix", 20: "xx",
+        21: "xxi", 22: "xxii", 23: "xxiii", 24: "xxiv", 25: "xxv", 26: "xxvi",
+    }
+    e = str(element or "").strip().lower()
+    rn = roman_map.get(int(ion_stage), str(int(ion_stage)).lower())
+    return {_normalize_ion_text(f"{e}_{rn}"), _normalize_ion_text(f"{e} {rn}"), _normalize_ion_text(f"{e}{rn}")}
+
+
+def _classify_triplet_row(row: dict) -> Optional[str]:
+    lower = str(row.get("lower_level", "") or row.get("lower", "")).replace(" ", "")
+    upper = str(row.get("upper_level", "") or row.get("upper", "")).replace(" ", "")
+    if "1s2.1S_0" in lower or "1s2" in lower:
+        if "1s1.2s1.3S_1" in upper or "2s1.3S_1" in upper:
+            return "f"
+        if "1s1.2p1.1P_1" in upper or "2p1.1P_1" in upper:
+            return "r"
+        if "1s1.2p1.3P_" in upper or "2p1.3P_" in upper:
+            return "i"
+    return None
+
+
+def _preflight_xstar_reference(args: argparse.Namespace) -> List[str]:
+    """Best-effort validation of the converted XSTAR triplet reference CSV."""
+    warnings: List[str] = []
+    path = Path(str(args.xstar_lines_csv))
+    if not path.exists():
+        warnings.append(
+            f"XSTAR triplet reference CSV does not exist: {path}. "
+            "Run/copy the converter output for this ion/density before running the block scan."
+        )
+        return warnings
+    aliases = _expected_ion_aliases(str(args.element), int(args.ion_stage))
+    counts = {"f": 0, "i": 0, "r": 0}
+    row_count = 0
+    matching_ion_rows = 0
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                row_count += 1
+                ion = _normalize_ion_text(row.get("ion", ""))
+                if ion and ion not in aliases:
+                    continue
+                matching_ion_rows += 1
+                kind = _classify_triplet_row(row)
+                if kind:
+                    counts[kind] += 1
+    except Exception as exc:
+        warnings.append(f"XSTAR triplet reference CSV could not be read: {path}: {exc}")
+        return warnings
+    if row_count == 0:
+        warnings.append(f"XSTAR triplet reference CSV is empty: {path}")
+    elif matching_ion_rows == 0:
+        warnings.append(f"XSTAR triplet reference CSV has {row_count} rows but none match {args.element} {args.ion_stage}: {path}")
+    missing = [name for name, n in counts.items() if n <= 0]
+    if missing:
+        warnings.append(
+            f"XSTAR triplet reference CSV is present but incomplete for {args.element} {args.ion_stage}: "
+            f"counts={counts}; missing={','.join(missing)}; path={path}. "
+            "examples/20 will reject this reference because it cannot compute both R=f/i and G=(f+i)/r."
+        )
+    else:
+        warnings.append(f"XSTAR triplet reference preflight OK for {args.element} {args.ion_stage}: counts={counts}; path={path}")
+    return warnings
+
 
 def write_csv(path: Path, rows: List[dict], default_fields: Optional[List[str]] = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -276,7 +351,7 @@ def summarize_block_scan(scan_rows: List[dict], discovery_run_rows: List[dict], 
 
 def write_markdown(path: Path, summary_rows: List[dict], scan_rows: List[dict], warnings: List[str]) -> None:
     lines = ["# He-like source-level block scan", ""]
-    lines.append("This diagnostic scans broad source-level blocks by running example 20 for each block and then applying the source-basis discovery diagnostic from example 38. In v0.3.6 the scanner can preflight the ATDB level table and skip source levels that do not exist for the requested ion.")
+    lines.append("This diagnostic scans broad source-level blocks by running example 20 for each block and then applying the source-basis discovery diagnostic from example 38. In v0.3.7 the scanner preflights the ATDB level table when possible, skips source levels that do not exist for the requested ion, and separately checks whether the XSTAR triplet reference CSV is present/readable before launching expensive block fits.")
     lines.append("")
     if warnings:
         lines.append("## Warnings")
@@ -355,6 +430,7 @@ def main() -> None:
     dens_token = density_token(float(args.electron_density))
     available_levels, preflight_warnings = _discover_available_source_levels(args)
     warnings.extend(preflight_warnings)
+    warnings.extend(_preflight_xstar_reference(args))
 
     for block in blocks:
         requested_levels = block_levels(block)
