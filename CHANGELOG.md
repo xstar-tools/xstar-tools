@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.12 - 2026-04-30
+
+- Added constrained absolute-response fitting controls to `examples/40_audit_signed_triplet_response.py`.
+- Added `--absolute-fit-reject-pure-i`, `--absolute-fit-pure-i-threshold`, and max/min normalized f/i/r column filters so pure-intercombination columns can be excluded from the absolute-response basis.
+- Added `--absolute-fit-component-weights` (`uniform`, `auto`, or explicit f,i,r triple) and `--absolute-fit-weight-floor`; `auto` upweights small XSTAR target components to discourage fits that overproduce weak components.
+- Propagated the same constrained absolute-response options through `examples/41_fit_absolute_response_density_grid.py` for density-grid scans.
+- Added fit diagnostics for component weights, constraint rejection counts, and selected constraints to the JSON/CSV/Markdown outputs.
+- Added tests for the constrained absolute-response helper functions and density-grid CLI propagation.
+
 ## v0.3.11 - absolute-response density-grid target scan - 2026-04-30
 
 - Added `examples/41_fit_absolute_response_density_grid.py`, which runs the v0.3.10 absolute-response triplet fit across a list of electron densities and aggregates target/predicted f/i/r, R, G, L1/L2 errors, top source levels, and fit status.

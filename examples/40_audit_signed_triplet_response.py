@@ -20,7 +20,7 @@ import math
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -196,7 +196,61 @@ def project_to_simplex(v: np.ndarray) -> np.ndarray:
     return w / sw if sw > 0.0 else np.full_like(v, 1.0 / len(v))
 
 
-def fit_raw_response_simplex(raw_response: np.ndarray, target_norm: np.ndarray, max_iter: int = 50000, tol: float = 1e-13) -> Tuple[np.ndarray, dict]:
+
+
+def parse_component_weights(text: str, target_norm: Sequence[float], floor: float = 1.0e-3) -> np.ndarray:
+    """Return positive f/i/r weights for constrained absolute-response fitting.
+
+    ``uniform`` gives equal component weights.  ``auto`` upweights small target
+    components as 1/sqrt(max(target, floor)), which discourages fits that match
+    the dominant component while greatly overproducing a tiny triplet component.
+    A comma-separated triple may also be supplied explicitly.
+    """
+    value = str(text or "uniform").strip().lower()
+    if value in ("uniform", "none", "1"):
+        return np.ones(3, dtype=float)
+    target = np.asarray(target_norm, dtype=float)
+    target = np.where(np.isfinite(target) & (target > 0.0), target, 0.0)
+    if value == "auto":
+        w = 1.0 / np.sqrt(np.maximum(target, float(floor)))
+        # Keep weights numerically moderate and normalize to mean one.
+        w = np.minimum(w, 1.0 / math.sqrt(float(floor)))
+        mean = float(np.mean(w)) if np.all(np.isfinite(w)) else 1.0
+        return w / mean if mean > 0.0 else np.ones(3, dtype=float)
+    parts = [p.strip() for p in value.replace(";", ",").split(",") if p.strip()]
+    if len(parts) != 3:
+        raise ValueError("--absolute-fit-component-weights must be 'uniform', 'auto', or a comma-separated f,i,r triple")
+    vals = np.asarray([float(p) for p in parts], dtype=float)
+    if not np.all(np.isfinite(vals)) or np.any(vals <= 0.0):
+        raise ValueError("component weights must be positive finite values")
+    return vals
+
+
+def absolute_candidate_rejection_reasons(norm: Sequence[float], args) -> List[str]:
+    """Return reasons why an absolute-response column should be excluded."""
+    f, i, r = [float(x) for x in norm]
+    reasons: List[str] = []
+    if args.absolute_fit_reject_pure_i and i >= float(args.absolute_fit_pure_i_threshold):
+        reasons.append("pure_intercombination")
+    if i > float(args.absolute_fit_max_intercombination_fraction):
+        reasons.append("max_intercombination_fraction")
+    if f > float(args.absolute_fit_max_forbidden_fraction):
+        reasons.append("max_forbidden_fraction")
+    if r > float(args.absolute_fit_max_resonance_fraction):
+        reasons.append("max_resonance_fraction")
+    if f < float(args.absolute_fit_min_forbidden_fraction):
+        reasons.append("min_forbidden_fraction")
+    if r < float(args.absolute_fit_min_resonance_fraction):
+        reasons.append("min_resonance_fraction")
+    return reasons
+
+def fit_raw_response_simplex(
+    raw_response: np.ndarray,
+    target_norm: np.ndarray,
+    max_iter: int = 50000,
+    tol: float = 1e-13,
+    component_weights: Optional[Sequence[float]] = None,
+) -> Tuple[np.ndarray, dict]:
     """Fit nonnegative simplex weights to positive absolute triplet responses.
 
     This is intentionally based on source-injected absolute emissivities, not
@@ -218,7 +272,12 @@ def fit_raw_response_simplex(raw_response: np.ndarray, target_norm: np.ndarray, 
     if not np.isfinite(scale) or scale <= 0.0:
         return np.full(n, 1.0 / n, dtype=float), {"status": "zero_absolute_response_matrix", "objective": None}
     Ys = Y / scale
-    Z = Ys - np.sum(Ys, axis=1)[:, None] * target[None, :]
+    weights_vec = np.asarray(component_weights if component_weights is not None else [1.0, 1.0, 1.0], dtype=float)
+    if weights_vec.size != 3 or not np.all(np.isfinite(weights_vec)) or np.any(weights_vec <= 0.0):
+        weights_vec = np.ones(3, dtype=float)
+    # Scale only the residual metric.  The final predicted triplet is still
+    # computed from the unweighted absolute source emissivities.
+    Z = (Ys - np.sum(Ys, axis=1)[:, None] * target[None, :]) * weights_vec[None, :]
     w = np.full(n, 1.0 / n, dtype=float)
     try:
         spectral = float(np.linalg.norm(Z, ord=2))
@@ -246,6 +305,7 @@ def fit_raw_response_simplex(raw_response: np.ndarray, target_norm: np.ndarray, 
         "objective": float(np.dot(final_centered, final_centered)),
         "step": step,
         "absolute_response_scale": scale,
+        "component_weights": [float(x) for x in weights_vec],
         "combined_absolute_triplet_sum": float(np.sum(final_raw)),
         "combined_normalized_forbidden": float(final_norm[0]),
         "combined_normalized_intercombination": float(final_norm[1]),
@@ -499,6 +559,15 @@ def main() -> None:
     parser.add_argument("--xstar-lines-csv", help="Converted XSTAR He-like triplet line CSV used as the target for --fit-mode absolute-response.")
     parser.add_argument("--xstar-value-column", default="emit_outward", help="XSTAR line CSV value column used for the target triplet.")
     parser.add_argument("--absolute-fit-min-triplet-sum", type=float, default=0.0, help="Minimum positive absolute injected f+i+r sum required for a source level to enter the absolute-response fit.")
+    parser.add_argument("--absolute-fit-component-weights", default="uniform", help="Component weights for absolute-response fitting: uniform, auto, or comma-separated f,i,r weights.")
+    parser.add_argument("--absolute-fit-weight-floor", type=float, default=1.0e-3, help="Floor used by --absolute-fit-component-weights auto.")
+    parser.add_argument("--absolute-fit-reject-pure-i", action="store_true", help="Reject absolute-response columns that are nearly pure intercombination.")
+    parser.add_argument("--absolute-fit-pure-i-threshold", type=float, default=0.95, help="Intercombination fraction above which a column is pure-i when --absolute-fit-reject-pure-i is set.")
+    parser.add_argument("--absolute-fit-max-intercombination-fraction", type=float, default=1.0, help="Maximum allowed absolute normalized intercombination fraction for a fit column.")
+    parser.add_argument("--absolute-fit-max-forbidden-fraction", type=float, default=1.0, help="Maximum allowed absolute normalized forbidden fraction for a fit column.")
+    parser.add_argument("--absolute-fit-max-resonance-fraction", type=float, default=1.0, help="Maximum allowed absolute normalized resonance fraction for a fit column.")
+    parser.add_argument("--absolute-fit-min-forbidden-fraction", type=float, default=0.0, help="Minimum required absolute normalized forbidden fraction for a fit column.")
+    parser.add_argument("--absolute-fit-min-resonance-fraction", type=float, default=0.0, help="Minimum required absolute normalized resonance fraction for a fit column.")
     parser.add_argument("--fit-max-iter", type=int, default=50000, help="Maximum projected-gradient iterations for absolute-response fitting.")
     parser.add_argument("--out-dir", default="helike_signed_triplet_response_audit")
     parser.add_argument("--dry-run", action="store_true", help="Write commands and output skeleton without running xstar_atomic.solver")
@@ -562,6 +631,7 @@ def main() -> None:
                 target = np.asarray([target_ref[f"target_norm_{name}"] for name in COMPONENTS], dtype=float)
                 fit_candidates: List[dict] = []
                 Y_abs: List[List[float]] = []
+                rejection_counts: Dict[str, int] = {}
                 for row in rows:
                     if row.get("run_status") != "ok":
                         continue
@@ -569,11 +639,19 @@ def main() -> None:
                     abs_pos = np.where(np.isfinite(injected) & (injected > 0.0), injected, 0.0)
                     abs_sum = float(np.sum(abs_pos))
                     if abs_sum <= float(args.absolute_fit_min_triplet_sum):
+                        rejection_counts["min_triplet_sum"] = rejection_counts.get("min_triplet_sum", 0) + 1
+                        continue
+                    norm = normalize_positive(abs_pos)
+                    reasons = absolute_candidate_rejection_reasons(norm, args)
+                    if reasons:
+                        for reason in reasons:
+                            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
                         continue
                     fit_candidates.append(row)
                     Y_abs.append([float(x) for x in abs_pos])
                 Y = np.asarray(Y_abs, dtype=float)
-                weights, fit_info = fit_raw_response_simplex(Y, target, max_iter=int(args.fit_max_iter))
+                component_weights = parse_component_weights(args.absolute_fit_component_weights, target, floor=float(args.absolute_fit_weight_floor))
+                weights, fit_info = fit_raw_response_simplex(Y, target, max_iter=int(args.fit_max_iter), component_weights=component_weights)
                 pred_raw = weights @ Y if weights.size else np.zeros(3, dtype=float)
                 pred = normalize_positive(pred_raw)
                 l2 = float(np.linalg.norm(pred - target)) if pred.size == 3 else None
@@ -588,6 +666,14 @@ def main() -> None:
                     "n_candidate_source_levels": len(fit_candidates),
                     "n_input_source_levels": len(source_levels),
                     "min_triplet_sum": float(args.absolute_fit_min_triplet_sum),
+                    "component_weights": [float(x) for x in component_weights],
+                    "component_weights_mode": str(args.absolute_fit_component_weights),
+                    "constraint_rejection_counts": rejection_counts,
+                    "reject_pure_i": bool(args.absolute_fit_reject_pure_i),
+                    "pure_i_threshold": float(args.absolute_fit_pure_i_threshold),
+                    "max_intercombination_fraction": float(args.absolute_fit_max_intercombination_fraction),
+                    "min_forbidden_fraction": float(args.absolute_fit_min_forbidden_fraction),
+                    "min_resonance_fraction": float(args.absolute_fit_min_resonance_fraction),
                     "component_l1_error": l1,
                     "component_l2_error": l2,
                     "pred_forbidden": float(pred[0]),
@@ -659,7 +745,8 @@ def main() -> None:
         if fit.get("enabled"):
             print(
                 f"absolute_response_fit status={fit.get('status')} candidates={fit.get('n_candidate_source_levels', 'NA')} "
-                f"l2={_fmt(fit.get('component_l2_error'))} top={fit.get('top_source_levels', [])}"
+                f"l2={_fmt(fit.get('component_l2_error'))} top={fit.get('top_source_levels', [])} "
+                f"rejected={fit.get('constraint_rejection_counts', {})}"
             )
         elif fit.get("status"):
             print(f"absolute_response_fit status={fit.get('status')}")

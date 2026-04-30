@@ -42,3 +42,28 @@ def test_signed_triplet_response_absolute_fit_dry_run(tmp_path: Path):
     assert summary["absolute_response_fit"]["status"] == "dry_run"
     rows = list(csv.DictReader((out / "helike_absolute_response_fit_weights.csv").open()))
     assert rows == []
+
+
+
+def test_absolute_response_constraint_helpers():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("audit40", ROOT / "examples" / "40_audit_signed_triplet_response.py")
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+
+    class Args:
+        absolute_fit_reject_pure_i = True
+        absolute_fit_pure_i_threshold = 0.95
+        absolute_fit_max_intercombination_fraction = 0.9
+        absolute_fit_max_forbidden_fraction = 1.0
+        absolute_fit_max_resonance_fraction = 1.0
+        absolute_fit_min_forbidden_fraction = 0.0
+        absolute_fit_min_resonance_fraction = 0.0
+
+    reasons = mod.absolute_candidate_rejection_reasons([0.0, 1.0, 0.0], Args())
+    assert "pure_intercombination" in reasons
+    assert "max_intercombination_fraction" in reasons
+    w = mod.parse_component_weights("auto", [0.8, 0.001, 0.199], floor=1e-3)
+    assert len(w) == 3
+    assert w[1] > w[0]

@@ -121,6 +121,14 @@ def command_for_density(args, density: float, index: int, xstar_csv: str, out_di
         "--xstar-value-column", str(args.xstar_value_column),
         "--fit-mode", "absolute-response",
         "--absolute-fit-min-triplet-sum", f"{float(args.absolute_fit_min_triplet_sum):.16g}",
+        "--absolute-fit-component-weights", str(args.absolute_fit_component_weights),
+        "--absolute-fit-weight-floor", f"{float(args.absolute_fit_weight_floor):.16g}",
+        "--absolute-fit-pure-i-threshold", f"{float(args.absolute_fit_pure_i_threshold):.16g}",
+        "--absolute-fit-max-intercombination-fraction", f"{float(args.absolute_fit_max_intercombination_fraction):.16g}",
+        "--absolute-fit-max-forbidden-fraction", f"{float(args.absolute_fit_max_forbidden_fraction):.16g}",
+        "--absolute-fit-max-resonance-fraction", f"{float(args.absolute_fit_max_resonance_fraction):.16g}",
+        "--absolute-fit-min-forbidden-fraction", f"{float(args.absolute_fit_min_forbidden_fraction):.16g}",
+        "--absolute-fit-min-resonance-fraction", f"{float(args.absolute_fit_min_resonance_fraction):.16g}",
         "--fit-max-iter", str(int(args.fit_max_iter)),
         "--linear-solver", str(args.linear_solver),
         "--rank-deficient-action", str(args.rank_deficient_action),
@@ -129,6 +137,8 @@ def command_for_density(args, density: float, index: int, xstar_csv: str, out_di
         "--zero-tol", f"{float(args.zero_tol):.16g}",
         "--out-dir", str(out_dir),
     ]
+    if args.absolute_fit_reject_pure_i:
+        cmd.append("--absolute-fit-reject-pure-i")
     if args.residual_l2_max is not None:
         cmd += ["--residual-l2-max", f"{float(args.residual_l2_max):.16g}"]
     if args.residual_linf_max is not None:
@@ -195,6 +205,9 @@ def summarize_density(density: float, tag: str, run_dir: Path, rc: int, xstar_cs
         "n_candidate_source_levels": fit.get("n_candidate_source_levels"),
         "component_l1_error": fit.get("component_l1_error"),
         "component_l2_error": fit.get("component_l2_error"),
+        "component_weights": ";".join(str(x) for x in (fit.get("component_weights") or [])),
+        "component_weights_mode": fit.get("component_weights_mode"),
+        "constraint_rejection_counts": json.dumps(fit.get("constraint_rejection_counts") or {}, sort_keys=True),
         "target_forbidden": fit.get("target_forbidden"),
         "target_intercombination": fit.get("target_intercombination"),
         "target_resonance": fit.get("target_resonance"),
@@ -263,6 +276,15 @@ def main() -> None:
     parser.add_argument("--xstar-lines-csv-template", required=True, help="Template for each density, e.g. xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv")
     parser.add_argument("--xstar-value-column", default="emit_outward")
     parser.add_argument("--absolute-fit-min-triplet-sum", type=float, default=0.0)
+    parser.add_argument("--absolute-fit-component-weights", default="uniform", help="Component weights for child absolute-response fits: uniform, auto, or comma-separated f,i,r weights.")
+    parser.add_argument("--absolute-fit-weight-floor", type=float, default=1.0e-3)
+    parser.add_argument("--absolute-fit-reject-pure-i", action="store_true", help="Reject nearly pure intercombination columns in child fits.")
+    parser.add_argument("--absolute-fit-pure-i-threshold", type=float, default=0.95)
+    parser.add_argument("--absolute-fit-max-intercombination-fraction", type=float, default=1.0)
+    parser.add_argument("--absolute-fit-max-forbidden-fraction", type=float, default=1.0)
+    parser.add_argument("--absolute-fit-max-resonance-fraction", type=float, default=1.0)
+    parser.add_argument("--absolute-fit-min-forbidden-fraction", type=float, default=0.0)
+    parser.add_argument("--absolute-fit-min-resonance-fraction", type=float, default=0.0)
     parser.add_argument("--fit-max-iter", type=int, default=50000)
     parser.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="svd")
     parser.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="svd")
@@ -333,6 +355,10 @@ def main() -> None:
         "source_levels": args.source_levels,
         "fitsfile": str(args.fitsfile) if args.fitsfile else None,
         "xstar_lines_csv_template": args.xstar_lines_csv_template,
+        "absolute_fit_component_weights": args.absolute_fit_component_weights,
+        "absolute_fit_reject_pure_i": bool(args.absolute_fit_reject_pure_i),
+        "absolute_fit_pure_i_threshold": float(args.absolute_fit_pure_i_threshold),
+        "absolute_fit_max_intercombination_fraction": float(args.absolute_fit_max_intercombination_fraction),
         "n_density_points": len(densities),
         "n_successful_runs": sum(1 for r in summary_rows if r.get("run_status") == "ok"),
         "rows": summary_rows,

@@ -1,26 +1,5 @@
 # xstar-atomic
 
-### v0.3.11 note: absolute-response density-grid scans
-
-`examples/41_fit_absolute_response_density_grid.py` runs the v0.3.10 absolute-response triplet fit across a density grid and writes merged CSV/JSON/Markdown summaries of target versus predicted f/i/r, R, G, L1/L2 errors, and top source levels.  Explicit ATDB paths such as `../xstar/data/atdb.fits` may still be used in examples; they are passed through and do not rewrite the saved `datapath`.
-
-Example:
-
-```bash
-PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
-  ../xstar/data/atdb.fits \
-  --element C --ion-stage 5 \
-  --temperature 1000000 \
-  --electron-densities 1,1e4,1e8,1e10,1e12 \
-  --wavelength-min 40 --wavelength-max 42 \
-  --source-levels 2:80 \
-  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
-  --index-cache \
-  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
-  --out-dir c5_absolute_response_density_grid \
-  --print-summary
-```
-
 ### He-like validation summary tagging
 
 `examples/34_summarize_helike_validation_runs.py` preserves condition-specific directory tags such as `ca19_xi3` and `ca19_xi4` in summary CSV/JSON/Markdown outputs.  This avoids merging multiple Ca XIX ionization-parameter grids into a single ambiguous `ca19` label.
@@ -1555,3 +1534,30 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
 ```
 
 Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.
+
+
+### v0.3.12 constrained absolute-response fitting
+
+`examples/40_audit_signed_triplet_response.py` and `examples/41_fit_absolute_response_density_grid.py` now support constrained absolute-response fitting.  This mode still avoids baseline-subtracted negative response columns, but can also reject pathological source columns such as nearly pure intercombination responses and can upweight weak target components.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --element C --ion-stage 5 \
+  --temperature 1000000 \
+  --electron-densities 1,1e4,1e8,1e10,1e12 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --source-levels 2:80 \
+  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
+  --absolute-fit-component-weights auto \
+  --absolute-fit-reject-pure-i \
+  --absolute-fit-max-intercombination-fraction 0.8 \
+  --index-cache \
+  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
+  --out-dir c5_absolute_response_density_grid_constrained \
+  --print-summary
+```
+
+Passing an explicit `../xstar/data/atdb.fits` path in examples remains supported and does not rewrite the persistent `datapath`; only explicit setup commands update that path.

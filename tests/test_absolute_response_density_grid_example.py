@@ -23,6 +23,9 @@ def test_absolute_response_density_grid_dry_run(tmp_path: Path):
         "--wavelength-max", "42",
         "--source-levels", "2,56",
         "--xstar-lines-csv-template", str(tmp_path / "c5_ne{ne_tag}" / "xstar_c5_triplet_lines.csv"),
+        "--absolute-fit-component-weights", "auto",
+        "--absolute-fit-reject-pure-i",
+        "--absolute-fit-max-intercombination-fraction", "0.8",
         "--out-dir", str(out),
         "--dry-run",
         "--print-summary",
@@ -34,6 +37,8 @@ def test_absolute_response_density_grid_dry_run(tmp_path: Path):
     commands = list(csv.DictReader((out / "helike_absolute_response_density_grid_commands.csv").open()))
     assert len(commands) == 2
     assert "--fit-mode absolute-response" in commands[0]["command"]
+    assert "--absolute-fit-component-weights auto" in commands[0]["command"]
+    assert "--absolute-fit-reject-pure-i" in commands[0]["command"]
     assert "dummy_atdb.fits" in commands[0]["command"]
     summary = json.loads((out / "helike_absolute_response_density_grid_summary.json").read_text())
     assert summary["n_density_points"] == 2
