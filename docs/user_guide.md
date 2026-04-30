@@ -1518,3 +1518,8 @@ The audit reports the XSTAR ion labels present in the file, rows in the waveleng
 ### Source-level failure diagnostics
 
 `examples/36_source_level_failure_diagnostics.py` compares He-like source-fit outputs level by level. It is intended for the post-validation question of why O VII remains reachable while C V, Mg XI, and Ca XIX are not. It reports source level labels, fitted weights, f/i/r response contributions, zero-response flags, optional component populations, dominant radiative and collisional paths, and weak/pruned-level indicators.
+
+
+### v0.3.3 response-basis filter comparison
+
+`examples/37_filter_source_basis_response.py` refits completed He-like density-grid outputs after removing zero-response and/or negative-response source levels. This diagnostic tests whether non-O VII failures are caused by a contaminated source basis or by the target lying outside the clean positive-response source span.

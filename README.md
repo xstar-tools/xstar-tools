@@ -1451,3 +1451,20 @@ zero-response columns rather than being normalized to an artificial
 `1/3,1/3,1/3` response vector.  The source-level diagnostic also reports the
 sum of fitted source weight assigned to all-zero response levels and to levels
 with negative raw response components.
+
+### v0.3.3 response-basis filtering diagnostic
+
+`examples/37_filter_source_basis_response.py` compares fitted He-like source bases after dropping source levels with zero or negative raw f/i/r response. It is intended to distinguish source-basis contamination from missing physics in non-O VII He-like triplet runs. Example:
+
+```bash
+PYTHONPATH=src python examples/37_filter_source_basis_response.py \
+  o7_solver_source_fit_density_xstar_grid_type69_suppressed \
+  c5_solver_source_fit_density_xstar_grid_v031 \
+  mg11_solver_source_fit_density_xstar_grid \
+  ca19_xi3_solver_source_fit_density_xstar_grid \
+  ca19_xi4_solver_source_fit_density_xstar_grid \
+  --out-dir helike_source_basis_filter_comparison \
+  --print-summary
+```
+
+The utility writes CSV, JSON, and Markdown reports and compares `all`, `drop_zero_response`, `drop_negative_response`, and `positive_nonzero_response` bases.

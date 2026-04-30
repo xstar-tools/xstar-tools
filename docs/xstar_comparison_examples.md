@@ -400,3 +400,8 @@ The audit reports the XSTAR ion labels present in the file, rows in the waveleng
 ### He-like XSTAR ionization-parameter scans (v0.2.96)
 
 `examples/32_prepare_helike_xstar_density_grids.py` supports `--rlogxi-grid` for ions whose default XSTAR run does not produce the expected He-like triplet rows. This is especially useful for Ca XIX: the default `log xi=1.5` run can finish successfully while `xout_lines1.fits` contains no `ca_xix` rows. A scan such as `--rlogxi-grid 1.5 2 2.5 3 3.5 4` writes xi-tagged run directories and mapping CSVs so each ionization condition can be audited independently before a density-grid solver comparison is attempted.
+
+
+### v0.3.3 response-basis filter comparison
+
+`examples/37_filter_source_basis_response.py` refits completed He-like density-grid outputs after removing zero-response and/or negative-response source levels. This diagnostic tests whether non-O VII failures are caused by a contaminated source basis or by the target lying outside the clean positive-response source span.
