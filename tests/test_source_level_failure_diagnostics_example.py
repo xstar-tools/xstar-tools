@@ -44,7 +44,12 @@ def test_source_level_failure_diagnostics_fake_run(tmp_path: Path):
     ], check=True)
     rows = list(csv.DictReader((out / "helike_source_level_diagnostics.csv").open()))
     assert len(rows) == 2
-    assert any("zero f/i/r response" in row["level_failure_flags"] for row in rows)
+    zero_row = next(row for row in rows if row["source_level"] == "2")
+    assert "zero f/i/r response" in zero_row["level_failure_flags"]
+    assert float(zero_row["response_forbidden_norm"]) == 0.0
+    assert float(zero_row["fit_contribution_forbidden"]) == 0.0
+    summary_rows = list(csv.DictReader((out / "helike_source_level_density_summary.csv").open()))
+    assert float(summary_rows[0]["zero_response_fitted_weight_sum"]) == 0.4
     assert (out / "helike_source_level_diagnostics.md").exists()
 
 

@@ -405,6 +405,21 @@ def _classify_level(row: dict[str, Any]) -> str:
     return "; ".join(reasons) if reasons else "active"
 
 
+
+
+def _positive_response_norm(f: float | None, i: float | None, r: float | None) -> tuple[float, float, float]:
+    vals = [max(_as_float(x) or 0.0, 0.0) for x in (f, i, r)]
+    total = sum(vals)
+    if total <= ZERO_TOL:
+        return 0.0, 0.0, 0.0
+    return tuple(v / total for v in vals)  # type: ignore[return-value]
+
+
+def _fit_contributions_from_raw(weight: float | None, f: float | None, i: float | None, r: float | None) -> tuple[float, float, float]:
+    w = _as_float(weight) or 0.0
+    nf, ni, nr = _positive_response_norm(f, i, r)
+    return w * nf, w * ni, w * nr
+
 def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     summary_path = _find_fit_summary(fit_dir)
     summary = _read_json(summary_path)
@@ -446,13 +461,12 @@ def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple
         f = _as_float(data.get("response_raw_forbidden") or data.get("weight_raw_forbidden_per_unit_source"))
         i = _as_float(data.get("response_raw_intercombination") or data.get("weight_raw_intercombination_per_unit_source"))
         r = _as_float(data.get("response_raw_resonance") or data.get("weight_raw_resonance_per_unit_source"))
-        fn = _as_float(data.get("weight_fit_contribution_forbidden"))
-        inn = _as_float(data.get("weight_fit_contribution_intercombination"))
-        rn = _as_float(data.get("weight_fit_contribution_resonance"))
+        source_weight = _as_float(data.get("weight_fit_weight_norm"))
+        nf, ni, nr = _positive_response_norm(f, i, r)
+        fn, inn, rn = _fit_contributions_from_raw(source_weight, f, i, r)
         comp_pop, cid, comp_size = _component_population(lev, pop, comp)
         rad = _dominant_radiative(lev, atdb_context, combined_lines)
         coll = _dominant_collision(lev, atdb_context)
-        source_weight = _as_float(data.get("weight_fit_weight_norm"))
         raw_abs_sum = sum(abs(x or 0.0) for x in (f, i, r))
         weak = False
         if atdb_context and cid is not None:
@@ -473,9 +487,9 @@ def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple
             "response_forbidden_raw": f,
             "response_intercombination_raw": i,
             "response_resonance_raw": r,
-            "response_forbidden_norm": _as_float(data.get("weight_response_forbidden_norm") or data.get("response_response_forbidden_norm")),
-            "response_intercombination_norm": _as_float(data.get("weight_response_intercombination_norm") or data.get("response_response_intercombination_norm")),
-            "response_resonance_norm": _as_float(data.get("weight_response_resonance_norm") or data.get("response_response_resonance_norm")),
+            "response_forbidden_norm": nf,
+            "response_intercombination_norm": ni,
+            "response_resonance_norm": nr,
             "fit_contribution_forbidden": fn,
             "fit_contribution_intercombination": inn,
             "fit_contribution_resonance": rn,
@@ -500,6 +514,16 @@ def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple
         rows.append(row)
     nonzero = [r for r in rows if (_as_float(r.get("fitted_source_weight")) or 0) > 1.0e-8]
     bad = [r for r in rows if r["level_failure_flags"] != "active"]
+    zero_response_weight_sum = sum(
+        (_as_float(r.get("fitted_source_weight")) or 0.0)
+        for r in rows
+        if all(bool(r.get(f"response_{c}_is_zero")) for c in TRIPLET_COMPONENTS)
+    )
+    negative_response_weight_sum = sum(
+        (_as_float(r.get("fitted_source_weight")) or 0.0)
+        for r in rows
+        if any((_as_float(r.get(f"response_{c}_raw")) or 0.0) < -NEGATIVE_RAW_TOL for c in TRIPLET_COMPONENTS)
+    )
     summary_row = {
         "tag": tag,
         "fit_dir": str(fit_dir),
@@ -514,6 +538,8 @@ def _collect_fit_dir(run_tag: str, fit_dir: Path, fitsfile: str | None) -> tuple
         "n_negative_raw_response": sum(1 for r in rows if any((_as_float(r.get(f"response_{c}_raw")) or 0.0) < -NEGATIVE_RAW_TOL for c in TRIPLET_COMPONENTS)),
         "n_population_available": sum(1 for r in rows if r.get("solver_population_source_level") not in (None, "")),
         "population_status": "available" if any(r.get("solver_population_source_level") not in (None, "") for r in rows) else "unavailable",
+        "zero_response_fitted_weight_sum": zero_response_weight_sum,
+        "negative_response_fitted_weight_sum": negative_response_weight_sum,
         "n_weakly_connected": sum(1 for r in rows if r.get("weakly_connected")),
         "max_fit_weight_level": max(rows, key=lambda r: _as_float(r.get("fitted_source_weight")) or -1).get("source_level") if rows else None,
         "max_fit_weight": max((_as_float(r.get("fitted_source_weight")) or 0.0) for r in rows) if rows else None,
@@ -571,14 +597,15 @@ def _write_markdown(path: Path, summaries: list[dict[str, Any]], rows: list[dict
         "",
         "## Density-level summary",
         "",
-        "| tag | density | levels | nonzero weights | all-zero response | partial-zero response | negative raw response | weakly connected | population | combined R/G | residual L2 | warning |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|",
+        "| tag | density | levels | nonzero weights | all-zero response | zero-response weight | partial-zero response | negative raw response | negative-response weight | weakly connected | population | combined R/G | residual L2 | warning |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|",
     ]
     for s in summaries:
         lines.append(
             f"| {s['tag']} | {_fmt(s['density_cm^-3'])} | {s['n_source_levels']} | {s['n_nonzero_fitted_weights']} | "
-            f"{s['n_all_zero_response']} | {s['n_partial_zero_response']} | {s['n_negative_raw_response']} | "
-            f"{s['n_weakly_connected']} | {s.get('population_status', s.get('n_population_available', 'unavailable'))} | {_fmt(s['combined_R'])}/{_fmt(s['combined_G'])} | {_fmt(s['combined_solver_residual_l2'])} | {s.get('run_warning','')} |"
+            f"{s['n_all_zero_response']} | {_fmt(s.get('zero_response_fitted_weight_sum'))} | {s['n_partial_zero_response']} | "
+            f"{s['n_negative_raw_response']} | {_fmt(s.get('negative_response_fitted_weight_sum'))} | {s['n_weakly_connected']} | "
+            f"{s.get('population_status', s.get('n_population_available', 'unavailable'))} | {_fmt(s['combined_R'])}/{_fmt(s['combined_G'])} | {_fmt(s['combined_solver_residual_l2'])} | {s.get('run_warning','')} |"
         )
     lines += ["", "## Highest-weight source levels with failure flags", "", "| tag | density | level | label | weight | response f/i/r | contribution f/i/r | component population | dominant radiative | dominant collision | flags |", "|---|---:|---:|---|---:|---:|---:|---:|---|---|---|"]
     top_rows = sorted(rows, key=lambda r: (_as_float(r.get("fitted_source_weight")) or 0.0), reverse=True)[:top_n]
@@ -637,6 +664,7 @@ def main() -> None:
                 f"levels={s['n_source_levels']} nonzero={s['n_nonzero_fitted_weights']} "
                 f"zero={s['n_all_zero_response']} partial_zero={s['n_partial_zero_response']} "
                 f"negative={s['n_negative_raw_response']} weak={s['n_weakly_connected']} "
+                f"zero_w={_fmt(s.get('zero_response_fitted_weight_sum'))} neg_w={_fmt(s.get('negative_response_fitted_weight_sum'))} "
                 f"pop={s.get('population_status', s.get('n_population_available', 'unavailable'))} residual={_fmt(s['combined_solver_residual_l2'])}"
                 + (f" warning={s.get('run_warning')}" if s.get('run_warning') else "")
             )

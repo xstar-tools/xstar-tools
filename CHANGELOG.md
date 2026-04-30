@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.2 - zero-response source accounting fix - 2026-04-29
+
+- Fixed `examples/20_o7_solver_source_fit.py` so source levels with no positive f/i/r response remain zero-response columns instead of being normalized to artificial `1/3,1/3,1/3` vectors.
+- Updated `examples/36_source_level_failure_diagnostics.py` to recompute normalized f/i/r fractions and fitted contribution columns from raw response amplitudes, making old v0.3.1 output folders diagnose correctly.
+- Added `zero_response_fitted_weight_sum` and `negative_response_fitted_weight_sum` to density-level source diagnostics and console output.
+- Added regression coverage for zero-response source levels so they are not converted into uniform triplet contributors.
+
 ## v0.3.1 - Source-level diagnostic robustness - 2026-04-29
 
 - Fixed `examples/36_source_level_failure_diagnostics.py` to use the current `ATDB.build_index()` API when `--fitsfile` is supplied, with a defensive fallback for older local trees.

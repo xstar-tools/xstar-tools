@@ -1441,3 +1441,13 @@ The output CSV/JSON/Markdown tables report the source level label/configuration,
 
 `examples/36_source_level_failure_diagnostics.py` now reports template-only or otherwise empty density-grid directories explicitly instead of silently writing empty tables.  When population exports are absent, the summary prints `pop=unavailable` rather than `pop=0`.  Supplying `--fitsfile` uses the current `ATDB.build_index()` API to annotate dominant radiative and collisional paths.
 
+
+### v0.3.2 source-level zero-response accounting
+
+Version 0.3.2 fixes a diagnostic normalization artifact in the He-like
+source-level workflow.  Source levels whose unit-source solver output has
+zero positive forbidden/intercombination/resonance response are now kept as
+zero-response columns rather than being normalized to an artificial
+`1/3,1/3,1/3` response vector.  The source-level diagnostic also reports the
+sum of fitted source weight assigned to all-zero response levels and to levels
+with negative raw response components.
