@@ -58,6 +58,7 @@ def main(argv=None):
     p.add_argument("--adjacent-coupling-source-mode", default="record-destination", choices=["ground", "record-destination", "selected-equal", "selected-statistical", "none"], help="Allocation mode for evaluated adjacent recombination source terms")
     p.add_argument("--adjacent-coupling-source-levels", help="Comma-separated source levels for selected-* coupling allocation modes")
     p.add_argument("--include-charge-exchange", action="store_true", help="Evaluate charge-exchange coupling coefficients when present")
+    p.add_argument("--type57-energy-convention", default="compare", choices=["ucalc-eth", "abs-rlev4", "threshold-only", "compare"], help="Select the type-57 calt57 convention used for primary python_* audit columns; all modes remain diagnostic-only and are not assembled")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
     p.add_argument("--print-summary", action="store_true")
@@ -79,6 +80,7 @@ def main(argv=None):
             "adjacent_coupling_mode": args.adjacent_coupling_mode,
             "adjacent_coupling_source_mode": args.adjacent_coupling_source_mode,
             "adjacent_coupling_source_levels": args.adjacent_coupling_source_levels,
+            "type57_energy_convention": args.type57_energy_convention,
             "status": "dry_run_not_executed",
         }]
         write_csv(out / "xstar_like_element_solver_ion_blocks.csv", [])
@@ -123,6 +125,7 @@ def main(argv=None):
         adjacent_coupling_source_mode=args.adjacent_coupling_source_mode,
         adjacent_coupling_selected_levels=parse_stage_list(args.adjacent_coupling_source_levels),
         include_charge_exchange=args.include_charge_exchange,
+        type57_energy_convention=args.type57_energy_convention,
     )
     write_element_solver_outputs(result, out)
     if args.print_summary:

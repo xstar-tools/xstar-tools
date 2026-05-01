@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.20 - 2026-05-01
+
+- Added `--type57-energy-convention {ucalc-eth,abs-rlev4,threshold-only,compare}` to `examples/42_xstar_like_element_solver_demo.py`.
+- Threaded the selected type-57 convention into the source-code-guided adjacent-ion audit while keeping type 57 diagnostic-only and not assembled into the matrix.
+- Added type-57 source-code provenance notes to the audit rows and summary output, documenting the visible `ucalc.f90` `ep=eth` branch versus the `calt57.f90` documented `ep=rlev(4)` convention.
+- Added summary counts for nonzero type-57 rates under the `ucalc-eth`, `abs-rlev4`, and `threshold-only` diagnostics.
+
 ## v0.3.19 - 2026-05-01
 
 - Added a source-code-guided type-57 energy-convention audit to the XSTAR-like element solver.

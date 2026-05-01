@@ -563,15 +563,31 @@ def _evaluate_type57_calt57_record(
     electron_density: float,
     nlevp: Optional[int],
     level_rows: Optional[Sequence[dict]] = None,
+    type57_energy_convention: str = "compare",
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
-    v0.3.19 keeps the visible ``ucalc.f90`` convention as the primary status,
-    but also writes side-by-side diagnostics for alternate energy conventions.
+    v0.3.20 writes side-by-side diagnostics for alternate energy conventions
+    and lets the caller select which convention populates the primary
+    ``python_eval_status`` / ``python_rate_*`` audit columns.
     This is needed because ``ucalc.f90`` currently passes ``ep=eth`` whereas
     ``calt57.f90`` documents ``ep`` as the fourth real of the type-6 level
     record.  No type-57 rate is assembled from any convention here.
     """
+    convention = str(type57_energy_convention or "compare").strip().lower().replace("_", "-")
+    aliases = {
+        "ucalc": "ucalc-eth",
+        "eth": "ucalc-eth",
+        "ucalceth": "ucalc-eth",
+        "rlev4": "abs-rlev4",
+        "abs": "abs-rlev4",
+        "absolute-rlev4": "abs-rlev4",
+        "threshold": "threshold-only",
+        "thresholdonly": "threshold-only",
+    }
+    convention = aliases.get(convention, convention)
+    if convention not in {"compare", "ucalc-eth", "abs-rlev4", "threshold-only"}:
+        convention = "compare"
     rd = [float(x) for x in reals]
     it = [int(x) for x in ints]
     if len(it) < 2:
@@ -618,6 +634,10 @@ def _evaluate_type57_calt57_record(
         "type57_ep_absolute_rlev4_eV": ip_abs,
         "type57_stat_weight_lower": g_lo,
         "type57_stat_weight_continuum_assumed": ggup,
+        "type57_selected_energy_convention": convention,
+        "type57_source_provenance_ucalc": "xstarlib/src/ucalc.f90 type 57: e1=rlev(1,idest1), eth=max(0,rlev(1,nlevp)-rlev(1,idest1)), ep=eth, call calt57",
+        "type57_source_provenance_calt57": "xstarlib/src/calt57.f90 documents e=level energy and ep=fourth real in type-6 level record; calt57 internally gates ep>=e",
+        "type57_source_provenance_irc": "xstarlib/src/irc.f90 with szirc/eint/expint/expo is ported diagnostically; no type-57 matrix assembly is performed",
     }
     out.update(_type57_prefixed_eval(
         "type57_ucalc_eth", ev_ucalc,
@@ -652,31 +672,49 @@ def _evaluate_type57_calt57_record(
         electron_density=electron_density, g_lo=g_lo, ggup=ggup, eth_eV=eth,
     ))
 
-    # Backward-compatible v0.3.18 columns reflect the visible ucalc convention.
-    cion = maybe_float(ev_ucalc.get("type57_cion_cm3_s"))
-    crec = maybe_float(ev_ucalc.get("type57_crec_cm6_s"))
+    # v0.3.20: select which convention populates the primary, backward-compatible
+    # audit columns.  ``compare`` deliberately keeps the visible ucalc convention
+    # as primary while still writing all alternate convention columns.
+    convention_map = {
+        "compare": ("type57_ucalc_eth", ev_ucalc, "visible_ucalc_eth_compare_default"),
+        "ucalc-eth": ("type57_ucalc_eth", ev_ucalc, "visible_ucalc_eth"),
+        "abs-rlev4": ("type57_abs_rlev4", ev_abs, "abs_rlev4_documented_calt57"),
+        "threshold-only": ("type57_threshold_only", ev_thr, "threshold_only_diagnostic"),
+    }
+    selected_prefix, selected_ev, selected_label = convention_map[convention]
+    if selected_ev is None:
+        selected_ev = {"python_eval_status": f"type57_selected_{convention}_not_available", "type57_cion_cm3_s": None, "type57_crec_cm6_s": None}
+    cion = maybe_float(selected_ev.get("type57_cion_cm3_s"))
+    crec = maybe_float(selected_ev.get("type57_crec_cm6_s"))
     ans1 = None if cion is None else cion * float(electron_density)
     rinf = None if g_lo is None else g_lo / (1.0e-48 + ggup)
     ans2 = None if crec is None or rinf is None else crec * rinf * float(electron_density) * float(electron_density)
     ergsev = 1.602197e-12
     out.update({
+        "python_eval_status": selected_ev.get("python_eval_status"),
         "python_rate_forward_s^-1": ans1,
         "python_rate_inverse_s^-1": ans2,
+        "type57_selected_convention_label": selected_label,
+        "type57_selected_rate_column_prefix": selected_prefix,
+        "type57_selected_cion_cm3_s": cion,
+        "type57_selected_crec_cm6_s": crec,
         "type57_ans6_energy_loss_erg_s^-1": None if ans1 is None else -ans1 * float(eth) * ergsev,
         "type57_ans5_inverse_energy_erg_s^-1": None if ans2 is None else -ans2 * float(eth) * ergsev,
-        "type57_calt57_energy_convention_note": "primary columns use visible ucalc ep=eth; abs_rlev4 columns use calt57 documented ep=rlev4; threshold_only is diagnostic only",
+        "type57_calt57_energy_convention_note": "primary python_* columns follow --type57-energy-convention; compare/default keeps visible ucalc ep=eth primary; abs_rlev4 uses calt57 documented ep=rlev4; threshold_only is diagnostic only",
+        "type57_assembly_note": "diagnostic_only_not_assembled_into_matrix",
     })
 
+    ucalc_rate = maybe_float(out.get("type57_ucalc_eth_rate_forward_s^-1"))
     abs_rate = maybe_float(out.get("type57_abs_rlev4_rate_forward_s^-1"))
     thr_rate = maybe_float(out.get("type57_threshold_only_rate_forward_s^-1"))
-    if (ans1 is None or ans1 == 0.0) and abs_rate is not None and abs_rate > 0.0:
+    if (ucalc_rate is None or ucalc_rate == 0.0) and abs_rate is not None and abs_rate > 0.0:
         out["type57_best_nonzero_convention"] = "abs_rlev4_documented_calt57"
         out["type57_energy_convention_conflict"] = True
-    elif (ans1 is None or ans1 == 0.0) and thr_rate is not None and thr_rate > 0.0:
+    elif (ucalc_rate is None or ucalc_rate == 0.0) and thr_rate is not None and thr_rate > 0.0:
         out["type57_best_nonzero_convention"] = "threshold_only_diagnostic"
         out["type57_energy_convention_conflict"] = True
     else:
-        out["type57_best_nonzero_convention"] = "visible_ucalc_eth" if ans1 and ans1 > 0.0 else "none"
+        out["type57_best_nonzero_convention"] = "visible_ucalc_eth" if ucalc_rate and ucalc_rate > 0.0 else "none"
         out["type57_energy_convention_conflict"] = False
 
     # ucalc zeros both ans1 and ans2 for destination level 1 because more
@@ -741,6 +779,7 @@ def audit_ucalc_adjacent_record(
     electron_density: float,
     nlevp: Optional[int] = None,
     level_rows: Optional[Sequence[dict]] = None,
+    type57_energy_convention: str = "compare",
 ) -> dict:
     """Return a source-code-guided audit row for an adjacent-ion record.
 
@@ -797,6 +836,7 @@ def audit_ucalc_adjacent_record(
             electron_density=electron_density,
             nlevp=nlevp,
             level_rows=level_rows,
+            type57_energy_convention=type57_energy_convention,
         ))
     elif dt == 74:
         row.update({
@@ -839,6 +879,7 @@ def build_adjacent_coupling_terms(
     selected_source_levels: Optional[Sequence[int]] = None,
     include_charge_exchange: bool = False,
     parent_population_proxy: float = 1.0,
+    type57_energy_convention: str = "compare",
 ) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
     """Build prototype adjacent-ion source/sink vectors for one target ion.
 
@@ -951,6 +992,7 @@ def build_adjacent_coupling_terms(
                     electron_density=electron_density,
                     nlevp=nlevp_guess,
                     level_rows=level_rows,
+                    type57_energy_convention=type57_energy_convention,
                 )
                 audit.update({
                     "element": Z_TO_SYMBOL.get(z, str(z)),
@@ -992,6 +1034,7 @@ def build_ion_rate_block(
     adjacent_coupling_source_mode: str = "record-destination",
     adjacent_coupling_selected_levels: Optional[Sequence[int]] = None,
     include_charge_exchange: bool = False,
+    type57_energy_convention: str = "compare",
 ) -> Tuple[dict, List[dict], List[dict], List[dict], List[dict], List[dict]]:
     """Build and solve one ion block for the reference element solver.
 
@@ -1041,6 +1084,7 @@ def build_ion_rate_block(
             coupling_source_mode=adjacent_coupling_source_mode,
             selected_source_levels=adjacent_coupling_selected_levels,
             include_charge_exchange=include_charge_exchange,
+            type57_energy_convention=type57_energy_convention,
         )
 
     if prune_null_rate_levels:
@@ -1126,6 +1170,7 @@ def build_ion_rate_block(
     block_summary["prune_null_rate_levels"] = prune_info
     block_summary["triplet"] = _normalise_triplet(line_rows)
     block_summary["adjacent_coupling_mode"] = adjacent_coupling_mode
+    block_summary["type57_energy_convention"] = type57_energy_convention
     block_summary["adjacent_parent_stage"] = adjacent_parent_stage
     block_summary["n_adjacent_coupling_rows"] = len(coupling_rows)
     block_summary["n_adjacent_coupling_assembled"] = sum(1 for r in coupling_rows if r.get("assembled"))
@@ -1189,6 +1234,7 @@ def solve_element_reference(
     adjacent_coupling_source_mode: str = "record-destination",
     adjacent_coupling_selected_levels: Optional[Sequence[int]] = None,
     include_charge_exchange: bool = False,
+    type57_energy_convention: str = "compare",
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -1225,6 +1271,7 @@ def solve_element_reference(
                 adjacent_coupling_source_mode=adjacent_coupling_source_mode,
                 adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
                 include_charge_exchange=include_charge_exchange,
+                type57_energy_convention=type57_energy_convention,
             )
             ion_blocks.append(block)
             populations.extend(pops)
@@ -1259,6 +1306,7 @@ def solve_element_reference(
             "n_line_rows": len(line_rows),
             "n_transition_rows": len(transitions),
             "adjacent_coupling_status": adjacent_coupling_mode,
+            "type57_energy_convention": type57_energy_convention,
             "n_adjacent_coupling_terms": len(assembled_coupling_terms),
             "n_adjacent_coupling_assembled": sum(1 for r in assembled_coupling_terms if r.get("assembled")),
             "he_like_triplet": _normalise_triplet(selected_lines),
@@ -1273,13 +1321,49 @@ def solve_element_reference(
     }
 
 
+def _type57_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise type-57 diagnostic audit/provenance rows."""
+    t57 = [r for r in rows if maybe_int(r.get("data_type")) == 57]
+    def _n_nonzero(col: str) -> int:
+        return sum(1 for r in t57 if (maybe_float(r.get(col)) or 0.0) > 0.0)
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in t57:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    return {
+        "n_type57_rows": len(t57),
+        "selected_energy_convention_counts": _counts_value("type57_selected_energy_convention"),
+        "primary_python_eval_status_counts": _counts_value("python_eval_status"),
+        "ucalc_eth_eval_status_counts": _counts_value("type57_ucalc_eth_eval_status"),
+        "abs_rlev4_eval_status_counts": _counts_value("type57_abs_rlev4_eval_status"),
+        "threshold_only_eval_status_counts": _counts_value("type57_threshold_only_eval_status"),
+        "nonzero_ucalc_eth_forward_rates": _n_nonzero("type57_ucalc_eth_rate_forward_s^-1"),
+        "nonzero_abs_rlev4_forward_rates": _n_nonzero("type57_abs_rlev4_rate_forward_s^-1"),
+        "nonzero_threshold_only_forward_rates": _n_nonzero("type57_threshold_only_rate_forward_s^-1"),
+        "best_nonzero_convention_counts": _counts_value("type57_best_nonzero_convention"),
+        "energy_convention_conflict_counts": _counts_value("type57_energy_convention_conflict"),
+        "provenance": {
+            "ucalc": "xstarlib/src/ucalc.f90 type 57 sets e1=rlev(1,idest1), eth=max(0,rlev(1,nlevp)-rlev(1,idest1)), ep=eth before calling calt57.",
+            "calt57": "xstarlib/src/calt57.f90 documents e as level energy and ep as the fourth real of the type-6 level record; its internal gate requires ep >= e.",
+            "irc_path": "The v0.3.20 diagnostic evaluator ports the calt57 -> irc -> szirc/eint/expint/expo numerical path and remains audit-only.",
+            "assembly": "No type-57 rate is assembled into the element matrix in v0.3.20.",
+        },
+    }
+
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    audit_rows = result.get("adjacent_coupling_terms", [])
+    if "summary" in result:
+        result["summary"] = dict(result.get("summary", {}))
+        result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
-    write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", result.get("adjacent_coupling_terms", []))
+    write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -1291,4 +1375,21 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
     lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
+    t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
+    if t57sum:
+        lines.extend([
+            "",
+            "## Type-57 source-code provenance",
+            "",
+            "- `ucalc.f90` type 57 visible branch uses `e1=rlev(1,idest1)`, `eth=max(0,rlev(1,nlevp)-rlev(1,idest1))`, and `ep=eth` before `call calt57`.",
+            "- `calt57.f90` documents `e` as level energy and `ep` as the fourth real of the type-6 level record; its internal gate requires `ep >= e`.",
+            "- v0.3.20 writes `ucalc-eth`, `abs-rlev4`, and `threshold-only` diagnostics side by side and lets `--type57-energy-convention` choose only the primary `python_*` audit columns.",
+            "- Type 57 remains diagnostic-only and is not assembled into the element matrix.",
+            "",
+            f"- **type57 rows**: `{t57sum.get('n_type57_rows')}`",
+            f"- **selected convention counts**: `{t57sum.get('selected_energy_convention_counts')}`",
+            f"- **nonzero ucalc-eth forward rates**: `{t57sum.get('nonzero_ucalc_eth_forward_rates')}`",
+            f"- **nonzero abs-rlev4 forward rates**: `{t57sum.get('nonzero_abs_rlev4_forward_rates')}`",
+            f"- **nonzero threshold-only forward rates**: `{t57sum.get('nonzero_threshold_only_forward_rates')}`",
+        ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
