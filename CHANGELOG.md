@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.26 - 2026-05-01
+
+- Added a diagnostic-only deep type-74 DR-delta linkage audit.
+- Added `xstar_like_element_solver_type74_linkage_audit.csv`, with one row per type-74 record.
+- Decodes both the parent/final side (`i5`/`i6`) and the recombined/source side (`i7`/`i8`) of type-74 records.
+- Classifies whether the recombined/source level is spectroscopic, superlevel, or continuum; reports direct f/i/r triplet-upper candidates; checks same-numeric and valid type-71/type-77 superlevel branch links.
+- Reports `possible_feed_route`, `branch_link_status`, and `why_no_branch_found_if_unlinked` so unlinked type-74 records can be diagnosed explicitly.
+- Keeps all type-74 DR-delta linkage rows diagnostic-only; no `calt74`, Milne inverse, source, or cascade term is assembled into the element matrix.
+
 ## v0.3.25 - 2026-05-01
 
 - Added a diagnostic-only superlevel source × branch audit for type 70, 74, and 99 source-candidate records.

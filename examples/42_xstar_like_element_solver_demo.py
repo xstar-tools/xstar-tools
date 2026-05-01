@@ -90,6 +90,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_superlevel_branching_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_superlevel_source_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_type74_linkage_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_populations.csv", [])
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])

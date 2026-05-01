@@ -1334,12 +1334,24 @@ def _audit_superlevel_cascade_record(
         source_provenance = "Bautista_Kallman_2001_appendix_type74_delta_functions_added_to_photoionization_cross_sections_to_match_ADF_DR_rates"
         requires += ["calt74_resonance_delta_integration", "radiation_or_milne_context", "linked_parent_continuum_population"]
         unsafe += ["type74_not_a_direct_cascade_rate", "requires_calt74_and_full_bound_free_context"]
+        final_label = lab(final_level)
+        initial_label = lab(initial_level)
         extra = {
             "type74_i5_final_level_plus": final_level,
             "type74_i6_final_ion_plus": final_ion,
             "type74_i7_initial_level": initial_level,
             "type74_i8_initial_ion": initial_ion,
             "type74_n_delta_coefficients": len(rd),
+            "type74_parent_or_final_level": final_level,
+            "type74_parent_or_final_ion_index": final_ion,
+            "type74_parent_or_final_label": final_label,
+            "type74_parent_or_final_level_kind": _level_kind_from_label(final_label),
+            "type74_parent_or_final_triplet_component": comp(final_level),
+            "type74_recombined_or_source_level": initial_level,
+            "type74_recombined_or_source_ion_index": initial_ion,
+            "type74_recombined_or_source_label": initial_label,
+            "type74_recombined_or_source_level_kind": _level_kind_from_label(initial_label),
+            "type74_recombined_or_source_triplet_component": comp(initial_level),
         }
     elif dt == 99:
         # Newer XSTAR superlevel PI/RR records: layout is not fully documented
@@ -1448,6 +1460,18 @@ def _truthy(value) -> bool:
 
 def _branch_component_label(component: str) -> str:
     return {"f": "forbidden", "i": "intercombination", "r": "resonance"}.get(str(component or ""), "other")
+
+
+def _level_kind_from_label(label: str) -> str:
+    """Classify an ATDB level label as spectroscopic, superlevel, continuum, or unknown."""
+    txt = str(label or "").strip().lower()
+    if not txt:
+        return "unknown"
+    if "continuum" in txt:
+        return "continuum"
+    if "superlevel" in txt:
+        return "superlevel"
+    return "spectroscopic"
 
 
 def build_superlevel_branching_audit(superlevel_rows: Sequence[dict]) -> List[dict]:
@@ -1744,6 +1768,161 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
             ),
             "matrix_safe_to_assemble": False,
             "unsafe_reason": ";".join(dict.fromkeys(unsafe)),
+        })
+    return out
+
+def build_type74_linkage_audit(superlevel_rows: Sequence[dict], branching_rows: Sequence[dict]) -> List[dict]:
+    """Deep diagnostic linkage audit for type-74 DR delta records.
+
+    Type 74 records are not direct cascade rates.  The 2001 XSTAR database
+    appendix describes them as delta functions added to photoionization cross
+    sections to match dielectronic-recombination rates.  In the inverse Milne
+    sense, the target/recombined level is most naturally associated with the
+    record's ``i7`` level, while ``i5``/``i6`` identify the final/parent side of
+    the partial photoionization channel.  This audit reports both sides and
+    checks whether the recombined/source level can directly feed a He-like f/i/r
+    upper level or maps to a superlevel with type-71/type-77 cascade branches.
+
+    No type-74 rate, link, or source term is assembled into the matrix.
+    """
+    type74_rows = [r for r in superlevel_rows if maybe_int(r.get("data_type")) == 74]
+    branch_by_key: Dict[Tuple[int, int, int], dict] = {}
+    for br in branching_rows:
+        dt = maybe_int(br.get("data_type"))
+        st = maybe_int(br.get("record_ion_stage"))
+        sl = maybe_int(br.get("superlevel_level"))
+        if dt is None or st is None or sl is None:
+            continue
+        branch_by_key[(int(st), int(sl), int(dt))] = br
+
+    out: List[dict] = []
+    for row in type74_rows:
+        st = maybe_int(row.get("record_ion_stage"))
+        target_stage = maybe_int(row.get("target_ion_stage"))
+        parent_stage = maybe_int(row.get("parent_ion_stage"))
+        src_level = maybe_int(row.get("type74_recombined_or_source_level") or row.get("type74_i7_initial_level"))
+        src_label = str(row.get("type74_recombined_or_source_label") or "")
+        src_kind = str(row.get("type74_recombined_or_source_level_kind") or _level_kind_from_label(src_label))
+        src_comp = str(row.get("type74_recombined_or_source_triplet_component") or "")
+        final_level = maybe_int(row.get("type74_parent_or_final_level") or row.get("type74_i5_final_level_plus"))
+        final_label = str(row.get("type74_parent_or_final_label") or row.get("destination_label") or "")
+        final_kind = str(row.get("type74_parent_or_final_level_kind") or _level_kind_from_label(final_label))
+        final_comp = str(row.get("type74_parent_or_final_triplet_component") or "")
+
+        br71_src = branch_by_key.get((int(st), int(src_level), 71)) if st is not None and src_level is not None else {}
+        br77_src = branch_by_key.get((int(st), int(src_level), 77)) if st is not None and src_level is not None else {}
+        br71_final = branch_by_key.get((int(st), int(final_level), 71)) if st is not None and final_level is not None else {}
+        br77_final = branch_by_key.get((int(st), int(final_level), 77)) if st is not None and final_level is not None else {}
+
+        source_is_superlevel = src_kind == "superlevel"
+        final_is_superlevel = final_kind == "superlevel"
+        source_is_spectroscopic = src_kind == "spectroscopic"
+        final_is_spectroscopic = final_kind == "spectroscopic"
+
+        linked_type71 = bool((source_is_superlevel and br71_src) or (final_is_superlevel and br71_final))
+        linked_type77 = bool((source_is_superlevel and br77_src) or (final_is_superlevel and br77_final))
+        linked_branch = (
+            br71_src if (source_is_superlevel and br71_src) else
+            br71_final if (final_is_superlevel and br71_final) else
+            br77_src if (source_is_superlevel and br77_src) else
+            br77_final if (final_is_superlevel and br77_final) else
+            {}
+        )
+
+        def bval(br: dict, key: str) -> Optional[float]:
+            val = maybe_float(br.get(key)) if br else None
+            return float(val) if val is not None and math.isfinite(float(val)) else None
+
+        Bf = bval(linked_branch, "B_f")
+        Bi = bval(linked_branch, "B_i")
+        Br = bval(linked_branch, "B_r")
+        Bt = bval(linked_branch, "B_triplet_total")
+
+        route_parts: List[str] = []
+        if src_comp in {"f", "i", "r"}:
+            route_parts.append(f"direct_inverse_dr_delta_to_{_branch_component_label(src_comp)}_upper_candidate")
+        if final_comp in {"f", "i", "r"}:
+            route_parts.append(f"parent_or_final_side_matches_{_branch_component_label(final_comp)}_upper_not_primary_inverse_feed")
+        if linked_type71:
+            route_parts.append("via_superlevel_type71_radiative_branch")
+        if linked_type77:
+            route_parts.append("via_superlevel_type77_collisional_branch_proxy")
+        if not route_parts:
+            route_parts.append("no_identified_f_i_r_feed_route")
+
+        reasons: List[str] = []
+        if not (br71_src or br77_src or br71_final or br77_final):
+            reasons.append("no_type71_or_type77_branch_with_same_numeric_source_or_final_level")
+        if (br71_src or br77_src) and not source_is_superlevel:
+            reasons.append("same_numeric_source_level_has_branch_record_but_source_level_is_spectroscopic_not_superlevel")
+        if (br71_final or br77_final) and not final_is_superlevel:
+            reasons.append("same_numeric_final_level_has_branch_record_but_final_level_is_spectroscopic_not_superlevel")
+        if source_is_spectroscopic and not src_comp:
+            reasons.append("source_level_is_spectroscopic_but_not_a_helike_triplet_upper_level")
+        if final_is_spectroscopic and not final_comp:
+            reasons.append("parent_or_final_level_is_spectroscopic_but_not_a_helike_triplet_upper_level")
+        if not linked_type71 and not linked_type77:
+            reasons.append("no_valid_superlevel_branch_link_after_level_kind_check")
+        if not src_label:
+            reasons.append("source_level_label_missing_from_current_target_level_table")
+        if not final_label:
+            reasons.append("parent_or_final_level_label_missing_from_current_target_level_table")
+
+        out.append({
+            "type74_linkage_audit_version": "v0.3.26",
+            "record": row.get("record"),
+            "data_type": 74,
+            "rate_type": row.get("rate_type"),
+            "record_ion_stage": st,
+            "target_ion_stage": target_stage,
+            "parent_ion_stage": parent_stage,
+            "stage_relation_to_target_parent": row.get("stage_relation_to_target_parent"),
+            "type74_raw_ints_preview": row.get("raw_ints_preview"),
+            "type74_raw_reals_preview": row.get("raw_reals_preview"),
+            "type74_i5_parent_or_final_level": final_level,
+            "type74_i6_parent_or_final_ion_index": row.get("type74_i6_final_ion_plus"),
+            "type74_i7_recombined_or_source_level": src_level,
+            "type74_i8_recombined_or_source_ion_index": row.get("type74_i8_initial_ion"),
+            "source_level": src_level,
+            "source_level_label": src_label,
+            "source_level_kind": src_kind,
+            "source_level_triplet_component": src_comp,
+            "source_level_is_spectroscopic": source_is_spectroscopic,
+            "source_level_is_superlevel": source_is_superlevel,
+            "source_level_direct_triplet_feed_candidate": bool(src_comp in {"f", "i", "r"}),
+            "parent_or_final_level": final_level,
+            "parent_or_final_level_label": final_label,
+            "parent_or_final_level_kind": final_kind,
+            "parent_or_final_triplet_component": final_comp,
+            "parent_or_final_level_is_spectroscopic": final_is_spectroscopic,
+            "parent_or_final_level_is_superlevel": final_is_superlevel,
+            "same_numeric_source_level_has_type71_branch": bool(br71_src),
+            "same_numeric_source_level_has_type77_branch": bool(br77_src),
+            "same_numeric_final_level_has_type71_branch": bool(br71_final),
+            "same_numeric_final_level_has_type77_branch": bool(br77_final),
+            "valid_type71_superlevel_branch_link": linked_type71,
+            "valid_type77_superlevel_branch_link": linked_type77,
+            "linked_branch_basis": "type71_radiative_A_s^-1" if linked_type71 else ("type77_count_proxy_no_rate_evaluator" if linked_type77 else "none"),
+            "linked_B_f": Bf,
+            "linked_B_i": Bi,
+            "linked_B_r": Br,
+            "linked_B_triplet_total": Bt,
+            "possible_feed_route": ";".join(dict.fromkeys(route_parts)),
+            "possible_feed_component_direct": src_comp,
+            "possible_feed_component_via_branch": max(("f", "i", "r", "none"), key=lambda c: {"f": Bf or 0.0, "i": Bi or 0.0, "r": Br or 0.0, "none": 0.0}[c]) if linked_branch else "none",
+            "can_feed_forbidden_candidate": bool(src_comp == "f" or (Bf or 0.0) > 0.0),
+            "can_feed_intercombination_candidate": bool(src_comp == "i" or (Bi or 0.0) > 0.0),
+            "can_feed_resonance_candidate": bool(src_comp == "r" or (Br or 0.0) > 0.0),
+            "can_feed_any_triplet_candidate": bool(src_comp in {"f", "i", "r"} or (Bt or 0.0) > 0.0),
+            "branch_link_status": "valid_superlevel_branch_link" if (linked_type71 or linked_type77) else ("direct_spectroscopic_triplet_target" if src_comp in {"f", "i", "r"} else "unlinked"),
+            "why_no_branch_found_if_unlinked": ";".join(dict.fromkeys(reasons)) if not (linked_type71 or linked_type77) else "",
+            "matrix_safe_to_assemble": False,
+            "unsafe_reason": ";".join(dict.fromkeys([
+                "type74_delta_record_is_not_a_direct_cascade_rate",
+                "requires_calt74_delta_integration_and_bound_free_milne_context",
+                "requires_explicit_superlevel_or_recombined_level_population_balance_before_assembly",
+                "diagnostic_only_not_assembled",
+            ])),
         })
     return out
 
@@ -2179,6 +2358,7 @@ def solve_element_reference(
         superlevel_cascade_audit_rows: List[dict] = []
         superlevel_branching_audit_rows: List[dict] = []
         superlevel_source_audit_rows: List[dict] = []
+        type74_linkage_audit_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -2202,6 +2382,7 @@ def solve_element_reference(
             )
             superlevel_branching_audit_rows = build_superlevel_branching_audit(superlevel_cascade_audit_rows)
             superlevel_source_audit_rows = build_superlevel_source_audit(superlevel_cascade_audit_rows, superlevel_branching_audit_rows)
+            type74_linkage_audit_rows = build_type74_linkage_audit(superlevel_cascade_audit_rows, superlevel_branching_audit_rows)
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -2232,6 +2413,7 @@ def solve_element_reference(
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
         "superlevel_branching_audit": superlevel_branching_audit_rows,
         "superlevel_source_audit": superlevel_source_audit_rows,
+        "type74_linkage_audit": type74_linkage_audit_rows,
     }
 
 
@@ -2438,6 +2620,41 @@ def _superlevel_source_audit_summary(rows: Sequence[dict]) -> dict:
             "assembly": "No type-70/74/99 source or source-weighted superlevel cascade term is assembled into the element matrix in v0.3.25.",
         },
     }
+
+def _type74_linkage_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise the v0.3.26 deep type-74 linkage audit."""
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    def _n_true(col: str) -> int:
+        return sum(1 for r in rows if _truthy(r.get(col)))
+    return {
+        "n_type74_linkage_rows": len(rows),
+        "source_level_kind_counts": _counts_value("source_level_kind"),
+        "parent_or_final_level_kind_counts": _counts_value("parent_or_final_level_kind"),
+        "branch_link_status_counts": _counts_value("branch_link_status"),
+        "possible_feed_route_counts": _counts_value("possible_feed_route"),
+        "direct_forbidden_source_candidates": sum(1 for r in rows if str(r.get("source_level_triplet_component") or "") == "f"),
+        "direct_intercombination_source_candidates": sum(1 for r in rows if str(r.get("source_level_triplet_component") or "") == "i"),
+        "direct_resonance_source_candidates": sum(1 for r in rows if str(r.get("source_level_triplet_component") or "") == "r"),
+        "can_feed_forbidden_candidates": _n_true("can_feed_forbidden_candidate"),
+        "can_feed_intercombination_candidates": _n_true("can_feed_intercombination_candidate"),
+        "can_feed_resonance_candidates": _n_true("can_feed_resonance_candidate"),
+        "can_feed_any_triplet_candidates": _n_true("can_feed_any_triplet_candidate"),
+        "valid_type71_superlevel_branch_links": _n_true("valid_type71_superlevel_branch_link"),
+        "valid_type77_superlevel_branch_links": _n_true("valid_type77_superlevel_branch_link"),
+        "same_numeric_source_type71_branch_rows": _n_true("same_numeric_source_level_has_type71_branch"),
+        "same_numeric_source_type77_branch_rows": _n_true("same_numeric_source_level_has_type77_branch"),
+        "matrix_safe_to_assemble_counts": _counts_value("matrix_safe_to_assemble"),
+        "provenance": {
+            "type74_layout": "Bautista & Kallman 2001 appendix: i5=level+, i6=ion+, i7=level, i8=nion for DR delta functions added to photoionization cross sections.",
+            "interpretation": "v0.3.26 reports both the parent/final level side and the recombined/source level side; it does not assemble type-74 records.",
+        },
+    }
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -2445,6 +2662,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     superlevel_rows = result.get("superlevel_cascade_audit", [])
     superlevel_branching_rows = result.get("superlevel_branching_audit", [])
     superlevel_source_rows = result.get("superlevel_source_audit", [])
+    type74_linkage_rows = result.get("type74_linkage_audit", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -2452,6 +2670,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
         result["summary"]["superlevel_cascade_audit_summary"] = _superlevel_cascade_audit_summary(superlevel_rows)
         result["summary"]["superlevel_branching_audit_summary"] = _superlevel_branching_audit_summary(superlevel_branching_rows)
         result["summary"]["superlevel_source_audit_summary"] = _superlevel_source_audit_summary(superlevel_source_rows)
+        result["summary"]["type74_linkage_audit_summary"] = _type74_linkage_audit_summary(type74_linkage_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
@@ -2459,6 +2678,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", superlevel_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_branching_audit.csv", superlevel_branching_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_source_audit.csv", superlevel_source_rows)
+    write_csv(out / "xstar_like_element_solver_type74_linkage_audit.csv", type74_linkage_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -2469,7 +2689,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions and type-70/74/99 source × branch proxies are audited diagnostically in v0.3.25 but are not assembled.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, and the v0.3.26 deep type-74 linkage audit are diagnostic-only and are not assembled.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
@@ -2564,5 +2784,24 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **total preferred triplet feed proxy**: `{srcsum.get('total_preferred_feed_triplet_proxy')}`",
             f"- **max preferred triplet superlevel/proxy**: `{srcsum.get('max_preferred_feed_triplet_superlevel')}` / `{srcsum.get('max_preferred_feed_triplet_proxy')}`",
             f"- **matrix safe-to-assemble counts**: `{srcsum.get('matrix_safe_to_assemble_counts')}`",
+        ])
+    t74sum = summ.get("type74_linkage_audit_summary", {}) if isinstance(summ, dict) else {}
+    if t74sum:
+        lines.extend([
+            "",
+            "## Type-74 DR-delta linkage audit",
+            "",
+            "- v0.3.26 decodes each type-74 DR delta record into its parent/final level side (`i5`/`i6`) and recombined/source level side (`i7`/`i8`).",
+            "- The audit classifies whether the recombined/source level is a spectroscopic level or superlevel, checks direct f/i/r triplet-upper matches, and tests whether any valid type-71/type-77 superlevel branch is available.",
+            "- Type 74 remains diagnostic-only: delta records are not assembled until `calt74`/Milne bound-free context and explicit population balance are implemented.",
+            "",
+            f"- **type-74 linkage rows**: `{t74sum.get('n_type74_linkage_rows')}`",
+            f"- **source-level kind counts**: `{t74sum.get('source_level_kind_counts')}`",
+            f"- **branch-link status counts**: `{t74sum.get('branch_link_status_counts')}`",
+            f"- **direct f/i/r source candidates**: `{t74sum.get('direct_forbidden_source_candidates')}` / `{t74sum.get('direct_intercombination_source_candidates')}` / `{t74sum.get('direct_resonance_source_candidates')}`",
+            f"- **can feed f/i/r candidates**: `{t74sum.get('can_feed_forbidden_candidates')}` / `{t74sum.get('can_feed_intercombination_candidates')}` / `{t74sum.get('can_feed_resonance_candidates')}`",
+            f"- **valid type-71/type-77 superlevel branch links**: `{t74sum.get('valid_type71_superlevel_branch_links')}` / `{t74sum.get('valid_type77_superlevel_branch_links')}`",
+            f"- **same-numeric source type-71/type-77 branch rows**: `{t74sum.get('same_numeric_source_type71_branch_rows')}` / `{t74sum.get('same_numeric_source_type77_branch_rows')}`",
+            f"- **matrix safe-to-assemble counts**: `{t74sum.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
