@@ -1547,3 +1547,8 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
 ```
 
 Supplying an explicit `atdb.fits` path still works, but it is now treated as a per-command override and does not rewrite `datapath`.
+
+
+## v0.3.27 note
+
+Adds diagnostic-only type-74 direct triplet-source audit output `xstar_like_element_solver_type74_triplet_source_audit.csv`.

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.27 - 2026-05-01
+
+- Added a diagnostic-only type-74 direct triplet-source evaluator.
+- New output: `xstar_like_element_solver_type74_triplet_source_audit.csv`.
+- Ports the recombination-alpha portion of XSTAR `calt74.f90` for type-74 records whose recombined/source level directly matches a He-like f/i/r triplet upper level.
+- Applies the `ucalc.f90` statistical-weight correction `alpha *= g(recombined)/g(continuum)` with an explicit placeholder continuum weight until a global element matrix includes the parent continuum row.
+- Reports candidate source rates into forbidden, intercombination, and resonance upper levels; computes a type-74-only f/i/r source-vector shape; and compares it to the C V ne=1e8 XSTAR target when applicable.
+- Type 74 remains diagnostic-only and is not assembled into the population matrix.
+
 ## v0.3.26 - 2026-05-01
 
 - Added a diagnostic-only deep type-74 DR-delta linkage audit.

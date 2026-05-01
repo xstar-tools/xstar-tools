@@ -1926,6 +1926,194 @@ def build_type74_linkage_audit(superlevel_rows: Sequence[dict], branching_rows: 
         })
     return out
 
+
+def _xstar_calt74_alpha_diagnostic(temperature: float, reals: Sequence[float]) -> dict:
+    """Diagnostic Python port of the recombination part of XSTAR calt74.
+
+    XSTAR ``calt74`` evaluates delta functions added to photoionization cross
+    sections to match dielectronic-recombination rates.  Its recombination
+    output ``alpha`` is a coefficient before the statistical-weight correction;
+    ``ucalc.f90`` subsequently applies ``alpha *= g(recombined)/g(continuum)``.
+
+    This helper ports only that recombination coefficient.  It does not use the
+    radiation-grid photoionization integral and it does not assemble any matrix
+    term.  The units follow the XSTAR routine convention as closely as possible
+    for diagnostic comparison.
+    """
+    try:
+        rd = [float(x) for x in reals]
+        temp = float(temperature)
+    except Exception:
+        return {"type74_eval_status": "type74_bad_input"}
+    nrd = len(rd)
+    if nrd < 3:
+        return {"type74_eval_status": "type74_too_few_real_coefficients", "type74_n_real_coefficients": nrd}
+    m = (nrd - 1) // 2
+    if m <= 0 or (1 + 2 * m) > nrd:
+        return {"type74_eval_status": "type74_bad_delta_coefficient_layout", "type74_n_real_coefficients": nrd, "type74_m_delta_count": m}
+    if temp <= 0.0 or not math.isfinite(temp):
+        return {"type74_eval_status": "type74_bad_temperature", "type74_temperature_K": temp}
+
+    # Literal constants/structure from xstarlib/src/calt74.f90.
+    te = temp * 1.38066e-16
+    ryk = 4.589343e10
+    factor = 213.9577e-9
+    xt = rd[0]
+    energies = rd[1:1 + m]
+    heights = rd[1 + m:1 + 2 * m]
+    alpha_sum = 0.0
+    used = 0
+    skipped = 0
+    for x, hgh in zip(energies, heights):
+        arg = x / ryk / te
+        if arg < 40.0:
+            alpha_sum += math.exp(-arg) * (x + xt) * (x + xt) * hgh
+            used += 1
+        else:
+            skipped += 1
+    alpha = alpha_sum * factor / (te ** 1.5) / ryk / ryk
+    return {
+        "type74_eval_status": "evaluated_type74_calt74_dr_alpha_diagnostic",
+        "type74_alpha_unweighted_cm3_s": alpha,
+        "type74_n_real_coefficients": nrd,
+        "type74_m_delta_count": m,
+        "type74_delta_terms_used": used,
+        "type74_delta_terms_skipped_arg_ge_40": skipped,
+        "type74_xt_coeff_preview": xt,
+        "type74_delta_energy_coeff_min": min(energies) if energies else None,
+        "type74_delta_energy_coeff_max": max(energies) if energies else None,
+        "type74_delta_height_abs_sum": sum(abs(h) for h in heights),
+    }
+
+
+def build_type74_triplet_source_audit(
+    type74_linkage_rows: Sequence[dict],
+    *,
+    temperature: float,
+    electron_density: float,
+    level_rows: Optional[Sequence[dict]] = None,
+    parent_population_proxy: float = 1.0,
+) -> List[dict]:
+    """Evaluate direct type-74 f/i/r triplet source candidates diagnostically.
+
+    The input rows come from the v0.3.26 deep type-74 linkage audit.  Only rows
+    whose recombined/source side maps directly to a He-like triplet upper level
+    are evaluated here.  The output is a type-74-only source-vector diagnostic:
+    candidate source rates into f/i/r are summed, normalized, and compared to a
+    built-in C V ne=1e8 XSTAR triplet target when applicable.
+
+    This is not a physical matrix assembly.  It omits the radiation-grid
+    photoionization rate and still uses a placeholder parent population.
+    """
+    levels = _level_lookup(level_rows or [])
+    rows: List[dict] = []
+    totals = {"f": 0.0, "i": 0.0, "r": 0.0}
+
+    for row in type74_linkage_rows:
+        comp = str(row.get("source_level_triplet_component") or "")
+        if comp not in {"f", "i", "r"}:
+            continue
+        raw = row.get("type74_raw_reals_preview")
+        reals: List[float] = []
+        if isinstance(raw, str):
+            # raw preview is written as a Python list string in v0.3.26.  Avoid
+            # importing ast globally; parse conservatively for floats.
+            import ast
+            try:
+                parsed = ast.literal_eval(raw)
+                if isinstance(parsed, (list, tuple)):
+                    reals = [float(x) for x in parsed]
+            except Exception:
+                reals = []
+        elif isinstance(raw, (list, tuple)):
+            reals = [float(x) for x in raw]
+
+        ev = _xstar_calt74_alpha_diagnostic(float(temperature), reals)
+        src_level = maybe_int(row.get("source_level"))
+        lev = levels.get(int(src_level), {}) if src_level is not None else {}
+        g_recombined = maybe_float(lev.get("statistical_weight_g"))
+        g_continuum = 1.0
+        alpha = maybe_float(ev.get("type74_alpha_unweighted_cm3_s"))
+        stat_factor = None if g_recombined is None else float(g_recombined) / g_continuum
+        alpha_weighted = None if alpha is None or stat_factor is None else alpha * stat_factor
+        source_rate = None if alpha_weighted is None else alpha_weighted * float(electron_density) * float(parent_population_proxy)
+        if source_rate is not None and math.isfinite(float(source_rate)) and source_rate > 0.0:
+            totals[comp] += float(source_rate)
+
+        rows.append({
+            "type74_triplet_source_audit_version": "v0.3.27",
+            "record": row.get("record"),
+            "data_type": 74,
+            "rate_type": row.get("rate_type"),
+            "record_ion_stage": row.get("record_ion_stage"),
+            "target_ion_stage": row.get("target_ion_stage"),
+            "parent_ion_stage": row.get("parent_ion_stage"),
+            "temperature_K": temperature,
+            "electron_density_cm^-3": electron_density,
+            "destination_level": src_level,
+            "destination_label": row.get("source_level_label"),
+            "triplet_component": comp,
+            "type74_direct_triplet_candidate": True,
+            **ev,
+            "type74_recombined_stat_weight_g": g_recombined,
+            "type74_parent_continuum_stat_weight_assumed": g_continuum,
+            "type74_statistical_weight_factor_glo_over_ggup": stat_factor,
+            "candidate_alpha_weighted_cm3_s": alpha_weighted,
+            "candidate_source_rate_s^-1": source_rate,
+            "candidate_source_rate_note": "source_rate = alpha_unweighted * g_recombined/g_continuum * ne * parent_population_proxy; diagnostic only",
+            "matrix_safe_to_assemble": False,
+            "unsafe_reason": ";".join([
+                "type74_direct_triplet_source_is_diagnostic_only",
+                "requires_full_calt74_bound_free_context_and_parent_continuum_population_before_assembly",
+                "parent_population_proxy_is_placeholder",
+                "global_element_matrix_not_yet_implemented",
+            ]),
+        })
+
+    total = totals["f"] + totals["i"] + totals["r"]
+    frac = {k: (totals[k] / total if total > 0.0 else 0.0) for k in ("f", "i", "r")}
+    # Built-in reference target from the current C V ne=1e8 benchmark used in
+    # this development thread.  For other ions/stages the fields remain blank.
+    target = None
+    stages = {maybe_int(r.get("target_ion_stage")) for r in rows}
+    if stages == {5}:
+        tf, ti, tr = 0.807706, 0.00663334, 0.185660
+        tsum = tf + ti + tr
+        target = {"f": tf / tsum, "i": ti / tsum, "r": tr / tsum}
+    l2 = None
+    if target is not None:
+        l2 = math.sqrt(sum((frac[k] - target[k]) ** 2 for k in ("f", "i", "r")))
+    dominant = max(("f", "i", "r", "none"), key=lambda k: {"f": frac["f"], "i": frac["i"], "r": frac["r"], "none": 0.0}[k])
+    rows.append({
+        "type74_triplet_source_audit_version": "v0.3.27",
+        "record": "TOTAL_TYPE74_DIRECT_TRIPLET",
+        "data_type": 74,
+        "rate_type": "aggregate",
+        "temperature_K": temperature,
+        "electron_density_cm^-3": electron_density,
+        "triplet_component": "aggregate",
+        "n_direct_triplet_candidate_rows": len([r for r in rows if r.get("type74_direct_triplet_candidate")]),
+        "total_source_rate_f_s^-1": totals["f"],
+        "total_source_rate_i_s^-1": totals["i"],
+        "total_source_rate_r_s^-1": totals["r"],
+        "total_source_rate_triplet_s^-1": total,
+        "source_fraction_f": frac["f"],
+        "source_fraction_i": frac["i"],
+        "source_fraction_r": frac["r"],
+        "source_vector_dominant_component": dominant,
+        "xstar_target_name": "C_V_ne1e8_fir_fraction" if target is not None else "not_available_for_this_target_stage",
+        "xstar_target_fraction_f": None if target is None else target["f"],
+        "xstar_target_fraction_i": None if target is None else target["i"],
+        "xstar_target_fraction_r": None if target is None else target["r"],
+        "source_vector_minus_target_f": None if target is None else frac["f"] - target["f"],
+        "source_vector_minus_target_i": None if target is None else frac["i"] - target["i"],
+        "source_vector_minus_target_r": None if target is None else frac["r"] - target["r"],
+        "source_vector_l2_distance_to_target": l2,
+        "matrix_safe_to_assemble": False,
+        "unsafe_reason": "aggregate_diagnostic_only_not_assembled",
+    })
+    return rows
+
 def build_adjacent_coupling_terms(
     db: ATDB,
     *,
@@ -2207,6 +2395,9 @@ def build_ion_rate_block(
             "level_index": lev,
             "level_label": base.get("level_label"),
             "energy_eV": base.get("energy_eV"),
+            "statistical_weight_g": base.get("statistical_weight_g"),
+            "ionization_potential_eV": base.get("ionization_potential_eV"),
+            "binding_from_continuum_eV": base.get("binding_from_continuum_eV"),
             "population_fraction": float(pop[idx[lev]]) if len(pop) else 0.0,
             "temperature_K": temperature,
             "electron_density_cm^-3": electron_density,
@@ -2359,6 +2550,7 @@ def solve_element_reference(
         superlevel_branching_audit_rows: List[dict] = []
         superlevel_source_audit_rows: List[dict] = []
         type74_linkage_audit_rows: List[dict] = []
+        type74_triplet_source_audit_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -2383,6 +2575,12 @@ def solve_element_reference(
             superlevel_branching_audit_rows = build_superlevel_branching_audit(superlevel_cascade_audit_rows)
             superlevel_source_audit_rows = build_superlevel_source_audit(superlevel_cascade_audit_rows, superlevel_branching_audit_rows)
             type74_linkage_audit_rows = build_type74_linkage_audit(superlevel_cascade_audit_rows, superlevel_branching_audit_rows)
+            type74_triplet_source_audit_rows = build_type74_triplet_source_audit(
+                type74_linkage_audit_rows,
+                temperature=temperature,
+                electron_density=electron_density,
+                level_rows=target_level_rows,
+            )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -2414,6 +2612,7 @@ def solve_element_reference(
         "superlevel_branching_audit": superlevel_branching_audit_rows,
         "superlevel_source_audit": superlevel_source_audit_rows,
         "type74_linkage_audit": type74_linkage_audit_rows,
+        "type74_triplet_source_audit": type74_triplet_source_audit_rows,
     }
 
 
@@ -2655,6 +2854,41 @@ def _type74_linkage_audit_summary(rows: Sequence[dict]) -> dict:
             "interpretation": "v0.3.26 reports both the parent/final level side and the recombined/source level side; it does not assemble type-74 records.",
         },
     }
+
+
+def _type74_triplet_source_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise the v0.3.27 type-74 direct triplet source diagnostic."""
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    candidates = [r for r in rows if r.get("type74_direct_triplet_candidate") is True]
+    agg = next((r for r in rows if str(r.get("record")) == "TOTAL_TYPE74_DIRECT_TRIPLET"), {})
+    return {
+        "n_type74_triplet_source_rows": len(rows),
+        "n_direct_triplet_candidate_rows": len(candidates),
+        "triplet_component_counts": _counts_value("triplet_component"),
+        "eval_status_counts": _counts_value("type74_eval_status"),
+        "total_source_rate_f_s^-1": agg.get("total_source_rate_f_s^-1"),
+        "total_source_rate_i_s^-1": agg.get("total_source_rate_i_s^-1"),
+        "total_source_rate_r_s^-1": agg.get("total_source_rate_r_s^-1"),
+        "total_source_rate_triplet_s^-1": agg.get("total_source_rate_triplet_s^-1"),
+        "source_fraction_f": agg.get("source_fraction_f"),
+        "source_fraction_i": agg.get("source_fraction_i"),
+        "source_fraction_r": agg.get("source_fraction_r"),
+        "source_vector_dominant_component": agg.get("source_vector_dominant_component"),
+        "xstar_target_name": agg.get("xstar_target_name"),
+        "source_vector_l2_distance_to_target": agg.get("source_vector_l2_distance_to_target"),
+        "matrix_safe_to_assemble_counts": _counts_value("matrix_safe_to_assemble"),
+        "provenance": {
+            "calt74": "v0.3.27 ports only the recombination-alpha part of xstarlib/src/calt74.f90 for direct type-74 triplet candidates.",
+            "ucalc": "ucalc.f90 type 74 applies alpha *= g(recombined)/g(continuum); v0.3.27 uses g(continuum)=1 placeholder until the global continuum row exists.",
+            "assembly": "No type-74 source term is assembled into the matrix in v0.3.27.",
+        },
+    }
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -2663,6 +2897,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     superlevel_branching_rows = result.get("superlevel_branching_audit", [])
     superlevel_source_rows = result.get("superlevel_source_audit", [])
     type74_linkage_rows = result.get("type74_linkage_audit", [])
+    type74_triplet_source_rows = result.get("type74_triplet_source_audit", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -2671,6 +2906,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
         result["summary"]["superlevel_branching_audit_summary"] = _superlevel_branching_audit_summary(superlevel_branching_rows)
         result["summary"]["superlevel_source_audit_summary"] = _superlevel_source_audit_summary(superlevel_source_rows)
         result["summary"]["type74_linkage_audit_summary"] = _type74_linkage_audit_summary(type74_linkage_rows)
+        result["summary"]["type74_triplet_source_audit_summary"] = _type74_triplet_source_audit_summary(type74_triplet_source_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
@@ -2679,6 +2915,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_superlevel_branching_audit.csv", superlevel_branching_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_source_audit.csv", superlevel_source_rows)
     write_csv(out / "xstar_like_element_solver_type74_linkage_audit.csv", type74_linkage_rows)
+    write_csv(out / "xstar_like_element_solver_type74_triplet_source_audit.csv", type74_triplet_source_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -2689,7 +2926,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, and the v0.3.26 deep type-74 linkage audit are diagnostic-only and are not assembled.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, and the v0.3.27 direct type-74 triplet-source diagnostic are diagnostic-only and are not assembled.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
@@ -2803,5 +3040,24 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **valid type-71/type-77 superlevel branch links**: `{t74sum.get('valid_type71_superlevel_branch_links')}` / `{t74sum.get('valid_type77_superlevel_branch_links')}`",
             f"- **same-numeric source type-71/type-77 branch rows**: `{t74sum.get('same_numeric_source_type71_branch_rows')}` / `{t74sum.get('same_numeric_source_type77_branch_rows')}`",
             f"- **matrix safe-to-assemble counts**: `{t74sum.get('matrix_safe_to_assemble_counts')}`",
+        ])
+    t74src = summ.get("type74_triplet_source_audit_summary", {}) if isinstance(summ, dict) else {}
+    if t74src:
+        lines.extend([
+            "",
+            "## Type-74 direct triplet-source diagnostic",
+            "",
+            "- v0.3.27 evaluates the recombination-alpha part of `calt74.f90` for type-74 records whose recombined/source level directly matches a He-like f/i/r triplet upper level.",
+            "- The diagnostic applies the `ucalc.f90` statistical-weight correction `alpha *= g(recombined)/g(continuum)` with a placeholder continuum weight of 1 until the global element matrix has an explicit continuum row.",
+            "- The resulting f/i/r source-vector shape is compared to the C V ne=1e8 XSTAR target when applicable. No type-74 source term is assembled into the matrix.",
+            "",
+            f"- **direct triplet candidates**: `{t74src.get('n_direct_triplet_candidate_rows')}`",
+            f"- **component counts**: `{t74src.get('triplet_component_counts')}`",
+            f"- **eval status counts**: `{t74src.get('eval_status_counts')}`",
+            f"- **total f/i/r source rates**: `{t74src.get('total_source_rate_f_s^-1')}` / `{t74src.get('total_source_rate_i_s^-1')}` / `{t74src.get('total_source_rate_r_s^-1')}`",
+            f"- **source-vector f/i/r fractions**: `{t74src.get('source_fraction_f')}` / `{t74src.get('source_fraction_i')}` / `{t74src.get('source_fraction_r')}`",
+            f"- **dominant source-vector component**: `{t74src.get('source_vector_dominant_component')}`",
+            f"- **target comparison**: `{t74src.get('xstar_target_name')}`, L2=`{t74src.get('source_vector_l2_distance_to_target')}`",
+            f"- **matrix safe-to-assemble counts**: `{t74src.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
