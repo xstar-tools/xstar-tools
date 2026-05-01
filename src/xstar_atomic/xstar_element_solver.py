@@ -62,6 +62,7 @@ BOUND_FREE_DATA_TYPES = {1, 2, 6, 7, 22, 30, 49, 53, 59, 70, 74, 95, 99}
 EVALUABLE_RECOMBINATION_DATA_TYPES = {1, 7, 8, 22, 30, 37, 38, 39}
 PHOTOIONIZATION_LIKE_DATA_TYPES = {49, 53, 59, 70, 74, 85, 88, 99}
 COLLISIONAL_IONIZATION_LIKE_DATA_TYPES = {57, 95}
+SUPERLEVEL_CASCADE_DATA_TYPES = {70, 71, 74, 77, 99}
 
 
 @dataclass
@@ -1184,6 +1185,260 @@ def audit_ucalc_adjacent_record(
         })
     return row
 
+
+def _triplet_component_from_level_label(label: str) -> str:
+    """Return f/i/r for a He-like triplet upper-level label when identifiable."""
+    txt = str(label or "").replace(" ", "").lower()
+    if not txt:
+        return ""
+    if "1s1.2s1.3s_1" in txt:
+        return "f"
+    if "1s1.2p1.3p_" in txt:
+        return "i"
+    if "1s1.2p1.1p_1" in txt:
+        return "r"
+    return ""
+
+
+def _superlevel_stage_relation(record_ion_stage: int, target_ion_stage: int, parent_ion_stage: int) -> str:
+    rec = int(record_ion_stage)
+    target = int(target_ion_stage)
+    parent = int(parent_ion_stage)
+    if rec == target:
+        return "target_ion_stage"
+    if rec == parent:
+        return "parent_ion_stage"
+    if rec == target - 1:
+        return "lower_than_target_ion_stage"
+    if rec == parent + 1:
+        return "higher_than_parent_ion_stage"
+    return "not_current_target_parent_pair"
+
+
+def _audit_superlevel_cascade_record(
+    db: ATDB,
+    rec,
+    *,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    level_rows: Sequence[dict],
+    level_indices: Optional[Sequence[int]] = None,
+) -> dict:
+    """Classify type 70/71/74/77/99 superlevel/cascade records.
+
+    This is a diagnostic inventory only.  It follows the database-paper/manual
+    descriptions of the record layouts and reports whether any record provides
+    a plausible superlevel -> spectroscopic cascade route into the He-like
+    triplet upper levels.  No rate from this audit is assembled into the matrix.
+    """
+    h = db.header(rec.recno)
+    rd = [float(x) for x in db.real_slice(h)]
+    it = [int(x) for x in db.int_slice(h)]
+    dt = int(rec.data_type)
+    rt = int(rec.rate_type)
+    rec_stage = int(rec.ion_stage)
+    level_set = set(int(x) for x in (level_indices or []))
+
+    def lab(level):
+        return _level_label_for(level_rows, level)
+
+    def comp(level):
+        return _triplet_component_from_level_label(lab(level))
+
+    # Common fields, populated below as far as the data type permits.
+    lower_level = None
+    upper_level = None
+    spectroscopic_level = None
+    superlevel_level = None
+    destination_level = None
+    parent_continuum_level = None
+    cascade_direction = ""
+    route_kind = ""
+    source_provenance = ""
+    requires = []
+    unsafe = []
+
+    if dt == 70:
+        # Appendix: type 70 coefficients for recombination and PI cross section
+        # of superlevels; i8=level+, i9=ion+, i10=level, i11=ion.
+        final_level = it[7] if len(it) >= 8 else None
+        final_ion = it[8] if len(it) >= 9 else None
+        initial_level = it[9] if len(it) >= 10 else None
+        initial_ion = it[10] if len(it) >= 11 else None
+        superlevel_level = initial_level
+        destination_level = final_level
+        parent_continuum_level = final_level
+        route_kind = "superlevel_recombination_photoionization_coefficient"
+        cascade_direction = "parent_continuum_or_final_level_to_superlevel_candidate"
+        source_provenance = "Bautista_Kallman_2001_appendix_type70_coefficients_for_recombination_and_photoionization_cross_sections_of_superlevels"
+        requires += ["radiation_field_or_milne_inverse_context", "superlevel_population_balance", "linked_type71_or_type77_decay_routes"]
+        unsafe += ["type70_rate_not_evaluated_without_phint53pl_or_superlevel_bound_free_context", "superlevel_population_column_not_explicit_in_current_matrix"]
+        extra = {
+            "type70_i8_final_level_plus": final_level,
+            "type70_i9_final_ion_plus": final_ion,
+            "type70_i10_superlevel_or_initial_level": initial_level,
+            "type70_i11_initial_ion": initial_ion,
+            "type70_n_coefficients": len(rd),
+        }
+    elif dt == 71:
+        # Appendix: radiative transition rates from superlevels to spectroscopic
+        # levels; i3=lower level, i4=upper level, i5=Z, i6=ion.
+        lower_level = it[2] if len(it) >= 3 else None
+        upper_level = it[3] if len(it) >= 4 else None
+        spectroscopic_level = lower_level
+        superlevel_level = upper_level
+        destination_level = lower_level
+        route_kind = "radiative_superlevel_to_spectroscopic_cascade"
+        cascade_direction = "superlevel_upper_to_spectroscopic_lower"
+        source_provenance = "Bautista_Kallman_2001_appendix_type71_radiative_transition_rates_from_superlevels_to_spectroscopic_levels"
+        requires += ["superlevel_population_from_type70_or_other_recombination_source"]
+        unsafe += ["superlevel_population_not_solved_explicitly", "cascade_branching_not_normalized_over_all_superlevel_decays"]
+        extra = {
+            "type71_lower_spectroscopic_level": lower_level,
+            "type71_upper_superlevel_level": upper_level,
+            "type71_A_or_rate_preview_s^-1": rd[0] if rd else None,
+            "type71_wavelength_or_energy_preview": rd[1] if len(rd) > 1 else None,
+        }
+    elif dt == 77:
+        # Appendix: collisional transition rates from superlevels to
+        # spectroscopic levels; same level integer layout as type 71.
+        lower_level = it[2] if len(it) >= 3 else None
+        upper_level = it[3] if len(it) >= 4 else None
+        spectroscopic_level = lower_level
+        superlevel_level = upper_level
+        destination_level = lower_level
+        route_kind = "collisional_superlevel_to_spectroscopic_cascade"
+        cascade_direction = "superlevel_upper_to_spectroscopic_lower"
+        source_provenance = "Bautista_Kallman_2001_appendix_type77_collision_transition_rates_from_superlevels_to_spectroscopic_levels"
+        requires += ["electron_density", "temperature", "superlevel_population"]
+        unsafe += ["type77_rate_evaluator_not_ported", "superlevel_population_not_solved_explicitly"]
+        extra = {
+            "type77_lower_spectroscopic_level": lower_level,
+            "type77_upper_superlevel_level": upper_level,
+            "type77_coefficients_preview": str(rd[:8]),
+        }
+    elif dt == 74:
+        # Appendix: DR delta functions added to PI cross sections; i5=level+,
+        # i6=ion+, i7=level, i8=nion.  Treat as possible recombination/cascade
+        # source only after the linked bound-free context is available.
+        final_level = it[4] if len(it) >= 5 else None
+        final_ion = it[5] if len(it) >= 6 else None
+        initial_level = it[6] if len(it) >= 7 else None
+        initial_ion = it[7] if len(it) >= 8 else None
+        destination_level = final_level
+        spectroscopic_level = final_level
+        superlevel_level = initial_level
+        route_kind = "dielectronic_recombination_delta_photoionization_cross_section"
+        cascade_direction = "dr_resonance_or_parent_level_to_recombined_level_candidate"
+        source_provenance = "Bautista_Kallman_2001_appendix_type74_delta_functions_added_to_photoionization_cross_sections_to_match_ADF_DR_rates"
+        requires += ["calt74_resonance_delta_integration", "radiation_or_milne_context", "linked_parent_continuum_population"]
+        unsafe += ["type74_not_a_direct_cascade_rate", "requires_calt74_and_full_bound_free_context"]
+        extra = {
+            "type74_i5_final_level_plus": final_level,
+            "type74_i6_final_ion_plus": final_ion,
+            "type74_i7_initial_level": initial_level,
+            "type74_i8_initial_ion": initial_ion,
+            "type74_n_delta_coefficients": len(rd),
+        }
+    elif dt == 99:
+        # Newer XSTAR superlevel PI/RR records: layout is not fully documented
+        # in the 2001 appendix, so keep raw destination guesses conservative.
+        g = _guess_ucalc_levels(dt, rt, it, nlevp=None)
+        destination_level = maybe_int(g.get("idest1_guess"))
+        spectroscopic_level = destination_level
+        route_kind = "superlevel_photoionization_recombination_linked_record"
+        cascade_direction = "superlevel_bound_free_context_required"
+        source_provenance = "ucalc_type99_superlevel_photoionization_recombination_phint53pl_context_not_fully_documented_in_2001_appendix"
+        requires += ["linked_superlevel_records", "radiation_field", "phint53pl_context", "superlevel_population_balance"]
+        unsafe += ["type99_layout_requires_source_code_linkage_validation", "not_a_standalone_cascade_rate"]
+        extra = {"type99_idest1_guess": g.get("idest1_guess"), "type99_idest2_guess": g.get("idest2_guess"), "type99_raw_int_count": len(it)}
+    else:
+        extra = {}
+        route_kind = "not_superlevel_cascade_audit_type"
+        unsafe.append("unsupported_data_type_for_superlevel_audit")
+
+    comp_level = spectroscopic_level if spectroscopic_level is not None else destination_level
+    component = comp(comp_level)
+    feeds_f = component == "f"
+    feeds_i = component == "i"
+    feeds_r = component == "r"
+    feeds_any = bool(component)
+    in_matrix = bool(comp_level in level_set) if comp_level is not None else False
+    stage_relation = _superlevel_stage_relation(rec_stage, target_ion_stage, parent_ion_stage)
+
+    if not feeds_any:
+        unsafe.append("no_direct_destination_match_to_identified_helike_triplet_upper_level")
+    if rec_stage != int(target_ion_stage):
+        unsafe.append("record_not_in_current_helike_target_ion_stage")
+    if not in_matrix and comp_level is not None:
+        unsafe.append("candidate_destination_level_not_in_current_pruned_matrix")
+
+    row = {
+        "record": rec.recno,
+        "data_type": dt,
+        "rate_type": rt,
+        "record_ion_stage": rec_stage,
+        "target_ion_stage": target_ion_stage,
+        "parent_ion_stage": parent_ion_stage,
+        "stage_relation_to_target_parent": stage_relation,
+        "superlevel_audit_version": "v0.3.23",
+        "superlevel_route_kind": route_kind,
+        "superlevel_source_provenance": source_provenance,
+        "cascade_direction": cascade_direction,
+        "lower_level": lower_level,
+        "upper_level": upper_level,
+        "superlevel_level": superlevel_level,
+        "spectroscopic_level": spectroscopic_level,
+        "destination_level": destination_level,
+        "parent_continuum_level": parent_continuum_level,
+        "destination_label": lab(comp_level),
+        "destination_in_current_level_set": in_matrix,
+        "cascade_feed_component": component,
+        "feeds_forbidden_upper": feeds_f,
+        "feeds_intercombination_upper": feeds_i,
+        "feeds_resonance_upper": feeds_r,
+        "feeds_any_triplet_component": feeds_any,
+        "requires_radiation_grid": any("radiation" in x for x in requires),
+        "requires_parent_continuum_population": any("continuum" in x or "parent" in x for x in requires),
+        "requires_superlevel_population": any("superlevel_population" in x for x in requires),
+        "matrix_safe_to_assemble": False,
+        "unsafe_reason": ";".join(dict.fromkeys(unsafe + ["diagnostic_only_not_assembled"])),
+        "required_context": ";".join(dict.fromkeys(requires)),
+        "raw_reals_preview": str(rd[:8]),
+        "raw_ints_preview": str(it[:12]),
+    }
+    row.update(extra)
+    return row
+
+
+def build_superlevel_cascade_audit(
+    db: ATDB,
+    *,
+    z: int,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    level_rows: Sequence[dict],
+    level_indices: Optional[Sequence[int]] = None,
+    use_cache: bool = True,
+    cache_path: Optional[str] = None,
+) -> List[dict]:
+    """Return diagnostic-only superlevel/cascade audit rows for one ion pair."""
+    rows: List[dict] = []
+    for stage in (target_ion_stage, parent_ion_stage):
+        for rec in _select_records(db, z, stage, use_cache=use_cache, cache_path=cache_path):
+            if int(rec.data_type) in SUPERLEVEL_CASCADE_DATA_TYPES:
+                row = _audit_superlevel_cascade_record(
+                    db,
+                    rec,
+                    target_ion_stage=target_ion_stage,
+                    parent_ion_stage=parent_ion_stage,
+                    level_rows=level_rows,
+                    level_indices=level_indices,
+                )
+                row.update({"element": Z_TO_SYMBOL.get(z, str(z)), "element_z": z})
+                rows.append(row)
+    return rows
+
 def build_adjacent_coupling_terms(
     db: ATDB,
     *,
@@ -1613,6 +1868,7 @@ def solve_element_reference(
                 tr["diagnostic_ion_stage"] = stage
                 triplet_rows.append(tr)
         coupling = []
+        superlevel_cascade_audit_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -1622,6 +1878,18 @@ def solve_element_reference(
                 use_cache=index_cache,
                 cache_path=index_cache_path,
             )))
+            target_level_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage]
+            target_level_indices = [int(r.get("level_index")) for r in target_level_rows if maybe_int(r.get("level_index")) is not None]
+            superlevel_cascade_audit_rows = build_superlevel_cascade_audit(
+                db,
+                z=z,
+                target_ion_stage=he_like_stage,
+                parent_ion_stage=he_like_stage + 1,
+                level_rows=target_level_rows,
+                level_indices=target_level_indices,
+                use_cache=index_cache,
+                cache_path=index_cache_path,
+            )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -1649,6 +1917,43 @@ def solve_element_reference(
         "transition_rows": transitions,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
+        "superlevel_cascade_audit": superlevel_cascade_audit_rows,
+    }
+
+
+def _superlevel_cascade_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise diagnostic superlevel/cascade audit rows."""
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    def _n_true(col: str) -> int:
+        return sum(1 for r in rows if str(r.get(col)).lower() == "true" or r.get(col) is True)
+    return {
+        "n_superlevel_cascade_rows": len(rows),
+        "data_type_counts": _counts_value("data_type"),
+        "route_kind_counts": _counts_value("superlevel_route_kind"),
+        "stage_relation_counts": _counts_value("stage_relation_to_target_parent"),
+        "cascade_feed_component_counts": _counts_value("cascade_feed_component"),
+        "feeds_any_triplet_component_rows": _n_true("feeds_any_triplet_component"),
+        "feeds_forbidden_upper_rows": _n_true("feeds_forbidden_upper"),
+        "feeds_intercombination_upper_rows": _n_true("feeds_intercombination_upper"),
+        "feeds_resonance_upper_rows": _n_true("feeds_resonance_upper"),
+        "requires_superlevel_population_rows": _n_true("requires_superlevel_population"),
+        "requires_parent_continuum_population_rows": _n_true("requires_parent_continuum_population"),
+        "requires_radiation_grid_rows": _n_true("requires_radiation_grid"),
+        "matrix_safe_to_assemble_counts": _counts_value("matrix_safe_to_assemble"),
+        "provenance": {
+            "type70": "Bautista & Kallman 2001 appendix: coefficients for recombination and photoionization cross sections of superlevels.",
+            "type71": "Bautista & Kallman 2001 appendix: radiative transition rates from superlevels to spectroscopic levels.",
+            "type74": "Bautista & Kallman 2001 appendix: delta functions added to photoionization cross sections to match DR recombination rates.",
+            "type77": "Bautista & Kallman 2001 appendix: collisional transition rates from superlevels to spectroscopic levels.",
+            "type99": "XSTAR source-code-guided audit: superlevel photoionization/recombination context requires linked phint53pl records.",
+            "assembly": "No superlevel/cascade rate is assembled into the element matrix in v0.3.23.",
+        },
     }
 
 
@@ -1726,14 +2031,17 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     audit_rows = result.get("adjacent_coupling_terms", [])
+    superlevel_rows = result.get("superlevel_cascade_audit", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
         result["summary"]["type59_recombination_audit_summary"] = _type59_recombination_audit_summary(audit_rows)
+        result["summary"]["superlevel_cascade_audit_summary"] = _superlevel_cascade_audit_summary(superlevel_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)
+    write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", superlevel_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -1782,5 +2090,23 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **type59 suppression reasons**: `{t59sum.get('type59_suppression_reason_counts')}`",
             f"- **type59 excited-destination rows**: `{t59sum.get('type59_excited_destination_rows')}`",
             f"- **type59 triplet-upper rows after gate**: `{t59sum.get('type59_triplet_upper_after_gate_rows')}`",
+        ])
+    slsum = summ.get("superlevel_cascade_audit_summary", {}) if isinstance(summ, dict) else {}
+    if slsum:
+        lines.extend([
+            "",
+            "## Superlevel cascade audit",
+            "",
+            "- v0.3.23 inventories data types 70/71/74/77/99 for possible superlevel recombination/cascade routes into He-like triplet upper levels.",
+            "- Type 70/74/99 require bound-free radiation/Milne or linked superlevel context; type 71/77 can identify superlevel-to-spectroscopic cascade destinations but still require explicit superlevel populations.",
+            "- No superlevel/cascade rate is assembled into the element matrix.",
+            "",
+            f"- **superlevel audit rows**: `{slsum.get('n_superlevel_cascade_rows')}`",
+            f"- **data type counts**: `{slsum.get('data_type_counts')}`",
+            f"- **route kind counts**: `{slsum.get('route_kind_counts')}`",
+            f"- **triplet-feed component counts**: `{slsum.get('cascade_feed_component_counts')}`",
+            f"- **feeds any triplet component rows**: `{slsum.get('feeds_any_triplet_component_rows')}`",
+            f"- **feeds forbidden/intercombination/resonance rows**: `{slsum.get('feeds_forbidden_upper_rows')}` / `{slsum.get('feeds_intercombination_upper_rows')}` / `{slsum.get('feeds_resonance_upper_rows')}`",
+            f"- **matrix safe-to-assemble counts**: `{slsum.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -87,6 +87,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", [])
         write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_populations.csv", [])
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
