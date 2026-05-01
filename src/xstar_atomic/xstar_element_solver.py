@@ -1316,6 +1316,7 @@ def _audit_superlevel_cascade_record(
             "type77_lower_spectroscopic_level": lower_level,
             "type77_upper_superlevel_level": upper_level,
             "type77_coefficients_preview": str(rd[:8]),
+            "type77_coefficient0_proxy": rd[0] if rd else None,
         }
     elif dt == 74:
         # Appendix: DR delta functions added to PI cross sections; i5=level+,
@@ -1381,7 +1382,7 @@ def _audit_superlevel_cascade_record(
         "target_ion_stage": target_ion_stage,
         "parent_ion_stage": parent_ion_stage,
         "stage_relation_to_target_parent": stage_relation,
-        "superlevel_audit_version": "v0.3.23",
+        "superlevel_audit_version": "v0.3.24",
         "superlevel_route_kind": route_kind,
         "superlevel_source_provenance": source_provenance,
         "cascade_direction": cascade_direction,
@@ -1438,6 +1439,115 @@ def build_superlevel_cascade_audit(
                 row.update({"element": Z_TO_SYMBOL.get(z, str(z)), "element_z": z})
                 rows.append(row)
     return rows
+
+
+def _truthy(value) -> bool:
+    """Return True for CSV-safe booleans used in diagnostic rows."""
+    return value is True or str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+
+def _branch_component_label(component: str) -> str:
+    return {"f": "forbidden", "i": "intercombination", "r": "resonance"}.get(str(component or ""), "other")
+
+
+def build_superlevel_branching_audit(superlevel_rows: Sequence[dict]) -> List[dict]:
+    """Summarise diagnostic type-71/type-77 branching by superlevel.
+
+    Type 71 rows have direct radiative A-value-like weights in the database
+    audit.  Type 77 rows are collisional superlevel-to-spectroscopic records;
+    the full rate evaluator is not ported yet, so v0.3.24 reports a count-based
+    branching proxy for type 77 rather than pretending the fit coefficients are
+    physical rates.  These rows are diagnostic only and are never assembled into
+    the element matrix.
+    """
+    groups: Dict[Tuple[int, int, int], List[dict]] = {}
+    for row in superlevel_rows:
+        dt = maybe_int(row.get("data_type"))
+        if dt not in {71, 77}:
+            continue
+        sl = maybe_int(row.get("superlevel_level"))
+        rec_stage = maybe_int(row.get("record_ion_stage"))
+        if sl is None or rec_stage is None:
+            continue
+        groups.setdefault((int(dt), int(rec_stage), int(sl)), []).append(row)
+
+    out: List[dict] = []
+    for (dt, rec_stage, sl), rows in sorted(groups.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
+        if dt == 71:
+            weight_basis = "type71_radiative_A_s^-1"
+            def weight(row):
+                val = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
+                return float(val) if val is not None and math.isfinite(float(val)) and float(val) > 0.0 else 0.0
+            unsafe_extra = "superlevel_population_not_solved_explicitly;branching_is_radiative_only_until_type70_population_source_is_available"
+        else:
+            weight_basis = "type77_count_proxy_no_rate_evaluator"
+            def weight(row):
+                return 1.0
+            unsafe_extra = "type77_rate_evaluator_not_ported;count_proxy_is_not_a_physical_collisional_branching_rate;superlevel_population_not_solved_explicitly"
+
+        weights = [weight(r) for r in rows]
+        total = float(sum(weights))
+        comp_weight = {"f": 0.0, "i": 0.0, "r": 0.0, "other": 0.0}
+        comp_count = {"f": 0, "i": 0, "r": 0, "other": 0}
+        dest_levels = {"f": [], "i": [], "r": [], "other": []}
+        dest_labels = {"f": [], "i": [], "r": [], "other": []}
+        for r, w in zip(rows, weights):
+            comp = str(r.get("cascade_feed_component") or "")
+            if comp not in {"f", "i", "r"}:
+                comp = "other"
+            comp_weight[comp] += float(w)
+            comp_count[comp] += 1
+            lev = r.get("spectroscopic_level") if r.get("spectroscopic_level") not in (None, "") else r.get("destination_level")
+            lab = r.get("destination_label")
+            if lev not in dest_levels[comp]:
+                dest_levels[comp].append(lev)
+            if lab not in dest_labels[comp]:
+                dest_labels[comp].append(lab)
+
+        def frac(c):
+            return comp_weight[c] / total if total > 0.0 else None
+
+        triplet_weight = comp_weight["f"] + comp_weight["i"] + comp_weight["r"]
+        triplet_count = comp_count["f"] + comp_count["i"] + comp_count["r"]
+        row0 = rows[0]
+        out.append({
+            "branching_audit_version": "v0.3.24",
+            "data_type": dt,
+            "record_ion_stage": rec_stage,
+            "target_ion_stage": row0.get("target_ion_stage"),
+            "parent_ion_stage": row0.get("parent_ion_stage"),
+            "superlevel_level": sl,
+            "branching_route_kind": "type71_radiative_superlevel_branching" if dt == 71 else "type77_collisional_superlevel_branching_proxy",
+            "branching_weight_basis": weight_basis,
+            "n_outgoing_records": len(rows),
+            "total_branch_weight": total,
+            "weight_to_forbidden": comp_weight["f"],
+            "weight_to_intercombination": comp_weight["i"],
+            "weight_to_resonance": comp_weight["r"],
+            "weight_to_triplet_total": triplet_weight,
+            "weight_to_other": comp_weight["other"],
+            "B_f": frac("f"),
+            "B_i": frac("i"),
+            "B_r": frac("r"),
+            "B_triplet_total": triplet_weight / total if total > 0.0 else None,
+            "B_other": comp_weight["other"] / total if total > 0.0 else None,
+            "n_to_forbidden": comp_count["f"],
+            "n_to_intercombination": comp_count["i"],
+            "n_to_resonance": comp_count["r"],
+            "n_to_triplet_total": triplet_count,
+            "n_to_other": comp_count["other"],
+            "forbidden_destination_levels": ";".join(str(x) for x in dest_levels["f"] if x not in (None, "")),
+            "intercombination_destination_levels": ";".join(str(x) for x in dest_levels["i"] if x not in (None, "")),
+            "resonance_destination_levels": ";".join(str(x) for x in dest_levels["r"] if x not in (None, "")),
+            "forbidden_destination_labels": ";".join(str(x) for x in dest_labels["f"] if x not in (None, "")),
+            "intercombination_destination_labels": ";".join(str(x) for x in dest_labels["i"] if x not in (None, "")),
+            "resonance_destination_labels": ";".join(str(x) for x in dest_labels["r"] if x not in (None, "")),
+            "cascade_naturally_favors_forbidden": bool(total > 0.0 and comp_weight["f"] >= comp_weight["i"] and comp_weight["f"] >= comp_weight["r"] and comp_weight["f"] > 0.0),
+            "cascade_dominant_triplet_component": max(("f", "i", "r", "other"), key=lambda c: comp_weight[c]) if total > 0.0 else "",
+            "matrix_safe_to_assemble": False,
+            "unsafe_reason": unsafe_extra + ";diagnostic_only_not_assembled",
+        })
+    return out
 
 def build_adjacent_coupling_terms(
     db: ATDB,
@@ -1869,6 +1979,7 @@ def solve_element_reference(
                 triplet_rows.append(tr)
         coupling = []
         superlevel_cascade_audit_rows: List[dict] = []
+        superlevel_branching_audit_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -1890,6 +2001,7 @@ def solve_element_reference(
                 use_cache=index_cache,
                 cache_path=index_cache_path,
             )
+            superlevel_branching_audit_rows = build_superlevel_branching_audit(superlevel_cascade_audit_rows)
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -1918,6 +2030,7 @@ def solve_element_reference(
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
+        "superlevel_branching_audit": superlevel_branching_audit_rows,
     }
 
 
@@ -1956,6 +2069,52 @@ def _superlevel_cascade_audit_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+
+def _superlevel_branching_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise v0.3.24 type-71/type-77 superlevel branching rows."""
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    def _sum_float(col: str) -> float:
+        total = 0.0
+        for r in rows:
+            val = maybe_float(r.get(col))
+            if val is not None and math.isfinite(float(val)):
+                total += float(val)
+        return total
+    def _max_row(dt: int, col: str):
+        candidates = [r for r in rows if maybe_int(r.get("data_type")) == dt and maybe_float(r.get(col)) is not None]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda r: maybe_float(r.get(col)) or -1.0)
+    type71_max_trip = _max_row(71, "B_triplet_total")
+    type77_max_trip = _max_row(77, "B_triplet_total")
+    return {
+        "n_superlevel_branching_rows": len(rows),
+        "data_type_counts": _counts_value("data_type"),
+        "weight_basis_counts": _counts_value("branching_weight_basis"),
+        "dominant_component_counts": _counts_value("cascade_dominant_triplet_component"),
+        "forbidden_favored_counts": _counts_value("cascade_naturally_favors_forbidden"),
+        "total_type71_triplet_weight": _sum_float("weight_to_triplet_total"),
+        "total_type71_forbidden_weight": sum(float(maybe_float(r.get("weight_to_forbidden")) or 0.0) for r in rows if maybe_int(r.get("data_type")) == 71),
+        "total_type71_intercombination_weight": sum(float(maybe_float(r.get("weight_to_intercombination")) or 0.0) for r in rows if maybe_int(r.get("data_type")) == 71),
+        "total_type71_resonance_weight": sum(float(maybe_float(r.get("weight_to_resonance")) or 0.0) for r in rows if maybe_int(r.get("data_type")) == 71),
+        "max_type71_triplet_branch_superlevel": None if type71_max_trip is None else type71_max_trip.get("superlevel_level"),
+        "max_type71_triplet_branch_fraction": None if type71_max_trip is None else type71_max_trip.get("B_triplet_total"),
+        "max_type77_triplet_branch_superlevel": None if type77_max_trip is None else type77_max_trip.get("superlevel_level"),
+        "max_type77_triplet_branch_fraction": None if type77_max_trip is None else type77_max_trip.get("B_triplet_total"),
+        "matrix_safe_to_assemble_counts": _counts_value("matrix_safe_to_assemble"),
+        "provenance": {
+            "type71": "Branching weights are summed from type-71 radiative superlevel-to-spectroscopic A-value-like coefficients.",
+            "type77": "Type-77 branching is count-proxy only in v0.3.24 because the collisional superlevel rate evaluator is not yet ported.",
+            "assembly": "No superlevel branching or cascade rate is assembled into the element matrix in v0.3.24.",
+        },
+    }
 
 def _type57_audit_summary(rows: Sequence[dict]) -> dict:
     """Summarise type-57 diagnostic audit/provenance rows."""
@@ -2032,16 +2191,19 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     audit_rows = result.get("adjacent_coupling_terms", [])
     superlevel_rows = result.get("superlevel_cascade_audit", [])
+    superlevel_branching_rows = result.get("superlevel_branching_audit", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
         result["summary"]["type59_recombination_audit_summary"] = _type59_recombination_audit_summary(audit_rows)
         result["summary"]["superlevel_cascade_audit_summary"] = _superlevel_cascade_audit_summary(superlevel_rows)
+        result["summary"]["superlevel_branching_audit_summary"] = _superlevel_branching_audit_summary(superlevel_branching_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", superlevel_rows)
+    write_csv(out / "xstar_like_element_solver_superlevel_branching_audit.csv", superlevel_branching_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -2052,7 +2214,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions are audited diagnostically in v0.3.24 but are not assembled.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
@@ -2097,9 +2259,9 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             "",
             "## Superlevel cascade audit",
             "",
-            "- v0.3.23 inventories data types 70/71/74/77/99 for possible superlevel recombination/cascade routes into He-like triplet upper levels.",
+            "- v0.3.23/v0.3.24 inventories data types 70/71/74/77/99 for possible superlevel recombination/cascade routes into He-like triplet upper levels.",
             "- Type 70/74/99 require bound-free radiation/Milne or linked superlevel context; type 71/77 can identify superlevel-to-spectroscopic cascade destinations but still require explicit superlevel populations.",
-            "- No superlevel/cascade rate is assembled into the element matrix.",
+            "- No superlevel/cascade or branching rate is assembled into the element matrix.",
             "",
             f"- **superlevel audit rows**: `{slsum.get('n_superlevel_cascade_rows')}`",
             f"- **data type counts**: `{slsum.get('data_type_counts')}`",
@@ -2108,5 +2270,25 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **feeds any triplet component rows**: `{slsum.get('feeds_any_triplet_component_rows')}`",
             f"- **feeds forbidden/intercombination/resonance rows**: `{slsum.get('feeds_forbidden_upper_rows')}` / `{slsum.get('feeds_intercombination_upper_rows')}` / `{slsum.get('feeds_resonance_upper_rows')}`",
             f"- **matrix safe-to-assemble counts**: `{slsum.get('matrix_safe_to_assemble_counts')}`",
+        ])
+    brsum = summ.get("superlevel_branching_audit_summary", {}) if isinstance(summ, dict) else {}
+    if brsum:
+        lines.extend([
+            "",
+            "## Superlevel branching audit",
+            "",
+            "- v0.3.24 groups type-71/type-77 superlevel-to-spectroscopic rows by superlevel and computes diagnostic f/i/r branch fractions.",
+            "- Type 71 uses radiative A-value-like weights. Type 77 uses a count proxy because the collisional superlevel rate evaluator is not yet ported.",
+            "- Branching rows remain diagnostic-only and are not assembled into the element matrix.",
+            "",
+            f"- **superlevel branching rows**: `{brsum.get('n_superlevel_branching_rows')}`",
+            f"- **data type counts**: `{brsum.get('data_type_counts')}`",
+            f"- **weight-basis counts**: `{brsum.get('weight_basis_counts')}`",
+            f"- **dominant component counts**: `{brsum.get('dominant_component_counts')}`",
+            f"- **forbidden-favored counts**: `{brsum.get('forbidden_favored_counts')}`",
+            f"- **type-71 f/i/r total weights**: `{brsum.get('total_type71_forbidden_weight')}` / `{brsum.get('total_type71_intercombination_weight')}` / `{brsum.get('total_type71_resonance_weight')}`",
+            f"- **max type-71 triplet-branch superlevel/fraction**: `{brsum.get('max_type71_triplet_branch_superlevel')}` / `{brsum.get('max_type71_triplet_branch_fraction')}`",
+            f"- **max type-77 triplet-branch superlevel/fraction**: `{brsum.get('max_type77_triplet_branch_superlevel')}` / `{brsum.get('max_type77_triplet_branch_fraction')}`",
+            f"- **matrix safe-to-assemble counts**: `{brsum.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
