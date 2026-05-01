@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.16 - 2026-05-01
+
+- Fixed a v0.3.15 API mismatch in `solve_element_reference()` where the coupling-candidate cataloguer was called with adjacent-coupling assembly options that are only valid for `build_adjacent_coupling_terms()`.
+- Restored `examples/42_xstar_like_element_solver_demo.py --adjacent-coupling-mode recombination-source` so the pure-Python element-solver scaffold runs and writes coupling audit outputs instead of failing at startup.
+- Kept the separation between catalogued adjacent-ion candidate records and physically assembled/evaluated recombination-source terms.
+
 ## v0.3.15 - prototype adjacent-ion coupling assembly - 2026-04-30
 
 - Extended the pure-Python XSTAR-like element solver with explicit adjacent-ion coupling term construction.

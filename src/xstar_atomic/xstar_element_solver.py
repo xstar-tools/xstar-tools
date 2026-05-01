@@ -569,11 +569,6 @@ def solve_element_reference(
                 upper_ion_stage=he_like_stage + 1,
                 use_cache=index_cache,
                 cache_path=index_cache_path,
-                adjacent_parent_stage=parent_stage,
-                adjacent_coupling_mode=adjacent_coupling_mode if parent_stage is not None else "none",
-                adjacent_coupling_source_mode=adjacent_coupling_source_mode,
-                adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
-                include_charge_exchange=include_charge_exchange,
             )))
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {

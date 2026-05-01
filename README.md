@@ -1,28 +1,5 @@
 # xstar-atomic
 
-### v0.3.15 note: prototype adjacent-ion coupling terms
-
-`examples/42_xstar_like_element_solver_demo.py` can now assemble implemented adjacent-ion recombination records as prototype source terms while separately cataloguing photoionization-like and collisional-ionization-like records that still require XSTAR's full `ucalc` radiation-field context.
-
-Example:
-
-```bash
-PYTHONPATH=src python examples/42_xstar_like_element_solver_demo.py \
-  ../xstar/data/atdb.fits \
-  --element C --he-like-stage 5 \
-  --temperature 1000000 --electron-density 1e8 \
-  --wavelength-min 40 --wavelength-max 42 \
-  --max-level 80 \
-  --adjacent-coupling-mode recombination-source \
-  --adjacent-coupling-source-mode record-destination \
-  --index-cache \
-  --out-dir c5_xstar_like_element_solver \
-  --print-summary
-```
-
-The generated `xstar_like_element_solver_adjacent_coupling_terms.csv` distinguishes assembled source-vector rows from catalogued records such as data types 53, 57, 74, 95, and 99 that are not yet converted into rates.
-
-
 ### He-like validation summary tagging
 
 `examples/34_summarize_helike_validation_runs.py` preserves condition-specific directory tags such as `ca19_xi3` and `ca19_xi4` in summary CSV/JSON/Markdown outputs.  This avoids merging multiple Ca XIX ionization-parameter grids into a single ambiguous `ca19` label.
