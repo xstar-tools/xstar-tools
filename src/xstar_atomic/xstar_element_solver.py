@@ -1549,6 +1549,204 @@ def build_superlevel_branching_audit(superlevel_rows: Sequence[dict]) -> List[di
         })
     return out
 
+
+def _source_proxy_from_row(row: dict) -> float:
+    """Return a transparent nonphysical source proxy for superlevel-source audits.
+
+    The type-70/74/99 source records are not yet evaluated as XSTAR physical
+    rates.  v0.3.25 therefore uses one count unit per source candidate for the
+    source-weighted branch diagnostic, while also reporting coefficient-magnitude
+    previews separately.  This makes source_proxy * B_f/i/r easy to interpret as
+    a source-presence weighted feed proxy, not an assembled rate.
+    """
+    return 1.0
+
+
+def _source_coeff_abs_sum(row: dict) -> Optional[float]:
+    """Best-effort coefficient-magnitude diagnostic from raw_reals_preview."""
+    txt = str(row.get("raw_reals_preview") or "").strip()
+    if not txt:
+        return None
+    try:
+        vals = json.loads(txt.replace("'", '"'))
+    except Exception:
+        try:
+            import ast
+            vals = ast.literal_eval(txt)
+        except Exception:
+            return None
+    if not isinstance(vals, (list, tuple)):
+        return None
+    nums = []
+    for val in vals:
+        try:
+            f = float(val)
+            if math.isfinite(f):
+                nums.append(abs(f))
+        except Exception:
+            pass
+    return float(sum(nums)) if nums else None
+
+
+def _source_superlevel_key(row: dict) -> Optional[int]:
+    """Return the best candidate superlevel index for type 70/74/99 rows."""
+    dt = maybe_int(row.get("data_type"))
+    if dt == 70:
+        for key in ("type70_i10_superlevel_or_initial_level", "superlevel_level", "destination_level"):
+            val = maybe_int(row.get(key))
+            if val is not None:
+                return int(val)
+    if dt == 74:
+        for key in ("type74_i7_initial_level", "superlevel_level", "destination_level"):
+            val = maybe_int(row.get(key))
+            if val is not None:
+                return int(val)
+    if dt == 99:
+        for key in ("type99_idest1_guess", "destination_level", "spectroscopic_level", "superlevel_level"):
+            val = maybe_int(row.get(key))
+            if val is not None:
+                return int(val)
+    val = maybe_int(row.get("superlevel_level"))
+    return None if val is None else int(val)
+
+
+def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_rows: Sequence[dict]) -> List[dict]:
+    """Link type-70/74/99 source candidates to v0.3.24 branch fractions.
+
+    The output is one diagnostic row per (record ion stage, superlevel).  It
+    identifies source-candidate records of types 70/74/99, attaches radiative
+    type-71 and collisional-proxy type-77 f/i/r branch fractions for that same
+    superlevel when available, and reports source_proxy * B_f/i/r feed proxies.
+
+    No source, branch, or source-weighted proxy is assembled into the solver.
+    """
+    source_rows = [r for r in superlevel_rows if maybe_int(r.get("data_type")) in {70, 74, 99}]
+    branch_by_key: Dict[Tuple[int, int, int], dict] = {}
+    for br in branching_rows:
+        dt = maybe_int(br.get("data_type"))
+        st = maybe_int(br.get("record_ion_stage"))
+        sl = maybe_int(br.get("superlevel_level"))
+        if dt is None or st is None or sl is None:
+            continue
+        branch_by_key[(int(st), int(sl), int(dt))] = br
+
+    keys = set()
+    grouped: Dict[Tuple[int, int], List[dict]] = {}
+    for row in source_rows:
+        st = maybe_int(row.get("record_ion_stage"))
+        sl = _source_superlevel_key(row)
+        if st is None or sl is None:
+            continue
+        key = (int(st), int(sl))
+        keys.add(key)
+        grouped.setdefault(key, []).append(row)
+    for br in branching_rows:
+        st = maybe_int(br.get("record_ion_stage"))
+        sl = maybe_int(br.get("superlevel_level"))
+        if st is not None and sl is not None:
+            keys.add((int(st), int(sl)))
+
+    out: List[dict] = []
+    for st, sl in sorted(keys, key=lambda x: (x[0], x[1])):
+        rows = grouped.get((st, sl), [])
+        rows_by_dt = {70: [], 74: [], 99: []}
+        for row in rows:
+            dt = maybe_int(row.get("data_type"))
+            if dt in rows_by_dt:
+                rows_by_dt[int(dt)].append(row)
+        records_by_dt = {
+            dt: ";".join(str(r.get("record")) for r in rows_by_dt[dt] if r.get("record") not in (None, ""))
+            for dt in (70, 74, 99)
+        }
+        coeff_abs_by_dt = {}
+        for dt in (70, 74, 99):
+            coeffs = [_source_coeff_abs_sum(r) for r in rows_by_dt[dt]]
+            coeff_abs_by_dt[dt] = float(sum(c for c in coeffs if c is not None)) if any(c is not None for c in coeffs) else None
+        n70 = len(rows_by_dt[70])
+        n74 = len(rows_by_dt[74])
+        n99 = len(rows_by_dt[99])
+        source_proxy = float(sum(_source_proxy_from_row(r) for r in rows))
+        # Prefer type-71 physical radiative branching for source-weighted proxy.
+        br71 = branch_by_key.get((st, sl, 71), {})
+        br77 = branch_by_key.get((st, sl, 77), {})
+        def bval(br: dict, key: str) -> Optional[float]:
+            val = maybe_float(br.get(key)) if br else None
+            return float(val) if val is not None and math.isfinite(float(val)) else None
+        type71_Bf, type71_Bi, type71_Br = bval(br71, "B_f"), bval(br71, "B_i"), bval(br71, "B_r")
+        type71_Bt = bval(br71, "B_triplet_total")
+        type77_Bf, type77_Bi, type77_Br = bval(br77, "B_f"), bval(br77, "B_i"), bval(br77, "B_r")
+        type77_Bt = bval(br77, "B_triplet_total")
+        has_branch = bool(br71 or br77)
+        has_type71 = bool(br71)
+        has_type77 = bool(br77)
+        def prod(b: Optional[float]) -> Optional[float]:
+            return None if b is None else source_proxy * float(b)
+        unsafe = ["source_proxy_is_count_based_not_a_physical_rate", "type70_74_99_bound_free_source_rates_not_evaluated", "superlevel_population_not_solved_explicitly", "diagnostic_only_not_assembled"]
+        if not rows:
+            unsafe.append("branching_superlevel_has_no_type70_74_99_source_candidate_in_current_audit")
+        if not has_branch:
+            unsafe.append("source_superlevel_has_no_type71_or_type77_branching_fraction_in_current_audit")
+        target_stage = rows[0].get("target_ion_stage") if rows else (br71 or br77).get("target_ion_stage")
+        parent_stage = rows[0].get("parent_ion_stage") if rows else (br71 or br77).get("parent_ion_stage")
+        out.append({
+            "source_audit_version": "v0.3.25",
+            "record_ion_stage": st,
+            "target_ion_stage": target_stage,
+            "parent_ion_stage": parent_stage,
+            "superlevel_level": sl,
+            "n_type70_source_candidates": n70,
+            "type70_records": records_by_dt[70],
+            "type70_coeff_abs_sum_preview": coeff_abs_by_dt[70],
+            "n_type74_dr_delta_source_candidates": n74,
+            "type74_records": records_by_dt[74],
+            "type74_coeff_abs_sum_preview": coeff_abs_by_dt[74],
+            "n_type99_superlevel_source_candidates": n99,
+            "type99_records": records_by_dt[99],
+            "type99_coeff_abs_sum_preview": coeff_abs_by_dt[99],
+            "n_total_source_candidates": len(rows),
+            "source_proxy_basis": "count_per_type70_74_99_source_candidate_nonphysical",
+            "source_proxy_total": source_proxy,
+            "has_type71_branching": has_type71,
+            "has_type77_branching_proxy": has_type77,
+            "has_any_branching": has_branch,
+            "type71_B_f": type71_Bf,
+            "type71_B_i": type71_Bi,
+            "type71_B_r": type71_Br,
+            "type71_B_triplet_total": type71_Bt,
+            "type77_B_f_proxy": type77_Bf,
+            "type77_B_i_proxy": type77_Bi,
+            "type77_B_r_proxy": type77_Br,
+            "type77_B_triplet_total_proxy": type77_Bt,
+            "source_weighted_type71_feed_f_proxy": prod(type71_Bf),
+            "source_weighted_type71_feed_i_proxy": prod(type71_Bi),
+            "source_weighted_type71_feed_r_proxy": prod(type71_Br),
+            "source_weighted_type71_feed_triplet_proxy": prod(type71_Bt),
+            "source_weighted_type77_feed_f_proxy": prod(type77_Bf),
+            "source_weighted_type77_feed_i_proxy": prod(type77_Bi),
+            "source_weighted_type77_feed_r_proxy": prod(type77_Br),
+            "source_weighted_type77_feed_triplet_proxy": prod(type77_Bt),
+            "source_weighted_preferred_feed_f_proxy": prod(type71_Bf if type71_Bf is not None else type77_Bf),
+            "source_weighted_preferred_feed_i_proxy": prod(type71_Bi if type71_Bi is not None else type77_Bi),
+            "source_weighted_preferred_feed_r_proxy": prod(type71_Br if type71_Br is not None else type77_Br),
+            "source_weighted_preferred_feed_triplet_proxy": prod(type71_Bt if type71_Bt is not None else type77_Bt),
+            "preferred_branch_basis": "type71_radiative_A_s^-1" if has_type71 else ("type77_count_proxy_no_rate_evaluator" if has_type77 else "none"),
+            "source_has_branch_to_forbidden": bool((type71_Bf or 0.0) > 0.0 or (type77_Bf or 0.0) > 0.0),
+            "source_has_branch_to_intercombination": bool((type71_Bi or 0.0) > 0.0 or (type77_Bi or 0.0) > 0.0),
+            "source_has_branch_to_resonance": bool((type71_Br or 0.0) > 0.0 or (type77_Br or 0.0) > 0.0),
+            "source_weighted_proxy_dominant_component": max(
+                ("f", "i", "r", "none"),
+                key=lambda c: {
+                    "f": prod(type71_Bf if type71_Bf is not None else type77_Bf) or 0.0,
+                    "i": prod(type71_Bi if type71_Bi is not None else type77_Bi) or 0.0,
+                    "r": prod(type71_Br if type71_Br is not None else type77_Br) or 0.0,
+                    "none": 0.0,
+                }[c],
+            ),
+            "matrix_safe_to_assemble": False,
+            "unsafe_reason": ";".join(dict.fromkeys(unsafe)),
+        })
+    return out
+
 def build_adjacent_coupling_terms(
     db: ATDB,
     *,
@@ -1980,6 +2178,7 @@ def solve_element_reference(
         coupling = []
         superlevel_cascade_audit_rows: List[dict] = []
         superlevel_branching_audit_rows: List[dict] = []
+        superlevel_source_audit_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -2002,6 +2201,7 @@ def solve_element_reference(
                 cache_path=index_cache_path,
             )
             superlevel_branching_audit_rows = build_superlevel_branching_audit(superlevel_cascade_audit_rows)
+            superlevel_source_audit_rows = build_superlevel_source_audit(superlevel_cascade_audit_rows, superlevel_branching_audit_rows)
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -2031,6 +2231,7 @@ def solve_element_reference(
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
         "superlevel_branching_audit": superlevel_branching_audit_rows,
+        "superlevel_source_audit": superlevel_source_audit_rows,
     }
 
 
@@ -2186,24 +2387,78 @@ def _type59_recombination_audit_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+
+def _superlevel_source_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise v0.3.25 type-70/74/99 source × branch proxy rows."""
+    def _counts_value(col: str) -> dict:
+        vals = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    def _sum_float(col: str) -> float:
+        total = 0.0
+        for r in rows:
+            val = maybe_float(r.get(col))
+            if val is not None and math.isfinite(float(val)):
+                total += float(val)
+        return total
+    def _max_row(col: str):
+        candidates = [r for r in rows if maybe_float(r.get(col)) is not None]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda r: maybe_float(r.get(col)) or -1.0)
+    max_trip = _max_row("source_weighted_preferred_feed_triplet_proxy")
+    return {
+        "n_superlevel_source_audit_rows": len(rows),
+        "rows_with_type70_candidates": sum(1 for r in rows if (maybe_float(r.get("n_type70_source_candidates")) or 0.0) > 0.0),
+        "rows_with_type74_candidates": sum(1 for r in rows if (maybe_float(r.get("n_type74_dr_delta_source_candidates")) or 0.0) > 0.0),
+        "rows_with_type99_candidates": sum(1 for r in rows if (maybe_float(r.get("n_type99_superlevel_source_candidates")) or 0.0) > 0.0),
+        "total_type70_candidates": int(_sum_float("n_type70_source_candidates")),
+        "total_type74_candidates": int(_sum_float("n_type74_dr_delta_source_candidates")),
+        "total_type99_candidates": int(_sum_float("n_type99_superlevel_source_candidates")),
+        "branch_basis_counts": _counts_value("preferred_branch_basis"),
+        "dominant_component_counts": _counts_value("source_weighted_proxy_dominant_component"),
+        "rows_with_forbidden_branch": _counts_value("source_has_branch_to_forbidden"),
+        "rows_with_intercombination_branch": _counts_value("source_has_branch_to_intercombination"),
+        "rows_with_resonance_branch": _counts_value("source_has_branch_to_resonance"),
+        "total_source_proxy": _sum_float("source_proxy_total"),
+        "total_preferred_feed_f_proxy": _sum_float("source_weighted_preferred_feed_f_proxy"),
+        "total_preferred_feed_i_proxy": _sum_float("source_weighted_preferred_feed_i_proxy"),
+        "total_preferred_feed_r_proxy": _sum_float("source_weighted_preferred_feed_r_proxy"),
+        "total_preferred_feed_triplet_proxy": _sum_float("source_weighted_preferred_feed_triplet_proxy"),
+        "max_preferred_feed_triplet_superlevel": None if max_trip is None else max_trip.get("superlevel_level"),
+        "max_preferred_feed_triplet_proxy": None if max_trip is None else max_trip.get("source_weighted_preferred_feed_triplet_proxy"),
+        "matrix_safe_to_assemble_counts": _counts_value("matrix_safe_to_assemble"),
+        "provenance": {
+            "source_proxy": "v0.3.25 uses one nonphysical count unit per type-70/74/99 source candidate and reports source_proxy * B_f/i/r only as a diagnostic feed proxy.",
+            "branch_linkage": "Branch fractions are imported from the v0.3.24 type-71/type-77 superlevel branching audit for the same record ion stage and superlevel index.",
+            "assembly": "No type-70/74/99 source or source-weighted superlevel cascade term is assembled into the element matrix in v0.3.25.",
+        },
+    }
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     audit_rows = result.get("adjacent_coupling_terms", [])
     superlevel_rows = result.get("superlevel_cascade_audit", [])
     superlevel_branching_rows = result.get("superlevel_branching_audit", [])
+    superlevel_source_rows = result.get("superlevel_source_audit", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
         result["summary"]["type59_recombination_audit_summary"] = _type59_recombination_audit_summary(audit_rows)
         result["summary"]["superlevel_cascade_audit_summary"] = _superlevel_cascade_audit_summary(superlevel_rows)
         result["summary"]["superlevel_branching_audit_summary"] = _superlevel_branching_audit_summary(superlevel_branching_rows)
+        result["summary"]["superlevel_source_audit_summary"] = _superlevel_source_audit_summary(superlevel_source_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_cascade_audit.csv", superlevel_rows)
     write_csv(out / "xstar_like_element_solver_superlevel_branching_audit.csv", superlevel_branching_rows)
+    write_csv(out / "xstar_like_element_solver_superlevel_source_audit.csv", superlevel_source_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -2214,7 +2469,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions are audited diagnostically in v0.3.24 but are not assembled.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions and type-70/74/99 source × branch proxies are audited diagnostically in v0.3.25 but are not assembled.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
@@ -2290,5 +2545,24 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **max type-71 triplet-branch superlevel/fraction**: `{brsum.get('max_type71_triplet_branch_superlevel')}` / `{brsum.get('max_type71_triplet_branch_fraction')}`",
             f"- **max type-77 triplet-branch superlevel/fraction**: `{brsum.get('max_type77_triplet_branch_superlevel')}` / `{brsum.get('max_type77_triplet_branch_fraction')}`",
             f"- **matrix safe-to-assemble counts**: `{brsum.get('matrix_safe_to_assemble_counts')}`",
+        ])
+    srcsum = summ.get("superlevel_source_audit_summary", {}) if isinstance(summ, dict) else {}
+    if srcsum:
+        lines.extend([
+            "",
+            "## Superlevel source × branch audit",
+            "",
+            "- v0.3.25 links type-70/74/99 superlevel source candidates to the v0.3.24 type-71/type-77 branching fractions for the same superlevel.",
+            "- The source proxy is one nonphysical count unit per type-70/74/99 source candidate; source_proxy × B_f/i/r is a diagnostic feed proxy, not a rate.",
+            "- Source-weighted proxy rows remain diagnostic-only and are not assembled into the element matrix.",
+            "",
+            f"- **superlevel source audit rows**: `{srcsum.get('n_superlevel_source_audit_rows')}`",
+            f"- **total type-70/type-74/type-99 candidates**: `{srcsum.get('total_type70_candidates')}` / `{srcsum.get('total_type74_candidates')}` / `{srcsum.get('total_type99_candidates')}`",
+            f"- **branch basis counts**: `{srcsum.get('branch_basis_counts')}`",
+            f"- **dominant source-weighted component counts**: `{srcsum.get('dominant_component_counts')}`",
+            f"- **total preferred f/i/r feed proxies**: `{srcsum.get('total_preferred_feed_f_proxy')}` / `{srcsum.get('total_preferred_feed_i_proxy')}` / `{srcsum.get('total_preferred_feed_r_proxy')}`",
+            f"- **total preferred triplet feed proxy**: `{srcsum.get('total_preferred_feed_triplet_proxy')}`",
+            f"- **max preferred triplet superlevel/proxy**: `{srcsum.get('max_preferred_feed_triplet_superlevel')}` / `{srcsum.get('max_preferred_feed_triplet_proxy')}`",
+            f"- **matrix safe-to-assemble counts**: `{srcsum.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

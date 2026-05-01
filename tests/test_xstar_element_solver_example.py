@@ -27,3 +27,5 @@ def test_xstar_like_element_solver_dry_run(tmp_path):
     assert (out / "xstar_like_element_solver_adjacent_coupling_terms.csv").exists()
     assert (out / "xstar_like_element_solver_ucalc_adjacent_audit.csv").exists()
     assert (out / "xstar_like_element_solver_superlevel_cascade_audit.csv").exists()
+    assert (out / "xstar_like_element_solver_superlevel_branching_audit.csv").exists()
+    assert (out / "xstar_like_element_solver_superlevel_source_audit.csv").exists()
