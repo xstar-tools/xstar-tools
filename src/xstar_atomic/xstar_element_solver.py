@@ -567,7 +567,7 @@ def _evaluate_type57_calt57_record(
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
-    v0.3.20 writes side-by-side diagnostics for alternate energy conventions
+    v0.3.21 writes side-by-side diagnostics for alternate energy conventions
     and lets the caller select which convention populates the primary
     ``python_eval_status`` / ``python_rate_*`` audit columns.
     This is needed because ``ucalc.f90`` currently passes ``ep=eth`` whereas
@@ -672,7 +672,7 @@ def _evaluate_type57_calt57_record(
         electron_density=electron_density, g_lo=g_lo, ggup=ggup, eth_eV=eth,
     ))
 
-    # v0.3.20: select which convention populates the primary, backward-compatible
+    # v0.3.21: select which convention populates the primary, backward-compatible
     # audit columns.  ``compare`` deliberately keeps the visible ucalc convention
     # as primary while still writing all alternate convention columns.
     convention_map = {
@@ -724,6 +724,120 @@ def _evaluate_type57_calt57_record(
         out["python_rate_forward_s^-1"] = 0.0
         out["python_rate_inverse_s^-1"] = 0.0
     return out
+
+
+def _classify_type57_matrix_role(
+    *,
+    record_ion_stage: int,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    destination_level: Optional[int],
+    level_indices: Optional[Sequence[int]] = None,
+    nlevp: Optional[int] = None,
+    selected_forward_rate: Optional[float] = None,
+    selected_inverse_rate: Optional[float] = None,
+) -> dict:
+    """Classify how a type-57 record would enter an element matrix.
+
+    This is intentionally diagnostic-only.  XSTAR type 57 represents
+    electron-impact ionization from a bound level plus an inverse three-body
+    recombination term from the adjacent continuum.  The current Python
+    reference solver still solves one ion block at a time, so it has no explicit
+    parent-continuum column/population.  v0.3.21 therefore reports candidate
+    local source/sink indices and the reason assembly is unsafe.
+    """
+    levels = [int(x) for x in (level_indices or [])]
+    idx = {lev: i for i, lev in enumerate(levels)}
+    dest = None if destination_level is None else int(destination_level)
+    rec_stage = int(record_ion_stage)
+    target = int(target_ion_stage)
+    parent = int(parent_ion_stage)
+
+    # XSTAR ion-stage convention used here: C V target stage 5 ionizes to
+    # adjacent C VI parent stage 6.  Thus the record ion stage is the lower
+    # bound ion for a target-parent pair when rec_stage == target and
+    # parent == target + 1.
+    pair_matches = (rec_stage == target and parent == target + 1)
+    record_is_parent_stage = (rec_stage == parent)
+    local_index = idx.get(dest) if dest is not None else None
+    in_local_matrix = local_index is not None
+    primary_forward_nonzero = selected_forward_rate is not None and selected_forward_rate > 0.0
+    primary_inverse_nonzero = selected_inverse_rate is not None and selected_inverse_rate > 0.0
+
+    if pair_matches and in_local_matrix:
+        role = "target_lower_ion_level_to_parent_continuum_ci_sink_with_inverse_tbr_source"
+        forward_sink_ion_stage = target
+        inverse_source_ion_stage = target
+        inverse_parent_stage = parent
+        sink_index = local_index
+        source_index = local_index
+    elif pair_matches and not in_local_matrix:
+        role = "target_lower_ion_type57_level_not_in_current_local_matrix"
+        forward_sink_ion_stage = target
+        inverse_source_ion_stage = target
+        inverse_parent_stage = parent
+        sink_index = None
+        source_index = None
+    elif record_is_parent_stage:
+        role = "record_belongs_to_parent_ion_not_target_parent_pair_sink_to_next_higher_stage"
+        forward_sink_ion_stage = parent
+        inverse_source_ion_stage = parent
+        inverse_parent_stage = parent + 1
+        sink_index = None
+        source_index = None
+    else:
+        role = "record_ion_stage_not_matched_to_current_target_parent_pair"
+        forward_sink_ion_stage = rec_stage
+        inverse_source_ion_stage = rec_stage
+        inverse_parent_stage = rec_stage + 1
+        sink_index = None
+        source_index = None
+
+    reasons = []
+    if not pair_matches:
+        reasons.append("record_ion_stage_is_not_current_lower_target_ion")
+    if not in_local_matrix:
+        reasons.append("destination_level_not_in_current_pruned_target_level_matrix")
+    if nlevp is None:
+        reasons.append("parent_continuum_level_index_nlevp_not_explicit_in_python_matrix")
+    else:
+        reasons.append("parent_continuum_column_population_not_available_in_single_ion_block_solver")
+    reasons.append("continuum_statistical_weight_is_placeholder_until_parent_continuum_row_is_explicit")
+    reasons.append("type57_energy_convention_conflict_must_be_resolved_before_physical_assembly")
+    reasons.append("inverse_three_body_recombination_requires_full_element_population_balance")
+
+    return {
+        "type57_matrix_role_classifier_version": "v0.3.21",
+        "type57_matrix_lower_ion_stage": target,
+        "type57_matrix_upper_ion_stage": parent,
+        "type57_matrix_record_ion_stage": rec_stage,
+        "type57_matrix_destination_ion_stage": target if pair_matches else rec_stage,
+        "type57_matrix_destination_level": dest,
+        "type57_matrix_destination_in_current_level_set": bool(in_local_matrix),
+        "type57_matrix_candidate_local_index_0based": local_index,
+        "type57_matrix_candidate_local_index_1based": None if local_index is None else local_index + 1,
+        "type57_matrix_candidate_nlevp_continuum_level": nlevp,
+        "type57_forward_rate_would_be_sink_from_lower_ion": bool(pair_matches),
+        "type57_forward_rate_would_be_sink_from_upper_ion": bool(record_is_parent_stage),
+        "type57_forward_sink_ion_stage": forward_sink_ion_stage,
+        "type57_forward_sink_level": dest,
+        "type57_forward_sink_vector_index_0based": sink_index,
+        "type57_forward_full_matrix_row_if_sink": sink_index,
+        "type57_forward_full_matrix_col_if_sink": sink_index,
+        "type57_inverse_three_body_recombination_source_candidate": bool(pair_matches),
+        "type57_inverse_source_ion_stage": inverse_source_ion_stage,
+        "type57_inverse_parent_source_ion_stage": inverse_parent_stage,
+        "type57_inverse_source_level": dest,
+        "type57_inverse_source_vector_index_0based": source_index,
+        "type57_inverse_full_matrix_row_if_source": source_index,
+        "type57_inverse_full_matrix_col_if_source": "parent_continuum_column_not_present",
+        "type57_selected_forward_rate_nonzero": bool(primary_forward_nonzero),
+        "type57_selected_inverse_rate_nonzero": bool(primary_inverse_nonzero),
+        "type57_matrix_role_classification": role,
+        "type57_matrix_safe_to_assemble": False,
+        "type57_matrix_unsafe_reason": ";".join(reasons),
+        "type57_matrix_assembly_note": "classifier_only_not_assembled; candidate sink/source indices are local to the current target ion block, not a complete element-wide matrix",
+    }
 
 def _evaluate_type95_bryans_ci(reals: Sequence[float], ints: Sequence[int], *, temperature: float, electron_density: float) -> dict:
     """Diagnostic approximation to ucalc type-95 Bryans collisional ionization.
@@ -779,6 +893,7 @@ def audit_ucalc_adjacent_record(
     electron_density: float,
     nlevp: Optional[int] = None,
     level_rows: Optional[Sequence[dict]] = None,
+    level_indices: Optional[Sequence[int]] = None,
     type57_energy_convention: str = "compare",
 ) -> dict:
     """Return a source-code-guided audit row for an adjacent-ion record.
@@ -837,6 +952,16 @@ def audit_ucalc_adjacent_record(
             nlevp=nlevp,
             level_rows=level_rows,
             type57_energy_convention=type57_energy_convention,
+        ))
+        row.update(_classify_type57_matrix_role(
+            record_ion_stage=int(rec.ion_stage),
+            target_ion_stage=target_ion_stage,
+            parent_ion_stage=parent_ion_stage,
+            destination_level=maybe_int(row.get("type57_destination_level") or row.get("idest1_guess")),
+            level_indices=level_indices,
+            nlevp=nlevp,
+            selected_forward_rate=maybe_float(row.get("python_rate_forward_s^-1")),
+            selected_inverse_rate=maybe_float(row.get("python_rate_inverse_s^-1")),
         ))
     elif dt == 74:
         row.update({
@@ -992,6 +1117,7 @@ def build_adjacent_coupling_terms(
                     electron_density=electron_density,
                     nlevp=nlevp_guess,
                     level_rows=level_rows,
+                    level_indices=level_indices,
                     type57_energy_convention=type57_energy_convention,
                 )
                 audit.update({
@@ -1345,11 +1471,16 @@ def _type57_audit_summary(rows: Sequence[dict]) -> dict:
         "nonzero_threshold_only_forward_rates": _n_nonzero("type57_threshold_only_rate_forward_s^-1"),
         "best_nonzero_convention_counts": _counts_value("type57_best_nonzero_convention"),
         "energy_convention_conflict_counts": _counts_value("type57_energy_convention_conflict"),
+        "matrix_role_classification_counts": _counts_value("type57_matrix_role_classification"),
+        "matrix_destination_in_current_level_set_counts": _counts_value("type57_matrix_destination_in_current_level_set"),
+        "forward_sink_from_lower_ion_counts": _counts_value("type57_forward_rate_would_be_sink_from_lower_ion"),
+        "inverse_tbr_source_candidate_counts": _counts_value("type57_inverse_three_body_recombination_source_candidate"),
+        "matrix_safe_to_assemble_counts": _counts_value("type57_matrix_safe_to_assemble"),
         "provenance": {
             "ucalc": "xstarlib/src/ucalc.f90 type 57 sets e1=rlev(1,idest1), eth=max(0,rlev(1,nlevp)-rlev(1,idest1)), ep=eth before calling calt57.",
             "calt57": "xstarlib/src/calt57.f90 documents e as level energy and ep as the fourth real of the type-6 level record; its internal gate requires ep >= e.",
-            "irc_path": "The v0.3.20 diagnostic evaluator ports the calt57 -> irc -> szirc/eint/expint/expo numerical path and remains audit-only.",
-            "assembly": "No type-57 rate is assembled into the element matrix in v0.3.20.",
+            "irc_path": "The v0.3.21 diagnostic evaluator ports the calt57 -> irc -> szirc/eint/expint/expo numerical path and remains audit-only.",
+            "assembly": "No type-57 rate is assembled into the element matrix in v0.3.21.",
         },
     }
 
@@ -1383,7 +1514,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             "",
             "- `ucalc.f90` type 57 visible branch uses `e1=rlev(1,idest1)`, `eth=max(0,rlev(1,nlevp)-rlev(1,idest1))`, and `ep=eth` before `call calt57`.",
             "- `calt57.f90` documents `e` as level energy and `ep` as the fourth real of the type-6 level record; its internal gate requires `ep >= e`.",
-            "- v0.3.20 writes `ucalc-eth`, `abs-rlev4`, and `threshold-only` diagnostics side by side and lets `--type57-energy-convention` choose only the primary `python_*` audit columns.",
+            "- v0.3.21 writes `ucalc-eth`, `abs-rlev4`, and `threshold-only` diagnostics side by side and lets `--type57-energy-convention` choose only the primary `python_*` audit columns.",
             "- Type 57 remains diagnostic-only and is not assembled into the element matrix.",
             "",
             f"- **type57 rows**: `{t57sum.get('n_type57_rows')}`",
@@ -1391,5 +1522,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **nonzero ucalc-eth forward rates**: `{t57sum.get('nonzero_ucalc_eth_forward_rates')}`",
             f"- **nonzero abs-rlev4 forward rates**: `{t57sum.get('nonzero_abs_rlev4_forward_rates')}`",
             f"- **nonzero threshold-only forward rates**: `{t57sum.get('nonzero_threshold_only_forward_rates')}`",
+            f"- **matrix role classification counts**: `{t57sum.get('matrix_role_classification_counts')}`",
+            f"- **matrix safe-to-assemble counts**: `{t57sum.get('matrix_safe_to_assemble_counts')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
