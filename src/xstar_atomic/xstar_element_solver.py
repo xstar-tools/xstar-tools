@@ -242,7 +242,7 @@ def _guess_ucalc_levels(data_type: int, rate_type: int, ints: Sequence[int], *, 
     vals = [int(x) for x in ints]
     out = {"idest1_guess": None, "idest2_guess": None, "idest3_guess": None, "idest4_guess": None, "nlevp_used": nlevp}
     try:
-        if data_type in {53, 59}:
+        if data_type == 53:
             if len(vals) >= 2:
                 out["idest1_guess"] = vals[-2]
             if len(vals) >= 3 and nlevp is not None:
@@ -250,6 +250,18 @@ def _guess_ucalc_levels(data_type: int, rate_type: int, ints: Sequence[int], *, 
             if len(vals) >= 1:
                 out["idest3_guess"] = vals[-1]
                 out["idest4_guess"] = vals[-1] + 1
+        elif data_type == 59:
+            # ucalc.f90 type 59 uses idest1=idat(nidt-2),
+            # idest2=nlevp+idat(nidt-3)-1, idest3=idat(nidt-1),
+            # idest4=idat(nidt-3).
+            if len(vals) >= 2:
+                out["idest1_guess"] = vals[-2]
+            if len(vals) >= 3 and nlevp is not None:
+                out["idest2_guess"] = int(nlevp) + vals[-3] - 1
+            if len(vals) >= 1:
+                out["idest3_guess"] = vals[-1]
+            if len(vals) >= 3:
+                out["idest4_guess"] = vals[-3]
         elif data_type == 57:
             if len(vals) >= 2:
                 out["idest1_guess"] = vals[-2]
@@ -839,6 +851,172 @@ def _classify_type57_matrix_role(
         "type57_matrix_assembly_note": "classifier_only_not_assembled; candidate sink/source indices are local to the current target ion block, not a complete element-wide matrix",
     }
 
+
+def _level_label_for(level_rows: Optional[Sequence[dict]], level: Optional[int]) -> str:
+    """Return a best-effort level label for an integer level index."""
+    if level is None:
+        return ""
+    try:
+        ilev = int(level)
+    except Exception:
+        return ""
+    for row in level_rows or []:
+        if maybe_int(row.get("level_index")) == ilev:
+            return str(row.get("level_label") or row.get("configuration") or "")
+    return ""
+
+
+def _is_helike_triplet_upper_label(label: str) -> bool:
+    """Heuristic identifier for He-like f/i/r upper levels in decoded labels."""
+    txt = str(label or "").replace(" ", "").lower()
+    if not txt:
+        return False
+    # These labels appear in XSTAR decoded level names for the He-like triplet
+    # upper terms.  Keep this heuristic narrow; it is an audit hint, not a
+    # physical assembly rule.
+    return any(tok in txt for tok in ("1s1.2s1.3s_1", "1s1.2p1.3p_", "1s1.2p1.1p_1"))
+
+
+def _audit_recombination_source_role(
+    *,
+    data_type: int,
+    rate_type: Optional[int],
+    record_ion_stage: Optional[int],
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    destination_level: Optional[int],
+    level_rows: Optional[Sequence[dict]] = None,
+    level_indices: Optional[Sequence[int]] = None,
+) -> dict:
+    """Classify recombination-like rows for adjacent C VI -> C V audits.
+
+    This helper is intentionally diagnostic.  It annotates total RR/DR rows and
+    level-specific inverse bound-free rows with the source/destination stages
+    and whether the destination is an excited level or a He-like triplet upper
+    candidate.  It performs no matrix assembly.
+    """
+    dt = int(data_type)
+    rt = None if rate_type is None else int(rate_type)
+    rec_stage = None if record_ion_stage is None else int(record_ion_stage)
+    target = int(target_ion_stage)
+    parent = int(parent_ion_stage)
+    dest = None if destination_level is None else int(destination_level)
+    levels = [int(x) for x in (level_indices or [])]
+    in_matrix = dest in set(levels) if dest is not None else False
+    label = _level_label_for(level_rows, dest)
+    is_excited = dest is not None and dest > 1
+    triplet_upper = bool(is_excited and _is_helike_triplet_upper_label(label))
+    pair_matches = (rec_stage == target and parent == target + 1)
+    if dt == 59:
+        family = "type59_photoionization_inverse_recombination"
+        xstar_gate = "suppressed_by_ucalc_if_rate_type_1_or_destination_level_gt_1"
+    elif dt in EVALUABLE_RECOMBINATION_DATA_TYPES:
+        family = "implemented_total_electron_recombination"
+        xstar_gate = "not_type59_gate_total_recombination_treated_as_ground_or_allocated_source"
+    else:
+        family = "recombination_like_inventory_or_related_record"
+        xstar_gate = "not_evaluated_by_current_recombination_audit"
+    return {
+        "recomb_audit_classifier_version": "v0.3.22",
+        "recomb_audit_family": family,
+        "recomb_record_ion_stage": rec_stage,
+        "recomb_parent_source_ion_stage": parent if pair_matches else (None if rec_stage is None else rec_stage + 1),
+        "recomb_destination_ion_stage": target if pair_matches else rec_stage,
+        "recomb_destination_level": dest,
+        "recomb_destination_label": label,
+        "recomb_destination_in_current_level_set": bool(in_matrix),
+        "recomb_destination_level_kind": "excited" if is_excited else ("ground" if dest == 1 else "unknown"),
+        "recomb_record_matches_current_parent_pair": bool(pair_matches),
+        "recomb_would_feed_excited_level": bool(is_excited),
+        "recomb_would_feed_helike_triplet_upper_candidate": bool(triplet_upper),
+        "recomb_xstar_excited_level_gate": xstar_gate,
+        "recomb_matrix_safe_to_assemble": False,
+        "recomb_matrix_unsafe_reason": "diagnostic_only; full element population balance and source-code branch validation required before assembly",
+    }
+
+
+def _audit_type59_recombination_record(
+    reals: Sequence[float],
+    ints: Sequence[int],
+    *,
+    rate_type: int,
+    record_ion_stage: int,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    nlevp: Optional[int] = None,
+    level_rows: Optional[Sequence[dict]] = None,
+    level_indices: Optional[Sequence[int]] = None,
+) -> dict:
+    """Audit XSTAR type-59 photoionization/inverse-recombination records.
+
+    The visible ``ucalc.f90`` type-59 branch computes bound-free rates through
+    ``phintfo`` and then explicitly zeros the recombination outputs for
+    ``rate_type == 1`` or ``idest1 > 1``::
+
+        if ((nrdesc.eq.1).or.(idest1.gt.1)) then
+          ans6=0.; ans4=0.; ans2=0.
+        endif
+
+    Therefore type-59 records that nominally point to excited levels are
+    important to audit, but should not be assumed to feed the He-like triplet
+    unless this gate and the surrounding continuum/radiation context are fully
+    reproduced.
+    """
+    vals = [int(x) for x in ints]
+    rd = [float(x) for x in reals]
+    idest1 = vals[-2] if len(vals) >= 2 else None
+    idest3 = vals[-1] if len(vals) >= 1 else None
+    idest4 = vals[-3] if len(vals) >= 3 else None
+    idest2 = (int(nlevp) + idest4 - 1) if (nlevp is not None and idest4 is not None) else None
+    ett_preview = rd[0] if len(rd) >= 1 else None
+    e0_preview = rd[1] if len(rd) >= 2 else None
+    s0_preview = rd[2] if len(rd) >= 3 else None
+    dest = None if idest1 is None else int(idest1)
+    rt = int(rate_type)
+    suppress = (rt == 1) or (dest is not None and dest > 1)
+    reasons = []
+    if rt == 1:
+        reasons.append("rate_type_1_total_or_special_branch")
+    if dest is not None and dest > 1:
+        reasons.append("destination_level_gt_1_excited_recombination_zeroed")
+    if not reasons:
+        reasons.append("not_suppressed_by_visible_type59_gate_but_still_requires_phintfo_radiation_context")
+    base = _audit_recombination_source_role(
+        data_type=59,
+        rate_type=rt,
+        record_ion_stage=record_ion_stage,
+        target_ion_stage=target_ion_stage,
+        parent_ion_stage=parent_ion_stage,
+        destination_level=dest,
+        level_rows=level_rows,
+        level_indices=level_indices,
+    )
+    can_feed = bool(base.get("recomb_would_feed_helike_triplet_upper_candidate")) and not suppress
+    out = {
+        "type59_audit_classifier_version": "v0.3.22",
+        "type59_source_provenance_ucalc": "xstarlib/src/ucalc.f90 type 59 calls phintfo, then zeros ans2/ans4/ans6 when nrdesc==1 or idest1>1",
+        "type59_source_provenance_gate": "if ((nrdesc.eq.1).or.(idest1.gt.1)) then ans6=0; ans4=0; ans2=0",
+        "type59_source_provenance_context": "type 59 requires continuum grid/radiation-field inputs and linked parent/cross-section record via derivedpointers%npar/ml before physical rates can be assembled",
+        "type59_idest1_destination_level": dest,
+        "type59_idest2_continuum_or_parent_level_guess": idest2,
+        "type59_idest3_guess": idest3,
+        "type59_idest4_or_continuum_offset_guess": idest4,
+        "type59_threshold_energy_preview_eV": ett_preview,
+        "type59_e0_preview": e0_preview,
+        "type59_s0_preview": s0_preview,
+        "type59_would_recombine_to_excited_level": bool(dest is not None and dest > 1),
+        "type59_ucalc_recombination_outputs_suppressed": bool(suppress),
+        "type59_suppression_reason": ";".join(reasons),
+        "type59_can_feed_helike_triplet_upper_after_visible_gate": bool(can_feed),
+        "type59_triplet_feed_reason": "triplet_upper_and_not_suppressed" if can_feed else ("destination_is_triplet_upper_but_visible_ucalc_gate_suppresses_recombination" if base.get("recomb_would_feed_helike_triplet_upper_candidate") else "destination_not_identified_as_helike_triplet_upper"),
+        "type59_matrix_role_classification": "bound_free_photoionization_sink_with_inverse_recombination_from_parent_continuum_suppressed_for_excited_destinations" if suppress else "bound_free_photoionization_sink_with_inverse_recombination_candidate_requires_phintfo_context",
+        "type59_matrix_safe_to_assemble": False,
+        "type59_matrix_unsafe_reason": "requires_phintfo_radiation_continuum_context; linked_parent_cross_section_record_not_explicitly_resolved; visible_ucalc_gate_suppresses_excited_level_recombination" if suppress else "requires_phintfo_radiation_continuum_context_and_element_wide_parent_continuum_population",
+        "python_eval_status": "type59_audited_recombination_outputs_suppressed_by_ucalc_gate" if suppress else "type59_audited_not_suppressed_but_not_evaluated_requires_phintfo_context",
+    }
+    out.update(base)
+    return out
+
 def _evaluate_type95_bryans_ci(reals: Sequence[float], ints: Sequence[int], *, temperature: float, electron_density: float) -> dict:
     """Diagnostic approximation to ucalc type-95 Bryans collisional ionization.
 
@@ -962,6 +1140,23 @@ def audit_ucalc_adjacent_record(
             nlevp=nlevp,
             selected_forward_rate=maybe_float(row.get("python_rate_forward_s^-1")),
             selected_inverse_rate=maybe_float(row.get("python_rate_inverse_s^-1")),
+        ))
+    elif dt == 59:
+        row.update({
+            "ucalc_ans1_role": "photoionization_rate_from_bound_level_to_continuum_from_phintfo",
+            "ucalc_ans2_role": "inverse_recombination_from_parent_continuum_zeroed_for_rate_type_1_or_excited_destinations",
+            "requires_context": "radiation_field_continuum_grid_bremsa_opacity_escape_probabilities_linked_parent_cross_section_record",
+            "matrix_role_if_implemented": "bound_free_sink_from_target_level_with_inverse_recombination_source_if_not_suppressed_by_ucalc_gate",
+        })
+        row.update(_audit_type59_recombination_record(
+            rd, it,
+            rate_type=rt,
+            record_ion_stage=int(rec.ion_stage),
+            target_ion_stage=target_ion_stage,
+            parent_ion_stage=parent_ion_stage,
+            nlevp=nlevp,
+            level_rows=level_rows,
+            level_indices=level_indices,
         ))
     elif dt == 74:
         row.update({
@@ -1100,6 +1295,16 @@ def build_adjacent_coupling_terms(
             "requires_context": "temperature_and_electron_density_only_for_current_total_recombination_fit",
             "python_eval_status": rec.get("eval_method"),
         }
+        base_row.update(_audit_recombination_source_role(
+            data_type=dt,
+            rate_type=maybe_int(rec.get("rate_type")),
+            record_ion_stage=maybe_int(rec.get("ion_stage") or target_ion_stage),
+            target_ion_stage=target_ion_stage,
+            parent_ion_stage=parent_ion_stage,
+            destination_level=maybe_int(rec.get("destination_level")),
+            level_rows=level_rows,
+            level_indices=level_indices,
+        ))
         rows.append(base_row)
 
     # Preserve the important but not-yet-evaluable adjacent-ion records called
@@ -1484,6 +1689,39 @@ def _type57_audit_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+def _type59_recombination_audit_summary(rows: Sequence[dict]) -> dict:
+    """Summarise type-59 and related recombination-to-level audit rows."""
+    t59 = [r for r in rows if maybe_int(r.get("data_type")) == 59]
+    related = [r for r in rows if str(r.get("recomb_audit_family") or "")]
+    def _counts_value(seq: Sequence[dict], col: str) -> dict:
+        vals = {}
+        for r in seq:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            vals[key] = vals.get(key, 0) + 1
+        return vals
+    def _n_true(seq: Sequence[dict], col: str) -> int:
+        return sum(1 for r in seq if str(r.get(col)).lower() == "true" or r.get(col) is True)
+    return {
+        "n_type59_rows": len(t59),
+        "n_related_recombination_audit_rows": len(related),
+        "related_recombination_family_counts": _counts_value(related, "recomb_audit_family"),
+        "related_destination_level_kind_counts": _counts_value(related, "recomb_destination_level_kind"),
+        "related_triplet_upper_candidate_rows": _n_true(related, "recomb_would_feed_helike_triplet_upper_candidate"),
+        "type59_python_eval_status_counts": _counts_value(t59, "python_eval_status"),
+        "type59_suppressed_counts": _counts_value(t59, "type59_ucalc_recombination_outputs_suppressed"),
+        "type59_suppression_reason_counts": _counts_value(t59, "type59_suppression_reason"),
+        "type59_excited_destination_rows": _n_true(t59, "type59_would_recombine_to_excited_level"),
+        "type59_triplet_upper_after_gate_rows": _n_true(t59, "type59_can_feed_helike_triplet_upper_after_visible_gate"),
+        "type59_matrix_safe_to_assemble_counts": _counts_value(t59, "type59_matrix_safe_to_assemble"),
+        "provenance": {
+            "ucalc_type59": "xstarlib/src/ucalc.f90 type 59 constructs bound-free cross sections, calls phintfo, and then zeros ans2/ans4/ans6 when nrdesc==1 or idest1>1.",
+            "gate": "The visible gate suppresses recombination into excited levels for type 59, so excited-level triplet feeding cannot be inferred directly from these rows without reproducing the full XSTAR context.",
+            "assembly": "No type-59 or related bound-free inverse recombination rate is assembled into the element matrix in v0.3.22.",
+        },
+    }
+
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1491,6 +1729,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
+        result["summary"]["type59_recombination_audit_summary"] = _type59_recombination_audit_summary(audit_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
@@ -1505,7 +1744,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
@@ -1524,5 +1763,24 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             f"- **nonzero threshold-only forward rates**: `{t57sum.get('nonzero_threshold_only_forward_rates')}`",
             f"- **matrix role classification counts**: `{t57sum.get('matrix_role_classification_counts')}`",
             f"- **matrix safe-to-assemble counts**: `{t57sum.get('matrix_safe_to_assemble_counts')}`",
+        ])
+    t59sum = summ.get("type59_recombination_audit_summary", {}) if isinstance(summ, dict) else {}
+    if t59sum:
+        lines.extend([
+            "",
+            "## Type-59 recombination-to-excited-level audit",
+            "",
+            "- `ucalc.f90` type 59 calls `phintfo` for bound-free photoionization/inverse recombination terms, then zeros `ans2`, `ans4`, and `ans6` when `nrdesc == 1` or `idest1 > 1`.",
+            "- v0.3.22 reports which type-59 or related recombination rows would nominally feed excited levels, which rows are suppressed by the visible XSTAR gate, and whether any unsuppressed row is a He-like triplet-upper candidate.",
+            "- Type 59 remains diagnostic-only and is not assembled into the element matrix.",
+            "",
+            f"- **type59 rows**: `{t59sum.get('n_type59_rows')}`",
+            f"- **related recombination audit rows**: `{t59sum.get('n_related_recombination_audit_rows')}`",
+            f"- **related family counts**: `{t59sum.get('related_recombination_family_counts')}`",
+            f"- **related destination-kind counts**: `{t59sum.get('related_destination_level_kind_counts')}`",
+            f"- **type59 suppressed counts**: `{t59sum.get('type59_suppressed_counts')}`",
+            f"- **type59 suppression reasons**: `{t59sum.get('type59_suppression_reason_counts')}`",
+            f"- **type59 excited-destination rows**: `{t59sum.get('type59_excited_destination_rows')}`",
+            f"- **type59 triplet-upper rows after gate**: `{t59sum.get('type59_triplet_upper_after_gate_rows')}`",
         ])
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

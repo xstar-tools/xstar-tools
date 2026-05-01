@@ -69,3 +69,32 @@ def test_type57_ground_destination_is_not_evaluated_by_ucalc_gate():
     # ucalc gates out idest1 <= 1 before calling calt57; a later ground-zeroing
     # safeguard is preserved in the evaluator for completeness.
     assert row["python_eval_status"] == "type57_idest1_outside_ucalc_range"
+
+from xstar_atomic.xstar_element_solver import _audit_type59_recombination_record
+
+
+def test_ucalc_level_guesses_for_type59_records():
+    g59 = _guess_ucalc_levels(59, 7, [10, 2, 27, 4], nlevp=81)
+    assert g59["idest1_guess"] == 27
+    assert g59["idest2_guess"] == 81 + 2 - 1
+    assert g59["idest3_guess"] == 4
+    assert g59["idest4_guess"] == 2
+
+
+def test_type59_excited_destination_is_suppressed_by_ucalc_gate():
+    row = _audit_type59_recombination_record(
+        [21.0, 1.0, 1.0],
+        [10, 2, 27, 4],
+        rate_type=7,
+        record_ion_stage=5,
+        target_ion_stage=5,
+        parent_ion_stage=6,
+        nlevp=81,
+        level_rows=[{"level_index": 27, "level_label": "1s1.2s1.3S_1"}],
+        level_indices=[1, 27],
+    )
+    assert row["type59_would_recombine_to_excited_level"] is True
+    assert row["recomb_would_feed_helike_triplet_upper_candidate"] is True
+    assert row["type59_ucalc_recombination_outputs_suppressed"] is True
+    assert row["type59_can_feed_helike_triplet_upper_after_visible_gate"] is False
+    assert row["python_eval_status"] == "type59_audited_recombination_outputs_suppressed_by_ucalc_gate"
