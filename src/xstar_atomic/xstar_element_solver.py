@@ -165,6 +165,256 @@ def _select_records(db: ATDB, z: int, ion_stage: int, *, use_cache: bool, cache_
 
 
 
+
+def _safe_exp1(x: float) -> Optional[float]:
+    """Return E1(x)=integral_x^inf exp(-t)/t dt with optional scipy fallback.
+
+    This helper is used only for diagnostic type-95 Bryans CI evaluation.
+    It avoids making scipy a hard runtime dependency; if scipy is unavailable,
+    it uses stable small-x and large-x approximations sufficient for audit
+    classification rather than precision production rates.
+    """
+    if not math.isfinite(x) or x <= 0.0:
+        return None
+    try:  # scipy is optional in pyproject [sparse]; do not require it.
+        from scipy.special import exp1  # type: ignore
+        val = float(exp1(x))
+        return val if math.isfinite(val) and val >= 0.0 else None
+    except Exception:
+        pass
+    gamma = 0.5772156649015329
+    if x < 1.0:
+        # E1(x) = -gamma - ln x - sum_{k>=1} (-x)^k/(k*k!)
+        term = 1.0
+        fact = 1.0
+        ssum = 0.0
+        for k in range(1, 80):
+            fact *= k
+            term = ((-x) ** k) / (k * fact)
+            ssum += term
+            if abs(term) < 1.0e-14:
+                break
+        val = -gamma - math.log(x) - ssum
+        return max(val, 0.0) if math.isfinite(val) else None
+    # Continued asymptotic series is adequate for audit at x >= 1.
+    term = 1.0
+    series = 1.0
+    sign = -1.0
+    for k in range(1, 80):
+        term *= k / x
+        add = sign * term
+        series += add
+        sign *= -1.0
+        if abs(add) < 1.0e-14:
+            break
+        # Stop before divergent asymptotic tail dominates.
+        if abs(add) > abs(series) * 10:
+            break
+    val = math.exp(-x) * series / x
+    return max(val, 0.0) if math.isfinite(val) else None
+
+
+def _interp_linear(x: float, xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
+    if not xs or not ys or len(xs) != len(ys):
+        return None
+    pairs = sorted((float(a), float(b)) for a, b in zip(xs, ys) if math.isfinite(float(a)) and math.isfinite(float(b)))
+    if not pairs:
+        return None
+    if x <= pairs[0][0]:
+        return pairs[0][1]
+    if x >= pairs[-1][0]:
+        return pairs[-1][1]
+    for (x0, y0), (x1, y1) in zip(pairs[:-1], pairs[1:]):
+        if x0 <= x <= x1:
+            if abs(x1 - x0) < 1.0e-300:
+                return y0
+            return y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+    return None
+
+
+def _guess_ucalc_levels(data_type: int, rate_type: int, ints: Sequence[int], *, nlevp: Optional[int] = None) -> dict:
+    """Infer XSTAR ucalc local level/continuum indices from packed integers.
+
+    The returned values are best-effort diagnostics matching the formulas seen
+    in ``ucalc.f90``.  They are not used to alter the matrix unless an evaluator
+    explicitly supports the record class.
+    """
+    vals = [int(x) for x in ints]
+    out = {"idest1_guess": None, "idest2_guess": None, "idest3_guess": None, "idest4_guess": None, "nlevp_used": nlevp}
+    try:
+        if data_type in {53, 59}:
+            if len(vals) >= 2:
+                out["idest1_guess"] = vals[-2]
+            if len(vals) >= 3 and nlevp is not None:
+                out["idest2_guess"] = int(nlevp) + vals[-3] - 1
+            if len(vals) >= 1:
+                out["idest3_guess"] = vals[-1]
+                out["idest4_guess"] = vals[-1] + 1
+        elif data_type == 57:
+            if len(vals) >= 2:
+                out["idest1_guess"] = vals[-2]
+            out["idest2_guess"] = nlevp
+        elif data_type == 74:
+            if len(vals) >= 2:
+                out["idest1_guess"] = vals[-2]
+            out["idest2_guess"] = nlevp
+            if len(vals) >= 1:
+                out["idest3_guess"] = vals[-1]
+                out["idest4_guess"] = vals[-1] + 1
+        elif data_type == 95:
+            if rate_type == 5:
+                if vals:
+                    out["idest1_guess"] = vals[0]
+                if len(vals) >= 2 and nlevp is not None:
+                    out["idest2_guess"] = int(nlevp) - 1 + vals[1]
+                elif nlevp is not None:
+                    out["idest2_guess"] = nlevp
+            else:
+                out["idest1_guess"] = 1
+                out["idest2_guess"] = 1
+            if vals:
+                out["idest3_guess"] = vals[-1]
+                out["idest4_guess"] = vals[-1] + 1
+        elif data_type == 99:
+            if len(vals) >= 2:
+                out["idest1_guess"] = vals[-2]
+            if len(vals) >= 3 and nlevp is not None:
+                out["idest2_guess"] = int(nlevp) + vals[-3] - 1
+    except Exception:
+        pass
+    return out
+
+
+def _evaluate_type95_bryans_ci(reals: Sequence[float], ints: Sequence[int], *, temperature: float, electron_density: float) -> dict:
+    """Diagnostic approximation to ucalc type-95 Bryans collisional ionization.
+
+    Mirrors the visible ucalc.f90 branch sufficiently to classify whether a
+    record can supply an electron-impact ionization sink.  It is not yet used
+    as an assembled production coupling term.
+    """
+    rd = [float(x) for x in reals]
+    if len(rd) < 4:
+        return {"python_eval_status": "type95_missing_coefficients"}
+    ee = rd[0]
+    if ee <= 0.0 or temperature <= 0.0:
+        return {"python_eval_status": "type95_bad_threshold_or_temperature"}
+    nspline = int((len(rd) - 2) // 2)
+    if nspline < 2 or len(rd) < 2 + 2 * nspline:
+        return {"python_eval_status": "type95_bad_spline_layout", "type95_nspline": nspline}
+    ekt = 0.861707 * (float(temperature) / 1.0e4)
+    tt = ekt / ee
+    if tt <= 0.0:
+        return {"python_eval_status": "type95_bad_tt", "type95_tt": tt}
+    try:
+        xx = 1.0 - 0.693147 / math.log(tt + 2.0)
+    except Exception:
+        return {"python_eval_status": "type95_bad_x_transform", "type95_tt": tt}
+    xs = rd[2:2 + nspline]
+    ys = rd[2 + nspline:2 + 2 * nspline]
+    rho = _interp_linear(xx, xs, ys)
+    e1 = _safe_exp1(1.0 / tt)
+    if rho is None or e1 is None:
+        return {"python_eval_status": "type95_interpolation_or_exp1_failed", "type95_tt": tt, "type95_xx": xx}
+    citmp1 = 1.0e-6 * e1 * rho / math.sqrt(max(tt * ee ** 3, 1.0e-300))
+    ans1 = citmp1 * electron_density
+    return {
+        "python_eval_status": "evaluated_type95_bryans_ci_diagnostic",
+        "python_rate_forward_s^-1": max(float(ans1), 0.0),
+        "type95_threshold_eV": ee,
+        "type95_tt": tt,
+        "type95_xx": xx,
+        "type95_rho": rho,
+        "type95_exp1": e1,
+        "type95_nspline": nspline,
+    }
+
+
+def audit_ucalc_adjacent_record(
+    db: ATDB,
+    rec,
+    *,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    temperature: float,
+    electron_density: float,
+    nlevp: Optional[int] = None,
+) -> dict:
+    """Return a source-code-guided audit row for an adjacent-ion record.
+
+    The intent is to document how XSTAR's ``ucalc.f90`` would treat candidate
+    adjacent-ion records before we decide whether a clean Python/C++ evaluator
+    can assemble them into the element matrix.
+    """
+    h = db.header(rec.recno)
+    rd = db.real_slice(h)
+    it = db.int_slice(h)
+    dt = int(rec.data_type)
+    rt = int(rec.rate_type)
+    level_guess = _guess_ucalc_levels(dt, rt, it, nlevp=nlevp)
+    row = {
+        "record": rec.recno,
+        "record_ion_stage": rec.ion_stage,
+        "data_type": dt,
+        "rate_type": rt,
+        "nreal": rec.nreal,
+        "nint": rec.nint,
+        "nchar": rec.nchar,
+        "target_ion_stage": target_ion_stage,
+        "parent_ion_stage": parent_ion_stage,
+        "ucalc_source_file": "xstarlib/src/ucalc.f90",
+        "ucalc_branch": f"type_{dt}",
+        "ucalc_ans1_role": "",
+        "ucalc_ans2_role": "",
+        "python_eval_status": "not_attempted",
+        "assembly_status": "catalogued_not_assembled",
+        "requires_context": "",
+        "matrix_role_if_implemented": "",
+        "raw_reals_preview": str(list(rd[:8])),
+        "raw_ints_preview": str(list(it[:8])),
+        **level_guess,
+    }
+    if dt == 53:
+        row.update({
+            "ucalc_ans1_role": "photoionization_rate_from_bound_level_to_continuum",
+            "ucalc_ans2_role": "radiative_recombination_inverse_from_phint53_milne",
+            "requires_context": "radiation_field_epi_bremsa_opacity_escape_probabilities_population_abundances",
+            "matrix_role_if_implemented": "bound_free_sink_from_target_level_and_recombination_source_from_parent_continuum",
+            "python_eval_status": "not_evaluated_requires_phint53_radiation_field",
+        })
+    elif dt == 57:
+        row.update({
+            "ucalc_ans1_role": "collisional_ionization_sink_from_target_level",
+            "ucalc_ans2_role": "three_body_recombination_inverse_from_calt57",
+            "requires_context": "calt57_effective_charge_formula_level_energies_degeneracies_parent_continuum",
+            "matrix_role_if_implemented": "electron_impact_ionization_sink_and_inverse_three_body_recombination",
+            "python_eval_status": "not_evaluated_calt57_not_yet_ported",
+        })
+    elif dt == 74:
+        row.update({
+            "ucalc_ans1_role": "dielectronic_resonance_photoionization_delta_rate",
+            "ucalc_ans2_role": "dielectronic_recombination_inverse_alpha_from_calt74",
+            "requires_context": "radiation_continuum_epi_bremsa_calt74_resonance_delta_integration",
+            "matrix_role_if_implemented": "dr_resonance_sink_source_pair",
+            "python_eval_status": "not_evaluated_requires_calt74_and_radiation_grid",
+        })
+    elif dt == 95:
+        row.update({
+            "ucalc_ans1_role": "bryans_collisional_ionization_sink",
+            "ucalc_ans2_role": "inverse_three_body_recombination_from_detailed_balance",
+            "requires_context": "level_degeneracies_parent_continuum_for_inverse_rate",
+            "matrix_role_if_implemented": "collisional_ionization_sink_with_optional_inverse_source",
+        })
+        row.update(_evaluate_type95_bryans_ci(rd, it, temperature=temperature, electron_density=electron_density))
+    elif dt == 99:
+        row.update({
+            "ucalc_ans1_role": "superlevel_photoionization_rate",
+            "ucalc_ans2_role": "superlevel_recombination_inverse",
+            "requires_context": "superlevel_linked_records_radiation_field_phint53pl_population_escape_probabilities",
+            "matrix_role_if_implemented": "superlevel_bound_free_sink_source_pair",
+            "python_eval_status": "not_evaluated_requires_linked_superlevel_phint53pl_context",
+        })
+    return row
+
 def build_adjacent_coupling_terms(
     db: ATDB,
     *,
@@ -203,6 +453,7 @@ def build_adjacent_coupling_terms(
     source = np.zeros(n, dtype=float)
     sink = np.zeros(n, dtype=float)
     idx = {int(lev): k for k, lev in enumerate(level_indices)}
+    nlevp_guess = (max(idx) + 1) if idx else None
     selected = [int(x) for x in (selected_source_levels or [])]
     rows: List[dict] = []
 
@@ -247,7 +498,7 @@ def build_adjacent_coupling_terms(
                         source[idx[int(lev)]] += source_rate_total * float(w) / wsum
                         assembled = True
                         allocation_note = note
-        rows.append({
+        base_row = {
             "element": Z_TO_SYMBOL.get(z, str(z)),
             "element_z": z,
             "target_ion_stage": target_ion_stage,
@@ -266,7 +517,15 @@ def build_adjacent_coupling_terms(
             "assembled": bool(assembled),
             "assembly_status": "assembled_recombination_source" if assembled else ("catalogued_evaluable_but_not_assembled" if alpha is not None else rec.get("eval_method")),
             "allocation_note": allocation_note,
-        })
+            "ucalc_branch": f"type_{dt}",
+            "ucalc_source_file": "xstarlib/src/ucalc.f90",
+            "ucalc_ans1_role": "",
+            "ucalc_ans2_role": "electron_recombination_source_coefficient",
+            "matrix_role_if_implemented": "adjacent_parent_to_target_source",
+            "requires_context": "temperature_and_electron_density_only_for_current_total_recombination_fit",
+            "python_eval_status": rec.get("eval_method"),
+        }
+        rows.append(base_row)
 
     # Preserve the important but not-yet-evaluable adjacent-ion records called
     # out in the source-code audit.  These rows are intentionally not converted
@@ -275,22 +534,27 @@ def build_adjacent_coupling_terms(
         for r in _select_records(db, z, stage, use_cache=True, cache_path=None):
             if r.data_type in PHOTOIONIZATION_LIKE_DATA_TYPES or r.data_type in COLLISIONAL_IONIZATION_LIKE_DATA_TYPES or r.rate_type in {1, 5, 7}:
                 role = "photoionization_like_sink_or_inverse_recombination" if r.data_type in PHOTOIONIZATION_LIKE_DATA_TYPES or r.rate_type in {1, 7} else "collisional_ionization_like_sink"
-                rows.append({
+                audit = audit_ucalc_adjacent_record(
+                    db, r,
+                    target_ion_stage=target_ion_stage,
+                    parent_ion_stage=parent_ion_stage,
+                    temperature=temperature,
+                    electron_density=electron_density,
+                    nlevp=nlevp_guess,
+                )
+                audit.update({
                     "element": Z_TO_SYMBOL.get(z, str(z)),
                     "element_z": z,
-                    "target_ion_stage": target_ion_stage,
-                    "parent_ion_stage": parent_ion_stage,
                     "record_ion_stage": stage,
-                    "record": r.recno,
-                    "data_type": r.data_type,
-                    "rate_type": r.rate_type,
                     "coupling_role": role,
                     "temperature_K": temperature,
                     "electron_density_cm^-3": electron_density,
                     "assembled": False,
-                    "assembly_status": "catalogued_not_assembled_requires_radiation_or_xstar_ucalc_context",
                     "coupling_mode": coupling_mode,
                 })
+                if not str(audit.get("assembly_status") or "").startswith("catalogued"):
+                    audit["assembly_status"] = "catalogued_not_assembled_ucalc_audit"
+                rows.append(audit)
 
     return source, sink, rows
 
@@ -605,6 +869,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
+    write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -615,5 +880,5 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
