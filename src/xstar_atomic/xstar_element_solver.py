@@ -440,7 +440,7 @@ def _xstar_calt57(te: float, den2: float, e: float, ep: float, n: int) -> dict:
 
     Returns the rate coefficient ``cion`` [cm^3/s] and inverse three-body
     coefficient ``crec`` [cm^6/s] before XSTAR's ``ucalc`` multiplies by density
-    and statistical weights.  This remains diagnostic in v0.3.18 and is not
+    and statistical weights.  This remains diagnostic in v0.3.18+ and is not
     assembled into the matrix by default.
     """
     if n <= 0:
@@ -529,6 +529,32 @@ def _level_lookup(level_rows: Sequence[dict]) -> Dict[int, dict]:
     return out
 
 
+def _type57_prefixed_eval(prefix: str, ev: dict, *, electron_density: float, g_lo: Optional[float], ggup: float, eth_eV: Optional[float]) -> dict:
+    """Return prefixed diagnostic columns for one type-57 energy convention."""
+    cion = maybe_float(ev.get("type57_cion_cm3_s"))
+    crec = maybe_float(ev.get("type57_crec_cm6_s"))
+    rinf = None if g_lo is None else g_lo / (1.0e-48 + ggup)
+    ans1 = None if cion is None else cion * float(electron_density)
+    ans2 = None if crec is None or rinf is None else crec * rinf * float(electron_density) * float(electron_density)
+    ergsev = 1.602197e-12
+    eth = None if eth_eV is None else max(0.0, float(eth_eV))
+    return {
+        f"{prefix}_eval_status": ev.get("python_eval_status"),
+        f"{prefix}_rio": ev.get("type57_rio"),
+        f"{prefix}_rc": ev.get("type57_rc"),
+        f"{prefix}_tmin_K": ev.get("type57_tmin_K"),
+        f"{prefix}_temp_used_K": ev.get("type57_temp_used_K"),
+        f"{prefix}_rno": ev.get("type57_rno"),
+        f"{prefix}_ciono_cm3_s": ev.get("type57_ciono_cm3_s"),
+        f"{prefix}_cion_cm3_s": cion,
+        f"{prefix}_crec_cm6_s": crec,
+        f"{prefix}_rate_forward_s^-1": ans1,
+        f"{prefix}_rate_inverse_s^-1": ans2,
+        f"{prefix}_ans6_energy_loss_erg_s^-1": None if ans1 is None or eth is None else -ans1 * eth * ergsev,
+        f"{prefix}_ans5_inverse_energy_erg_s^-1": None if ans2 is None or eth is None else -ans2 * eth * ergsev,
+    }
+
+
 def _evaluate_type57_calt57_record(
     reals: Sequence[float],
     ints: Sequence[int],
@@ -538,7 +564,14 @@ def _evaluate_type57_calt57_record(
     nlevp: Optional[int],
     level_rows: Optional[Sequence[dict]] = None,
 ) -> dict:
-    """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only."""
+    """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
+
+    v0.3.19 keeps the visible ``ucalc.f90`` convention as the primary status,
+    but also writes side-by-side diagnostics for alternate energy conventions.
+    This is needed because ``ucalc.f90`` currently passes ``ep=eth`` whereas
+    ``calt57.f90`` documents ``ep`` as the fourth real of the type-6 level
+    record.  No type-57 rate is assembled from any convention here.
+    """
     rd = [float(x) for x in reals]
     it = [int(x) for x in ints]
     if len(it) < 2:
@@ -553,44 +586,99 @@ def _evaluate_type57_calt57_record(
     lev = levels.get(int(idest1), {})
     e1 = maybe_float(lev.get("energy_eV"))
     g_lo = maybe_float(lev.get("statistical_weight_g"))
-    ep = maybe_float(lev.get("binding_from_continuum_eV"))
-    if ep is None:
-        ip = maybe_float(lev.get("ionization_potential_eV"))
-        if ip is not None and e1 is not None:
-            ep = ip - e1
+    ip_abs = maybe_float(lev.get("ionization_potential_eV"))
+    eth = maybe_float(lev.get("binding_from_continuum_eV"))
+    if eth is None and ip_abs is not None and e1 is not None:
+        eth = ip_abs - e1
     if e1 is None:
         # The record real is usually the effective charge; keep it in the audit,
         # but do not use it as level energy because ucalc takes e1 from rlev.
         return {"python_eval_status": "type57_missing_destination_level_energy", "type57_n_principal": i57, "type57_destination_level": idest1}
-    if ep is None:
+    if eth is None:
         return {"python_eval_status": "type57_missing_destination_binding_energy", "type57_n_principal": i57, "type57_destination_level": idest1, "type57_level_energy_eV": e1}
     tz = float(temperature)  # user-facing API already passes Kelvin; ucalc's t*1e4 equals Kelvin.
-    ev = _xstar_calt57(tz, float(electron_density), float(e1), float(ep), int(i57))
-    cion = maybe_float(ev.get("type57_cion_cm3_s"))
-    crec = maybe_float(ev.get("type57_crec_cm6_s"))
-    ans1 = None if cion is None else cion * float(electron_density)
     ggup = 1.0
     # XSTAR uses the continuum/parent statistical weight in rlev(2,nlevp).  The
     # present ion-level table often lacks that continuum row, so use 1 as an
     # explicit diagnostic placeholder until the element matrix has the parent
     # continuum level available.
-    rinf = None if g_lo is None else g_lo / (1.0e-48 + ggup)
-    ans2 = None if crec is None or rinf is None else crec * rinf * float(electron_density) * float(electron_density)
-    eth = max(0.0, float(ep))
-    ergsev = 1.602197e-12
+
+    # Visible current ucalc.f90 path: e=e1, ep=eth.  This gives ep<e for many
+    # excited levels and therefore returns zero in calt57.
+    ev_ucalc = _xstar_calt57(tz, float(electron_density), float(e1), float(eth), int(i57))
     out = {
-        **ev,
+        **ev_ucalc,
         "type57_n_principal": i57,
         "type57_destination_level": idest1,
         "type57_level_energy_eV": e1,
-        "type57_binding_or_eth_eV": ep,
+        "type57_binding_or_eth_eV": eth,
+        "type57_ionization_potential_rlev4_eV": ip_abs,
+        "type57_ep_ucalc_eth_eV": eth,
+        "type57_ep_legacy_rlev4_minus_e1_eV": None if ip_abs is None else ip_abs - e1,
+        "type57_ep_absolute_rlev4_eV": ip_abs,
         "type57_stat_weight_lower": g_lo,
         "type57_stat_weight_continuum_assumed": ggup,
+    }
+    out.update(_type57_prefixed_eval(
+        "type57_ucalc_eth", ev_ucalc,
+        electron_density=electron_density, g_lo=g_lo, ggup=ggup, eth_eV=eth,
+    ))
+
+    # Direct calt57.f90 documentation convention: ep is rlev(4), i.e. the
+    # absolute level ionization-potential column.  Then calt57's internal
+    # (ep-e) equals the physical binding threshold.
+    ev_abs = None
+    if ip_abs is not None:
+        ev_abs = _xstar_calt57(tz, float(electron_density), float(e1), float(ip_abs), int(i57))
+        out.update(_type57_prefixed_eval(
+            "type57_abs_rlev4", ev_abs,
+            electron_density=electron_density, g_lo=g_lo, ggup=ggup, eth_eV=eth,
+        ))
+    else:
+        out.update({
+            "type57_abs_rlev4_eval_status": "type57_missing_absolute_rlev4",
+            "type57_abs_rlev4_cion_cm3_s": None,
+            "type57_abs_rlev4_crec_cm6_s": None,
+            "type57_abs_rlev4_rate_forward_s^-1": None,
+            "type57_abs_rlev4_rate_inverse_s^-1": None,
+        })
+
+    # Threshold-only diagnostic: e=0, ep=eth.  This is not an XSTAR assembly
+    # path; it checks whether the calt57 kernel itself produces a finite rate
+    # when supplied the effective threshold directly.
+    ev_thr = _xstar_calt57(tz, float(electron_density), 0.0, float(eth), int(i57))
+    out.update(_type57_prefixed_eval(
+        "type57_threshold_only", ev_thr,
+        electron_density=electron_density, g_lo=g_lo, ggup=ggup, eth_eV=eth,
+    ))
+
+    # Backward-compatible v0.3.18 columns reflect the visible ucalc convention.
+    cion = maybe_float(ev_ucalc.get("type57_cion_cm3_s"))
+    crec = maybe_float(ev_ucalc.get("type57_crec_cm6_s"))
+    ans1 = None if cion is None else cion * float(electron_density)
+    rinf = None if g_lo is None else g_lo / (1.0e-48 + ggup)
+    ans2 = None if crec is None or rinf is None else crec * rinf * float(electron_density) * float(electron_density)
+    ergsev = 1.602197e-12
+    out.update({
         "python_rate_forward_s^-1": ans1,
         "python_rate_inverse_s^-1": ans2,
-        "type57_ans6_energy_loss_erg_s^-1": None if ans1 is None else -ans1 * eth * ergsev,
-        "type57_ans5_inverse_energy_erg_s^-1": None if ans2 is None else -ans2 * eth * ergsev,
-    }
+        "type57_ans6_energy_loss_erg_s^-1": None if ans1 is None else -ans1 * float(eth) * ergsev,
+        "type57_ans5_inverse_energy_erg_s^-1": None if ans2 is None else -ans2 * float(eth) * ergsev,
+        "type57_calt57_energy_convention_note": "primary columns use visible ucalc ep=eth; abs_rlev4 columns use calt57 documented ep=rlev4; threshold_only is diagnostic only",
+    })
+
+    abs_rate = maybe_float(out.get("type57_abs_rlev4_rate_forward_s^-1"))
+    thr_rate = maybe_float(out.get("type57_threshold_only_rate_forward_s^-1"))
+    if (ans1 is None or ans1 == 0.0) and abs_rate is not None and abs_rate > 0.0:
+        out["type57_best_nonzero_convention"] = "abs_rlev4_documented_calt57"
+        out["type57_energy_convention_conflict"] = True
+    elif (ans1 is None or ans1 == 0.0) and thr_rate is not None and thr_rate > 0.0:
+        out["type57_best_nonzero_convention"] = "threshold_only_diagnostic"
+        out["type57_energy_convention_conflict"] = True
+    else:
+        out["type57_best_nonzero_convention"] = "visible_ucalc_eth" if ans1 and ans1 > 0.0 else "none"
+        out["type57_energy_convention_conflict"] = False
+
     # ucalc zeros both ans1 and ans2 for destination level 1 because more
     # accurate ground-level rates are supplied by data types 95 or 25.
     if idest1 == 1 and out.get("python_eval_status") == "evaluated_type57_calt57_diagnostic":

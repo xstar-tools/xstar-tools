@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.19 - 2026-05-01
+
+- Added a source-code-guided type-57 energy-convention audit to the XSTAR-like element solver.
+- Kept the visible `ucalc.f90` convention (`ep=eth`) as the primary diagnostic columns while adding side-by-side `calt57.f90` documented absolute-`rlev(4)` diagnostics and threshold-only diagnostics.
+- Added audit columns such as `type57_ep_ucalc_eth_eV`, `type57_ep_absolute_rlev4_eV`, `type57_abs_rlev4_cion_cm3_s`, `type57_abs_rlev4_rate_forward_s^-1`, `type57_threshold_only_cion_cm3_s`, and `type57_energy_convention_conflict`.
+- Type-57 rates remain diagnostic-only and are not assembled into the element matrix.
+
 ## v0.3.17 - 2026-05-01
 
 - Added source-code-guided ucalc-style adjacent-ion coupling audit metadata to the pure-Python XSTAR-like element solver.
