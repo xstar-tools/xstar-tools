@@ -77,6 +77,15 @@ POINTERS, REALS, INTEGERS, CHARS
 
 This package decodes those arrays, reconstructs the element/ion/level/process hierarchy, and provides first-pass physics extractors and emissivity tools.
 
+### v0.3.18 type-57 `calt57` diagnostic evaluator
+
+Adds a source-code-guided Python port/audit of the XSTAR type-57 collisional-ionization path:
+
+- ports the visible `calt57 -> irc -> szirc/eint/expint` helper chain from the uploaded XSTAR source;
+- evaluates type-57 records diagnostically into `cion`, `crec`, `ans1=cion*ne`, and the inverse `ans2` estimate;
+- records source/destination level diagnostics, threshold/binding energy, statistical-weight assumptions, and expected matrix role;
+- deliberately keeps type-57 rates unassembled by default until the matrix role and destination/source mapping are validated.
+
 ### v0.3.17 ucalc-style adjacent-coupling audit
 
 The pure-Python XSTAR-like element solver now writes `xstar_like_element_solver_ucalc_adjacent_audit.csv`.  This table annotates adjacent-ion candidate records with the corresponding XSTAR `ucalc.f90` branch for type 53, 57, 74, 95, and 99 records, the physical context needed to evaluate each branch, and the matrix role if implemented.  Type-95 Bryans collisional-ionization records receive a diagnostic forward-rate estimate; photoionization/DR/superlevel records are deliberately audited but not blindly assembled without the XSTAR radiation-field/continuum context.

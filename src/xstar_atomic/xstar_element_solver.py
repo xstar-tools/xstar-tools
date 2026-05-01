@@ -285,6 +285,320 @@ def _guess_ucalc_levels(data_type: int, rate_type: int, ints: Sequence[int], *, 
     return out
 
 
+
+def _xstar_expo(x: float) -> float:
+    """XSTAR ``expo`` helper: exp(x) with the historical +/-60 clamp."""
+    return math.exp(min(max(float(x), -60.0), 60.0))
+
+
+def _xstar_expint_em1(x: float) -> Optional[float]:
+    """Return XSTAR ``expint`` value ``em1 = x * exp(x) * E1(x)``.
+
+    The polynomial/rational approximations mirror ``xstarlib/src/expint.f90``
+    and are used here only for source-code-guided type-57 diagnostics.
+    """
+    x = float(x)
+    if not math.isfinite(x) or x == 0.0:
+        return None
+    if x > 1.0:
+        b1 = 9.5733223454
+        b2 = 25.6329561486
+        b3 = 21.0996530827
+        b4 = 3.9584969228
+        c1 = 8.5733287401
+        c2 = 18.0590169730
+        c3 = 8.6347608925
+        c4 = 0.2677737343
+        den = x**4 + b1*x**3 + b2*x*x + b3*x + b4
+        if den == 0.0:
+            return None
+        return (x**4 + c1*x**3 + c2*x*x + c3*x + c4) / den
+    a0 = -0.57721566
+    a1 = 0.99999193
+    a2 = -0.24991055
+    a3 = 0.05519968
+    a4 = -0.00976004
+    a5 = 0.00107857
+    try:
+        if x > 0.0:
+            e1 = a0 + a1*x + a2*x*x + a3*x**3 + a4*x**4 + a5*x**5 - math.log(x)
+        else:
+            e1 = -a0 + a1*x + a2*x*x + a3*x**3 + a4*x**4 + a5*x**5 - math.log(-x)
+        return e1 * x * _xstar_expo(x)
+    except Exception:
+        return None
+
+
+def _xstar_eint(t: float) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """Return XSTAR ``eint`` outputs E1, E2, E3 for diagnostic calt57 use."""
+    t = float(t)
+    ss = _xstar_expint_em1(t)
+    if ss is None:
+        return None, None, None
+    try:
+        e1 = ss / max(1.0e-34, t * _xstar_expo(t))
+        e2 = math.exp(-t) - t * e1
+        # Follow the source expression literally: 0.5*(expo(-t)-t*e2).
+        e3 = 0.5 * (_xstar_expo(-t) - t * e2)
+        return e1, e2, e3
+    except Exception:
+        return None, None, None
+
+
+def _xstar_szirc(n: int, temperature: float, rz: float, rno: float) -> Optional[float]:
+    """Port of XSTAR ``szirc`` semiempirical hydrogenic CI rate."""
+    abethe = [1.134, 0.603, 0.412, 0.313, 0.252, 0.211, 0.181, 0.159, 0.142, 0.128, 1.307]
+    hbethe = [1.48, 3.64, 5.93, 8.32, 10.75, 12.90, 15.05, 17.20, 19.35, 21.50, 2.15]
+    rbethe = [2.20, 1.90, 1.73, 1.65, 1.60, 1.56, 1.54, 1.52, 1.52, 1.52, 1.52]
+    if n <= 0 or temperature <= 0.0 or rz <= 0.0 or rno <= 1.0:
+        return None
+    boltz = 1.38066e-16
+    eion = 2.179874e-11
+    const = 4.6513e-3
+    rc = float(int(rno))
+    if rc <= 1.0:
+        return None
+    if n < 11:
+        an = abethe[n - 1]
+        hn = hbethe[n - 1]
+        rrn = rbethe[n - 1]
+    else:
+        an = abethe[10] / float(n)
+        hn = hbethe[10] * float(n)
+        rrn = rbethe[10]
+    tt = temperature * boltz
+    rn = float(n)
+    try:
+        yy = rz * rz * eion / tt * (1.0 / rn / rn - 1.0 / rc / rc - 0.25 * (1.0 / (rc - 1.0) ** 2 - 1.0 / rc / rc))
+    except Exception:
+        return None
+    if yy <= 0.0:
+        return None
+    e1, e2, e3 = _xstar_eint(yy)
+    if e1 is None or e2 is None or e3 is None:
+        return None
+    try:
+        cii = const * math.sqrt(tt) * (rn ** 5) / (rz ** 4) * an * yy * (
+            e1 / rn
+            - (math.exp(-yy) - yy * e3) / (3.0 * rn)
+            + (yy * e2 - 2.0 * yy * e1 + math.exp(-yy)) * 3.0 * hn / rn / (3.0 - rrn)
+            + (e1 - e2) * 3.36 * yy
+        )
+        return cii if math.isfinite(cii) and cii >= 0.0 else None
+    except Exception:
+        return None
+
+
+def _xstar_irc(n: int, temperature: float, rc: float, rno: float) -> Optional[float]:
+    """Port of XSTAR ``irc`` collisional ionization helper."""
+    if n <= 0 or temperature <= 0.0 or rc <= 0.0 or rno <= float(n):
+        return None
+    if abs(rc - 1.0) > 0.0:
+        return _xstar_szirc(n, temperature, rc, rno)
+    try:
+        xo = 1.0 - n * n / rno / rno
+        if xo <= 0.0:
+            return None
+        yn = xo * 157803.0 / (temperature * n * n)
+        if yn <= 0.0:
+            return None
+        if n < 2:
+            an = 1.9603 * n * (1.133 / 3.0 / xo**3 - 0.4059 / 4.0 / xo**4 + 0.07014 / 5.0 / xo**5)
+            bn = 2.0 / 3.0 * n * n / xo * (3.0 + 2.0 / xo - 0.603 / xo / xo)
+            rn = 0.45
+        elif n == 2:
+            an = 1.9603 * n * (1.0785 / 3.0 / xo**3 - 0.2319 / 4.0 / xo**4 + 0.02947 / 5.0 / xo**5)
+            bn = (4.0 - 18.63 / n + 36.24 / (n * n) - 28.09 / (n * n * n)) / n
+            bn = 2.0 / 3.0 * n * n / xo * (3.0 + 2.0 / xo + bn / xo / xo)
+            rn = 0.653
+        else:
+            g0 = (0.9935 + 0.2328 / n - 0.1296 / (n * n)) / 3.0 / xo**3
+            g1 = -(0.6282 - 0.5598 / n + 0.5299 / (n * n)) / (n * 4.0) / xo**4
+            g2 = (0.3887 - 1.181 / n + 1.470 / (n * n)) / (n * n * 5.0) / xo**5
+            an = 1.9603 * n * (g0 + g1 + g2)
+            bn = (4.0 - 18.63 / n + 36.24 / (n * n) - 28.09 / (n * n * n)) / n
+            bn = (3.0 + 2.0 / xo + bn / xo / xo) * 2.0 * n * n / 3.0 / xo
+            rn = 1.94 * n ** (-1.57)
+        rn *= xo
+        zn = rn + yn
+        ey = _xstar_expint_em1(yn)
+        ez = _xstar_expint_em1(zn)
+        if ey is None or ez is None or zn <= 0.0:
+            return None
+        se = an * (ey / yn / yn - math.exp(-rn) * ez / zn / zn)
+        ey2 = 1.0 + 1.0 / yn - ey * (2.0 / yn + 1.0)
+        ez2 = math.exp(-rn) * (1.0 + 1.0 / zn - ez * (1.0 / zn + 1.0))
+        se = se + (bn - an * math.log(2.0 * n * n / xo)) * (ey2 - ez2)
+        se = se * math.sqrt(temperature) * yn * yn * n * n * 1.095e-10 / xo
+        return se if math.isfinite(se) and se >= 0.0 else None
+    except Exception:
+        return None
+
+
+def _xstar_calt57(te: float, den2: float, e: float, ep: float, n: int) -> dict:
+    """Port/audit of XSTAR ``calt57`` for type-57 collisional ionization.
+
+    Returns the rate coefficient ``cion`` [cm^3/s] and inverse three-body
+    coefficient ``crec`` [cm^6/s] before XSTAR's ``ucalc`` multiplies by density
+    and statistical weights.  This remains diagnostic in v0.3.18 and is not
+    assembled into the matrix by default.
+    """
+    if n <= 0:
+        return {"python_eval_status": "type57_bad_principal_quantum_number"}
+    if te <= 0.0 or den2 <= 0.0:
+        return {"python_eval_status": "type57_bad_temperature_or_density"}
+    if ep < e:
+        return {"python_eval_status": "type57_ep_less_than_level_energy", "type57_cion_cm3_s": 0.0, "type57_crec_cm6_s": 0.0}
+    try:
+        rn = float(n)
+        rk = 1.16058e4
+        cb = 13.605692 * 1.6021e-19 / 1.3805e-23
+        rio = (ep - e) / 13.6
+        if rio <= 0.0:
+            return {"python_eval_status": "type57_nonpositive_effective_threshold", "type57_rio": rio, "type57_cion_cm3_s": 0.0, "type57_crec_cm6_s": 0.0}
+        rc = math.sqrt(rio) * rn
+        den = min(float(den2), 1.0e18)
+        tmin = 3.8e4 * rc * math.sqrt(rc)
+        temp = max(float(te), tmin)
+        rno = math.sqrt(1.8887e8 * rc / den ** 0.3333)
+        rno2 = (1.814e26 * (rc ** 6) / 2.0 / den) ** 0.13333
+        rno = min(rno, rno2)
+        if int(rno) <= n:
+            return {
+                "python_eval_status": "type57_rno_not_above_n_no_rate",
+                "type57_rio": rio, "type57_rc": rc, "type57_tmin_K": tmin,
+                "type57_temp_used_K": temp, "type57_rno": rno,
+                "type57_cion_cm3_s": 0.0, "type57_crec_cm6_s": 0.0,
+            }
+        ciono = _xstar_irc(n, temp, rc, rno)
+        if ciono is None:
+            return {
+                "python_eval_status": "type57_irc_failed",
+                "type57_rio": rio, "type57_rc": rc, "type57_tmin_K": tmin,
+                "type57_temp_used_K": temp, "type57_rno": rno,
+            }
+        cion = 0.0
+        crec = 0.0
+        if te < tmin:
+            beta = 0.25 * (math.sqrt((100.0 * rc + 91.0) / (4.0 * rc + 3.0)) - 5.0)
+            wte = (math.log(1.0 + te / cb / rio)) ** (beta / (1.0 + te / cb * rio))
+            wtm = (math.log(1.0 + tmin / cb / rio)) ** (beta / (1.0 + tmin / cb * rio))
+            ete, _e2, _e3 = _xstar_eint(rio / te * cb)
+            etm, _e2m, _e3m = _xstar_eint(rio / tmin * cb)
+            if ete is None or etm is None or ete < 1.0e-20:
+                return {
+                    "python_eval_status": "type57_low_temperature_extrapolation_failed",
+                    "type57_rio": rio, "type57_rc": rc, "type57_tmin_K": tmin,
+                    "type57_temp_used_K": temp, "type57_rno": rno,
+                    "type57_cion_cm3_s": 0.0, "type57_crec_cm6_s": 0.0,
+                }
+            cion = ciono * math.sqrt(tmin / te) * ete / (etm + 1.0e-30) * wte / (wtm + 1.0e-30)
+        else:
+            cion = ciono
+        if cion <= 1.0e-24:
+            return {
+                "python_eval_status": "type57_rate_below_xstar_cutoff",
+                "type57_rio": rio, "type57_rc": rc, "type57_tmin_K": tmin,
+                "type57_temp_used_K": temp, "type57_rno": rno,
+                "type57_ciono_cm3_s": ciono,
+                "type57_cion_cm3_s": 0.0, "type57_crec_cm6_s": 0.0,
+            }
+        cion = cion / float(n * n)
+        crec = cion * 2.0779e-16 * math.exp(min((ep - e) * rk / te, 60.0)) / te ** 1.5
+        return {
+            "python_eval_status": "evaluated_type57_calt57_diagnostic",
+            "type57_rio": rio,
+            "type57_rc": rc,
+            "type57_tmin_K": tmin,
+            "type57_temp_used_K": temp,
+            "type57_rno": rno,
+            "type57_ciono_cm3_s": ciono,
+            "type57_cion_cm3_s": cion,
+            "type57_crec_cm6_s": crec,
+        }
+    except Exception as exc:
+        return {"python_eval_status": f"type57_exception_{exc.__class__.__name__}"}
+
+
+def _level_lookup(level_rows: Sequence[dict]) -> Dict[int, dict]:
+    out: Dict[int, dict] = {}
+    for row in level_rows:
+        lev = maybe_int(row.get("level_index"))
+        if lev is not None:
+            out[int(lev)] = row
+    return out
+
+
+def _evaluate_type57_calt57_record(
+    reals: Sequence[float],
+    ints: Sequence[int],
+    *,
+    temperature: float,
+    electron_density: float,
+    nlevp: Optional[int],
+    level_rows: Optional[Sequence[dict]] = None,
+) -> dict:
+    """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only."""
+    rd = [float(x) for x in reals]
+    it = [int(x) for x in ints]
+    if len(it) < 2:
+        return {"python_eval_status": "type57_missing_integer_indices"}
+    i57 = it[0]
+    idest1 = it[-2]
+    if i57 <= 0:
+        return {"python_eval_status": "type57_bad_i57_n"}
+    if nlevp is not None and (idest1 <= 1 or idest1 > int(nlevp)):
+        return {"python_eval_status": "type57_idest1_outside_ucalc_range", "type57_n_principal": i57}
+    levels = _level_lookup(level_rows or [])
+    lev = levels.get(int(idest1), {})
+    e1 = maybe_float(lev.get("energy_eV"))
+    g_lo = maybe_float(lev.get("statistical_weight_g"))
+    ep = maybe_float(lev.get("binding_from_continuum_eV"))
+    if ep is None:
+        ip = maybe_float(lev.get("ionization_potential_eV"))
+        if ip is not None and e1 is not None:
+            ep = ip - e1
+    if e1 is None:
+        # The record real is usually the effective charge; keep it in the audit,
+        # but do not use it as level energy because ucalc takes e1 from rlev.
+        return {"python_eval_status": "type57_missing_destination_level_energy", "type57_n_principal": i57, "type57_destination_level": idest1}
+    if ep is None:
+        return {"python_eval_status": "type57_missing_destination_binding_energy", "type57_n_principal": i57, "type57_destination_level": idest1, "type57_level_energy_eV": e1}
+    tz = float(temperature)  # user-facing API already passes Kelvin; ucalc's t*1e4 equals Kelvin.
+    ev = _xstar_calt57(tz, float(electron_density), float(e1), float(ep), int(i57))
+    cion = maybe_float(ev.get("type57_cion_cm3_s"))
+    crec = maybe_float(ev.get("type57_crec_cm6_s"))
+    ans1 = None if cion is None else cion * float(electron_density)
+    ggup = 1.0
+    # XSTAR uses the continuum/parent statistical weight in rlev(2,nlevp).  The
+    # present ion-level table often lacks that continuum row, so use 1 as an
+    # explicit diagnostic placeholder until the element matrix has the parent
+    # continuum level available.
+    rinf = None if g_lo is None else g_lo / (1.0e-48 + ggup)
+    ans2 = None if crec is None or rinf is None else crec * rinf * float(electron_density) * float(electron_density)
+    eth = max(0.0, float(ep))
+    ergsev = 1.602197e-12
+    out = {
+        **ev,
+        "type57_n_principal": i57,
+        "type57_destination_level": idest1,
+        "type57_level_energy_eV": e1,
+        "type57_binding_or_eth_eV": ep,
+        "type57_stat_weight_lower": g_lo,
+        "type57_stat_weight_continuum_assumed": ggup,
+        "python_rate_forward_s^-1": ans1,
+        "python_rate_inverse_s^-1": ans2,
+        "type57_ans6_energy_loss_erg_s^-1": None if ans1 is None else -ans1 * eth * ergsev,
+        "type57_ans5_inverse_energy_erg_s^-1": None if ans2 is None else -ans2 * eth * ergsev,
+    }
+    # ucalc zeros both ans1 and ans2 for destination level 1 because more
+    # accurate ground-level rates are supplied by data types 95 or 25.
+    if idest1 == 1 and out.get("python_eval_status") == "evaluated_type57_calt57_diagnostic":
+        out["python_eval_status"] = "evaluated_type57_calt57_ground_zeroed_by_ucalc"
+        out["python_rate_forward_s^-1"] = 0.0
+        out["python_rate_inverse_s^-1"] = 0.0
+    return out
+
 def _evaluate_type95_bryans_ci(reals: Sequence[float], ints: Sequence[int], *, temperature: float, electron_density: float) -> dict:
     """Diagnostic approximation to ucalc type-95 Bryans collisional ionization.
 
@@ -338,6 +652,7 @@ def audit_ucalc_adjacent_record(
     temperature: float,
     electron_density: float,
     nlevp: Optional[int] = None,
+    level_rows: Optional[Sequence[dict]] = None,
 ) -> dict:
     """Return a source-code-guided audit row for an adjacent-ion record.
 
@@ -385,10 +700,16 @@ def audit_ucalc_adjacent_record(
         row.update({
             "ucalc_ans1_role": "collisional_ionization_sink_from_target_level",
             "ucalc_ans2_role": "three_body_recombination_inverse_from_calt57",
-            "requires_context": "calt57_effective_charge_formula_level_energies_degeneracies_parent_continuum",
-            "matrix_role_if_implemented": "electron_impact_ionization_sink_and_inverse_three_body_recombination",
-            "python_eval_status": "not_evaluated_calt57_not_yet_ported",
+            "requires_context": "destination_level_energy_binding_statistical_weight_and_parent_continuum_weight",
+            "matrix_role_if_implemented": "electron_impact_ionization_sink_from_target_level_and_inverse_three_body_recombination_source_from_parent_continuum",
         })
+        row.update(_evaluate_type57_calt57_record(
+            rd, it,
+            temperature=temperature,
+            electron_density=electron_density,
+            nlevp=nlevp,
+            level_rows=level_rows,
+        ))
     elif dt == 74:
         row.update({
             "ucalc_ans1_role": "dielectronic_resonance_photoionization_delta_rate",
@@ -541,6 +862,7 @@ def build_adjacent_coupling_terms(
                     temperature=temperature,
                     electron_density=electron_density,
                     nlevp=nlevp_guess,
+                    level_rows=level_rows,
                 )
                 audit.update({
                     "element": Z_TO_SYMBOL.get(z, str(z)),
@@ -880,5 +1202,5 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context.")
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
