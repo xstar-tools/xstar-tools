@@ -1,8 +1,10 @@
 # xstar-atomic
 
-### v0.3.14 XSTAR-like element solver scaffold
+### v0.3.15 note: prototype adjacent-ion coupling terms
 
-The package now includes a pure-Python reference scaffold for an XSTAR-like element-wide solver:
+`examples/42_xstar_like_element_solver_demo.py` can now assemble implemented adjacent-ion recombination records as prototype source terms while separately cataloguing photoionization-like and collisional-ionization-like records that still require XSTAR's full `ucalc` radiation-field context.
+
+Example:
 
 ```bash
 PYTHONPATH=src python examples/42_xstar_like_element_solver_demo.py \
@@ -10,12 +12,15 @@ PYTHONPATH=src python examples/42_xstar_like_element_solver_demo.py \
   --element C --he-like-stage 5 \
   --temperature 1000000 --electron-density 1e8 \
   --wavelength-min 40 --wavelength-max 42 \
-  --max-level 80 --index-cache \
+  --max-level 80 \
+  --adjacent-coupling-mode recombination-source \
+  --adjacent-coupling-source-mode record-destination \
+  --index-cache \
   --out-dir c5_xstar_like_element_solver \
   --print-summary
 ```
 
-This reference implementation writes ion-block population diagnostics, transition logs, line emissivities, He-like triplet summaries, and adjacent-ion coupling candidate counts.  It is intentionally readable Python first; the same interfaces can later dispatch to a C++ backend.
+The generated `xstar_like_element_solver_adjacent_coupling_terms.csv` distinguishes assembled source-vector rows from catalogued records such as data types 53, 57, 74, 95, and 99 that are not yet converted into rates.
 
 
 ### He-like validation summary tagging

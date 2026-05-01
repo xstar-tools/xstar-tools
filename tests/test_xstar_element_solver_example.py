@@ -24,3 +24,4 @@ def test_xstar_like_element_solver_dry_run(tmp_path):
     assert "dry run" in result.stdout.lower()
     assert (out / "xstar_like_element_solver_summary.md").exists()
     assert (out / "xstar_like_element_solver_commands.csv").exists()
+    assert (out / "xstar_like_element_solver_adjacent_coupling_terms.csv").exists()

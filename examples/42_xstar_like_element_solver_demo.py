@@ -54,6 +54,10 @@ def main(argv=None):
     p.add_argument("--negative-population-action", default="keep", choices=["keep", "clip", "error"])
     p.add_argument("--index-cache", action="store_true")
     p.add_argument("--index-cache-path")
+    p.add_argument("--adjacent-coupling-mode", default="recombination-source", choices=["none", "catalog", "recombination-source"], help="How to handle adjacent-ion coupling records")
+    p.add_argument("--adjacent-coupling-source-mode", default="record-destination", choices=["ground", "record-destination", "selected-equal", "selected-statistical", "none"], help="Allocation mode for evaluated adjacent recombination source terms")
+    p.add_argument("--adjacent-coupling-source-levels", help="Comma-separated source levels for selected-* coupling allocation modes")
+    p.add_argument("--include-charge-exchange", action="store_true", help="Evaluate charge-exchange coupling coefficients when present")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
     p.add_argument("--print-summary", action="store_true")
@@ -72,10 +76,14 @@ def main(argv=None):
             "wavelength_min": args.wavelength_min,
             "wavelength_max": args.wavelength_max,
             "max_level": args.max_level,
+            "adjacent_coupling_mode": args.adjacent_coupling_mode,
+            "adjacent_coupling_source_mode": args.adjacent_coupling_source_mode,
+            "adjacent_coupling_source_levels": args.adjacent_coupling_source_levels,
             "status": "dry_run_not_executed",
         }]
         write_csv(out / "xstar_like_element_solver_ion_blocks.csv", [])
         write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", [])
+        write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_populations.csv", [])
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
@@ -110,6 +118,10 @@ def main(argv=None):
         negative_population_action=args.negative_population_action,
         index_cache=args.index_cache,
         index_cache_path=args.index_cache_path,
+        adjacent_coupling_mode=args.adjacent_coupling_mode,
+        adjacent_coupling_source_mode=args.adjacent_coupling_source_mode,
+        adjacent_coupling_selected_levels=parse_stage_list(args.adjacent_coupling_source_levels),
+        include_charge_exchange=args.include_charge_exchange,
     )
     write_element_solver_outputs(result, out)
     if args.print_summary:
@@ -117,7 +129,7 @@ def main(argv=None):
         trip = summ.get("he_like_triplet", {})
         print("XSTAR-like element solver")
         print("-------------------------")
-        print(f"element={summ.get('element')} stages={summ.get('stages')} coupling={summ.get('adjacent_coupling_status')}")
+        print(f"element={summ.get('element')} stages={summ.get('stages')} coupling={summ.get('adjacent_coupling_status')} assembled={summ.get('n_adjacent_coupling_assembled')}")
         print(f"triplet f/i/r={trip.get('f_fraction'):.6g}/{trip.get('i_fraction'):.6g}/{trip.get('r_fraction'):.6g} R={trip.get('R')} G={trip.get('G')}")
         print(f"wrote: {out / 'xstar_like_element_solver_summary.md'}")
 

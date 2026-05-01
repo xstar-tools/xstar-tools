@@ -31,6 +31,7 @@ import numpy as np
 from .hierarchy import ATDB, Z_TO_SYMBOL, roman
 from .lines import choose_z, extract_levels, extract_lines
 from .collisions import extract_collisions
+from .recombination import extract_recombination_records, evaluate_records, allocation_levels
 from .solver import (
     assemble_rate_matrix,
     build_collision_rates_for_T,
@@ -51,6 +52,16 @@ from .solver import (
 
 BOUND_FREE_RATE_TYPES = {1, 2, 5, 6, 7, 8}
 BOUND_FREE_DATA_TYPES = {1, 2, 6, 7, 22, 30, 49, 53, 59, 70, 74, 95, 99}
+
+# Terms whose rate coefficients can be evaluated in the current Python
+# reference implementation and assembled as prototype adjacent-ion source terms.
+# Many XSTAR adjacent-ion records (for example data type 53/74/99
+# photoionization/DR resonance data and type 57/95 collisional ionization data)
+# are deliberately catalogued but not converted to rates here, because doing so
+# requires XSTAR's continuum/radiation-field and ion-balance context.
+EVALUABLE_RECOMBINATION_DATA_TYPES = {1, 7, 8, 22, 30, 37, 38, 39}
+PHOTOIONIZATION_LIKE_DATA_TYPES = {49, 53, 59, 70, 74, 85, 88, 99}
+COLLISIONAL_IONIZATION_LIKE_DATA_TYPES = {57, 95}
 
 
 @dataclass
@@ -153,6 +164,137 @@ def _select_records(db: ATDB, z: int, ion_stage: int, *, use_cache: bool, cache_
     return db.select_records(z=z, ion_stage=ion_stage, use_cache=use_cache, cache_path=cache_path)
 
 
+
+def build_adjacent_coupling_terms(
+    db: ATDB,
+    *,
+    z: int,
+    target_ion_stage: int,
+    parent_ion_stage: int,
+    temperature: float,
+    electron_density: float,
+    level_indices: Sequence[int],
+    level_rows: Sequence[dict],
+    coupling_mode: str = "recombination-source",
+    coupling_source_mode: str = "record-destination",
+    selected_source_levels: Optional[Sequence[int]] = None,
+    include_charge_exchange: bool = False,
+    parent_population_proxy: float = 1.0,
+) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
+    """Build prototype adjacent-ion source/sink vectors for one target ion.
+
+    This is a source-code-guided reference implementation of the part of the
+    XSTAR ``calc_hmc_element -> calc_hmc_ion -> ucalc`` path that couples an
+    ion to its adjacent higher ion.  The current implementation is conservative:
+
+    * electron recombination records with implemented temperature fits are
+      evaluated and assembled as source terms into the target ion;
+    * photoionization-like records (notably data types 53, 74, 99) and
+      collisional-ionization-like records (57, 95) are catalogued but not used
+      as rates, because they require XSTAR's radiation field / electron-impact
+      ionization context;
+    * the assembled source vector has units of s^-1 in the same prototype
+      convention used by :func:`solve_steady_state`.
+
+    The function returns ``(source_vector, sink_rates, rows)`` where ``rows`` is
+    a transparent audit trail containing both assembled and unassembled records.
+    """
+    n = len(level_indices)
+    source = np.zeros(n, dtype=float)
+    sink = np.zeros(n, dtype=float)
+    idx = {int(lev): k for k, lev in enumerate(level_indices)}
+    selected = [int(x) for x in (selected_source_levels or [])]
+    rows: List[dict] = []
+
+    if str(coupling_mode or "none").lower() in {"", "none", "catalog", "catalogue", "catalog-only"}:
+        mode = "catalog_only"
+    else:
+        mode = "assemble_recombination_source"
+
+    records = _select_records(db, z, target_ion_stage, use_cache=True, cache_path=None)
+    recomb_rows = extract_recombination_records(db, records, z, target_ion_stage)
+    evaluated = evaluate_records(db, recomb_rows, [temperature], include_charge_exchange=include_charge_exchange)
+    for rec in evaluated:
+        if int(rec.get("parent_ion_stage") or -1) != int(parent_ion_stage):
+            continue
+        dt = int(rec.get("data_type") or -1)
+        alpha = maybe_float(rec.get("alpha_cm3_s"))
+        assembled = False
+        allocation_note = ""
+        allocated_levels: List[Tuple[int, float, str]] = []
+        source_rate_total = None
+        if mode == "assemble_recombination_source" and dt in EVALUABLE_RECOMBINATION_DATA_TYPES and alpha is not None and alpha > 0.0:
+            source_rate_total = float(alpha) * float(electron_density) * float(parent_population_proxy)
+            try:
+                allocated_levels = allocation_levels(
+                    coupling_source_mode,
+                    selected,
+                    list(level_rows),
+                    rec,
+                )
+            except Exception as exc:
+                allocated_levels = []
+                allocation_note = f"allocation_error:{exc.__class__.__name__}"
+            if not allocated_levels and coupling_source_mode not in {"none", "catalog"}:
+                # Fall back to ground if the requested allocation mode yielded no
+                # usable level.  This mirrors XSTAR's tendency to assign many
+                # total recombination records to idest1=1, but keeps the note.
+                allocated_levels = [(1, 1.0, "fallback_total_recombination_to_ground")]
+            wsum = sum(max(float(w), 0.0) for _lev, w, _note in allocated_levels)
+            if wsum > 0.0:
+                for lev, w, note in allocated_levels:
+                    if int(lev) in idx and w > 0.0:
+                        source[idx[int(lev)]] += source_rate_total * float(w) / wsum
+                        assembled = True
+                        allocation_note = note
+        rows.append({
+            "element": Z_TO_SYMBOL.get(z, str(z)),
+            "element_z": z,
+            "target_ion_stage": target_ion_stage,
+            "parent_ion_stage": parent_ion_stage,
+            "record": rec.get("record"),
+            "data_type": dt,
+            "rate_type": rec.get("rate_type"),
+            "coupling_role": "adjacent_recombination_source",
+            "temperature_K": temperature,
+            "electron_density_cm^-3": electron_density,
+            "alpha_cm3_s": alpha,
+            "source_rate_total_s^-1": source_rate_total,
+            "destination_level": rec.get("destination_level"),
+            "coupling_mode": coupling_mode,
+            "coupling_source_mode": coupling_source_mode,
+            "assembled": bool(assembled),
+            "assembly_status": "assembled_recombination_source" if assembled else ("catalogued_evaluable_but_not_assembled" if alpha is not None else rec.get("eval_method")),
+            "allocation_note": allocation_note,
+        })
+
+    # Preserve the important but not-yet-evaluable adjacent-ion records called
+    # out in the source-code audit.  These rows are intentionally not converted
+    # into rates yet.
+    for stage in (target_ion_stage, parent_ion_stage):
+        for r in _select_records(db, z, stage, use_cache=True, cache_path=None):
+            if r.data_type in PHOTOIONIZATION_LIKE_DATA_TYPES or r.data_type in COLLISIONAL_IONIZATION_LIKE_DATA_TYPES or r.rate_type in {1, 5, 7}:
+                role = "photoionization_like_sink_or_inverse_recombination" if r.data_type in PHOTOIONIZATION_LIKE_DATA_TYPES or r.rate_type in {1, 7} else "collisional_ionization_like_sink"
+                rows.append({
+                    "element": Z_TO_SYMBOL.get(z, str(z)),
+                    "element_z": z,
+                    "target_ion_stage": target_ion_stage,
+                    "parent_ion_stage": parent_ion_stage,
+                    "record_ion_stage": stage,
+                    "record": r.recno,
+                    "data_type": r.data_type,
+                    "rate_type": r.rate_type,
+                    "coupling_role": role,
+                    "temperature_K": temperature,
+                    "electron_density_cm^-3": electron_density,
+                    "assembled": False,
+                    "assembly_status": "catalogued_not_assembled_requires_radiation_or_xstar_ucalc_context",
+                    "coupling_mode": coupling_mode,
+                })
+
+    return source, sink, rows
+
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -171,7 +313,12 @@ def build_ion_rate_block(
     negative_population_action: str = "keep",
     use_cache: bool = True,
     cache_path: Optional[str] = None,
-) -> Tuple[dict, List[dict], List[dict], List[dict], List[dict]]:
+    adjacent_parent_stage: Optional[int] = None,
+    adjacent_coupling_mode: str = "catalog",
+    adjacent_coupling_source_mode: str = "record-destination",
+    adjacent_coupling_selected_levels: Optional[Sequence[int]] = None,
+    include_charge_exchange: bool = False,
+) -> Tuple[dict, List[dict], List[dict], List[dict], List[dict], List[dict]]:
     """Build and solve one ion block for the reference element solver.
 
     Returns ``(block_summary, population_rows, line_rows, transition_rows,
@@ -203,12 +350,32 @@ def build_ion_rate_block(
         coll_rows_T = build_collision_rates_for_T(collision_eval, level_set, temperature, electron_density, args)
 
     Rmat, transition_log = assemble_rate_matrix(level_indices, rad_lines, coll_rows_T)
+    source_vector = np.zeros(len(level_indices), dtype=float)
+    sink_rates = np.zeros(len(level_indices), dtype=float)
+    coupling_rows: List[dict] = []
+    if adjacent_parent_stage is not None and len(level_indices):
+        source_vector, sink_rates, coupling_rows = build_adjacent_coupling_terms(
+            db,
+            z=z,
+            target_ion_stage=ion_stage,
+            parent_ion_stage=int(adjacent_parent_stage),
+            temperature=temperature,
+            electron_density=electron_density,
+            level_indices=level_indices,
+            level_rows=levels,
+            coupling_mode=adjacent_coupling_mode,
+            coupling_source_mode=adjacent_coupling_source_mode,
+            selected_source_levels=adjacent_coupling_selected_levels,
+            include_charge_exchange=include_charge_exchange,
+        )
+
     if prune_null_rate_levels:
-        pruned, prune_info = prune_null_rate_levels_for_solve(level_indices, Rmat, np.zeros(len(level_indices)), np.zeros(len(level_indices)), output_lines, ground_level)
+        pruned, prune_info = prune_null_rate_levels_for_solve(level_indices, Rmat, source_vector, sink_rates, output_lines, ground_level)
         if pruned != level_indices:
             keep_idx = [level_indices.index(lev) for lev in pruned]
             level_indices = pruned
-            Rmat = Rmat[np.ix_(keep_idx, keep_idx)]
+            source_vector = source_vector[keep_idx]
+            sink_rates = sink_rates[keep_idx]
             level_set = set(level_indices)
             rad_lines = build_radiative_transitions(lines, level_set, args)
             coll_rows_T = build_collision_rates_for_T(collision_eval, level_set, temperature, electron_density, args)
@@ -222,12 +389,13 @@ def build_ion_rate_block(
     else:
         pop, solve_info = solve_steady_state(
             Rmat,
+            source_vector=source_vector if np.count_nonzero(source_vector) else None,
+            sink_rates=sink_rates if np.count_nonzero(sink_rates) else None,
             linear_solver=linear_solver,
             rank_deficient_action=rank_deficient_action,
             negative_population_action=negative_population_action,
         )
         solve_info["solution_status"] = "ok" if not solve_info.get("solver_warning") else "warning"
-
     level_by_index = {maybe_int(row.get("level_index")): row for row in levels if maybe_int(row.get("level_index")) is not None}
     rad_rates_from_upper: Dict[int, float] = {}
     for row in rad_lines:
@@ -283,7 +451,13 @@ def build_ion_rate_block(
     block_summary = asdict(block_diag)
     block_summary["prune_null_rate_levels"] = prune_info
     block_summary["triplet"] = _normalise_triplet(line_rows)
-    return block_summary, pop_rows, line_rows, transition_log, make_helike_triplet_diagnostics(line_rows)
+    block_summary["adjacent_coupling_mode"] = adjacent_coupling_mode
+    block_summary["adjacent_parent_stage"] = adjacent_parent_stage
+    block_summary["n_adjacent_coupling_rows"] = len(coupling_rows)
+    block_summary["n_adjacent_coupling_assembled"] = sum(1 for r in coupling_rows if r.get("assembled"))
+    block_summary["adjacent_source_sum_s^-1"] = float(np.sum(source_vector)) if len(source_vector) else 0.0
+    block_summary["adjacent_sink_sum_s^-1"] = float(np.sum(sink_rates)) if len(sink_rates) else 0.0
+    return block_summary, pop_rows, line_rows, transition_log, make_helike_triplet_diagnostics(line_rows), coupling_rows
 
 
 def catalog_adjacent_coupling_candidates(
@@ -337,6 +511,10 @@ def solve_element_reference(
     negative_population_action: str = "keep",
     index_cache: bool = True,
     index_cache_path: Optional[str] = None,
+    adjacent_coupling_mode: str = "recombination-source",
+    adjacent_coupling_source_mode: str = "record-destination",
+    adjacent_coupling_selected_levels: Optional[Sequence[int]] = None,
+    include_charge_exchange: bool = False,
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -349,8 +527,10 @@ def solve_element_reference(
         line_rows: List[dict] = []
         transitions: List[dict] = []
         triplet_rows: List[dict] = []
+        assembled_coupling_terms: List[dict] = []
         for stage in stages:
-            block, pops, lines, trans, trips = build_ion_rate_block(
+            parent_stage = stage + 1 if (stage + 1) in stages else None
+            block, pops, lines, trans, trips, cterms = build_ion_rate_block(
                 db,
                 z=z,
                 ion_stage=stage,
@@ -366,11 +546,17 @@ def solve_element_reference(
                 negative_population_action=negative_population_action,
                 use_cache=index_cache,
                 cache_path=index_cache_path,
+                adjacent_parent_stage=parent_stage,
+                adjacent_coupling_mode=adjacent_coupling_mode if parent_stage is not None else "none",
+                adjacent_coupling_source_mode=adjacent_coupling_source_mode,
+                adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
+                include_charge_exchange=include_charge_exchange,
             )
             ion_blocks.append(block)
             populations.extend(pops)
             line_rows.extend(lines)
             transitions.extend(trans)
+            assembled_coupling_terms.extend(cterms)
             for tr in trips:
                 tr["diagnostic_ion_stage"] = stage
                 triplet_rows.append(tr)
@@ -383,6 +569,11 @@ def solve_element_reference(
                 upper_ion_stage=he_like_stage + 1,
                 use_cache=index_cache,
                 cache_path=index_cache_path,
+                adjacent_parent_stage=parent_stage,
+                adjacent_coupling_mode=adjacent_coupling_mode if parent_stage is not None else "none",
+                adjacent_coupling_source_mode=adjacent_coupling_source_mode,
+                adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
+                include_charge_exchange=include_charge_exchange,
             )))
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
@@ -398,7 +589,9 @@ def solve_element_reference(
             "n_population_rows": len(populations),
             "n_line_rows": len(line_rows),
             "n_transition_rows": len(transitions),
-            "adjacent_coupling_status": "catalogued_not_yet_assembled",
+            "adjacent_coupling_status": adjacent_coupling_mode,
+            "n_adjacent_coupling_terms": len(assembled_coupling_terms),
+            "n_adjacent_coupling_assembled": sum(1 for r in assembled_coupling_terms if r.get("assembled")),
             "he_like_triplet": _normalise_triplet(selected_lines),
         },
         "ion_blocks": ion_blocks,
@@ -407,6 +600,7 @@ def solve_element_reference(
         "line_rows": line_rows,
         "transition_rows": transitions,
         "triplet_rows": triplet_rows,
+        "adjacent_coupling_terms": assembled_coupling_terms,
     }
 
 
@@ -415,6 +609,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
+    write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -425,5 +620,5 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are currently catalogued but not yet assembled into the rate matrix.")
+    lines.append("Adjacent-ion coupling records are catalogued; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it.")
     (out / "xstar_like_element_solver_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
