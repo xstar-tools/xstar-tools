@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.14 - Pure-Python XSTAR-like element solver scaffold - 2026-04-30
+
+- Added `src/xstar_atomic/xstar_element_solver.py`, a pure-Python reference scaffold for an XSTAR-like element-wide population workflow.
+- Added `examples/42_xstar_like_element_solver_demo.py` to build ion-block diagnostics, line emissivities, populations, transition logs, and adjacent-ion coupling candidate catalogs.
+- The new solver intentionally catalogs adjacent H-like/He-like coupling records but does not yet assemble full XSTAR recombination/photoionization coupling into the matrix. This replaces further empirical fitting with a source-code-guided architecture.
+- Exposed `solve_element_reference` in the package namespace for future Python/C++ backend parity tests.
+
 ## v0.3.13 - target-aware absolute-response constraints - 2026-04-30
 
 - Added `--absolute-fit-constraint-mode target-aware` to `examples/40_audit_signed_triplet_response.py` and `examples/41_fit_absolute_response_density_grid.py`.
