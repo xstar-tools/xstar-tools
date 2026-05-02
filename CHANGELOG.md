@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.28 - 2026-05-02
+
+- Added `--triplet-source-mode none|type74-direct-diagnostic` to `examples/42_xstar_like_element_solver_demo.py`.
+- Added an optional diagnostic before/after solve that injects evaluated type-74 direct triplet source rates into the current He-like ion source vector.
+- New output: `xstar_like_element_solver_triplet_source_injection_comparison.csv`, reporting baseline f/i/r, type74-source-injected f/i/r, and the C V ne=1e8 XSTAR target comparison.
+- The mode is off by default and remains diagnostic-only; it is not the final global element-wide matrix assembly.
+
 ## v0.3.27 - 2026-05-01
 
 - Added a diagnostic-only type-74 direct triplet-source evaluator.

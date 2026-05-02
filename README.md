@@ -1552,3 +1552,14 @@ Supplying an explicit `atdb.fits` path still works, but it is now treated as a p
 ## v0.3.27 note
 
 Adds diagnostic-only type-74 direct triplet-source audit output `xstar_like_element_solver_type74_triplet_source_audit.csv`.
+
+
+## v0.3.28 note
+
+This version adds an optional diagnostic triplet-source injection mode:
+
+```bash
+--triplet-source-mode type74-direct-diagnostic
+```
+
+When enabled, the example evaluates direct type-74 DR-delta triplet source candidates and injects their candidate source rates into the existing single-ion source vector for a before/after solve.  It writes `xstar_like_element_solver_triplet_source_injection_comparison.csv` with baseline, injected, and C V target f/i/r fractions.  The default remains `--triplet-source-mode none`; the diagnostic injection is not the final global element-wide matrix assembly.
