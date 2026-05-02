@@ -1563,3 +1563,7 @@ This version adds an optional diagnostic triplet-source injection mode:
 ```
 
 When enabled, the example evaluates direct type-74 DR-delta triplet source candidates and injects their candidate source rates into the existing single-ion source vector for a before/after solve.  It writes `xstar_like_element_solver_triplet_source_injection_comparison.csv` with baseline, injected, and C V target f/i/r fractions.  The default remains `--triplet-source-mode none`; the diagnostic injection is not the final global element-wide matrix assembly.
+## v0.3.29 note
+
+`examples/42_xstar_like_element_solver_demo.py` now accepts `--triplet-source-scale` for diagnostic type-74 direct triplet-source injection.  A comma-separated list such as `1,1e2,1e4,1e6,1e8,1e10` writes `xstar_like_element_solver_triplet_source_scale_scan.csv`, with one solved row per scale plus baseline and target rows.  This remains a single-ion diagnostic source-vector experiment and does not assemble type-74 terms into the final element-wide matrix.
+

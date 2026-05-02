@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.29 - 2026-05-02
+
+- Adds `--triplet-source-scale` to `examples/42_xstar_like_element_solver_demo.py` for diagnostic type-74 direct triplet-source injection.
+- Supports one scale or a comma-separated scale list, e.g. `1,1e2,1e4,1e6,1e8,1e10`.
+- Writes `xstar_like_element_solver_triplet_source_scale_scan.csv` with baseline, each scaled injected solve, and the C V XSTAR target row when available.
+- Reports f/i/r, R, G, scaled injected source rate, solve status, and L2 distance to the XSTAR target for each scale.
+- Keeps type-74 source scaling diagnostic-only; it is not the final element-wide XSTAR-like matrix assembly.
+
+# Changelog
+
 ## v0.3.28 - 2026-05-02
 
 - Added `--triplet-source-mode none|type74-direct-diagnostic` to `examples/42_xstar_like_element_solver_demo.py`.

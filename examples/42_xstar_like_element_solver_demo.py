@@ -60,6 +60,7 @@ def main(argv=None):
     p.add_argument("--include-charge-exchange", action="store_true", help="Evaluate charge-exchange coupling coefficients when present")
     p.add_argument("--type57-energy-convention", default="compare", choices=["ucalc-eth", "abs-rlev4", "threshold-only", "compare"], help="Select the type-57 calt57 convention used for primary python_* audit columns; all modes remain diagnostic-only and are not assembled")
     p.add_argument("--triplet-source-mode", default="none", choices=["none", "type74-direct-diagnostic"], help="Optional diagnostic source injection into the He-like triplet upper levels. Off by default; type74-direct-diagnostic injects evaluated type-74 direct triplet source rates into a before/after solve without changing the baseline matrix outputs.")
+    p.add_argument("--triplet-source-scale", default="1", help="Scale factor(s) for --triplet-source-mode type74-direct-diagnostic. Accepts one value or a comma-separated list, e.g. '1,1e2,1e4,1e6,1e8,1e10'.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
     p.add_argument("--print-summary", action="store_true")
@@ -83,6 +84,7 @@ def main(argv=None):
             "adjacent_coupling_source_levels": args.adjacent_coupling_source_levels,
             "type57_energy_convention": args.type57_energy_convention,
             "triplet_source_mode": args.triplet_source_mode,
+            "triplet_source_scale": args.triplet_source_scale,
             "status": "dry_run_not_executed",
         }]
         write_csv(out / "xstar_like_element_solver_ion_blocks.csv", [])
@@ -95,6 +97,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_type74_linkage_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type74_triplet_source_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_triplet_source_injection_comparison.csv", [])
+        write_csv(out / "xstar_like_element_solver_triplet_source_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_populations.csv", [])
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
@@ -135,6 +138,7 @@ def main(argv=None):
         include_charge_exchange=args.include_charge_exchange,
         type57_energy_convention=args.type57_energy_convention,
         triplet_source_mode=args.triplet_source_mode,
+        triplet_source_scale=args.triplet_source_scale,
     )
     write_element_solver_outputs(result, out)
     if args.print_summary:

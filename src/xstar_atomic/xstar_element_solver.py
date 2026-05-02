@@ -578,6 +578,7 @@ def _evaluate_type57_calt57_record(
     level_rows: Optional[Sequence[dict]] = None,
     type57_energy_convention: str = "compare",
     triplet_source_mode: str = "none",
+    triplet_source_scale: object = 1.0,
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
@@ -1076,6 +1077,7 @@ def audit_ucalc_adjacent_record(
     level_indices: Optional[Sequence[int]] = None,
     type57_energy_convention: str = "compare",
     triplet_source_mode: str = "none",
+    triplet_source_scale: object = 1.0,
 ) -> dict:
     """Return a source-code-guided audit row for an adjacent-ion record.
 
@@ -2118,6 +2120,103 @@ def build_type74_triplet_source_audit(
 
 
 
+
+def _parse_triplet_source_scales(value: object) -> List[float]:
+    """Parse one or more diagnostic triplet-source scale factors."""
+    if value is None:
+        return [1.0]
+    if isinstance(value, (int, float)):
+        vals = [float(value)]
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            vals = [1.0]
+        else:
+            vals = []
+            for part in text.replace(";", ",").split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    vals.append(float(part))
+                except Exception:
+                    raise ValueError(f"Invalid --triplet-source-scale value {part!r}")
+    else:
+        vals = []
+        try:
+            for item in value:  # type: ignore[operator]
+                vals.append(float(item))
+        except TypeError:
+            vals = [float(value)]
+    vals = [v for v in vals if math.isfinite(float(v))]
+    return vals or [1.0]
+
+
+def _scale_source_by_level(source_by_level: Dict[int, float], scale: float) -> Dict[int, float]:
+    return {int(k): float(v) * float(scale) for k, v in source_by_level.items()}
+
+
+def build_triplet_source_scale_scan(
+    *,
+    baseline_triplet: dict,
+    scan_triplets: Sequence[tuple[float, dict, dict]],
+    source_by_level: Dict[int, float],
+    type74_triplet_source_rows: Sequence[dict],
+    target_ion_stage: int,
+    mode: str,
+) -> List[dict]:
+    """Build a scale-scan table for diagnostic type-74 triplet source injection."""
+    target = _xstar_triplet_target(target_ion_stage)
+    base = _triplet_fraction_record("baseline", baseline_triplet, target=target)
+    total_source = sum(float(v) for v in source_by_level.values()) if source_by_level else 0.0
+    levels = ";".join(str(k) for k in sorted(source_by_level))
+    common = {
+        "triplet_source_mode": mode,
+        "unscaled_total_type74_source_rate_s^-1": total_source,
+        "n_injected_source_levels": len(source_by_level),
+        "injected_source_levels": levels,
+        "type74_direct_candidate_rows": sum(1 for r in type74_triplet_source_rows if _truthy(r.get("type74_direct_triplet_candidate"))),
+        "diagnostic_note": "scale * evaluated type-74 direct triplet source was injected into the current single-ion source vector; this is a diagnostic scan, not the final element-wide matrix assembly.",
+    }
+    rows: List[dict] = []
+    base.update(common)
+    base.update({
+        "triplet_source_scale": 0.0,
+        "scaled_total_injected_source_rate_s^-1": 0.0,
+        "scan_status": "baseline_no_extra_source",
+    })
+    rows.append(base)
+    for scale, trip, block in scan_triplets:
+        rec = _triplet_fraction_record("type74_source_injected_scaled", trip, target=target)
+        rec.update(common)
+        rec.update({
+            "triplet_source_scale": float(scale),
+            "scaled_total_injected_source_rate_s^-1": float(scale) * total_source,
+            "injected_matrix_size": block.get("matrix_size"),
+            "injected_solve_status": block.get("solve_status"),
+            "injected_extra_source_sum_s^-1": block.get("extra_source_sum_s^-1"),
+            "scan_status": "scale_solved",
+        })
+        rows.append(rec)
+    if target is not None:
+        rows.append({
+            "case": "xstar_target",
+            "triplet_source_mode": mode,
+            "triplet_source_scale": "target",
+            "f_fraction": target["f"],
+            "i_fraction": target["i"],
+            "r_fraction": target["r"],
+            "target_f_fraction": target["f"],
+            "target_i_fraction": target["i"],
+            "target_r_fraction": target["r"],
+            "delta_f_minus_target": 0.0,
+            "delta_i_minus_target": 0.0,
+            "delta_r_minus_target": 0.0,
+            "l2_distance_to_target": 0.0,
+            "scan_status": "reference_target",
+        })
+    return rows
+
 def _type74_direct_triplet_source_by_level(rows: Sequence[dict]) -> Dict[int, float]:
     """Return level-index -> diagnostic source rate from type-74 triplet rows."""
     out: Dict[int, float] = {}
@@ -2627,6 +2726,7 @@ def solve_element_reference(
     include_charge_exchange: bool = False,
     type57_energy_convention: str = "compare",
     triplet_source_mode: str = "none",
+    triplet_source_scale: object = 1.0,
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -2680,6 +2780,7 @@ def solve_element_reference(
         type74_linkage_audit_rows: List[dict] = []
         type74_triplet_source_audit_rows: List[dict] = []
         triplet_source_injection_comparison_rows: List[dict] = []
+        triplet_source_scale_scan_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -2713,45 +2814,69 @@ def solve_element_reference(
             if str(triplet_source_mode or "none").lower() == "type74-direct-diagnostic":
                 source_by_level = _type74_direct_triplet_source_by_level(type74_triplet_source_audit_rows)
                 if source_by_level:
-                    _block2, _pops2, _lines2, _trans2, _trips2, _cterms2 = build_ion_rate_block(
-                        db,
-                        z=z,
-                        ion_stage=he_like_stage,
-                        temperature=temperature,
-                        electron_density=electron_density,
-                        wavelength_min=wavelength_min,
-                        wavelength_max=wavelength_max,
-                        max_level=max_level,
-                        component_mode=component_mode,
-                        prune_null_rate_levels=prune_null_rate_levels,
-                        linear_solver=linear_solver,
-                        rank_deficient_action=rank_deficient_action,
-                        negative_population_action=negative_population_action,
-                        use_cache=index_cache,
-                        cache_path=index_cache_path,
-                        adjacent_parent_stage=he_like_stage + 1 if (he_like_stage + 1) in stages else None,
-                        adjacent_coupling_mode=adjacent_coupling_mode,
-                        adjacent_coupling_source_mode=adjacent_coupling_source_mode,
-                        adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
-                        include_charge_exchange=include_charge_exchange,
-                        type57_energy_convention=type57_energy_convention,
-                        extra_source_by_level=source_by_level,
-                        extra_source_label="type74-direct-diagnostic",
-                    )
                     baseline_triplet = _normalise_triplet([r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage])
-                    injected_triplet = _normalise_triplet(_lines2)
-                    triplet_source_injection_comparison_rows = build_triplet_source_injection_comparison(
+                    scale_values = _parse_triplet_source_scales(triplet_source_scale)
+                    scan_triplets: List[tuple[float, dict, dict]] = []
+                    first_block = None
+                    first_lines = None
+                    first_scale = scale_values[0]
+                    for scale in scale_values:
+                        scaled_source_by_level = _scale_source_by_level(source_by_level, scale)
+                        _block2, _pops2, _lines2, _trans2, _trips2, _cterms2 = build_ion_rate_block(
+                            db,
+                            z=z,
+                            ion_stage=he_like_stage,
+                            temperature=temperature,
+                            electron_density=electron_density,
+                            wavelength_min=wavelength_min,
+                            wavelength_max=wavelength_max,
+                            max_level=max_level,
+                            component_mode=component_mode,
+                            prune_null_rate_levels=prune_null_rate_levels,
+                            linear_solver=linear_solver,
+                            rank_deficient_action=rank_deficient_action,
+                            negative_population_action=negative_population_action,
+                            use_cache=index_cache,
+                            cache_path=index_cache_path,
+                            adjacent_parent_stage=he_like_stage + 1 if (he_like_stage + 1) in stages else None,
+                            adjacent_coupling_mode=adjacent_coupling_mode,
+                            adjacent_coupling_source_mode=adjacent_coupling_source_mode,
+                            adjacent_coupling_selected_levels=adjacent_coupling_selected_levels,
+                            include_charge_exchange=include_charge_exchange,
+                            type57_energy_convention=type57_energy_convention,
+                            extra_source_by_level=scaled_source_by_level,
+                            extra_source_label=f"type74-direct-diagnostic-scale-{scale:g}",
+                        )
+                        injected_triplet = _normalise_triplet(_lines2)
+                        scan_triplets.append((float(scale), injected_triplet, _block2))
+                        if first_block is None:
+                            first_block = _block2
+                            first_lines = _lines2
+                            first_scale = float(scale)
+                    triplet_source_scale_scan_rows = build_triplet_source_scale_scan(
                         baseline_triplet=baseline_triplet,
-                        injected_triplet=injected_triplet,
+                        scan_triplets=scan_triplets,
+                        source_by_level=source_by_level,
                         type74_triplet_source_rows=type74_triplet_source_audit_rows,
                         target_ion_stage=he_like_stage,
                         mode=str(triplet_source_mode),
                     )
-                    # Keep the injected run separate from the baseline outputs.
-                    for r in triplet_source_injection_comparison_rows:
-                        r["injected_matrix_size"] = _block2.get("matrix_size")
-                        r["injected_solve_status"] = _block2.get("solve_status")
-                        r["injected_extra_source_sum_s^-1"] = _block2.get("extra_source_sum_s^-1")
+                    if first_lines is not None and first_block is not None:
+                        injected_triplet = _normalise_triplet(first_lines)
+                        triplet_source_injection_comparison_rows = build_triplet_source_injection_comparison(
+                            baseline_triplet=baseline_triplet,
+                            injected_triplet=injected_triplet,
+                            type74_triplet_source_rows=type74_triplet_source_audit_rows,
+                            target_ion_stage=he_like_stage,
+                            mode=str(triplet_source_mode),
+                        )
+                        # Keep the injected run separate from the baseline outputs.
+                        for r in triplet_source_injection_comparison_rows:
+                            r["triplet_source_scale"] = first_scale
+                            r["scaled_total_injected_source_rate_s^-1"] = (maybe_float(r.get("total_injected_source_rate_s^-1")) or 0.0) * first_scale
+                            r["injected_matrix_size"] = first_block.get("matrix_size")
+                            r["injected_solve_status"] = first_block.get("solve_status")
+                            r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -2786,6 +2911,7 @@ def solve_element_reference(
         "type74_linkage_audit": type74_linkage_audit_rows,
         "type74_triplet_source_audit": type74_triplet_source_audit_rows,
         "triplet_source_injection_comparison": triplet_source_injection_comparison_rows,
+        "triplet_source_scale_scan": triplet_source_scale_scan_rows,
     }
 
 
@@ -3094,6 +3220,35 @@ def _triplet_source_injection_comparison_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+def _triplet_source_scale_scan_summary(rows: Sequence[dict]) -> dict:
+    """Summarise the v0.3.29 diagnostic source-scale scan."""
+    scale_rows = [r for r in rows if str(r.get("case")) == "type74_source_injected_scaled"]
+    best = None
+    for r in scale_rows:
+        d = maybe_float(r.get("l2_distance_to_target"))
+        if d is None:
+            continue
+        if best is None or float(d) < float(best.get("l2_distance_to_target")):
+            best = r
+    base = next((r for r in rows if str(r.get("case")) == "baseline"), {})
+    return {
+        "n_triplet_source_scale_scan_rows": len(rows),
+        "n_scale_solutions": len(scale_rows),
+        "scales": [r.get("triplet_source_scale") for r in scale_rows],
+        "baseline_l2_distance_to_target": base.get("l2_distance_to_target"),
+        "best_scale": None if best is None else best.get("triplet_source_scale"),
+        "best_l2_distance_to_target": None if best is None else best.get("l2_distance_to_target"),
+        "best_f_fraction": None if best is None else best.get("f_fraction"),
+        "best_i_fraction": None if best is None else best.get("i_fraction"),
+        "best_r_fraction": None if best is None else best.get("r_fraction"),
+        "unscaled_total_type74_source_rate_s^-1": base.get("unscaled_total_type74_source_rate_s^-1"),
+        "provenance": {
+            "mode": "v0.3.29 adds --triplet-source-scale and writes xstar_like_element_solver_triplet_source_scale_scan.csv for diagnostic type-74 direct-source injection scale tests.",
+            "assembly": "The scale scan remains a single-ion diagnostic source-vector experiment, not the final XSTAR-like global element matrix assembly.",
+        },
+    }
+
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -3104,6 +3259,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type74_linkage_rows = result.get("type74_linkage_audit", [])
     type74_triplet_source_rows = result.get("type74_triplet_source_audit", [])
     triplet_source_injection_rows = result.get("triplet_source_injection_comparison", [])
+    triplet_source_scale_scan_rows = result.get("triplet_source_scale_scan", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -3115,6 +3271,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
         result["summary"]["type74_triplet_source_audit_summary"] = _type74_triplet_source_audit_summary(type74_triplet_source_rows)
         if triplet_source_injection_rows:
             result["summary"]["triplet_source_injection_comparison_summary"] = _triplet_source_injection_comparison_summary(triplet_source_injection_rows)
+        if triplet_source_scale_scan_rows:
+            result["summary"]["triplet_source_scale_scan_summary"] = _triplet_source_scale_scan_summary(triplet_source_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
@@ -3125,6 +3283,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type74_linkage_audit.csv", type74_linkage_rows)
     write_csv(out / "xstar_like_element_solver_type74_triplet_source_audit.csv", type74_triplet_source_rows)
     write_csv(out / "xstar_like_element_solver_triplet_source_injection_comparison.csv", triplet_source_injection_rows)
+    write_csv(out / "xstar_like_element_solver_triplet_source_scale_scan.csv", triplet_source_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
@@ -3135,7 +3294,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve are diagnostic-only; the injection mode is off by default and is not the final global element matrix assembly.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan are diagnostic-only; the injection mode is off by default and is not the final global element matrix assembly.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
