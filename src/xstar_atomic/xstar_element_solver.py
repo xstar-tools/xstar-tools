@@ -2501,7 +2501,19 @@ def _classify_global_level_kind(row: dict) -> str:
     label = str(row.get("level_label") or "").strip().lower()
     if "continuum" in label or label == "cont" or label.startswith("continuum"):
         return "continuum"
-    if "superlevel" in label or "super level" in label or label == "super":
+    # XSTAR/ATDB labels for superlevels are not always written as the
+    # literal word ``superlevel``.  In the C V block, the superlevel rows
+    # appear as labels such as ``sprlevls`` and ``sprlevlt``; those rows are
+    # the same levels linked by type-71/type-77/type-99 superlevel cascade
+    # diagnostics and must be represented as explicit superlevel states before
+    # global matrix assembly.
+    if (
+        "superlevel" in label
+        or "super level" in label
+        or label == "super"
+        or label.startswith("sprlev")
+        or label.startswith("sup")
+    ):
         return "superlevel"
     return "spectroscopic"
 
@@ -2571,6 +2583,8 @@ def build_element_global_index(
                 "is_continuum": level_kind == "continuum",
                 "is_parent_continuum_placeholder": False,
                 "parent_ion_stage": "",
+                "parent_level_index": "",
+                "continuum_represents_parent": False,
                 "source": "decoded_type6_level_record",
             })
 
@@ -2613,8 +2627,24 @@ def build_element_global_index(
             "is_continuum": True,
             "is_parent_continuum_placeholder": True,
             "parent_ion_stage": int(upper),
-            "source": "v0.3.31_explicit_parent_continuum_placeholder",
+            "parent_level_index": 1,
+            "continuum_represents_parent": True,
+            "source": "v0.3.32_explicit_parent_continuum_placeholder",
         })
+
+    # When a lower-ion continuum row already exists, keep it as the physical
+    # continuum state and annotate it with the adjacent parent ion represented
+    # by that continuum.  This avoids duplicating the continuum row while still
+    # making the future global matrix mapping explicit.
+    for r in rows:
+        stage = maybe_int(r.get("ion_stage"))
+        if stage is None or not bool(r.get("is_continuum")):
+            continue
+        upper = int(stage) + 1
+        if upper in stage_set:
+            r["parent_ion_stage"] = int(upper)
+            r["parent_level_index"] = 1
+            r["continuum_represents_parent"] = True
 
     def _sort_key(r: dict):
         stage = maybe_int(r.get("ion_stage")) or 0
@@ -2648,8 +2678,165 @@ def _global_index_summary(rows: Sequence[dict]) -> dict:
         "n_continuum_rows": sum(1 for r in rows if bool(r.get("is_continuum"))),
         "n_parent_continuum_placeholders": sum(1 for r in rows if bool(r.get("is_parent_continuum_placeholder"))),
         "provenance": {
-            "mode": "v0.3.31 creates xstar_like_element_solver_global_index.csv as the explicit element-wide state map scaffold.",
+            "mode": "v0.3.32 fixes superlevel classification and parent-continuum mapping in xstar_like_element_solver_global_index.csv.",
             "assembly": "No global matrix terms are assembled from this index yet; it is the structural prerequisite for the later pure-Python element-wide solve.",
+        },
+    }
+
+
+def _global_index_lookup(rows: Sequence[dict]) -> Dict[tuple[int, int], dict]:
+    """Return ``(ion_stage, level_index) -> global-index row`` for real levels.
+
+    Placeholder continuum rows may use level_index=0 and are therefore kept
+    out of the normal bound-bound lookup.  Bound-bound matrix terms should only
+    connect decoded levels present in the global state index.
+    """
+    out: Dict[tuple[int, int], dict] = {}
+    for row in rows:
+        stage = maybe_int(row.get("ion_stage"))
+        level = maybe_int(row.get("level_index"))
+        gidx = maybe_int(row.get("global_index"))
+        if stage is None or level is None or gidx is None:
+            continue
+        out[(int(stage), int(level))] = row
+    return out
+
+
+def build_global_bound_bound_matrix_terms(
+    transition_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+) -> List[dict]:
+    """Map existing intra-ion bound-bound transition logs onto global indices.
+
+    v0.3.33 is a scaffold for the later element-wide linear system.  It does
+    not solve the global matrix yet.  For each current per-ion bound-bound
+    transition ``from_level -> to_level`` it writes the two matrix entries that
+    would appear in a population-rate matrix with column = source state and row
+    = destination state:
+
+    * an off-diagonal gain term ``M[to, from] += rate``;
+    * a diagonal loss term ``M[from, from] -= rate``.
+
+    Only radiative and collisional bound-bound transition kinds from the current
+    per-ion assembly are mapped.  Bound-free, recombination, type-74 source,
+    and superlevel-source terms remain diagnostic-only and are not included here.
+    """
+    lookup = _global_index_lookup(global_index_rows)
+    out: List[dict] = []
+    allowed = {
+        "radiative_decay",
+        "collisional_excitation",
+        "collisional_deexcitation",
+        "phenomenological_same_n_lmixing",
+    }
+    term_id = 0
+    for tr in transition_rows:
+        kind = str(tr.get("kind") or "")
+        if kind not in allowed:
+            continue
+        stage = maybe_int(tr.get("ion_stage"))
+        from_level = maybe_int(tr.get("from_level"))
+        to_level = maybe_int(tr.get("to_level"))
+        rate = maybe_float(tr.get("rate_s^-1"))
+        if stage is None or from_level is None or to_level is None or rate is None:
+            continue
+        if not math.isfinite(float(rate)) or float(rate) <= 0.0:
+            continue
+        from_row = lookup.get((int(stage), int(from_level)))
+        to_row = lookup.get((int(stage), int(to_level)))
+        if from_row is None or to_row is None:
+            missing = []
+            if from_row is None:
+                missing.append("from_level_missing_from_global_index")
+            if to_row is None:
+                missing.append("to_level_missing_from_global_index")
+            # Keep a skipped row for auditability; it is not a matrix entry.
+            out.append({
+                "global_term_id": term_id,
+                "matrix_term_kind": "skipped_bound_bound_transition",
+                "matrix_role": "not_assembled_missing_global_index",
+                "element": tr.get("element"),
+                "ion_stage": int(stage),
+                "transition_kind": kind,
+                "from_level": int(from_level),
+                "to_level": int(to_level),
+                "rate_s^-1": float(rate),
+                "signed_rate_s^-1": 0.0,
+                "record": tr.get("record"),
+                "source_method": tr.get("source_method"),
+                "assembly_status": "skipped",
+                "skip_reason": ";".join(missing),
+                "provenance": "v0.3.33_global_bound_bound_matrix_scaffold",
+            })
+            term_id += 1
+            continue
+        from_g = int(from_row["global_index"])
+        to_g = int(to_row["global_index"])
+        common = {
+            "element": tr.get("element"),
+            "element_z": from_row.get("element_z"),
+            "ion_stage": int(stage),
+            "ion_roman": from_row.get("ion_roman"),
+            "transition_kind": kind,
+            "from_level": int(from_level),
+            "to_level": int(to_level),
+            "from_global_index": from_g,
+            "to_global_index": to_g,
+            "from_level_label": from_row.get("level_label"),
+            "to_level_label": to_row.get("level_label"),
+            "from_level_kind": from_row.get("level_kind"),
+            "to_level_kind": to_row.get("level_kind"),
+            "rate_s^-1": float(rate),
+            "record": tr.get("record"),
+            "source_method": tr.get("source_method"),
+            "temperature_K": tr.get("temperature_K"),
+            "electron_density_cm^-3": tr.get("electron_density_cm^-3"),
+            "assembly_status": "assembled_global_bound_bound_scaffold",
+            "skip_reason": "",
+            "provenance": "v0.3.33_global_bound_bound_matrix_scaffold",
+        }
+        out.append({
+            "global_term_id": term_id,
+            "matrix_term_kind": "offdiag_gain",
+            "matrix_role": "bound_bound_gain_to_destination",
+            "matrix_row_global_index": to_g,
+            "matrix_col_global_index": from_g,
+            "signed_rate_s^-1": float(rate),
+            **common,
+        })
+        term_id += 1
+        out.append({
+            "global_term_id": term_id,
+            "matrix_term_kind": "diagonal_loss",
+            "matrix_role": "bound_bound_loss_from_source",
+            "matrix_row_global_index": from_g,
+            "matrix_col_global_index": from_g,
+            "signed_rate_s^-1": -float(rate),
+            **common,
+        })
+        term_id += 1
+    return out
+
+
+def _global_bound_bound_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    assembled = [r for r in rows if str(r.get("assembly_status")) == "assembled_global_bound_bound_scaffold"]
+    skipped = [r for r in rows if str(r.get("assembly_status")) == "skipped"]
+    return {
+        "n_global_bound_bound_matrix_term_rows": len(rows),
+        "n_global_bound_bound_assembled_rows": len(assembled),
+        "n_global_bound_bound_skipped_rows": len(skipped),
+        "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
+        "rows_by_transition_kind": _counts(assembled, "transition_kind"),
+        "rows_by_ion_stage": _counts(assembled, "ion_stage"),
+        "n_unique_matrix_positions": len({
+            (maybe_int(r.get("matrix_row_global_index")), maybe_int(r.get("matrix_col_global_index")))
+            for r in assembled
+            if maybe_int(r.get("matrix_row_global_index")) is not None and maybe_int(r.get("matrix_col_global_index")) is not None
+        }),
+        "provenance": {
+            "mode": "v0.3.33 maps current per-ion bound-bound radiative/collisional transition logs onto the explicit global_index rows.",
+            "assembly": "Diagnostic scaffold only: writes sparse-like global matrix term triplets but does not solve the global element matrix yet.",
+            "terms": "For each transition j->i, writes offdiag M[i,j]+=rate and diagonal M[j,j]-=rate.",
         },
     }
 
@@ -2933,6 +3120,7 @@ def solve_element_reference(
         populations: List[dict] = []
         line_rows: List[dict] = []
         transitions: List[dict] = []
+        global_bound_bound_matrix_terms: List[dict] = []
         triplet_rows: List[dict] = []
         assembled_coupling_terms: List[dict] = []
         for stage in stages:
@@ -3072,6 +3260,7 @@ def solve_element_reference(
                             r["injected_matrix_size"] = first_block.get("matrix_size")
                             r["injected_solve_status"] = first_block.get("solve_status")
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
+    global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(transitions, global_index_rows)
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -3088,6 +3277,8 @@ def solve_element_reference(
             "n_transition_rows": len(transitions),
             "n_global_index_rows": len(global_index_rows),
             "global_index_summary": _global_index_summary(global_index_rows),
+            "n_global_bound_bound_matrix_term_rows": len(global_bound_bound_matrix_terms),
+            "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
             "adjacent_coupling_status": adjacent_coupling_mode,
             "type57_energy_convention": type57_energy_convention,
             "triplet_source_mode": triplet_source_mode,
@@ -3101,6 +3292,7 @@ def solve_element_reference(
         "populations": populations,
         "line_rows": line_rows,
         "transition_rows": transitions,
+        "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -3486,6 +3678,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_populations.csv", result.get("populations", []))
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
+    write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -3493,7 +3686,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index; diagnostic audits remain non-assembled; the injection mode is off by default and is not the final global element matrix assembly.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; diagnostic audits remain non-assembled; the injection mode is off by default and the global matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

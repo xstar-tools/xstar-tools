@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.33 - 2026-05-02
+
+- Added the first diagnostic global bound-bound matrix scaffold for the pure-Python XSTAR-like element solver.
+- New output: `xstar_like_element_solver_global_bound_bound_matrix_terms.csv`.
+- Maps the current per-ion bound-bound radiative and collisional transition logs onto the explicit `global_index` rows introduced in v0.3.31/v0.3.32.
+- For each bound-bound transition `from_level -> to_level`, writes sparse-like matrix triplet rows for the future global element matrix: an off-diagonal gain term `M[to, from] += rate` and a diagonal loss term `M[from, from] -= rate`.
+- Includes global row/column indices, source/destination labels, level kinds, transition kind, signed rate, record number, and provenance.
+- Adds `global_bound_bound_matrix_terms_summary` to the solver summary.
+- This is still a scaffold: the global matrix is not solved yet, and bound-free/recombination/superlevel source terms remain diagnostic-only.
+
 ## v0.3.31 - 2026-05-02
 
 - Added an explicit element-wide global state index scaffold for the pure-Python XSTAR-like element solver.
