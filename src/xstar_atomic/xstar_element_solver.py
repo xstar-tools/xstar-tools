@@ -2156,6 +2156,31 @@ def _scale_source_by_level(source_by_level: Dict[int, float], scale: float) -> D
     return {int(k): float(v) * float(scale) for k, v in source_by_level.items()}
 
 
+def _xstar_triplet_target(target_ion_stage: int) -> Optional[dict]:
+    """Return built-in normalized XSTAR f/i/r benchmark targets when known.
+
+    These targets are development diagnostics used by the C V source-vector
+    experiments. They are intentionally limited: for other ions or density
+    cases, callers receive None and should still write the scan without target
+    distances.
+    """
+    try:
+        stage = int(target_ion_stage)
+    except Exception:
+        return None
+    if stage == 5:
+        tf, ti, tr = 0.807706, 0.00663334, 0.185660
+        tsum = tf + ti + tr
+        if tsum > 0.0:
+            return {
+                "name": "C_V_ne1e8_fir_fraction",
+                "f": tf / tsum,
+                "i": ti / tsum,
+                "r": tr / tsum,
+            }
+    return None
+
+
 def build_triplet_source_scale_scan(
     *,
     baseline_triplet: dict,
@@ -2269,11 +2294,7 @@ def build_triplet_source_injection_comparison(
     """Build before/after f/i/r comparison for diagnostic triplet source injection."""
     source_map = _type74_direct_triplet_source_by_level(type74_triplet_source_rows)
     total_source = sum(float(v) for v in source_map.values())
-    target = None
-    if int(target_ion_stage) == 5:
-        tf, ti, tr = 0.807706, 0.00663334, 0.185660
-        tsum = tf + ti + tr
-        target = {"f": tf / tsum, "i": ti / tsum, "r": tr / tsum}
+    target = _xstar_triplet_target(target_ion_stage)
     rows = []
     meta = {
         "triplet_source_mode": mode,
@@ -3294,7 +3315,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan are diagnostic-only; the injection mode is off by default and is not the final global element matrix assembly.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper are diagnostic-only; the injection mode is off by default and is not the final global element matrix assembly.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

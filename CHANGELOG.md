@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.30 - 2026-05-02
+
+- Fixes the v0.3.29 `--triplet-source-scale` scan crash by adding the missing `_xstar_triplet_target()` helper used to compute diagnostic L2 distances to the built-in C V ne=1e8 f/i/r target.
+- Reuses the same target helper for the single-scale type-74 direct triplet-source injection comparison.
+- No physics changes: the type-74 direct source scale scan remains diagnostic-only and is not assembled into the final element-wide matrix.
+
 ## v0.3.29 - 2026-05-02
 
 - Adds `--triplet-source-scale` to `examples/42_xstar_like_element_solver_demo.py` for diagnostic type-74 direct triplet-source injection.

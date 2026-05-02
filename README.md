@@ -1567,3 +1567,8 @@ When enabled, the example evaluates direct type-74 DR-delta triplet source candi
 
 `examples/42_xstar_like_element_solver_demo.py` now accepts `--triplet-source-scale` for diagnostic type-74 direct triplet-source injection.  A comma-separated list such as `1,1e2,1e4,1e6,1e8,1e10` writes `xstar_like_element_solver_triplet_source_scale_scan.csv`, with one solved row per scale plus baseline and target rows.  This remains a single-ion diagnostic source-vector experiment and does not assemble type-74 terms into the final element-wide matrix.
 
+
+
+## v0.3.30 note
+
+This release fixes the v0.3.29 type-74 direct triplet-source scale-scan crash caused by a missing `_xstar_triplet_target()` helper. The scan now writes target-fraction and L2-distance columns when the built-in C V ne=1e8 target applies. No source term is physically assembled into the global matrix; this remains a diagnostic single-ion source-vector experiment.
