@@ -1572,3 +1572,8 @@ When enabled, the example evaluates direct type-74 DR-delta triplet source candi
 ## v0.3.30 note
 
 This release fixes the v0.3.29 type-74 direct triplet-source scale-scan crash caused by a missing `_xstar_triplet_target()` helper. The scan now writes target-fraction and L2-distance columns when the built-in C V ne=1e8 target applies. No source term is physically assembled into the global matrix; this remains a diagnostic single-ion source-vector experiment.
+
+
+## v0.3.31 note
+
+Version v0.3.31 adds the first explicit element-wide state-index scaffold for the pure-Python XSTAR-like element solver.  `examples/42_xstar_like_element_solver_demo.py` now writes `xstar_like_element_solver_global_index.csv`, which assigns a stable `global_index` to all decoded levels for the selected ion stages and adds explicit parent-continuum placeholder rows where adjacent lower/upper ion stages need a future continuum coupling column.  The file reports `ion_stage`, `level_index`, `level_kind`, `energy_eV`, `stat_weight`, `configuration`, `is_triplet_upper`, `is_superlevel`, and `is_continuum`.  This version does not yet assemble or solve a global matrix; it provides the structural map needed for later XSTAR-like element-wide coupling.

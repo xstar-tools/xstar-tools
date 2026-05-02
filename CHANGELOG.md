@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.31 - 2026-05-02
+
+- Added an explicit element-wide global state index scaffold for the pure-Python XSTAR-like element solver.
+- Writes `xstar_like_element_solver_global_index.csv` from `examples/42_xstar_like_element_solver_demo.py`.
+- The global index includes one row per decoded selected-stage level plus explicit parent-continuum placeholder rows where needed for adjacent lower/upper ion stages.
+- Columns include `global_index`, `ion_stage`, `level_index`, `level_kind`, `energy_eV`, `stat_weight`, `configuration`, `is_triplet_upper`, `is_superlevel`, and `is_continuum`.
+- Adds a `global_index_summary` block to the summary JSON/Markdown.
+- This is a structural Step-1 scaffold only; no global element matrix terms are assembled from the index yet.
+
 ## v0.3.30 - 2026-05-02
 
 - Fixes the v0.3.29 `--triplet-source-scale` scan crash by adding the missing `_xstar_triplet_target()` helper used to compute diagnostic L2 distances to the built-in C V ne=1e8 f/i/r target.

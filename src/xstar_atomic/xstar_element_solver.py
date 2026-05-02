@@ -2488,6 +2488,171 @@ def build_adjacent_coupling_terms(
     return source, sink, rows
 
 
+
+def _classify_global_level_kind(row: dict) -> str:
+    """Classify a level row for the v0.3.31 global element index.
+
+    This is intentionally diagnostic and conservative.  XSTAR level records
+    explicitly mark some rows as ``superlevel`` or ``continuum`` in the
+    character label; otherwise we keep the row as spectroscopic, even when it
+    lies above the ionization threshold (autoionizing spectroscopic/satellite
+    levels are still explicit states in the later matrix plan).
+    """
+    label = str(row.get("level_label") or "").strip().lower()
+    if "continuum" in label or label == "cont" or label.startswith("continuum"):
+        return "continuum"
+    if "superlevel" in label or "super level" in label or label == "super":
+        return "superlevel"
+    return "spectroscopic"
+
+
+def _global_index_triplet_component(row: dict, *, he_like_stage: int) -> str:
+    if maybe_int(row.get("ion_stage")) != int(he_like_stage):
+        return ""
+    return _triplet_component_from_level_label(str(row.get("level_label") or ""))
+
+
+def build_element_global_index(
+    db: ATDB,
+    *,
+    z: int,
+    stages: Sequence[int],
+    he_like_stage: int,
+    max_level: Optional[int] = None,
+    use_cache: bool = True,
+    cache_path: Optional[str] = None,
+) -> List[dict]:
+    """Build the explicit element-wide state index scaffold.
+
+    v0.3.31 does not yet assemble or solve the global matrix.  It creates the
+    canonical state map needed for that next step: one row per decoded level for
+    all selected ion stages plus an explicit parent-continuum placeholder for
+    each lower->upper adjacent pair when no continuum row is already obvious.
+    """
+    rows: List[dict] = []
+    seen: set[tuple[int, str]] = set()
+    for stage in sorted({int(s) for s in stages if int(s) > 0}, reverse=True):
+        records = _select_records(db, z, stage, use_cache=use_cache, cache_path=cache_path)
+        levels = extract_levels(db, records, z, stage)
+        for lev in levels:
+            level_index = maybe_int(lev.get("level_index"))
+            if level_index is None:
+                continue
+            if max_level is not None and int(level_index) > int(max_level):
+                # Keep continuum-like levels even if they happen to sit beyond
+                # max_level; they are structural rows needed by the global map.
+                k_tmp = _classify_global_level_kind(lev)
+                if k_tmp not in {"continuum", "superlevel"}:
+                    continue
+            level_kind = _classify_global_level_kind(lev)
+            comp = _global_index_triplet_component(lev, he_like_stage=he_like_stage)
+            key = (int(stage), str(level_index))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({
+                "global_index": None,  # filled after placeholders are appended
+                "element": Z_TO_SYMBOL.get(z, str(z)),
+                "element_z": z,
+                "ion_stage": int(stage),
+                "ion_roman": roman(int(stage)),
+                "level_index": int(level_index),
+                "level_kind": level_kind,
+                "energy_eV": lev.get("energy_eV"),
+                "stat_weight": lev.get("statistical_weight_g"),
+                "statistical_weight_g": lev.get("statistical_weight_g"),
+                "configuration": lev.get("level_label"),
+                "level_label": lev.get("level_label"),
+                "ionization_potential_eV": lev.get("ionization_potential_eV"),
+                "binding_from_continuum_eV": lev.get("binding_from_continuum_eV"),
+                "is_triplet_upper": bool(comp),
+                "triplet_component": comp,
+                "is_superlevel": level_kind == "superlevel",
+                "is_continuum": level_kind == "continuum",
+                "is_parent_continuum_placeholder": False,
+                "parent_ion_stage": "",
+                "source": "decoded_type6_level_record",
+            })
+
+    # Add explicit continuum/parent-continuum placeholders for adjacent stages.
+    # These placeholders are the structural prerequisite for later matrix terms
+    # like C V(level) <-> C VI(parent continuum).  They are not solved in v0.3.31.
+    stage_set = {int(s) for s in stages if int(s) > 0}
+    for lower in sorted(stage_set, reverse=True):
+        upper = lower + 1
+        if upper not in stage_set:
+            continue
+        has_cont = any(
+            maybe_int(r.get("ion_stage")) == lower and bool(r.get("is_continuum"))
+            for r in rows
+        )
+        if has_cont:
+            continue
+        key = (int(lower), "parent_continuum_placeholder")
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "global_index": None,
+            "element": Z_TO_SYMBOL.get(z, str(z)),
+            "element_z": z,
+            "ion_stage": int(lower),
+            "ion_roman": roman(int(lower)),
+            "level_index": 0,
+            "level_kind": "parent_continuum_placeholder",
+            "energy_eV": "",
+            "stat_weight": 1.0,
+            "statistical_weight_g": 1.0,
+            "configuration": f"{Z_TO_SYMBOL.get(z, str(z))} {roman(int(upper))} parent continuum placeholder",
+            "level_label": f"parent continuum placeholder for {Z_TO_SYMBOL.get(z, str(z))} {roman(int(upper))}",
+            "ionization_potential_eV": "",
+            "binding_from_continuum_eV": 0.0,
+            "is_triplet_upper": False,
+            "triplet_component": "",
+            "is_superlevel": False,
+            "is_continuum": True,
+            "is_parent_continuum_placeholder": True,
+            "parent_ion_stage": int(upper),
+            "source": "v0.3.31_explicit_parent_continuum_placeholder",
+        })
+
+    def _sort_key(r: dict):
+        stage = maybe_int(r.get("ion_stage")) or 0
+        placeholder = 1 if r.get("is_parent_continuum_placeholder") else 0
+        li = maybe_int(r.get("level_index"))
+        if li is None:
+            li = 10**9
+        return (-stage, placeholder, li, str(r.get("configuration") or ""))
+
+    rows.sort(key=_sort_key)
+    for i, r in enumerate(rows):
+        r["global_index"] = i
+    return rows
+
+
+def _global_index_summary(rows: Sequence[dict]) -> dict:
+    def _counts(col: str) -> dict:
+        out: Dict[str, int] = {}
+        for r in rows:
+            key = r.get(col)
+            key = "" if key is None else str(key)
+            out[key] = out.get(key, 0) + 1
+        return dict(sorted(out.items(), key=lambda kv: kv[0]))
+    return {
+        "n_global_index_rows": len(rows),
+        "rows_by_ion_stage": _counts("ion_stage"),
+        "rows_by_level_kind": _counts("level_kind"),
+        "n_triplet_upper_rows": sum(1 for r in rows if bool(r.get("is_triplet_upper"))),
+        "triplet_component_counts": _counts("triplet_component"),
+        "n_superlevel_rows": sum(1 for r in rows if bool(r.get("is_superlevel"))),
+        "n_continuum_rows": sum(1 for r in rows if bool(r.get("is_continuum"))),
+        "n_parent_continuum_placeholders": sum(1 for r in rows if bool(r.get("is_parent_continuum_placeholder"))),
+        "provenance": {
+            "mode": "v0.3.31 creates xstar_like_element_solver_global_index.csv as the explicit element-wide state map scaffold.",
+            "assembly": "No global matrix terms are assembled from this index yet; it is the structural prerequisite for the later pure-Python element-wide solve.",
+        },
+    }
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -2755,6 +2920,15 @@ def solve_element_reference(
     stages = list(adjacent_stages) if adjacent_stages else [he_like_stage + 1, he_like_stage]
     stages = sorted({int(s) for s in stages if int(s) > 0}, reverse=True)
     with ATDB(fitsfile, load_reals=False, prompt_for_data=False) as db:
+        global_index_rows = build_element_global_index(
+            db,
+            z=z,
+            stages=stages,
+            he_like_stage=he_like_stage,
+            max_level=max_level,
+            use_cache=index_cache,
+            cache_path=index_cache_path,
+        )
         ion_blocks: List[dict] = []
         populations: List[dict] = []
         line_rows: List[dict] = []
@@ -2912,6 +3086,8 @@ def solve_element_reference(
             "n_population_rows": len(populations),
             "n_line_rows": len(line_rows),
             "n_transition_rows": len(transitions),
+            "n_global_index_rows": len(global_index_rows),
+            "global_index_summary": _global_index_summary(global_index_rows),
             "adjacent_coupling_status": adjacent_coupling_mode,
             "type57_energy_convention": type57_energy_convention,
             "triplet_source_mode": triplet_source_mode,
@@ -2920,6 +3096,7 @@ def solve_element_reference(
             "he_like_triplet": _normalise_triplet(selected_lines),
         },
         "ion_blocks": ion_blocks,
+        "global_index": global_index_rows,
         "coupling_candidates": coupling,
         "populations": populations,
         "line_rows": line_rows,
@@ -3295,6 +3472,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
         if triplet_source_scale_scan_rows:
             result["summary"]["triplet_source_scale_scan_summary"] = _triplet_source_scale_scan_summary(triplet_source_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
+    write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)
@@ -3315,7 +3493,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper are diagnostic-only; the injection mode is off by default and is not the final global element matrix assembly.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index; diagnostic audits remain non-assembled; the injection mode is off by default and is not the final global element matrix assembly.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
