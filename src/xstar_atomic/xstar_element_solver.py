@@ -2841,6 +2841,186 @@ def _global_bound_bound_matrix_terms_summary(rows: Sequence[dict]) -> dict:
     }
 
 
+def build_global_superlevel_cascade_matrix_terms(
+    superlevel_cascade_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+) -> List[dict]:
+    """Map type-71 superlevel cascades onto global-index matrix entries.
+
+    v0.3.35 keeps this diagnostic/scaffold-only.  For every type-71 record
+    that can be mapped to an explicit superlevel row and an explicit
+    spectroscopic row in ``xstar_like_element_solver_global_index.csv``, write
+    the two matrix triplets needed by the future element-wide population
+    matrix:
+
+    * ``M[spectroscopic, superlevel] += A`` for the radiative cascade gain;
+    * ``M[superlevel, superlevel] -= A`` for the superlevel loss.
+
+    Type-77 collisional superlevel cascades and type-70/74/99 source terms are
+    deliberately not included here.  They still require separate rate/source
+    evaluators and parent-continuum population handling.
+    """
+    lookup = _global_index_lookup(global_index_rows)
+    out: List[dict] = []
+    term_id = 0
+    for row in superlevel_cascade_rows:
+        dt = maybe_int(row.get("data_type"))
+        if dt != 71:
+            continue
+        stage = maybe_int(row.get("record_ion_stage"))
+        lower = maybe_int(row.get("type71_lower_spectroscopic_level") or row.get("spectroscopic_level") or row.get("lower_level"))
+        upper = maybe_int(row.get("type71_upper_superlevel_level") or row.get("superlevel_level") or row.get("upper_level"))
+        rate = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
+        if stage is None or lower is None or upper is None or rate is None:
+            out.append({
+                "global_superlevel_term_id": term_id,
+                "matrix_term_kind": "skipped_type71_superlevel_cascade",
+                "matrix_role": "not_assembled_missing_required_field",
+                "data_type": dt,
+                "record": row.get("record"),
+                "ion_stage": stage if stage is not None else "",
+                "spectroscopic_level": lower if lower is not None else "",
+                "superlevel_level": upper if upper is not None else "",
+                "rate_s^-1": rate if rate is not None else "",
+                "signed_rate_s^-1": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "missing_stage_or_level_or_type71_rate",
+                "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
+            })
+            term_id += 1
+            continue
+        if not math.isfinite(float(rate)) or float(rate) <= 0.0:
+            out.append({
+                "global_superlevel_term_id": term_id,
+                "matrix_term_kind": "skipped_type71_superlevel_cascade",
+                "matrix_role": "not_assembled_nonpositive_rate",
+                "data_type": dt,
+                "record": row.get("record"),
+                "ion_stage": int(stage),
+                "spectroscopic_level": int(lower),
+                "superlevel_level": int(upper),
+                "rate_s^-1": float(rate),
+                "signed_rate_s^-1": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "nonpositive_or_nonfinite_type71_rate",
+                "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
+            })
+            term_id += 1
+            continue
+        spec_row = lookup.get((int(stage), int(lower)))
+        super_row = lookup.get((int(stage), int(upper)))
+        missing = []
+        if spec_row is None:
+            missing.append("spectroscopic_level_missing_from_global_index")
+        if super_row is None:
+            missing.append("superlevel_level_missing_from_global_index")
+        if super_row is not None and str(super_row.get("level_kind") or "") != "superlevel":
+            missing.append("upper_level_is_not_classified_as_superlevel")
+        if spec_row is not None and str(spec_row.get("level_kind") or "") == "continuum":
+            missing.append("lower_level_is_continuum_not_spectroscopic_destination")
+        if missing:
+            out.append({
+                "global_superlevel_term_id": term_id,
+                "matrix_term_kind": "skipped_type71_superlevel_cascade",
+                "matrix_role": "not_assembled_unmappable_or_misclassified_levels",
+                "data_type": dt,
+                "rate_type": row.get("rate_type"),
+                "record": row.get("record"),
+                "element": row.get("element"),
+                "element_z": row.get("element_z"),
+                "ion_stage": int(stage),
+                "spectroscopic_level": int(lower),
+                "superlevel_level": int(upper),
+                "spectroscopic_global_index": "" if spec_row is None else spec_row.get("global_index"),
+                "superlevel_global_index": "" if super_row is None else super_row.get("global_index"),
+                "spectroscopic_level_label": "" if spec_row is None else spec_row.get("level_label"),
+                "superlevel_level_label": "" if super_row is None else super_row.get("level_label"),
+                "spectroscopic_level_kind": "" if spec_row is None else spec_row.get("level_kind"),
+                "superlevel_level_kind": "" if super_row is None else super_row.get("level_kind"),
+                "rate_s^-1": float(rate),
+                "signed_rate_s^-1": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": ";".join(missing),
+                "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
+            })
+            term_id += 1
+            continue
+        spec_g = int(spec_row["global_index"])
+        super_g = int(super_row["global_index"])
+        comp = row.get("cascade_feed_component") or _triplet_component_from_level_label(str(spec_row.get("level_label") or ""))
+        common = {
+            "data_type": 71,
+            "rate_type": row.get("rate_type"),
+            "record": row.get("record"),
+            "element": row.get("element"),
+            "element_z": row.get("element_z"),
+            "ion_stage": int(stage),
+            "ion_roman": spec_row.get("ion_roman"),
+            "transition_kind": "type71_radiative_superlevel_cascade",
+            "spectroscopic_level": int(lower),
+            "superlevel_level": int(upper),
+            "spectroscopic_global_index": spec_g,
+            "superlevel_global_index": super_g,
+            "spectroscopic_level_label": spec_row.get("level_label"),
+            "superlevel_level_label": super_row.get("level_label"),
+            "spectroscopic_level_kind": spec_row.get("level_kind"),
+            "superlevel_level_kind": super_row.get("level_kind"),
+            "destination_triplet_component": comp,
+            "feeds_forbidden_upper": bool(row.get("feeds_forbidden_upper")),
+            "feeds_intercombination_upper": bool(row.get("feeds_intercombination_upper")),
+            "feeds_resonance_upper": bool(row.get("feeds_resonance_upper")),
+            "feeds_any_triplet_component": bool(row.get("feeds_any_triplet_component")),
+            "rate_s^-1": float(rate),
+            "assembly_status": "assembled_global_type71_superlevel_cascade_scaffold",
+            "skip_reason": "",
+            "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
+            "notes": "Diagnostic scaffold only; no global element-wide solve includes these terms yet.",
+        }
+        out.append({
+            "global_superlevel_term_id": term_id,
+            "matrix_term_kind": "offdiag_gain",
+            "matrix_role": "type71_superlevel_cascade_gain_to_spectroscopic_destination",
+            "matrix_row_global_index": spec_g,
+            "matrix_col_global_index": super_g,
+            "signed_rate_s^-1": float(rate),
+            **common,
+        })
+        term_id += 1
+        out.append({
+            "global_superlevel_term_id": term_id,
+            "matrix_term_kind": "diagonal_loss",
+            "matrix_role": "type71_superlevel_cascade_loss_from_superlevel_source",
+            "matrix_row_global_index": super_g,
+            "matrix_col_global_index": super_g,
+            "signed_rate_s^-1": -float(rate),
+            **common,
+        })
+        term_id += 1
+    return out
+
+
+def _global_superlevel_cascade_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    assembled = [r for r in rows if str(r.get("assembly_status")) == "assembled_global_type71_superlevel_cascade_scaffold"]
+    skipped = [r for r in rows if str(r.get("assembly_status")) == "skipped"]
+    return {
+        "n_global_superlevel_cascade_matrix_term_rows": len(rows),
+        "n_global_superlevel_cascade_assembled_rows": len(assembled),
+        "n_global_superlevel_cascade_skipped_rows": len(skipped),
+        "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
+        "rows_by_ion_stage": _counts(assembled, "ion_stage"),
+        "rows_by_destination_triplet_component": _counts(assembled, "destination_triplet_component"),
+        "n_unique_type71_records_assembled": len({str(r.get("record")) for r in assembled if str(r.get("matrix_term_kind")) == "offdiag_gain"}),
+        "n_terms_feeding_triplet_upper": sum(1 for r in assembled if bool(r.get("feeds_any_triplet_component")) and str(r.get("matrix_term_kind")) == "offdiag_gain"),
+        "total_type71_gain_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in assembled if str(r.get("matrix_term_kind")) == "offdiag_gain"),
+        "total_type71_triplet_gain_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in assembled if str(r.get("matrix_term_kind")) == "offdiag_gain" and bool(r.get("feeds_any_triplet_component"))),
+        "provenance": {
+            "mode": "v0.3.35 maps type-71 radiative superlevel-to-spectroscopic cascade records onto explicit global_index rows.",
+            "assembly": "Diagnostic scaffold only: writes M[spectroscopic,superlevel]+=A and M[superlevel,superlevel]-=A matrix triplets but does not include them in the solved global matrix yet.",
+            "excluded": "Type-77 collisional superlevel cascades and type-70/type-74/type-99 superlevel source terms remain diagnostic-only.",
+        },
+    }
+
+
 def _triplet_l2_distance(model: dict, target: Optional[dict]) -> Optional[float]:
     if not target:
         return None
@@ -3461,6 +3641,7 @@ def solve_element_reference(
         triplet_source_injection_comparison_rows: List[dict] = []
         triplet_source_scale_scan_rows: List[dict] = []
         global_bound_bound_solve_comparison_rows: List[dict] = []
+        global_superlevel_cascade_matrix_terms: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -3558,6 +3739,10 @@ def solve_element_reference(
                             r["injected_solve_status"] = first_block.get("solve_status")
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
     global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(transitions, global_index_rows)
+    global_superlevel_cascade_matrix_terms = build_global_superlevel_cascade_matrix_terms(
+        superlevel_cascade_audit_rows,
+        global_index_rows,
+    )
     global_bound_bound_solve_comparison_rows = build_global_bound_bound_solve_comparison(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -3589,6 +3774,8 @@ def solve_element_reference(
             "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
             "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
             "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
+            "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
+            "global_superlevel_cascade_matrix_terms_summary": _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms),
             "adjacent_coupling_status": adjacent_coupling_mode,
             "type57_energy_convention": type57_energy_convention,
             "triplet_source_mode": triplet_source_mode,
@@ -3603,6 +3790,7 @@ def solve_element_reference(
         "line_rows": line_rows,
         "transition_rows": transitions,
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
+        "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
@@ -3962,6 +4150,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     triplet_source_injection_rows = result.get("triplet_source_injection_comparison", [])
     triplet_source_scale_scan_rows = result.get("triplet_source_scale_scan", [])
     global_bound_bound_solve_comparison_rows = result.get("global_bound_bound_solve_comparison", [])
+    global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -3977,6 +4166,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["triplet_source_scale_scan_summary"] = _triplet_source_scale_scan_summary(triplet_source_scale_scan_rows)
         if global_bound_bound_solve_comparison_rows:
             result["summary"]["global_bound_bound_solve_comparison_summary"] = _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows)
+        if global_superlevel_cascade_matrix_terms:
+            result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
@@ -3993,6 +4184,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
+    write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")

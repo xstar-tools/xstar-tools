@@ -1586,6 +1586,11 @@ Version v0.3.31 adds the first explicit element-wide state-index scaffold for th
 
 Version v0.3.33 adds the first sparse-like global bound-bound matrix term table for the pure-Python XSTAR-like element solver.  The example now writes `xstar_like_element_solver_global_bound_bound_matrix_terms.csv`, which maps the existing per-ion radiative and collisional transition logs onto the explicit `global_index` rows.  Each transition contributes an off-diagonal gain term and a diagonal loss term using global matrix row/column indices.  This prepares the C VI + C V element-wide matrix assembly while preserving the existing single-ion solve; the global matrix is not solved yet.
 
+
+### v0.3.35 global type-71 superlevel cascade matrix scaffold
+
+Version v0.3.35 adds the first global-index matrix scaffold for radiative superlevel cascades.  The element-solver example now writes `xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv`, which maps type-71 superlevel-to-spectroscopic records onto the explicit `global_index` state table.  Each assembled cascade contributes an off-diagonal gain term `M[spectroscopic_global_index, superlevel_global_index] += A` and a diagonal loss term `M[superlevel_global_index, superlevel_global_index] -= A`.  This is still a diagnostic scaffold: the type-71 terms are not yet included in the solved global matrix, and the type-77/type-70/type-74/type-99 superlevel source/cascade paths remain diagnostic-only.
+
 ### v0.3.34 global bound-bound block solve comparison
 
 Version v0.3.34 adds the first diagnostic solve using the explicit global-index bound-bound matrix scaffold. The example writes `xstar_like_element_solver_global_bound_bound_solve_comparison.csv`, which solves the He-like ion intra-ion bound-bound block assembled from `xstar_like_element_solver_global_bound_bound_matrix_terms.csv` using the same adjacent source vector as the current per-ion solver. The output compares baseline per-ion populations and triplet f/i/r ratios against the global-index block solution. This is an equivalence test and does not yet solve the full element-wide C VI + C V coupled matrix.

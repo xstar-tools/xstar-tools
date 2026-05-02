@@ -29,3 +29,4 @@ def test_xstar_like_element_solver_dry_run(tmp_path):
     assert (out / "xstar_like_element_solver_superlevel_cascade_audit.csv").exists()
     assert (out / "xstar_like_element_solver_superlevel_branching_audit.csv").exists()
     assert (out / "xstar_like_element_solver_superlevel_source_audit.csv").exists()
+    assert (out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv").exists()
