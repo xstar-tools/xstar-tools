@@ -2840,6 +2840,302 @@ def _global_bound_bound_matrix_terms_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+def _triplet_l2_distance(model: dict, target: Optional[dict]) -> Optional[float]:
+    if not target:
+        return None
+    try:
+        diffs = [
+            float(model.get(f"{c}_fraction") or 0.0) - float(target.get(c) or target.get(f"{c}_fraction") or 0.0)
+            for c in ("f", "i", "r")
+        ]
+        return float(math.sqrt(sum(d * d for d in diffs)))
+    except Exception:
+        return None
+
+
+def _make_line_rows_with_population(line_rows: Sequence[dict], pop_by_level: Dict[int, float], solve_info: dict) -> List[dict]:
+    """Copy line rows and replace emissivities using a supplied level population map."""
+    out: List[dict] = []
+    for row in line_rows:
+        upper = maybe_int(row.get("upper_level"))
+        A = maybe_float(row.get("A_s^-1"))
+        eerg = line_energy_erg(row)
+        pop = float(pop_by_level.get(int(upper), 0.0)) if upper is not None else 0.0
+        photon = pop * float(A) if A is not None and A > 0 else 0.0
+        energy = photon * float(eerg) if eerg is not None and eerg > 0 else 0.0
+        new = dict(row)
+        new["upper_population_fraction"] = pop
+        new["line_photon_emissivity_per_ion_s^-1"] = photon
+        new["line_energy_emissivity_per_ion_erg_s^-1"] = energy
+        ne = maybe_float(row.get("electron_density_cm^-3"))
+        new["line_energy_emissivity_coeff_per_ne_nion_erg_cm3_s"] = energy / ne if ne and ne > 0 else None
+        new["matrix_size"] = solve_info.get("matrix_size")
+        new["matrix_rank"] = solve_info.get("matrix_rank")
+        new["condition_number"] = solve_info.get("condition_number")
+        new["solver"] = solve_info.get("solver")
+        new["solver_warning"] = solve_info.get("solver_warning")
+        out.append(new)
+    return out
+
+
+def _assemble_source_vector_from_coupling_rows(
+    *,
+    level_indices: Sequence[int],
+    coupling_rows: Sequence[dict],
+    ion_stage: int,
+) -> tuple[np.ndarray, List[dict]]:
+    """Rebuild the old single-ion adjacent source vector from assembled audit rows."""
+    idx = {int(lev): k for k, lev in enumerate(level_indices)}
+    source = np.zeros(len(level_indices), dtype=float)
+    rows: List[dict] = []
+    for r in coupling_rows:
+        if not bool(r.get("assembled")):
+            continue
+        target_stage = maybe_int(r.get("target_ion_stage"))
+        dest = maybe_int(r.get("destination_level"))
+        rate = maybe_float(r.get("source_rate_total_s^-1"))
+        if target_stage != int(ion_stage) or dest is None or rate is None or not math.isfinite(float(rate)):
+            continue
+        applied = int(dest) in idx and float(rate) != 0.0
+        if applied:
+            source[idx[int(dest)]] += float(rate)
+        rows.append({
+            "source_record": r.get("record"),
+            "source_data_type": r.get("data_type"),
+            "source_rate_type": r.get("rate_type"),
+            "destination_level": int(dest),
+            "source_rate_s^-1": float(rate),
+            "applied_to_global_bound_bound_block": bool(applied),
+            "source_reconstruction_note": "rebuilt_from_assembled_adjacent_coupling_terms",
+        })
+    return source, rows
+
+
+def build_global_bound_bound_solve_comparison(
+    *,
+    global_index_rows: Sequence[dict],
+    global_bound_bound_matrix_terms: Sequence[dict],
+    populations: Sequence[dict],
+    line_rows: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    ion_stage: int,
+    linear_solver: str = "svd",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+) -> List[dict]:
+    """Solve a diagnostic global-index bound-bound-only block for one ion.
+
+    This v0.3.34 helper is an equivalence test.  It assembles the requested
+    ion's block from the v0.3.33 global matrix-term rows, rebuilds the same
+    adjacent source vector used by the old per-ion solve, solves the block, and
+    compares populations and He-like triplet fractions against the existing
+    per-ion outputs.
+    """
+    ion_stage = int(ion_stage)
+    ion_global_rows = [
+        r for r in global_index_rows
+        if maybe_int(r.get("ion_stage")) == ion_stage and not bool(r.get("is_continuum"))
+    ]
+    global_to_level: Dict[int, int] = {}
+    for r in ion_global_rows:
+        g = maybe_int(r.get("global_index"))
+        lev = maybe_int(r.get("level_index"))
+        if g is not None and lev is not None:
+            global_to_level[int(g)] = int(lev)
+
+    used_globals: set[int] = set()
+    for t in global_bound_bound_matrix_terms:
+        if str(t.get("assembly_status")) != "assembled_global_bound_bound_scaffold":
+            continue
+        if maybe_int(t.get("ion_stage")) != ion_stage:
+            continue
+        row = maybe_int(t.get("matrix_row_global_index"))
+        col = maybe_int(t.get("matrix_col_global_index"))
+        if row in global_to_level and col in global_to_level:
+            used_globals.add(int(row))
+            used_globals.add(int(col))
+
+    for r in coupling_rows:
+        if bool(r.get("assembled")) and maybe_int(r.get("target_ion_stage")) == ion_stage:
+            dest = maybe_int(r.get("destination_level"))
+            if dest is not None:
+                for g, lev in global_to_level.items():
+                    if lev == int(dest):
+                        used_globals.add(g)
+    for r in line_rows:
+        if maybe_int(r.get("ion_stage")) == ion_stage:
+            for key in ("lower_level", "upper_level"):
+                lev = maybe_int(r.get(key))
+                if lev is not None:
+                    for g, glev in global_to_level.items():
+                        if glev == int(lev):
+                            used_globals.add(g)
+
+    selected_globals = sorted(used_globals)
+    level_indices = [global_to_level[g] for g in selected_globals]
+    g_to_local = {g: k for k, g in enumerate(selected_globals)}
+    n = len(selected_globals)
+    R = np.zeros((n, n), dtype=float)
+    n_offdiag = 0
+    n_diag = 0
+    diag_from_terms = np.zeros(n, dtype=float)
+    for t in global_bound_bound_matrix_terms:
+        if str(t.get("assembly_status")) != "assembled_global_bound_bound_scaffold":
+            continue
+        if maybe_int(t.get("ion_stage")) != ion_stage:
+            continue
+        row = maybe_int(t.get("matrix_row_global_index"))
+        col = maybe_int(t.get("matrix_col_global_index"))
+        rate = maybe_float(t.get("signed_rate_s^-1"))
+        if row is None or col is None or rate is None or row not in g_to_local or col not in g_to_local:
+            continue
+        if str(t.get("matrix_term_kind")) == "offdiag_gain" and row != col and float(rate) > 0.0:
+            R[g_to_local[int(row)], g_to_local[int(col)]] += float(rate)
+            n_offdiag += 1
+        elif str(t.get("matrix_term_kind")) == "diagonal_loss" and row == col:
+            diag_from_terms[g_to_local[int(row)]] += float(rate)
+            n_diag += 1
+
+    expected_diag = -np.sum(R, axis=0)
+    diag_linf = float(np.max(np.abs(diag_from_terms - expected_diag))) if n else 0.0
+    source_vector, source_rows = _assemble_source_vector_from_coupling_rows(
+        level_indices=level_indices,
+        coupling_rows=coupling_rows,
+        ion_stage=ion_stage,
+    )
+    if n == 0:
+        pop = np.array([], dtype=float)
+        solve_info = {"matrix_size": 0, "solution_status": "empty", "solver_warning": "empty global bound-bound block"}
+    else:
+        pop, solve_info = solve_steady_state(
+            R,
+            source_vector=source_vector if np.count_nonzero(source_vector) else None,
+            sink_rates=None,
+            linear_solver=linear_solver,
+            rank_deficient_action=rank_deficient_action,
+            negative_population_action=negative_population_action,
+        )
+        solve_info["solution_status"] = "ok" if not solve_info.get("solver_warning") else "warning"
+
+    global_pop_by_level = {int(lev): float(pop[k]) for k, lev in enumerate(level_indices)}
+    old_pop_by_level: Dict[int, float] = {}
+    for r in populations:
+        if maybe_int(r.get("ion_stage")) == ion_stage:
+            lev = maybe_int(r.get("level_index"))
+            val = maybe_float(r.get("population_fraction"))
+            if lev is not None and val is not None:
+                old_pop_by_level[int(lev)] = float(val)
+
+    selected_line_rows = [r for r in line_rows if maybe_int(r.get("ion_stage")) == ion_stage]
+    global_line_rows = _make_line_rows_with_population(selected_line_rows, global_pop_by_level, solve_info)
+    old_triplet = _normalise_triplet(selected_line_rows)
+    global_triplet = _normalise_triplet(global_line_rows)
+    target = _xstar_triplet_target(ion_stage)
+    old_l2 = _triplet_l2_distance(old_triplet, target)
+    global_l2 = _triplet_l2_distance(global_triplet, target)
+
+    rows: List[dict] = []
+    rows.append({
+        "row_kind": "summary",
+        "comparison_case": "per_ion_baseline",
+        "ion_stage": ion_stage,
+        "n_levels": len(old_pop_by_level),
+        "n_global_indices": n,
+        "n_offdiag_gain_terms": n_offdiag,
+        "n_diagonal_loss_terms": n_diag,
+        "diag_loss_linf_mismatch_s^-1": diag_linf,
+        "source_sum_s^-1": float(np.sum(source_vector)) if len(source_vector) else 0.0,
+        "n_source_terms_nonzero": int(np.count_nonzero(source_vector)) if len(source_vector) else 0,
+        "f_fraction": old_triplet.get("f_fraction"),
+        "i_fraction": old_triplet.get("i_fraction"),
+        "r_fraction": old_triplet.get("r_fraction"),
+        "R": old_triplet.get("R"),
+        "G": old_triplet.get("G"),
+        "l2_distance_to_target": old_l2,
+        "solve_status": "baseline_existing_per_ion_solve",
+        "solver": "existing_per_ion_solver",
+        "provenance": "v0.3.34_global_bound_bound_only_solve_comparison",
+    })
+    rows.append({
+        "row_kind": "summary",
+        "comparison_case": "global_bound_bound_block",
+        "ion_stage": ion_stage,
+        "n_levels": n,
+        "n_global_indices": n,
+        "n_offdiag_gain_terms": n_offdiag,
+        "n_diagonal_loss_terms": n_diag,
+        "diag_loss_linf_mismatch_s^-1": diag_linf,
+        "source_sum_s^-1": float(np.sum(source_vector)) if len(source_vector) else 0.0,
+        "n_source_terms_nonzero": int(np.count_nonzero(source_vector)) if len(source_vector) else 0,
+        "f_fraction": global_triplet.get("f_fraction"),
+        "i_fraction": global_triplet.get("i_fraction"),
+        "r_fraction": global_triplet.get("r_fraction"),
+        "R": global_triplet.get("R"),
+        "G": global_triplet.get("G"),
+        "l2_distance_to_target": global_l2,
+        "delta_f_global_minus_baseline": float(global_triplet.get("f_fraction") or 0.0) - float(old_triplet.get("f_fraction") or 0.0),
+        "delta_i_global_minus_baseline": float(global_triplet.get("i_fraction") or 0.0) - float(old_triplet.get("i_fraction") or 0.0),
+        "delta_r_global_minus_baseline": float(global_triplet.get("r_fraction") or 0.0) - float(old_triplet.get("r_fraction") or 0.0),
+        "solve_status": solve_info.get("solution_status"),
+        "solver": solve_info.get("solver"),
+        "solver_warning": solve_info.get("solver_warning"),
+        "matrix_rank": solve_info.get("matrix_rank"),
+        "condition_number": solve_info.get("condition_number"),
+        "provenance": "v0.3.34_global_bound_bound_only_solve_comparison",
+    })
+    for lev in sorted(set(old_pop_by_level) | set(global_pop_by_level)):
+        old = old_pop_by_level.get(int(lev), 0.0)
+        new = global_pop_by_level.get(int(lev), 0.0)
+        rows.append({
+            "row_kind": "population",
+            "comparison_case": "population_by_level",
+            "ion_stage": ion_stage,
+            "level_index": int(lev),
+            "old_population_fraction": old,
+            "global_population_fraction": new,
+            "delta_global_minus_old": new - old,
+            "abs_delta_global_minus_old": abs(new - old),
+            "provenance": "v0.3.34_global_bound_bound_only_solve_comparison",
+        })
+    for sr in source_rows:
+        row = {"row_kind": "source", "comparison_case": "rebuilt_source_vector", "ion_stage": ion_stage}
+        row.update(sr)
+        row["provenance"] = "v0.3.34_global_bound_bound_only_solve_comparison"
+        rows.append(row)
+    return rows
+
+
+def _global_bound_bound_solve_comparison_summary(rows: Sequence[dict]) -> dict:
+    summaries = [r for r in rows if str(r.get("row_kind")) == "summary"]
+    pops = [r for r in rows if str(r.get("row_kind")) == "population"]
+    global_case = next((r for r in summaries if str(r.get("comparison_case")) == "global_bound_bound_block"), {})
+    base_case = next((r for r in summaries if str(r.get("comparison_case")) == "per_ion_baseline"), {})
+    max_abs_delta = None
+    if pops:
+        vals = [maybe_float(r.get("abs_delta_global_minus_old")) for r in pops]
+        vals = [float(v) for v in vals if v is not None]
+        max_abs_delta = max(vals) if vals else None
+    return {
+        "n_global_bound_bound_solve_comparison_rows": len(rows),
+        "n_population_comparison_rows": len(pops),
+        "baseline_f_fraction": base_case.get("f_fraction"),
+        "global_f_fraction": global_case.get("f_fraction"),
+        "baseline_i_fraction": base_case.get("i_fraction"),
+        "global_i_fraction": global_case.get("i_fraction"),
+        "baseline_r_fraction": base_case.get("r_fraction"),
+        "global_r_fraction": global_case.get("r_fraction"),
+        "global_solve_status": global_case.get("solve_status"),
+        "global_solver_warning": global_case.get("solver_warning"),
+        "max_abs_population_delta": max_abs_delta,
+        "diag_loss_linf_mismatch_s^-1": global_case.get("diag_loss_linf_mismatch_s^-1"),
+        "source_sum_s^-1": global_case.get("source_sum_s^-1"),
+        "provenance": {
+            "mode": "v0.3.34 solves a diagnostic global-index bound-bound-only block for the He-like ion.",
+            "assembly": "This is an intra-ion equivalence test using current bound-bound terms and the old adjacent source vector; it is not yet the full element-wide coupled solve.",
+        },
+    }
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -3164,6 +3460,7 @@ def solve_element_reference(
         type74_triplet_source_audit_rows: List[dict] = []
         triplet_source_injection_comparison_rows: List[dict] = []
         triplet_source_scale_scan_rows: List[dict] = []
+        global_bound_bound_solve_comparison_rows: List[dict] = []
         if he_like_stage + 1 in stages:
             coupling.append(asdict(catalog_adjacent_coupling_candidates(
                 db,
@@ -3261,6 +3558,17 @@ def solve_element_reference(
                             r["injected_solve_status"] = first_block.get("solve_status")
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
     global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(transitions, global_index_rows)
+    global_bound_bound_solve_comparison_rows = build_global_bound_bound_solve_comparison(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        populations=populations,
+        line_rows=line_rows,
+        coupling_rows=assembled_coupling_terms,
+        ion_stage=he_like_stage,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -3279,6 +3587,8 @@ def solve_element_reference(
             "global_index_summary": _global_index_summary(global_index_rows),
             "n_global_bound_bound_matrix_term_rows": len(global_bound_bound_matrix_terms),
             "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
+            "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
+            "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
             "adjacent_coupling_status": adjacent_coupling_mode,
             "type57_energy_convention": type57_energy_convention,
             "triplet_source_mode": triplet_source_mode,
@@ -3293,6 +3603,7 @@ def solve_element_reference(
         "line_rows": line_rows,
         "transition_rows": transitions,
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
+        "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -3650,6 +3961,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type74_triplet_source_rows = result.get("type74_triplet_source_audit", [])
     triplet_source_injection_rows = result.get("triplet_source_injection_comparison", [])
     triplet_source_scale_scan_rows = result.get("triplet_source_scale_scan", [])
+    global_bound_bound_solve_comparison_rows = result.get("global_bound_bound_solve_comparison", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -3663,6 +3975,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["triplet_source_injection_comparison_summary"] = _triplet_source_injection_comparison_summary(triplet_source_injection_rows)
         if triplet_source_scale_scan_rows:
             result["summary"]["triplet_source_scale_scan_summary"] = _triplet_source_scale_scan_summary(triplet_source_scale_scan_rows)
+        if global_bound_bound_solve_comparison_rows:
+            result["summary"]["global_bound_bound_solve_comparison_summary"] = _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
@@ -3679,6 +3993,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
+    write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -3686,7 +4001,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; diagnostic audits remain non-assembled; the injection mode is off by default and the global matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; diagnostic audits remain non-assembled, and the full element-wide matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

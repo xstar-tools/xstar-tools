@@ -1585,3 +1585,7 @@ Version v0.3.31 adds the first explicit element-wide state-index scaffold for th
 ### v0.3.33 global bound-bound matrix scaffold
 
 Version v0.3.33 adds the first sparse-like global bound-bound matrix term table for the pure-Python XSTAR-like element solver.  The example now writes `xstar_like_element_solver_global_bound_bound_matrix_terms.csv`, which maps the existing per-ion radiative and collisional transition logs onto the explicit `global_index` rows.  Each transition contributes an off-diagonal gain term and a diagonal loss term using global matrix row/column indices.  This prepares the C VI + C V element-wide matrix assembly while preserving the existing single-ion solve; the global matrix is not solved yet.
+
+### v0.3.34 global bound-bound block solve comparison
+
+Version v0.3.34 adds the first diagnostic solve using the explicit global-index bound-bound matrix scaffold. The example writes `xstar_like_element_solver_global_bound_bound_solve_comparison.csv`, which solves the He-like ion intra-ion bound-bound block assembled from `xstar_like_element_solver_global_bound_bound_matrix_terms.csv` using the same adjacent source vector as the current per-ion solver. The output compares baseline per-ion populations and triplet f/i/r ratios against the global-index block solution. This is an equivalence test and does not yet solve the full element-wide C VI + C V coupled matrix.

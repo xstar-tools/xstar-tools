@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.34 - 2026-05-02
+
+- Added a diagnostic global bound-bound-only solve comparison for the pure-Python XSTAR-like element solver.
+- `examples/42_xstar_like_element_solver_demo.py` now writes `xstar_like_element_solver_global_bound_bound_solve_comparison.csv`.
+- The comparison assembles the He-like ion intra-ion block from `xstar_like_element_solver_global_bound_bound_matrix_terms.csv`, rebuilds the same adjacent source vector used by the current per-ion solve, solves the global-index block with the existing statistical-equilibrium solver, and compares populations plus f/i/r, R, G against the old per-ion result.
+- This is an equivalence/scaffold test only; the full element-wide C VI + C V matrix is not solved yet.
+
 ## v0.3.33 - 2026-05-02
 
 - Added the first diagnostic global bound-bound matrix scaffold for the pure-Python XSTAR-like element solver.
