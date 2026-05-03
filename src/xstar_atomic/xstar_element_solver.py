@@ -582,6 +582,10 @@ def _evaluate_type57_calt57_record(
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
     radiation_field_mode: str = "none",
+    full_global_linear_solver: str = "svd",
+    full_global_rank_deficient_action: str = "svd",
+    full_global_negative_population_action: str = "keep",
+    full_global_prune_null_rate_levels: bool = True,
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
@@ -5172,16 +5176,22 @@ def build_full_global_normalized_solve_comparison(
     full_global_matrix_terms: Sequence[dict],
     line_rows: Sequence[dict],
     he_like_stage: int,
+    linear_solver: str = "svd",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+    prune_null_rate_levels: bool = True,
+    svd_rcond: Optional[float] = None,
 ) -> List[dict]:
     """Solve the first diagnostic full C VI+C V normalized global matrix.
 
-    v0.3.48 diagnostic only: assemble a dense matrix over all explicit
+    v0.3.49 diagnostic only: assemble a dense matrix over all explicit
     ``global_index`` rows from ``xstar_like_element_solver_full_global_matrix_terms.csv``.
     Only matrix triplet rows are used; source-vector rows are deliberately
-    excluded for this first topology-normalized solve.  One row is replaced by
-    the normalization equation ``sum_i n_i = 1`` and the resulting linear system
-    is solved with a least-squares fallback.  The rates include proxy topology
-    terms, so the solution is not a physical XSTAR population solution yet.
+    excluded.  One row is replaced by the normalization equation
+    ``sum_i n_i = 1``.  The full-global path now exposes rank-aware/SVD
+    controls similar to the earlier He-like/O VII source-fit solver.  The
+    rates include proxy topology terms, so the solution is not a physical
+    XSTAR population solution yet.
     """
     he_like_stage = int(he_like_stage)
     indexed_rows: List[dict] = []
@@ -5197,7 +5207,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+            "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -5245,53 +5255,135 @@ def build_full_global_normalized_solve_comparison(
         component_counts[comp] = component_counts.get(comp, 0) + 1
         kind_counts[kind] = kind_counts.get(kind, 0) + 1
 
-    # Diagnostic normalization row.  Use the first explicit global row to avoid
-    # silently dropping any row outside the declared global_index range.
-    normalization_row = min(global_to_row) if global_to_row else 0
-    A = M.copy()
-    b = np.zeros(n, dtype=float)
-    A[normalization_row, :] = 1.0
-    b[normalization_row] = 1.0
+    # Optionally prune isolated/null-rate rows before solving.  This mirrors the
+    # earlier rank-aware He-like solver option while preserving the original
+    # global-index numbering in the output table.  Rows outside the active set
+    # get zero population in the expanded diagnostic vector.
+    row_norm = np.sum(np.abs(M), axis=1)
+    col_norm = np.sum(np.abs(M), axis=0)
+    null_rate_tolerance = 1.0e-300
+    if prune_null_rate_levels:
+        active_indices = [i for i in range(n) if (row_norm[i] > null_rate_tolerance or col_norm[i] > null_rate_tolerance)]
+        if not active_indices:
+            active_indices = list(range(n))
+    else:
+        active_indices = list(range(n))
+    inactive_indices = [i for i in range(n) if i not in set(active_indices)]
+    M_solve = M[np.ix_(active_indices, active_indices)] if active_indices else M.copy()
+    n_solve = int(M_solve.shape[0])
+
+    # Diagnostic normalization row.  XSTAR's msolvelucy replaces one row of the
+    # condensed superlevel system by number conservation and then calls the
+    # Numerical-Recipes LU path (leqt2f -> ludcmp/lubksb/mprove).  Here we keep
+    # the same number-conservation row idea, but allow SVD/lstsq fallbacks for
+    # rank-deficient proxy-topology matrices.
+    requested_solver = str(linear_solver or "svd").lower()
+    rank_action = str(rank_deficient_action or "svd").lower()
+    neg_action = str(negative_population_action or "keep").lower()
+    normalization_row_local = 0
+    normalization_row = int(active_indices[normalization_row_local]) if active_indices else 0
+    A = M_solve.copy()
+    b = np.zeros(n_solve, dtype=float)
+    if n_solve:
+        A[normalization_row_local, :] = 1.0
+        b[normalization_row_local] = 1.0
+
+    def _svd_lstsq_local(Ain: np.ndarray, bin: np.ndarray, rcond: Optional[float] = None):
+        U, svals_local, Vt = np.linalg.svd(Ain, full_matrices=False)
+        if rcond is None:
+            cutoff = np.finfo(float).eps * max(Ain.shape) * (float(svals_local[0]) if len(svals_local) else 0.0)
+        else:
+            cutoff = float(rcond) * (float(svals_local[0]) if len(svals_local) else 0.0)
+        inv = np.array([1.0 / sv if sv > cutoff else 0.0 for sv in svals_local], dtype=float)
+        x = Vt.T @ (inv * (U.T @ bin)) if len(svals_local) else np.zeros(Ain.shape[1], dtype=float)
+        rank_local = int(np.sum(svals_local > cutoff)) if len(svals_local) else 0
+        return x, rank_local, svals_local, cutoff
 
     solve_status = "ok"
-    solver = "numpy.linalg.solve"
+    solver = ""
     solver_warning = ""
+    svd_cutoff = None
     try:
-        pop = np.linalg.solve(A, b)
-    except Exception as exc:
-        solver = "numpy.linalg.lstsq"
-        try:
-            pop, residuals, rank, svals = np.linalg.lstsq(A, b, rcond=None)
-            solve_status = "warning"
-            solver_warning = f"solve_failed_then_lstsq_used: {exc}"
-        except Exception as exc2:
-            pop = np.zeros(n, dtype=float)
-            residuals = np.array([], dtype=float)
-            rank = 0
-            svals = np.array([], dtype=float)
-            solve_status = "failed"
-            solver_warning = f"solve_and_lstsq_failed: {exc}; {exc2}"
-    else:
-        residuals = np.array([], dtype=float)
-        try:
-            rank = int(np.linalg.matrix_rank(A))
-            svals = np.linalg.svd(A, compute_uv=False)
-        except Exception:
-            rank = None
-            svals = np.array([], dtype=float)
+        svals_pre = np.linalg.svd(A, compute_uv=False) if n_solve else np.array([], dtype=float)
+        rank_pre = int(np.linalg.matrix_rank(A)) if n_solve else 0
+    except Exception:
+        svals_pre = np.array([], dtype=float)
+        rank_pre = None
+    rank_deficient = bool(rank_pre is not None and rank_pre < n_solve)
 
-    if solver == "numpy.linalg.lstsq":
-        # rank/svals already populated above, but keep robust defaults.
-        rank = int(rank)
+    try:
+        if requested_solver == "svd" or (rank_deficient and rank_action == "svd"):
+            solver = "numpy.linalg.svd_lstsq"
+            pop_solve, rank, svals, svd_cutoff = _svd_lstsq_local(A, b, svd_rcond)
+            solve_status = "warning" if rank_deficient else "ok"
+            if rank_deficient:
+                solver_warning = f"matrix rank deficient ({rank}/{n_solve}); solved with SVD pseudoinverse"
+        elif requested_solver == "lstsq" or (rank_deficient and rank_action == "lstsq"):
+            solver = "numpy.linalg.lstsq_rank_deficient" if rank_deficient else "numpy.linalg.lstsq"
+            pop_solve, residuals_tmp, rank_tmp, svals_tmp = np.linalg.lstsq(A, b, rcond=None)
+            rank = int(rank_tmp)
+            svals = np.asarray(svals_tmp, dtype=float)
+            solve_status = "warning" if rank_deficient else "ok"
+            if rank_deficient:
+                solver_warning = f"matrix rank deficient ({rank}/{n_solve}); solved with lstsq"
+        else:
+            solver = "numpy.linalg.solve"
+            pop_solve = np.linalg.solve(A, b)
+            rank = int(rank_pre) if rank_pre is not None else int(np.linalg.matrix_rank(A))
+            svals = svals_pre if len(svals_pre) else np.linalg.svd(A, compute_uv=False)
+    except Exception as exc:
+        if rank_action == "svd":
+            try:
+                solver = "numpy.linalg.svd_lstsq"
+                pop_solve, rank, svals, svd_cutoff = _svd_lstsq_local(A, b, svd_rcond)
+                solve_status = "warning"
+                solver_warning = f"solve_failed_then_svd_used: {exc}"
+            except Exception as exc2:
+                pop_solve = np.zeros(n_solve, dtype=float)
+                rank = 0
+                svals = np.array([], dtype=float)
+                solve_status = "failed"
+                solver_warning = f"solve_and_svd_failed: {exc}; {exc2}"
+        else:
+            try:
+                solver = "numpy.linalg.lstsq"
+                pop_solve, residuals_tmp, rank_tmp, svals_tmp = np.linalg.lstsq(A, b, rcond=None)
+                rank = int(rank_tmp)
+                svals = np.asarray(svals_tmp, dtype=float)
+                solve_status = "warning"
+                solver_warning = f"solve_failed_then_lstsq_used: {exc}"
+            except Exception as exc2:
+                pop_solve = np.zeros(n_solve, dtype=float)
+                rank = 0
+                svals = np.array([], dtype=float)
+                solve_status = "failed"
+                solver_warning = f"solve_and_lstsq_failed: {exc}; {exc2}"
+
+    pop = np.zeros(n, dtype=float)
+    for local_i, global_i in enumerate(active_indices):
+        if local_i < len(pop_solve):
+            pop[int(global_i)] = float(pop_solve[local_i])
+    if neg_action == "clip":
+        pop = np.where(pop < 0.0, 0.0, pop)
+        psum = float(np.sum(pop))
+        if psum > 0.0:
+            pop = pop / psum
+        solve_status = "warning" if solve_status == "ok" else solve_status
+        solver_warning = (solver_warning + "; " if solver_warning else "") + "negative populations clipped and renormalized"
+    elif neg_action == "error" and np.any(pop < -1.0e-12):
+        solve_status = "failed"
+        solver_warning = (solver_warning + "; " if solver_warning else "") + "negative populations present and negative_population_action=error"
+
     condition_number = None
     if isinstance(svals, np.ndarray) and len(svals) and float(np.min(np.abs(svals))) > 0.0:
         condition_number = float(np.max(np.abs(svals)) / np.min(np.abs(svals)))
-    residual_norm = float(np.linalg.norm(A @ pop - b)) if len(pop) else None
+    residual_norm = float(np.linalg.norm(A @ pop_solve - b)) if len(pop_solve) else None
+    full_residual_norm = float(np.linalg.norm(M @ pop)) if len(pop) else None
+    normalization_residual = float(np.sum(pop) - 1.0) if len(pop) else None
     n_negative = int(np.sum(pop < -1.0e-12)) if len(pop) else 0
     min_population = float(np.min(pop)) if len(pop) else None
     max_population = float(np.max(pop)) if len(pop) else None
     sum_population = float(np.sum(pop)) if len(pop) else 0.0
-
     # Compare He-like triplet fractions using global populations projected back
     # to the target He-like level indices.
     he_like_pop_by_level: Dict[int, float] = {}
@@ -5322,6 +5414,18 @@ def build_full_global_normalized_solve_comparison(
     rows: List[dict] = []
     common = {
         "n_global_indices": n,
+        "n_active_global_indices_solved": n_solve,
+        "n_pruned_null_rate_global_indices": len(inactive_indices),
+        "prune_null_rate_levels": bool(prune_null_rate_levels),
+        "solver_requested": requested_solver,
+        "rank_deficient_action": rank_action,
+        "negative_population_action": neg_action,
+        "svd_rcond": svd_rcond,
+        "svd_cutoff": svd_cutoff,
+        "matrix_rank_before_normalization": rank_pre,
+        "matrix_rank_deficient_after_normalization": bool(rank is not None and rank < n_solve),
+        "full_rate_matrix_residual_norm_excluding_normalization": full_residual_norm,
+        "normalization_residual": normalization_residual,
         "n_matrix_triplet_rows_used": n_triplet_rows_used,
         "n_source_vector_rows_excluded": n_source_vector_rows_excluded,
         "n_skipped_bad_index_rows": n_skipped_bad_index,
@@ -5339,8 +5443,8 @@ def build_full_global_normalized_solve_comparison(
         "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
-        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
-        "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix, while this diagnostic path can use SVD/lstsq for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
+        "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -5389,7 +5493,7 @@ def build_full_global_normalized_solve_comparison(
             "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+            "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
         })
     return rows
 
@@ -5409,6 +5513,8 @@ def _full_global_normalized_solve_comparison_summary(rows: Sequence[dict]) -> di
         "baseline_r_fraction": base_case.get("r_fraction"),
         "full_global_r_fraction": global_case.get("r_fraction"),
         "full_global_solve_status": global_case.get("solve_status"),
+        "full_global_solver": global_case.get("solver"),
+        "full_global_solver_requested": global_case.get("solver_requested"),
         "full_global_solver_warning": global_case.get("solver_warning"),
         "full_global_l2_distance_to_target": global_case.get("l2_distance_to_target"),
         "n_matrix_triplet_rows_used": global_case.get("n_matrix_triplet_rows_used"),
@@ -5683,6 +5789,10 @@ def solve_element_reference(
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
     radiation_field_mode: str = "none",
+    full_global_linear_solver: str = "svd",
+    full_global_rank_deficient_action: str = "svd",
+    full_global_negative_population_action: str = "keep",
+    full_global_prune_null_rate_levels: bool = True,
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -5960,6 +6070,10 @@ def solve_element_reference(
         full_global_matrix_terms=full_global_matrix_terms,
         line_rows=line_rows,
         he_like_stage=he_like_stage,
+        linear_solver=full_global_linear_solver,
+        rank_deficient_action=full_global_rank_deficient_action,
+        negative_population_action=full_global_negative_population_action,
+        prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
@@ -5998,6 +6112,10 @@ def solve_element_reference(
             "n_full_global_matrix_term_rows": len(full_global_matrix_terms),
             "full_global_matrix_terms_summary": _full_global_matrix_terms_summary(full_global_matrix_terms),
             "n_full_global_normalized_solve_comparison_rows": len(full_global_normalized_solve_comparison_rows),
+            "full_global_linear_solver": full_global_linear_solver,
+            "full_global_rank_deficient_action": full_global_rank_deficient_action,
+            "full_global_negative_population_action": full_global_negative_population_action,
+            "full_global_prune_null_rate_levels": bool(full_global_prune_null_rate_levels),
             "full_global_normalized_solve_comparison_summary": _full_global_normalized_solve_comparison_summary(full_global_normalized_solve_comparison_rows),
             "n_global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows": len(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),
             "global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),

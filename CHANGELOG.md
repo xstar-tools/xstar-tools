@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.3.49 - 2026-05-03
+
+- Checked the XSTAR source-code solver path used by the element population workflow: `calc_hmc_element` calls `msolvelucy`, which forms a condensed superlevel matrix, replaces one row with number conservation, and solves it through `leqt2f` using Numerical Recipes LU routines (`ludcmp`, `lubksb`) plus `mprove` iterative improvement.
+- Added rank-aware controls for the diagnostic full-global normalized proxy-topology solve:
+  - `--full-global-linear-solver solve|dense|lstsq|svd`
+  - `--full-global-rank-deficient-action solve|lstsq|svd|error`
+  - `--full-global-negative-population-action keep|clip|error`
+  - `--no-full-global-prune-null-rate-levels`
+- The full-global normalized comparison now defaults to `solver_requested=svd`, `rank_deficient_action=svd`, `negative_population_action=keep`, and `prune_null_rate_levels=true`, matching the earlier rank-aware He-like/O VII diagnostic-solver style.
+- Added solver diagnostics to `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`, including requested solver, SVD cutoff, active/pruned global-index counts, matrix rank before/after normalization, normalization residual, and full-rate-matrix residual excluding the normalization row.
+- This remains a diagnostic proxy-topology solve; type-53/type-99/type-1 proxy terms are not physical XSTAR rates.
+
 ## v0.3.48 - 2026-05-03
 
 - Added the first diagnostic full global C VI+C V normalized solve.

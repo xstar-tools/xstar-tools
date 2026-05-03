@@ -13,6 +13,11 @@ v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-m
 
 # xstar-atomic
 
+### v0.3.49 note: full-global SVD/rank-aware normalized solve controls
+
+The full-global C VI+C V normalized proxy-topology diagnostic now exposes rank-aware controls similar to the earlier He-like/O VII solver diagnostics.  `examples/42_xstar_like_element_solver_demo.py` accepts `--full-global-linear-solver solve|dense|lstsq|svd`, `--full-global-rank-deficient-action solve|lstsq|svd|error`, `--full-global-negative-population-action keep|clip|error`, and `--no-full-global-prune-null-rate-levels`.  Defaults are SVD, SVD rank handling, keep negative populations, and prune null-rate global-index rows.  This is intentionally different from production XSTAR, where `calc_hmc_element` calls `msolvelucy`, which solves a condensed superlevel system with a number-conservation row using LU decomposition (`leqt2f` -> `ludcmp`/`lubksb`) plus `mprove`.
+
+
 ### v0.3.43 note: type-53 radiation-context scaffold
 
 `examples/42_xstar_like_element_solver_demo.py` now includes `--radiation-field-mode none|flat|blackbody|table` as a diagnostic scaffold for future type-53 photoionization and Milne inverse-recombination work. The run writes `xstar_like_element_solver_radiation_context.csv` and `xstar_like_element_solver_type53_rate_audit.csv`. These outputs map type-53 records onto the current global-index state inventory where possible and explicitly report the missing `phint53`/radiation-field context. No type-53 physical rates are evaluated or assembled yet.

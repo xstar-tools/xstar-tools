@@ -64,6 +64,10 @@ def main(argv=None):
     p.add_argument("--type99-proxy-scale", default="0,1e-8,1e-6,1e-4,1e-2,1,1e2", help="Scale factor(s) for the nonphysical type-99 proxy source scan in the global bound-bound+type71 diagnostic block. Accepts one value or a comma-separated list.")
     p.add_argument("--radiation-field-mode", default="none", choices=["none", "flat", "blackbody", "table"], help="Diagnostic radiation context scaffold for type-53 photoionization/Milne audits. Does not evaluate physical rates yet.")
     p.add_argument("--type53-flat-proxy-scale", default="1", help="Scale factor for the nonphysical flat-field type-53 photoionization-rate proxy. Diagnostic only; used only in the v0.3.46 proxy-sink comparison solve, not in the baseline solver.")
+    p.add_argument("--full-global-linear-solver", default="svd", choices=["solve", "dense", "lstsq", "svd"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. XSTAR itself uses msolvelucy with LU on a condensed superlevel matrix; this diagnostic path defaults to SVD for rank-deficient scaffolds.")
+    p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
+    p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
+    p.add_argument("--no-full-global-prune-null-rate-levels", action="store_true", help="Disable pruning of null-rate global_index rows before the diagnostic full-global normalized solve.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
     p.add_argument("--print-summary", action="store_true")
@@ -91,6 +95,10 @@ def main(argv=None):
             "type99_proxy_scale": args.type99_proxy_scale,
             "radiation_field_mode": args.radiation_field_mode,
             "type53_flat_proxy_scale": args.type53_flat_proxy_scale,
+            "full_global_linear_solver": args.full_global_linear_solver,
+            "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
+            "full_global_negative_population_action": args.full_global_negative_population_action,
+            "full_global_prune_null_rate_levels": not args.no_full_global_prune_null_rate_levels,
             "status": "dry_run_not_executed",
         }]
         write_csv(out / "xstar_like_element_solver_ion_blocks.csv", [])
@@ -162,6 +170,10 @@ def main(argv=None):
         type99_proxy_scale=args.type99_proxy_scale,
         radiation_field_mode=args.radiation_field_mode,
         type53_flat_proxy_scale=args.type53_flat_proxy_scale,
+        full_global_linear_solver=args.full_global_linear_solver,
+        full_global_rank_deficient_action=args.full_global_rank_deficient_action,
+        full_global_negative_population_action=args.full_global_negative_population_action,
+        full_global_prune_null_rate_levels=not args.no_full_global_prune_null_rate_levels,
     )
     write_element_solver_outputs(result, out)
     if args.print_summary:
