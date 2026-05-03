@@ -1079,6 +1079,7 @@ def audit_ucalc_adjacent_record(
     type57_energy_convention: str = "compare",
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
+    type99_proxy_scale: object = "1",
 ) -> dict:
     """Return a source-code-guided audit row for an adjacent-ion record.
 

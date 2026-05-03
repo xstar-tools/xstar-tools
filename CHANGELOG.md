@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.41 - 2026-05-03
+
+- Bug fix: add the missing `type99_proxy_scale` keyword argument to `solve_element_reference()`.
+- This fixes the `TypeError: solve_element_reference() got an unexpected keyword argument 'type99_proxy_scale'` raised by `examples/42_xstar_like_element_solver_demo.py` in v0.3.40.
+- No physics behavior is intentionally changed; the type-99 proxy scale scan remains diagnostic-only.
+
 ## v0.3.40 - 2026-05-02
 
 - Added a diagnostic type-99 proxy source scale scan for the global bound-bound+type71 block.

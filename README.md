@@ -1616,3 +1616,8 @@ Version v0.3.39 adds a nonphysical diagnostic solve that combines the global-ind
 ### v0.3.40 type-99 proxy scale scan
 
 Version v0.3.40 adds a diagnostic scale scan for the nonphysical type-99 superlevel source proxy used by the global bound-bound+type-71 scaffold.  Use `--type99-proxy-scale` with one value or a comma-separated list, for example `0,1e-8,1e-6,1e-4,1e-2,1,1e2`.  The example writes `xstar_like_element_solver_type99_proxy_scale_scan.csv`, which reports the solved f/i/r fractions, R, G, L2 distance to the C V target, type-99 proxy source sum, superlevel population sum, and solver status for each scale.  The proxy values are not XSTAR `phint53pl` rates; this scan only diagnoses source normalization and matrix topology before physical type-99 radiation integrals are implemented.
+
+
+### v0.3.41 note
+
+Fixes the v0.3.40 CLI handoff for `--type99-proxy-scale` by adding the corresponding `solve_element_reference()` keyword argument. No physics behavior is intentionally changed.
