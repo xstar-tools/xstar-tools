@@ -1642,3 +1642,7 @@ Fixes the v0.3.40 CLI handoff for `--type99-proxy-scale` by adding the correspon
 ### v0.3.42 note
 
 Fixes the remaining v0.3.41 signature regression for `--type99-proxy-scale`: the solver entry point now actually accepts the keyword used by `examples/42_xstar_like_element_solver_demo.py`. No physics behavior is intentionally changed.
+
+### v0.3.47 full global C VI+C V matrix-topology scaffold
+
+Version v0.3.47 adds `xstar_like_element_solver_full_global_matrix_terms.csv`, a unified diagnostic topology table for the future element-wide matrix solve.  It combines the existing C VI and C V bound-bound matrix blocks, C V type-71 superlevel cascade matrix terms, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows.  This file is not yet solved as a normalized global matrix.  It is a scaffold for the next step, where a true C VI+C V population normalization row can be added and the full matrix can be solved.

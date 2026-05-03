@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.3.47 - 2026-05-03
+
+- Added the diagnostic full global C VI+C V matrix-topology scaffold for the Python XSTAR-like element solver.
+- New output: `xstar_like_element_solver_full_global_matrix_terms.csv`.
+- The new unified topology file combines:
+  - C VI and C V bound-bound radiative/collisional matrix blocks;
+  - C V type-71 superlevel-to-spectroscopic cascade matrix triplets;
+  - type-99 parent-continuum-to-superlevel proxy topology rows and source-vector proxy rows;
+  - type-53 flat photoionization proxy topology rows;
+  - mappable type-1 recombination source-vector rows and parent-continuum topology proxy rows.
+- Added a full-global matrix-term summary to the run summary.
+- This is still a topology scaffold: no full C VI+C V normalized solve is performed, and type-53/type-99 proxy rows remain nonphysical diagnostics.
+
 ## v0.3.46 - 2026-05-03
 
 - Added a diagnostic global bound-bound+type71+type99-proxy+type53-flat-proxy solve comparison.

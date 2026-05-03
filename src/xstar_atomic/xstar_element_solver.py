@@ -4989,6 +4989,181 @@ def _global_type53_flat_proxy_matrix_terms_summary(rows: Sequence[dict]) -> dict
     }
 
 
+
+def build_full_global_matrix_terms(
+    *,
+    global_index_rows: Sequence[dict],
+    global_bound_bound_matrix_terms: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    global_type53_flat_proxy_matrix_terms: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Combine current global-index scaffolds into one full element matrix topology.
+
+    Diagnostic/topology-only v0.3.47 inventory for the future C VI+C V matrix.
+    It combines bound-bound blocks, type-71 cascade terms, type-99 proxy
+    parent-continuum topology, type-53 flat photoionization proxy topology, and
+    mappable type-1 recombination source/topology rows.  It is not solved here.
+    """
+    out: List[dict] = []
+    tid = 0
+
+    def _add(row: dict, *, component: str, source_row_kind: str, status: str = "assembled_full_global_topology_scaffold") -> None:
+        nonlocal tid
+        r = dict(row)
+        signed = maybe_float(r.get("signed_rate_s^-1"))
+        if signed is None:
+            signed = maybe_float(r.get("signed_rate_proxy_s^-1"))
+        if signed is None:
+            signed = maybe_float(r.get("signed_rate_proxy"))
+        rate = maybe_float(r.get("rate_s^-1"))
+        if rate is None:
+            rate = maybe_float(r.get("rate_proxy_s^-1"))
+        if rate is None:
+            rate = maybe_float(r.get("rate_proxy"))
+        if rate is None:
+            rate = maybe_float(r.get("source_rate_s^-1"))
+        if rate is None:
+            rate = maybe_float(r.get("source_rate_total_s^-1"))
+        r.update({
+            "full_global_term_id": tid,
+            "row_kind": "full_global_matrix_term",
+            "full_global_component": component,
+            "source_row_kind": source_row_kind,
+            "full_global_assembly_status": status,
+            "full_global_signed_rate_s^-1": "" if signed is None else float(signed),
+            "full_global_rate_s^-1": "" if rate is None else float(rate),
+            "full_global_provenance": "v0.3.47_full_global_CVI_CV_matrix_topology_scaffold",
+        })
+        out.append(r)
+        tid += 1
+
+    for r in global_bound_bound_matrix_terms:
+        if str(r.get("assembly_status")) == "assembled_global_bound_bound_scaffold":
+            _add(r, component="bound_bound_blocks_CVI_CV", source_row_kind="global_bound_bound_matrix_term")
+
+    for r in global_superlevel_cascade_matrix_terms:
+        if str(r.get("assembly_status")) == "assembled_global_type71_superlevel_cascade_scaffold":
+            _add(r, component="type71_superlevel_cascade", source_row_kind="global_superlevel_cascade_matrix_term")
+
+    for r in global_superlevel_source_matrix_terms:
+        if str(r.get("assembly_status")) != "assembled_global_type99_superlevel_source_scaffold_proxy":
+            continue
+        kind = str(r.get("matrix_term_kind"))
+        if kind in {"offdiag_parent_continuum_to_superlevel_proxy", "diagonal_parent_continuum_loss_proxy"}:
+            _add(r, component="type99_parent_continuum_to_superlevel_proxy", source_row_kind="global_superlevel_source_matrix_term")
+        elif kind == "source_vector_gain_proxy":
+            _add(r, component="type99_superlevel_source_vector_proxy", source_row_kind="global_superlevel_source_vector_term")
+
+    for r in global_type53_flat_proxy_matrix_terms:
+        if str(r.get("assembly_status")) == "diagnostic_proxy_topology_only_not_used_in_solve":
+            _add(r, component="type53_flat_photoionization_proxy", source_row_kind="global_type53_flat_proxy_matrix_term")
+
+    lookup = _global_index_lookup(global_index_rows)
+    for cr in coupling_rows:
+        if not bool(cr.get("assembled")):
+            continue
+        if maybe_int(cr.get("data_type")) != 1:
+            continue
+        target_stage = maybe_int(cr.get("target_ion_stage"))
+        dest = maybe_int(cr.get("destination_level"))
+        rate = maybe_float(cr.get("source_rate_total_s^-1"))
+        if target_stage is None or dest is None or rate is None:
+            continue
+        dest_row = lookup.get((int(target_stage), int(dest)))
+        cont_row = _find_parent_continuum_global_row(global_index_rows, ion_stage=int(target_stage))
+        if dest_row is None:
+            _add({
+                "matrix_term_kind": "skipped_type1_recombination_source",
+                "matrix_role": "not_assembled_destination_missing_global_index",
+                "data_type": 1,
+                "record": cr.get("record"),
+                "ion_stage": int(target_stage),
+                "destination_level": int(dest),
+                "source_rate_s^-1": float(rate),
+                "rate_s^-1": float(rate),
+                "signed_rate_s^-1": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "destination_level_not_found_in_global_index",
+                "provenance": "v0.3.47_type1_recombination_source_topology_scaffold",
+            }, component="type1_recombination_source_vector", source_row_kind="assembled_adjacent_coupling_source_term", status="skipped")
+            continue
+        dest_g = maybe_int(dest_row.get("global_index"))
+        parent_g = maybe_int(cont_row.get("global_index")) if cont_row else None
+        common = {
+            "data_type": 1,
+            "rate_type": cr.get("rate_type"),
+            "record": cr.get("record"),
+            "ion_stage": int(target_stage),
+            "target_ion_stage": int(target_stage),
+            "parent_ion_stage": cr.get("parent_ion_stage") or (int(target_stage) + 1),
+            "destination_level": int(dest),
+            "destination_global_index": dest_g,
+            "destination_level_label": dest_row.get("level_label"),
+            "parent_continuum_global_index": "" if parent_g is None else parent_g,
+            "parent_continuum_level_index": "" if cont_row is None else cont_row.get("level_index"),
+            "source_rate_s^-1": float(rate),
+            "rate_s^-1": float(rate),
+            "assembly_status": "assembled_global_type1_recombination_source_topology",
+            "skip_reason": "",
+            "matrix_safe_to_solve_physically": False,
+            "unsafe_reason": "source_vector_or_parent_continuum_proxy_only;full_global_population_normalization_not_solved_yet",
+            "provenance": "v0.3.47_type1_recombination_source_topology_scaffold",
+        }
+        _add({
+            **common,
+            "matrix_term_kind": "type1_recombination_source_vector",
+            "matrix_role": "b[destination_global_index] += type1_recombination_source_rate",
+            "matrix_row_global_index": dest_g,
+            "matrix_col_global_index": "",
+            "signed_rate_s^-1": float(rate),
+        }, component="type1_recombination_source_vector", source_row_kind="assembled_adjacent_coupling_source_term")
+        if parent_g is not None:
+            _add({
+                **common,
+                "matrix_term_kind": "offdiag_parent_continuum_to_type1_destination_proxy",
+                "matrix_role": "M[destination_global_index,parent_continuum_global_index] += type1_recombination_rate_proxy",
+                "matrix_row_global_index": dest_g,
+                "matrix_col_global_index": parent_g,
+                "signed_rate_s^-1": float(rate),
+                "assembly_status": "assembled_global_type1_parent_continuum_topology_proxy",
+            }, component="type1_parent_continuum_to_destination_proxy", source_row_kind="assembled_adjacent_coupling_matrix_proxy")
+            _add({
+                **common,
+                "matrix_term_kind": "diagonal_parent_continuum_type1_loss_proxy",
+                "matrix_role": "M[parent_continuum_global_index,parent_continuum_global_index] -= type1_recombination_rate_proxy",
+                "matrix_row_global_index": parent_g,
+                "matrix_col_global_index": parent_g,
+                "signed_rate_s^-1": -float(rate),
+                "assembly_status": "assembled_global_type1_parent_continuum_topology_proxy",
+            }, component="type1_parent_continuum_to_destination_proxy", source_row_kind="assembled_adjacent_coupling_matrix_proxy")
+    return out
+
+
+def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    matrix_rows = [r for r in rows if maybe_int(r.get("matrix_row_global_index")) is not None and maybe_int(r.get("matrix_col_global_index")) is not None]
+    source_rows = [r for r in rows if maybe_int(r.get("matrix_row_global_index")) is not None and maybe_int(r.get("matrix_col_global_index")) is None]
+    skipped = [r for r in rows if str(r.get("full_global_assembly_status")) == "skipped" or str(r.get("assembly_status")) == "skipped"]
+    return {
+        "n_full_global_matrix_term_rows": len(rows),
+        "n_full_global_matrix_triplet_rows": len(matrix_rows),
+        "n_full_global_source_vector_rows": len(source_rows),
+        "n_full_global_skipped_rows": len(skipped),
+        "rows_by_component": _counts(rows, "full_global_component"),
+        "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
+        "rows_by_ion_stage": _counts(rows, "ion_stage"),
+        "n_unique_matrix_positions": len({
+            (maybe_int(r.get("matrix_row_global_index")), maybe_int(r.get("matrix_col_global_index")))
+            for r in matrix_rows
+        }),
+        "total_positive_rate_or_proxy_s^-1": sum(max(0.0, float(maybe_float(r.get("full_global_signed_rate_s^-1")) or 0.0)) for r in rows),
+        "total_negative_rate_or_proxy_s^-1": sum(min(0.0, float(maybe_float(r.get("full_global_signed_rate_s^-1")) or 0.0)) for r in rows),
+        "warning": "Topology scaffold only: includes nonphysical proxy rows and source-vector rows; the full C VI+C V normalized matrix is not solved in v0.3.47.",
+    }
+
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -5500,6 +5675,15 @@ def solve_element_reference(
     global_type53_flat_proxy_matrix_terms = build_global_type53_flat_proxy_matrix_terms(
         type53_flat_proxy_rate_audit_rows
     )
+    full_global_matrix_terms = build_full_global_matrix_terms(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        coupling_rows=assembled_coupling_terms,
+        he_like_stage=he_like_stage,
+    )
     global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows = build_global_bound_bound_type71_type99_type53_proxy_solve_comparison(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -5549,6 +5733,8 @@ def solve_element_reference(
             "type53_flat_proxy_rate_audit_summary": _type53_flat_proxy_rate_audit_summary(type53_flat_proxy_rate_audit_rows),
             "n_global_type53_flat_proxy_matrix_term_rows": len(global_type53_flat_proxy_matrix_terms),
             "global_type53_flat_proxy_matrix_terms_summary": _global_type53_flat_proxy_matrix_terms_summary(global_type53_flat_proxy_matrix_terms),
+            "n_full_global_matrix_term_rows": len(full_global_matrix_terms),
+            "full_global_matrix_terms_summary": _full_global_matrix_terms_summary(full_global_matrix_terms),
             "n_global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows": len(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),
             "global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),
             "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
@@ -5580,6 +5766,7 @@ def solve_element_reference(
         "type53_rate_audit": type53_rate_audit_rows,
         "type53_flat_proxy_rate_audit": type53_flat_proxy_rate_audit_rows,
         "global_type53_flat_proxy_matrix_terms": global_type53_flat_proxy_matrix_terms,
+        "full_global_matrix_terms": full_global_matrix_terms,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -5946,6 +6133,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type53_rate_audit_rows = result.get("type53_rate_audit", [])
     type53_flat_proxy_rate_audit_rows = result.get("type53_flat_proxy_rate_audit", [])
     global_type53_flat_proxy_matrix_terms = result.get("global_type53_flat_proxy_matrix_terms", [])
+    full_global_matrix_terms = result.get("full_global_matrix_terms", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -5977,6 +6165,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type53_flat_proxy_rate_audit_summary"] = _type53_flat_proxy_rate_audit_summary(type53_flat_proxy_rate_audit_rows)
         if global_type53_flat_proxy_matrix_terms:
             result["summary"]["global_type53_flat_proxy_matrix_terms_summary"] = _global_type53_flat_proxy_matrix_terms_summary(global_type53_flat_proxy_matrix_terms)
+        if full_global_matrix_terms:
+            result["summary"]["full_global_matrix_terms_summary"] = _full_global_matrix_terms_summary(full_global_matrix_terms)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -6008,6 +6198,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", type53_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", type53_flat_proxy_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", global_type53_flat_proxy_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -6015,7 +6206,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
