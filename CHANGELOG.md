@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.37 - 2026-05-02
+
+- Fixed the v0.3.36 output handoff for the diagnostic global bound-bound+type-71 solve comparison.
+- `solve_element_reference()` now returns `global_bound_bound_type71_solve_comparison` rows so `write_element_solver_outputs()` writes the populated `xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv` instead of an empty CSV.
+- No physics behavior is intentionally changed; the extended global C V block remains a diagnostic scaffold and the full element-wide coupled matrix is not solved yet.
+
 ## v0.3.36 - 2026-05-02
 
 - Added a diagnostic global bound-bound+type-71 solve comparison for the pure-Python XSTAR-like element solver.
