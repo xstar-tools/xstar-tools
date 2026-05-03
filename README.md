@@ -1608,3 +1608,7 @@ Version v0.3.36 adds the next global-matrix scaffold test. The element-solver ex
 ### v0.3.38 diagnostic type-99 superlevel source scaffold
 
 The element solver now writes `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv`, a diagnostic global-index scaffold that maps type-99 superlevel source candidates to explicit superlevel rows and parent-continuum proxy columns. These proxy terms are not included in the solved matrix yet.
+
+### v0.3.39 diagnostic bound-bound+type71+type99-proxy solve
+
+Version v0.3.39 adds a nonphysical diagnostic solve that combines the global-index bound-bound block, type-71 superlevel-cascade matrix terms, and v0.3.38 type-99 superlevel source-vector proxy rows.  The new output `xstar_like_element_solver_global_bound_bound_type71_type99_proxy_solve_comparison.csv` compares the existing per-ion baseline with a global-index block solve that feeds mapped type-99 superlevels through proxy source terms.  These proxy terms are not XSTAR `phint53pl` rates and are not a final physical assembly; the purpose is to test matrix topology and the direction of superlevel feeding before porting/evaluating true type-99 rates and full adjacent-ion normalization.
