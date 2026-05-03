@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.46 - 2026-05-03
+
+- Added a diagnostic global bound-bound+type71+type99-proxy+type53-flat-proxy solve comparison.
+- New output: `xstar_like_element_solver_global_bound_bound_type71_type99_type53_proxy_solve_comparison.csv`.
+- The extended diagnostic solve uses the existing He-like global-index block, nonphysical type-99 source-vector proxy rows, and type-53 flat photoionization proxy sinks via `sink_rates`.
+- Type-53 off-diagonal parent-continuum topology rows are still not included in the local He-like solve because the full adjacent-ion parent-continuum population is not solved yet.
+- No physical XSTAR `phint53` or Milne inverse-recombination rates are evaluated in this release.
+
 ## v0.3.45 - 2026-05-03
 
 - Added a diagnostic flat-field type-53 photoionization-rate proxy.
