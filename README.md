@@ -1612,3 +1612,7 @@ The element solver now writes `xstar_like_element_solver_global_superlevel_sourc
 ### v0.3.39 diagnostic bound-bound+type71+type99-proxy solve
 
 Version v0.3.39 adds a nonphysical diagnostic solve that combines the global-index bound-bound block, type-71 superlevel-cascade matrix terms, and v0.3.38 type-99 superlevel source-vector proxy rows.  The new output `xstar_like_element_solver_global_bound_bound_type71_type99_proxy_solve_comparison.csv` compares the existing per-ion baseline with a global-index block solve that feeds mapped type-99 superlevels through proxy source terms.  These proxy terms are not XSTAR `phint53pl` rates and are not a final physical assembly; the purpose is to test matrix topology and the direction of superlevel feeding before porting/evaluating true type-99 rates and full adjacent-ion normalization.
+
+### v0.3.40 type-99 proxy scale scan
+
+Version v0.3.40 adds a diagnostic scale scan for the nonphysical type-99 superlevel source proxy used by the global bound-bound+type-71 scaffold.  Use `--type99-proxy-scale` with one value or a comma-separated list, for example `0,1e-8,1e-6,1e-4,1e-2,1,1e2`.  The example writes `xstar_like_element_solver_type99_proxy_scale_scan.csv`, which reports the solved f/i/r fractions, R, G, L2 distance to the C V target, type-99 proxy source sum, superlevel population sum, and solver status for each scale.  The proxy values are not XSTAR `phint53pl` rates; this scan only diagnoses source normalization and matrix topology before physical type-99 radiation integrals are implemented.

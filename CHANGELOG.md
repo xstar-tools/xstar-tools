@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.40 - 2026-05-02
+
+- Added a diagnostic type-99 proxy source scale scan for the global bound-bound+type71 block.
+- `examples/42_xstar_like_element_solver_demo.py` now accepts `--type99-proxy-scale`, with comma-separated lists such as `0,1e-8,1e-6,1e-4,1e-2,1,1e2`.
+- New output: `xstar_like_element_solver_type99_proxy_scale_scan.csv`.
+- For each scale, the scan multiplies only the nonphysical type-99 `source_vector_gain_proxy` rows, solves the He-like global-index bound-bound+type71 diagnostic block, and reports f/i/r, R, G, L2 distance to the C V target, superlevel population sum, source totals, and solver status.
+- Type-99 `phint53pl` physical rates are still not evaluated; this remains a diagnostic proxy-normalization scan and not the final element-wide coupled matrix solve.
+
 ## v0.3.39 - 2026-05-02
 
 - Added a diagnostic global bound-bound+type71+type99-proxy solve comparison for the pure-Python XSTAR-like element-solver scaffold.

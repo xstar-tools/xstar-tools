@@ -579,6 +579,7 @@ def _evaluate_type57_calt57_record(
     type57_energy_convention: str = "compare",
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
+    type99_proxy_scale: object = "1",
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
@@ -3328,6 +3329,12 @@ def build_global_bound_bound_solve_comparison(
     per-ion outputs.
     """
     ion_stage = int(ion_stage)
+    try:
+        type99_proxy_scale = float(type99_proxy_scale)
+    except Exception:
+        type99_proxy_scale = 1.0
+    if not math.isfinite(type99_proxy_scale):
+        type99_proxy_scale = 1.0
     ion_global_rows = [
         r for r in global_index_rows
         if maybe_int(r.get("ion_stage")) == ion_stage and not bool(r.get("is_continuum"))
@@ -3820,6 +3827,7 @@ def build_global_bound_bound_type71_type99_proxy_solve_comparison(
     linear_solver: str = "svd",
     rank_deficient_action: str = "svd",
     negative_population_action: str = "keep",
+    type99_proxy_scale: float = 1.0,
 ) -> List[dict]:
     """Solve a diagnostic He-like global block with type-99 proxy sources.
 
@@ -3828,7 +3836,8 @@ def build_global_bound_bound_type71_type99_proxy_solve_comparison(
     type-99 ``source_vector_gain_proxy`` rows to the source vector.  The proxy
     values are not XSTAR ``phint53pl`` rates; they are only topology/source-scale
     placeholders used to test how feeding mapped superlevels redirects the
-    type-71 cascade solution.
+    type-71 cascade solution.  v0.3.40 adds ``type99_proxy_scale`` so the
+    proxy source normalization can be scanned without treating it as physical.
     """
     ion_stage = int(ion_stage)
     ion_global_rows = [
@@ -3946,9 +3955,10 @@ def build_global_bound_bound_type71_type99_proxy_solve_comparison(
         if g is None or proxy is None or g not in g_to_local:
             continue
         k = g_to_local[int(g)]
-        source_vector[k] += float(proxy)
+        scaled_proxy = float(proxy) * float(type99_proxy_scale)
+        source_vector[k] += scaled_proxy
         n_type99_proxy_source_terms += 1
-        type99_proxy_source_sum += float(proxy)
+        type99_proxy_source_sum += scaled_proxy
         source_rows.append({
             "source_family": "type99_superlevel_proxy_source",
             "source_record": t.get("type99_records"),
@@ -3958,7 +3968,9 @@ def build_global_bound_bound_type71_type99_proxy_solve_comparison(
             "destination_global_index": int(g),
             "destination_level_label": global_to_row.get(int(g), {}).get("level_label"),
             "destination_level_kind": global_to_row.get(int(g), {}).get("level_kind"),
-            "source_rate_s^-1": float(proxy),
+            "source_rate_s^-1": scaled_proxy,
+            "unscaled_source_rate_proxy_s^-1": float(proxy),
+            "type99_proxy_scale": type99_proxy_scale,
             "source_proxy_basis": t.get("source_proxy_basis"),
             "source_proxy_value": t.get("source_proxy_value"),
             "applied_to_global_bound_bound_type71_type99_proxy_block": True,
@@ -4012,6 +4024,7 @@ def build_global_bound_bound_type71_type99_proxy_solve_comparison(
         "n_type71_offdiag_gain_terms": n_t71_offdiag,
         "n_type71_diagonal_loss_terms": n_t71_diag,
         "n_type99_proxy_source_terms": n_type99_proxy_source_terms,
+        "type99_proxy_scale": type99_proxy_scale,
         "type99_proxy_source_sum_s^-1": type99_proxy_source_sum,
         "diag_loss_linf_mismatch_s^-1": diag_linf,
     }
@@ -4115,6 +4128,134 @@ def _global_bound_bound_type71_type99_proxy_solve_comparison_summary(rows: Seque
         "provenance": {
             "mode": "v0.3.39 solves a diagnostic global-index block with bound-bound plus type-71 cascade terms and nonphysical type-99 proxy source-vector rows.",
             "assembly": "Type-99 proxy values are not physical phint53pl rates and this is not the final element-wide coupled matrix solve.",
+        },
+    }
+
+
+def build_global_bound_bound_type71_type99_proxy_scale_scan(
+    *,
+    global_index_rows: Sequence[dict],
+    global_bound_bound_matrix_terms: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    populations: Sequence[dict],
+    line_rows: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    ion_stage: int,
+    type99_proxy_scale: object = "1",
+    linear_solver: str = "svd",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+) -> List[dict]:
+    """Scan nonphysical type-99 proxy source normalization.
+
+    v0.3.40 diagnostic only: for each scale, solve the same He-like
+    bound-bound+type71 block as v0.3.39, but multiply the type-99
+    ``source_vector_gain_proxy`` rows by the requested scale.  The output is a
+    compact summary table intended to diagnose whether the type99->superlevel
+    ->type71 topology can move the line fractions toward a target before the
+    physical XSTAR phint53pl radiation integrals are ported.
+    """
+    scales = _parse_triplet_source_scales(type99_proxy_scale)
+    rows: List[dict] = []
+    baseline_rows = build_global_bound_bound_type71_type99_proxy_solve_comparison(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        populations=populations,
+        line_rows=line_rows,
+        coupling_rows=coupling_rows,
+        ion_stage=ion_stage,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        type99_proxy_scale=0.0,
+    )
+    base_summary = next((r for r in baseline_rows if str(r.get("comparison_case")) == "global_bound_bound_plus_type71_plus_type99_proxy_block"), None)
+    if base_summary:
+        rows.append({
+            "row_kind": "baseline_type71_no_type99_proxy",
+            "type99_proxy_scale": 0.0,
+            "f_fraction": base_summary.get("f_fraction"),
+            "i_fraction": base_summary.get("i_fraction"),
+            "r_fraction": base_summary.get("r_fraction"),
+            "R": base_summary.get("R"),
+            "G": base_summary.get("G"),
+            "l2_distance_to_target": base_summary.get("l2_distance_to_target"),
+            "source_sum_s^-1": base_summary.get("source_sum_s^-1"),
+            "type99_proxy_source_sum_s^-1": base_summary.get("type99_proxy_source_sum_s^-1"),
+            "n_type99_proxy_source_terms": base_summary.get("n_type99_proxy_source_terms"),
+            "superlevel_population_sum": base_summary.get("superlevel_population_sum"),
+            "solve_status": base_summary.get("solve_status"),
+            "solver_warning": base_summary.get("solver_warning"),
+            "matrix_rank": base_summary.get("matrix_rank"),
+            "condition_number": base_summary.get("condition_number"),
+            "warning": "baseline has type-71 cascade terms but type-99 proxy scale set to zero",
+            "provenance": "v0.3.40_type99_proxy_scale_scan",
+        })
+    for scale in scales:
+        comp_rows = build_global_bound_bound_type71_type99_proxy_solve_comparison(
+            global_index_rows=global_index_rows,
+            global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+            global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+            global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+            populations=populations,
+            line_rows=line_rows,
+            coupling_rows=coupling_rows,
+            ion_stage=ion_stage,
+            linear_solver=linear_solver,
+            rank_deficient_action=rank_deficient_action,
+            negative_population_action=negative_population_action,
+            type99_proxy_scale=float(scale),
+        )
+        summ = next((r for r in comp_rows if str(r.get("comparison_case")) == "global_bound_bound_plus_type71_plus_type99_proxy_block"), {})
+        rows.append({
+            "row_kind": "type99_proxy_scale_scan",
+            "type99_proxy_scale": float(scale),
+            "f_fraction": summ.get("f_fraction"),
+            "i_fraction": summ.get("i_fraction"),
+            "r_fraction": summ.get("r_fraction"),
+            "R": summ.get("R"),
+            "G": summ.get("G"),
+            "l2_distance_to_target": summ.get("l2_distance_to_target"),
+            "source_sum_s^-1": summ.get("source_sum_s^-1"),
+            "type99_proxy_source_sum_s^-1": summ.get("type99_proxy_source_sum_s^-1"),
+            "n_type99_proxy_source_terms": summ.get("n_type99_proxy_source_terms"),
+            "superlevel_population_sum": summ.get("superlevel_population_sum"),
+            "delta_f_global_minus_baseline": summ.get("delta_f_global_minus_baseline"),
+            "delta_i_global_minus_baseline": summ.get("delta_i_global_minus_baseline"),
+            "delta_r_global_minus_baseline": summ.get("delta_r_global_minus_baseline"),
+            "solve_status": summ.get("solve_status"),
+            "solver_warning": summ.get("solver_warning"),
+            "matrix_rank": summ.get("matrix_rank"),
+            "condition_number": summ.get("condition_number"),
+            "warning": "diagnostic_type99_proxy_scale_only_not_physical_phint53pl_rate",
+            "provenance": "v0.3.40_type99_proxy_scale_scan",
+        })
+    return rows
+
+
+def _type99_proxy_scale_scan_summary(rows: Sequence[dict]) -> dict:
+    scan_rows = [r for r in rows if str(r.get("row_kind")) == "type99_proxy_scale_scan"]
+    def _finite_l2(r: dict) -> float:
+        v = maybe_float(r.get("l2_distance_to_target"))
+        return float(v) if v is not None and math.isfinite(float(v)) else float("inf")
+    best = min(scan_rows, key=_finite_l2) if scan_rows else None
+    base = next((r for r in rows if str(r.get("row_kind")) == "baseline_type71_no_type99_proxy"), {})
+    return {
+        "n_type99_proxy_scale_scan_rows": len(rows),
+        "n_scales": len(scan_rows),
+        "baseline_no_type99_proxy_l2_distance_to_target": base.get("l2_distance_to_target"),
+        "best_scale": None if best is None else best.get("type99_proxy_scale"),
+        "best_l2_distance_to_target": None if best is None else best.get("l2_distance_to_target"),
+        "best_f_fraction": None if best is None else best.get("f_fraction"),
+        "best_i_fraction": None if best is None else best.get("i_fraction"),
+        "best_r_fraction": None if best is None else best.get("r_fraction"),
+        "best_type99_proxy_source_sum_s^-1": None if best is None else best.get("type99_proxy_source_sum_s^-1"),
+        "provenance": {
+            "mode": "v0.3.40 scans nonphysical type-99 proxy source-vector scale in the global bound-bound+type71 diagnostic block.",
+            "assembly": "Type-99 proxy values are not physical phint53pl rates and the full adjacent-ion element-wide matrix is not solved yet.",
         },
     }
 
@@ -4586,6 +4727,21 @@ def solve_element_reference(
         linear_solver=linear_solver,
         rank_deficient_action=rank_deficient_action,
         negative_population_action=negative_population_action,
+        type99_proxy_scale=1.0,
+    )
+    type99_proxy_scale_scan_rows = build_global_bound_bound_type71_type99_proxy_scale_scan(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        populations=populations,
+        line_rows=line_rows,
+        coupling_rows=assembled_coupling_terms,
+        ion_stage=he_like_stage,
+        type99_proxy_scale=type99_proxy_scale,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
     )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
@@ -4611,6 +4767,8 @@ def solve_element_reference(
             "global_bound_bound_type71_solve_comparison_summary": _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows),
             "n_global_bound_bound_type71_type99_proxy_solve_comparison_rows": len(global_bound_bound_type71_type99_proxy_solve_comparison_rows),
             "global_bound_bound_type71_type99_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows),
+            "n_type99_proxy_scale_scan_rows": len(type99_proxy_scale_scan_rows),
+            "type99_proxy_scale_scan_summary": _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows),
             "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
             "global_superlevel_cascade_matrix_terms_summary": _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms),
             "n_global_superlevel_source_matrix_term_rows": len(global_superlevel_source_matrix_terms),
@@ -4634,6 +4792,7 @@ def solve_element_reference(
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
         "global_bound_bound_type71_solve_comparison": global_bound_bound_type71_solve_comparison_rows,
         "global_bound_bound_type71_type99_proxy_solve_comparison": global_bound_bound_type71_type99_proxy_solve_comparison_rows,
+        "type99_proxy_scale_scan": type99_proxy_scale_scan_rows,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -4994,6 +5153,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_bound_bound_solve_comparison_rows = result.get("global_bound_bound_solve_comparison", [])
     global_bound_bound_type71_solve_comparison_rows = result.get("global_bound_bound_type71_solve_comparison", [])
     global_bound_bound_type71_type99_proxy_solve_comparison_rows = result.get("global_bound_bound_type71_type99_proxy_solve_comparison", [])
+    type99_proxy_scale_scan_rows = result.get("type99_proxy_scale_scan", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -5015,6 +5175,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_bound_bound_type71_solve_comparison_summary"] = _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows)
         if global_bound_bound_type71_type99_proxy_solve_comparison_rows:
             result["summary"]["global_bound_bound_type71_type99_proxy_solve_comparison_summary"] = _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows)
+        if type99_proxy_scale_scan_rows:
+            result["summary"]["type99_proxy_scale_scan_summary"] = _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -5040,6 +5202,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv", global_bound_bound_type71_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_type99_proxy_solve_comparison.csv", global_bound_bound_type71_type99_proxy_solve_comparison_rows)
+    write_csv(out / "xstar_like_element_solver_type99_proxy_scale_scan.csv", type99_proxy_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -5047,7 +5210,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([
