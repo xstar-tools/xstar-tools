@@ -1,3 +1,7 @@
+### v0.3.44 note: type-53 radiation-context scaffold bug fix
+
+v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-mode` runs to crash while building global bound-bound matrix terms. The type-53 scaffold remains diagnostic-only.
+
 # xstar-atomic
 
 ### v0.3.43 note: type-53 radiation-context scaffold

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.44 - 2026-05-03
+
+- Fixes a helper-name collision introduced in v0.3.43: the table-building `_global_index_lookup(rows)` helper is preserved for global matrix scaffolds, and the single-row query helper used by the type-53 audit is renamed to `_global_index_lookup_one(rows, ion_stage, level_index)`.
+- This fixes the `TypeError: _global_index_lookup() missing 2 required positional arguments` crash when running with `--radiation-field-mode`.
+- No physics behavior is intentionally changed; type-53 remains audit/scaffold-only and is not assembled into the matrix.
+
 ## v0.3.43 - 2026-05-03
 
 - Adds the first Phase-E type-53 radiation-context scaffold for the XSTAR-like element solver.

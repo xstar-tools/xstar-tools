@@ -4312,7 +4312,7 @@ def build_radiation_context_rows(
     }]
 
 
-def _global_index_lookup(rows: Sequence[dict], ion_stage: Optional[int], level_index: Optional[int]) -> Optional[int]:
+def _global_index_lookup_one(rows: Sequence[dict], ion_stage: Optional[int], level_index: Optional[int]) -> Optional[int]:
     if ion_stage is None or level_index is None:
         return None
     for row in rows:
@@ -4351,8 +4351,8 @@ def build_type53_rate_audit_rows(
         bound_level = maybe_int(ar.get("idest1_guess"))
         continuum_guess = maybe_int(ar.get("idest2_guess"))
         final_or_parent_level = maybe_int(ar.get("idest3_guess"))
-        bound_g = _global_index_lookup(global_index_rows, rec_stage, bound_level)
-        continuum_g = _global_index_lookup(global_index_rows, rec_stage, continuum_guess)
+        bound_g = _global_index_lookup_one(global_index_rows, rec_stage, bound_level)
+        continuum_g = _global_index_lookup_one(global_index_rows, rec_stage, continuum_guess)
         if continuum_g is None and target_stage is not None and parent_stage is not None:
             continuum_g = _continuum_global_for_parent(global_index_rows, target_ion_stage=target_stage, parent_ion_stage=parent_stage)
         status = "not_evaluated_no_radiation_field" if mode == "none" else "not_evaluated_placeholder_radiation_context_only"
