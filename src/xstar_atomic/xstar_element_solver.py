@@ -5164,6 +5164,262 @@ def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
     }
 
 
+
+
+def build_full_global_normalized_solve_comparison(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Solve the first diagnostic full C VI+C V normalized global matrix.
+
+    v0.3.48 diagnostic only: assemble a dense matrix over all explicit
+    ``global_index`` rows from ``xstar_like_element_solver_full_global_matrix_terms.csv``.
+    Only matrix triplet rows are used; source-vector rows are deliberately
+    excluded for this first topology-normalized solve.  One row is replaced by
+    the normalization equation ``sum_i n_i = 1`` and the resulting linear system
+    is solved with a least-squares fallback.  The rates include proxy topology
+    terms, so the solution is not a physical XSTAR population solution yet.
+    """
+    he_like_stage = int(he_like_stage)
+    indexed_rows: List[dict] = []
+    for r in global_index_rows:
+        g = maybe_int(r.get("global_index"))
+        if g is not None:
+            rr = dict(r)
+            rr["global_index"] = int(g)
+            indexed_rows.append(rr)
+    if not indexed_rows:
+        return [{
+            "row_kind": "summary",
+            "comparison_case": "full_global_normalized_proxy_topology_solve",
+            "solve_status": "empty",
+            "solver_warning": "no global_index rows available",
+            "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+        }]
+
+    indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
+    max_g = max(int(r.get("global_index")) for r in indexed_rows)
+    n = max_g + 1
+    global_to_row = {int(r.get("global_index")): r for r in indexed_rows}
+    global_to_ion_level = {
+        int(r.get("global_index")): (maybe_int(r.get("ion_stage")), maybe_int(r.get("level_index")))
+        for r in indexed_rows
+    }
+
+    M = np.zeros((n, n), dtype=float)
+    n_triplet_rows_used = 0
+    n_source_vector_rows_excluded = 0
+    n_skipped_bad_index = 0
+    n_skipped_bad_rate = 0
+    component_counts: Dict[str, int] = {}
+    kind_counts: Dict[str, int] = {}
+    for t in full_global_matrix_terms:
+        row = maybe_int(t.get("matrix_row_global_index"))
+        col = maybe_int(t.get("matrix_col_global_index"))
+        if row is not None and col is None:
+            n_source_vector_rows_excluded += 1
+            continue
+        if row is None or col is None:
+            n_skipped_bad_index += 1
+            continue
+        if int(row) < 0 or int(col) < 0 or int(row) >= n or int(col) >= n:
+            n_skipped_bad_index += 1
+            continue
+        rate = maybe_float(t.get("full_global_signed_rate_s^-1"))
+        if rate is None:
+            rate = maybe_float(t.get("signed_rate_s^-1"))
+        if rate is None:
+            rate = maybe_float(t.get("signed_rate_proxy_s^-1"))
+        if rate is None:
+            rate = maybe_float(t.get("signed_rate_proxy"))
+        if rate is None or not math.isfinite(float(rate)):
+            n_skipped_bad_rate += 1
+            continue
+        M[int(row), int(col)] += float(rate)
+        n_triplet_rows_used += 1
+        comp = str(t.get("full_global_component", ""))
+        kind = str(t.get("matrix_term_kind", ""))
+        component_counts[comp] = component_counts.get(comp, 0) + 1
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+
+    # Diagnostic normalization row.  Use the first explicit global row to avoid
+    # silently dropping any row outside the declared global_index range.
+    normalization_row = min(global_to_row) if global_to_row else 0
+    A = M.copy()
+    b = np.zeros(n, dtype=float)
+    A[normalization_row, :] = 1.0
+    b[normalization_row] = 1.0
+
+    solve_status = "ok"
+    solver = "numpy.linalg.solve"
+    solver_warning = ""
+    try:
+        pop = np.linalg.solve(A, b)
+    except Exception as exc:
+        solver = "numpy.linalg.lstsq"
+        try:
+            pop, residuals, rank, svals = np.linalg.lstsq(A, b, rcond=None)
+            solve_status = "warning"
+            solver_warning = f"solve_failed_then_lstsq_used: {exc}"
+        except Exception as exc2:
+            pop = np.zeros(n, dtype=float)
+            residuals = np.array([], dtype=float)
+            rank = 0
+            svals = np.array([], dtype=float)
+            solve_status = "failed"
+            solver_warning = f"solve_and_lstsq_failed: {exc}; {exc2}"
+    else:
+        residuals = np.array([], dtype=float)
+        try:
+            rank = int(np.linalg.matrix_rank(A))
+            svals = np.linalg.svd(A, compute_uv=False)
+        except Exception:
+            rank = None
+            svals = np.array([], dtype=float)
+
+    if solver == "numpy.linalg.lstsq":
+        # rank/svals already populated above, but keep robust defaults.
+        rank = int(rank)
+    condition_number = None
+    if isinstance(svals, np.ndarray) and len(svals) and float(np.min(np.abs(svals))) > 0.0:
+        condition_number = float(np.max(np.abs(svals)) / np.min(np.abs(svals)))
+    residual_norm = float(np.linalg.norm(A @ pop - b)) if len(pop) else None
+    n_negative = int(np.sum(pop < -1.0e-12)) if len(pop) else 0
+    min_population = float(np.min(pop)) if len(pop) else None
+    max_population = float(np.max(pop)) if len(pop) else None
+    sum_population = float(np.sum(pop)) if len(pop) else 0.0
+
+    # Compare He-like triplet fractions using global populations projected back
+    # to the target He-like level indices.
+    he_like_pop_by_level: Dict[int, float] = {}
+    for g, (stage, lev) in global_to_ion_level.items():
+        if stage == he_like_stage and lev is not None and g < len(pop):
+            he_like_pop_by_level[int(lev)] = float(pop[g])
+    selected_line_rows = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
+    global_line_rows = _make_line_rows_with_population(selected_line_rows, he_like_pop_by_level, {
+        "solver": solver,
+        "solver_warning": solver_warning,
+        "solution_status": solve_status,
+    })
+    baseline_triplet = _normalise_triplet(selected_line_rows)
+    full_triplet = _normalise_triplet(global_line_rows)
+    target = _xstar_triplet_target(he_like_stage)
+    baseline_l2 = _triplet_l2_distance(baseline_triplet, target)
+    full_l2 = _triplet_l2_distance(full_triplet, target)
+
+    ion_population_sums: Dict[str, float] = {}
+    kind_population_sums: Dict[str, float] = {}
+    for g, val in enumerate(pop):
+        grow = global_to_row.get(g, {})
+        ion_key = str(grow.get("ion_stage", ""))
+        kind_key = str(grow.get("level_kind", ""))
+        ion_population_sums[ion_key] = ion_population_sums.get(ion_key, 0.0) + float(val)
+        kind_population_sums[kind_key] = kind_population_sums.get(kind_key, 0.0) + float(val)
+
+    rows: List[dict] = []
+    common = {
+        "n_global_indices": n,
+        "n_matrix_triplet_rows_used": n_triplet_rows_used,
+        "n_source_vector_rows_excluded": n_source_vector_rows_excluded,
+        "n_skipped_bad_index_rows": n_skipped_bad_index,
+        "n_skipped_bad_rate_rows": n_skipped_bad_rate,
+        "normalization_row_global_index": normalization_row,
+        "normalization_equation": "sum_all_global_populations_equals_1",
+        "matrix_rank_after_normalization": rank,
+        "condition_number_after_normalization": condition_number,
+        "residual_norm": residual_norm,
+        "n_negative_populations": n_negative,
+        "min_population": min_population,
+        "max_population": max_population,
+        "sum_population": sum_population,
+        "rows_by_component_used": json.dumps(dict(sorted(component_counts.items())), sort_keys=True),
+        "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
+        "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
+        "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
+        "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+    }
+    rows.append({
+        "row_kind": "summary",
+        "comparison_case": "per_ion_baseline",
+        "f_fraction": baseline_triplet.get("f_fraction"),
+        "i_fraction": baseline_triplet.get("i_fraction"),
+        "r_fraction": baseline_triplet.get("r_fraction"),
+        "R": baseline_triplet.get("R"),
+        "G": baseline_triplet.get("G"),
+        "l2_distance_to_target": baseline_l2,
+        "solve_status": "baseline_existing_per_ion_solve",
+        "solver": "existing_per_ion_solver",
+        **common,
+    })
+    rows.append({
+        "row_kind": "summary",
+        "comparison_case": "full_global_normalized_proxy_topology_solve",
+        "f_fraction": full_triplet.get("f_fraction"),
+        "i_fraction": full_triplet.get("i_fraction"),
+        "r_fraction": full_triplet.get("r_fraction"),
+        "R": full_triplet.get("R"),
+        "G": full_triplet.get("G"),
+        "l2_distance_to_target": full_l2,
+        "delta_f_global_minus_baseline": float(full_triplet.get("f_fraction") or 0.0) - float(baseline_triplet.get("f_fraction") or 0.0),
+        "delta_i_global_minus_baseline": float(full_triplet.get("i_fraction") or 0.0) - float(baseline_triplet.get("i_fraction") or 0.0),
+        "delta_r_global_minus_baseline": float(full_triplet.get("r_fraction") or 0.0) - float(baseline_triplet.get("r_fraction") or 0.0),
+        "solve_status": solve_status,
+        "solver": solver,
+        "solver_warning": solver_warning,
+        **common,
+    })
+    for g in range(n):
+        grow = global_to_row.get(g, {})
+        rows.append({
+            "row_kind": "population",
+            "comparison_case": "full_global_population_by_global_index",
+            "global_index": g,
+            "ion_stage": grow.get("ion_stage"),
+            "level_index": grow.get("level_index"),
+            "level_label": grow.get("level_label"),
+            "level_kind": grow.get("level_kind"),
+            "triplet_component": grow.get("triplet_component"),
+            "is_triplet_upper": grow.get("is_triplet_upper"),
+            "is_superlevel": grow.get("is_superlevel"),
+            "is_continuum": grow.get("is_continuum"),
+            "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
+            "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
+            "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
+            "provenance": "v0.3.48_full_global_normalized_solve_comparison",
+        })
+    return rows
+
+
+def _full_global_normalized_solve_comparison_summary(rows: Sequence[dict]) -> dict:
+    summaries = [r for r in rows if str(r.get("row_kind")) == "summary"]
+    pops = [r for r in rows if str(r.get("row_kind")) == "population"]
+    global_case = next((r for r in summaries if str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), {})
+    base_case = next((r for r in summaries if str(r.get("comparison_case")) == "per_ion_baseline"), {})
+    return {
+        "n_full_global_normalized_solve_comparison_rows": len(rows),
+        "n_population_rows": len(pops),
+        "baseline_f_fraction": base_case.get("f_fraction"),
+        "full_global_f_fraction": global_case.get("f_fraction"),
+        "baseline_i_fraction": base_case.get("i_fraction"),
+        "full_global_i_fraction": global_case.get("i_fraction"),
+        "baseline_r_fraction": base_case.get("r_fraction"),
+        "full_global_r_fraction": global_case.get("r_fraction"),
+        "full_global_solve_status": global_case.get("solve_status"),
+        "full_global_solver_warning": global_case.get("solver_warning"),
+        "full_global_l2_distance_to_target": global_case.get("l2_distance_to_target"),
+        "n_matrix_triplet_rows_used": global_case.get("n_matrix_triplet_rows_used"),
+        "n_source_vector_rows_excluded": global_case.get("n_source_vector_rows_excluded"),
+        "n_negative_populations": global_case.get("n_negative_populations"),
+        "sum_population": global_case.get("sum_population"),
+        "ion_population_sums_json": global_case.get("ion_population_sums_json"),
+        "level_kind_population_sums_json": global_case.get("level_kind_population_sums_json"),
+        "warning": "Diagnostic normalized solve over proxy topology rows only; not a physical XSTAR element solution.",
+    }
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -5699,6 +5955,12 @@ def solve_element_reference(
         negative_population_action=negative_population_action,
         type99_proxy_scale=1.0,
     )
+    full_global_normalized_solve_comparison_rows = build_full_global_normalized_solve_comparison(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -5735,6 +5997,8 @@ def solve_element_reference(
             "global_type53_flat_proxy_matrix_terms_summary": _global_type53_flat_proxy_matrix_terms_summary(global_type53_flat_proxy_matrix_terms),
             "n_full_global_matrix_term_rows": len(full_global_matrix_terms),
             "full_global_matrix_terms_summary": _full_global_matrix_terms_summary(full_global_matrix_terms),
+            "n_full_global_normalized_solve_comparison_rows": len(full_global_normalized_solve_comparison_rows),
+            "full_global_normalized_solve_comparison_summary": _full_global_normalized_solve_comparison_summary(full_global_normalized_solve_comparison_rows),
             "n_global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows": len(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),
             "global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows),
             "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
@@ -5767,6 +6031,7 @@ def solve_element_reference(
         "type53_flat_proxy_rate_audit": type53_flat_proxy_rate_audit_rows,
         "global_type53_flat_proxy_matrix_terms": global_type53_flat_proxy_matrix_terms,
         "full_global_matrix_terms": full_global_matrix_terms,
+        "full_global_normalized_solve_comparison": full_global_normalized_solve_comparison_rows,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -6134,6 +6399,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type53_flat_proxy_rate_audit_rows = result.get("type53_flat_proxy_rate_audit", [])
     global_type53_flat_proxy_matrix_terms = result.get("global_type53_flat_proxy_matrix_terms", [])
     full_global_matrix_terms = result.get("full_global_matrix_terms", [])
+    full_global_normalized_solve_comparison_rows = result.get("full_global_normalized_solve_comparison", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -6167,6 +6433,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_type53_flat_proxy_matrix_terms_summary"] = _global_type53_flat_proxy_matrix_terms_summary(global_type53_flat_proxy_matrix_terms)
         if full_global_matrix_terms:
             result["summary"]["full_global_matrix_terms_summary"] = _full_global_matrix_terms_summary(full_global_matrix_terms)
+        if full_global_normalized_solve_comparison_rows:
+            result["summary"]["full_global_normalized_solve_comparison_summary"] = _full_global_normalized_solve_comparison_summary(full_global_normalized_solve_comparison_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -6199,6 +6467,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", type53_flat_proxy_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", global_type53_flat_proxy_matrix_terms)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv", full_global_normalized_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -6206,7 +6475,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; v0.3.48 adds xstar_like_element_solver_full_global_normalized_solve_comparison.csv, the first diagnostic normalized full-global proxy-topology solve over all global_index rows with source-vector rows excluded; diagnostic source audits remain nonphysical and the normalized solve is not yet a physical XSTAR element solution.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

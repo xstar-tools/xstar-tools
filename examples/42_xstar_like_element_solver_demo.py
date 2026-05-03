@@ -120,6 +120,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv", [])
         write_csv(out / "xstar_like_element_solver_triplet.csv", [])
         write_csv(out / "xstar_like_element_solver_commands.csv", rows)
         summary = {"mode": "dry_run", "status": "not_executed", **rows[0]}

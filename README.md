@@ -1643,6 +1643,10 @@ Fixes the v0.3.40 CLI handoff for `--type99-proxy-scale` by adding the correspon
 
 Fixes the remaining v0.3.41 signature regression for `--type99-proxy-scale`: the solver entry point now actually accepts the keyword used by `examples/42_xstar_like_element_solver_demo.py`. No physics behavior is intentionally changed.
 
+### v0.3.48 full global normalized proxy-topology solve
+
+Version v0.3.48 adds `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`, the first diagnostic normalized solve over the unified C VI+C V global-index matrix scaffold.  The solver assembles a dense matrix over all explicit `global_index` rows from `xstar_like_element_solver_full_global_matrix_terms.csv`, includes only matrix triplet rows, deliberately excludes source-vector proxy rows, replaces one row with `sum_i n_i = 1`, and solves the resulting system.  The output compares the normalized full-global proxy-topology populations and C V f/i/r fractions against the existing per-ion baseline.  This remains diagnostic only: the matrix still contains nonphysical proxy topology terms and does not yet evaluate XSTAR `phint53`, Milne inverse recombination, or type-99 `phint53pl` rates.
+
 ### v0.3.47 full global C VI+C V matrix-topology scaffold
 
 Version v0.3.47 adds `xstar_like_element_solver_full_global_matrix_terms.csv`, a unified diagnostic topology table for the future element-wide matrix solve.  It combines the existing C VI and C V bound-bound matrix blocks, C V type-71 superlevel cascade matrix terms, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows.  This file is not yet solved as a normalized global matrix.  It is a scaffold for the next step, where a true C VI+C V population normalization row can be added and the full matrix can be solved.

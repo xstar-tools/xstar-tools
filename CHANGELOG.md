@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.48 - 2026-05-03
+
+- Added the first diagnostic full global C VI+C V normalized solve.
+- New output: `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`.
+- The solve assembles a dense matrix over all explicit `global_index` rows from `xstar_like_element_solver_full_global_matrix_terms.csv`.
+- Only matrix triplet rows are included; source-vector proxy rows are deliberately excluded for this first normalized solve.
+- One row is replaced by the normalization equation `sum_i n_i = 1`, and the diagnostic solution is compared against the existing per-ion C V triplet result.
+- The solve remains nonphysical because the matrix still contains proxy topology terms for type-53/type-99/type-1 and does not yet use physical XSTAR `phint53`, Milne, or `phint53pl` rates.
+
 ## v0.3.47 - 2026-05-03
 
 - Added the diagnostic full global C VI+C V matrix-topology scaffold for the Python XSTAR-like element solver.
