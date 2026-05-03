@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.38 - 2026-05-02
+
+- Added a diagnostic global-index type-99 superlevel source scaffold.
+- New output: `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv`.
+- Maps type-99 source candidates from `xstar_like_element_solver_superlevel_source_audit.csv` onto explicit superlevel `global_index` rows.
+- Writes source-vector proxy rows and parent-continuum-to-superlevel matrix proxy rows when a parent-continuum/continuum mapping exists.
+- Reports proxy basis, candidate records, type-71 branch fractions, and f/i/r source-weighted branch proxies for each mapped type-99 source group.
+- These type-99 terms are not included in the solved matrix; physical `phint53pl`/radiation-field rate evaluation and full parent-continuum population balance are still future work.
+
 ## v0.3.37 - 2026-05-02
 
 - Fixed the v0.3.36 output handoff for the diagnostic global bound-bound+type-71 solve comparison.

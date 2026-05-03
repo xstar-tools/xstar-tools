@@ -3021,6 +3021,221 @@ def _global_superlevel_cascade_matrix_terms_summary(rows: Sequence[dict]) -> dic
     }
 
 
+
+def _find_parent_continuum_global_row(global_index_rows: Sequence[dict], *, ion_stage: int) -> Optional[dict]:
+    """Return the continuum row in ``ion_stage`` representing the next parent ion.
+
+    v0.3.38 uses this only for a diagnostic type-99 source scaffold.  The
+    continuum row is not yet solved as a physically normalised parent-ion
+    population, but it provides the explicit column needed by the later global
+    C VI + C V matrix.
+    """
+    parent = int(ion_stage) + 1
+    for row in global_index_rows:
+        st = maybe_int(row.get("ion_stage"))
+        if st != int(ion_stage):
+            continue
+        if not bool(row.get("is_continuum")):
+            continue
+        pr = maybe_int(row.get("parent_ion_stage"))
+        if pr is None or int(pr) == parent:
+            return row
+    return None
+
+
+def build_global_superlevel_source_matrix_terms(
+    superlevel_source_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+) -> List[dict]:
+    """Map type-99 superlevel source candidates onto the global index.
+
+    v0.3.38 is a diagnostic scaffold, not a physical type-99 evaluator.  The
+    source audit already identifies type-99 records associated with a given
+    superlevel.  This routine maps those candidates to explicit global-index
+    rows and writes transparent proxy terms that future element-wide assembly can
+    replace by real XSTAR ``phint53pl``/superlevel recombination rates:
+
+    * a source-vector proxy into the superlevel row;
+    * when a parent-continuum row exists, a parent-continuum -> superlevel
+      off-diagonal matrix proxy;
+    * a matching parent-continuum diagonal-loss proxy, clearly marked as a
+      proxy, so the future matrix topology is explicit.
+
+    The proxy value is the type-99 coefficient-magnitude preview when available;
+    otherwise it falls back to one count unit per type-99 source candidate.  No
+    proxy term is included in any solved matrix in this version.
+    """
+    lookup = _global_index_lookup(global_index_rows)
+    out: List[dict] = []
+    term_id = 0
+    for row in superlevel_source_rows:
+        n99_val = maybe_float(row.get("n_type99_superlevel_source_candidates"))
+        n99 = int(n99_val) if n99_val is not None and math.isfinite(float(n99_val)) else 0
+        if n99 <= 0:
+            continue
+        stage = maybe_int(row.get("record_ion_stage") or row.get("target_ion_stage"))
+        sl = maybe_int(row.get("superlevel_level"))
+        if stage is None or sl is None:
+            out.append({
+                "global_superlevel_source_term_id": term_id,
+                "matrix_term_kind": "skipped_type99_superlevel_source",
+                "matrix_role": "not_assembled_missing_stage_or_superlevel",
+                "data_type": 99,
+                "ion_stage": stage if stage is not None else "",
+                "superlevel_level": sl if sl is not None else "",
+                "n_type99_source_candidates": n99,
+                "type99_records": row.get("type99_records"),
+                "source_proxy_value": 0.0,
+                "signed_rate_proxy": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "missing_record_ion_stage_or_superlevel_level",
+                "provenance": "v0.3.38_global_type99_superlevel_source_scaffold",
+            })
+            term_id += 1
+            continue
+        super_row = lookup.get((int(stage), int(sl)))
+        cont_row = _find_parent_continuum_global_row(global_index_rows, ion_stage=int(stage))
+        if super_row is None:
+            out.append({
+                "global_superlevel_source_term_id": term_id,
+                "matrix_term_kind": "skipped_type99_superlevel_source",
+                "matrix_role": "not_assembled_superlevel_not_in_global_index",
+                "data_type": 99,
+                "ion_stage": int(stage),
+                "superlevel_level": int(sl),
+                "n_type99_source_candidates": n99,
+                "type99_records": row.get("type99_records"),
+                "source_proxy_value": 0.0,
+                "signed_rate_proxy": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "superlevel_row_not_found_in_global_index",
+                "provenance": "v0.3.38_global_type99_superlevel_source_scaffold",
+            })
+            term_id += 1
+            continue
+        coeff = maybe_float(row.get("type99_coeff_abs_sum_preview"))
+        if coeff is not None and math.isfinite(float(coeff)) and float(coeff) > 0.0:
+            proxy = float(coeff)
+            proxy_basis = "type99_coeff_abs_sum_preview"
+        else:
+            proxy = float(n99)
+            proxy_basis = "type99_candidate_count_proxy"
+        parent_stage = int(stage) + 1
+        common = {
+            "data_type": 99,
+            "rate_type": "type99_superlevel_photoionization_recombination_linked_record",
+            "ion_stage": int(stage),
+            "parent_ion_stage": parent_stage,
+            "superlevel_level": int(sl),
+            "superlevel_global_index": maybe_int(super_row.get("global_index")),
+            "superlevel_level_label": super_row.get("level_label"),
+            "superlevel_level_kind": super_row.get("level_kind"),
+            "n_type99_source_candidates": n99,
+            "type99_records": row.get("type99_records"),
+            "type99_coeff_abs_sum_preview": row.get("type99_coeff_abs_sum_preview"),
+            "source_proxy_basis": proxy_basis,
+            "source_proxy_value": proxy,
+            "has_type71_branching": row.get("has_type71_branching"),
+            "type71_B_f": row.get("type71_B_f"),
+            "type71_B_i": row.get("type71_B_i"),
+            "type71_B_r": row.get("type71_B_r"),
+            "type71_B_triplet_total": row.get("type71_B_triplet_total"),
+            "source_has_branch_to_forbidden": row.get("source_has_branch_to_forbidden"),
+            "source_has_branch_to_intercombination": row.get("source_has_branch_to_intercombination"),
+            "source_has_branch_to_resonance": row.get("source_has_branch_to_resonance"),
+            "source_weighted_type71_feed_proxy_f": row.get("source_weighted_type71_feed_proxy_f"),
+            "source_weighted_type71_feed_proxy_i": row.get("source_weighted_type71_feed_proxy_i"),
+            "source_weighted_type71_feed_proxy_r": row.get("source_weighted_type71_feed_proxy_r"),
+            "matrix_safe_to_solve": False,
+            "unsafe_reason": "diagnostic_proxy_only;type99_phint53pl_rate_not_evaluated;parent_continuum_population_not_physically_normalized",
+            "provenance": "v0.3.38_global_type99_superlevel_source_scaffold",
+        }
+        out.append({
+            "global_superlevel_source_term_id": term_id,
+            "matrix_term_kind": "source_vector_gain_proxy",
+            "matrix_role": "b[superlevel_global_index] += type99_source_proxy",
+            "matrix_row_global_index": maybe_int(super_row.get("global_index")),
+            "matrix_col_global_index": "",
+            "signed_rate_proxy": proxy,
+            "rate_proxy": proxy,
+            "assembly_status": "assembled_global_type99_superlevel_source_scaffold_proxy",
+            "skip_reason": "",
+            **common,
+        })
+        term_id += 1
+        if cont_row is None:
+            out.append({
+                "global_superlevel_source_term_id": term_id,
+                "matrix_term_kind": "skipped_parent_continuum_to_superlevel_proxy",
+                "matrix_role": "not_assembled_parent_continuum_row_missing",
+                "matrix_row_global_index": maybe_int(super_row.get("global_index")),
+                "matrix_col_global_index": "",
+                "signed_rate_proxy": 0.0,
+                "rate_proxy": proxy,
+                "assembly_status": "skipped",
+                "skip_reason": "parent_continuum_row_not_found_for_ion_stage",
+                **common,
+            })
+            term_id += 1
+            continue
+        parent_g = maybe_int(cont_row.get("global_index"))
+        out.append({
+            "global_superlevel_source_term_id": term_id,
+            "matrix_term_kind": "offdiag_parent_continuum_to_superlevel_proxy",
+            "matrix_role": "M[superlevel_global_index,parent_continuum_global_index] += type99_source_proxy",
+            "matrix_row_global_index": maybe_int(super_row.get("global_index")),
+            "matrix_col_global_index": parent_g,
+            "parent_continuum_global_index": parent_g,
+            "parent_continuum_level_index": cont_row.get("level_index"),
+            "parent_continuum_level_label": cont_row.get("level_label"),
+            "signed_rate_proxy": proxy,
+            "rate_proxy": proxy,
+            "assembly_status": "assembled_global_type99_superlevel_source_scaffold_proxy",
+            "skip_reason": "",
+            **common,
+        })
+        term_id += 1
+        out.append({
+            "global_superlevel_source_term_id": term_id,
+            "matrix_term_kind": "diagonal_parent_continuum_loss_proxy",
+            "matrix_role": "M[parent_continuum_global_index,parent_continuum_global_index] -= type99_source_proxy",
+            "matrix_row_global_index": parent_g,
+            "matrix_col_global_index": parent_g,
+            "parent_continuum_global_index": parent_g,
+            "parent_continuum_level_index": cont_row.get("level_index"),
+            "parent_continuum_level_label": cont_row.get("level_label"),
+            "signed_rate_proxy": -proxy,
+            "rate_proxy": proxy,
+            "assembly_status": "assembled_global_type99_superlevel_source_scaffold_proxy",
+            "skip_reason": "",
+            **common,
+        })
+        term_id += 1
+    return out
+
+
+def _global_superlevel_source_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    assembled = [r for r in rows if str(r.get("assembly_status")) == "assembled_global_type99_superlevel_source_scaffold_proxy"]
+    skipped = [r for r in rows if str(r.get("assembly_status")) == "skipped"]
+    gain = [r for r in assembled if str(r.get("matrix_term_kind")) == "source_vector_gain_proxy"]
+    return {
+        "n_global_superlevel_source_matrix_term_rows": len(rows),
+        "n_global_superlevel_source_assembled_proxy_rows": len(assembled),
+        "n_global_superlevel_source_skipped_rows": len(skipped),
+        "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
+        "rows_by_ion_stage": _counts(assembled, "ion_stage"),
+        "n_unique_type99_record_groups": len({str(r.get("type99_records")) for r in gain if r.get("type99_records") not in (None, "")}),
+        "n_source_vector_gain_proxy_rows": len(gain),
+        "total_type99_source_proxy_value": sum(float(maybe_float(r.get("source_proxy_value")) or 0.0) for r in gain),
+        "source_proxy_basis_counts": _counts(gain, "source_proxy_basis"),
+        "n_source_rows_with_type71_branching": sum(1 for r in gain if str(r.get("has_type71_branching")).strip().lower() in {"true", "1", "yes"}),
+        "provenance": {
+            "mode": "v0.3.38 maps type-99 superlevel source candidates onto explicit global_index rows.",
+            "assembly": "Diagnostic scaffold only: writes source-vector and parent-continuum matrix proxy terms but does not include them in a solved matrix.",
+            "excluded": "Type-99 phint53pl physical rates, radiation-field integrals, and full parent-continuum population balance are not evaluated yet.",
+        },
+    }
+
 def _triplet_l2_distance(model: dict, target: Optional[dict]) -> Optional[float]:
     if not target:
         return None
@@ -4019,6 +4234,10 @@ def solve_element_reference(
         superlevel_cascade_audit_rows,
         global_index_rows,
     )
+    global_superlevel_source_matrix_terms = build_global_superlevel_source_matrix_terms(
+        superlevel_source_audit_rows,
+        global_index_rows,
+    )
     global_bound_bound_solve_comparison_rows = build_global_bound_bound_solve_comparison(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -4066,6 +4285,8 @@ def solve_element_reference(
             "global_bound_bound_type71_solve_comparison_summary": _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows),
             "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
             "global_superlevel_cascade_matrix_terms_summary": _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms),
+            "n_global_superlevel_source_matrix_term_rows": len(global_superlevel_source_matrix_terms),
+            "global_superlevel_source_matrix_terms_summary": _global_superlevel_source_matrix_terms_summary(global_superlevel_source_matrix_terms),
             "adjacent_coupling_status": adjacent_coupling_mode,
             "type57_energy_convention": type57_energy_convention,
             "triplet_source_mode": triplet_source_mode,
@@ -4081,6 +4302,7 @@ def solve_element_reference(
         "transition_rows": transitions,
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
         "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
+        "global_superlevel_source_matrix_terms": global_superlevel_source_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
         "global_bound_bound_type71_solve_comparison": global_bound_bound_type71_solve_comparison_rows,
         "triplet_rows": triplet_rows,
@@ -4443,6 +4665,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_bound_bound_solve_comparison_rows = result.get("global_bound_bound_solve_comparison", [])
     global_bound_bound_type71_solve_comparison_rows = result.get("global_bound_bound_type71_solve_comparison", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
+    global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
         result["summary"] = dict(result.get("summary", {}))
         result["summary"]["type57_audit_summary"] = _type57_audit_summary(audit_rows)
@@ -4462,6 +4685,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_bound_bound_type71_solve_comparison_summary"] = _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
+        if global_superlevel_source_matrix_terms:
+            result["summary"]["global_superlevel_source_matrix_terms_summary"] = _global_superlevel_source_matrix_terms_summary(global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
@@ -4479,6 +4704,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
     write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv", global_bound_bound_type71_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
@@ -4488,7 +4714,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; diagnostic source audits remain non-assembled, and the full element-wide matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; diagnostic source audits remain non-assembled, and the full element-wide matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

@@ -1596,10 +1596,15 @@ Version v0.3.35 adds the first global-index matrix scaffold for radiative superl
 Version v0.3.34 adds the first diagnostic solve using the explicit global-index bound-bound matrix scaffold. The example writes `xstar_like_element_solver_global_bound_bound_solve_comparison.csv`, which solves the He-like ion intra-ion bound-bound block assembled from `xstar_like_element_solver_global_bound_bound_matrix_terms.csv` using the same adjacent source vector as the current per-ion solver. The output compares baseline per-ion populations and triplet f/i/r ratios against the global-index block solution. This is an equivalence test and does not yet solve the full element-wide C VI + C V coupled matrix.
 
 
-### v0.3.37 type-71 solve-comparison CSV writer fix
+### v0.3.38 type-71 solve-comparison CSV writer fix
 
-Version v0.3.37 fixes the v0.3.36 output handoff for `xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv`. The extended global bound-bound+type-71 solve rows were being built and summarized internally, but they were not returned from `solve_element_reference()`, so the CSV writer received an empty list. This version returns those rows and writes the populated comparison CSV. No physics behavior is intentionally changed; this remains a diagnostic global-block scaffold rather than the full element-wide coupled solver.
+Version v0.3.38 fixes the v0.3.36 output handoff for `xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv`. The extended global bound-bound+type-71 solve rows were being built and summarized internally, but they were not returned from `solve_element_reference()`, so the CSV writer received an empty list. This version returns those rows and writes the populated comparison CSV. No physics behavior is intentionally changed; this remains a diagnostic global-block scaffold rather than the full element-wide coupled solver.
 
 ### v0.3.36 global bound-bound plus type-71 solve diagnostic
 
 Version v0.3.36 adds the next global-matrix scaffold test. The element-solver example now writes `xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv`, which assembles the verified He-like global bound-bound block, adds the type-71 superlevel-to-spectroscopic cascade matrix triplets, rebuilds the same adjacent source vector used by the current per-ion solve, and solves the extended global-index block. This diagnostic reports summary rows for the old per-ion baseline and the global bound-bound+type-71 block, plus level-by-level population comparisons including superlevel rows. No type-70/type-74/type-99 superlevel source terms are included yet, so this remains a structural test rather than the full element-wide coupled solution.
+
+
+### v0.3.38 diagnostic type-99 superlevel source scaffold
+
+The element solver now writes `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv`, a diagnostic global-index scaffold that maps type-99 superlevel source candidates to explicit superlevel rows and parent-continuum proxy columns. These proxy terms are not included in the solved matrix yet.
