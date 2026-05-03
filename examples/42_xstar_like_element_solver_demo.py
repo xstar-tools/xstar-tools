@@ -62,6 +62,7 @@ def main(argv=None):
     p.add_argument("--triplet-source-mode", default="none", choices=["none", "type74-direct-diagnostic"], help="Optional diagnostic source injection into the He-like triplet upper levels. Off by default; type74-direct-diagnostic injects evaluated type-74 direct triplet source rates into a before/after solve without changing the baseline matrix outputs.")
     p.add_argument("--triplet-source-scale", default="1", help="Scale factor(s) for --triplet-source-mode type74-direct-diagnostic. Accepts one value or a comma-separated list, e.g. '1,1e2,1e4,1e6,1e8,1e10'.")
     p.add_argument("--type99-proxy-scale", default="0,1e-8,1e-6,1e-4,1e-2,1,1e2", help="Scale factor(s) for the nonphysical type-99 proxy source scan in the global bound-bound+type71 diagnostic block. Accepts one value or a comma-separated list.")
+    p.add_argument("--radiation-field-mode", default="none", choices=["none", "flat", "blackbody", "table"], help="Diagnostic radiation context scaffold for type-53 photoionization/Milne audits. Does not evaluate physical rates yet.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
     p.add_argument("--print-summary", action="store_true")
@@ -87,6 +88,7 @@ def main(argv=None):
             "triplet_source_mode": args.triplet_source_mode,
             "triplet_source_scale": args.triplet_source_scale,
             "type99_proxy_scale": args.type99_proxy_scale,
+            "radiation_field_mode": args.radiation_field_mode,
             "status": "dry_run_not_executed",
         }]
         write_csv(out / "xstar_like_element_solver_ion_blocks.csv", [])
@@ -110,6 +112,8 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_type99_proxy_solve_comparison.csv", [])
         write_csv(out / "xstar_like_element_solver_type99_proxy_scale_scan.csv", [])
+        write_csv(out / "xstar_like_element_solver_radiation_context.csv", [])
+        write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_triplet.csv", [])
         write_csv(out / "xstar_like_element_solver_commands.csv", rows)
         summary = {"mode": "dry_run", "status": "not_executed", **rows[0]}
@@ -149,6 +153,7 @@ def main(argv=None):
         triplet_source_mode=args.triplet_source_mode,
         triplet_source_scale=args.triplet_source_scale,
         type99_proxy_scale=args.type99_proxy_scale,
+        radiation_field_mode=args.radiation_field_mode,
     )
     write_element_solver_outputs(result, out)
     if args.print_summary:

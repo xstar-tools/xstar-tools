@@ -580,6 +580,7 @@ def _evaluate_type57_calt57_record(
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
+    radiation_field_mode: str = "none",
 ) -> dict:
     """Evaluate XSTAR type-57 using the ported ``calt57`` path for audit only.
 
@@ -4260,6 +4261,149 @@ def _type99_proxy_scale_scan_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+def build_radiation_context_rows(
+    *,
+    radiation_field_mode: str = "none",
+    temperature: float,
+    electron_density: float,
+    element: str,
+    element_z: int,
+    stages: Sequence[int],
+    he_like_stage: int,
+) -> List[dict]:
+    """Return a diagnostic radiation-context scaffold for type-53 work."""
+    mode = str(radiation_field_mode or "none").strip().lower()
+    if mode not in {"none", "flat", "blackbody", "table"}:
+        mode = "none"
+    has_placeholder_grid = mode in {"flat", "blackbody", "table"}
+    if has_placeholder_grid:
+        energy_min_ev = 1.0
+        energy_max_ev = 1.0e5
+        n_energy_grid_points = 256
+        grid_status = "placeholder_log_energy_grid_not_used_for_rates"
+    else:
+        energy_min_ev = None
+        energy_max_ev = None
+        n_energy_grid_points = 0
+        grid_status = "not_constructed_radiation_field_mode_none"
+    return [{
+        "row_kind": "radiation_context",
+        "radiation_context_version": "v0.3.43",
+        "radiation_field_mode": mode,
+        "element": element,
+        "element_z": element_z,
+        "stages": ";".join(str(int(s)) for s in stages),
+        "he_like_stage": he_like_stage,
+        "temperature_K": temperature,
+        "electron_density_cm^-3": electron_density,
+        "energy_grid_status": grid_status,
+        "n_energy_grid_points": n_energy_grid_points,
+        "energy_min_eV": energy_min_ev,
+        "energy_max_eV": energy_max_ev,
+        "mean_intensity_status": "not_available" if mode == "none" else "placeholder_not_physical",
+        "photon_flux_status": "not_available" if mode == "none" else "placeholder_not_physical",
+        "photoionization_integral_status": "not_evaluated_requires_phint53_port",
+        "milne_inverse_recombination_status": "not_evaluated_requires_milne_or_xstar_inverse_context",
+        "opacity_escape_probability_status": "not_available",
+        "assembly_status": "context_scaffold_only_not_used_in_matrix",
+        "warning": "type53 physical rates are not evaluated in v0.3.43",
+        "provenance": "v0.3.43_type53_radiation_context_scaffold",
+    }]
+
+
+def _global_index_lookup(rows: Sequence[dict], ion_stage: Optional[int], level_index: Optional[int]) -> Optional[int]:
+    if ion_stage is None or level_index is None:
+        return None
+    for row in rows:
+        if maybe_int(row.get("ion_stage")) == int(ion_stage) and maybe_int(row.get("level_index")) == int(level_index):
+            return maybe_int(row.get("global_index"))
+    return None
+
+
+def _continuum_global_for_parent(rows: Sequence[dict], *, target_ion_stage: int, parent_ion_stage: int) -> Optional[int]:
+    for row in rows:
+        if maybe_int(row.get("ion_stage")) == int(target_ion_stage) and bool(row.get("is_continuum")):
+            pstage = maybe_int(row.get("parent_ion_stage"))
+            if pstage is None or pstage == int(parent_ion_stage):
+                return maybe_int(row.get("global_index"))
+    return None
+
+
+def build_type53_rate_audit_rows(
+    *,
+    adjacent_audit_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    radiation_context_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Build a diagnostic type-53 radiation/photoionization audit."""
+    mode = "none"
+    if radiation_context_rows:
+        mode = str(radiation_context_rows[0].get("radiation_field_mode", "none"))
+    out: List[dict] = []
+    for ar in adjacent_audit_rows:
+        if maybe_int(ar.get("data_type")) != 53:
+            continue
+        rec_stage = maybe_int(ar.get("record_ion_stage"))
+        target_stage = maybe_int(ar.get("target_ion_stage")) or rec_stage or int(he_like_stage)
+        parent_stage = maybe_int(ar.get("parent_ion_stage")) or (target_stage + 1 if target_stage is not None else None)
+        bound_level = maybe_int(ar.get("idest1_guess"))
+        continuum_guess = maybe_int(ar.get("idest2_guess"))
+        final_or_parent_level = maybe_int(ar.get("idest3_guess"))
+        bound_g = _global_index_lookup(global_index_rows, rec_stage, bound_level)
+        continuum_g = _global_index_lookup(global_index_rows, rec_stage, continuum_guess)
+        if continuum_g is None and target_stage is not None and parent_stage is not None:
+            continuum_g = _continuum_global_for_parent(global_index_rows, target_ion_stage=target_stage, parent_ion_stage=parent_stage)
+        status = "not_evaluated_no_radiation_field" if mode == "none" else "not_evaluated_placeholder_radiation_context_only"
+        missing = []
+        if bound_g is None:
+            missing.append("bound_level_global_index")
+        if continuum_g is None:
+            missing.append("continuum_or_parent_global_index")
+        missing += ["phint53_photoionization_integral", "milne_inverse_recombination_integral", "radiation_field_J_E_or_flux", "opacity_escape_probability_context"]
+        out.append({
+            "row_kind": "type53_rate_audit",
+            "type53_audit_version": "v0.3.43",
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "record_ion_stage": rec_stage,
+            "target_ion_stage": target_stage,
+            "parent_ion_stage": parent_stage,
+            "bound_level": bound_level,
+            "bound_global_index": bound_g,
+            "continuum_level_guess": continuum_guess,
+            "continuum_or_parent_global_index": continuum_g,
+            "final_or_parent_level_guess": final_or_parent_level,
+            "radiation_field_mode": mode,
+            "photoionization_rate_s^-1": "",
+            "inverse_recombination_rate_s^-1": "",
+            "photoionization_integral_status": status,
+            "milne_inverse_status": "not_evaluated_requires_phint53_inverse_context",
+            "matrix_role_if_implemented": "M[continuum_or_parent,bound]+=photoion_sink_and_M[bound,continuum_or_parent]+=inverse_recomb_source",
+            "requires_context": ar.get("requires_context") or "radiation_field_epi_bremsa_opacity_escape_probabilities_population_abundances",
+            "matrix_safe_to_assemble": False,
+            "missing_requirements": ";".join(missing),
+            "assembly_status": "diagnostic_only_not_assembled",
+            "provenance": "v0.3.43_type53_radiation_context_scaffold",
+            "raw_reals_preview": ar.get("raw_reals_preview"),
+            "raw_ints_preview": ar.get("raw_ints_preview"),
+        })
+    return out
+
+
+def _type53_rate_audit_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_type53_rate_audit_rows": len(rows),
+        "radiation_field_mode_counts": _counts(rows, "radiation_field_mode"),
+        "photoionization_integral_status_counts": _counts(rows, "photoionization_integral_status"),
+        "matrix_safe_to_assemble_counts": _counts(rows, "matrix_safe_to_assemble"),
+        "n_rows_with_bound_global_index": sum(1 for r in rows if r.get("bound_global_index") not in (None, "")),
+        "n_rows_with_continuum_or_parent_global_index": sum(1 for r in rows if r.get("continuum_or_parent_global_index") not in (None, "")),
+    }
+
+
 def build_ion_rate_block(
     db: ATDB,
     *,
@@ -4521,6 +4665,7 @@ def solve_element_reference(
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
+    radiation_field_mode: str = "none",
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -4745,6 +4890,21 @@ def solve_element_reference(
         rank_deficient_action=rank_deficient_action,
         negative_population_action=negative_population_action,
     )
+    radiation_context_rows = build_radiation_context_rows(
+        radiation_field_mode=radiation_field_mode,
+        temperature=temperature,
+        electron_density=electron_density,
+        element=Z_TO_SYMBOL.get(z, str(z)),
+        element_z=z,
+        stages=stages,
+        he_like_stage=he_like_stage,
+    )
+    type53_rate_audit_rows = build_type53_rate_audit_rows(
+        adjacent_audit_rows=assembled_coupling_terms,
+        global_index_rows=global_index_rows,
+        radiation_context_rows=radiation_context_rows,
+        he_like_stage=he_like_stage,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -4771,6 +4931,10 @@ def solve_element_reference(
             "global_bound_bound_type71_type99_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows),
             "n_type99_proxy_scale_scan_rows": len(type99_proxy_scale_scan_rows),
             "type99_proxy_scale_scan_summary": _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows),
+            "radiation_field_mode": radiation_field_mode,
+            "n_radiation_context_rows": len(radiation_context_rows),
+            "n_type53_rate_audit_rows": len(type53_rate_audit_rows),
+            "type53_rate_audit_summary": _type53_rate_audit_summary(type53_rate_audit_rows),
             "n_global_superlevel_cascade_matrix_term_rows": len(global_superlevel_cascade_matrix_terms),
             "global_superlevel_cascade_matrix_terms_summary": _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms),
             "n_global_superlevel_source_matrix_term_rows": len(global_superlevel_source_matrix_terms),
@@ -4795,6 +4959,8 @@ def solve_element_reference(
         "global_bound_bound_type71_solve_comparison": global_bound_bound_type71_solve_comparison_rows,
         "global_bound_bound_type71_type99_proxy_solve_comparison": global_bound_bound_type71_type99_proxy_solve_comparison_rows,
         "type99_proxy_scale_scan": type99_proxy_scale_scan_rows,
+        "radiation_context": radiation_context_rows,
+        "type53_rate_audit": type53_rate_audit_rows,
         "triplet_rows": triplet_rows,
         "adjacent_coupling_terms": assembled_coupling_terms,
         "superlevel_cascade_audit": superlevel_cascade_audit_rows,
@@ -5156,6 +5322,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_bound_bound_type71_solve_comparison_rows = result.get("global_bound_bound_type71_solve_comparison", [])
     global_bound_bound_type71_type99_proxy_solve_comparison_rows = result.get("global_bound_bound_type71_type99_proxy_solve_comparison", [])
     type99_proxy_scale_scan_rows = result.get("type99_proxy_scale_scan", [])
+    radiation_context_rows = result.get("radiation_context", [])
+    type53_rate_audit_rows = result.get("type53_rate_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -5179,6 +5347,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_bound_bound_type71_type99_proxy_solve_comparison_summary"] = _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows)
         if type99_proxy_scale_scan_rows:
             result["summary"]["type99_proxy_scale_scan_summary"] = _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows)
+        if type53_rate_audit_rows:
+            result["summary"]["type53_rate_audit_summary"] = _type53_rate_audit_summary(type53_rate_audit_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -5205,6 +5375,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv", global_bound_bound_type71_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_type99_proxy_solve_comparison.csv", global_bound_bound_type71_type99_proxy_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_type99_proxy_scale_scan.csv", type99_proxy_scale_scan_rows)
+    write_csv(out / "xstar_like_element_solver_radiation_context.csv", radiation_context_rows)
+    write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", type53_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
     (out / "xstar_like_element_solver_summary.json").write_text(json.dumps(result.get("summary", {}), indent=2), encoding="utf-8")
     lines = ["# XSTAR-like element-solver summary", "", "This is a pure-Python reference/scaffold run.", ""]
@@ -5212,7 +5384,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; diagnostic source audits remain nonphysical, and the full element-wide matrix is not solved yet.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

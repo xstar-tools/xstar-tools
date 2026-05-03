@@ -1,5 +1,9 @@
 # xstar-atomic
 
+### v0.3.43 note: type-53 radiation-context scaffold
+
+`examples/42_xstar_like_element_solver_demo.py` now includes `--radiation-field-mode none|flat|blackbody|table` as a diagnostic scaffold for future type-53 photoionization and Milne inverse-recombination work. The run writes `xstar_like_element_solver_radiation_context.csv` and `xstar_like_element_solver_type53_rate_audit.csv`. These outputs map type-53 records onto the current global-index state inventory where possible and explicitly report the missing `phint53`/radiation-field context. No type-53 physical rates are evaluated or assembled yet.
+
 ### He-like validation summary tagging
 
 `examples/34_summarize_helike_validation_runs.py` preserves condition-specific directory tags such as `ca19_xi3` and `ca19_xi4` in summary CSV/JSON/Markdown outputs.  This avoids merging multiple Ca XIX ionization-parameter grids into a single ambiguous `ca19` label.
