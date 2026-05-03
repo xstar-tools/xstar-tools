@@ -1,3 +1,7 @@
+### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
+
+v0.3.45 adds a diagnostic-only flat-field proxy for type-53 photoionization rates. It writes `xstar_like_element_solver_type53_flat_proxy_rate_audit.csv` and `xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv`, mapping bound-level to parent-continuum photoionization-sink topology through `global_index`. The proxy uses previewed type-53 real coefficients under a unit flat placeholder radiation field and is not a physical XSTAR `phint53`/Milne rate. It is not assembled into the solved matrix.
+
 ### v0.3.44 note: type-53 radiation-context scaffold bug fix
 
 v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-mode` runs to crash while building global bound-bound matrix terms. The type-53 scaffold remains diagnostic-only.

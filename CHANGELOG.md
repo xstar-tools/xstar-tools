@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.45 - 2026-05-03
+
+- Added a diagnostic flat-field type-53 photoionization-rate proxy.
+- Added `--type53-flat-proxy-scale` to `examples/42_xstar_like_element_solver_demo.py`.
+- Added `xstar_like_element_solver_type53_flat_proxy_rate_audit.csv`.
+- Added `xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv`.
+- The proxy maps `M[continuum_or_parent,bound] += rate_proxy` and `M[bound,bound] -= rate_proxy` topology only; it is not assembled into the solved matrix.
+- Physical XSTAR `phint53`/Milne rates are still not evaluated.
+
 ## v0.3.44 - 2026-05-03
 
 - Fixes a helper-name collision introduced in v0.3.43: the table-building `_global_index_lookup(rows)` helper is preserved for global matrix scaffolds, and the single-row query helper used by the type-53 audit is renamed to `_global_index_lookup_one(rows, ion_stage, level_index)`.
