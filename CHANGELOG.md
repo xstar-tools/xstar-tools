@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v0.3.42 - 2026-05-03
+
+- Fixes the v0.3.41 packaging/signature regression for `--type99-proxy-scale`: `solve_element_reference()` now actually accepts the `type99_proxy_scale` keyword and passes it into the type-99 proxy scale-scan builder.
+- Adds no intended physics changes; the type-99 proxy scale scan remains diagnostic-only.
+
 ## v0.3.41 - 2026-05-03
 
 - Bug fix: add the missing `type99_proxy_scale` keyword argument to `solve_element_reference()`.

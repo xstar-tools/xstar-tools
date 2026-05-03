@@ -1621,3 +1621,7 @@ Version v0.3.40 adds a diagnostic scale scan for the nonphysical type-99 superle
 ### v0.3.41 note
 
 Fixes the v0.3.40 CLI handoff for `--type99-proxy-scale` by adding the corresponding `solve_element_reference()` keyword argument. No physics behavior is intentionally changed.
+
+### v0.3.42 note
+
+Fixes the remaining v0.3.41 signature regression for `--type99-proxy-scale`: the solver entry point now actually accepts the keyword used by `examples/42_xstar_like_element_solver_demo.py`. No physics behavior is intentionally changed.
