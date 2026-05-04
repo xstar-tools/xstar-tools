@@ -8169,6 +8169,19 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    triplet_alpha_gamma_audit_rows = build_triplet_alpha_gamma_audit_rows(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
+    triplet_emissivity_branch_audit_rows = build_triplet_emissivity_branch_audit_rows(
+        global_index_rows=global_index_rows,
+        line_rows=line_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -8233,6 +8246,10 @@ def solve_element_reference(
             "intercombination_feed_audit_summary": _intercombination_feed_audit_summary(intercombination_feed_audit_rows),
             "n_triplet_component_balance_audit_rows": len(triplet_component_balance_audit_rows),
             "triplet_component_balance_audit_summary": _triplet_component_balance_audit_summary(triplet_component_balance_audit_rows),
+            "n_triplet_alpha_gamma_audit_rows": len(triplet_alpha_gamma_audit_rows),
+            "triplet_alpha_gamma_audit_summary": _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows),
+            "n_triplet_emissivity_branch_audit_rows": len(triplet_emissivity_branch_audit_rows),
+            "triplet_emissivity_branch_audit_summary": _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
             "radiation_normalization_audit_summary": _radiation_normalization_audit_summary(radiation_normalization_audit_rows),
             "n_type53_phint53_scale_scan_rows": len(type53_phint53_scale_scan_rows),
@@ -8290,6 +8307,8 @@ def solve_element_reference(
         "inverse_recombination_refined_scale_scan": inverse_recombination_refined_scale_scan_rows,
         "intercombination_feed_audit": intercombination_feed_audit_rows,
         "triplet_component_balance_audit": triplet_component_balance_audit_rows,
+        "triplet_alpha_gamma_audit": triplet_alpha_gamma_audit_rows,
+        "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
@@ -8580,6 +8599,350 @@ def build_triplet_component_balance_audit_rows(
     })
     return rows
 
+
+
+def _global_index_by_ion_level(global_index_rows: Sequence[dict]) -> Dict[Tuple[int, int], int]:
+    """Return ``(ion_stage, level_index) -> global_index`` for explicit rows."""
+    out: Dict[Tuple[int, int], int] = {}
+    for r in global_index_rows:
+        g = maybe_int(r.get("global_index"))
+        stage = maybe_int(r.get("ion_stage"))
+        lev = maybe_int(r.get("level_index"))
+        if g is not None and stage is not None and lev is not None:
+            out[(int(stage), int(lev))] = int(g)
+    return out
+
+
+def _term_signed_rate(term: Mapping[str, object]) -> Optional[float]:
+    """Extract the signed matrix coefficient from a full-global term row."""
+    for key in (
+        "full_global_signed_rate_s^-1",
+        "signed_rate_s^-1",
+        "signed_rate_proxy_s^-1",
+        "signed_rate_proxy",
+    ):
+        val = maybe_float(term.get(key))
+        if val is not None and math.isfinite(float(val)):
+            return float(val)
+    return None
+
+
+def _term_positive_rate(term: Mapping[str, object]) -> Optional[float]:
+    """Extract a positive rate magnitude from a full-global term row."""
+    for key in (
+        "full_global_rate_s^-1",
+        "rate_s^-1",
+        "photoionization_rate_s^-1",
+        "inverse_rate_s^-1",
+        "rate_proxy_s^-1",
+        "source_rate_s^-1",
+        "rate_proxy",
+    ):
+        val = maybe_float(term.get(key))
+        if val is not None and math.isfinite(float(val)):
+            return abs(float(val))
+    sval = _term_signed_rate(term)
+    return abs(sval) if sval is not None else None
+
+
+def build_triplet_alpha_gamma_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Build an XSTAR-source-aligned alpha/gamma balance audit for f/i/r uppers.
+
+    XSTAR ``msolvelucy`` uses population/fraction weighted terms rather than raw
+    incoming rate sums.  This diagnostic therefore reports source-population
+    weighted feed terms ``alpha = sum_j rate(i<-j) * n_j`` and loss terms
+    ``gamma = sum_j rate(j<-i)`` for each triplet upper.  It remains a diagnostic
+    proxy because the matrix terms may still contain nonphysical scaffolds.
+    """
+    he_like_stage = int(he_like_stage)
+    meta = _global_index_metadata(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    triplet_sets = _triplet_global_index_sets(global_index_rows, ion_stage=he_like_stage)
+    triplet_indices = {comp: [int(x) for x in triplet_sets.get(comp, [])] for comp in ("f", "i", "r")}
+
+    rows: List[dict] = []
+    component_totals: Dict[str, Dict[str, float]] = {c: {"alpha": 0.0, "gamma_pop": 0.0, "pop": 0.0, "gamma": 0.0} for c in ("f", "i", "r")}
+
+    for comp, indices in triplet_indices.items():
+        for gi in indices:
+            pop_i = float(pops.get(int(gi), 0.0))
+            alpha = 0.0
+            gamma = 0.0
+            diag_loss = 0.0
+            n_alpha = n_gamma = n_diag = 0
+            feed_by_component: Dict[str, float] = {}
+            loss_by_component: Dict[str, float] = {}
+            dominant_feed = (0.0, None, None, None)  # weighted, source gi, component, term
+            dominant_loss = (0.0, None, None, None)
+            for term in full_global_matrix_terms:
+                row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+                col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+                rate = _term_positive_rate(term)
+                signed = _term_signed_rate(term)
+                if rate is None or not math.isfinite(rate):
+                    continue
+                component_name = str(term.get("full_global_component") or "")
+                matrix_kind = str(term.get("matrix_term_kind") or "")
+                # Source -> this level feed: M[this, source] += rate.
+                if row_gi == gi and col_gi is not None and col_gi != gi:
+                    src_pop = float(pops.get(int(col_gi), 0.0))
+                    weighted = rate * src_pop
+                    alpha += weighted
+                    n_alpha += 1
+                    feed_by_component[component_name] = feed_by_component.get(component_name, 0.0) + weighted
+                    if abs(weighted) > dominant_feed[0]:
+                        dominant_feed = (abs(weighted), int(col_gi), component_name, term)
+                # This level -> destination loss: M[dest, this] += rate.
+                if col_gi == gi and row_gi is not None and row_gi != gi:
+                    gamma += rate
+                    n_gamma += 1
+                    loss_by_component[component_name] = loss_by_component.get(component_name, 0.0) + rate
+                    if rate > dominant_loss[0]:
+                        dominant_loss = (rate, int(row_gi), component_name, term)
+                # Diagonal drain on this level.
+                if row_gi == gi and col_gi == gi:
+                    dval = abs(float(signed)) if signed is not None else rate
+                    diag_loss += dval
+                    n_diag += 1
+                    loss_by_component[component_name] = loss_by_component.get(component_name, 0.0) + dval
+            gamma_total = gamma if gamma > 0.0 else diag_loss
+            if diag_loss > gamma_total:
+                gamma_total = diag_loss
+            alpha_over_gamma = alpha / gamma_total if gamma_total > 0.0 else None
+            pop_over_alpha_gamma = pop_i / alpha_over_gamma if alpha_over_gamma and alpha_over_gamma != 0.0 else None
+            df_term = dominant_feed[3] or {}
+            dl_term = dominant_loss[3] or {}
+            rows.append({
+                "audit_kind": "triplet_alpha_gamma_level",
+                "component": comp,
+                "global_index": gi,
+                "ion_stage": meta.get(gi, {}).get("ion_stage"),
+                "level_index": meta.get(gi, {}).get("level_index"),
+                "level_label": meta.get(gi, {}).get("level_label"),
+                "population_fraction": pop_i,
+                "alpha_source_population_weighted_feed_s^-1": alpha,
+                "gamma_loss_rate_sum_s^-1": gamma_total,
+                "gamma_offdiag_loss_rate_sum_s^-1": gamma,
+                "gamma_diagonal_loss_rate_sum_s^-1": diag_loss,
+                "alpha_over_gamma_population_proxy": alpha_over_gamma,
+                "population_over_alpha_gamma_proxy": pop_over_alpha_gamma,
+                "n_alpha_feed_terms": n_alpha,
+                "n_gamma_loss_terms": n_gamma,
+                "n_diagonal_loss_terms": n_diag,
+                "alpha_by_component_json": json.dumps(dict(sorted(feed_by_component.items())), sort_keys=True),
+                "gamma_by_component_json": json.dumps(dict(sorted(loss_by_component.items())), sort_keys=True),
+                "dominant_alpha_source_global_index": dominant_feed[1] if dominant_feed[1] is not None else "",
+                "dominant_alpha_source_level_label": meta.get(dominant_feed[1], {}).get("level_label", "") if dominant_feed[1] is not None else "",
+                "dominant_alpha_component": dominant_feed[2] or "",
+                "dominant_alpha_weighted_rate_s^-1": dominant_feed[0],
+                "dominant_alpha_record": df_term.get("record", df_term.get("source_record", "")),
+                "dominant_alpha_matrix_term_kind": df_term.get("matrix_term_kind", ""),
+                "dominant_gamma_destination_global_index": dominant_loss[1] if dominant_loss[1] is not None else "",
+                "dominant_gamma_destination_level_label": meta.get(dominant_loss[1], {}).get("level_label", "") if dominant_loss[1] is not None else "",
+                "dominant_gamma_component": dominant_loss[2] or "",
+                "dominant_gamma_rate_s^-1": dominant_loss[0],
+                "dominant_gamma_record": dl_term.get("record", dl_term.get("source_record", "")),
+                "dominant_gamma_matrix_term_kind": dl_term.get("matrix_term_kind", ""),
+                "diagnostic_note": "v0.3.61 XSTAR-like alpha/gamma audit: alpha uses source population times feed rate; gamma uses loss rates. Matrix terms may still include proxy topology.",
+            })
+            component_totals[comp]["alpha"] += alpha
+            component_totals[comp]["gamma_pop"] += gamma_total * pop_i
+            component_totals[comp]["pop"] += pop_i
+            component_totals[comp]["gamma"] += gamma_total
+
+    for comp in ("f", "i", "r"):
+        t = component_totals[comp]
+        rows.append({
+            "audit_kind": "triplet_alpha_gamma_component_summary",
+            "component": comp,
+            "population_fraction_sum": t["pop"],
+            "alpha_source_population_weighted_feed_sum_s^-1": t["alpha"],
+            "population_weighted_gamma_loss_sum_s^-1": t["gamma_pop"],
+            "gamma_loss_rate_sum_s^-1": t["gamma"],
+            "alpha_minus_population_weighted_gamma_s^-1": t["alpha"] - t["gamma_pop"],
+            "alpha_over_population_weighted_gamma": (t["alpha"] / t["gamma_pop"] if t["gamma_pop"] > 0.0 else ""),
+            "diagnostic_note": "component-level XSTAR-like steady-state balance proxy",
+        })
+    # Compact comparison row.
+    f = component_totals["f"]; i = component_totals["i"]; r = component_totals["r"]
+    rows.append({
+        "audit_kind": "triplet_alpha_gamma_summary",
+        "component": "summary",
+        "population_i_over_f": (i["pop"] / f["pop"] if f["pop"] else ""),
+        "population_i_over_r": (i["pop"] / r["pop"] if r["pop"] else ""),
+        "alpha_i_over_f": (i["alpha"] / f["alpha"] if f["alpha"] else ""),
+        "alpha_i_over_r": (i["alpha"] / r["alpha"] if r["alpha"] else ""),
+        "gamma_pop_i_over_f": (i["gamma_pop"] / f["gamma_pop"] if f["gamma_pop"] else ""),
+        "gamma_pop_i_over_r": (i["gamma_pop"] / r["gamma_pop"] if r["gamma_pop"] else ""),
+        "diagnostic_note": "summary ratios; use with emissivity audit to separate population-balance and line-accounting effects",
+    })
+    return rows
+
+
+def build_triplet_emissivity_branch_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Audit triplet line branching/emissivity accounting from solved populations.
+
+    The current line rows use a simple ``n_upper*A*E`` proxy.  XSTAR's
+    ``calc_emis_ion`` includes net ``ucalc`` emissivities, line selection, and
+    escape probabilities.  This audit records the simple proxy alongside fields
+    that make the missing XSTAR factors explicit.
+    """
+    he_like_stage = int(he_like_stage)
+    meta = _global_index_metadata(global_index_rows)
+    by_ion_level = _global_index_by_ion_level(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    # Total radiative A out of each upper level from decoded line list.
+    total_A_by_upper: Dict[int, float] = {}
+    for row in line_rows:
+        if maybe_int(row.get("ion_stage")) != he_like_stage:
+            continue
+        upper = maybe_int(row.get("upper_level"))
+        A = maybe_float(row.get("A_s^-1"))
+        if upper is not None and A is not None and A > 0.0:
+            total_A_by_upper[int(upper)] = total_A_by_upper.get(int(upper), 0.0) + float(A)
+
+    rows: List[dict] = []
+    component_sums: Dict[str, Dict[str, float]] = {c: {"energy": 0.0, "photon": 0.0, "pop": 0.0, "A": 0.0, "n": 0.0} for c in ("f", "i", "r")}
+    for row in line_rows:
+        if maybe_int(row.get("ion_stage")) != he_like_stage:
+            continue
+        comp = classify_helike_triplet_line(row)
+        if comp not in {"f", "i", "r"}:
+            continue
+        upper = maybe_int(row.get("upper_level"))
+        lower = maybe_int(row.get("lower_level"))
+        if upper is None:
+            continue
+        ug = by_ion_level.get((he_like_stage, int(upper)))
+        lg = by_ion_level.get((he_like_stage, int(lower))) if lower is not None else None
+        upper_pop = float(pops.get(int(ug), 0.0)) if ug is not None else 0.0
+        lower_pop = float(pops.get(int(lg), 0.0)) if lg is not None else 0.0
+        A = maybe_float(row.get("A_s^-1")) or 0.0
+        Eerg = line_energy_erg(row) or 0.0
+        total_A = total_A_by_upper.get(int(upper), 0.0)
+        branch = float(A) / total_A if total_A > 0.0 and A > 0.0 else None
+        simple_photon = max(upper_pop, 0.0) * max(float(A), 0.0)
+        simple_energy = simple_photon * max(float(Eerg), 0.0)
+        # XSTAR calc_emis_ion has two escape-probability channels.  Until tau/cfrac
+        # are available, record transparent placeholders separately from the simple
+        # proxy rather than hiding this missing physics.
+        pescl_tau1_placeholder = 1.0
+        pescl_tau2_placeholder = 1.0
+        cfrac_placeholder = 0.0
+        ptmp1 = pescl_tau1_placeholder * (1.0 - cfrac_placeholder)
+        ptmp2 = pescl_tau2_placeholder * (1.0 - cfrac_placeholder) + 2.0 * pescl_tau1_placeholder * cfrac_placeholder
+        xstar_like_energy_ptmp1 = simple_energy * ptmp1
+        xstar_like_energy_ptmp2 = simple_energy * ptmp2
+        component_sums[comp]["energy"] += simple_energy
+        component_sums[comp]["photon"] += simple_photon
+        component_sums[comp]["pop"] += upper_pop
+        component_sums[comp]["A"] += float(A)
+        component_sums[comp]["n"] += 1.0
+        rows.append({
+            "audit_kind": "triplet_emissivity_branch_line",
+            "component": comp,
+            "record": row.get("record"),
+            "ion_stage": he_like_stage,
+            "upper_level": upper,
+            "lower_level": lower,
+            "upper_global_index": ug if ug is not None else "",
+            "lower_global_index": lg if lg is not None else "",
+            "upper_label": row.get("upper_label"),
+            "lower_label": row.get("lower_label"),
+            "wavelength_A": row.get("wavelength_A"),
+            "energy_eV": row.get("energy_eV"),
+            "photon_energy_erg": Eerg,
+            "A_s^-1": A,
+            "total_A_from_upper_decoded_lines_s^-1": total_A,
+            "branching_fraction_from_upper_decoded_lines": branch,
+            "upper_population_fraction": upper_pop,
+            "lower_population_fraction": lower_pop,
+            "simple_pop_A_photon_emissivity_s^-1": simple_photon,
+            "simple_pop_A_energy_emissivity_erg_s^-1": simple_energy,
+            "xstar_like_transparent_ptmp1_energy_proxy_erg_s^-1": xstar_like_energy_ptmp1,
+            "xstar_like_transparent_ptmp2_energy_proxy_erg_s^-1": xstar_like_energy_ptmp2,
+            "ptmp1_escape_placeholder": ptmp1,
+            "ptmp2_escape_placeholder": ptmp2,
+            "missing_xstar_emissivity_context": "ucalc_net_ans1_ans2;abund1_abund2;optical_depth_tau1_tau2;escape_probability_pescl;cfrac;strong_line_filtering_nlbin_ncbin",
+            "diagnostic_note": "v0.3.61 branch audit: transparent XSTAR-like proxy equals simple pop*A*E until escape/net-emissivity context is ported",
+        })
+
+    total_energy = sum(component_sums[c]["energy"] for c in ("f", "i", "r"))
+    target = _xstar_triplet_target(he_like_stage)
+    for comp in ("f", "i", "r"):
+        frac = component_sums[comp]["energy"] / total_energy if total_energy > 0.0 else 0.0
+        target_frac = maybe_float((target or {}).get(comp) or (target or {}).get(f"{comp}_fraction"))
+        rows.append({
+            "audit_kind": "triplet_emissivity_branch_component_summary",
+            "component": comp,
+            "n_lines": int(component_sums[comp]["n"]),
+            "upper_population_fraction_sum_over_lines": component_sums[comp]["pop"],
+            "A_s^-1_sum_over_lines": component_sums[comp]["A"],
+            "simple_pop_A_photon_emissivity_sum_s^-1": component_sums[comp]["photon"],
+            "simple_pop_A_energy_emissivity_sum_erg_s^-1": component_sums[comp]["energy"],
+            "component_fraction_from_simple_emissivity": frac,
+            "target_component_fraction": target_frac,
+            "delta_fraction_minus_target": (frac - target_frac if target_frac is not None else ""),
+            "diagnostic_note": "component summary for deciding whether low i is a population or line-accounting problem",
+        })
+    fE = component_sums["f"]["energy"]
+    iE = component_sums["i"]["energy"]
+    rE = component_sums["r"]["energy"]
+    rows.append({
+        "audit_kind": "triplet_emissivity_branch_summary",
+        "component": "summary",
+        "f_energy_sum_erg_s^-1": fE,
+        "i_energy_sum_erg_s^-1": iE,
+        "r_energy_sum_erg_s^-1": rE,
+        "f_fraction": fE / total_energy if total_energy else 0.0,
+        "i_fraction": iE / total_energy if total_energy else 0.0,
+        "r_fraction": rE / total_energy if total_energy else 0.0,
+        "R": fE / iE if iE > 0.0 else "",
+        "G": (fE + iE) / rE if rE > 0.0 else "",
+        "missing_xstar_context_summary": "transparent proxy only; calc_emis_ion net emissivity and escape probabilities not yet ported",
+    })
+    return rows
+
+
+def _triplet_alpha_gamma_audit_summary(rows: Sequence[dict]) -> dict:
+    comps = {r.get("component"): r for r in rows if r.get("audit_kind") == "triplet_alpha_gamma_component_summary"}
+    return {
+        "n_triplet_alpha_gamma_audit_rows": len(rows),
+        "alpha_f_s^-1": comps.get("f", {}).get("alpha_source_population_weighted_feed_sum_s^-1", ""),
+        "alpha_i_s^-1": comps.get("i", {}).get("alpha_source_population_weighted_feed_sum_s^-1", ""),
+        "alpha_r_s^-1": comps.get("r", {}).get("alpha_source_population_weighted_feed_sum_s^-1", ""),
+        "population_f": comps.get("f", {}).get("population_fraction_sum", ""),
+        "population_i": comps.get("i", {}).get("population_fraction_sum", ""),
+        "population_r": comps.get("r", {}).get("population_fraction_sum", ""),
+        "provenance": "v0.3.61_triplet_alpha_gamma_source_aligned_audit",
+    }
+
+
+def _triplet_emissivity_branch_audit_summary(rows: Sequence[dict]) -> dict:
+    comps = {r.get("component"): r for r in rows if r.get("audit_kind") == "triplet_emissivity_branch_component_summary"}
+    summary = next((r for r in rows if r.get("audit_kind") == "triplet_emissivity_branch_summary"), {})
+    return {
+        "n_triplet_emissivity_branch_audit_rows": len(rows),
+        "n_triplet_line_rows": sum(1 for r in rows if r.get("audit_kind") == "triplet_emissivity_branch_line"),
+        "f_fraction": summary.get("f_fraction", comps.get("f", {}).get("component_fraction_from_simple_emissivity", "")),
+        "i_fraction": summary.get("i_fraction", comps.get("i", {}).get("component_fraction_from_simple_emissivity", "")),
+        "r_fraction": summary.get("r_fraction", comps.get("r", {}).get("component_fraction_from_simple_emissivity", "")),
+        "missing_xstar_context": "calc_emis_ion net ucalc emissivity; pescl escape probabilities; cfrac; strong-line filtering",
+        "provenance": "v0.3.61_triplet_emissivity_branch_audit",
+    }
 
 def _intercombination_feed_audit_summary(rows: Sequence[dict]) -> dict:
     def counts(col: str) -> dict:
@@ -8985,6 +9348,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type53_phint53_scale_scan_rows = result.get("type53_phint53_scale_scan", [])
     full_global_matrix_terms = result.get("full_global_matrix_terms", [])
     full_global_normalized_solve_comparison_rows = result.get("full_global_normalized_solve_comparison", [])
+    triplet_alpha_gamma_audit_rows = result.get("triplet_alpha_gamma_audit", [])
+    triplet_emissivity_branch_audit_rows = result.get("triplet_emissivity_branch_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -9044,6 +9409,10 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["full_global_matrix_terms_summary"] = _full_global_matrix_terms_summary(full_global_matrix_terms)
         if full_global_normalized_solve_comparison_rows:
             result["summary"]["full_global_normalized_solve_comparison_summary"] = _full_global_normalized_solve_comparison_summary(full_global_normalized_solve_comparison_rows)
+        if triplet_alpha_gamma_audit_rows:
+            result["summary"]["triplet_alpha_gamma_audit_summary"] = _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows)
+        if triplet_emissivity_branch_audit_rows:
+            result["summary"]["triplet_emissivity_branch_audit_summary"] = _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -9088,6 +9457,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", inverse_recombination_refined_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_intercombination_feed_audit.csv", result.get("intercombination_feed_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_component_balance_audit.csv", result.get("triplet_component_balance_audit", []))
+    write_csv(out / "xstar_like_element_solver_triplet_alpha_gamma_audit.csv", triplet_alpha_gamma_audit_rows)
+    write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
