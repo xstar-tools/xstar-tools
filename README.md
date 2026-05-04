@@ -1665,6 +1665,11 @@ Version v0.3.48 adds `xstar_like_element_solver_full_global_normalized_solve_com
 
 Version v0.3.47 adds `xstar_like_element_solver_full_global_matrix_terms.csv`, a unified diagnostic topology table for the future element-wide matrix solve.  It combines the existing C VI and C V bound-bound matrix blocks, C V type-71 superlevel cascade matrix terms, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows.  This file is not yet solved as a normalized global matrix.  It is a scaffold for the next step, where a true C VI+C V population normalization row can be added and the full matrix can be solved.
 
+
+### v0.3.53 note: type-53 phint53 summary crash fix
+
+v0.3.53 fixes a v0.3.52 summary-generation crash in the type-53 `phint53` diagnostic path (`NameError: name '_sum_float' is not defined`).  The release adds the missing module-level finite-sum helper used by the phint53 audit and matrix-term summaries.  No physics behavior is intentionally changed.
+
 ### v0.3.52 note: type-53 phint53 photoionization-kernel diagnostic
 
 v0.3.52 keeps the full-global diagnostic default on the XSTAR-Lucy solver path and adds the first type-53 `phint53` forward-photoionization kernel diagnostic. The run now writes `xstar_like_element_solver_type53_phint53_rate_audit.csv` and `xstar_like_element_solver_global_type53_phint53_matrix_terms.csv`. These rows replace the older flat type-53 proxy in the full-global matrix topology whenever the phint53-kernel rows are matrix-ready. The kernel maps type-53 cross-section pairs onto the radiation grid and integrates the XSTAR-style `sigma(E) * bremsa(E) / E` photoionization term. The continuum field is still a placeholder in this release; Milne inverse recombination, opacity/escape probability, and the real XSTAR radiation field remain pending.

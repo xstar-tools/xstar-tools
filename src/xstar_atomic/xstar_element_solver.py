@@ -65,6 +65,23 @@ COLLISIONAL_IONIZATION_LIKE_DATA_TYPES = {57, 95}
 SUPERLEVEL_CASCADE_DATA_TYPES = {70, 71, 74, 77, 99}
 
 
+def _sum_float(rows: Sequence[dict], col: str) -> float:
+    """Return a finite float sum for *col* across a sequence of row dictionaries.
+
+    This module has several local summary helpers with nested ``_sum_float``
+    functions.  The type-53 ``phint53`` summary added in v0.3.52 needs a
+    module-level helper because it is shared by multiple summary functions.
+    Missing, non-numeric, NaN, and infinite values are ignored, matching the
+    behavior of the older nested helpers.
+    """
+    total = 0.0
+    for row in rows:
+        val = maybe_float(row.get(col))
+        if val is not None and math.isfinite(float(val)):
+            total += float(val)
+    return total
+
+
 @dataclass
 class IonBlockDiagnostics:
     element: str

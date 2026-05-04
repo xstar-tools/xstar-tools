@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.53 - 2026-05-04
+
+- Fixes the v0.3.52 `NameError: name '_sum_float' is not defined` crash in the type-53 `phint53` audit summary path.
+- Adds a module-level `_sum_float(rows, col)` helper used by both `xstar_like_element_solver_type53_phint53_rate_audit.csv` and `xstar_like_element_solver_global_type53_phint53_matrix_terms.csv` summary generation.
+- No intentional physics change: XSTAR-Lucy remains the preferred full-global diagnostic solver, and the type-53 `phint53` forward-kernel diagnostic remains a first audit/topology port with placeholder radiation context.
+
 ## v0.3.52 - 2026-05-03
 
 - Makes `--full-global-linear-solver xstar-lucy` the preferred/default diagnostic solver for the full-global path.
