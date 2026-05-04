@@ -1696,3 +1696,8 @@ The diagnostic full-global solver now exposes independent inverse-recombination 
 
 The first scale in each list is used for the primary full-global matrix.  All requested scales are scanned and written to `xstar_like_element_solver_inverse_recombination_scale_scan.csv`.  This matches the XSTAR source direction: type 53 uses `phint53`/`milne`, while type 74 uses `calt74`; the current Python rows remain diagnostic proxies until the true radiation and continuum context is ported.
 
+
+### v0.3.57 source-aligned type-74 calt74 diagnostic
+
+Version 0.3.57 adds `xstar_like_element_solver_type74_calt74_rate_audit.csv` and `xstar_like_element_solver_global_type74_calt74_matrix_terms.csv`.  The diagnostic ports the two-output structure of XSTAR `calt74`: forward DR-delta photoionization `rate` and inverse recombination `alpha`, then applies the `ucalc` statistical-weight correction `alpha *= gglo/ggup` for the inverse topology.  The full-global matrix prefers these source-aligned type-74 rows when available.  Absolute forward rates are still tied to the placeholder radiation/bremsa context, so this remains a diagnostic scaffold rather than a physical XSTAR solution.
+

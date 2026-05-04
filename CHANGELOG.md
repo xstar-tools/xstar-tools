@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.57 - 2026-05-04
+
+- Adds a source-aligned type-74 `calt74` diagnostic path.
+- Evaluates both `rate` and `alpha` following `xstarlib/src/calt74.f90`, including delta-resonance interpolation on the diagnostic radiation grid and the `ucalc` statistical-weight correction `alpha *= gglo/ggup`.
+- Writes `xstar_like_element_solver_type74_calt74_rate_audit.csv` and `xstar_like_element_solver_global_type74_calt74_matrix_terms.csv`.
+- The full-global matrix now prefers the source-aligned type-74 calt74 inverse topology rows when available, falling back to the older type-74 inverse proxy rows otherwise.
+- Still diagnostic: absolute forward rates depend on placeholder `bremsa`, and parent-continuum closure remains pending.
+
 ## v0.3.56 - 2026-05-04
 
 - Checked the XSTAR source path for inverse recombination before extending the scaffold:

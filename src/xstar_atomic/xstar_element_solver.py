@@ -1956,63 +1956,134 @@ def build_type74_linkage_audit(superlevel_rows: Sequence[dict], branching_rows: 
     return out
 
 
-def _xstar_calt74_alpha_diagnostic(temperature: float, reals: Sequence[float]) -> dict:
-    """Diagnostic Python port of the recombination part of XSTAR calt74.
+def _xstar_calt74_rate_alpha_diagnostic(
+    temperature: float,
+    reals: Sequence[float],
+    *,
+    radiation_context_rows: Sequence[dict] | None = None,
+) -> dict:
+    """Diagnostic Python port of XSTAR ``calt74`` rate and alpha.
 
-    XSTAR ``calt74`` evaluates delta functions added to photoionization cross
-    sections to match dielectronic-recombination rates.  Its recombination
-    output ``alpha`` is a coefficient before the statistical-weight correction;
-    ``ucalc.f90`` subsequently applies ``alpha *= g(recombined)/g(continuum)``.
+    This follows ``xstarlib/src/calt74.f90`` more directly than the older
+    v0.3.27 alpha-only helper.  XSTAR receives an energy grid ``xse`` in eV
+    and a radiation/flux-like array ``xss`` (``bremsa`` in ``ucalc.f90``),
+    evaluates delta-function resonances at ``(x_i + xt) * Ry``, linearly
+    interpolates ``xss`` there, and returns both:
 
-    This helper ports only that recombination coefficient.  It does not use the
-    radiation-grid photoionization integral and it does not assemble any matrix
-    term.  The units follow the XSTAR routine convention as closely as possible
-    for diagnostic comparison.
+    * ``rate``  -- forward photoionization delta contribution before matrix use
+    * ``alpha`` -- inverse DR recombination coefficient before the
+      ``gglo/ggup`` statistical-weight correction applied in ``ucalc``.
+
+    The radiation array is still the deterministic placeholder used by the
+    current diagnostic radiation context, so absolute rates are not physical
+    XSTAR rates.  The algebra, coefficient layout, interpolation, constants,
+    and statistical-weight handoff are source-code aligned diagnostics.
     """
     try:
         rd = [float(x) for x in reals]
         temp = float(temperature)
     except Exception:
-        return {"type74_eval_status": "type74_bad_input"}
+        return {"type74_calt74_status": "type74_bad_input"}
     nrd = len(rd)
     if nrd < 3:
-        return {"type74_eval_status": "type74_too_few_real_coefficients", "type74_n_real_coefficients": nrd}
+        return {"type74_calt74_status": "type74_too_few_real_coefficients", "type74_n_real_coefficients": nrd}
     m = (nrd - 1) // 2
     if m <= 0 or (1 + 2 * m) > nrd:
-        return {"type74_eval_status": "type74_bad_delta_coefficient_layout", "type74_n_real_coefficients": nrd, "type74_m_delta_count": m}
+        return {"type74_calt74_status": "type74_bad_delta_coefficient_layout", "type74_n_real_coefficients": nrd, "type74_m_delta_count": m}
     if temp <= 0.0 or not math.isfinite(temp):
-        return {"type74_eval_status": "type74_bad_temperature", "type74_temperature_K": temp}
+        return {"type74_calt74_status": "type74_bad_temperature", "type74_temperature_K": temp}
 
-    # Literal constants/structure from xstarlib/src/calt74.f90.
+    # Constants are literal values from calt74.f90.  ``ry`` is the Rydberg in eV.
     te = temp * 1.38066e-16
     ryk = 4.589343e10
     factor = 213.9577e-9
+    ry_eV = 13.60569253
     xt = rd[0]
     energies = rd[1:1 + m]
     heights = rd[1 + m:1 + 2 * m]
+
     alpha_sum = 0.0
-    used = 0
-    skipped = 0
+    alpha_terms_used = 0
+    alpha_terms_skipped = 0
     for x, hgh in zip(energies, heights):
         arg = x / ryk / te
         if arg < 40.0:
             alpha_sum += math.exp(-arg) * (x + xt) * (x + xt) * hgh
-            used += 1
+            alpha_terms_used += 1
         else:
-            skipped += 1
+            alpha_terms_skipped += 1
     alpha = alpha_sum * factor / (te ** 1.5) / ryk / ryk
+
+    ctx = dict((radiation_context_rows or [{}])[0] if radiation_context_rows else {})
+    mode = str(ctx.get("radiation_field_mode", "none"))
+    ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 256
+    emin = maybe_float(ctx.get("energy_min_eV")) or 1.0
+    emax = maybe_float(ctx.get("energy_max_eV")) or 1.0e5
+    grid = _log_energy_grid(float(emin), float(emax), max(int(ngrid), 2))
+    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=temp) for e in grid]
+
+    rate_sum = 0.0
+    rate_terms_used = 0
+    rate_terms_outside_grid = 0
+    resonance_energies_eV = []
+    for x, hgh in zip(energies, heights):
+        eres = (x + xt) * ry_eV
+        resonance_energies_eV.append(eres)
+        if not (math.isfinite(eres) and len(grid) >= 2 and grid[0] <= eres <= grid[-1]):
+            rate_terms_outside_grid += 1
+            continue
+        # Source-compatible linear interpolation of xss at resonance energy.
+        xsec = None
+        for i in range(len(grid) - 1):
+            if grid[i] <= eres <= grid[i + 1]:
+                dx = grid[i + 1] - grid[i]
+                if dx == 0.0:
+                    xsec = bremsa[i]
+                else:
+                    xsec = bremsa[i] + (bremsa[i + 1] - bremsa[i]) * (eres - grid[i]) / dx
+                break
+        if xsec is None:
+            rate_terms_outside_grid += 1
+            continue
+        rate_sum += xsec * hgh
+        rate_terms_used += 1
+    rate = rate_sum * 4.752e-22
     return {
-        "type74_eval_status": "evaluated_type74_calt74_dr_alpha_diagnostic",
+        "type74_calt74_status": "evaluated_type74_calt74_rate_alpha_diagnostic",
+        "type74_rate_unweighted_s^-1": rate,
         "type74_alpha_unweighted_cm3_s": alpha,
         "type74_n_real_coefficients": nrd,
         "type74_m_delta_count": m,
-        "type74_delta_terms_used": used,
-        "type74_delta_terms_skipped_arg_ge_40": skipped,
-        "type74_xt_coeff_preview": xt,
+        "type74_xt_coeff": xt,
+        "type74_delta_terms_alpha_used": alpha_terms_used,
+        "type74_delta_terms_alpha_skipped_arg_ge_40": alpha_terms_skipped,
+        "type74_delta_terms_rate_used": rate_terms_used,
+        "type74_delta_terms_rate_outside_grid": rate_terms_outside_grid,
         "type74_delta_energy_coeff_min": min(energies) if energies else None,
         "type74_delta_energy_coeff_max": max(energies) if energies else None,
         "type74_delta_height_abs_sum": sum(abs(h) for h in heights),
+        "type74_resonance_energy_eV_min": min(resonance_energies_eV) if resonance_energies_eV else None,
+        "type74_resonance_energy_eV_max": max(resonance_energies_eV) if resonance_energies_eV else None,
+        "radiation_field_mode": mode,
+        "radiation_grid_min_eV": min(grid) if grid else None,
+        "radiation_grid_max_eV": max(grid) if grid else None,
+        "provenance": "v0.3.57_source_aligned_calt74_rate_alpha_diagnostic",
     }
+
+
+def _xstar_calt74_alpha_diagnostic(temperature: float, reals: Sequence[float]) -> dict:
+    """Backward-compatible wrapper for the older alpha-only diagnostic name."""
+    ev = _xstar_calt74_rate_alpha_diagnostic(temperature, reals, radiation_context_rows=[])
+    # Preserve the old status/key names used by existing type-74 source audits.
+    out = dict(ev)
+    if str(out.get("type74_calt74_status", "")).startswith("evaluated"):
+        out["type74_eval_status"] = "evaluated_type74_calt74_dr_alpha_diagnostic"
+    else:
+        out["type74_eval_status"] = out.get("type74_calt74_status")
+    out["type74_xt_coeff_preview"] = out.get("type74_xt_coeff")
+    out["type74_delta_terms_used"] = out.get("type74_delta_terms_alpha_used")
+    out["type74_delta_terms_skipped_arg_ge_40"] = out.get("type74_delta_terms_alpha_skipped_arg_ge_40")
+    return out
 
 
 def build_type74_triplet_source_audit(
@@ -5769,6 +5840,193 @@ def build_type74_inverse_recombination_audit_rows(
     return rows
 
 
+
+def build_type74_calt74_rate_audit_rows(
+    *,
+    type74_linkage_rows: Sequence[dict],
+    radiation_context_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    inverse_recombination_mode: str = "none",
+    temperature: float,
+    type74_inverse_scale: object = 1.0,
+) -> List[dict]:
+    """Evaluate type-74 rows with a source-aligned calt74 diagnostic.
+
+    v0.3.57 ports both outputs from XSTAR ``calt74``: forward DR-delta
+    photoionization ``rate`` and inverse DR ``alpha``.  ``ucalc.f90`` then
+    applies ``alpha *= gglo/ggup`` where ``gglo`` is the recombined/destination
+    level statistical weight and ``ggup`` is the parent-continuum statistical
+    weight.  Absolute rates still depend on the placeholder radiation context.
+    """
+    mode = _normalise_inverse_recombination_mode(inverse_recombination_mode)
+    enabled = _mode_includes_type74_inverse(mode)
+    scales = _parse_triplet_source_scales(type74_inverse_scale)
+    scale = float(scales[0]) if scales else 1.0
+    if not math.isfinite(scale):
+        scale = 1.0
+    lookup = _global_index_lookup(global_index_rows)
+    rows: List[dict] = []
+    for lr in type74_linkage_rows:
+        if maybe_int(lr.get("data_type")) != 74:
+            continue
+        stage = maybe_int(lr.get("target_ion_stage"))
+        dest = maybe_int(lr.get("type74_i7_recombined_or_source_level") or lr.get("source_level"))
+        parent_stage = maybe_int(lr.get("parent_ion_stage")) or (stage + 1 if stage is not None else None)
+        if stage is None or dest is None:
+            continue
+        raw = lr.get("type74_raw_reals_preview") or lr.get("raw_reals_preview")
+        reals = _parse_preview_numbers(raw)
+        ev = _xstar_calt74_rate_alpha_diagnostic(
+            float(temperature),
+            reals,
+            radiation_context_rows=radiation_context_rows,
+        )
+        dest_row = lookup.get((stage, dest))
+        cont_row = _find_parent_continuum_global_row(global_index_rows, ion_stage=stage)
+        dest_g = maybe_int(dest_row.get("global_index")) if dest_row else None
+        cont_g = maybe_int(cont_row.get("global_index")) if cont_row else None
+        gglo = maybe_float(dest_row.get("stat_weight")) if dest_row else None
+        ggup = maybe_float(cont_row.get("stat_weight")) if cont_row else None
+        stat_factor = 0.0
+        if gglo is not None and ggup not in (None, 0.0):
+            stat_factor = float(gglo) / float(ggup)
+        alpha0 = maybe_float(ev.get("type74_alpha_unweighted_cm3_s")) or 0.0
+        rate_forward0 = maybe_float(ev.get("type74_rate_unweighted_s^-1")) or 0.0
+        alpha_weighted0 = alpha0 * stat_factor
+        inv_rate = alpha_weighted0 * scale if enabled else 0.0
+        safe = enabled and dest_g is not None and cont_g is not None and inv_rate > 0.0
+        rows.append({
+            "row_kind": "type74_calt74_rate_audit",
+            "type74_calt74_version": "v0.3.57",
+            "inverse_recombination_mode": mode,
+            "record": lr.get("record"),
+            "data_type": lr.get("data_type"),
+            "rate_type": lr.get("rate_type"),
+            "target_ion_stage": stage,
+            "parent_ion_stage": parent_stage,
+            "destination_level": dest,
+            "destination_global_index": dest_g,
+            "parent_continuum_global_index": cont_g,
+            "triplet_component": lr.get("source_level_triplet_component") or lr.get("possible_feed_component_direct"),
+            "destination_stat_weight_gglo": gglo,
+            "parent_continuum_stat_weight_ggup": ggup,
+            "statistical_weight_factor_gglo_over_ggup": stat_factor,
+            "type74_inverse_scale": scale,
+            "type74_calt74_rate_forward_unscaled_s^-1": rate_forward0,
+            "type74_calt74_alpha_unweighted_cm3_s": alpha0,
+            "type74_calt74_alpha_weighted_cm3_s": alpha_weighted0,
+            "type74_calt74_inverse_rate_unscaled_s^-1": alpha_weighted0,
+            "type74_calt74_inverse_rate_s^-1": inv_rate,
+            "topology_safe_for_inverse_matrix": safe,
+            "matrix_safe_to_assemble_physically": False,
+            "assembly_status": "diagnostic_type74_calt74_inverse_topology_ready" if safe else "diagnostic_type74_calt74_not_ready_or_disabled",
+            "matrix_role_if_assembled": "M[destination,parent_continuum]+=alpha*gglo/ggup_and_M[parent,parent]-=same",
+            "missing_physical_requirements": "real_xstar_bremsa_for_forward_rate;closed_parent_continuum_population;validated_calt74_full_context",
+            "warning": "source-aligned calt74 diagnostic; inverse alpha uses XSTAR gglo/ggup correction but parent continuum balance remains proxy topology",
+            "provenance": "v0.3.57_type74_calt74_rate_alpha_diagnostic",
+            **ev,
+        })
+    return rows
+
+
+def build_global_type74_calt74_matrix_terms(type74_calt74_rate_audit_rows: Sequence[dict]) -> List[dict]:
+    """Map source-aligned calt74 inverse alpha rows onto global matrix triplets."""
+    rows: List[dict] = []
+    tid = 0
+    for ar in type74_calt74_rate_audit_rows:
+        dest_g = maybe_int(ar.get("destination_global_index"))
+        cont_g = maybe_int(ar.get("parent_continuum_global_index"))
+        rate = maybe_float(ar.get("type74_calt74_inverse_rate_s^-1")) or 0.0
+        safe = bool(ar.get("topology_safe_for_inverse_matrix")) and dest_g is not None and cont_g is not None and rate > 0.0
+        base = {
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "destination_level": ar.get("destination_level"),
+            "destination_global_index": dest_g,
+            "parent_continuum_global_index": cont_g,
+            "triplet_component": ar.get("triplet_component"),
+            "inverse_recombination_mode": ar.get("inverse_recombination_mode"),
+            "type74_inverse_scale": ar.get("type74_inverse_scale"),
+            "type74_calt74_status": ar.get("type74_calt74_status"),
+            "type74_calt74_alpha_weighted_cm3_s": ar.get("type74_calt74_alpha_weighted_cm3_s"),
+            "type74_calt74_rate_forward_unscaled_s^-1": ar.get("type74_calt74_rate_forward_unscaled_s^-1"),
+            "matrix_safe_to_assemble_physically": False,
+            "provenance": "v0.3.57_type74_calt74_matrix_topology",
+        }
+        if not safe:
+            tid += 1
+            rows.append({
+                **base,
+                "global_type74_calt74_term_id": tid,
+                "row_kind": "global_type74_calt74_matrix_term",
+                "matrix_term_kind": "skipped_type74_calt74_inverse_recombination",
+                "matrix_role": "skipped_disabled_or_missing_mapping_or_zero_rate",
+                "matrix_row_global_index": "",
+                "matrix_col_global_index": "",
+                "signed_rate_s^-1": "",
+                "rate_s^-1": rate,
+                "assembly_status": "skipped_type74_calt74_topology_or_rate_incomplete",
+                "skip_reason": "disabled_or_missing_destination_or_parent_continuum_global_index_or_zero_rate",
+            })
+            continue
+        tid += 1
+        rows.append({
+            **base,
+            "global_type74_calt74_term_id": tid,
+            "row_kind": "global_type74_calt74_matrix_term",
+            "matrix_term_kind": "offdiag_parent_continuum_to_type74_calt74_destination_gain",
+            "matrix_role": "M[destination_global_index,parent_continuum_global_index]+=type74_calt74_alpha_weighted",
+            "matrix_row_global_index": dest_g,
+            "matrix_col_global_index": cont_g,
+            "signed_rate_s^-1": rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_diagnostic_type74_calt74_inverse_topology",
+            "skip_reason": "",
+        })
+        tid += 1
+        rows.append({
+            **base,
+            "global_type74_calt74_term_id": tid,
+            "row_kind": "global_type74_calt74_matrix_term",
+            "matrix_term_kind": "diagonal_parent_continuum_type74_calt74_loss",
+            "matrix_role": "M[parent_continuum_global_index,parent_continuum_global_index]-=type74_calt74_alpha_weighted",
+            "matrix_row_global_index": cont_g,
+            "matrix_col_global_index": cont_g,
+            "signed_rate_s^-1": -rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_diagnostic_type74_calt74_inverse_topology",
+            "skip_reason": "",
+        })
+    return rows
+
+
+def _type74_calt74_rate_audit_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_type74_calt74_rate_audit_rows": len(rows),
+        "rows_by_triplet_component": _counts(rows, "triplet_component"),
+        "rows_by_status": _counts(rows, "type74_calt74_status"),
+        "rows_by_assembly_status": _counts(rows, "assembly_status"),
+        "total_type74_calt74_forward_rate_unscaled_s^-1": _sum_float(rows, "type74_calt74_rate_forward_unscaled_s^-1"),
+        "total_type74_calt74_alpha_unweighted_cm3_s": _sum_float(rows, "type74_calt74_alpha_unweighted_cm3_s"),
+        "total_type74_calt74_alpha_weighted_cm3_s": _sum_float(rows, "type74_calt74_alpha_weighted_cm3_s"),
+        "total_type74_calt74_inverse_rate_s^-1": _sum_float(rows, "type74_calt74_inverse_rate_s^-1"),
+        "warning": "Source-aligned calt74 diagnostic; absolute forward rate still depends on placeholder radiation field and inverse topology still depends on parent-continuum closure.",
+    }
+
+
+def _global_type74_calt74_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_global_type74_calt74_matrix_term_rows": len(rows),
+        "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
+        "rows_by_assembly_status": _counts(rows, "assembly_status"),
+        "total_signed_rate_s^-1": _sum_float(rows, "signed_rate_s^-1"),
+        "total_rate_s^-1": _sum_float(rows, "rate_s^-1"),
+    }
+
+
 def build_global_type74_inverse_matrix_terms(type74_inverse_recombination_audit_rows: Sequence[dict]) -> List[dict]:
     """Map diagnostic type-74 inverse DR-delta rows into global matrix triplets."""
     rows: List[dict] = []
@@ -6041,6 +6299,7 @@ def build_full_global_matrix_terms(
     global_type53_phint53_matrix_terms: Sequence[dict] | None = None,
     global_type53_milne_matrix_terms: Sequence[dict] | None = None,
     global_type74_inverse_matrix_terms: Sequence[dict] | None = None,
+    global_type74_calt74_matrix_terms: Sequence[dict] | None = None,
     coupling_rows: Sequence[dict] = (),
     he_like_stage: int,
 ) -> List[dict]:
@@ -6116,9 +6375,16 @@ def build_full_global_matrix_terms(
         if str(r.get("assembly_status")) == "assembled_diagnostic_milne_inverse_topology_proxy":
             _add(r, component="type53_milne_inverse_recombination_proxy", source_row_kind="global_type53_milne_matrix_term")
 
-    for r in (global_type74_inverse_matrix_terms or []):
-        if str(r.get("assembly_status")) == "assembled_diagnostic_type74_inverse_topology_proxy":
-            _add(r, component="type74_direct_inverse_recombination_proxy", source_row_kind="global_type74_inverse_matrix_term")
+    calt74_terms = list(global_type74_calt74_matrix_terms or [])
+    n_calt74_assembled = sum(1 for r in calt74_terms if str(r.get("assembly_status")) == "assembled_diagnostic_type74_calt74_inverse_topology")
+    if n_calt74_assembled > 0:
+        for r in calt74_terms:
+            if str(r.get("assembly_status")) == "assembled_diagnostic_type74_calt74_inverse_topology":
+                _add(r, component="type74_calt74_inverse_recombination_diagnostic", source_row_kind="global_type74_calt74_matrix_term")
+    else:
+        for r in (global_type74_inverse_matrix_terms or []):
+            if str(r.get("assembly_status")) == "assembled_diagnostic_type74_inverse_topology_proxy":
+                _add(r, component="type74_direct_inverse_recombination_proxy", source_row_kind="global_type74_inverse_matrix_term")
 
     lookup = _global_index_lookup(global_index_rows)
     for cr in coupling_rows:
@@ -7245,6 +7511,8 @@ def solve_element_reference(
         global_type53_milne_matrix_terms: List[dict] = []
         type74_inverse_recombination_audit_rows: List[dict] = []
         global_type74_inverse_matrix_terms: List[dict] = []
+        type74_calt74_rate_audit_rows: List[dict] = []
+        global_type74_calt74_matrix_terms: List[dict] = []
         inverse_recombination_scale_scan_rows: List[dict] = []
         global_superlevel_cascade_matrix_terms: List[dict] = []
         if he_like_stage + 1 in stages:
@@ -7454,6 +7722,17 @@ def solve_element_reference(
     global_type74_inverse_matrix_terms = build_global_type74_inverse_matrix_terms(
         type74_inverse_recombination_audit_rows
     )
+    type74_calt74_rate_audit_rows = build_type74_calt74_rate_audit_rows(
+        type74_linkage_rows=type74_linkage_audit_rows,
+        radiation_context_rows=radiation_context_rows,
+        global_index_rows=global_index_rows,
+        inverse_recombination_mode=inverse_recombination_mode,
+        temperature=temperature,
+        type74_inverse_scale=type74_inverse_scale,
+    )
+    global_type74_calt74_matrix_terms = build_global_type74_calt74_matrix_terms(
+        type74_calt74_rate_audit_rows
+    )
     radiation_normalization_audit_rows = build_radiation_normalization_audit_rows(
         radiation_context_rows=radiation_context_rows,
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
@@ -7486,6 +7765,7 @@ def solve_element_reference(
         global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
         global_type53_milne_matrix_terms=global_type53_milne_matrix_terms,
         global_type74_inverse_matrix_terms=global_type74_inverse_matrix_terms,
+        global_type74_calt74_matrix_terms=global_type74_calt74_matrix_terms,
         coupling_rows=assembled_coupling_terms,
         he_like_stage=he_like_stage,
     )
@@ -7583,6 +7863,10 @@ def solve_element_reference(
             "type74_inverse_recombination_audit_summary": _type74_inverse_recombination_audit_summary(type74_inverse_recombination_audit_rows),
             "n_global_type74_inverse_matrix_term_rows": len(global_type74_inverse_matrix_terms),
             "global_type74_inverse_matrix_terms_summary": _global_type74_inverse_matrix_terms_summary(global_type74_inverse_matrix_terms),
+            "n_type74_calt74_rate_audit_rows": len(type74_calt74_rate_audit_rows),
+            "type74_calt74_rate_audit_summary": _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows),
+            "n_global_type74_calt74_matrix_term_rows": len(global_type74_calt74_matrix_terms),
+            "global_type74_calt74_matrix_terms_summary": _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms),
             "n_inverse_recombination_scale_scan_rows": len(inverse_recombination_scale_scan_rows),
             "inverse_recombination_scale_scan_summary": _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
@@ -7635,6 +7919,8 @@ def solve_element_reference(
         "global_type53_milne_matrix_terms": global_type53_milne_matrix_terms,
         "type74_inverse_recombination_audit": type74_inverse_recombination_audit_rows,
         "global_type74_inverse_matrix_terms": global_type74_inverse_matrix_terms,
+        "type74_calt74_rate_audit": type74_calt74_rate_audit_rows,
+        "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
@@ -8012,6 +8298,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_type53_milne_matrix_terms = result.get("global_type53_milne_matrix_terms", [])
     type74_inverse_recombination_audit_rows = result.get("type74_inverse_recombination_audit", [])
     global_type74_inverse_matrix_terms = result.get("global_type74_inverse_matrix_terms", [])
+    type74_calt74_rate_audit_rows = result.get("type74_calt74_rate_audit", [])
+    global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
     inverse_recombination_scale_scan_rows = result.get("inverse_recombination_scale_scan", [])
     radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
     type53_phint53_scale_scan_rows = result.get("type53_phint53_scale_scan", [])
@@ -8050,6 +8338,10 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type74_inverse_recombination_audit_summary"] = _type74_inverse_recombination_audit_summary(type74_inverse_recombination_audit_rows)
         if global_type74_inverse_matrix_terms:
             result["summary"]["global_type74_inverse_matrix_terms_summary"] = _global_type74_inverse_matrix_terms_summary(global_type74_inverse_matrix_terms)
+        if type74_calt74_rate_audit_rows:
+            result["summary"]["type74_calt74_rate_audit_summary"] = _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows)
+        if global_type74_calt74_matrix_terms:
+            result["summary"]["global_type74_calt74_matrix_terms_summary"] = _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms)
         if inverse_recombination_scale_scan_rows:
             result["summary"]["inverse_recombination_scale_scan_summary"] = _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows)
         if radiation_normalization_audit_rows:
@@ -8107,6 +8399,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_type53_milne_matrix_terms.csv", global_type53_milne_matrix_terms)
     write_csv(out / "xstar_like_element_solver_type74_inverse_recombination_audit.csv", type74_inverse_recombination_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", global_type74_inverse_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_type74_calt74_rate_audit.csv", type74_calt74_rate_audit_rows)
+    write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
