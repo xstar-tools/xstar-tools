@@ -1,4 +1,8 @@
 ### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
+### v0.3.62 triplet 3S1--3P_J coupling-record audit
+
+v0.3.62 adds `xstar_like_element_solver_triplet_coupling_record_audit.csv` to validate the direct `1s2s 3S1 <-> 1s2p 3P_J` coupling records that control the intercombination bottleneck.  The audit selects full-global matrix terms directly coupling the forbidden upper level to the intercombination upper levels, includes their diagonal partners, infers the XSTAR data type/source method, reports source-population-weighted contributions, and separates radiative type-50 drains from density-scaled collisional type-63/67/68/69 partners.  This is an audit-only release; no solver or physical-rate behavior is intentionally changed.
+
 ### v0.3.61 triplet α/γ and emissivity-branch diagnostics
 
 v0.3.61 adds two source-code-aligned triplet diagnostics for the full-global XSTAR-Lucy path.  `xstar_like_element_solver_triplet_alpha_gamma_audit.csv` reports XSTAR-like source-population-weighted feed (`alpha`) and loss (`gamma`) balances for the He-like f/i/r upper levels, instead of relying only on raw incoming matrix-rate sums.  `xstar_like_element_solver_triplet_emissivity_branch_audit.csv` lists f/i/r candidate line records with branching fractions, solved upper populations, transparent `pop*A*E` emissivity proxies, and explicit placeholders for the still-missing XSTAR `calc_emis_ion` contexts such as net `ucalc` emissivity, escape probabilities, `cfrac`, and strong-line filtering.  No solver or physical-rate behavior is changed.

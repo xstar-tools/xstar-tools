@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.62 - 2026-05-04
+
+- Added `xstar_like_element_solver_triplet_coupling_record_audit.csv` for source-code-aligned validation of the direct `1s2s 3S1 <-> 1s2p 3P_J` coupling records that dominate the C V intercombination bottleneck.
+- The audit selects f/i off-diagonal matrix terms and their diagonal partners, infers type-50 radiative A-value paths versus type-63/67/68/69 density-scaled collisional partners, and reports source-population-weighted feed/loss contributions.
+- The summary highlights whether the large `3P_J -> 3S1` radiative-drain terms overwhelm collisional `3S1 -> 3P_J` feeds at the current density and radiation context.
+- No solver or physical-rate behavior is intentionally changed.
+
 ## v0.3.61 - 2026-05-04
 
 - Added source-code-aligned triplet α/γ diagnostics for the full-global XSTAR-Lucy solution.

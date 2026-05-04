@@ -8182,6 +8182,12 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -8250,6 +8256,8 @@ def solve_element_reference(
             "triplet_alpha_gamma_audit_summary": _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows),
             "n_triplet_emissivity_branch_audit_rows": len(triplet_emissivity_branch_audit_rows),
             "triplet_emissivity_branch_audit_summary": _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows),
+            "n_triplet_coupling_record_audit_rows": len(triplet_coupling_record_audit_rows),
+            "triplet_coupling_record_audit_summary": _triplet_coupling_record_audit_summary(triplet_coupling_record_audit_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
             "radiation_normalization_audit_summary": _radiation_normalization_audit_summary(radiation_normalization_audit_rows),
             "n_type53_phint53_scale_scan_rows": len(type53_phint53_scale_scan_rows),
@@ -8309,6 +8317,7 @@ def solve_element_reference(
         "triplet_component_balance_audit": triplet_component_balance_audit_rows,
         "triplet_alpha_gamma_audit": triplet_alpha_gamma_audit_rows,
         "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
+        "triplet_coupling_record_audit": triplet_coupling_record_audit_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
@@ -8917,6 +8926,211 @@ def build_triplet_emissivity_branch_audit_rows(
     return rows
 
 
+
+def _infer_xstar_data_type_from_term(term: Mapping[str, object]) -> Optional[int]:
+    """Infer an ATDB/XSTAR data type from a full-global matrix term."""
+    dt = maybe_int(term.get("data_type"))
+    if dt is not None:
+        return dt
+    sm = str(term.get("source_method") or "")
+    for token in sm.replace("-", "_").split("_"):
+        if token.startswith("type"):
+            val = maybe_int(token[4:])
+            if val is not None:
+                return val
+    if sm.startswith("data_type_"):
+        parts = sm.split("_")
+        for i, part in enumerate(parts[:-1]):
+            if part == "type":
+                val = maybe_int(parts[i + 1])
+                if val is not None:
+                    return val
+    return None
+
+
+def _xstar_coupling_source_note(data_type: Optional[int], transition_kind: str, source_method: str) -> str:
+    """Human-readable source-code expectation for triplet coupling records."""
+    if data_type == 50 or transition_kind == "radiative_decay":
+        return "type50 radiative A-value path: ucalc/calc_hmc_ion assemble one-way upper->lower gain plus upper diagonal loss"
+    if data_type == 63 or "type63" in source_method:
+        return "type63 same-n L-changing path: ucalc computes density-scaled ans1/ans2 with amcrs and statistical-weight partner rates"
+    if data_type in {67, 68, 69}:
+        return "He-like effective-collision-strength path: ucalc computes collisional excitation/de-excitation ans1/ans2 with detailed balance"
+    return "generic full-global matrix term; inspect source_method/transition_kind"
+
+
+def build_triplet_coupling_record_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Audit direct 1s2s 3S1 <-> 1s2p 3P_J coupling records.
+
+    Added in v0.3.62 after the v0.3.61 alpha/gamma audit showed that the
+    intercombination upper levels have tiny steady-state populations because
+    their dominant loss routes return to the forbidden upper level.  This audit
+    validates the raw matrix terms against the XSTAR source-code roles: type-50
+    radiative decays, type-63 same-n L-changing collisions, and He-like
+    type-67/68/69 effective-collision-strength routes.
+    """
+    meta = _global_index_metadata(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    triplet_sets = _triplet_global_index_sets(global_index_rows, ion_stage=he_like_stage)
+    f_set = set(triplet_sets.get("f", []))
+    i_set = set(triplet_sets.get("i", []))
+    if not f_set or not i_set:
+        return []
+
+    selected_records: set[int] = set()
+    for term in full_global_matrix_terms:
+        row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+        col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+        rec = maybe_int(term.get("record"))
+        if rec is None:
+            continue
+        if (row_gi in f_set and col_gi in i_set) or (row_gi in i_set and col_gi in f_set):
+            selected_records.add(int(rec))
+
+    rows: List[dict] = []
+    detail_rows: List[dict] = []
+    for term in full_global_matrix_terms:
+        rec = maybe_int(term.get("record"))
+        if rec is None or int(rec) not in selected_records:
+            continue
+        row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+        col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+        if row_gi not in (f_set | i_set) and col_gi not in (f_set | i_set):
+            continue
+        rate = maybe_float(term.get("full_global_rate_s^-1") or term.get("rate_s^-1") or term.get("rate_proxy") or term.get("source_rate_s^-1"))
+        signed = maybe_float(term.get("full_global_signed_rate_s^-1") or term.get("signed_rate_s^-1") or term.get("signed_rate_proxy"))
+        if rate is None and signed is not None:
+            rate = abs(float(signed))
+        if rate is None or not math.isfinite(float(rate)):
+            continue
+        rate = float(rate)
+        dt = _infer_xstar_data_type_from_term(term)
+        transition_kind = str(term.get("transition_kind") or "")
+        source_method = str(term.get("source_method") or "")
+        row_comp = "f" if row_gi in f_set else ("i" if row_gi in i_set else "other")
+        col_comp = "f" if col_gi in f_set else ("i" if col_gi in i_set else "other")
+        if row_comp == "i" and col_comp == "f" and row_gi != col_gi:
+            coupling_role = "f_to_i_gain"
+        elif row_comp == "f" and col_comp == "i" and row_gi != col_gi:
+            coupling_role = "i_to_f_gain"
+        elif row_comp == "i" and col_comp == "i" and row_gi == col_gi:
+            coupling_role = "i_diagonal_loss"
+        elif row_comp == "f" and col_comp == "f" and row_gi == col_gi:
+            coupling_role = "f_diagonal_loss"
+        else:
+            coupling_role = "other_touching_f_or_i"
+        src_pop = pops.get(int(col_gi), 0.0) if col_gi is not None else 0.0
+        dst_pop = pops.get(int(row_gi), 0.0) if row_gi is not None else 0.0
+        ne = maybe_float(term.get("electron_density_cm^-3"))
+        rate_coeff = rate / float(ne) if ne and ne > 0.0 and ("collisional" in transition_kind or dt in {63, 67, 68, 69}) else ""
+        expected = _xstar_coupling_source_note(dt, transition_kind, source_method)
+        detail = {
+            "audit_kind": "triplet_3S_3P_coupling_record_detail",
+            "record": int(rec),
+            "data_type_inferred": dt if dt is not None else "",
+            "transition_kind": transition_kind,
+            "source_method": source_method,
+            "matrix_term_kind": term.get("matrix_term_kind", ""),
+            "matrix_role": term.get("matrix_role", ""),
+            "coupling_role": coupling_role,
+            "row_global_index": row_gi if row_gi is not None else "",
+            "row_component": row_comp,
+            "row_level_index": meta.get(row_gi, {}).get("level_index", "") if row_gi is not None else "",
+            "row_level_label": meta.get(row_gi, {}).get("level_label", "") if row_gi is not None else "",
+            "col_global_index": col_gi if col_gi is not None else "",
+            "col_component": col_comp,
+            "col_level_index": meta.get(col_gi, {}).get("level_index", "") if col_gi is not None else "",
+            "col_level_label": meta.get(col_gi, {}).get("level_label", "") if col_gi is not None else "",
+            "rate_s^-1": rate,
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "electron_density_cm^-3": ne if ne is not None else "",
+            "rate_coefficient_cm3_s_if_density_scaled": rate_coeff,
+            "source_population_fraction_col": src_pop,
+            "destination_population_fraction_row": dst_pop,
+            "source_population_weighted_rate_s^-1": src_pop * rate,
+            "destination_population_weighted_rate_s^-1": dst_pop * rate,
+            "xstar_ucalc_expected_role": expected,
+            "validation_comment": "record selected because it directly couples 1s2s 3S1 and 1s2p 3P_J, or is its diagonal partner",
+        }
+        detail_rows.append(detail)
+        rows.append(detail)
+
+    # Summary rows by record.
+    by_rec: Dict[int, List[dict]] = {}
+    for row in detail_rows:
+        by_rec.setdefault(int(row["record"]), []).append(row)
+    for rec, rec_rows in sorted(by_rec.items()):
+        f_to_i = sum(float(r["rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "f_to_i_gain")
+        i_to_f = sum(float(r["rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "i_to_f_gain")
+        f_diag = sum(float(r["rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "f_diagonal_loss")
+        i_diag = sum(float(r["rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "i_diagonal_loss")
+        f_to_i_weighted = sum(float(r["source_population_weighted_rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "f_to_i_gain")
+        i_to_f_weighted = sum(float(r["source_population_weighted_rate_s^-1"]) for r in rec_rows if r.get("coupling_role") == "i_to_f_gain")
+        dtypes = sorted({str(r.get("data_type_inferred")) for r in rec_rows if str(r.get("data_type_inferred"))})
+        trans = sorted({str(r.get("transition_kind")) for r in rec_rows if str(r.get("transition_kind"))})
+        source_methods = sorted({str(r.get("source_method")) for r in rec_rows if str(r.get("source_method"))})
+        if "50" in dtypes or "radiative_decay" in trans:
+            validation = "radiative_3P_to_3S_drain_present; compare whether XSTAR should include this A-value in the triplet model"
+        elif any(dt in {"63", "67", "68", "69"} for dt in dtypes) or any("collisional" in t for t in trans):
+            validation = "collisional_pair_present; check ans1/ans2 direction, density scaling, and detailed balance"
+        else:
+            validation = "generic_pair_present"
+        rows.append({
+            "audit_kind": "triplet_3S_3P_coupling_record_summary",
+            "record": rec,
+            "data_type_inferred_set": ";".join(dtypes),
+            "transition_kind_set": ";".join(trans),
+            "source_method_set": ";".join(source_methods),
+            "n_matrix_terms_for_record": len(rec_rows),
+            "f_to_i_gain_rate_sum_s^-1": f_to_i,
+            "i_to_f_gain_rate_sum_s^-1": i_to_f,
+            "f_diagonal_loss_rate_sum_s^-1": f_diag,
+            "i_diagonal_loss_rate_sum_s^-1": i_diag,
+            "f_to_i_source_population_weighted_feed_s^-1": f_to_i_weighted,
+            "i_to_f_source_population_weighted_feed_s^-1": i_to_f_weighted,
+            "i_to_f_over_f_to_i_rate_ratio": (i_to_f / f_to_i if f_to_i > 0.0 else ""),
+            "i_to_f_over_f_to_i_population_weighted_ratio": (i_to_f_weighted / f_to_i_weighted if f_to_i_weighted > 0.0 else ""),
+            "validation_comment": validation,
+            "xstar_source_alignment_note": "Bautista/Kallman rate matrix includes radiative and electron/proton impact terms; XSTAR ucalc type50/type63/type67-69 should decide whether this coupling is radiative or collisional.",
+        })
+
+    # Compact global conclusion row.
+    radiative_i_to_f = sum(float(r.get("rate_s^-1") or 0.0) for r in detail_rows if r.get("coupling_role") == "i_to_f_gain" and (r.get("data_type_inferred") == 50 or r.get("transition_kind") == "radiative_decay"))
+    coll_f_to_i = sum(float(r.get("rate_s^-1") or 0.0) for r in detail_rows if r.get("coupling_role") == "f_to_i_gain" and (r.get("data_type_inferred") in {63, 67, 68, 69} or "collisional" in str(r.get("transition_kind"))))
+    coll_i_to_f = sum(float(r.get("rate_s^-1") or 0.0) for r in detail_rows if r.get("coupling_role") == "i_to_f_gain" and (r.get("data_type_inferred") in {63, 67, 68, 69} or "collisional" in str(r.get("transition_kind"))))
+    rows.append({
+        "audit_kind": "triplet_3S_3P_coupling_audit_summary",
+        "record": "summary",
+        "n_selected_records": len(by_rec),
+        "n_detail_rows": len(detail_rows),
+        "radiative_i_to_f_gain_rate_sum_s^-1": radiative_i_to_f,
+        "collisional_f_to_i_gain_rate_sum_s^-1": coll_f_to_i,
+        "collisional_i_to_f_gain_rate_sum_s^-1": coll_i_to_f,
+        "radiative_i_to_f_over_collisional_f_to_i_rate_ratio": (radiative_i_to_f / coll_f_to_i if coll_f_to_i > 0.0 else ""),
+        "diagnostic_conclusion": "large radiative 3P_J->3S1 drain terms can suppress intercombination populations unless XSTAR line/level handling treats these routes differently or additional 3P_J feeds are missing",
+    })
+    return rows
+
+
+def _triplet_coupling_record_audit_summary(rows: Sequence[dict]) -> dict:
+    summary = next((r for r in rows if r.get("audit_kind") == "triplet_3S_3P_coupling_audit_summary"), {})
+    rec_summaries = [r for r in rows if r.get("audit_kind") == "triplet_3S_3P_coupling_record_summary"]
+    return {
+        "n_triplet_coupling_audit_rows": len(rows),
+        "n_triplet_coupling_records": len(rec_summaries),
+        "radiative_i_to_f_gain_rate_sum_s^-1": summary.get("radiative_i_to_f_gain_rate_sum_s^-1", ""),
+        "collisional_f_to_i_gain_rate_sum_s^-1": summary.get("collisional_f_to_i_gain_rate_sum_s^-1", ""),
+        "collisional_i_to_f_gain_rate_sum_s^-1": summary.get("collisional_i_to_f_gain_rate_sum_s^-1", ""),
+        "radiative_i_to_f_over_collisional_f_to_i_rate_ratio": summary.get("radiative_i_to_f_over_collisional_f_to_i_rate_ratio", ""),
+        "provenance": "v0.3.62_triplet_3S_3P_coupling_record_audit",
+    }
+
 def _triplet_alpha_gamma_audit_summary(rows: Sequence[dict]) -> dict:
     comps = {r.get("component"): r for r in rows if r.get("audit_kind") == "triplet_alpha_gamma_component_summary"}
     return {
@@ -9459,6 +9673,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_triplet_component_balance_audit.csv", result.get("triplet_component_balance_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_alpha_gamma_audit.csv", triplet_alpha_gamma_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
+    write_csv(out / "xstar_like_element_solver_triplet_coupling_record_audit.csv", result.get("triplet_coupling_record_audit", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
