@@ -1678,3 +1678,8 @@ v0.3.52 keeps the full-global diagnostic default on the XSTAR-Lucy solver path a
 ### v0.3.54 note: type-53 phint53 scale scan and radiation normalization audit
 
 v0.3.54 adds a diagnostic `phint53` scale scan for the full-global XSTAR-Lucy path.  The option `--type53-phint53-scale` now accepts comma-separated scale factors; the first value controls the primary phint53 audit/matrix outputs, while all values are evaluated in `xstar_like_element_solver_type53_phint53_scale_scan.csv`.  The release also writes `xstar_like_element_solver_radiation_normalization_audit.csv`, which records the placeholder radiation-grid/bremsa normalization currently used by the forward phint53 kernel.  This is still not a physical XSTAR continuum: true bremsa/radiation field, Milne inverse recombination, opacity/escape probabilities, and physical type-99/type-1 rates remain pending.
+
+
+### v0.3.55 inverse-recombination scaffold
+
+The element-solver demo now accepts `--inverse-recombination-mode none|type53-milne-diagnostic|type74-direct-diagnostic|type53-type74`.  The new mode writes diagnostic topology/audit CSVs for type-53 Milne inverse recombination and type-74 direct DR-delta inverse routes. These are scaffolds only: they are not yet physical XSTAR Milne or DR rates.

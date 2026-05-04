@@ -65,6 +65,7 @@ def main(argv=None):
     p.add_argument("--radiation-field-mode", default="none", choices=["none", "flat", "blackbody", "table"], help="Diagnostic radiation context scaffold for type-53 photoionization/Milne audits. Does not evaluate physical rates yet.")
     p.add_argument("--type53-flat-proxy-scale", default="1", help="Scale factor for the nonphysical flat-field type-53 photoionization-rate proxy. Diagnostic only; retained for comparison with the phint53 kernel path.")
     p.add_argument("--type53-phint53-scale", default="1", help="Scale factor(s) for the type-53 phint53 photoionization-kernel diagnostic and v0.3.54 scale scan. Accepts one value or a comma-separated list, e.g. 1,1e5,1e10,1e15,1e18,1e20. The kernel is ported, but the radiation field is still placeholder unless a future physical continuum is supplied.")
+    p.add_argument("--inverse-recombination-mode", default="none", choices=["none", "type53-milne-diagnostic", "type74-direct-diagnostic", "type53-type74"], help="Diagnostic inverse-recombination scaffold mode. type53-milne-diagnostic maps continuum->bound Milne inverse topology from type-53 phint53 rows; type74-direct-diagnostic maps direct DR-delta source candidates; type53-type74 enables both. Rates remain diagnostic proxies, not physical XSTAR inverse rates.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -97,6 +98,7 @@ def main(argv=None):
             "radiation_field_mode": args.radiation_field_mode,
             "type53_flat_proxy_scale": args.type53_flat_proxy_scale,
             "type53_phint53_scale": args.type53_phint53_scale,
+            "inverse_recombination_mode": args.inverse_recombination_mode,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -131,6 +133,11 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_type53_phint53_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_global_type53_phint53_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_type53_milne_inverse_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_global_type53_milne_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_type74_inverse_recombination_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", [])
@@ -177,6 +184,7 @@ def main(argv=None):
         radiation_field_mode=args.radiation_field_mode,
         type53_flat_proxy_scale=args.type53_flat_proxy_scale,
         type53_phint53_scale=args.type53_phint53_scale,
+        inverse_recombination_mode=args.inverse_recombination_mode,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

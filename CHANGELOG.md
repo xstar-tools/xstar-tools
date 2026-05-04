@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.3.55 - 2026-05-04
+
+- Added `--inverse-recombination-mode none|type53-milne-diagnostic|type74-direct-diagnostic|type53-type74` to the element-solver demo.
+- Added diagnostic type-53 Milne inverse-recombination scaffold outputs:
+  - `xstar_like_element_solver_type53_milne_inverse_audit.csv`
+  - `xstar_like_element_solver_global_type53_milne_matrix_terms.csv`
+- Added diagnostic type-74 direct DR-delta inverse-recombination scaffold outputs:
+  - `xstar_like_element_solver_type74_inverse_recombination_audit.csv`
+  - `xstar_like_element_solver_global_type74_inverse_matrix_terms.csv`
+- Added `xstar_like_element_solver_inverse_recombination_scale_scan.csv` as a first solve-context audit for inverse-recombination modes.
+- The inverse terms are included in `xstar_like_element_solver_full_global_matrix_terms.csv` only when enabled by mode, but remain explicitly marked as diagnostic/proxy topology. True XSTAR Milne inverse recombination, physical type-74 DR balance, real radiation context, and closed continuum balance remain pending.
+
 ## v0.3.54 - 2026-05-04
 
 - Added a type-53 `phint53` scale scan for the full-global XSTAR-Lucy diagnostic path.
