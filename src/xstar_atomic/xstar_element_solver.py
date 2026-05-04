@@ -6801,6 +6801,202 @@ def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
 
 
 
+def _normalise_triplet_coupling_treatment(value: object) -> str:
+    """Return a supported v0.3.63 triplet-coupling treatment string."""
+    text = str(value or "normal").strip().lower().replace("_", "-")
+    aliases = {
+        "": "normal",
+        "none": "normal",
+        "default": "normal",
+        "audit": "audit-only",
+        "audit-only": "audit-only",
+        "normal": "normal",
+        "suppress": "suppress-3p-to-3s-radiative",
+        "suppress-3p-3s": "suppress-3p-to-3s-radiative",
+        "suppress-3p-to-3s": "suppress-3p-to-3s-radiative",
+        "suppress-3p-to-3s-radiative": "suppress-3p-to-3s-radiative",
+    }
+    if text not in aliases:
+        raise ValueError(f"Unsupported triplet coupling treatment {value!r}")
+    return aliases[text]
+
+
+def _is_3p_to_3s_radiative_drain_term(row: Mapping[str, object], *, he_like_stage: int) -> bool:
+    """Identify the suspicious He-like 1s2p 3P_J -> 1s2s 3S1 type-50 drain terms.
+
+    The full-global matrix uses column=source and row=destination.  These
+    records appear as both off-diagonal gain rows M[3S,3P]+=A and diagonal
+    loss rows M[3P,3P]-=A, but the common metadata retains
+    from_level_label=3P and to_level_label=3S for both rows.
+    """
+    if maybe_int(row.get("ion_stage")) != int(he_like_stage):
+        return False
+    if str(row.get("transition_kind") or "") != "radiative_decay":
+        return False
+    if "data_type_50" not in str(row.get("source_method") or ""):
+        return False
+    from_label = str(row.get("from_level_label") or "")
+    to_label = str(row.get("to_level_label") or "")
+    if "1s1.2p1.3P" not in from_label:
+        return False
+    if "1s1.2s1.3S" not in to_label:
+        return False
+    role = str(row.get("matrix_term_kind") or "")
+    return role in {"offdiag_gain", "diagonal_loss"}
+
+
+def suppress_triplet_3p_to_3s_radiative_terms(
+    full_global_matrix_terms: Sequence[dict],
+    *,
+    he_like_stage: int,
+) -> Tuple[List[dict], List[dict]]:
+    """Return (filtered_terms, suppressed_terms) for the v0.3.63 diagnostic test."""
+    kept: List[dict] = []
+    suppressed: List[dict] = []
+    for row in full_global_matrix_terms:
+        if _is_3p_to_3s_radiative_drain_term(row, he_like_stage=he_like_stage):
+            r = dict(row)
+            r["triplet_coupling_treatment"] = "suppress-3p-to-3s-radiative"
+            r["suppression_reason"] = "diagnostic suppression of type-50 1s2p 3P_J -> 1s2s 3S1 radiative population-transfer drain"
+            suppressed.append(r)
+        else:
+            kept.append(dict(row))
+    return kept, suppressed
+
+
+def _summary_row_from_full_global_solve(rows: Sequence[dict]) -> dict:
+    for row in rows:
+        if row.get("row_kind") == "summary" and row.get("comparison_case") == "full_global_normalized_proxy_topology_solve":
+            return dict(row)
+    return {}
+
+
+def build_triplet_coupling_suppression_comparison_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+    linear_solver: str,
+    rank_deficient_action: str,
+    negative_population_action: str,
+    prune_null_rate_levels: bool,
+) -> List[dict]:
+    """Compare normal vs suppressed 3P_J->3S1 radiative-drain full-global solves.
+
+    This is a controlled v0.3.63 diagnostic: it deliberately suppresses only
+    the type-50 population-transfer terms identified in v0.3.62, while leaving
+    intercombination-to-ground, forbidden-to-ground, resonance, type-63
+    collisional coupling, type-53, type-74, type-99, and type-71 terms intact.
+    """
+    suppressed_matrix_terms, suppressed_terms = suppress_triplet_3p_to_3s_radiative_terms(
+        full_global_matrix_terms, he_like_stage=he_like_stage
+    )
+    normal_rows = build_full_global_normalized_solve_comparison(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        prune_null_rate_levels=prune_null_rate_levels,
+    )
+    suppressed_rows = build_full_global_normalized_solve_comparison(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=suppressed_matrix_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        prune_null_rate_levels=prune_null_rate_levels,
+    )
+    normal = _summary_row_from_full_global_solve(normal_rows)
+    supp = _summary_row_from_full_global_solve(suppressed_rows)
+    out: List[dict] = []
+    def _emit(case: str, row: Mapping[str, object], *, n_suppressed: int) -> None:
+        out.append({
+            "row_kind": "triplet_coupling_suppression_summary",
+            "comparison_case": case,
+            "triplet_coupling_treatment": "normal" if case == "normal_full_global" else "suppress-3p-to-3s-radiative",
+            "n_suppressed_matrix_terms": 0 if case == "normal_full_global" else n_suppressed,
+            "f_fraction": row.get("f_fraction"),
+            "i_fraction": row.get("i_fraction"),
+            "r_fraction": row.get("r_fraction"),
+            "R": row.get("R"),
+            "G": row.get("G"),
+            "l2_distance_to_target": row.get("l2_distance_to_target"),
+            "solve_status": row.get("solve_status"),
+            "solver": row.get("solver"),
+            "n_negative_populations": row.get("n_negative_populations"),
+            "sum_population": row.get("sum_population"),
+            "ion_population_sums_json": row.get("ion_population_sums_json"),
+            "level_kind_population_sums_json": row.get("level_kind_population_sums_json"),
+            "diagnostic_note": "v0.3.63 controlled diagnostic; suppression is not physical by default",
+        })
+    _emit("normal_full_global", normal, n_suppressed=len(suppressed_terms))
+    _emit("suppress_3p_to_3s_radiative", supp, n_suppressed=len(suppressed_terms))
+    if normal and supp:
+        out.append({
+            "row_kind": "triplet_coupling_suppression_delta",
+            "comparison_case": "suppressed_minus_normal",
+            "triplet_coupling_treatment": "suppress-3p-to-3s-radiative",
+            "n_suppressed_matrix_terms": len(suppressed_terms),
+            "delta_f": float(maybe_float(supp.get("f_fraction")) or 0.0) - float(maybe_float(normal.get("f_fraction")) or 0.0),
+            "delta_i": float(maybe_float(supp.get("i_fraction")) or 0.0) - float(maybe_float(normal.get("i_fraction")) or 0.0),
+            "delta_r": float(maybe_float(supp.get("r_fraction")) or 0.0) - float(maybe_float(normal.get("r_fraction")) or 0.0),
+            "delta_l2": float(maybe_float(supp.get("l2_distance_to_target")) or 0.0) - float(maybe_float(normal.get("l2_distance_to_target")) or 0.0),
+            "diagnostic_note": "Positive delta_i would support the v0.3.62 hypothesis that type-50 3P->3S drains suppress intercombination emission.",
+        })
+    for i, row in enumerate(suppressed_terms):
+        out.append({
+            "row_kind": "suppressed_matrix_term",
+            "comparison_case": "suppressed_3p_to_3s_radiative_term",
+            "suppressed_term_index": i,
+            "full_global_term_id": row.get("full_global_term_id"),
+            "record": row.get("record"),
+            "transition_kind": row.get("transition_kind"),
+            "source_method": row.get("source_method"),
+            "matrix_term_kind": row.get("matrix_term_kind"),
+            "matrix_role": row.get("matrix_role"),
+            "matrix_row_global_index": row.get("matrix_row_global_index"),
+            "matrix_col_global_index": row.get("matrix_col_global_index"),
+            "from_level": row.get("from_level"),
+            "to_level": row.get("to_level"),
+            "from_level_label": row.get("from_level_label"),
+            "to_level_label": row.get("to_level_label"),
+            "rate_s^-1": row.get("rate_s^-1"),
+            "signed_rate_s^-1": row.get("signed_rate_s^-1"),
+            "full_global_component": row.get("full_global_component"),
+            "suppression_reason": row.get("suppression_reason"),
+        })
+    return out
+
+
+def _triplet_coupling_suppression_comparison_summary(rows: Sequence[dict]) -> dict:
+    summaries = [r for r in rows if r.get("row_kind") == "triplet_coupling_suppression_summary"]
+    delta = next((r for r in rows if r.get("row_kind") == "triplet_coupling_suppression_delta"), {})
+    suppressed_terms = [r for r in rows if r.get("row_kind") == "suppressed_matrix_term"]
+    normal = next((r for r in summaries if r.get("comparison_case") == "normal_full_global"), {})
+    supp = next((r for r in summaries if r.get("comparison_case") == "suppress_3p_to_3s_radiative"), {})
+    return {
+        "n_triplet_coupling_suppression_comparison_rows": len(rows),
+        "n_suppressed_matrix_terms": len(suppressed_terms),
+        "normal_f_fraction": normal.get("f_fraction"),
+        "normal_i_fraction": normal.get("i_fraction"),
+        "normal_r_fraction": normal.get("r_fraction"),
+        "suppressed_f_fraction": supp.get("f_fraction"),
+        "suppressed_i_fraction": supp.get("i_fraction"),
+        "suppressed_r_fraction": supp.get("r_fraction"),
+        "delta_i_suppressed_minus_normal": delta.get("delta_i"),
+        "delta_l2_suppressed_minus_normal": delta.get("delta_l2"),
+        "warning": "Diagnostic comparison only; suppressing type-50 3P_J->3S1 radiative drains is not a physical default.",
+    }
+
+
+
+
 
 def _xstar_ludcmp(a: np.ndarray, *, tiny: float = 1.0e-30):
     """Numerical-Recipes-style LU decomposition with scaled partial pivoting.
@@ -7746,6 +7942,7 @@ def solve_element_reference(
     type74_inverse_scale: object = 1.0,
     type53_milne_refined_scale: object = "1e9,3e9,1e10,3e10,1e11",
     type74_inverse_refined_scale: object = "1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12",
+    triplet_coupling_treatment: str = "normal",
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -8079,7 +8276,7 @@ def solve_element_reference(
         full_global_negative_population_action=full_global_negative_population_action,
         full_global_prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
-    full_global_matrix_terms = build_full_global_matrix_terms(
+    full_global_matrix_terms_unsuppressed = build_full_global_matrix_terms(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
         global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
@@ -8092,6 +8289,15 @@ def solve_element_reference(
         coupling_rows=assembled_coupling_terms,
         he_like_stage=he_like_stage,
     )
+    triplet_coupling_treatment_norm = _normalise_triplet_coupling_treatment(triplet_coupling_treatment)
+    suppressed_full_global_matrix_terms, suppressed_triplet_coupling_terms = suppress_triplet_3p_to_3s_radiative_terms(
+        full_global_matrix_terms_unsuppressed,
+        he_like_stage=he_like_stage,
+    )
+    if triplet_coupling_treatment_norm == "suppress-3p-to-3s-radiative":
+        full_global_matrix_terms = suppressed_full_global_matrix_terms
+    else:
+        full_global_matrix_terms = full_global_matrix_terms_unsuppressed
     global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows = build_global_bound_bound_type71_type99_type53_proxy_solve_comparison(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -8110,6 +8316,16 @@ def solve_element_reference(
     full_global_normalized_solve_comparison_rows = build_full_global_normalized_solve_comparison(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        linear_solver=full_global_linear_solver,
+        rank_deficient_action=full_global_rank_deficient_action,
+        negative_population_action=full_global_negative_population_action,
+        prune_null_rate_levels=full_global_prune_null_rate_levels,
+    )
+    triplet_coupling_suppression_comparison_rows = build_triplet_coupling_suppression_comparison_rows(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
         line_rows=line_rows,
         he_like_stage=he_like_stage,
         linear_solver=full_global_linear_solver,
@@ -8184,7 +8400,7 @@ def solve_element_reference(
     )
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
-        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
@@ -8256,6 +8472,10 @@ def solve_element_reference(
             "triplet_alpha_gamma_audit_summary": _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows),
             "n_triplet_emissivity_branch_audit_rows": len(triplet_emissivity_branch_audit_rows),
             "triplet_emissivity_branch_audit_summary": _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows),
+            "triplet_coupling_treatment": triplet_coupling_treatment_norm,
+            "n_triplet_coupling_suppressed_matrix_terms": len(suppressed_triplet_coupling_terms),
+            "n_triplet_coupling_suppression_comparison_rows": len(triplet_coupling_suppression_comparison_rows),
+            "triplet_coupling_suppression_comparison_summary": _triplet_coupling_suppression_comparison_summary(triplet_coupling_suppression_comparison_rows),
             "n_triplet_coupling_record_audit_rows": len(triplet_coupling_record_audit_rows),
             "triplet_coupling_record_audit_summary": _triplet_coupling_record_audit_summary(triplet_coupling_record_audit_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
@@ -8318,6 +8538,7 @@ def solve_element_reference(
         "triplet_alpha_gamma_audit": triplet_alpha_gamma_audit_rows,
         "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
         "triplet_coupling_record_audit": triplet_coupling_record_audit_rows,
+        "triplet_coupling_suppression_comparison": triplet_coupling_suppression_comparison_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
@@ -9674,6 +9895,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_triplet_alpha_gamma_audit.csv", triplet_alpha_gamma_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_coupling_record_audit.csv", result.get("triplet_coupling_record_audit", []))
+    write_csv(out / "xstar_like_element_solver_triplet_coupling_suppression_comparison.csv", result.get("triplet_coupling_suppression_comparison", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)

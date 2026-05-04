@@ -1,4 +1,14 @@
 ### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
+
+### v0.3.63 triplet-coupling suppression diagnostic
+
+The element solver can now write `xstar_like_element_solver_triplet_coupling_suppression_comparison.csv`, a controlled normal-vs-suppressed diagnostic for the He-like `1s2p 3P_J -> 1s2s 3S1` type-50 radiative drains identified by the v0.3.62 coupling audit.  Use `--triplet-coupling-treatment suppress-3p-to-3s-radiative` only as a diagnostic matrix-semantics test; the default `normal` behavior is unchanged.
+
+```bash
+--triplet-coupling-treatment normal
+--triplet-coupling-treatment suppress-3p-to-3s-radiative
+```
+
 ### v0.3.62 triplet 3S1--3P_J coupling-record audit
 
 v0.3.62 adds `xstar_like_element_solver_triplet_coupling_record_audit.csv` to validate the direct `1s2s 3S1 <-> 1s2p 3P_J` coupling records that control the intercombination bottleneck.  The audit selects full-global matrix terms directly coupling the forbidden upper level to the intercombination upper levels, includes their diagonal partners, infers the XSTAR data type/source method, reports source-population-weighted contributions, and separates radiative type-50 drains from density-scaled collisional type-63/67/68/69 partners.  This is an audit-only release; no solver or physical-rate behavior is intentionally changed.
