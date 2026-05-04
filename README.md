@@ -1683,3 +1683,16 @@ v0.3.54 adds a diagnostic `phint53` scale scan for the full-global XSTAR-Lucy pa
 ### v0.3.55 inverse-recombination scaffold
 
 The element-solver demo now accepts `--inverse-recombination-mode none|type53-milne-diagnostic|type74-direct-diagnostic|type53-type74`.  The new mode writes diagnostic topology/audit CSVs for type-53 Milne inverse recombination and type-74 direct DR-delta inverse routes. These are scaffolds only: they are not yet physical XSTAR Milne or DR rates.
+
+### v0.3.56 inverse-recombination scale scan
+
+The diagnostic full-global solver now exposes independent inverse-recombination scale controls:
+
+```bash
+--inverse-recombination-mode type53-type74 \
+--type53-milne-scale 1,1e10,1e20,1e30 \
+--type74-inverse-scale 1,1e5,1e10,1e15
+```
+
+The first scale in each list is used for the primary full-global matrix.  All requested scales are scanned and written to `xstar_like_element_solver_inverse_recombination_scale_scan.csv`.  This matches the XSTAR source direction: type 53 uses `phint53`/`milne`, while type 74 uses `calt74`; the current Python rows remain diagnostic proxies until the true radiation and continuum context is ported.
+
