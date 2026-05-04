@@ -13,6 +13,10 @@ v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-m
 
 # xstar-atomic
 
+### v0.3.51 note: explicit XSTAR-style LU helpers
+
+v0.3.51 updates the `--full-global-linear-solver xstar-lucy` diagnostic path to use local Numerical-Recipes-style helpers `_xstar_ludcmp`, `_xstar_lubksb`, and `_xstar_mprove`, matching the XSTAR `leqt2f -> ludcmp/lubksb/mprove` solver structure more directly.  The v0.3.50 implementation used NumPy's dense solve as the LU-backed step; v0.3.51 removes that delegation for the XSTAR-Lucy mode.  The package still does not use `scipy.linalg.lu` for this path, and the solve remains proxy-topology only until physical type-53/type-99/type-1 rates are evaluated.
+
 
 ### v0.3.50 note: XSTAR-style Lucy/LU full-global diagnostic solver
 

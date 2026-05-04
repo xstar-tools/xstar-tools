@@ -5171,25 +5171,110 @@ def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
 
 
 
+def _xstar_ludcmp(a: np.ndarray, *, tiny: float = 1.0e-30):
+    """Numerical-Recipes-style LU decomposition with scaled partial pivoting.
+
+    This mirrors the algorithmic role of XSTAR's ``ludcmp`` routine closely
+    enough for the diagnostic Python solver: a single matrix is factorized into
+    compact LU storage plus a pivot vector, and subsequent right-hand sides are
+    solved by ``_xstar_lubksb``.  No SciPy dependency is used here.
+    """
+    lu = np.array(a, dtype=float, copy=True)
+    if lu.ndim != 2 or lu.shape[0] != lu.shape[1]:
+        raise np.linalg.LinAlgError("ludcmp requires a square matrix")
+    n = int(lu.shape[0])
+    indx = np.zeros(n, dtype=int)
+    vv = np.zeros(n, dtype=float)
+    d = 1.0
+
+    for i in range(n):
+        big = float(np.max(np.abs(lu[i, :]))) if n else 0.0
+        if big <= 0.0 or not math.isfinite(big):
+            raise np.linalg.LinAlgError("singular matrix in ludcmp row scaling")
+        vv[i] = 1.0 / big
+
+    for j in range(n):
+        for i in range(j):
+            s = lu[i, j]
+            if i:
+                s -= float(np.dot(lu[i, :i], lu[:i, j]))
+            lu[i, j] = s
+
+        big = -1.0
+        imax = j
+        for i in range(j, n):
+            s = lu[i, j]
+            if j:
+                s -= float(np.dot(lu[i, :j], lu[:j, j]))
+            lu[i, j] = s
+            dum = vv[i] * abs(s)
+            if dum >= big:
+                big = dum
+                imax = i
+
+        if j != imax:
+            lu[[j, imax], :] = lu[[imax, j], :]
+            d = -d
+            vv[imax] = vv[j]
+
+        indx[j] = imax
+        if abs(float(lu[j, j])) <= tiny:
+            lu[j, j] = tiny
+
+        if j != n - 1:
+            dum = 1.0 / float(lu[j, j])
+            lu[j + 1 :, j] *= dum
+
+    return lu, indx, d
+
+
+def _xstar_lubksb(lu: np.ndarray, indx: np.ndarray, b: np.ndarray):
+    """Back-substitution companion for ``_xstar_ludcmp``."""
+    n = int(lu.shape[0])
+    x = np.array(b, dtype=float, copy=True).reshape(n)
+    ii = -1
+    for i in range(n):
+        ip = int(indx[i])
+        s = x[ip]
+        x[ip] = x[i]
+        if ii >= 0:
+            s -= float(np.dot(lu[i, ii:i], x[ii:i]))
+        elif s != 0.0:
+            ii = i
+        x[i] = s
+
+    for i in range(n - 1, -1, -1):
+        s = x[i]
+        if i + 1 < n:
+            s -= float(np.dot(lu[i, i + 1 :], x[i + 1 :]))
+        x[i] = s / float(lu[i, i])
+    return x
+
+
+def _xstar_mprove(A: np.ndarray, b: np.ndarray, lu: np.ndarray, indx: np.ndarray, x: np.ndarray):
+    """One XSTAR/NR-style iterative-improvement correction."""
+    residual = np.array(b, dtype=float, copy=False) - np.array(A, dtype=float, copy=False) @ x
+    rnorm = float(np.linalg.norm(residual))
+    dx = _xstar_lubksb(lu, indx, residual)
+    return x + dx, rnorm, float(np.linalg.norm(dx))
+
+
 def _xstar_lucy_lu_solve(A: np.ndarray, b: np.ndarray, *, max_improve: int = 2):
-    """Solve ``A x = b`` using the XSTAR ``leqt2f`` style diagnostic path.
+    """Solve ``A x = b`` using an explicit XSTAR ``leqt2f`` analogue.
 
     XSTAR's ``leqt2f`` calls Numerical Recipes ``ludcmp``/``lubksb`` and then
-    ``mprove`` for iterative improvement.  NumPy does not expose the pivoted LU
-    factors used by ``numpy.linalg.solve``; for this pure-Python diagnostic we
-    use ``numpy.linalg.solve`` as the LU-backed dense solve and then perform
-    explicit iterative improvement by solving for residual corrections.
+    ``mprove`` for iterative improvement.  v0.3.51 uses local pure-Python/NumPy
+    versions of those steps instead of delegating the LU step to SciPy or to
+    ``numpy.linalg.solve``.
     """
-    x = np.linalg.solve(A, b)
+    lu, indx, _ = _xstar_ludcmp(A)
+    x = _xstar_lubksb(lu, indx, b)
     improvement_norms: List[float] = []
     for _ in range(int(max(0, max_improve))):
-        residual = b - A @ x
-        rnorm = float(np.linalg.norm(residual))
+        x, rnorm, dxnorm = _xstar_mprove(A, b, lu, indx, x)
         improvement_norms.append(rnorm)
-        if rnorm <= 1.0e-12 * (1.0 + float(np.linalg.norm(b))):
+        if rnorm <= 1.0e-12 * (1.0 + float(np.linalg.norm(b))) or dxnorm <= 1.0e-14 * (1.0 + float(np.linalg.norm(x))):
             break
-        dx = np.linalg.solve(A, residual)
-        x = x + dx
     return x, improvement_norms
 
 
@@ -5415,7 +5500,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
+            "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -5680,7 +5765,7 @@ def build_full_global_normalized_solve_comparison(
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
         "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure, while SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
-        "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
+        "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -5729,7 +5814,7 @@ def build_full_global_normalized_solve_comparison(
             "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
+            "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
         })
     return rows
 
