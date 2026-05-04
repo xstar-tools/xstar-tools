@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.60 - 2026-05-04
+
+- Added `xstar_like_element_solver_intercombination_feed_audit.csv`, a detailed audit of all current full-global matrix routes that feed, branch out of, or diagonally drain the He-like intercombination upper levels (`1s2p 3P_J`).
+- Added `xstar_like_element_solver_triplet_component_balance_audit.csv`, summarising f/i/r populations, incoming rates, radiative losses, type-71 cascade feeds, type-53 Milne inverse feeds, type-74 inverse feeds, collisional couplings, and type-53 photoionization losses.
+- Added summary entries for both new audits to `xstar_like_element_solver_summary.json` and the Markdown summary.
+- No solver or physics rates are intentionally changed; v0.3.60 is an audit layer for the low-intercombination bottleneck identified by v0.3.59.
+
 ## v0.3.59 - 2026-05-04
 
 - Added a refined inverse-recombination scale scan around the promising C V region found in v0.3.58.

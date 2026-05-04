@@ -8157,6 +8157,18 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
+    intercombination_feed_audit_rows = build_intercombination_feed_audit_rows(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
+    triplet_component_balance_audit_rows = build_triplet_component_balance_audit_rows(
+        global_index_rows=global_index_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -8217,6 +8229,10 @@ def solve_element_reference(
             "inverse_recombination_scale_scan_summary": _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows),
             "n_inverse_recombination_refined_scale_scan_rows": len(inverse_recombination_refined_scale_scan_rows),
             "inverse_recombination_refined_scale_scan_summary": _inverse_recombination_refined_scale_scan_summary(inverse_recombination_refined_scale_scan_rows),
+            "n_intercombination_feed_audit_rows": len(intercombination_feed_audit_rows),
+            "intercombination_feed_audit_summary": _intercombination_feed_audit_summary(intercombination_feed_audit_rows),
+            "n_triplet_component_balance_audit_rows": len(triplet_component_balance_audit_rows),
+            "triplet_component_balance_audit_summary": _triplet_component_balance_audit_summary(triplet_component_balance_audit_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
             "radiation_normalization_audit_summary": _radiation_normalization_audit_summary(radiation_normalization_audit_rows),
             "n_type53_phint53_scale_scan_rows": len(type53_phint53_scale_scan_rows),
@@ -8272,6 +8288,8 @@ def solve_element_reference(
         "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,
         "inverse_recombination_refined_scale_scan": inverse_recombination_refined_scale_scan_rows,
+        "intercombination_feed_audit": intercombination_feed_audit_rows,
+        "triplet_component_balance_audit": triplet_component_balance_audit_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
@@ -8287,6 +8305,316 @@ def solve_element_reference(
         "triplet_source_scale_scan": triplet_source_scale_scan_rows,
     }
 
+
+
+def _truthy_value(value: object) -> bool:
+    """Return True for common CSV/string boolean true values."""
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _row_global_index(row: Mapping[str, object], *keys: str) -> Optional[int]:
+    """Return the first valid integer global-index value from *keys*."""
+    for key in keys:
+        val = maybe_int(row.get(key))
+        if val is not None:
+            return val
+    return None
+
+
+def _triplet_global_index_sets(global_index_rows: Sequence[dict], *, ion_stage: int) -> Dict[str, List[int]]:
+    """Return global-index lists for f/i/r triplet upper levels."""
+    out = {"f": [], "i": [], "r": []}
+    for row in global_index_rows:
+        if maybe_int(row.get("ion_stage")) != ion_stage:
+            continue
+        comp = str(row.get("triplet_component") or "").strip().lower()
+        if comp in out and _truthy_value(row.get("is_triplet_upper")):
+            gi = maybe_int(row.get("global_index"))
+            if gi is not None:
+                out[comp].append(gi)
+    return out
+
+
+def _global_index_metadata(global_index_rows: Sequence[dict]) -> Dict[int, dict]:
+    meta = {}
+    for row in global_index_rows:
+        gi = maybe_int(row.get("global_index"))
+        if gi is not None:
+            meta[gi] = row
+    return meta
+
+
+def _full_global_population_map(full_global_normalized_solve_comparison_rows: Sequence[dict]) -> Dict[int, float]:
+    """Extract population by global index from the normalized-solve comparison rows."""
+    pop = {}
+    for row in full_global_normalized_solve_comparison_rows:
+        if row.get("row_kind") != "population":
+            continue
+        gi = maybe_int(row.get("global_index"))
+        val = maybe_float(row.get("population_fraction"))
+        if gi is not None and val is not None and math.isfinite(float(val)):
+            pop[gi] = float(val)
+    return pop
+
+
+def build_intercombination_feed_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Audit all currently assembled routes into/out of the He-like i upper levels.
+
+    This is a diagnostic accounting table added in v0.3.60.  It focuses on the
+    C V/O VII/etc. intercombination upper levels (1s2p 3P_J) and records every
+    full-global matrix term that either feeds those levels, removes population
+    from them, or appears as their diagonal loss.  Rates are whatever the current
+    diagnostic matrix contains (physical bound-bound rates plus proxy/topology
+    terms for the still-incomplete continuum/recombination channels).
+    """
+    meta = _global_index_metadata(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    triplet_sets = _triplet_global_index_sets(global_index_rows, ion_stage=he_like_stage)
+    i_targets = set(triplet_sets.get("i", []))
+    f_targets = set(triplet_sets.get("f", []))
+    r_targets = set(triplet_sets.get("r", []))
+    all_triplet = f_targets | i_targets | r_targets
+    rows: List[dict] = []
+    term_id = 0
+    for term in full_global_matrix_terms:
+        row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+        col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+        rate = maybe_float(term.get("full_global_rate_s^-1") or term.get("rate_s^-1") or term.get("rate_proxy") or term.get("source_rate_s^-1"))
+        signed = maybe_float(term.get("full_global_signed_rate_s^-1") or term.get("signed_rate_s^-1") or term.get("signed_rate_proxy"))
+        if rate is None and signed is not None:
+            rate = abs(float(signed))
+        if rate is None:
+            continue
+        if not math.isfinite(float(rate)):
+            continue
+        touches_i = (row_gi in i_targets) or (col_gi in i_targets)
+        if not touches_i:
+            continue
+        if row_gi in i_targets and col_gi != row_gi:
+            route_role = "incoming_feed_to_intercombination_upper"
+            target_gi = row_gi
+            partner_gi = col_gi
+        elif col_gi in i_targets and row_gi != col_gi:
+            route_role = "outgoing_branch_or_coupling_from_intercombination_upper"
+            target_gi = col_gi
+            partner_gi = row_gi
+        elif row_gi in i_targets and col_gi == row_gi:
+            route_role = "diagonal_loss_on_intercombination_upper"
+            target_gi = row_gi
+            partner_gi = None
+        else:
+            continue
+        target = meta.get(target_gi, {})
+        partner = meta.get(partner_gi, {}) if partner_gi is not None else {}
+        component_partner = partner.get("triplet_component") or ""
+        if partner_gi in f_targets:
+            partner_triplet_family = "f"
+        elif partner_gi in i_targets:
+            partner_triplet_family = "i"
+        elif partner_gi in r_targets:
+            partner_triplet_family = "r"
+        elif partner_gi in all_triplet:
+            partner_triplet_family = str(component_partner)
+        else:
+            partner_triplet_family = "non_triplet_or_continuum"
+        pop_target = pops.get(target_gi, 0.0)
+        contribution_proxy = float(rate) * float(pop_target)
+        rows.append({
+            "audit_row_id": term_id,
+            "audit_kind": "intercombination_feed_branch_audit",
+            "route_role": route_role,
+            "target_global_index": target_gi,
+            "target_level_index": target.get("level_index"),
+            "target_level_label": target.get("level_label"),
+            "target_triplet_component": target.get("triplet_component"),
+            "target_population_fraction": pop_target,
+            "partner_global_index": partner_gi if partner_gi is not None else "",
+            "partner_ion_stage": partner.get("ion_stage", ""),
+            "partner_level_index": partner.get("level_index", ""),
+            "partner_level_label": partner.get("level_label", ""),
+            "partner_level_kind": partner.get("level_kind", ""),
+            "partner_triplet_family": partner_triplet_family,
+            "matrix_term_kind": term.get("matrix_term_kind", ""),
+            "matrix_role": term.get("matrix_role", ""),
+            "full_global_component": term.get("full_global_component", ""),
+            "transition_kind": term.get("transition_kind", ""),
+            "data_type": term.get("data_type", ""),
+            "record": term.get("record", ""),
+            "rate_s^-1": float(rate),
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "population_weighted_rate_proxy_s^-1": contribution_proxy,
+            "diagnostic_note": "v0.3.60 audit; proxy/topology continuum terms are not physical XSTAR rates yet",
+        })
+        term_id += 1
+    return rows
+
+
+def _component_balance_for_indices(
+    component: str,
+    indices: Sequence[int],
+    *,
+    meta: Mapping[int, dict],
+    pops: Mapping[int, float],
+    full_global_matrix_terms: Sequence[dict],
+) -> dict:
+    idx = set(indices)
+    incoming = 0.0
+    outgoing = 0.0
+    diagonal_loss = 0.0
+    radiative_out = 0.0
+    collisional_in = 0.0
+    collisional_out = 0.0
+    type71_in = 0.0
+    type53_milne_in = 0.0
+    type74_in = 0.0
+    type53_photo_loss = 0.0
+    n_in = n_out = n_diag = 0
+    for term in full_global_matrix_terms:
+        row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+        col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+        rate = maybe_float(term.get("full_global_rate_s^-1") or term.get("rate_s^-1") or term.get("rate_proxy") or term.get("source_rate_s^-1"))
+        signed = maybe_float(term.get("full_global_signed_rate_s^-1") or term.get("signed_rate_s^-1") or term.get("signed_rate_proxy"))
+        if rate is None and signed is not None:
+            rate = abs(float(signed))
+        if rate is None or not math.isfinite(float(rate)):
+            continue
+        rate = float(rate)
+        comp_name = str(term.get("full_global_component") or "")
+        trans_kind = str(term.get("transition_kind") or "")
+        if row_gi in idx and col_gi != row_gi:
+            incoming += rate
+            n_in += 1
+            if "type71" in comp_name:
+                type71_in += rate
+            if "type53_milne" in comp_name:
+                type53_milne_in += rate
+            if "type74" in comp_name:
+                type74_in += rate
+            if "collisional" in trans_kind:
+                collisional_in += rate
+        if col_gi in idx and row_gi != col_gi:
+            outgoing += rate
+            n_out += 1
+            if "radiative_decay" in trans_kind:
+                radiative_out += rate
+            if "collisional" in trans_kind:
+                collisional_out += rate
+            if "type53_phint53" in comp_name:
+                type53_photo_loss += rate
+        if row_gi in idx and col_gi == row_gi:
+            diagonal_loss += rate
+            n_diag += 1
+    pop_sum = sum(float(pops.get(i, 0.0)) for i in idx)
+    label_summary = ";".join(str(meta.get(i, {}).get("level_label", i)) for i in sorted(idx))
+    return {
+        "component": component,
+        "global_indices": ";".join(str(i) for i in sorted(idx)),
+        "level_labels": label_summary,
+        "population_sum": pop_sum,
+        "incoming_rate_sum_s^-1": incoming,
+        "outgoing_offdiag_rate_sum_s^-1": outgoing,
+        "diagonal_loss_rate_sum_s^-1": diagonal_loss,
+        "n_incoming_terms": n_in,
+        "n_outgoing_terms": n_out,
+        "n_diagonal_loss_terms": n_diag,
+        "type71_cascade_in_rate_sum_s^-1": type71_in,
+        "type53_milne_in_rate_sum_s^-1": type53_milne_in,
+        "type74_inverse_in_rate_sum_s^-1": type74_in,
+        "collisional_in_rate_sum_s^-1": collisional_in,
+        "collisional_out_rate_sum_s^-1": collisional_out,
+        "radiative_out_rate_sum_s^-1": radiative_out,
+        "type53_photoionization_loss_rate_sum_s^-1": type53_photo_loss,
+        "population_weighted_radiative_out_proxy_s^-1": pop_sum * radiative_out,
+    }
+
+
+def build_triplet_component_balance_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Summarise source/loss balance for f/i/r upper-level groups."""
+    meta = _global_index_metadata(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    triplet_sets = _triplet_global_index_sets(global_index_rows, ion_stage=he_like_stage)
+    rows = []
+    for comp in ["f", "i", "r"]:
+        row = _component_balance_for_indices(
+            comp,
+            triplet_sets.get(comp, []),
+            meta=meta,
+            pops=pops,
+            full_global_matrix_terms=full_global_matrix_terms,
+        )
+        row["audit_kind"] = "triplet_component_balance"
+        row["diagnostic_note"] = "v0.3.60 component balance; population-weighted radiative proxy is not a replacement for full emissivity calculation"
+        rows.append(row)
+    # Add a compact i/f/r comparison row to make sorting easier in spreadsheets.
+    by = {r["component"]: r for r in rows}
+    fpop = maybe_float(by.get("f", {}).get("population_sum")) or 0.0
+    ipop = maybe_float(by.get("i", {}).get("population_sum")) or 0.0
+    rpop = maybe_float(by.get("r", {}).get("population_sum")) or 0.0
+    rows.append({
+        "audit_kind": "triplet_component_balance_summary",
+        "component": "summary",
+        "population_sum_f": fpop,
+        "population_sum_i": ipop,
+        "population_sum_r": rpop,
+        "i_over_f_population_ratio": (ipop / fpop if fpop else ""),
+        "i_over_r_population_ratio": (ipop / rpop if rpop else ""),
+        "incoming_rate_i_over_f": ((maybe_float(by.get("i", {}).get("incoming_rate_sum_s^-1")) or 0.0) / (maybe_float(by.get("f", {}).get("incoming_rate_sum_s^-1")) or 0.0) if (maybe_float(by.get("f", {}).get("incoming_rate_sum_s^-1")) or 0.0) else ""),
+        "incoming_rate_i_over_r": ((maybe_float(by.get("i", {}).get("incoming_rate_sum_s^-1")) or 0.0) / (maybe_float(by.get("r", {}).get("incoming_rate_sum_s^-1")) or 0.0) if (maybe_float(by.get("r", {}).get("incoming_rate_sum_s^-1")) or 0.0) else ""),
+        "diagnostic_note": "summary ratios for locating the low-intercombination bottleneck",
+    })
+    return rows
+
+
+def _intercombination_feed_audit_summary(rows: Sequence[dict]) -> dict:
+    def counts(col: str) -> dict:
+        out = {}
+        for r in rows:
+            k = str(r.get(col) or "")
+            out[k] = out.get(k, 0) + 1
+        return out
+    return {
+        "n_intercombination_feed_audit_rows": len(rows),
+        "route_role_counts": counts("route_role"),
+        "component_counts": counts("full_global_component"),
+        "transition_kind_counts": counts("transition_kind"),
+        "incoming_feed_rate_sum_s^-1": sum(float(r.get("rate_s^-1") or 0.0) for r in rows if r.get("route_role") == "incoming_feed_to_intercombination_upper"),
+        "outgoing_branch_rate_sum_s^-1": sum(float(r.get("rate_s^-1") or 0.0) for r in rows if r.get("route_role") == "outgoing_branch_or_coupling_from_intercombination_upper"),
+        "diagonal_loss_rate_sum_s^-1": sum(float(r.get("rate_s^-1") or 0.0) for r in rows if r.get("route_role") == "diagonal_loss_on_intercombination_upper"),
+        "provenance": "v0.3.60_intercombination_branch_audit",
+    }
+
+
+def _triplet_component_balance_audit_summary(rows: Sequence[dict]) -> dict:
+    comps = {r.get("component"): r for r in rows if r.get("audit_kind") == "triplet_component_balance"}
+    return {
+        "n_triplet_component_balance_rows": len(rows),
+        "population_sum_f": comps.get("f", {}).get("population_sum", ""),
+        "population_sum_i": comps.get("i", {}).get("population_sum", ""),
+        "population_sum_r": comps.get("r", {}).get("population_sum", ""),
+        "incoming_rate_sum_f_s^-1": comps.get("f", {}).get("incoming_rate_sum_s^-1", ""),
+        "incoming_rate_sum_i_s^-1": comps.get("i", {}).get("incoming_rate_sum_s^-1", ""),
+        "incoming_rate_sum_r_s^-1": comps.get("r", {}).get("incoming_rate_sum_s^-1", ""),
+        "radiative_out_rate_sum_f_s^-1": comps.get("f", {}).get("radiative_out_rate_sum_s^-1", ""),
+        "radiative_out_rate_sum_i_s^-1": comps.get("i", {}).get("radiative_out_rate_sum_s^-1", ""),
+        "radiative_out_rate_sum_r_s^-1": comps.get("r", {}).get("radiative_out_rate_sum_s^-1", ""),
+        "provenance": "v0.3.60_triplet_component_balance_audit",
+    }
 
 def _superlevel_cascade_audit_summary(rows: Sequence[dict]) -> dict:
     """Summarise diagnostic superlevel/cascade audit rows."""
@@ -8758,6 +9086,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", inverse_recombination_refined_scale_scan_rows)
+    write_csv(out / "xstar_like_element_solver_intercombination_feed_audit.csv", result.get("intercombination_feed_audit", []))
+    write_csv(out / "xstar_like_element_solver_triplet_component_balance_audit.csv", result.get("triplet_component_balance_audit", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)

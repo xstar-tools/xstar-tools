@@ -1,5 +1,9 @@
 ### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
 
+### v0.3.60 intercombination branch audit
+
+v0.3.60 adds two diagnostic balance outputs for the He-like intercombination component: `xstar_like_element_solver_intercombination_feed_audit.csv` and `xstar_like_element_solver_triplet_component_balance_audit.csv`.  The first table lists every current full-global matrix term that feeds, removes, or diagonally drains the 1s2p 3P_J intercombination upper levels.  The second summarizes f/i/r component populations, incoming-rate sums, radiative losses, cascade feeds, inverse-recombination feeds, collisional couplings, and photoionization losses.  These tables are intended to locate why the refined inverse scan still underpredicts the intercombination fraction.  They are diagnostic only: continuum/proxy rows remain nonphysical until the XSTAR radiation, Milne, type-99/type-1, and continuum closure are fully ported.
+
 ### v0.3.59 refined inverse-recombination scan
 
 v0.3.59 adds `xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv`, a focused diagnostic scan around the C V region identified in v0.3.58.  Use `--type53-milne-refined-scale` and `--type74-inverse-refined-scale` to adjust the refined grid.  The file includes intercombination-sensitive ranking columns (`i_abs_error_to_target`, `i_fraction_to_target_ratio`, and `intercombination_weighted_score_w5`) in addition to the standard f/i/r and L2 diagnostics.  The scan remains diagnostic/proxy until the true XSTAR Milne/calt74 rates and continuum closure are fully ported.
