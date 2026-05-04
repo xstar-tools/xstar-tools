@@ -13,6 +13,11 @@ v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-m
 
 # xstar-atomic
 
+
+### v0.3.50 note: XSTAR-style Lucy/LU full-global diagnostic solver
+
+v0.3.50 adds `--full-global-linear-solver xstar-lucy`, a diagnostic solver mode patterned on the XSTAR `msolvelucy` path.  It builds a condensed superlevel matrix, replaces one row with number conservation, solves with an LU-style dense solve plus iterative-improvement corrections, expands back to level populations, and applies the Lucy fixed-point update.  The output `xstar_like_element_solver_full_global_normalized_solve_comparison.csv` now reports the XSTAR-Lucy iteration and rank diagnostics.  This is still a proxy-topology diagnostic, not a physical XSTAR solution, because type-53/type-99/type-1 physical rates are not yet evaluated.
+
 ### v0.3.49 note: full-global SVD/rank-aware normalized solve controls
 
 The full-global C VI+C V normalized proxy-topology diagnostic now exposes rank-aware controls similar to the earlier He-like/O VII solver diagnostics.  `examples/42_xstar_like_element_solver_demo.py` accepts `--full-global-linear-solver solve|dense|lstsq|svd`, `--full-global-rank-deficient-action solve|lstsq|svd|error`, `--full-global-negative-population-action keep|clip|error`, and `--no-full-global-prune-null-rate-levels`.  Defaults are SVD, SVD rank handling, keep negative populations, and prune null-rate global-index rows.  This is intentionally different from production XSTAR, where `calc_hmc_element` calls `msolvelucy`, which solves a condensed superlevel system with a number-conservation row using LU decomposition (`leqt2f` -> `ludcmp`/`lubksb`) plus `mprove`.

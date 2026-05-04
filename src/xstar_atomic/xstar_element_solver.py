@@ -24,7 +24,7 @@ import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -582,7 +582,7 @@ def _evaluate_type57_calt57_record(
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
     radiation_field_mode: str = "none",
-    full_global_linear_solver: str = "svd",
+    full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
     full_global_prune_null_rate_levels: bool = True,
@@ -5170,6 +5170,214 @@ def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
 
 
 
+
+def _xstar_lucy_lu_solve(A: np.ndarray, b: np.ndarray, *, max_improve: int = 2):
+    """Solve ``A x = b`` using the XSTAR ``leqt2f`` style diagnostic path.
+
+    XSTAR's ``leqt2f`` calls Numerical Recipes ``ludcmp``/``lubksb`` and then
+    ``mprove`` for iterative improvement.  NumPy does not expose the pivoted LU
+    factors used by ``numpy.linalg.solve``; for this pure-Python diagnostic we
+    use ``numpy.linalg.solve`` as the LU-backed dense solve and then perform
+    explicit iterative improvement by solving for residual corrections.
+    """
+    x = np.linalg.solve(A, b)
+    improvement_norms: List[float] = []
+    for _ in range(int(max(0, max_improve))):
+        residual = b - A @ x
+        rnorm = float(np.linalg.norm(residual))
+        improvement_norms.append(rnorm)
+        if rnorm <= 1.0e-12 * (1.0 + float(np.linalg.norm(b))):
+            break
+        dx = np.linalg.solve(A, residual)
+        x = x + dx
+    return x, improvement_norms
+
+
+def _xstar_lucy_condensed_solve(
+    M: np.ndarray,
+    active_indices: Sequence[int],
+    global_to_row: Mapping[int, dict],
+    *,
+    max_outer: int = 50,
+    max_inner: int = 20,
+    crit: float = 1.0e-2,
+    crit2: float = 1.0e-2,
+):
+    """Diagnostic port of the XSTAR ``msolvelucy`` population iteration.
+
+    This intentionally mirrors the structure of ``msolvelucy`` rather than the
+    previous SVD pseudo-inverse solver:
+
+    * build level-to-superlevel memberships;
+    * form fractional populations ``rr(level)=x(level)/p(superlevel)``;
+    * build a condensed superlevel matrix from the full rate matrix;
+    * replace the last condensed row by number conservation;
+    * solve the condensed system with an LU-style solve plus iterative
+      improvement (``leqt2f`` analogue);
+    * expand back to level populations and apply the Lucy fixed-point update.
+
+    It is still diagnostic because the matrix terms contain type-53/type-99/type-1
+    proxy rates, not physical XSTAR ``phint53``/``phint53pl`` rates.
+    """
+    n_full = int(M.shape[0])
+    active = [int(i) for i in active_indices]
+    if not active:
+        return np.zeros(n_full, dtype=float), {
+            "solver": "xstar_msolvelucy_lu",
+            "solve_status": "empty",
+            "solver_warning": "no active global_index rows",
+        }
+    # The current global index already contains explicit XSTAR-style superlevel
+    # and continuum rows.  Keep low/spectroscopic rows explicit and let explicit
+    # superlevel/continuum rows act as their own condensed states.  This is the
+    # least destructive first diagnostic analogue to XSTAR's nsup array.
+    super_keys = []
+    super_key_to_local = {}
+    local_to_super = []
+    for g in active:
+        row = global_to_row.get(int(g), {})
+        # Future versions can map multiple high-n spectroscopic rows into one
+        # superlevel.  For v0.3.50, preserving each global row avoids hiding the
+        # triplet upper populations while still exercising the msolvelucy logic.
+        key = (str(row.get("ion_stage", "")), str(row.get("level_kind", "")), int(g))
+        if key not in super_key_to_local:
+            super_key_to_local[key] = len(super_keys)
+            super_keys.append(key)
+        local_to_super.append(super_key_to_local[key])
+    nsup = len(super_keys)
+    global_to_active_local = {g: k for k, g in enumerate(active)}
+    M_active = M[np.ix_(active, active)].astype(float, copy=True)
+    # XSTAR initializes/iterates with a normalized population vector.  Start from
+    # statistical weights when available; otherwise uniform.
+    x = np.zeros(len(active), dtype=float)
+    for k, g in enumerate(active):
+        wg = maybe_float(global_to_row.get(int(g), {}).get("statistical_weight_g"))
+        if wg is None or not math.isfinite(float(wg)) or float(wg) <= 0.0:
+            wg = 1.0
+        x[k] = float(wg)
+    if float(np.sum(x)) <= 0.0:
+        x[:] = 1.0
+    x /= float(np.sum(x))
+    diff = float("inf")
+    diff2 = float("inf")
+    niter = 0
+    nit3 = 0
+    last_lu_improvement_norms: List[float] = []
+    lu_failures = 0
+    last_condensed_rank = None
+    last_condensed_condition = None
+    for outer in range(int(max_outer)):
+        niter = outer + 1
+        xo = x.copy()
+        p = np.zeros(nsup, dtype=float)
+        for k, sp in enumerate(local_to_super):
+            p[sp] += x[k]
+        rr = np.ones_like(x)
+        for k, sp in enumerate(local_to_super):
+            if p[sp] > 1.0e-36:
+                rr[k] = x[k] / (1.0e-48 + p[sp])
+            else:
+                rr[k] = 1.0
+        A_sup = np.zeros((nsup, nsup), dtype=float)
+        # Condense sum_i M_ij rr_j P_super(j), matching the conservation form
+        # implied by msolvelucy's rr-weighted superlevel matrix.
+        for i_local in range(len(active)):
+            spi = local_to_super[i_local]
+            for j_local in range(len(active)):
+                val = M_active[i_local, j_local]
+                if val != 0.0:
+                    spj = local_to_super[j_local]
+                    A_sup[spi, spj] += float(val) * float(rr[j_local])
+        b_sup = np.zeros(nsup, dtype=float)
+        nspcon = nsup - 1
+        A_solve = A_sup.copy()
+        A_solve[nspcon, :] = 1.0
+        b_sup[nspcon] = 1.0
+        try:
+            last_condensed_rank = int(np.linalg.matrix_rank(A_solve))
+            svals = np.linalg.svd(A_solve, compute_uv=False)
+            if len(svals) and float(np.min(np.abs(svals))) > 0.0:
+                last_condensed_condition = float(np.max(np.abs(svals)) / np.min(np.abs(svals)))
+            else:
+                last_condensed_condition = None
+        except Exception:
+            last_condensed_rank = None
+            last_condensed_condition = None
+        try:
+            p_new, last_lu_improvement_norms = _xstar_lucy_lu_solve(A_solve, b_sup, max_improve=2)
+        except Exception:
+            lu_failures += 1
+            # XSTAR's LU path does not use SVD.  For a diagnostic CSV rather than
+            # a crash, fall back to least-squares but mark this clearly.
+            p_new, *_ = np.linalg.lstsq(A_solve, b_sup, rcond=None)
+            last_lu_improvement_norms = []
+        x = np.zeros_like(x)
+        for k, sp in enumerate(local_to_super):
+            x[k] = float(rr[k]) * float(p_new[sp])
+        # Lucy fixed-point update on level populations using total incoming and
+        # outgoing rates.  This follows the riu/rui/ril/rli spirit in msolvelucy.
+        for inner in range(int(max_inner)):
+            nit3 += 1
+            x_old_inner = x.copy()
+            gain = np.zeros_like(x)
+            loss = np.zeros_like(x)
+            for i in range(len(active)):
+                # Incoming positive off-diagonal rates into i from j.
+                for j in range(len(active)):
+                    if i == j:
+                        continue
+                    rate = M_active[i, j]
+                    if rate > 0.0:
+                        gain[i] += rate * max(0.0, x[j])
+                loss_i = -M_active[i, i]
+                if loss_i > 0.0:
+                    loss[i] = loss_i
+            x_new = np.where(loss > 0.0, gain / (loss + 1.0e-24), x)
+            sx = float(np.sum(x_new))
+            if sx != 0.0 and math.isfinite(sx):
+                x_new = x_new / sx
+            x = x_new
+            diff2 = 0.0
+            for old, new in zip(x_old_inner, x):
+                if new > 1.0e-6:
+                    tst = old / new
+                    diff2 += (tst - 1.0) * (tst - 1.0)
+                    if diff2 >= 1.0e3:
+                        break
+            if diff2 < crit2:
+                break
+        diff = 0.0
+        for old, new in zip(xo, x):
+            if new > 1.0e-6:
+                denom = old + new
+                if denom != 0.0:
+                    d = min(1.0e10, (old - new) / denom)
+                    diff += d * d
+                    if diff >= 1.0e3:
+                        break
+        if diff < crit:
+            break
+    pop = np.zeros(n_full, dtype=float)
+    for k, g in enumerate(active):
+        pop[int(g)] = float(x[k])
+    meta = {
+        "solver": "xstar_msolvelucy_lu",
+        "solve_status": "warning" if lu_failures else "ok",
+        "solver_warning": "" if not lu_failures else f"condensed_lu_failed_{lu_failures}_times_lstsq_used_for_diagnostic_continuation",
+        "xstar_lucy_n_superlevels": int(nsup),
+        "xstar_lucy_niter": int(niter),
+        "xstar_lucy_nit3": int(nit3),
+        "xstar_lucy_diff": float(diff) if math.isfinite(float(diff)) else None,
+        "xstar_lucy_diff2": float(diff2) if math.isfinite(float(diff2)) else None,
+        "xstar_lucy_crit": float(crit),
+        "xstar_lucy_crit2": float(crit2),
+        "xstar_lucy_lu_failures": int(lu_failures),
+        "xstar_lucy_last_condensed_rank": last_condensed_rank,
+        "xstar_lucy_last_condensed_condition": last_condensed_condition,
+        "xstar_lucy_last_lu_improvement_norms_json": json.dumps(last_lu_improvement_norms),
+    }
+    return pop, meta
+
 def build_full_global_normalized_solve_comparison(
     *,
     global_index_rows: Sequence[dict],
@@ -5184,7 +5392,7 @@ def build_full_global_normalized_solve_comparison(
 ) -> List[dict]:
     """Solve the first diagnostic full C VI+C V normalized global matrix.
 
-    v0.3.49 diagnostic only: assemble a dense matrix over all explicit
+    v0.3.50 diagnostic: assemble a dense matrix over all explicit
     ``global_index`` rows from ``xstar_like_element_solver_full_global_matrix_terms.csv``.
     Only matrix triplet rows are used; source-vector rows are deliberately
     excluded.  One row is replaced by the normalization equation
@@ -5207,7 +5415,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
+            "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -5301,6 +5509,7 @@ def build_full_global_normalized_solve_comparison(
 
     solve_status = "ok"
     solver = ""
+    xstar_meta: Dict[str, object] = {}
     solver_warning = ""
     svd_cutoff = None
     try:
@@ -5312,7 +5521,23 @@ def build_full_global_normalized_solve_comparison(
     rank_deficient = bool(rank_pre is not None and rank_pre < n_solve)
 
     try:
-        if requested_solver == "svd" or (rank_deficient and rank_action == "svd"):
+        if requested_solver in {"xstar-lucy", "xstar_lucy", "lucy", "msolvelucy"}:
+            pop_xstar, xstar_meta = _xstar_lucy_condensed_solve(
+                M,
+                active_indices,
+                global_to_row,
+                max_outer=50,
+                max_inner=20,
+                crit=1.0e-2,
+                crit2=1.0e-2,
+            )
+            pop_solve = np.array([pop_xstar[int(g)] for g in active_indices], dtype=float)
+            solver = str(xstar_meta.get("solver") or "xstar_msolvelucy_lu")
+            solve_status = str(xstar_meta.get("solve_status") or "ok")
+            solver_warning = str(xstar_meta.get("solver_warning") or "")
+            rank = int(rank_pre) if rank_pre is not None else int(np.linalg.matrix_rank(A))
+            svals = svals_pre if len(svals_pre) else np.linalg.svd(A, compute_uv=False)
+        elif requested_solver == "svd" or (rank_deficient and rank_action == "svd"):
             solver = "numpy.linalg.svd_lstsq"
             pop_solve, rank, svals, svd_cutoff = _svd_lstsq_local(A, b, svd_rcond)
             solve_status = "warning" if rank_deficient else "ok"
@@ -5420,6 +5645,17 @@ def build_full_global_normalized_solve_comparison(
         "solver_requested": requested_solver,
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
+        "xstar_lucy_n_superlevels": xstar_meta.get("xstar_lucy_n_superlevels"),
+        "xstar_lucy_niter": xstar_meta.get("xstar_lucy_niter"),
+        "xstar_lucy_nit3": xstar_meta.get("xstar_lucy_nit3"),
+        "xstar_lucy_diff": xstar_meta.get("xstar_lucy_diff"),
+        "xstar_lucy_diff2": xstar_meta.get("xstar_lucy_diff2"),
+        "xstar_lucy_crit": xstar_meta.get("xstar_lucy_crit"),
+        "xstar_lucy_crit2": xstar_meta.get("xstar_lucy_crit2"),
+        "xstar_lucy_lu_failures": xstar_meta.get("xstar_lucy_lu_failures"),
+        "xstar_lucy_last_condensed_rank": xstar_meta.get("xstar_lucy_last_condensed_rank"),
+        "xstar_lucy_last_condensed_condition": xstar_meta.get("xstar_lucy_last_condensed_condition"),
+        "xstar_lucy_last_lu_improvement_norms_json": xstar_meta.get("xstar_lucy_last_lu_improvement_norms_json"),
         "svd_rcond": svd_rcond,
         "svd_cutoff": svd_cutoff,
         "matrix_rank_before_normalization": rank_pre,
@@ -5443,8 +5679,8 @@ def build_full_global_normalized_solve_comparison(
         "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
-        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix, while this diagnostic path can use SVD/lstsq for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
-        "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure, while SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
+        "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -5493,7 +5729,7 @@ def build_full_global_normalized_solve_comparison(
             "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.49_full_global_svd_normalized_solve_comparison",
+            "provenance": "v0.3.50_full_global_xstar_lucy_solve_comparison",
         })
     return rows
 
@@ -5789,7 +6025,7 @@ def solve_element_reference(
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
     radiation_field_mode: str = "none",
-    full_global_linear_solver: str = "svd",
+    full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
     full_global_prune_null_rate_levels: bool = True,
