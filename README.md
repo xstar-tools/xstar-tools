@@ -13,6 +13,11 @@ v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-m
 
 # xstar-atomic
 
+### v0.3.58 note: explicit diagnostic XSTAR-style bremsa grid
+
+v0.3.58 improves the radiation context used by the type-53/type-74 diagnostics.  The example now writes `xstar_like_element_solver_bremsa_context.csv`, an explicit log-spaced `epi` grid with diagnostic `bremsa` values in the units expected by XSTAR (`erg s^-1 cm^-2 erg^-1`) and a cumulative `bremsint` integral.  New options `--radiation-bremsa-scale`, `--radiation-energy-min-eV`, `--radiation-energy-max-eV`, `--radiation-n-energy-grid`, and `--radiation-powerlaw-index` allow controlled tests of the radiation normalization while preserving the XSTAR-Lucy full-global normalization solve.  This is still a diagnostic context, not the full XSTAR radiation-transfer continuum.
+
+
 ### v0.3.51 note: explicit XSTAR-style LU helpers
 
 v0.3.51 updates the `--full-global-linear-solver xstar-lucy` diagnostic path to use local Numerical-Recipes-style helpers `_xstar_ludcmp`, `_xstar_lubksb`, and `_xstar_mprove`, matching the XSTAR `leqt2f -> ludcmp/lubksb/mprove` solver structure more directly.  The v0.3.50 implementation used NumPy's dense solve as the LU-backed step; v0.3.51 removes that delegation for the XSTAR-Lucy mode.  The package still does not use `scipy.linalg.lu` for this path, and the solve remains proxy-topology only until physical type-53/type-99/type-1 rates are evaluated.

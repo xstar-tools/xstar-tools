@@ -2019,8 +2019,10 @@ def _xstar_calt74_rate_alpha_diagnostic(
     ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 256
     emin = maybe_float(ctx.get("energy_min_eV")) or 1.0
     emax = maybe_float(ctx.get("energy_max_eV")) or 1.0e5
+    bscale_ctx = maybe_float(ctx.get("radiation_bremsa_scale")) or 1.0
+    powerlaw_ctx = maybe_float(ctx.get("radiation_powerlaw_index")) or 1.0
     grid = _log_energy_grid(float(emin), float(emax), max(int(ngrid), 2))
-    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=temp) for e in grid]
+    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=temp, bremsa_scale=bscale_ctx, powerlaw_index=powerlaw_ctx) for e in grid]
 
     rate_sum = 0.0
     rate_terms_used = 0
@@ -2065,6 +2067,8 @@ def _xstar_calt74_rate_alpha_diagnostic(
         "type74_resonance_energy_eV_min": min(resonance_energies_eV) if resonance_energies_eV else None,
         "type74_resonance_energy_eV_max": max(resonance_energies_eV) if resonance_energies_eV else None,
         "radiation_field_mode": mode,
+        "radiation_bremsa_scale": bscale_ctx,
+        "radiation_powerlaw_index": powerlaw_ctx,
         "radiation_grid_min_eV": min(grid) if grid else None,
         "radiation_grid_max_eV": max(grid) if grid else None,
         "provenance": "v0.3.57_source_aligned_calt74_rate_alpha_diagnostic",
@@ -4734,25 +4738,62 @@ def build_radiation_context_rows(
     element_z: int,
     stages: Sequence[int],
     he_like_stage: int,
+    radiation_bremsa_scale: object = 1.0,
+    radiation_energy_min_eV: Optional[float] = None,
+    radiation_energy_max_eV: Optional[float] = None,
+    radiation_n_energy_grid: int = 256,
+    radiation_powerlaw_index: float = 1.0,
 ) -> List[dict]:
-    """Return a diagnostic radiation-context scaffold for type-53 work."""
+    """Return an XSTAR-style diagnostic radiation/bremsa context.
+
+    XSTAR passes ``epi`` and ``bremsa`` arrays to ``ucalc``, ``phint53`` and
+    ``calt74``.  This context is still diagnostic, but v0.3.58 makes the
+    arrays explicit, configurable, and consistently reused by the type-53 and
+    type-74 kernels.
+    """
     mode = str(radiation_field_mode or "none").strip().lower()
-    if mode not in {"none", "flat", "blackbody", "table"}:
+    if mode not in {"none", "flat", "blackbody", "table", "powerlaw", "xstar-powerlaw"}:
         mode = "none"
-    has_placeholder_grid = mode in {"flat", "blackbody", "table"}
-    if has_placeholder_grid:
-        energy_min_ev = 1.0
-        energy_max_ev = 1.0e5
-        n_energy_grid_points = 256
-        grid_status = "placeholder_log_energy_grid_not_used_for_rates"
+    try:
+        bscale = float(radiation_bremsa_scale)
+    except Exception:
+        bscale = 1.0
+    if not math.isfinite(bscale):
+        bscale = 1.0
+    try:
+        alpha = float(radiation_powerlaw_index)
+    except Exception:
+        alpha = 1.0
+    if not math.isfinite(alpha):
+        alpha = 1.0
+    has_grid = mode != "none"
+    if has_grid:
+        energy_min_ev = float(radiation_energy_min_eV) if radiation_energy_min_eV is not None else 1.0
+        energy_max_ev = float(radiation_energy_max_eV) if radiation_energy_max_eV is not None else 1.0e5
+        if not math.isfinite(energy_min_ev) or energy_min_ev <= 0.0:
+            energy_min_ev = 1.0
+        if not math.isfinite(energy_max_ev) or energy_max_ev <= energy_min_ev:
+            energy_max_ev = 1.0e5
+        n_energy_grid_points = max(int(radiation_n_energy_grid or 256), 8)
+        grid_status = "explicit_log_epi_grid_for_diagnostic_bremsa"
+        grid = _log_energy_grid(energy_min_ev, energy_max_ev, n_energy_grid_points)
+        bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=temperature, bremsa_scale=bscale, powerlaw_index=alpha) for e in grid]
+        bremsint = _bremsint_from_grid(grid, bremsa)
+        total_bremsa_energy_flux = _trapz(grid, bremsa)
+        total_bremsa_over_E = _trapz(grid, [b / max(e, 1.0e-300) for e, b in zip(grid, bremsa)])
     else:
         energy_min_ev = None
         energy_max_ev = None
         n_energy_grid_points = 0
         grid_status = "not_constructed_radiation_field_mode_none"
+        grid = []
+        bremsa = []
+        bremsint = []
+        total_bremsa_energy_flux = 0.0
+        total_bremsa_over_E = 0.0
     return [{
         "row_kind": "radiation_context",
-        "radiation_context_version": "v0.3.45",
+        "radiation_context_version": "v0.3.58",
         "radiation_field_mode": mode,
         "element": element,
         "element_z": element_z,
@@ -4764,16 +4805,76 @@ def build_radiation_context_rows(
         "n_energy_grid_points": n_energy_grid_points,
         "energy_min_eV": energy_min_ev,
         "energy_max_eV": energy_max_ev,
-        "mean_intensity_status": "not_available" if mode == "none" else "placeholder_not_physical",
-        "photon_flux_status": "not_available" if mode == "none" else "placeholder_not_physical",
-        "photoionization_integral_status": "not_evaluated_requires_phint53_port",
-        "milne_inverse_recombination_status": "not_evaluated_requires_milne_or_xstar_inverse_context",
+        "radiation_bremsa_scale": bscale,
+        "radiation_powerlaw_index": alpha,
+        "bremsa_units_assumed": "erg_s^-1_cm^-2_erg^-1_as_expected_by_XSTAR_phint53_calt74",
+        "bremsint_status": "computed_cumulative_integral_from_each_epi_bin_to_grid_max" if has_grid else "not_available",
+        "total_bremsa_integral_over_eV_grid": total_bremsa_energy_flux,
+        "total_bremsa_over_E_integral": total_bremsa_over_E,
+        "bremsa_min": min(bremsa) if bremsa else None,
+        "bremsa_max": max(bremsa) if bremsa else None,
+        "bremsa_mean": (sum(bremsa) / len(bremsa)) if bremsa else None,
+        "bremsint_min": min(bremsint) if bremsint else None,
+        "bremsint_max": max(bremsint) if bremsint else None,
+        "mean_intensity_status": "not_available" if mode == "none" else "diagnostic_bremsa_array_available_not_full_XSTAR_transfer",
+        "photon_flux_status": "not_available" if mode == "none" else "diagnostic_bremsa_over_E_available",
+        "photoionization_integral_status": "phint53_forward_kernel_uses_this_bremsa_grid" if has_grid else "not_evaluated_no_radiation_field",
+        "milne_inverse_recombination_status": "diagnostic_inverse_topology_only_real_milne_pending",
         "opacity_escape_probability_status": "not_available",
-        "assembly_status": "context_scaffold_only_not_used_in_matrix",
-        "warning": "type53 physical rates are not evaluated; v0.3.45 adds only flat-field proxy diagnostics",
-        "provenance": "v0.3.45_type53_flat_proxy_scaffold",
+        "assembly_status": "radiation_bremsa_context_used_by_diagnostic_kernels",
+        "warning": "v0.3.58 improves epi/bremsa bookkeeping and normalization controls, but this is still not the full XSTAR radiation-transfer bremsa context.",
+        "provenance": "v0.3.58_xstar_style_bremsa_context",
     }]
 
+
+
+def build_bremsa_context_rows(radiation_context_rows: Sequence[dict]) -> List[dict]:
+    """Write the explicit diagnostic XSTAR-style epi/bremsa grid used by kernels."""
+    if not radiation_context_rows:
+        return []
+    ctx = radiation_context_rows[0]
+    mode = str(ctx.get("radiation_field_mode", "none"))
+    if mode == "none":
+        return []
+    ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 0
+    emin = maybe_float(ctx.get("energy_min_eV"))
+    emax = maybe_float(ctx.get("energy_max_eV"))
+    temp = maybe_float(ctx.get("temperature_K")) or 1.0
+    bscale = maybe_float(ctx.get("radiation_bremsa_scale")) or 1.0
+    alpha = maybe_float(ctx.get("radiation_powerlaw_index")) or 1.0
+    if ngrid < 2 or emin is None or emax is None or emax <= emin:
+        return []
+    grid = _log_energy_grid(float(emin), float(emax), int(ngrid))
+    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=float(temp), bremsa_scale=float(bscale), powerlaw_index=float(alpha)) for e in grid]
+    bremsint = _bremsint_from_grid(grid, bremsa)
+    rows: List[dict] = []
+    for i, (e, b, bi) in enumerate(zip(grid, bremsa, bremsint), start=1):
+        rows.append({
+            "row_kind": "bremsa_context",
+            "bremsa_context_version": "v0.3.58",
+            "grid_index": i,
+            "epi_eV": e,
+            "bremsa_erg_s^-1_cm^-2_erg^-1": b,
+            "bremsint_cumulative_to_grid_max": bi,
+            "bremsa_over_E": b / max(e, 1.0e-300),
+            "radiation_field_mode": mode,
+            "radiation_bremsa_scale": bscale,
+            "radiation_powerlaw_index": alpha,
+            "temperature_K": temp,
+            "provenance": "v0.3.58_explicit_xstar_style_epi_bremsa_grid",
+        })
+    return rows
+
+
+def _bremsa_context_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_bremsa_context_rows": len(rows),
+        "radiation_field_mode_counts": _counts(rows, "radiation_field_mode"),
+        "energy_min_eV": min([maybe_float(r.get("epi_eV")) or float("inf") for r in rows], default=None),
+        "energy_max_eV": max([maybe_float(r.get("epi_eV")) or 0.0 for r in rows], default=None),
+        "bremsa_min": min([maybe_float(r.get("bremsa_erg_s^-1_cm^-2_erg^-1")) or 0.0 for r in rows], default=None),
+        "bremsa_max": max([maybe_float(r.get("bremsa_erg_s^-1_cm^-2_erg^-1")) or 0.0 for r in rows], default=None),
+    }
 
 def _global_index_lookup_one(rows: Sequence[dict], ion_stage: Optional[int], level_index: Optional[int]) -> Optional[int]:
     if ion_stage is None or level_index is None:
@@ -5143,25 +5244,71 @@ def _interp_piecewise_linear_local(x: float, xs: Sequence[float], ys: Sequence[f
     return 0.0
 
 
-def _placeholder_bremsa_value(energy_eV: float, *, mode: str, temperature_K: float) -> float:
-    """Placeholder continuum flux for the first phint53 port.
+def _trapz(x: Sequence[float], y: Sequence[float]) -> float:
+    total = 0.0
+    for i in range(max(0, min(len(x), len(y)) - 1)):
+        dx = float(x[i + 1]) - float(x[i])
+        if dx > 0.0:
+            total += 0.5 * (float(y[i]) + float(y[i + 1])) * dx
+    return float(total)
 
-    XSTAR phint53 expects ``bremsa`` in erg s^-1 cm^-2 erg^-1.  The real
-    XSTAR continuum field is not yet ported, so this helper supplies a
-    deterministic placeholder shape while the phint53 integration kernel and
-    matrix plumbing are tested.  Output rows are explicitly marked as
-    placeholder-radiation diagnostics.
+
+def _bremsint_from_grid(grid: Sequence[float], bremsa: Sequence[float]) -> List[float]:
+    """Return cumulative XSTAR-like bremsint from each bin to the high-energy edge."""
+    n = min(len(grid), len(bremsa))
+    out = [0.0 for _ in range(n)]
+    running = 0.0
+    for i in range(n - 2, -1, -1):
+        dx = float(grid[i + 1]) - float(grid[i])
+        if dx > 0.0:
+            running += 0.5 * (float(bremsa[i]) + float(bremsa[i + 1])) * dx
+        out[i] = running
+    return out
+
+
+def _placeholder_bremsa_value(
+    energy_eV: float,
+    *,
+    mode: str,
+    temperature_K: float,
+    bremsa_scale: float = 1.0,
+    powerlaw_index: float = 1.0,
+) -> float:
+    """Diagnostic continuum flux with XSTAR ``bremsa`` units.
+
+    XSTAR expects ``bremsa`` in erg s^-1 cm^-2 erg^-1 on the ``epi`` energy
+    grid.  The full XSTAR radiative-transfer continuum is not yet ported, but
+    v0.3.58 makes the diagnostic array explicit and scalable so ``phint53`` and
+    ``calt74`` use the same source-code-style input.
     """
     mode = str(mode or "none").lower()
+    try:
+        scale = float(bremsa_scale)
+    except Exception:
+        scale = 1.0
+    if not math.isfinite(scale):
+        scale = 1.0
     if mode == "none":
         return 0.0
+    e = max(float(energy_eV), 1.0e-300)
     if mode == "blackbody":
         kT_eV = max(8.617333262e-5 * max(float(temperature_K), 1.0), 1.0e-30)
-        x = max(float(energy_eV) / kT_eV, 0.0)
+        x = max(e / kT_eV, 0.0)
         if x > 700.0:
             return 0.0
-        return (float(energy_eV) ** 3) / max(math.expm1(x), 1.0e-300)
-    return 1.0
+        # Normalized Planck-like shape; scale carries the absolute XSTAR bremsa units.
+        shape = (e / max(kT_eV, 1.0e-300)) ** 3 / max(math.expm1(x), 1.0e-300)
+        return scale * shape
+    if mode in {"powerlaw", "xstar-powerlaw", "table"}:
+        try:
+            alpha = float(powerlaw_index)
+        except Exception:
+            alpha = 1.0
+        if not math.isfinite(alpha):
+            alpha = 1.0
+        return scale * (e / 1000.0) ** (-alpha)
+    # flat: constant XSTAR-style bremsa array value in erg s^-1 cm^-2 erg^-1.
+    return scale
 
 
 def _evaluate_type53_phint53_photoionization_kernel(
@@ -5172,6 +5319,8 @@ def _evaluate_type53_phint53_photoionization_kernel(
     radiation_mode: str,
     temperature_K: float,
     n_energy_grid_points: int,
+    bremsa_scale: float = 1.0,
+    powerlaw_index: float = 1.0,
     energy_min_eV: Optional[float],
     energy_max_eV: Optional[float],
 ) -> dict:
@@ -5213,12 +5362,12 @@ def _evaluate_type53_phint53_photoionization_kernel(
     used = 0
     prev_e = grid[0]
     prev_sig = _interp_piecewise_linear_local(prev_e, xs, ys)
-    prev_b = _placeholder_bremsa_value(prev_e, mode=mode, temperature_K=temperature_K)
+    prev_b = _placeholder_bremsa_value(prev_e, mode=mode, temperature_K=temperature_K, bremsa_scale=bremsa_scale, powerlaw_index=powerlaw_index)
     prev_y = prev_sig * prev_b / max(prev_e, 1.0e-300)
     prev_h = prev_y * max(prev_e - eth, 0.0)
     for e in grid[1:]:
         sig = _interp_piecewise_linear_local(e, xs, ys)
-        b = _placeholder_bremsa_value(e, mode=mode, temperature_K=temperature_K)
+        b = _placeholder_bremsa_value(e, mode=mode, temperature_K=temperature_K, bremsa_scale=bremsa_scale, powerlaw_index=powerlaw_index)
         y = sig * b / max(e, 1.0e-300)
         h = y * max(e - eth, 0.0)
         de = e - prev_e
@@ -5239,7 +5388,7 @@ def _evaluate_type53_phint53_photoionization_kernel(
         "phint53_n_intervals_used": used,
         "phint53_photoionization_rate_s^-1": max(float(rate), 0.0),
         "phint53_photoheating_proxy_eV_s^-1": max(float(heat_eVs), 0.0),
-        "phint53_radiation_field_status": "placeholder_shape_not_xstar_bremsa",
+        "phint53_radiation_field_status": "diagnostic_xstar_style_bremsa_context_not_full_transfer",
         "phint53_milne_status": "not_evaluated",
     }
 
@@ -5262,6 +5411,8 @@ def build_type53_phint53_rate_audit_rows(
     ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 0
     emin = maybe_float(ctx.get("energy_min_eV"))
     emax = maybe_float(ctx.get("energy_max_eV"))
+    bscale_ctx = maybe_float(ctx.get("radiation_bremsa_scale")) or 1.0
+    powerlaw_ctx = maybe_float(ctx.get("radiation_powerlaw_index")) or 1.0
     by_g = {maybe_int(r.get("global_index")): r for r in global_index_rows if maybe_int(r.get("global_index")) is not None}
     rows: List[dict] = []
     for ar in type53_rate_audit_rows:
@@ -5281,6 +5432,8 @@ def build_type53_phint53_rate_audit_rows(
             radiation_mode=mode,
             temperature_K=temperature,
             n_energy_grid_points=ngrid,
+            bremsa_scale=bscale_ctx,
+            powerlaw_index=powerlaw_ctx,
             energy_min_eV=emin,
             energy_max_eV=emax,
         )
@@ -5301,6 +5454,8 @@ def build_type53_phint53_rate_audit_rows(
             "bound_global_index": bg,
             "continuum_or_parent_global_index": cont_g,
             "radiation_field_mode": mode,
+            "radiation_bremsa_scale": bscale_ctx,
+            "radiation_powerlaw_index": powerlaw_ctx,
             "type53_phint53_scale": scale,
             "photoionization_rate_unscaled_s^-1": rate0,
             "photoionization_rate_s^-1": rate,
@@ -5425,8 +5580,11 @@ def build_radiation_normalization_audit_rows(
     emin = maybe_float(ctx.get("energy_min_eV")) or 1.0
     emax = maybe_float(ctx.get("energy_max_eV")) or 1.0e5
     temp = maybe_float(ctx.get("temperature_K")) or 1.0
+    bscale_ctx = maybe_float(ctx.get("radiation_bremsa_scale")) or 1.0
+    powerlaw_ctx = maybe_float(ctx.get("radiation_powerlaw_index")) or 1.0
     grid = _log_energy_grid(float(emin), float(emax), max(int(ngrid), 2))
-    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=float(temp)) for e in grid]
+    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=float(temp), bremsa_scale=bscale_ctx, powerlaw_index=powerlaw_ctx) for e in grid]
+    bremsint = _bremsint_from_grid(grid, bremsa)
     weighted = [b / max(e, 1.0e-300) for e, b in zip(grid, bremsa)]
     unscaled_total = _sum_float(type53_phint53_rate_audit_rows, "photoionization_rate_unscaled_s^-1")
     scaled_current_total = _sum_float(type53_phint53_rate_audit_rows, "photoionization_rate_s^-1")
@@ -5440,6 +5598,10 @@ def build_radiation_normalization_audit_rows(
         "energy_min_eV": min(grid) if grid else None,
         "energy_max_eV": max(grid) if grid else None,
         "temperature_K": temp,
+        "radiation_bremsa_scale": bscale_ctx,
+        "radiation_powerlaw_index": powerlaw_ctx,
+        "bremsint_min": min(bremsint) if bremsint else None,
+        "bremsint_max": max(bremsint) if bremsint else None,
         "bremsa_min_placeholder": min(bremsa) if bremsa else None,
         "bremsa_max_placeholder": max(bremsa) if bremsa else None,
         "bremsa_mean_placeholder": (sum(bremsa) / len(bremsa)) if bremsa else None,
@@ -5451,9 +5613,9 @@ def build_radiation_normalization_audit_rows(
         "total_unscaled_phint53_rate_s^-1": unscaled_total,
         "total_current_scaled_phint53_rate_s^-1": scaled_current_total,
         "type53_phint53_scale_values": ",".join(f"{float(x):g}" for x in scales),
-        "radiation_normalization_status": "placeholder_not_xstar_bremsa",
-        "warning": "The phint53 forward kernel is ported, but this audit uses a deterministic placeholder radiation field; absolute rates are not physical XSTAR rates.",
-        "provenance": "v0.3.54_type53_phint53_radiation_normalization_audit",
+        "radiation_normalization_status": "diagnostic_xstar_style_bremsa_grid_not_full_transfer",
+        "warning": "The phint53 forward kernel now uses an explicit diagnostic epi/bremsa grid, but this is still not the full XSTAR radiation-transfer continuum.",
+        "provenance": "v0.3.58_xstar_style_bremsa_normalization_audit",
     })
     for scale in scales:
         rows.append({
@@ -7435,6 +7597,11 @@ def solve_element_reference(
     type53_milne_scale: object = 1.0,
     type74_inverse_scale: object = 1.0,
     radiation_field_mode: str = "none",
+    radiation_bremsa_scale: object = 1.0,
+    radiation_energy_min_eV: Optional[float] = None,
+    radiation_energy_max_eV: Optional[float] = None,
+    radiation_n_energy_grid: int = 256,
+    radiation_powerlaw_index: float = 1.0,
     full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
@@ -7679,7 +7846,13 @@ def solve_element_reference(
         element_z=z,
         stages=stages,
         he_like_stage=he_like_stage,
+        radiation_bremsa_scale=radiation_bremsa_scale,
+        radiation_energy_min_eV=radiation_energy_min_eV,
+        radiation_energy_max_eV=radiation_energy_max_eV,
+        radiation_n_energy_grid=radiation_n_energy_grid,
+        radiation_powerlaw_index=radiation_powerlaw_index,
     )
+    bremsa_context_rows = build_bremsa_context_rows(radiation_context_rows)
     type53_rate_audit_rows = build_type53_rate_audit_rows(
         adjacent_audit_rows=assembled_coupling_terms,
         global_index_rows=global_index_rows,
@@ -7842,6 +8015,9 @@ def solve_element_reference(
             "type99_proxy_scale_scan_summary": _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows),
             "radiation_field_mode": radiation_field_mode,
             "n_radiation_context_rows": len(radiation_context_rows),
+            "radiation_context_summary": radiation_context_rows[0] if radiation_context_rows else {},
+            "n_bremsa_context_rows": len(bremsa_context_rows),
+            "bremsa_context_summary": _bremsa_context_summary(bremsa_context_rows),
             "n_type53_rate_audit_rows": len(type53_rate_audit_rows),
             "type53_rate_audit_summary": _type53_rate_audit_summary(type53_rate_audit_rows),
             "n_type53_flat_proxy_rate_audit_rows": len(type53_flat_proxy_rate_audit_rows),
@@ -7910,6 +8086,7 @@ def solve_element_reference(
         "global_bound_bound_type71_type99_type53_proxy_solve_comparison": global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows,
         "type99_proxy_scale_scan": type99_proxy_scale_scan_rows,
         "radiation_context": radiation_context_rows,
+        "bremsa_context": bremsa_context_rows,
         "type53_rate_audit": type53_rate_audit_rows,
         "type53_flat_proxy_rate_audit": type53_flat_proxy_rate_audit_rows,
         "global_type53_flat_proxy_matrix_terms": global_type53_flat_proxy_matrix_terms,
@@ -8289,6 +8466,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows = result.get("global_bound_bound_type71_type99_type53_proxy_solve_comparison", [])
     type99_proxy_scale_scan_rows = result.get("type99_proxy_scale_scan", [])
     radiation_context_rows = result.get("radiation_context", [])
+    bremsa_context_rows = result.get("bremsa_context", [])
     type53_rate_audit_rows = result.get("type53_rate_audit", [])
     type53_flat_proxy_rate_audit_rows = result.get("type53_flat_proxy_rate_audit", [])
     global_type53_flat_proxy_matrix_terms = result.get("global_type53_flat_proxy_matrix_terms", [])
@@ -8344,6 +8522,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_type74_calt74_matrix_terms_summary"] = _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms)
         if inverse_recombination_scale_scan_rows:
             result["summary"]["inverse_recombination_scale_scan_summary"] = _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows)
+        if bremsa_context_rows:
+            result["summary"]["bremsa_context_summary"] = _bremsa_context_summary(bremsa_context_rows)
         if radiation_normalization_audit_rows:
             result["summary"]["radiation_normalization_audit_summary"] = _radiation_normalization_audit_summary(radiation_normalization_audit_rows)
         if type53_phint53_scale_scan_rows:
@@ -8390,6 +8570,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_bound_bound_type71_type99_type53_proxy_solve_comparison.csv", global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_type99_proxy_scale_scan.csv", type99_proxy_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_radiation_context.csv", radiation_context_rows)
+    write_csv(out / "xstar_like_element_solver_bremsa_context.csv", bremsa_context_rows)
     write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", type53_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", type53_flat_proxy_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", global_type53_flat_proxy_matrix_terms)
