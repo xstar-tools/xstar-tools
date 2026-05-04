@@ -1673,3 +1673,8 @@ v0.3.53 fixes a v0.3.52 summary-generation crash in the type-53 `phint53` diagno
 ### v0.3.52 note: type-53 phint53 photoionization-kernel diagnostic
 
 v0.3.52 keeps the full-global diagnostic default on the XSTAR-Lucy solver path and adds the first type-53 `phint53` forward-photoionization kernel diagnostic. The run now writes `xstar_like_element_solver_type53_phint53_rate_audit.csv` and `xstar_like_element_solver_global_type53_phint53_matrix_terms.csv`. These rows replace the older flat type-53 proxy in the full-global matrix topology whenever the phint53-kernel rows are matrix-ready. The kernel maps type-53 cross-section pairs onto the radiation grid and integrates the XSTAR-style `sigma(E) * bremsa(E) / E` photoionization term. The continuum field is still a placeholder in this release; Milne inverse recombination, opacity/escape probability, and the real XSTAR radiation field remain pending.
+
+
+### v0.3.54 note: type-53 phint53 scale scan and radiation normalization audit
+
+v0.3.54 adds a diagnostic `phint53` scale scan for the full-global XSTAR-Lucy path.  The option `--type53-phint53-scale` now accepts comma-separated scale factors; the first value controls the primary phint53 audit/matrix outputs, while all values are evaluated in `xstar_like_element_solver_type53_phint53_scale_scan.csv`.  The release also writes `xstar_like_element_solver_radiation_normalization_audit.csv`, which records the placeholder radiation-grid/bremsa normalization currently used by the forward phint53 kernel.  This is still not a physical XSTAR continuum: true bremsa/radiation field, Milne inverse recombination, opacity/escape probabilities, and physical type-99/type-1 rates remain pending.

@@ -5187,10 +5187,8 @@ def build_type53_phint53_rate_audit_rows(
     type53_phint53_scale: object = 1.0,
 ) -> List[dict]:
     """Build first type-53 phint53 photoionization-kernel diagnostics."""
-    try:
-        scale = float(type53_phint53_scale)
-    except Exception:
-        scale = 1.0
+    scale_values = _parse_triplet_source_scales(type53_phint53_scale)
+    scale = float(scale_values[0]) if scale_values else 1.0
     if not math.isfinite(scale):
         scale = 1.0
     ctx = radiation_context_rows[0] if radiation_context_rows else {}
@@ -5345,6 +5343,200 @@ def _global_type53_phint53_matrix_terms_summary(rows: Sequence[dict]) -> dict:
         "n_offdiag_phint53_gain_rows": sum(1 for r in rows if str(r.get("matrix_term_kind")) == "offdiag_bound_to_continuum_phint53_gain"),
         "n_diagonal_phint53_loss_rows": sum(1 for r in rows if str(r.get("matrix_term_kind")) == "diagonal_bound_phint53_photoionization_loss"),
         "total_phint53_rate_s^-1": _sum_float(rows, "rate_s^-1"),
+    }
+
+
+def build_radiation_normalization_audit_rows(
+    *,
+    radiation_context_rows: Sequence[dict],
+    type53_phint53_rate_audit_rows: Sequence[dict],
+    type53_phint53_scale: object = 1.0,
+) -> List[dict]:
+    """Audit placeholder radiation normalization used by the phint53 kernel."""
+    ctx = radiation_context_rows[0] if radiation_context_rows else {}
+    mode = str(ctx.get("radiation_field_mode", "none"))
+    ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 256
+    emin = maybe_float(ctx.get("energy_min_eV")) or 1.0
+    emax = maybe_float(ctx.get("energy_max_eV")) or 1.0e5
+    temp = maybe_float(ctx.get("temperature_K")) or 1.0
+    grid = _log_energy_grid(float(emin), float(emax), max(int(ngrid), 2))
+    bremsa = [_placeholder_bremsa_value(e, mode=mode, temperature_K=float(temp)) for e in grid]
+    weighted = [b / max(e, 1.0e-300) for e, b in zip(grid, bremsa)]
+    unscaled_total = _sum_float(type53_phint53_rate_audit_rows, "photoionization_rate_unscaled_s^-1")
+    scaled_current_total = _sum_float(type53_phint53_rate_audit_rows, "photoionization_rate_s^-1")
+    scales = _parse_triplet_source_scales(type53_phint53_scale)
+    rows: List[dict] = []
+    rows.append({
+        "row_kind": "radiation_normalization_audit",
+        "audit_case": "placeholder_radiation_context",
+        "radiation_field_mode": mode,
+        "n_energy_grid_points": len(grid),
+        "energy_min_eV": min(grid) if grid else None,
+        "energy_max_eV": max(grid) if grid else None,
+        "temperature_K": temp,
+        "bremsa_min_placeholder": min(bremsa) if bremsa else None,
+        "bremsa_max_placeholder": max(bremsa) if bremsa else None,
+        "bremsa_mean_placeholder": (sum(bremsa) / len(bremsa)) if bremsa else None,
+        "bremsa_over_E_min_placeholder": min(weighted) if weighted else None,
+        "bremsa_over_E_max_placeholder": max(weighted) if weighted else None,
+        "bremsa_over_E_mean_placeholder": (sum(weighted) / len(weighted)) if weighted else None,
+        "n_type53_phint53_rows": len(type53_phint53_rate_audit_rows),
+        "n_phint53_evaluated_rows": sum(1 for r in type53_phint53_rate_audit_rows if str(r.get("phint53_status", "")).startswith("evaluated")),
+        "total_unscaled_phint53_rate_s^-1": unscaled_total,
+        "total_current_scaled_phint53_rate_s^-1": scaled_current_total,
+        "type53_phint53_scale_values": ",".join(f"{float(x):g}" for x in scales),
+        "radiation_normalization_status": "placeholder_not_xstar_bremsa",
+        "warning": "The phint53 forward kernel is ported, but this audit uses a deterministic placeholder radiation field; absolute rates are not physical XSTAR rates.",
+        "provenance": "v0.3.54_type53_phint53_radiation_normalization_audit",
+    })
+    for scale in scales:
+        rows.append({
+            "row_kind": "radiation_normalization_audit",
+            "audit_case": "phint53_scale_factor",
+            "radiation_field_mode": mode,
+            "type53_phint53_scale": float(scale),
+            "total_unscaled_phint53_rate_s^-1": unscaled_total,
+            "total_scaled_phint53_rate_s^-1": unscaled_total * float(scale),
+            "scale_needed_for_total_rate_1_s^-1": None if unscaled_total <= 0.0 else 1.0 / unscaled_total,
+            "scale_needed_for_total_rate_1e2_s^-1": None if unscaled_total <= 0.0 else 1.0e2 / unscaled_total,
+            "scale_needed_for_total_rate_1e4_s^-1": None if unscaled_total <= 0.0 else 1.0e4 / unscaled_total,
+            "radiation_normalization_status": "scale_audit_only",
+            "warning": "Scale rows multiply the placeholder-radiation phint53 kernel and are diagnostic only.",
+            "provenance": "v0.3.54_type53_phint53_radiation_normalization_audit",
+        })
+    return rows
+
+
+def _radiation_normalization_audit_summary(rows: Sequence[dict]) -> dict:
+    scale_rows = [r for r in rows if str(r.get("audit_case")) == "phint53_scale_factor"]
+    context = next((r for r in rows if str(r.get("audit_case")) == "placeholder_radiation_context"), {})
+    return {
+        "n_radiation_normalization_audit_rows": len(rows),
+        "radiation_field_mode": context.get("radiation_field_mode"),
+        "n_type53_phint53_rows": context.get("n_type53_phint53_rows"),
+        "total_unscaled_phint53_rate_s^-1": context.get("total_unscaled_phint53_rate_s^-1"),
+        "scale_values": [r.get("type53_phint53_scale") for r in scale_rows],
+        "max_scaled_total_phint53_rate_s^-1": max([maybe_float(r.get("total_scaled_phint53_rate_s^-1")) or 0.0 for r in scale_rows], default=0.0),
+        "warning": "Radiation normalization remains placeholder-only; use scale scan before porting the real XSTAR bremsa/radiation context.",
+    }
+
+
+def build_type53_phint53_scale_scan_rows(
+    *,
+    type53_rate_audit_rows: Sequence[dict],
+    radiation_context_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    global_bound_bound_matrix_terms: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    global_type53_flat_proxy_matrix_terms: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+    temperature: float,
+    type53_phint53_scale: object = 1.0,
+    full_global_linear_solver: str = "xstar-lucy",
+    full_global_rank_deficient_action: str = "svd",
+    full_global_negative_population_action: str = "keep",
+    full_global_prune_null_rate_levels: bool = True,
+) -> List[dict]:
+    """Scan diagnostic type-53 phint53 scale factors through the full-global solve."""
+    scales = _parse_triplet_source_scales(type53_phint53_scale)
+    rows: List[dict] = []
+    target = _xstar_triplet_target(int(he_like_stage))
+    if target is not None:
+        rows.append({
+            "row_kind": "type53_phint53_scale_scan",
+            "scan_case": "xstar_target",
+            "type53_phint53_scale": "target",
+            "f_fraction": target["f"],
+            "i_fraction": target["i"],
+            "r_fraction": target["r"],
+            "provenance": "v0.3.54_type53_phint53_scale_scan",
+        })
+    for scale in scales:
+        audit = build_type53_phint53_rate_audit_rows(
+            type53_rate_audit_rows=type53_rate_audit_rows,
+            radiation_context_rows=radiation_context_rows,
+            global_index_rows=global_index_rows,
+            temperature=temperature,
+            type53_phint53_scale=float(scale),
+        )
+        matrix_terms = build_global_type53_phint53_matrix_terms(audit)
+        full_terms = build_full_global_matrix_terms(
+            global_index_rows=global_index_rows,
+            global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+            global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+            global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+            global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+            global_type53_phint53_matrix_terms=matrix_terms,
+            coupling_rows=coupling_rows,
+            he_like_stage=he_like_stage,
+        )
+        solve_rows = build_full_global_normalized_solve_comparison(
+            global_index_rows=global_index_rows,
+            full_global_matrix_terms=full_terms,
+            line_rows=line_rows,
+            he_like_stage=he_like_stage,
+            linear_solver=full_global_linear_solver,
+            rank_deficient_action=full_global_rank_deficient_action,
+            negative_population_action=full_global_negative_population_action,
+            prune_null_rate_levels=full_global_prune_null_rate_levels,
+        )
+        summary = next((r for r in solve_rows if str(r.get("row_kind")) == "summary" and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), {})
+        rows.append({
+            "row_kind": "type53_phint53_scale_scan",
+            "scan_case": "full_global_xstar_lucy_phint53_scaled",
+            "type53_phint53_scale": float(scale),
+            "n_type53_phint53_rate_audit_rows": len(audit),
+            "n_global_type53_phint53_matrix_term_rows": len(matrix_terms),
+            "total_unscaled_phint53_rate_s^-1": _sum_float(audit, "photoionization_rate_unscaled_s^-1"),
+            "total_scaled_phint53_rate_s^-1": _sum_float(audit, "photoionization_rate_s^-1"),
+            "matrix_source_preference": "phint53_kernel_when_available_else_flat_proxy",
+            "solver": summary.get("solver"),
+            "solve_status": summary.get("solve_status"),
+            "solver_warning": summary.get("solver_warning"),
+            "sum_population": summary.get("sum_population"),
+            "normalization_residual": summary.get("normalization_residual"),
+            "residual_norm": summary.get("residual_norm"),
+            "n_negative_populations": summary.get("n_negative_populations"),
+            "f_fraction": summary.get("f_fraction"),
+            "i_fraction": summary.get("i_fraction"),
+            "r_fraction": summary.get("r_fraction"),
+            "R": summary.get("R"),
+            "G": summary.get("G"),
+            "l2_distance_to_target": summary.get("l2_distance_to_target"),
+            "ion_population_sums_json": summary.get("ion_population_sums_json"),
+            "level_kind_population_sums_json": summary.get("level_kind_population_sums_json"),
+            "xstar_lucy_niter": summary.get("xstar_lucy_niter"),
+            "xstar_lucy_diff": summary.get("xstar_lucy_diff"),
+            "xstar_lucy_last_condensed_rank": summary.get("xstar_lucy_last_condensed_rank"),
+            "xstar_lucy_last_condensed_condition": summary.get("xstar_lucy_last_condensed_condition"),
+            "provenance": "v0.3.54_type53_phint53_scale_scan",
+            "warning": "Scale scan uses placeholder-radiation phint53 forward kernel; absolute scale is not physical XSTAR radiation normalization.",
+        })
+    return rows
+
+
+def _type53_phint53_scale_scan_summary(rows: Sequence[dict]) -> dict:
+    scan_rows = [r for r in rows if str(r.get("scan_case")) == "full_global_xstar_lucy_phint53_scaled"]
+    best = None
+    for r in scan_rows:
+        d = maybe_float(r.get("l2_distance_to_target"))
+        if d is None:
+            continue
+        if best is None or float(d) < float(best.get("l2_distance_to_target")):
+            best = r
+    return {
+        "n_type53_phint53_scale_scan_rows": len(rows),
+        "n_scale_solutions": len(scan_rows),
+        "scale_values": [r.get("type53_phint53_scale") for r in scan_rows],
+        "best_scale": None if best is None else best.get("type53_phint53_scale"),
+        "best_l2_distance_to_target": None if best is None else best.get("l2_distance_to_target"),
+        "best_f_fraction": None if best is None else best.get("f_fraction"),
+        "best_i_fraction": None if best is None else best.get("i_fraction"),
+        "best_r_fraction": None if best is None else best.get("r_fraction"),
+        "warning": "Scale scan is diagnostic only because phint53 still uses placeholder radiation normalization.",
     }
 
 
@@ -6735,6 +6927,29 @@ def solve_element_reference(
     global_type53_phint53_matrix_terms = build_global_type53_phint53_matrix_terms(
         type53_phint53_rate_audit_rows
     )
+    radiation_normalization_audit_rows = build_radiation_normalization_audit_rows(
+        radiation_context_rows=radiation_context_rows,
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type53_phint53_scale=type53_phint53_scale,
+    )
+    type53_phint53_scale_scan_rows = build_type53_phint53_scale_scan_rows(
+        type53_rate_audit_rows=type53_rate_audit_rows,
+        radiation_context_rows=radiation_context_rows,
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        coupling_rows=assembled_coupling_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        temperature=temperature,
+        type53_phint53_scale=type53_phint53_scale,
+        full_global_linear_solver=full_global_linear_solver,
+        full_global_rank_deficient_action=full_global_rank_deficient_action,
+        full_global_negative_population_action=full_global_negative_population_action,
+        full_global_prune_null_rate_levels=full_global_prune_null_rate_levels,
+    )
     full_global_matrix_terms = build_full_global_matrix_terms(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -6808,6 +7023,10 @@ def solve_element_reference(
             "type53_phint53_rate_audit_summary": _type53_phint53_rate_audit_summary(type53_phint53_rate_audit_rows),
             "n_global_type53_phint53_matrix_term_rows": len(global_type53_phint53_matrix_terms),
             "global_type53_phint53_matrix_terms_summary": _global_type53_phint53_matrix_terms_summary(global_type53_phint53_matrix_terms),
+            "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
+            "radiation_normalization_audit_summary": _radiation_normalization_audit_summary(radiation_normalization_audit_rows),
+            "n_type53_phint53_scale_scan_rows": len(type53_phint53_scale_scan_rows),
+            "type53_phint53_scale_scan_summary": _type53_phint53_scale_scan_summary(type53_phint53_scale_scan_rows),
             "type53_matrix_source_preference": "phint53_kernel_when_available_else_flat_proxy",
             "n_full_global_matrix_term_rows": len(full_global_matrix_terms),
             "full_global_matrix_terms_summary": _full_global_matrix_terms_summary(full_global_matrix_terms),
@@ -6850,6 +7069,8 @@ def solve_element_reference(
         "global_type53_flat_proxy_matrix_terms": global_type53_flat_proxy_matrix_terms,
         "type53_phint53_rate_audit": type53_phint53_rate_audit_rows,
         "global_type53_phint53_matrix_terms": global_type53_phint53_matrix_terms,
+        "radiation_normalization_audit": radiation_normalization_audit_rows,
+        "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
         "full_global_normalized_solve_comparison": full_global_normalized_solve_comparison_rows,
         "triplet_rows": triplet_rows,
@@ -7220,6 +7441,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_type53_flat_proxy_matrix_terms = result.get("global_type53_flat_proxy_matrix_terms", [])
     type53_phint53_rate_audit_rows = result.get("type53_phint53_rate_audit", [])
     global_type53_phint53_matrix_terms = result.get("global_type53_phint53_matrix_terms", [])
+    radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
+    type53_phint53_scale_scan_rows = result.get("type53_phint53_scale_scan", [])
     full_global_matrix_terms = result.get("full_global_matrix_terms", [])
     full_global_normalized_solve_comparison_rows = result.get("full_global_normalized_solve_comparison", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
@@ -7247,6 +7470,10 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type53_phint53_rate_audit_summary"] = _type53_phint53_rate_audit_summary(type53_phint53_rate_audit_rows)
         if global_type53_phint53_matrix_terms:
             result["summary"]["global_type53_phint53_matrix_terms_summary"] = _global_type53_phint53_matrix_terms_summary(global_type53_phint53_matrix_terms)
+        if radiation_normalization_audit_rows:
+            result["summary"]["radiation_normalization_audit_summary"] = _radiation_normalization_audit_summary(radiation_normalization_audit_rows)
+        if type53_phint53_scale_scan_rows:
+            result["summary"]["type53_phint53_scale_scan_summary"] = _type53_phint53_scale_scan_summary(type53_phint53_scale_scan_rows)
         if global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows:
             result["summary"]["global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary"] = _global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows)
         if type99_proxy_scale_scan_rows:
@@ -7294,6 +7521,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", global_type53_flat_proxy_matrix_terms)
     write_csv(out / "xstar_like_element_solver_type53_phint53_rate_audit.csv", type53_phint53_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type53_phint53_matrix_terms.csv", global_type53_phint53_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
+    write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
     write_csv(out / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv", full_global_normalized_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))
@@ -7303,7 +7532,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; v0.3.48 adds xstar_like_element_solver_full_global_normalized_solve_comparison.csv, the first diagnostic normalized full-global proxy-topology solve over all global_index rows with source-vector rows excluded; diagnostic source audits remain nonphysical and the normalized solve is not yet a physical XSTAR element solution.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; v0.3.48 adds xstar_like_element_solver_full_global_normalized_solve_comparison.csv, the first diagnostic normalized full-global proxy-topology solve over all global_index rows with source-vector rows excluded; v0.3.50/v0.3.51 add an XSTAR-Lucy/LU diagnostic solver path; v0.3.52/v0.3.53 add the first type-53 phint53 forward-kernel diagnostic; v0.3.54 adds xstar_like_element_solver_radiation_normalization_audit.csv and xstar_like_element_solver_type53_phint53_scale_scan.csv for placeholder-radiation normalization/scale testing; diagnostic source audits remain nonphysical and the normalized solve is not yet a physical XSTAR element solution.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

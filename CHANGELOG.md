@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.54 - 2026-05-04
+
+- Added a type-53 `phint53` scale scan for the full-global XSTAR-Lucy diagnostic path.
+- `--type53-phint53-scale` now accepts comma-separated values, e.g. `1,1e5,1e10,1e15,1e18,1e20`; the first value is used for the primary audit/matrix, and all values are scanned in `xstar_like_element_solver_type53_phint53_scale_scan.csv`.
+- Added `xstar_like_element_solver_radiation_normalization_audit.csv` to report the placeholder radiation-grid/bremsa normalization used by the first `phint53` forward-kernel diagnostic and the scale needed to reach reference total rates.
+- Added summary metadata for the radiation-normalization audit and `phint53` scale scan.
+- The phint53 kernel remains diagnostic: the real XSTAR radiation field, Milne inverse recombination, opacity/escape probabilities, and physical type-99/type-1 rates are still pending.
+
 ## v0.3.53 - 2026-05-04
 
 - Fixes the v0.3.52 `NameError: name '_sum_float' is not defined` crash in the type-53 `phint53` audit summary path.
