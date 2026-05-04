@@ -6451,6 +6451,154 @@ def _inverse_recombination_scale_scan_summary(rows: Sequence[dict]) -> dict:
         "warning": "Independent inverse-recombination scans are diagnostic only until true XSTAR Milne/calt74 rates and continuum balance are ported.",
     }
 
+
+
+def _add_refined_triplet_target_metrics(rows: Sequence[dict], *, he_like_stage: int) -> List[dict]:
+    """Add target-aware metrics to inverse-recombination refined scan rows.
+
+    The refined scan is meant to diagnose the region where f and r are already
+    close to the C V XSTAR target but intercombination remains low.  The added
+    fields therefore include both the ordinary L2 distance and an
+    intercombination-weighted score.  The score is diagnostic only and should not
+    be treated as a physical objective function.
+    """
+    target = _xstar_triplet_target(he_like_stage)
+    if target is None:
+        return [dict(r) for r in rows]
+    tf = float(target.get("f", 0.0))
+    ti = float(target.get("i", 0.0))
+    tr = float(target.get("r", 0.0))
+    out: List[dict] = []
+    for r0 in rows:
+        r = dict(r0)
+        f = maybe_float(r.get("f_fraction")) or 0.0
+        i = maybe_float(r.get("i_fraction")) or 0.0
+        rr = maybe_float(r.get("r_fraction")) or 0.0
+        df = float(f) - tf
+        di = float(i) - ti
+        dr = float(rr) - tr
+        l2 = math.sqrt(df * df + di * di + dr * dr)
+        fr_l2 = math.sqrt(df * df + dr * dr)
+        i_abs = abs(di)
+        # Up-weight i because the current good region matches f/r reasonably but
+        # systematically underpredicts intercombination.  This is a diagnostic
+        # ranking, not a fit statistic.
+        weighted = math.sqrt(df * df + (5.0 * di) * (5.0 * di) + dr * dr)
+        r.update({
+            "target_f_fraction": tf,
+            "target_i_fraction": ti,
+            "target_r_fraction": tr,
+            "delta_f_minus_target": df,
+            "delta_i_minus_target": di,
+            "delta_r_minus_target": dr,
+            "l2_distance_to_target_recomputed": l2,
+            "fr_l2_distance_to_target": fr_l2,
+            "i_abs_error_to_target": i_abs,
+            "i_fraction_to_target_ratio": (float(i) / ti if ti > 0.0 else ""),
+            "intercombination_weighted_score_w5": weighted,
+        })
+        out.append(r)
+    return out
+
+
+def build_inverse_recombination_refined_scale_scan_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    global_bound_bound_matrix_terms: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    global_type53_flat_proxy_matrix_terms: Sequence[dict],
+    global_type53_phint53_matrix_terms: Sequence[dict],
+    type53_phint53_rate_audit_rows: Sequence[dict],
+    type74_triplet_source_audit_rows: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+    inverse_recombination_mode: str = "none",
+    type53_milne_refined_scale: object = "1e9,3e9,1e10,3e10,1e11",
+    type74_inverse_refined_scale: object = "1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12",
+    linear_solver: str = "xstar-lucy",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+    prune_null_rate_levels: bool = True,
+) -> List[dict]:
+    """Refined inverse-recombination scale scan around the promising region.
+
+    v0.3.58 showed that the coarse scan becomes close to the C V f/r target near
+    type53_milne_scale ~ 1e10 and type74_inverse_scale ~ 1e8--1e12, but i is
+    still low.  This routine writes a narrower grid with intercombination-aware
+    ranking fields.
+    """
+    rows = build_inverse_recombination_scale_scan_rows(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type74_triplet_source_audit_rows=type74_triplet_source_audit_rows,
+        coupling_rows=coupling_rows,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        inverse_recombination_mode=inverse_recombination_mode,
+        type53_milne_scale=type53_milne_refined_scale,
+        type74_inverse_scale=type74_inverse_refined_scale,
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        prune_null_rate_levels=prune_null_rate_levels,
+    )
+    out: List[dict] = []
+    for r0 in _add_refined_triplet_target_metrics(rows, he_like_stage=he_like_stage):
+        r = dict(r0)
+        r["refined_scan_region"] = "type53_milne_1e9_to_1e11_type74_1e8_to_1e12_default" 
+        r["provenance"] = "v0.3.59_refined_inverse_recombination_scale_scan"
+        r["warning"] = "Refined scan is diagnostic; rates remain scaled proxy/source-aligned inverse-recombination terms until physical XSTAR Milne/calt74 and continuum closure are complete."
+        out.append(r)
+    return out
+
+
+def _inverse_recombination_refined_scale_scan_summary(rows: Sequence[dict]) -> dict:
+    scan_rows = [r for r in rows if str(r.get("row_kind")) == "inverse_recombination_scale_scan"]
+    def _best_by(col: str):
+        best = None
+        for r in scan_rows:
+            val = maybe_float(r.get(col))
+            if val is None:
+                continue
+            if best is None or float(val) < float(best.get(col)):
+                best = r
+        return best
+    best_l2 = _best_by("l2_distance_to_target") or _best_by("l2_distance_to_target_recomputed")
+    best_i = _best_by("i_abs_error_to_target")
+    best_w = _best_by("intercombination_weighted_score_w5")
+    def _pack(prefix: str, r: Optional[dict]) -> dict:
+        if r is None:
+            return {f"{prefix}_scan_case": None}
+        return {
+            f"{prefix}_scan_case": r.get("scan_case"),
+            f"{prefix}_type53_milne_scale": r.get("type53_milne_scale"),
+            f"{prefix}_type74_inverse_scale": r.get("type74_inverse_scale"),
+            f"{prefix}_f_fraction": r.get("f_fraction"),
+            f"{prefix}_i_fraction": r.get("i_fraction"),
+            f"{prefix}_r_fraction": r.get("r_fraction"),
+            f"{prefix}_l2_distance_to_target": r.get("l2_distance_to_target"),
+            f"{prefix}_i_abs_error_to_target": r.get("i_abs_error_to_target"),
+            f"{prefix}_intercombination_weighted_score_w5": r.get("intercombination_weighted_score_w5"),
+        }
+    summary = {
+        "n_inverse_recombination_refined_scale_scan_rows": len(rows),
+        "scan_cases": _counts(rows, "scan_case"),
+        "type53_milne_scale_values": sorted({float(maybe_float(r.get("type53_milne_scale")) or 0.0) for r in rows}),
+        "type74_inverse_scale_values": sorted({float(maybe_float(r.get("type74_inverse_scale")) or 0.0) for r in rows}),
+        "warning": "Refined inverse-recombination scans are diagnostic and intercombination-weighted metrics are ranking aids only.",
+    }
+    summary.update(_pack("best_l2", best_l2))
+    summary.update(_pack("best_i", best_i))
+    summary.update(_pack("best_intercombination_weighted", best_w))
+    return summary
+
 def build_full_global_matrix_terms(
     *,
     global_index_rows: Sequence[dict],
@@ -7596,6 +7744,8 @@ def solve_element_reference(
     inverse_recombination_mode: str = "none",
     type53_milne_scale: object = 1.0,
     type74_inverse_scale: object = 1.0,
+    type53_milne_refined_scale: object = "1e9,3e9,1e10,3e10,1e11",
+    type74_inverse_refined_scale: object = "1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12",
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -7987,6 +8137,26 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
+    inverse_recombination_refined_scale_scan_rows = build_inverse_recombination_refined_scale_scan_rows(
+        global_index_rows=global_index_rows,
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type74_triplet_source_audit_rows=type74_triplet_source_audit_rows,
+        coupling_rows=assembled_coupling_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        inverse_recombination_mode=inverse_recombination_mode,
+        type53_milne_refined_scale=type53_milne_refined_scale,
+        type74_inverse_refined_scale=type74_inverse_refined_scale,
+        linear_solver=full_global_linear_solver,
+        rank_deficient_action=full_global_rank_deficient_action,
+        negative_population_action=full_global_negative_population_action,
+        prune_null_rate_levels=full_global_prune_null_rate_levels,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -8045,6 +8215,8 @@ def solve_element_reference(
             "global_type74_calt74_matrix_terms_summary": _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms),
             "n_inverse_recombination_scale_scan_rows": len(inverse_recombination_scale_scan_rows),
             "inverse_recombination_scale_scan_summary": _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows),
+            "n_inverse_recombination_refined_scale_scan_rows": len(inverse_recombination_refined_scale_scan_rows),
+            "inverse_recombination_refined_scale_scan_summary": _inverse_recombination_refined_scale_scan_summary(inverse_recombination_refined_scale_scan_rows),
             "n_radiation_normalization_audit_rows": len(radiation_normalization_audit_rows),
             "radiation_normalization_audit_summary": _radiation_normalization_audit_summary(radiation_normalization_audit_rows),
             "n_type53_phint53_scale_scan_rows": len(type53_phint53_scale_scan_rows),
@@ -8099,6 +8271,7 @@ def solve_element_reference(
         "type74_calt74_rate_audit": type74_calt74_rate_audit_rows,
         "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,
+        "inverse_recombination_refined_scale_scan": inverse_recombination_refined_scale_scan_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
         "type53_phint53_scale_scan": type53_phint53_scale_scan_rows,
         "full_global_matrix_terms": full_global_matrix_terms,
@@ -8479,6 +8652,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type74_calt74_rate_audit_rows = result.get("type74_calt74_rate_audit", [])
     global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
     inverse_recombination_scale_scan_rows = result.get("inverse_recombination_scale_scan", [])
+    inverse_recombination_refined_scale_scan_rows = result.get("inverse_recombination_refined_scale_scan", [])
     radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
     type53_phint53_scale_scan_rows = result.get("type53_phint53_scale_scan", [])
     full_global_matrix_terms = result.get("full_global_matrix_terms", [])
@@ -8583,6 +8757,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type74_calt74_rate_audit.csv", type74_calt74_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)
+    write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", inverse_recombination_refined_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", type53_phint53_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
@@ -8594,7 +8769,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     for key in sorted(summ):
         lines.append(f"- **{key}**: `{summ[key]}`")
     lines.append("")
-    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; v0.3.48 adds xstar_like_element_solver_full_global_normalized_solve_comparison.csv, the first diagnostic normalized full-global proxy-topology solve over all global_index rows with source-vector rows excluded; v0.3.50/v0.3.51 add an XSTAR-Lucy/LU diagnostic solver path; v0.3.52/v0.3.53 add the first type-53 phint53 forward-kernel diagnostic; v0.3.54 adds xstar_like_element_solver_radiation_normalization_audit.csv and xstar_like_element_solver_type53_phint53_scale_scan.csv for placeholder-radiation normalization/scale testing; v0.3.55 adds inverse-recombination-mode scaffolds for type-53 Milne and type-74 DR-delta inverse topology with xstar_like_element_solver_type53_milne_inverse_audit.csv, xstar_like_element_solver_global_type53_milne_matrix_terms.csv, xstar_like_element_solver_type74_inverse_recombination_audit.csv, xstar_like_element_solver_global_type74_inverse_matrix_terms.csv, and xstar_like_element_solver_inverse_recombination_scale_scan.csv; v0.3.56 extends that scan with independent --type53-milne-scale and --type74-inverse-scale controls informed by the XSTAR phint53/milne and calt74 branches; diagnostic source audits remain nonphysical and the normalized solve is not yet a physical XSTAR element solution.")
+    lines.append("Adjacent-ion coupling records are catalogued with ucalc-style branch annotations; evaluable recombination records may also be assembled as prototype source terms when adjacent_coupling_mode requests it. Type-57 records are evaluated diagnostically through the ported calt57 path but are not assembled by default. Type-59 inverse recombination/photoionization records are audited for the XSTAR excited-level recombination suppression gate and are not assembled. Photoionization/DR/superlevel records are audited but not blindly treated as rates without XSTAR radiation-field context. Type-71/type-77 superlevel branching fractions, type-70/74/99 source × branch proxies, the v0.3.26 deep type-74 linkage audit, the v0.3.27 direct type-74 triplet-source diagnostic, and the v0.3.28 optional type-74 direct source-injection before/after solve, and v0.3.29 type-74 direct source scale scan; v0.3.30 fixes the scale-scan target helper, and v0.3.31 writes an explicit global element state index, v0.3.32 fixes superlevel/continuum classification, and v0.3.33 writes a diagnostic global bound-bound matrix-term scaffold from the current per-ion radiative/collisional transition logs; v0.3.34 solves the He-like intra-ion global-index bound-bound block as an equivalence test against the current per-ion solve; v0.3.35 maps type-71 superlevel cascade terms onto global-index matrix triplets; v0.3.36 solves an extended He-like global block including bound-bound plus type-71 cascade terms as a diagnostic scaffold; v0.3.37 fixes the output handoff so the bound-bound+type71 solve-comparison rows are written to CSV; v0.3.38 maps diagnostic type-99 superlevel source candidates onto global-index source/matrix proxy rows; v0.3.39 solves a diagnostic bound-bound+type71 block with nonphysical type-99 proxy source-vector rows; v0.3.40 adds a type-99 proxy scale scan and writes xstar_like_element_solver_type99_proxy_scale_scan.csv; v0.3.41/v0.3.42 fix the CLI-to-solver handoff for the type-99 proxy scale option; v0.3.43 adds a type-53 radiation-context scaffold and xstar_like_element_solver_type53_rate_audit.csv without evaluating phint53/Milne physical rates; v0.3.45 adds a diagnostic flat-field type-53 photoionization-rate proxy and global matrix topology rows without assembling them; v0.3.46 solves a diagnostic bound-bound+type71+type99-proxy block with type-53 flat photoionization proxy sinks; v0.3.47 writes xstar_like_element_solver_full_global_matrix_terms.csv by combining C VI/C V bound-bound blocks, C V type-71 cascades, type-99 parent-continuum-to-superlevel proxy topology, type-53 flat photoionization proxy topology, and mappable type-1 recombination source/topology rows; v0.3.48 adds xstar_like_element_solver_full_global_normalized_solve_comparison.csv, the first diagnostic normalized full-global proxy-topology solve over all global_index rows with source-vector rows excluded; v0.3.50/v0.3.51 add an XSTAR-Lucy/LU diagnostic solver path; v0.3.52/v0.3.53 add the first type-53 phint53 forward-kernel diagnostic; v0.3.54 adds xstar_like_element_solver_radiation_normalization_audit.csv and xstar_like_element_solver_type53_phint53_scale_scan.csv for placeholder-radiation normalization/scale testing; v0.3.55 adds inverse-recombination-mode scaffolds for type-53 Milne and type-74 DR-delta inverse topology with xstar_like_element_solver_type53_milne_inverse_audit.csv, xstar_like_element_solver_global_type53_milne_matrix_terms.csv, xstar_like_element_solver_type74_inverse_recombination_audit.csv, xstar_like_element_solver_global_type74_inverse_matrix_terms.csv, and xstar_like_element_solver_inverse_recombination_scale_scan.csv; v0.3.56 extends that scan with independent --type53-milne-scale and --type74-inverse-scale controls informed by the XSTAR phint53/milne and calt74 branches; v0.3.59 adds a refined inverse-recombination scan around the good C V region with intercombination-sensitive ranking metrics in xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv; diagnostic source audits remain nonphysical and the normalized solve is not yet a physical XSTAR element solution.")
     t57sum = summ.get("type57_audit_summary", {}) if isinstance(summ, dict) else {}
     if t57sum:
         lines.extend([

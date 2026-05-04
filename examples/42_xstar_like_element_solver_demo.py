@@ -73,6 +73,8 @@ def main(argv=None):
     p.add_argument("--inverse-recombination-mode", default="none", choices=["none", "type53-milne-diagnostic", "type74-direct-diagnostic", "type53-type74"], help="Diagnostic inverse-recombination scaffold mode. type53-milne-diagnostic maps continuum->bound Milne inverse topology from type-53 phint53 rows; type74-direct-diagnostic maps direct DR-delta source candidates; type53-type74 enables both. Rates remain diagnostic proxies, not physical XSTAR inverse rates.")
     p.add_argument("--type53-milne-scale", default="1", help="Scale factor(s) for the diagnostic type-53 Milne inverse-recombination scaffold. Accepts one value or a comma-separated list, e.g. 1,1e10,1e20,1e30. The first value is used for the primary matrix; all values are used in the inverse-recombination scale scan.")
     p.add_argument("--type74-inverse-scale", default="1", help="Scale factor(s) for the diagnostic type-74 DR-delta inverse-recombination scaffold. Accepts one value or a comma-separated list, e.g. 1,1e5,1e10,1e15. The first value is used for the primary matrix; all values are used in the inverse-recombination scale scan.")
+    p.add_argument("--type53-milne-refined-scale", default="1e9,3e9,1e10,3e10,1e11", help="Refined diagnostic type-53 Milne scale grid around the v0.3.58 good C V region. Used only for xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv.")
+    p.add_argument("--type74-inverse-refined-scale", default="1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12", help="Refined diagnostic type-74 inverse scale grid around the v0.3.58 good C V region. Used only for xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -113,6 +115,8 @@ def main(argv=None):
             "inverse_recombination_mode": args.inverse_recombination_mode,
             "type53_milne_scale": args.type53_milne_scale,
             "type74_inverse_scale": args.type74_inverse_scale,
+            "type53_milne_refined_scale": args.type53_milne_refined_scale,
+            "type74_inverse_refined_scale": args.type74_inverse_refined_scale,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -153,6 +157,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_type74_inverse_recombination_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", [])
+        write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", [])
@@ -207,6 +212,8 @@ def main(argv=None):
         inverse_recombination_mode=args.inverse_recombination_mode,
         type53_milne_scale=args.type53_milne_scale,
         type74_inverse_scale=args.type74_inverse_scale,
+        type53_milne_refined_scale=args.type53_milne_refined_scale,
+        type74_inverse_refined_scale=args.type74_inverse_refined_scale,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.59 - 2026-05-04
+
+- Added a refined inverse-recombination scale scan around the promising C V region found in v0.3.58.
+- Added `--type53-milne-refined-scale` and `--type74-inverse-refined-scale` to `examples/42_xstar_like_element_solver_demo.py`.
+- Wrote `xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv`, using a narrower default grid: type-53 Milne scales `1e9,3e9,1e10,3e10,1e11` and type-74 inverse scales `1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12`.
+- Added target-aware columns to the refined scan, including f/r-only L2, intercombination absolute error, i/target ratio, and an intercombination-weighted diagnostic score.
+- Kept the XSTAR-Lucy global solver and existing physical/proxy limitations unchanged.
+
 ## v0.3.58 - 2026-05-04
 
 - Improves the diagnostic radiation/bremsa context used by the type-53 `phint53` and type-74 `calt74` ports.

@@ -1,5 +1,10 @@
 ### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
 
+### v0.3.59 refined inverse-recombination scan
+
+v0.3.59 adds `xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv`, a focused diagnostic scan around the C V region identified in v0.3.58.  Use `--type53-milne-refined-scale` and `--type74-inverse-refined-scale` to adjust the refined grid.  The file includes intercombination-sensitive ranking columns (`i_abs_error_to_target`, `i_fraction_to_target_ratio`, and `intercombination_weighted_score_w5`) in addition to the standard f/i/r and L2 diagnostics.  The scan remains diagnostic/proxy until the true XSTAR Milne/calt74 rates and continuum closure are fully ported.
+
+
 ### v0.3.46 diagnostic type-53 proxy-sink solve
 
 The element-solver demo now writes `xstar_like_element_solver_global_bound_bound_type71_type99_type53_proxy_solve_comparison.csv`.  This comparison solves a diagnostic He-like global-index block containing bound-bound terms, type-71 superlevel cascades, nonphysical type-99 proxy sources, and type-53 flat-field photoionization proxy sinks.  These type-53 terms are still proxies and are not XSTAR `phint53`/Milne rates; the full adjacent-ion parent-continuum matrix is not solved yet.
