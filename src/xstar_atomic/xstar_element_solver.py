@@ -581,6 +581,7 @@ def _evaluate_type57_calt57_record(
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
+    type53_phint53_scale: object = 1.0,
     radiation_field_mode: str = "none",
     full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
@@ -1123,6 +1124,10 @@ def audit_ucalc_adjacent_record(
     }
     if dt == 53:
         row.update({
+            "type53_nreal_full": len(rd),
+            "type53_nint_full": len(it),
+            "type53_raw_reals_full": str(list(rd)),
+            "type53_raw_ints_full": str(list(it)),
             "ucalc_ans1_role": "photoionization_rate_from_bound_level_to_continuum",
             "ucalc_ans2_role": "radiative_recombination_inverse_from_phint53_milne",
             "requires_context": "radiation_field_epi_bremsa_opacity_escape_probabilities_population_abundances",
@@ -4764,6 +4769,10 @@ def build_type53_rate_audit_rows(
             "provenance": "v0.3.45_type53_flat_proxy_scaffold",
             "raw_reals_preview": ar.get("raw_reals_preview"),
             "raw_ints_preview": ar.get("raw_ints_preview"),
+            "type53_raw_reals_full": ar.get("type53_raw_reals_full"),
+            "type53_raw_ints_full": ar.get("type53_raw_ints_full"),
+            "type53_nreal_full": ar.get("type53_nreal_full"),
+            "type53_nint_full": ar.get("type53_nint_full"),
         })
     return out
 
@@ -4994,6 +5003,334 @@ def _global_type53_flat_proxy_matrix_terms_summary(rows: Sequence[dict]) -> dict
 
 
 
+def _type53_cross_section_pairs_from_reals(value: object) -> tuple[List[float], List[float]]:
+    """Decode type-53 rdat pairs as (energy above threshold in Ry, sigma in cm^2).
+
+    XSTAR's ucalc type-53 branch uses rdat pairs as::
+
+        etmpp(k) = rdat(2*k-1)                # Ry above threshold
+        stmpp(k) = max(rdat(2*k), 0) * 1e-18 # Mb -> cm^2
+
+    This helper accepts the full stored real list when available and falls back
+    to the preview list for dry/incomplete audits.
+    """
+    vals = _parse_preview_numbers(value)
+    n = len(vals) // 2
+    if n <= 0:
+        return [], []
+    e_ry: List[float] = []
+    sigma_cm2: List[float] = []
+    for i in range(n):
+        e = maybe_float(vals[2 * i])
+        sig_mb = maybe_float(vals[2 * i + 1])
+        if e is None or sig_mb is None:
+            continue
+        if not (math.isfinite(e) and math.isfinite(sig_mb)):
+            continue
+        e_ry.append(float(e))
+        sigma_cm2.append(max(float(sig_mb), 0.0) * 1.0e-18)
+    return e_ry, sigma_cm2
+
+
+def _log_energy_grid(emin: float, emax: float, n: int) -> List[float]:
+    if n <= 1:
+        return [float(emin), float(emax)]
+    emin = max(float(emin), 1.0e-30)
+    emax = max(float(emax), emin * 1.000001)
+    l0 = math.log(emin)
+    l1 = math.log(emax)
+    return [math.exp(l0 + (l1 - l0) * i / (n - 1)) for i in range(n)]
+
+
+def _interp_piecewise_linear_local(x: float, xs: Sequence[float], ys: Sequence[float]) -> float:
+    if not xs or not ys or len(xs) != len(ys):
+        return 0.0
+    if x < xs[0] or x > xs[-1]:
+        return 0.0
+    if x == xs[-1]:
+        return float(ys[-1])
+    for i in range(len(xs) - 1):
+        x0 = float(xs[i]); x1 = float(xs[i + 1])
+        if x0 <= x <= x1:
+            y0 = float(ys[i]); y1 = float(ys[i + 1])
+            if abs(x1 - x0) <= 1.0e-300:
+                return y0
+            f = (x - x0) / (x1 - x0)
+            return y0 + f * (y1 - y0)
+    return 0.0
+
+
+def _placeholder_bremsa_value(energy_eV: float, *, mode: str, temperature_K: float) -> float:
+    """Placeholder continuum flux for the first phint53 port.
+
+    XSTAR phint53 expects ``bremsa`` in erg s^-1 cm^-2 erg^-1.  The real
+    XSTAR continuum field is not yet ported, so this helper supplies a
+    deterministic placeholder shape while the phint53 integration kernel and
+    matrix plumbing are tested.  Output rows are explicitly marked as
+    placeholder-radiation diagnostics.
+    """
+    mode = str(mode or "none").lower()
+    if mode == "none":
+        return 0.0
+    if mode == "blackbody":
+        kT_eV = max(8.617333262e-5 * max(float(temperature_K), 1.0), 1.0e-30)
+        x = max(float(energy_eV) / kT_eV, 0.0)
+        if x > 700.0:
+            return 0.0
+        return (float(energy_eV) ** 3) / max(math.expm1(x), 1.0e-300)
+    return 1.0
+
+
+def _evaluate_type53_phint53_photoionization_kernel(
+    *,
+    e_ry: Sequence[float],
+    sigma_cm2: Sequence[float],
+    threshold_eV: float,
+    radiation_mode: str,
+    temperature_K: float,
+    n_energy_grid_points: int,
+    energy_min_eV: Optional[float],
+    energy_max_eV: Optional[float],
+) -> dict:
+    """Evaluate the photoionization part of XSTAR phint53 diagnostically.
+
+    This ports the forward photoionization integral used by XSTAR ``phint53``:
+    the type-53 cross section is mapped onto the continuum grid and integrated
+    with the same algebraic kernel, ``sigma(E) * bremsa(E) / E``.  The Milne
+    inverse recombination, opacity/emissivity arrays, escape probabilities, and
+    the real XSTAR radiation field are still pending.
+    """
+    if not e_ry or not sigma_cm2 or len(e_ry) != len(sigma_cm2):
+        return {"phint53_status": "not_evaluated_missing_cross_section_pairs"}
+    eth = maybe_float(threshold_eV)
+    if eth is None or not math.isfinite(eth) or eth <= 0.0:
+        return {"phint53_status": "not_evaluated_missing_or_bad_threshold_eV"}
+    mode = str(radiation_mode or "none").lower()
+    if mode == "none":
+        return {"phint53_status": "not_evaluated_no_radiation_field"}
+    energies = [eth + max(float(x), 0.0) * 13.605692 for x in e_ry]
+    pairs = sorted((e, s) for e, s in zip(energies, sigma_cm2) if math.isfinite(e) and math.isfinite(s) and e > 0.0)
+    if len(pairs) < 2:
+        return {"phint53_status": "not_evaluated_too_few_cross_section_pairs"}
+    xs = [p[0] for p in pairs]
+    ys = [max(p[1], 0.0) for p in pairs]
+    emin = max(float(energy_min_eV) if energy_min_eV else xs[0], xs[0])
+    emax = min(float(energy_max_eV) if energy_max_eV else xs[-1], xs[-1])
+    if emax <= emin:
+        return {
+            "phint53_status": "not_evaluated_energy_grid_outside_cross_section_range",
+            "phint53_threshold_eV": eth,
+            "phint53_cross_section_min_eV": xs[0],
+            "phint53_cross_section_max_eV": xs[-1],
+        }
+    ngrid = max(int(n_energy_grid_points or 0), 8)
+    grid = _log_energy_grid(emin, emax, ngrid)
+    rate = 0.0
+    heat_eVs = 0.0
+    used = 0
+    prev_e = grid[0]
+    prev_sig = _interp_piecewise_linear_local(prev_e, xs, ys)
+    prev_b = _placeholder_bremsa_value(prev_e, mode=mode, temperature_K=temperature_K)
+    prev_y = prev_sig * prev_b / max(prev_e, 1.0e-300)
+    prev_h = prev_y * max(prev_e - eth, 0.0)
+    for e in grid[1:]:
+        sig = _interp_piecewise_linear_local(e, xs, ys)
+        b = _placeholder_bremsa_value(e, mode=mode, temperature_K=temperature_K)
+        y = sig * b / max(e, 1.0e-300)
+        h = y * max(e - eth, 0.0)
+        de = e - prev_e
+        if de > 0.0:
+            rate += 0.5 * (prev_y + y) * de
+            heat_eVs += 0.5 * (prev_h + h) * de
+            used += 1
+        prev_e, prev_y, prev_h = e, y, h
+    return {
+        "phint53_status": "evaluated_phint53_photoionization_kernel_with_placeholder_radiation",
+        "phint53_threshold_eV": eth,
+        "phint53_n_cross_section_pairs": len(xs),
+        "phint53_cross_section_min_eV": xs[0],
+        "phint53_cross_section_max_eV": xs[-1],
+        "phint53_energy_grid_min_eV": emin,
+        "phint53_energy_grid_max_eV": emax,
+        "phint53_n_energy_grid_points": ngrid,
+        "phint53_n_intervals_used": used,
+        "phint53_photoionization_rate_s^-1": max(float(rate), 0.0),
+        "phint53_photoheating_proxy_eV_s^-1": max(float(heat_eVs), 0.0),
+        "phint53_radiation_field_status": "placeholder_shape_not_xstar_bremsa",
+        "phint53_milne_status": "not_evaluated",
+    }
+
+
+def build_type53_phint53_rate_audit_rows(
+    *,
+    type53_rate_audit_rows: Sequence[dict],
+    radiation_context_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    temperature: float,
+    type53_phint53_scale: object = 1.0,
+) -> List[dict]:
+    """Build first type-53 phint53 photoionization-kernel diagnostics."""
+    try:
+        scale = float(type53_phint53_scale)
+    except Exception:
+        scale = 1.0
+    if not math.isfinite(scale):
+        scale = 1.0
+    ctx = radiation_context_rows[0] if radiation_context_rows else {}
+    mode = str(ctx.get("radiation_field_mode", "none"))
+    ngrid = maybe_int(ctx.get("n_energy_grid_points")) or 0
+    emin = maybe_float(ctx.get("energy_min_eV"))
+    emax = maybe_float(ctx.get("energy_max_eV"))
+    by_g = {maybe_int(r.get("global_index")): r for r in global_index_rows if maybe_int(r.get("global_index")) is not None}
+    rows: List[dict] = []
+    for ar in type53_rate_audit_rows:
+        full = ar.get("type53_raw_reals_full") or ar.get("raw_reals_preview")
+        e_ry, sigma_cm2 = _type53_cross_section_pairs_from_reals(full)
+        bg = maybe_int(ar.get("bound_global_index"))
+        bound_row = by_g.get(bg) if bg is not None else None
+        threshold = None
+        if bound_row is not None:
+            threshold = maybe_float(bound_row.get("binding_from_continuum_eV"))
+            if threshold is None or threshold <= 0.0:
+                threshold = maybe_float(bound_row.get("ionization_potential_eV"))
+        eval_row = _evaluate_type53_phint53_photoionization_kernel(
+            e_ry=e_ry,
+            sigma_cm2=sigma_cm2,
+            threshold_eV=float(threshold) if threshold is not None else float("nan"),
+            radiation_mode=mode,
+            temperature_K=temperature,
+            n_energy_grid_points=ngrid,
+            energy_min_eV=emin,
+            energy_max_eV=emax,
+        )
+        rate0 = maybe_float(eval_row.get("phint53_photoionization_rate_s^-1")) or 0.0
+        rate = scale * rate0
+        cont_g = maybe_int(ar.get("continuum_or_parent_global_index"))
+        safe = bg is not None and cont_g is not None and rate > 0.0
+        rows.append({
+            "row_kind": "type53_phint53_rate_audit",
+            "type53_phint53_version": "v0.3.52",
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "record_ion_stage": ar.get("record_ion_stage"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "bound_level": ar.get("bound_level"),
+            "bound_global_index": bg,
+            "continuum_or_parent_global_index": cont_g,
+            "radiation_field_mode": mode,
+            "type53_phint53_scale": scale,
+            "photoionization_rate_unscaled_s^-1": rate0,
+            "photoionization_rate_s^-1": rate,
+            "inverse_recombination_rate_s^-1": 0.0,
+            "matrix_role_if_assembled": "M[continuum_or_parent,bound]+=phint53_photoionization_rate_and_M[bound,bound]-=phint53_photoionization_rate",
+            "topology_safe_for_physical_matrix": safe,
+            "matrix_safe_to_assemble_physically": safe,
+            "assembly_status": "phint53_photoionization_kernel_evaluated_matrix_ready" if safe else "phint53_not_matrix_ready",
+            "missing_physical_requirements": "milne_inverse_recombination_integral;real_xstar_radiation_field_bremsa;opacity_escape_probability_context",
+            "warning": "forward_phint53_kernel_ported_but_radiation_field_is_placeholder_and_milne_is_not_evaluated",
+            "provenance": "v0.3.52_type53_phint53_photoionization_kernel",
+            **eval_row,
+        })
+    return rows
+
+
+def build_global_type53_phint53_matrix_terms(type53_phint53_rate_audit_rows: Sequence[dict]) -> List[dict]:
+    """Map evaluated type-53 phint53 photoionization rates onto global matrix triplets."""
+    rows: List[dict] = []
+    tid = 0
+    for ar in type53_phint53_rate_audit_rows:
+        bound_g = maybe_int(ar.get("bound_global_index"))
+        cont_g = maybe_int(ar.get("continuum_or_parent_global_index"))
+        rate = maybe_float(ar.get("photoionization_rate_s^-1")) or 0.0
+        safe = bool(ar.get("topology_safe_for_physical_matrix")) and bound_g is not None and cont_g is not None and rate > 0.0
+        base = {
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "record_ion_stage": ar.get("record_ion_stage"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "bound_level": ar.get("bound_level"),
+            "bound_global_index": bound_g,
+            "continuum_or_parent_global_index": cont_g,
+            "radiation_field_mode": ar.get("radiation_field_mode"),
+            "type53_phint53_scale": ar.get("type53_phint53_scale"),
+            "phint53_status": ar.get("phint53_status"),
+            "matrix_safe_to_assemble_physically": safe,
+            "provenance": "v0.3.52_type53_phint53_matrix_topology",
+        }
+        if not safe:
+            tid += 1
+            rows.append({
+                **base,
+                "global_type53_phint53_term_id": tid,
+                "row_kind": "global_type53_phint53_matrix_term",
+                "matrix_term_kind": "skipped_phint53_photoionization",
+                "matrix_role": "skipped_missing_mapping_or_zero_rate",
+                "matrix_row_global_index": "",
+                "matrix_col_global_index": "",
+                "signed_rate_s^-1": "",
+                "rate_s^-1": rate,
+                "assembly_status": "skipped_phint53_topology_or_rate_incomplete",
+                "skip_reason": "missing_bound_or_continuum_global_index_or_zero_rate",
+            })
+            continue
+        tid += 1
+        rows.append({
+            **base,
+            "global_type53_phint53_term_id": tid,
+            "row_kind": "global_type53_phint53_matrix_term",
+            "matrix_term_kind": "offdiag_bound_to_continuum_phint53_gain",
+            "matrix_role": "M[continuum_or_parent_global_index,bound_global_index]+=phint53_photoionization_rate",
+            "matrix_row_global_index": cont_g,
+            "matrix_col_global_index": bound_g,
+            "signed_rate_s^-1": rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_phint53_photoionization_kernel_topology",
+            "skip_reason": "",
+        })
+        tid += 1
+        rows.append({
+            **base,
+            "global_type53_phint53_term_id": tid,
+            "row_kind": "global_type53_phint53_matrix_term",
+            "matrix_term_kind": "diagonal_bound_phint53_photoionization_loss",
+            "matrix_role": "M[bound_global_index,bound_global_index]-=phint53_photoionization_rate",
+            "matrix_row_global_index": bound_g,
+            "matrix_col_global_index": bound_g,
+            "signed_rate_s^-1": -rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_phint53_photoionization_kernel_topology",
+            "skip_reason": "",
+        })
+    return rows
+
+
+def _type53_phint53_rate_audit_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_type53_phint53_rate_audit_rows": len(rows),
+        "phint53_status_counts": _counts(rows, "phint53_status"),
+        "assembly_status_counts": _counts(rows, "assembly_status"),
+        "radiation_field_mode_counts": _counts(rows, "radiation_field_mode"),
+        "n_rows_matrix_safe": sum(1 for r in rows if bool(r.get("matrix_safe_to_assemble_physically"))),
+        "total_phint53_photoionization_rate_s^-1": _sum_float(rows, "photoionization_rate_s^-1"),
+        "max_phint53_photoionization_rate_s^-1": max([maybe_float(r.get("photoionization_rate_s^-1")) or 0.0 for r in rows] or [0.0]),
+    }
+
+
+def _global_type53_phint53_matrix_terms_summary(rows: Sequence[dict]) -> dict:
+    return {
+        "n_global_type53_phint53_matrix_term_rows": len(rows),
+        "matrix_term_kind_counts": _counts(rows, "matrix_term_kind"),
+        "assembly_status_counts": _counts(rows, "assembly_status"),
+        "n_offdiag_phint53_gain_rows": sum(1 for r in rows if str(r.get("matrix_term_kind")) == "offdiag_bound_to_continuum_phint53_gain"),
+        "n_diagonal_phint53_loss_rows": sum(1 for r in rows if str(r.get("matrix_term_kind")) == "diagonal_bound_phint53_photoionization_loss"),
+        "total_phint53_rate_s^-1": _sum_float(rows, "rate_s^-1"),
+    }
+
+
 def build_full_global_matrix_terms(
     *,
     global_index_rows: Sequence[dict],
@@ -5001,7 +5338,8 @@ def build_full_global_matrix_terms(
     global_superlevel_cascade_matrix_terms: Sequence[dict],
     global_superlevel_source_matrix_terms: Sequence[dict],
     global_type53_flat_proxy_matrix_terms: Sequence[dict],
-    coupling_rows: Sequence[dict],
+    global_type53_phint53_matrix_terms: Sequence[dict] | None = None,
+    coupling_rows: Sequence[dict] = (),
     he_like_stage: int,
 ) -> List[dict]:
     """Combine current global-index scaffolds into one full element matrix topology.
@@ -5061,9 +5399,16 @@ def build_full_global_matrix_terms(
         elif kind == "source_vector_gain_proxy":
             _add(r, component="type99_superlevel_source_vector_proxy", source_row_kind="global_superlevel_source_vector_term")
 
-    for r in global_type53_flat_proxy_matrix_terms:
-        if str(r.get("assembly_status")) == "diagnostic_proxy_topology_only_not_used_in_solve":
-            _add(r, component="type53_flat_photoionization_proxy", source_row_kind="global_type53_flat_proxy_matrix_term")
+    phint53_terms = list(global_type53_phint53_matrix_terms or [])
+    n_phint53_assembled = sum(1 for r in phint53_terms if str(r.get("assembly_status")) == "assembled_phint53_photoionization_kernel_topology")
+    if n_phint53_assembled > 0:
+        for r in phint53_terms:
+            if str(r.get("assembly_status")) == "assembled_phint53_photoionization_kernel_topology":
+                _add(r, component="type53_phint53_photoionization_kernel", source_row_kind="global_type53_phint53_matrix_term")
+    else:
+        for r in global_type53_flat_proxy_matrix_terms:
+            if str(r.get("assembly_status")) == "diagnostic_proxy_topology_only_not_used_in_solve":
+                _add(r, component="type53_flat_photoionization_proxy", source_row_kind="global_type53_flat_proxy_matrix_term")
 
     lookup = _global_index_lookup(global_index_rows)
     for cr in coupling_rows:
@@ -6109,6 +6454,7 @@ def solve_element_reference(
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
     type53_flat_proxy_scale: object = 1.0,
+    type53_phint53_scale: object = 1.0,
     radiation_field_mode: str = "none",
     full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
@@ -6362,12 +6708,23 @@ def solve_element_reference(
     global_type53_flat_proxy_matrix_terms = build_global_type53_flat_proxy_matrix_terms(
         type53_flat_proxy_rate_audit_rows
     )
+    type53_phint53_rate_audit_rows = build_type53_phint53_rate_audit_rows(
+        type53_rate_audit_rows=type53_rate_audit_rows,
+        radiation_context_rows=radiation_context_rows,
+        global_index_rows=global_index_rows,
+        temperature=temperature,
+        type53_phint53_scale=type53_phint53_scale,
+    )
+    global_type53_phint53_matrix_terms = build_global_type53_phint53_matrix_terms(
+        type53_phint53_rate_audit_rows
+    )
     full_global_matrix_terms = build_full_global_matrix_terms(
         global_index_rows=global_index_rows,
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
         global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
         global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
         global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
         coupling_rows=assembled_coupling_terms,
         he_like_stage=he_like_stage,
     )
@@ -6430,6 +6787,11 @@ def solve_element_reference(
             "type53_flat_proxy_rate_audit_summary": _type53_flat_proxy_rate_audit_summary(type53_flat_proxy_rate_audit_rows),
             "n_global_type53_flat_proxy_matrix_term_rows": len(global_type53_flat_proxy_matrix_terms),
             "global_type53_flat_proxy_matrix_terms_summary": _global_type53_flat_proxy_matrix_terms_summary(global_type53_flat_proxy_matrix_terms),
+            "n_type53_phint53_rate_audit_rows": len(type53_phint53_rate_audit_rows),
+            "type53_phint53_rate_audit_summary": _type53_phint53_rate_audit_summary(type53_phint53_rate_audit_rows),
+            "n_global_type53_phint53_matrix_term_rows": len(global_type53_phint53_matrix_terms),
+            "global_type53_phint53_matrix_terms_summary": _global_type53_phint53_matrix_terms_summary(global_type53_phint53_matrix_terms),
+            "type53_matrix_source_preference": "phint53_kernel_when_available_else_flat_proxy",
             "n_full_global_matrix_term_rows": len(full_global_matrix_terms),
             "full_global_matrix_terms_summary": _full_global_matrix_terms_summary(full_global_matrix_terms),
             "n_full_global_normalized_solve_comparison_rows": len(full_global_normalized_solve_comparison_rows),
@@ -6469,6 +6831,8 @@ def solve_element_reference(
         "type53_rate_audit": type53_rate_audit_rows,
         "type53_flat_proxy_rate_audit": type53_flat_proxy_rate_audit_rows,
         "global_type53_flat_proxy_matrix_terms": global_type53_flat_proxy_matrix_terms,
+        "type53_phint53_rate_audit": type53_phint53_rate_audit_rows,
+        "global_type53_phint53_matrix_terms": global_type53_phint53_matrix_terms,
         "full_global_matrix_terms": full_global_matrix_terms,
         "full_global_normalized_solve_comparison": full_global_normalized_solve_comparison_rows,
         "triplet_rows": triplet_rows,
@@ -6837,6 +7201,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type53_rate_audit_rows = result.get("type53_rate_audit", [])
     type53_flat_proxy_rate_audit_rows = result.get("type53_flat_proxy_rate_audit", [])
     global_type53_flat_proxy_matrix_terms = result.get("global_type53_flat_proxy_matrix_terms", [])
+    type53_phint53_rate_audit_rows = result.get("type53_phint53_rate_audit", [])
+    global_type53_phint53_matrix_terms = result.get("global_type53_phint53_matrix_terms", [])
     full_global_matrix_terms = result.get("full_global_matrix_terms", [])
     full_global_normalized_solve_comparison_rows = result.get("full_global_normalized_solve_comparison", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
@@ -6860,6 +7226,10 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_bound_bound_type71_solve_comparison_summary"] = _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows)
         if global_bound_bound_type71_type99_proxy_solve_comparison_rows:
             result["summary"]["global_bound_bound_type71_type99_proxy_solve_comparison_summary"] = _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows)
+        if type53_phint53_rate_audit_rows:
+            result["summary"]["type53_phint53_rate_audit_summary"] = _type53_phint53_rate_audit_summary(type53_phint53_rate_audit_rows)
+        if global_type53_phint53_matrix_terms:
+            result["summary"]["global_type53_phint53_matrix_terms_summary"] = _global_type53_phint53_matrix_terms_summary(global_type53_phint53_matrix_terms)
         if global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows:
             result["summary"]["global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary"] = _global_bound_bound_type71_type99_type53_proxy_solve_comparison_summary(global_bound_bound_type71_type99_type53_proxy_solve_comparison_rows)
         if type99_proxy_scale_scan_rows:
@@ -6905,6 +7275,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", type53_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", type53_flat_proxy_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", global_type53_flat_proxy_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_type53_phint53_rate_audit.csv", type53_phint53_rate_audit_rows)
+    write_csv(out / "xstar_like_element_solver_global_type53_phint53_matrix_terms.csv", global_type53_phint53_matrix_terms)
     write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", full_global_matrix_terms)
     write_csv(out / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv", full_global_normalized_solve_comparison_rows)
     write_csv(out / "xstar_like_element_solver_triplet.csv", result.get("triplet_rows", []))

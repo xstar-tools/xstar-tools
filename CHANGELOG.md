@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.52 - 2026-05-03
+
+- Makes `--full-global-linear-solver xstar-lucy` the preferred/default diagnostic solver for the full-global path.
+- Adds the first type-53 `phint53` photoionization-kernel diagnostic port.
+- Adds `--type53-phint53-scale` for controlled rate scaling of the new phint53-kernel diagnostic.
+- Writes `xstar_like_element_solver_type53_phint53_rate_audit.csv` with decoded type-53 cross-section pairs, placeholder radiation-grid integration diagnostics, and forward photoionization rates.
+- Writes `xstar_like_element_solver_global_type53_phint53_matrix_terms.csv` with physical-kernel type-53 matrix topology rows.
+- `xstar_like_element_solver_full_global_matrix_terms.csv` now prefers type-53 phint53-kernel rows when any are matrix-ready, and falls back to the older flat proxy topology otherwise.
+- The phint53 forward photoionization kernel is ported, but the radiation field is still a placeholder; Milne inverse recombination, opacity/escape-probability context, and the real XSTAR continuum are still pending.
+
 ## v0.3.51 - 2026-05-03
 
 - Replaced the v0.3.50 XSTAR-Lucy LU backend implementation with explicit local Numerical-Recipes-style helpers `_xstar_ludcmp`, `_xstar_lubksb`, and `_xstar_mprove`.

@@ -63,7 +63,8 @@ def main(argv=None):
     p.add_argument("--triplet-source-scale", default="1", help="Scale factor(s) for --triplet-source-mode type74-direct-diagnostic. Accepts one value or a comma-separated list, e.g. '1,1e2,1e4,1e6,1e8,1e10'.")
     p.add_argument("--type99-proxy-scale", default="0,1e-8,1e-6,1e-4,1e-2,1,1e2", help="Scale factor(s) for the nonphysical type-99 proxy source scan in the global bound-bound+type71 diagnostic block. Accepts one value or a comma-separated list.")
     p.add_argument("--radiation-field-mode", default="none", choices=["none", "flat", "blackbody", "table"], help="Diagnostic radiation context scaffold for type-53 photoionization/Milne audits. Does not evaluate physical rates yet.")
-    p.add_argument("--type53-flat-proxy-scale", default="1", help="Scale factor for the nonphysical flat-field type-53 photoionization-rate proxy. Diagnostic only; used only in the v0.3.46 proxy-sink comparison solve, not in the baseline solver.")
+    p.add_argument("--type53-flat-proxy-scale", default="1", help="Scale factor for the nonphysical flat-field type-53 photoionization-rate proxy. Diagnostic only; retained for comparison with the phint53 kernel path.")
+    p.add_argument("--type53-phint53-scale", default="1", help="Scale factor for the v0.3.52 type-53 phint53 photoionization-kernel diagnostic. The kernel is ported, but the radiation field is still placeholder unless a future physical continuum is supplied.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -95,6 +96,7 @@ def main(argv=None):
             "type99_proxy_scale": args.type99_proxy_scale,
             "radiation_field_mode": args.radiation_field_mode,
             "type53_flat_proxy_scale": args.type53_flat_proxy_scale,
+            "type53_phint53_scale": args.type53_phint53_scale,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -127,6 +129,8 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_type53_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type53_flat_proxy_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_type53_phint53_rate_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_global_type53_phint53_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_full_global_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv", [])
         write_csv(out / "xstar_like_element_solver_triplet.csv", [])
@@ -170,6 +174,7 @@ def main(argv=None):
         type99_proxy_scale=args.type99_proxy_scale,
         radiation_field_mode=args.radiation_field_mode,
         type53_flat_proxy_scale=args.type53_flat_proxy_scale,
+        type53_phint53_scale=args.type53_phint53_scale,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

@@ -17,4 +17,4 @@ __all__ = [
     "solve_element_reference",
 ]
 
-__version__ = "0.3.51"
+__version__ = "0.3.52"
