@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.73 - 2026-05-05
+
+- Bug-fix release for the v0.3.72 `phint53` Milne integral audit.
+- `xstar_like_element_solver_phint53_milne_integral_audit.csv` now reads the full type-53 raw real arrays from `type53_rate_audit_rows` when the later `type53_phint53_rate_audit_rows` do not carry the original cross-section grid.
+- Adds `type53_cross_section_source` and `type53_n_cross_section_pairs_available` columns to make this provenance explicit.
+- No intentional solver, matrix, type-50, recombination-rate, triplet-coupling, or physical-rate behavior changes.
+
 ## v0.3.72 - 2026-05-05
 
 - Added `xstar_like_element_solver_phint53_milne_integral_audit.csv`.

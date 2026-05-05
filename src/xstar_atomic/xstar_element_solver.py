@@ -6696,6 +6696,7 @@ def _global_type74_calt74_matrix_terms_summary(rows: Sequence[dict]) -> dict:
 def build_phint53_milne_integral_audit_rows(
     *,
     type53_phint53_rate_audit_rows: Sequence[dict],
+    type53_rate_audit_rows: Sequence[dict] = (),
     type53_milne_inverse_audit_rows: Sequence[dict],
     global_index_rows: Sequence[dict],
     he_like_stage: int,
@@ -6717,6 +6718,7 @@ def build_phint53_milne_integral_audit_rows(
     component balance before any physical treatment is introduced.
     """
     by_record_milne = {r.get("record"): r for r in type53_milne_inverse_audit_rows}
+    by_record_raw53 = {r.get("record"): r for r in type53_rate_audit_rows}
     by_g = {maybe_int(r.get("global_index")): r for r in global_index_rows if maybe_int(r.get("global_index")) is not None}
     rows: List[dict] = []
     component_sums: Dict[str, dict] = {}
@@ -6727,7 +6729,13 @@ def build_phint53_milne_integral_audit_rows(
 
     for ar in type53_phint53_rate_audit_rows:
         rec = ar.get("record")
-        full = ar.get("type53_raw_reals_full") or ar.get("raw_reals_preview")
+        raw_ar = by_record_raw53.get(rec, {})
+        full = (
+            ar.get("type53_raw_reals_full")
+            or ar.get("raw_reals_preview")
+            or raw_ar.get("type53_raw_reals_full")
+            or raw_ar.get("raw_reals_preview")
+        )
         e_ry, sigma_cm2 = _type53_cross_section_pairs_from_reals(full)
         e_ry_mb, sigma_mb = _type53_cross_section_pairs_mb_from_reals(full)
         bg = maybe_int(ar.get("bound_global_index"))
@@ -6794,6 +6802,8 @@ def build_phint53_milne_integral_audit_rows(
             "temperature_K": temperature,
             "electron_density_cm^-3": electron_density,
             "current_python_forward_photoionization_ans1_s^-1": fwd,
+            "type53_cross_section_source": "type53_rate_audit_raw_reals_full" if raw_ar.get("type53_raw_reals_full") else ("type53_rate_audit_raw_reals_preview" if raw_ar.get("raw_reals_preview") else "type53_phint53_rate_audit"),
+            "type53_n_cross_section_pairs_available": len(e_ry),
             "current_python_proxy_milne_ans2_scaled_s^-1": current_proxy,
             "current_python_proxy_milne_ans2_unscaled_s^-1": current_unscaled,
             "source_code_phint53_milne_ans2_rrrt_s^-1": ph_ans2,
@@ -9244,6 +9254,7 @@ def solve_element_reference(
     )
     type53_type74_ucalc_closure_audit_rows = build_type53_type74_ucalc_closure_audit_rows(
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type53_rate_audit_rows=type53_rate_audit_rows,
         type53_milne_inverse_audit_rows=type53_milne_inverse_audit_rows,
         type74_calt74_rate_audit_rows=type74_calt74_rate_audit_rows,
         type74_inverse_recombination_audit_rows=type74_inverse_recombination_audit_rows,
@@ -9254,6 +9265,7 @@ def solve_element_reference(
     )
     phint53_milne_integral_audit_rows = build_phint53_milne_integral_audit_rows(
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type53_rate_audit_rows=type53_rate_audit_rows,
         type53_milne_inverse_audit_rows=type53_milne_inverse_audit_rows,
         global_index_rows=global_index_rows,
         he_like_stage=he_like_stage,

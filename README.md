@@ -1743,3 +1743,8 @@ The first scale in each list is used for the primary full-global matrix.  All re
 
 Version 0.3.57 adds `xstar_like_element_solver_type74_calt74_rate_audit.csv` and `xstar_like_element_solver_global_type74_calt74_matrix_terms.csv`.  The diagnostic ports the two-output structure of XSTAR `calt74`: forward DR-delta photoionization `rate` and inverse recombination `alpha`, then applies the `ucalc` statistical-weight correction `alpha *= gglo/ggup` for the inverse topology.  The full-global matrix prefers these source-aligned type-74 rows when available.  Absolute forward rates are still tied to the placeholder radiation/bremsa context, so this remains a diagnostic scaffold rather than a physical XSTAR solution.
 
+
+### v0.3.73 diagnostic correction
+
+v0.3.73 fixes the v0.3.72 `phint53` Milne integral audit so the audit uses the original type-53 cross-section grids from the raw type-53 audit rows. The solver behavior is unchanged.
+
