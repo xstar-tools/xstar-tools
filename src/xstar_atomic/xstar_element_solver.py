@@ -8404,6 +8404,13 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    calc_emis_context_audit_rows = build_calc_emis_context_audit_rows(
+        global_index_rows=global_index_rows,
+        line_rows=line_rows,
+        full_global_matrix_terms=full_global_matrix_terms,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -8480,6 +8487,8 @@ def solve_element_reference(
             "triplet_emissivity_branch_audit_summary": _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows),
             "n_calc_emis_triplet_audit_rows": len(calc_emis_triplet_audit_rows),
             "calc_emis_triplet_audit_summary": _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows),
+            "n_calc_emis_context_audit_rows": len(calc_emis_context_audit_rows),
+            "calc_emis_context_audit_summary": _calc_emis_context_audit_summary(calc_emis_context_audit_rows),
             "triplet_coupling_treatment": triplet_coupling_treatment_norm,
             "n_triplet_coupling_suppressed_matrix_terms": len(suppressed_triplet_coupling_terms),
             "n_triplet_coupling_suppression_comparison_rows": len(triplet_coupling_suppression_comparison_rows),
@@ -8546,6 +8555,7 @@ def solve_element_reference(
         "triplet_alpha_gamma_audit": triplet_alpha_gamma_audit_rows,
         "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
         "calc_emis_triplet_audit": calc_emis_triplet_audit_rows,
+        "calc_emis_context_audit": calc_emis_context_audit_rows,
         "triplet_coupling_record_audit": triplet_coupling_record_audit_rows,
         "triplet_coupling_suppression_comparison": triplet_coupling_suppression_comparison_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
@@ -9345,6 +9355,289 @@ def _calc_emis_triplet_audit_summary(rows: Sequence[dict]) -> dict:
         "provenance": "v0.3.64_calc_emis_ion_style_triplet_line_output_audit",
     }
 
+def _line_output_balance_context(
+    *,
+    global_index: Optional[int],
+    full_global_matrix_terms: Sequence[dict],
+    populations: Mapping[int, float],
+) -> dict:
+    """Summarise matrix-population context for one global level.
+
+    This is not a full XSTAR ``ucalc`` port.  It converts the already assembled
+    full-global matrix rows into source-population-weighted feeds and outgoing
+    loss-rate sums so that the line-output audit can show what runtime context is
+    available and what remains a placeholder.
+    """
+    if global_index is None:
+        return {
+            "alpha_source_population_weighted_feed_s^-1": 0.0,
+            "gamma_offdiag_loss_rate_sum_s^-1": 0.0,
+            "gamma_diagonal_loss_rate_sum_s^-1": 0.0,
+            "gamma_loss_rate_context_s^-1": 0.0,
+            "n_alpha_feed_terms": 0,
+            "n_gamma_loss_terms": 0,
+            "n_diagonal_loss_terms": 0,
+            "dominant_alpha_component": "",
+            "dominant_alpha_record": "",
+            "dominant_gamma_component": "",
+            "dominant_gamma_record": "",
+            "alpha_by_component_json": "{}",
+            "gamma_by_component_json": "{}",
+        }
+    gi = int(global_index)
+    alpha = 0.0
+    gamma_offdiag = 0.0
+    gamma_diag = 0.0
+    n_alpha = n_gamma = n_diag = 0
+    alpha_by_component: Dict[str, float] = {}
+    gamma_by_component: Dict[str, float] = {}
+    dominant_alpha = (0.0, "", "")
+    dominant_gamma = (0.0, "", "")
+    for term in full_global_matrix_terms:
+        row_gi = _row_global_index(term, "matrix_row_global_index", "row_global_index")
+        col_gi = _row_global_index(term, "matrix_col_global_index", "col_global_index")
+        rate = _term_positive_rate(term)
+        signed = _term_signed_rate(term)
+        if rate is None or not math.isfinite(float(rate)):
+            continue
+        component_name = str(term.get("full_global_component") or term.get("source_method") or "")
+        record = str(term.get("record") or term.get("source_record") or "")
+        if row_gi == gi and col_gi is not None and col_gi != gi:
+            src_pop = float(populations.get(int(col_gi), 0.0))
+            weighted = abs(float(rate)) * src_pop
+            alpha += weighted
+            n_alpha += 1
+            alpha_by_component[component_name] = alpha_by_component.get(component_name, 0.0) + weighted
+            if weighted > dominant_alpha[0]:
+                dominant_alpha = (weighted, component_name, record)
+        if col_gi == gi and row_gi is not None and row_gi != gi:
+            rval = abs(float(rate))
+            gamma_offdiag += rval
+            n_gamma += 1
+            gamma_by_component[component_name] = gamma_by_component.get(component_name, 0.0) + rval
+            if rval > dominant_gamma[0]:
+                dominant_gamma = (rval, component_name, record)
+        if row_gi == gi and col_gi == gi:
+            dval = abs(float(signed)) if signed is not None else abs(float(rate))
+            gamma_diag += dval
+            n_diag += 1
+            gamma_by_component[component_name] = gamma_by_component.get(component_name, 0.0) + dval
+    gamma_context = max(gamma_offdiag, gamma_diag)
+    return {
+        "alpha_source_population_weighted_feed_s^-1": alpha,
+        "gamma_offdiag_loss_rate_sum_s^-1": gamma_offdiag,
+        "gamma_diagonal_loss_rate_sum_s^-1": gamma_diag,
+        "gamma_loss_rate_context_s^-1": gamma_context,
+        "population_from_alpha_over_gamma_context": (alpha / gamma_context if gamma_context > 0.0 else ""),
+        "n_alpha_feed_terms": n_alpha,
+        "n_gamma_loss_terms": n_gamma,
+        "n_diagonal_loss_terms": n_diag,
+        "dominant_alpha_component": dominant_alpha[1],
+        "dominant_alpha_record": dominant_alpha[2],
+        "dominant_gamma_component": dominant_gamma[1],
+        "dominant_gamma_record": dominant_gamma[2],
+        "alpha_by_component_json": json.dumps(dict(sorted(alpha_by_component.items())), sort_keys=True),
+        "gamma_by_component_json": json.dumps(dict(sorted(gamma_by_component.items())), sort_keys=True),
+    }
+
+
+def build_calc_emis_context_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    full_global_matrix_terms: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Build a v0.3.65 audit for the missing XSTAR line-output runtime context.
+
+    v0.3.64 showed that the transparent ``calc_emis_ion`` proxy is identical to
+    ``n_upper*A*E``.  This follow-up audit keeps that transparent baseline but
+    adds the matrix-population context available to an eventual ``ucalc`` port,
+    plus the line-accounting correction factors that would be needed to reproduce
+    the XSTAR f/i/r target while holding the solved populations fixed.
+    """
+    he_like_stage = int(he_like_stage)
+    by_ion_level = _global_index_by_ion_level(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    target = _xstar_triplet_target(he_like_stage) or {}
+    target_frac = {
+        c: maybe_float(target.get(c) or target.get(f"{c}_fraction"))
+        for c in ("f", "i", "r")
+    }
+    rows: List[dict] = []
+    component_sums: Dict[str, Dict[str, float]] = {
+        c: {"transparent": 0.0, "photon": 0.0, "n": 0.0, "upper_pop": 0.0, "alpha": 0.0, "gamma_pop": 0.0}
+        for c in ("f", "i", "r")
+    }
+    line_cache: List[dict] = []
+    for row in line_rows:
+        if maybe_int(row.get("ion_stage")) != he_like_stage:
+            continue
+        comp = classify_helike_triplet_line(row)
+        if comp not in {"f", "i", "r"}:
+            continue
+        upper = maybe_int(row.get("upper_level"))
+        lower = maybe_int(row.get("lower_level"))
+        if upper is None or lower is None:
+            continue
+        ug = by_ion_level.get((he_like_stage, int(upper)))
+        lg = by_ion_level.get((he_like_stage, int(lower)))
+        upper_pop = float(pops.get(int(ug), 0.0)) if ug is not None else 0.0
+        lower_pop = float(pops.get(int(lg), 0.0)) if lg is not None else 0.0
+        A = maybe_float(row.get("A_s^-1")) or 0.0
+        Eerg = line_energy_erg(row) or 0.0
+        transparent = max(upper_pop, 0.0) * max(float(A), 0.0) * max(float(Eerg), 0.0)
+        photon = max(upper_pop, 0.0) * max(float(A), 0.0)
+        ctx = _line_output_balance_context(global_index=ug, full_global_matrix_terms=full_global_matrix_terms, populations=pops)
+        component_sums[comp]["transparent"] += transparent
+        component_sums[comp]["photon"] += photon
+        component_sums[comp]["n"] += 1.0
+        component_sums[comp]["upper_pop"] += upper_pop
+        component_sums[comp]["alpha"] += maybe_float(ctx.get("alpha_source_population_weighted_feed_s^-1")) or 0.0
+        gamma = maybe_float(ctx.get("gamma_loss_rate_context_s^-1")) or 0.0
+        component_sums[comp]["gamma_pop"] += gamma * upper_pop
+        line_cache.append({
+            "row": row, "component": comp, "upper": upper, "lower": lower,
+            "ug": ug, "lg": lg, "upper_pop": upper_pop, "lower_pop": lower_pop,
+            "A": float(A), "Eerg": float(Eerg), "transparent": transparent, "photon": photon,
+            "ctx": ctx,
+        })
+
+    total_transparent = sum(component_sums[c]["transparent"] for c in ("f", "i", "r"))
+    current_frac = {
+        c: (component_sums[c]["transparent"] / total_transparent if total_transparent > 0.0 else 0.0)
+        for c in ("f", "i", "r")
+    }
+    # Required component multipliers are only a diagnostic.  They answer: if the
+    # solved populations and A-values are kept fixed, how much would line-output
+    # accounting need to rescale each component to match the XSTAR fractions?
+    required_scale = {
+        c: (target_frac[c] / current_frac[c] if target_frac[c] is not None and current_frac[c] > 0.0 else "")
+        for c in ("f", "i", "r")
+    }
+    i_only_scale = ""
+    if component_sums["i"]["transparent"] > 0.0 and target_frac.get("i") is not None and target_frac["i"] is not None and target_frac["i"] < 1.0:
+        i_only_scale = target_frac["i"] * (component_sums["f"]["transparent"] + component_sums["r"]["transparent"]) / (component_sums["i"]["transparent"] * (1.0 - target_frac["i"]))
+
+    for item in line_cache:
+        comp = item["component"]
+        ctx = item["ctx"]
+        comp_scale = required_scale.get(comp, "")
+        required_ans2 = item["A"] * float(comp_scale) if isinstance(comp_scale, (int, float)) and math.isfinite(float(comp_scale)) else ""
+        required_ptmp = comp_scale
+        escape_only_feasible = isinstance(required_ptmp, (int, float)) and 0.0 <= float(required_ptmp) <= 1.0
+        rows.append({
+            "audit_kind": "calc_emis_context_line",
+            "component": comp,
+            "record": item["row"].get("record"),
+            "ion_stage": he_like_stage,
+            "lower_level": item["lower"],
+            "upper_level": item["upper"],
+            "lower_global_index": item["lg"] if item["lg"] is not None else "",
+            "upper_global_index": item["ug"] if item["ug"] is not None else "",
+            "lower_label": item["row"].get("lower_label"),
+            "upper_label": item["row"].get("upper_label"),
+            "wavelength_A": item["row"].get("wavelength_A"),
+            "energy_eV": item["row"].get("energy_eV"),
+            "photon_energy_erg": item["Eerg"],
+            "A_s^-1": item["A"],
+            "lower_population_fraction": item["lower_pop"],
+            "upper_population_fraction": item["upper_pop"],
+            "transparent_pop_A_E_erg_s^-1": item["transparent"],
+            "transparent_pop_A_photon_s^-1": item["photon"],
+            "current_component_fraction_transparent": current_frac[comp],
+            "target_component_fraction": target_frac.get(comp),
+            "component_target_over_current_fraction_scale": comp_scale,
+            "i_only_scale_needed_if_f_r_fixed": i_only_scale if comp == "i" else "",
+            "required_ans2_emission_rate_for_component_scale_s^-1": required_ans2,
+            "required_ptmp_escape_multiplier_for_component_scale": required_ptmp,
+            "escape_only_component_scale_feasible": escape_only_feasible,
+            "ucalc_ans2_current_transparent_A_s^-1": item["A"],
+            "ucalc_ans1_current_transparent_absorption_or_stimulated_s^-1": 0.0,
+            "abund1_lower_current_population_proxy": item["lower_pop"],
+            "abund2_upper_current_population_proxy": item["upper_pop"],
+            "tau1_current_placeholder": 0.0,
+            "tau2_current_placeholder": 0.0,
+            "ptmp1_current_transparent": 1.0,
+            "ptmp2_current_transparent": 1.0,
+            "alpha_source_population_weighted_feed_s^-1": ctx.get("alpha_source_population_weighted_feed_s^-1", ""),
+            "gamma_loss_rate_context_s^-1": ctx.get("gamma_loss_rate_context_s^-1", ""),
+            "population_from_alpha_over_gamma_context": ctx.get("population_from_alpha_over_gamma_context", ""),
+            "population_minus_alpha_over_gamma_context": (item["upper_pop"] - float(ctx.get("population_from_alpha_over_gamma_context")) if isinstance(ctx.get("population_from_alpha_over_gamma_context"), (int, float)) else ""),
+            "gamma_offdiag_loss_rate_sum_s^-1": ctx.get("gamma_offdiag_loss_rate_sum_s^-1", ""),
+            "gamma_diagonal_loss_rate_sum_s^-1": ctx.get("gamma_diagonal_loss_rate_sum_s^-1", ""),
+            "n_alpha_feed_terms": ctx.get("n_alpha_feed_terms", ""),
+            "n_gamma_loss_terms": ctx.get("n_gamma_loss_terms", ""),
+            "n_diagonal_loss_terms": ctx.get("n_diagonal_loss_terms", ""),
+            "dominant_alpha_component": ctx.get("dominant_alpha_component", ""),
+            "dominant_alpha_record": ctx.get("dominant_alpha_record", ""),
+            "dominant_gamma_component": ctx.get("dominant_gamma_component", ""),
+            "dominant_gamma_record": ctx.get("dominant_gamma_record", ""),
+            "alpha_by_component_json": ctx.get("alpha_by_component_json", "{}"),
+            "gamma_by_component_json": ctx.get("gamma_by_component_json", "{}"),
+            "missing_calc_emis_ion_context": "true ucalc ans1/ans2 with stimulated terms; tau0/tauc optical depths; pescl/pescv escape probabilities; cfrac geometry; xpx/xeltp abundance factors; nlbin/ncbin strong-line filtering",
+            "diagnostic_note": "v0.3.65 context audit: reports available matrix-population context and required line-accounting multipliers; it does not alter the solve.",
+        })
+
+    for comp in ("f", "i", "r"):
+        frac = current_frac[comp]
+        tfrac = target_frac.get(comp)
+        scale = required_scale.get(comp, "")
+        rows.append({
+            "audit_kind": "calc_emis_context_component_summary",
+            "component": comp,
+            "n_lines": int(component_sums[comp]["n"]),
+            "transparent_pop_A_E_sum_erg_s^-1": component_sums[comp]["transparent"],
+            "transparent_pop_A_photon_sum_s^-1": component_sums[comp]["photon"],
+            "upper_population_fraction_sum_over_lines": component_sums[comp]["upper_pop"],
+            "current_fraction_transparent": frac,
+            "target_component_fraction": tfrac,
+            "delta_current_minus_target": (frac - tfrac if tfrac is not None else ""),
+            "target_over_current_fraction_scale": scale,
+            "escape_only_scale_feasible": (isinstance(scale, (int, float)) and 0.0 <= float(scale) <= 1.0),
+            "component_alpha_source_population_weighted_feed_sum_s^-1": component_sums[comp]["alpha"],
+            "component_population_weighted_gamma_loss_sum_s^-1": component_sums[comp]["gamma_pop"],
+            "alpha_over_population_weighted_gamma": (component_sums[comp]["alpha"] / component_sums[comp]["gamma_pop"] if component_sums[comp]["gamma_pop"] > 0.0 else ""),
+            "diagnostic_note": "required scale is a line-output-accounting diagnostic, not a physical correction.",
+        })
+
+    rows.append({
+        "audit_kind": "calc_emis_context_summary",
+        "component": "summary",
+        "f_fraction_transparent": current_frac["f"],
+        "i_fraction_transparent": current_frac["i"],
+        "r_fraction_transparent": current_frac["r"],
+        "target_f_fraction": target_frac.get("f"),
+        "target_i_fraction": target_frac.get("i"),
+        "target_r_fraction": target_frac.get("r"),
+        "f_target_over_current_scale": required_scale.get("f", ""),
+        "i_target_over_current_scale": required_scale.get("i", ""),
+        "r_target_over_current_scale": required_scale.get("r", ""),
+        "i_only_scale_needed_if_f_r_fixed": i_only_scale,
+        "R_transparent": (component_sums["f"]["transparent"] / component_sums["i"]["transparent"] if component_sums["i"]["transparent"] > 0.0 else ""),
+        "G_transparent": ((component_sums["f"]["transparent"] + component_sums["i"]["transparent"]) / component_sums["r"]["transparent"] if component_sums["r"]["transparent"] > 0.0 else ""),
+        "conclusion_scope": "If required scale exceeds unity, pure escape attenuation cannot raise that component in channel 1; a true ucalc/strong-line/context change or population-balance change is required.",
+        "provenance": "v0.3.65_calc_emis_ion_runtime_context_audit",
+    })
+    return rows
+
+
+def _calc_emis_context_audit_summary(rows: Sequence[dict]) -> dict:
+    summary = next((r for r in rows if r.get("audit_kind") == "calc_emis_context_summary"), {})
+    return {
+        "n_calc_emis_context_audit_rows": len(rows),
+        "n_calc_emis_context_line_rows": sum(1 for r in rows if r.get("audit_kind") == "calc_emis_context_line"),
+        "f_fraction_transparent": summary.get("f_fraction_transparent", ""),
+        "i_fraction_transparent": summary.get("i_fraction_transparent", ""),
+        "r_fraction_transparent": summary.get("r_fraction_transparent", ""),
+        "i_target_over_current_scale": summary.get("i_target_over_current_scale", ""),
+        "i_only_scale_needed_if_f_r_fixed": summary.get("i_only_scale_needed_if_f_r_fixed", ""),
+        "missing_context": "true calc_emis_ion ucalc net emissivity, optical-depth/escape channels, abundance factors, covering fraction, and strong-line filtering",
+        "provenance": "v0.3.65_calc_emis_ion_runtime_context_audit",
+    }
+
+
 def _infer_xstar_data_type_from_term(term: Mapping[str, object]) -> Optional[int]:
     """Infer an ATDB/XSTAR data type from a full-global matrix term."""
     dt = maybe_int(term.get("data_type"))
@@ -10095,6 +10388,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_triplet_alpha_gamma_audit.csv", triplet_alpha_gamma_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
     write_csv(out / "xstar_like_element_solver_calc_emis_triplet_audit.csv", calc_emis_triplet_audit_rows)
+    write_csv(out / "xstar_like_element_solver_calc_emis_context_audit.csv", calc_emis_context_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_coupling_record_audit.csv", result.get("triplet_coupling_record_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_coupling_suppression_comparison.csv", result.get("triplet_coupling_suppression_comparison", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)

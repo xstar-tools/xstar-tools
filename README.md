@@ -1,48 +1,10 @@
-### v0.3.64 calc_emis_ion-style triplet line-output audit
-
-The element solver now writes `xstar_like_element_solver_calc_emis_triplet_audit.csv`, a source-code-aligned diagnostic for the He-like f/i/r line-output stage.  It compares the current transparent `population * A * photon_energy` proxy with the `calc_emis_ion.f90` line-output form `max((ans2*abund2 - ans1*abund1) * E * ptmp, 0)`, while explicitly marking the missing XSTAR contexts: true `ucalc` net `ans1/ans2`, optical depths, `pescl` escape probabilities, covering fraction, abundance factors, and strong-line filtering (`nlbin`/`ncbin`).  No solver or rate behavior is intentionally changed.
-
-### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
-
-### v0.3.63 triplet-coupling suppression diagnostic
-
-The element solver can now write `xstar_like_element_solver_triplet_coupling_suppression_comparison.csv`, a controlled normal-vs-suppressed diagnostic for the He-like `1s2p 3P_J -> 1s2s 3S1` type-50 radiative drains identified by the v0.3.62 coupling audit.  Use `--triplet-coupling-treatment suppress-3p-to-3s-radiative` only as a diagnostic matrix-semantics test; the default `normal` behavior is unchanged.
-
-```bash
---triplet-coupling-treatment normal
---triplet-coupling-treatment suppress-3p-to-3s-radiative
-```
-
-### v0.3.62 triplet 3S1--3P_J coupling-record audit
-
-v0.3.62 adds `xstar_like_element_solver_triplet_coupling_record_audit.csv` to validate the direct `1s2s 3S1 <-> 1s2p 3P_J` coupling records that control the intercombination bottleneck.  The audit selects full-global matrix terms directly coupling the forbidden upper level to the intercombination upper levels, includes their diagonal partners, infers the XSTAR data type/source method, reports source-population-weighted contributions, and separates radiative type-50 drains from density-scaled collisional type-63/67/68/69 partners.  This is an audit-only release; no solver or physical-rate behavior is intentionally changed.
-
-### v0.3.61 triplet α/γ and emissivity-branch diagnostics
-
-v0.3.61 adds two source-code-aligned triplet diagnostics for the full-global XSTAR-Lucy path.  `xstar_like_element_solver_triplet_alpha_gamma_audit.csv` reports XSTAR-like source-population-weighted feed (`alpha`) and loss (`gamma`) balances for the He-like f/i/r upper levels, instead of relying only on raw incoming matrix-rate sums.  `xstar_like_element_solver_triplet_emissivity_branch_audit.csv` lists f/i/r candidate line records with branching fractions, solved upper populations, transparent `pop*A*E` emissivity proxies, and explicit placeholders for the still-missing XSTAR `calc_emis_ion` contexts such as net `ucalc` emissivity, escape probabilities, `cfrac`, and strong-line filtering.  No solver or physical-rate behavior is changed.
-
-
-### v0.3.60 intercombination branch audit
-
-v0.3.60 adds two diagnostic balance outputs for the He-like intercombination component: `xstar_like_element_solver_intercombination_feed_audit.csv` and `xstar_like_element_solver_triplet_component_balance_audit.csv`.  The first table lists every current full-global matrix term that feeds, removes, or diagonally drains the 1s2p 3P_J intercombination upper levels.  The second summarizes f/i/r component populations, incoming-rate sums, radiative losses, cascade feeds, inverse-recombination feeds, collisional couplings, and photoionization losses.  These tables are intended to locate why the refined inverse scan still underpredicts the intercombination fraction.  They are diagnostic only: continuum/proxy rows remain nonphysical until the XSTAR radiation, Milne, type-99/type-1, and continuum closure are fully ported.
-
-### v0.3.59 refined inverse-recombination scan
-
-v0.3.59 adds `xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv`, a focused diagnostic scan around the C V region identified in v0.3.58.  Use `--type53-milne-refined-scale` and `--type74-inverse-refined-scale` to adjust the refined grid.  The file includes intercombination-sensitive ranking columns (`i_abs_error_to_target`, `i_fraction_to_target_ratio`, and `intercombination_weighted_score_w5`) in addition to the standard f/i/r and L2 diagnostics.  The scan remains diagnostic/proxy until the true XSTAR Milne/calt74 rates and continuum closure are fully ported.
-
-
-### v0.3.46 diagnostic type-53 proxy-sink solve
-
-The element-solver demo now writes `xstar_like_element_solver_global_bound_bound_type71_type99_type53_proxy_solve_comparison.csv`.  This comparison solves a diagnostic He-like global-index block containing bound-bound terms, type-71 superlevel cascades, nonphysical type-99 proxy sources, and type-53 flat-field photoionization proxy sinks.  These type-53 terms are still proxies and are not XSTAR `phint53`/Milne rates; the full adjacent-ion parent-continuum matrix is not solved yet.
-
-
-v0.3.45 adds a diagnostic-only flat-field proxy for type-53 photoionization rates. It writes `xstar_like_element_solver_type53_flat_proxy_rate_audit.csv` and `xstar_like_element_solver_global_type53_flat_proxy_matrix_terms.csv`, mapping bound-level to parent-continuum photoionization-sink topology through `global_index`. The proxy uses previewed type-53 real coefficients under a unit flat placeholder radiation field and is not a physical XSTAR `phint53`/Milne rate. It is not assembled into the solved matrix.
-
-### v0.3.44 note: type-53 radiation-context scaffold bug fix
-
-v0.3.44 fixes the v0.3.43 helper-name collision that caused `--radiation-field-mode` runs to crash while building global bound-bound matrix terms. The type-53 scaffold remains diagnostic-only.
-
 # xstar-atomic
+
+### v0.3.65 calc_emis_ion runtime-context audit
+
+The element solver now writes `xstar_like_element_solver_calc_emis_context_audit.csv`, a diagnostic companion to the v0.3.64 transparent `calc_emis_ion` triplet audit.  The new context audit keeps the solver unchanged, but reports the available matrix-population context for each He-like f/i/r line, including source-population-weighted feed (`alpha`), loss (`gamma`), dominant feed/loss records, and the line-accounting multipliers that would be required to match the XSTAR triplet target while holding solved populations fixed.  This isolates whether the remaining C V intercombination deficit could plausibly be fixed by `calc_emis_ion` escape/net-emissivity/strong-line accounting or whether the population balance must change.
+
+The v0.3.64 `xstar_like_element_solver_calc_emis_triplet_audit.csv` is still written.  It compares the transparent `population * A * photon_energy` proxy with the `calc_emis_ion.f90` line-output form `max((ans2*abund2 - ans1*abund1) * E * ptmp, 0)`, while explicitly marking the missing XSTAR contexts: true `ucalc` net `ans1/ans2`, optical depths, `pescl` escape probabilities, covering fraction, abundance factors, and strong-line filtering (`nlbin`/`ncbin`).  No solver or rate behavior is intentionally changed.
 
 ### v0.3.58 note: explicit diagnostic XSTAR-style bremsa grid
 
