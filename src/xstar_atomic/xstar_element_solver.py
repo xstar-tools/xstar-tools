@@ -6876,7 +6876,8 @@ def _phint53_milne_integral_audit_summary(rows: Sequence[dict]) -> dict:
 def build_type53_type74_ucalc_closure_audit_rows(
     *,
     type53_phint53_rate_audit_rows: Sequence[dict],
-    type53_milne_inverse_audit_rows: Sequence[dict],
+    type53_rate_audit_rows: Sequence[dict] = (),
+    type53_milne_inverse_audit_rows: Sequence[dict] = (),
     type74_calt74_rate_audit_rows: Sequence[dict],
     type74_inverse_recombination_audit_rows: Sequence[dict],
     global_index_rows: Sequence[dict],

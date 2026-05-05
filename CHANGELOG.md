@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.74 - 2026-05-05
+
+- Bug-fix release for the v0.3.73 Milne-integral audit handoff.
+- Fixed `build_type53_type74_ucalc_closure_audit_rows(...)` so its signature accepts the new `type53_rate_audit_rows` keyword passed by `solve_element_reference(...)`.
+- This restores the v0.3.71 closure audit and allows the v0.3.73 `phint53`/`milne` raw cross-section-grid join to run in the same demo call.
+- No intentional solver, matrix assembly, type-50 treatment, inverse-recombination rate, triplet-coupling, suppression, or physical-rate behavior changes.
+
 ## v0.3.73 - 2026-05-05
 
 - Bug-fix release for the v0.3.72 `phint53` Milne integral audit.
