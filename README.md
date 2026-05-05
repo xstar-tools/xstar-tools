@@ -1,3 +1,7 @@
+### v0.3.66 calc_emis context writer fix
+
+v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_context_audit.csv` is retrieved from the result dictionary before writing. It preserves the v0.3.65 diagnostic semantics and makes no intentional solver, matrix, or physical-rate changes.
+
 # xstar-atomic
 
 ### v0.3.65 calc_emis_ion runtime-context audit

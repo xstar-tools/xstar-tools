@@ -10276,6 +10276,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     triplet_alpha_gamma_audit_rows = result.get("triplet_alpha_gamma_audit", [])
     triplet_emissivity_branch_audit_rows = result.get("triplet_emissivity_branch_audit", [])
     calc_emis_triplet_audit_rows = result.get("calc_emis_triplet_audit", [])
+    calc_emis_context_audit_rows = result.get("calc_emis_context_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -10341,6 +10342,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["triplet_emissivity_branch_audit_summary"] = _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows)
         if calc_emis_triplet_audit_rows:
             result["summary"]["calc_emis_triplet_audit_summary"] = _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows)
+        if calc_emis_context_audit_rows:
+            result["summary"]["calc_emis_context_audit_summary"] = _calc_emis_context_audit_summary(calc_emis_context_audit_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.66 - 2026-05-05
+
+- Fixed `write_element_solver_outputs` so `calc_emis_context_audit_rows` is defined from `result.get("calc_emis_context_audit", [])` before writing `xstar_like_element_solver_calc_emis_context_audit.csv`.
+- Added the v0.3.65 context-audit summary into the output summary when rows are present.
+- No intentional changes to the solver, matrix assembly, triplet-coupling treatment, suppression behavior, or physical rate behavior.
+
 ## v0.3.65 - 2026-05-05
 
 - Added `xstar_like_element_solver_calc_emis_context_audit.csv`, a diagnostic companion to the v0.3.64 transparent `calc_emis_ion` triplet audit.
