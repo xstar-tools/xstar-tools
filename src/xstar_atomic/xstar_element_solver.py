@@ -2802,9 +2802,108 @@ def _global_index_lookup(rows: Sequence[dict]) -> Dict[tuple[int, int], dict]:
     return out
 
 
+
+def _normalise_type50_bound_bound_treatment(value: object) -> str:
+    """Return a supported v0.3.67 type-50 bound-bound treatment string."""
+    text = str(value or "raw-A").strip().lower().replace("_", "-")
+    aliases = {
+        "": "raw-A",
+        "none": "raw-A",
+        "default": "raw-A",
+        "raw": "raw-A",
+        "raw-a": "raw-A",
+        "raw-A": "raw-A",
+        "xstar-escape": "xstar-escape",
+        "escape": "xstar-escape",
+        "xstar-escape-photoexcitation": "xstar-escape-photoexcitation",
+        "escape-photoexcitation": "xstar-escape-photoexcitation",
+        "photoexcitation": "xstar-escape-photoexcitation",
+    }
+    if text not in aliases:
+        raise ValueError(f"Unsupported type-50 bound-bound treatment {value!r}")
+    return aliases[text]
+
+
+def _bounded_nonnegative_float(value: object, default: float = 0.0) -> float:
+    val = maybe_float(value)
+    if val is None or not math.isfinite(float(val)):
+        return float(default)
+    return max(0.0, float(val))
+
+
+def _infer_transition_data_type(row: Mapping[str, object]) -> Optional[int]:
+    data_type = maybe_int(row.get("data_type"))
+    if data_type is not None:
+        return int(data_type)
+    text = str(row.get("source_method") or "")
+    if "data_type_" in text:
+        try:
+            return int(text.split("data_type_", 1)[1].split("_", 1)[0])
+        except Exception:
+            return None
+    return None
+
+
+def _is_type50_radiative_transition(row: Mapping[str, object]) -> bool:
+    return str(row.get("kind") or row.get("transition_kind") or "") == "radiative_decay" and _infer_transition_data_type(row) == 50
+
+
+def _type50_effective_rates(
+    row: Mapping[str, object],
+    *,
+    treatment: str,
+    escape_factor: object = 1.0,
+    photoexcitation_scale: object = 0.0,
+) -> dict:
+    """Return controlled v0.3.67 XSTAR-ucalc-style type-50 rate proxies.
+
+    XSTAR's ``ucalc`` type-50 branch does not pass a raw A-value directly to
+    the population matrix.  It forms an escaped downward rate roughly
+    ``A*(ptmp1+ptmp2)`` and an upward radiation-field pumping term.  This helper
+    keeps the default ``raw-A`` behavior unchanged while exposing a controlled
+    diagnostic treatment for testing the impact of escape and pumping.
+    """
+    treatment_norm = _normalise_type50_bound_bound_treatment(treatment)
+    raw_a = _bounded_nonnegative_float(row.get("rate_s^-1"), 0.0)
+    user_escape = _bounded_nonnegative_float(escape_factor, 1.0)
+    user_escape = min(user_escape, 1.0)
+    # In the absence of a ported optical-depth/escape calculation, split the
+    # user-supplied total escape factor equally into the two XSTAR fline channels.
+    ptmp1 = 0.5 * user_escape
+    ptmp2 = 0.5 * user_escape
+    ptmp_sum = ptmp1 + ptmp2
+    if treatment_norm == "raw-A" or not _is_type50_radiative_transition(row):
+        decay = raw_a
+        ptmp1 = 0.5
+        ptmp2 = 0.5
+        ptmp_sum = 1.0
+        pumping = 0.0
+    else:
+        decay = raw_a * ptmp_sum
+        pumping_scale = _bounded_nonnegative_float(photoexcitation_scale, 0.0)
+        pumping = raw_a * pumping_scale if treatment_norm == "xstar-escape-photoexcitation" else 0.0
+    return {
+        "type50_bound_bound_treatment": treatment_norm,
+        "raw_A_s^-1": raw_a,
+        "ptmp1_proxy": ptmp1,
+        "ptmp2_proxy": ptmp2,
+        "ptmp_sum_proxy": ptmp_sum,
+        "escaped_decay_rate_s^-1": decay,
+        "photoexcitation_rate_s^-1": pumping,
+        "decay_rate_multiplier_vs_raw_A": (decay / raw_a) if raw_a > 0 else None,
+        "photoexcitation_rate_multiplier_vs_raw_A": (pumping / raw_a) if raw_a > 0 else None,
+        "ucalc_ans1_matrix_lower_to_upper_proxy_s^-1": pumping,
+        "ucalc_ans2_matrix_upper_to_lower_proxy_s^-1": decay,
+        "ucalc_context_status": "raw_A_default" if treatment_norm == "raw-A" else "diagnostic_escape_proxy_no_real_tau_or_bremsa_line_integral",
+    }
+
 def build_global_bound_bound_matrix_terms(
     transition_rows: Sequence[dict],
     global_index_rows: Sequence[dict],
+    *,
+    type50_bound_bound_treatment: str = "raw-A",
+    type50_escape_factor: object = 1.0,
+    type50_photoexcitation_scale: object = 0.0,
 ) -> List[dict]:
     """Map existing intra-ion bound-bound transition logs onto global indices.
 
@@ -2842,6 +2941,13 @@ def build_global_bound_bound_matrix_terms(
             continue
         if not math.isfinite(float(rate)) or float(rate) <= 0.0:
             continue
+        type50_rates = _type50_effective_rates(
+            tr,
+            treatment=type50_bound_bound_treatment,
+            escape_factor=type50_escape_factor,
+            photoexcitation_scale=type50_photoexcitation_scale,
+        )
+        effective_rate = float(type50_rates["escaped_decay_rate_s^-1"]) if _is_type50_radiative_transition(tr) else float(rate)
         from_row = lookup.get((int(stage), int(from_level)))
         to_row = lookup.get((int(stage), int(to_level)))
         if from_row is None or to_row is None:
@@ -2860,8 +2966,10 @@ def build_global_bound_bound_matrix_terms(
                 "transition_kind": kind,
                 "from_level": int(from_level),
                 "to_level": int(to_level),
-                "rate_s^-1": float(rate),
+                "rate_s^-1": effective_rate,
+                "raw_rate_s^-1": float(rate),
                 "signed_rate_s^-1": 0.0,
+                **type50_rates,
                 "record": tr.get("record"),
                 "source_method": tr.get("source_method"),
                 "assembly_status": "skipped",
@@ -2886,7 +2994,9 @@ def build_global_bound_bound_matrix_terms(
             "to_level_label": to_row.get("level_label"),
             "from_level_kind": from_row.get("level_kind"),
             "to_level_kind": to_row.get("level_kind"),
-            "rate_s^-1": float(rate),
+            "rate_s^-1": effective_rate,
+            "raw_rate_s^-1": float(rate),
+            **type50_rates,
             "record": tr.get("record"),
             "source_method": tr.get("source_method"),
             "temperature_K": tr.get("temperature_K"),
@@ -2901,7 +3011,7 @@ def build_global_bound_bound_matrix_terms(
             "matrix_role": "bound_bound_gain_to_destination",
             "matrix_row_global_index": to_g,
             "matrix_col_global_index": from_g,
-            "signed_rate_s^-1": float(rate),
+            "signed_rate_s^-1": effective_rate,
             **common,
         })
         term_id += 1
@@ -2911,10 +3021,48 @@ def build_global_bound_bound_matrix_terms(
             "matrix_role": "bound_bound_loss_from_source",
             "matrix_row_global_index": from_g,
             "matrix_col_global_index": from_g,
-            "signed_rate_s^-1": -float(rate),
+            "signed_rate_s^-1": -effective_rate,
             **common,
         })
         term_id += 1
+        if _is_type50_radiative_transition(tr) and str(type50_rates.get("type50_bound_bound_treatment")) == "xstar-escape-photoexcitation":
+            pump_rate = float(type50_rates.get("photoexcitation_rate_s^-1") or 0.0)
+            if pump_rate > 0.0:
+                pump_common = dict(common)
+                pump_common.update({
+                    "transition_kind": "radiative_photoexcitation",
+                    "from_level": int(to_level),
+                    "to_level": int(from_level),
+                    "from_global_index": to_g,
+                    "to_global_index": from_g,
+                    "from_level_label": to_row.get("level_label"),
+                    "to_level_label": from_row.get("level_label"),
+                    "from_level_kind": to_row.get("level_kind"),
+                    "to_level_kind": from_row.get("level_kind"),
+                    "rate_s^-1": pump_rate,
+                    "matrix_safe_to_solve_physically": False,
+                    "unsafe_reason": "diagnostic type-50 photoexcitation proxy; real XSTAR bremsa/flinabs line integral not yet ported",
+                })
+                out.append({
+                    "global_term_id": term_id,
+                    "matrix_term_kind": "offdiag_gain",
+                    "matrix_role": "type50_photoexcitation_gain_to_upper_proxy",
+                    "matrix_row_global_index": from_g,
+                    "matrix_col_global_index": to_g,
+                    "signed_rate_s^-1": pump_rate,
+                    **pump_common,
+                })
+                term_id += 1
+                out.append({
+                    "global_term_id": term_id,
+                    "matrix_term_kind": "diagonal_loss",
+                    "matrix_role": "type50_photoexcitation_loss_from_lower_proxy",
+                    "matrix_row_global_index": to_g,
+                    "matrix_col_global_index": to_g,
+                    "signed_rate_s^-1": -pump_rate,
+                    **pump_common,
+                })
+                term_id += 1
     return out
 
 
@@ -2927,6 +3075,7 @@ def _global_bound_bound_matrix_terms_summary(rows: Sequence[dict]) -> dict:
         "n_global_bound_bound_skipped_rows": len(skipped),
         "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
         "rows_by_transition_kind": _counts(assembled, "transition_kind"),
+        "rows_by_type50_bound_bound_treatment": _counts(assembled, "type50_bound_bound_treatment"),
         "rows_by_ion_stage": _counts(assembled, "ion_stage"),
         "n_unique_matrix_positions": len({
             (maybe_int(r.get("matrix_row_global_index")), maybe_int(r.get("matrix_col_global_index")))
@@ -3082,7 +3231,7 @@ def build_global_superlevel_cascade_matrix_terms(
             "matrix_role": "type71_superlevel_cascade_gain_to_spectroscopic_destination",
             "matrix_row_global_index": spec_g,
             "matrix_col_global_index": super_g,
-            "signed_rate_s^-1": float(rate),
+            "signed_rate_s^-1": effective_rate,
             **common,
         })
         term_id += 1
@@ -3092,7 +3241,7 @@ def build_global_superlevel_cascade_matrix_terms(
             "matrix_role": "type71_superlevel_cascade_loss_from_superlevel_source",
             "matrix_row_global_index": super_g,
             "matrix_col_global_index": super_g,
-            "signed_rate_s^-1": -float(rate),
+            "signed_rate_s^-1": -effective_rate,
             **common,
         })
         term_id += 1
@@ -6777,6 +6926,96 @@ def build_full_global_matrix_terms(
     return out
 
 
+
+def build_type50_ucalc_rate_audit_rows(
+    *,
+    global_bound_bound_matrix_terms: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Audit v0.3.67 XSTAR-ucalc-style type-50 bound-bound rate treatment.
+
+    One row is emitted for each assembled type-50 radiative decay off-diagonal
+    term.  Photoexcitation proxy rows are summarized through their matching
+    treatment columns rather than emitted as separate primary transition rows.
+    """
+    out: List[dict] = []
+    seen = set()
+    for row in global_bound_bound_matrix_terms:
+        if str(row.get("matrix_term_kind") or "") != "offdiag_gain":
+            continue
+        if str(row.get("transition_kind") or "") != "radiative_decay":
+            continue
+        if _infer_transition_data_type(row) != 50:
+            continue
+        key = (row.get("record"), row.get("ion_stage"), row.get("from_level"), row.get("to_level"))
+        if key in seen:
+            continue
+        seen.add(key)
+        raw_a = _bounded_nonnegative_float(row.get("raw_A_s^-1") if row.get("raw_A_s^-1") not in (None, "") else row.get("raw_rate_s^-1"), 0.0)
+        eff = _bounded_nonnegative_float(row.get("escaped_decay_rate_s^-1") if row.get("escaped_decay_rate_s^-1") not in (None, "") else row.get("rate_s^-1"), 0.0)
+        pump = _bounded_nonnegative_float(row.get("photoexcitation_rate_s^-1"), 0.0)
+        from_label = str(row.get("from_level_label") or "")
+        to_label = str(row.get("to_level_label") or "")
+        is_triplet_uv_drain = (maybe_int(row.get("ion_stage")) == int(he_like_stage) and "1s1.2p1.3P" in from_label and "1s1.2s1.3S" in to_label)
+        out.append({
+            "row_kind": "type50_ucalc_rate_audit",
+            "element": row.get("element"),
+            "ion_stage": row.get("ion_stage"),
+            "record": row.get("record"),
+            "from_level": row.get("from_level"),
+            "to_level": row.get("to_level"),
+            "from_global_index": row.get("from_global_index"),
+            "to_global_index": row.get("to_global_index"),
+            "from_level_label": from_label,
+            "to_level_label": to_label,
+            "is_helike_3p_to_3s_uv_drain": bool(is_triplet_uv_drain),
+            "raw_A_s^-1": raw_a,
+            "current_matrix_decay_rate_s^-1": row.get("rate_s^-1"),
+            "type50_bound_bound_treatment": row.get("type50_bound_bound_treatment"),
+            "ptmp1_proxy": row.get("ptmp1_proxy"),
+            "ptmp2_proxy": row.get("ptmp2_proxy"),
+            "ptmp_sum_proxy": row.get("ptmp_sum_proxy"),
+            "escaped_decay_rate_s^-1": eff,
+            "photoexcitation_rate_s^-1": pump,
+            "decay_rate_multiplier_vs_raw_A": (eff / raw_a) if raw_a > 0 else "",
+            "photoexcitation_rate_multiplier_vs_raw_A": (pump / raw_a) if raw_a > 0 else "",
+            "ucalc_ans1_matrix_lower_to_upper_proxy_s^-1": row.get("ucalc_ans1_matrix_lower_to_upper_proxy_s^-1"),
+            "ucalc_ans2_matrix_upper_to_lower_proxy_s^-1": row.get("ucalc_ans2_matrix_upper_to_lower_proxy_s^-1"),
+            "ucalc_context_status": row.get("ucalc_context_status"),
+            "xstar_source_path": "ucalc.f90 type-50: ans2 radiative decay is A*(ptmp1+ptmp2); ans1 radiative excitation/pumping requires bremsa/flinabs context",
+            "provenance": "v0.3.67_type50_ucalc_bound_bound_rate_audit",
+        })
+    if out:
+        triplet = [r for r in out if r.get("is_helike_3p_to_3s_uv_drain")]
+        out.append({
+            "row_kind": "type50_ucalc_rate_audit_summary",
+            "n_type50_rows": len(out),
+            "n_helike_3p_to_3s_uv_drain_rows": len(triplet),
+            "sum_raw_A_helike_3p_to_3s_s^-1": sum(float(r.get("raw_A_s^-1") or 0.0) for r in triplet),
+            "sum_escaped_decay_helike_3p_to_3s_s^-1": sum(float(r.get("escaped_decay_rate_s^-1") or 0.0) for r in triplet),
+            "sum_photoexcitation_3s_to_3p_proxy_s^-1": sum(float(r.get("photoexcitation_rate_s^-1") or 0.0) for r in triplet),
+            "treatment": triplet[0].get("type50_bound_bound_treatment") if triplet else "",
+            "diagnostic_note": "Default raw-A reproduces v0.3.66. xstar-escape and xstar-escape-photoexcitation are controlled diagnostics until real tau, pescl/pescv, bremsa, and flinabs are ported.",
+            "provenance": "v0.3.67_type50_ucalc_bound_bound_rate_audit",
+        })
+    return out
+
+
+def _type50_ucalc_rate_audit_summary(rows: Sequence[dict]) -> dict:
+    detail = [r for r in rows if str(r.get("row_kind")) == "type50_ucalc_rate_audit"]
+    triplet = [r for r in detail if bool(r.get("is_helike_3p_to_3s_uv_drain"))]
+    return {
+        "n_type50_ucalc_rate_audit_rows": len(rows),
+        "n_type50_detail_rows": len(detail),
+        "n_helike_3p_to_3s_uv_drain_rows": len(triplet),
+        "rows_by_type50_bound_bound_treatment": _counts(detail, "type50_bound_bound_treatment"),
+        "sum_raw_A_helike_3p_to_3s_s^-1": sum(float(r.get("raw_A_s^-1") or 0.0) for r in triplet),
+        "sum_escaped_decay_helike_3p_to_3s_s^-1": sum(float(r.get("escaped_decay_rate_s^-1") or 0.0) for r in triplet),
+        "sum_photoexcitation_3s_to_3p_proxy_s^-1": sum(float(r.get("photoexcitation_rate_s^-1") or 0.0) for r in triplet),
+        "provenance": "v0.3.67_type50_ucalc_bound_bound_rate_audit",
+    }
+
+
 def _full_global_matrix_terms_summary(rows: Sequence[dict]) -> dict:
     matrix_rows = [r for r in rows if maybe_int(r.get("matrix_row_global_index")) is not None and maybe_int(r.get("matrix_col_global_index")) is not None]
     source_rows = [r for r in rows if maybe_int(r.get("matrix_row_global_index")) is not None and maybe_int(r.get("matrix_col_global_index")) is None]
@@ -7943,6 +8182,9 @@ def solve_element_reference(
     type53_milne_refined_scale: object = "1e9,3e9,1e10,3e10,1e11",
     type74_inverse_refined_scale: object = "1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12",
     triplet_coupling_treatment: str = "normal",
+    type50_bound_bound_treatment: str = "raw-A",
+    type50_escape_factor: object = 1.0,
+    type50_photoexcitation_scale: object = 0.0,
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -8125,7 +8367,18 @@ def solve_element_reference(
                             r["injected_matrix_size"] = first_block.get("matrix_size")
                             r["injected_solve_status"] = first_block.get("solve_status")
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
-    global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(transitions, global_index_rows)
+    type50_bound_bound_treatment_norm = _normalise_type50_bound_bound_treatment(type50_bound_bound_treatment)
+    global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(
+        transitions,
+        global_index_rows,
+        type50_bound_bound_treatment=type50_bound_bound_treatment_norm,
+        type50_escape_factor=type50_escape_factor,
+        type50_photoexcitation_scale=type50_photoexcitation_scale,
+    )
+    type50_ucalc_rate_audit_rows = build_type50_ucalc_rate_audit_rows(
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        he_like_stage=he_like_stage,
+    )
     global_superlevel_cascade_matrix_terms = build_global_superlevel_cascade_matrix_terms(
         superlevel_cascade_audit_rows,
         global_index_rows,
@@ -8435,6 +8688,11 @@ def solve_element_reference(
             "global_index_summary": _global_index_summary(global_index_rows),
             "n_global_bound_bound_matrix_term_rows": len(global_bound_bound_matrix_terms),
             "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
+            "type50_bound_bound_treatment": type50_bound_bound_treatment_norm,
+            "type50_escape_factor": type50_escape_factor,
+            "type50_photoexcitation_scale": type50_photoexcitation_scale,
+            "n_type50_ucalc_rate_audit_rows": len(type50_ucalc_rate_audit_rows),
+            "type50_ucalc_rate_audit_summary": _type50_ucalc_rate_audit_summary(type50_ucalc_rate_audit_rows),
             "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
             "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
             "n_global_bound_bound_type71_solve_comparison_rows": len(global_bound_bound_type71_solve_comparison_rows),
@@ -8528,6 +8786,7 @@ def solve_element_reference(
         "line_rows": line_rows,
         "transition_rows": transitions,
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
+        "type50_ucalc_rate_audit": type50_ucalc_rate_audit_rows,
         "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
         "global_superlevel_source_matrix_terms": global_superlevel_source_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
@@ -10277,6 +10536,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     triplet_emissivity_branch_audit_rows = result.get("triplet_emissivity_branch_audit", [])
     calc_emis_triplet_audit_rows = result.get("calc_emis_triplet_audit", [])
     calc_emis_context_audit_rows = result.get("calc_emis_context_audit", [])
+    type50_ucalc_rate_audit_rows = result.get("type50_ucalc_rate_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -10364,6 +10624,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_lines.csv", result.get("line_rows", []))
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
+    write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", type50_ucalc_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)

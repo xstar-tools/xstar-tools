@@ -76,6 +76,9 @@ def main(argv=None):
     p.add_argument("--type53-milne-refined-scale", default="1e9,3e9,1e10,3e10,1e11", help="Refined diagnostic type-53 Milne scale grid around the v0.3.58 good C V region. Used only for xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv.")
     p.add_argument("--type74-inverse-refined-scale", default="1e8,3e8,1e9,3e9,1e10,3e10,1e11,3e11,1e12", help="Refined diagnostic type-74 inverse scale grid around the v0.3.58 good C V region. Used only for xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv.")
     p.add_argument("--triplet-coupling-treatment", default="normal", choices=["normal", "audit-only", "suppress-3p-to-3s-radiative"], help="v0.3.63 diagnostic treatment for suspicious type-50 1s2p 3P_J -> 1s2s 3S1 radiative drains. normal/audit-only leave the primary solve unchanged; suppress-3p-to-3s-radiative removes only those matrix terms from the primary full-global solve and always writes a normal-vs-suppressed comparison CSV.")
+    p.add_argument("--type50-bound-bound-treatment", default="raw-A", choices=["raw-A", "xstar-escape", "xstar-escape-photoexcitation"], help="v0.3.67 diagnostic treatment for type-50 bound-bound population rates. raw-A preserves v0.3.66. xstar-escape multiplies downward A-values by a proxy ptmp1+ptmp2 escape factor. xstar-escape-photoexcitation also adds a lower->upper pumping proxy. Diagnostic until real ucalc tau/pescl/bremsa/flinabs context is ported.")
+    p.add_argument("--type50-escape-factor", default="1", help="Proxy total escape factor ptmp1+ptmp2 used by --type50-bound-bound-treatment xstar-escape modes. Clipped to [0,1]. Default 1 preserves raw-A when the treatment is raw-A.")
+    p.add_argument("--type50-photoexcitation-scale", default="0", help="Proxy lower->upper pumping rate as a multiple of raw A for --type50-bound-bound-treatment xstar-escape-photoexcitation. Default 0.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -119,6 +122,9 @@ def main(argv=None):
             "type53_milne_refined_scale": args.type53_milne_refined_scale,
             "type74_inverse_refined_scale": args.type74_inverse_refined_scale,
             "triplet_coupling_treatment": args.triplet_coupling_treatment,
+            "type50_bound_bound_treatment": args.type50_bound_bound_treatment,
+            "type50_escape_factor": args.type50_escape_factor,
+            "type50_photoexcitation_scale": args.type50_photoexcitation_scale,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -140,6 +146,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", [])
@@ -220,6 +227,9 @@ def main(argv=None):
         type53_milne_refined_scale=args.type53_milne_refined_scale,
         type74_inverse_refined_scale=args.type74_inverse_refined_scale,
         triplet_coupling_treatment=args.triplet_coupling_treatment,
+        type50_bound_bound_treatment=args.type50_bound_bound_treatment,
+        type50_escape_factor=args.type50_escape_factor,
+        type50_photoexcitation_scale=args.type50_photoexcitation_scale,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

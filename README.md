@@ -1,5 +1,16 @@
 ### v0.3.66 calc_emis context writer fix
 
+### v0.3.67 type-50 `ucalc` bound-bound diagnostic
+
+v0.3.67 adds `xstar_like_element_solver_type50_ucalc_rate_audit.csv` and the experimental switch
+`--type50-bound-bound-treatment raw-A|xstar-escape|xstar-escape-photoexcitation`. The default `raw-A`
+preserves earlier behavior. The escape modes are diagnostic proxies for the XSTAR `ucalc.f90` type-50
+path, where downward line rates are attenuated by `ptmp1+ptmp2` escape factors and upward radiative pumping
+requires radiation-field/line-absorption context. Use `--type50-escape-factor` and
+`--type50-photoexcitation-scale` only for controlled sensitivity tests until real optical-depth and bremsa/flinabs
+context is ported.
+
+
 v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_context_audit.csv` is retrieved from the result dictionary before writing. It preserves the v0.3.65 diagnostic semantics and makes no intentional solver, matrix, or physical-rate changes.
 
 # xstar-atomic
