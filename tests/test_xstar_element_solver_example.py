@@ -36,4 +36,5 @@ def test_xstar_like_element_solver_dry_run(tmp_path):
     assert (out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv").exists()
     assert (out / "xstar_like_element_solver_type50_escape_factor_scan.csv").exists()
     assert (out / "xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv").exists()
+    assert (out / "xstar_like_element_solver_phint53_milne_integral_audit.csv").exists()
 

@@ -5364,6 +5364,198 @@ def _type53_cross_section_pairs_from_reals(value: object) -> tuple[List[float], 
         sigma_cm2.append(max(float(sig_mb), 0.0) * 1.0e-18)
     return e_ry, sigma_cm2
 
+def _type53_cross_section_pairs_mb_from_reals(value: object) -> tuple[List[float], List[float]]:
+    """Decode type-53 rdat pairs as (energy above threshold in Ry, sigma in Mb).
+
+    This keeps the cross section in the same units passed to XSTAR's
+    ``milne.f90`` source-code validation path.  The normal phint53 helper above
+    converts the same values to cm^2 because ``phint53.f90`` receives ``stmpp``
+    after ``ucalc.f90`` multiplies the raw Mb value by ``1.d-18``.
+    """
+    vals = _parse_preview_numbers(value)
+    n = len(vals) // 2
+    if n <= 0:
+        return [], []
+    e_ry: List[float] = []
+    sigma_mb: List[float] = []
+    for i in range(n):
+        e = maybe_float(vals[2 * i])
+        sig_mb = maybe_float(vals[2 * i + 1])
+        if e is None or sig_mb is None:
+            continue
+        if not (math.isfinite(e) and math.isfinite(sig_mb)):
+            continue
+        e_ry.append(float(e))
+        sigma_mb.append(max(float(sig_mb), 0.0))
+    return e_ry, sigma_mb
+
+
+def _xstar_milne_intin(x1: float, x2: float, x0: float, temperature_K: float) -> tuple[float, float]:
+    """Python port of XSTAR ``intin.f90`` for the ``milne.f90`` audit."""
+    ryk = 7.2438e15
+    temp = max(float(temperature_K), 1.0e-300)
+    s1 = float(x1) * ryk / temp
+    s2 = float(x2) * ryk / temp
+    s0 = float(x0) * ryk / temp
+    delt = ryk / temp
+    if delt <= 0.0 or not math.isfinite(delt):
+        return 0.0, 0.0
+    if (s1 - s0) < 90.0:
+        try:
+            ri2 = math.exp(s0 - s1) * ((s1 * s1 + 2.0 * s1 + 2.0) - math.exp(s1 - s2) * (s2 * s2 + 2.0 * s2 + 2.0)) / delt / math.sqrt(delt)
+        except OverflowError:
+            ri2 = 0.0
+        if s0 < 1.0e-3 and s2 < 1.0e-3 and s1 < 1.0e-3:
+            ri2 = 0.0
+    else:
+        ri2 = 0.0
+    try:
+        rr = math.exp(s0 - s1) * ((s1 ** 3) - math.exp(s1 - s2) * (s2 ** 3))
+    except OverflowError:
+        rr = 0.0
+    ri3 = (rr / delt / math.sqrt(delt) + 3.0 * ri2) / delt
+    if not math.isfinite(ri2):
+        ri2 = 0.0
+    if not math.isfinite(ri3):
+        ri3 = 0.0
+    return float(ri2), float(ri3)
+
+
+def _evaluate_xstar_milne_f90_integral(*, e_ry: Sequence[float], sigma_mb: Sequence[float], threshold_ry: float, temperature_K: float) -> dict:
+    """Evaluate the source-code ``milne.f90`` integral for type-53 data."""
+    pairs = sorted((float(e), max(float(s), 0.0)) for e, s in zip(e_ry, sigma_mb) if math.isfinite(float(e)) and math.isfinite(float(s)))
+    if len(pairs) < 2:
+        return {"milne_f90_status": "not_evaluated_too_few_cross_section_pairs"}
+    x = [p[0] for p in pairs]
+    y = [p[1] for p in pairs]
+    eth = maybe_float(threshold_ry)
+    if eth is None or not math.isfinite(float(eth)) or float(eth) <= 0.0:
+        return {"milne_f90_status": "not_evaluated_missing_or_bad_threshold_ry"}
+    ry_erg = 2.17896e-11
+    st = (x[0] + float(eth)) * ry_erg
+    total = 0.0
+    prev_total = 1.0
+    crit = 0.01
+    n_intervals = 0
+    stopped_by_convergence = False
+    for i in range(1, len(x)):
+        if abs(total - prev_total) <= crit * abs(total) and i > 1:
+            stopped_by_convergence = True
+            break
+        s1 = (x[i - 1] + float(eth)) * ry_erg
+        s2 = (x[i] + float(eth)) * ry_erg
+        if s2 < s1:
+            return {"milne_f90_status": "not_evaluated_nonmonotonic_energy_grid"}
+        v1 = y[i - 1]
+        v2 = y[i]
+        if v1 != 0.0 or v2 != 0.0:
+            rb = (v2 - v1) / (s2 - s1 + 1.0e-24)
+            ra = v2 - rb * s2
+            ri2, ri3 = _xstar_milne_intin(s1, s2, st, temperature_K)
+            prev_total = total
+            total += ra * ri2 + rb * ri3
+        n_intervals += 1
+    alpha = total * 0.79788 * 40.4153
+    if not math.isfinite(alpha):
+        alpha = 0.0
+    return {
+        "milne_f90_status": "evaluated_source_code_milne_f90_integral",
+        "milne_f90_threshold_ry": float(eth),
+        "milne_f90_n_cross_section_pairs": len(x),
+        "milne_f90_n_intervals_used": n_intervals,
+        "milne_f90_stopping_rule": "converged_abs_delta_lt_0p01_sum" if stopped_by_convergence else "reached_end_of_cross_section_grid",
+        "milne_f90_sum_integral": total,
+        "milne_f90_alpha_cm3_s": max(float(alpha), 0.0),
+        "milne_f90_source_file": "xstarlib/src/milne.f90",
+        "milne_f90_intin_source_file": "xstarlib/src/intin.f90",
+    }
+
+
+def _evaluate_phint53_milne_ans2_integral(
+    *,
+    e_ry: Sequence[float],
+    sigma_cm2: Sequence[float],
+    threshold_eV: float,
+    temperature_K: float,
+    electron_density: float,
+    bound_stat_weight: Optional[float],
+    continuum_stat_weight: Optional[float],
+    ptmp_sum: float = 1.0,
+    n_energy_grid_points: int = 512,
+) -> dict:
+    """Evaluate the recombination-side integral used in ``phint53.f90``.
+
+    This ports the source-code terms contributing to ``rrrt``/``ans2``:
+    ``rnist * bbnurjp * sigma(E) * exp[-(E-Eth)/kT] * 12.56/E``.
+    ``rnist`` is reconstructed from available level weights; exact XSTAR
+    ``ethion``/``emltlv`` arrays remain an explicitly reported approximation.
+    """
+    if not e_ry or not sigma_cm2 or len(e_ry) != len(sigma_cm2):
+        return {"phint53_milne_ans2_status": "not_evaluated_missing_cross_section_pairs"}
+    eth = maybe_float(threshold_eV)
+    if eth is None or not math.isfinite(float(eth)) or float(eth) <= 0.0:
+        return {"phint53_milne_ans2_status": "not_evaluated_missing_or_bad_threshold_eV"}
+    gb = maybe_float(bound_stat_weight)
+    gc = maybe_float(continuum_stat_weight)
+    if gb is None or gc is None or gc <= 0.0:
+        return {"phint53_milne_ans2_status": "not_evaluated_missing_statistical_weights"}
+    pairs = sorted((float(eth) + max(float(e), 0.0) * 13.605692, max(float(s), 0.0)) for e, s in zip(e_ry, sigma_cm2) if math.isfinite(float(e)) and math.isfinite(float(s)))
+    if len(pairs) < 2:
+        return {"phint53_milne_ans2_status": "not_evaluated_too_few_cross_section_pairs"}
+    xs = [p[0] for p in pairs]
+    ys = [p[1] for p in pairs]
+    emin = max(float(eth), xs[0])
+    emax = xs[-1]
+    if emax <= emin:
+        return {"phint53_milne_ans2_status": "not_evaluated_empty_energy_range"}
+    ngrid = max(int(n_energy_grid_points or 0), 16)
+    grid = _log_energy_grid(emin, emax, ngrid)
+    kT_eV = 8.61707e-5 * max(float(temperature_K), 1.0e-300)
+    q2 = 2.07e-16 * max(float(electron_density), 0.0) * (max(float(temperature_K), 1.0e-300) ** -1.5)
+    rs = q2 / max(float(gc), 1.0e-300)
+    rnist0 = float(gb) * rs
+    first_edge_eV = max(0.0, float(e_ry[0]) * 13.605692)
+    seed_exp = math.exp(-min(max(first_edge_eV / max(kT_eV, 1.0e-300), 0.0), 700.0))
+    rnist = rnist0 * seed_exp
+    total = 0.0
+    cooling_eV = 0.0
+    prev_e = grid[0]
+    prev_sig = _interp_piecewise_linear_local(prev_e, xs, ys)
+    prev_exp = math.exp(-min(max((prev_e - float(eth)) / max(kT_eV, 1.0e-300), 0.0), 700.0))
+    prev_bbn = (min(2.0e4, prev_e) ** 3) * 1.571e22 * 2.0
+    prev_y = rnist * prev_bbn * prev_sig * prev_exp * 12.56 / max(prev_e, 1.0e-300) * max(float(ptmp_sum), 0.0)
+    prev_c = prev_y * prev_e
+    used = 0
+    for e in grid[1:]:
+        sig = _interp_piecewise_linear_local(e, xs, ys)
+        expfac = math.exp(-min(max((e - float(eth)) / max(kT_eV, 1.0e-300), 0.0), 700.0))
+        bbn = (min(2.0e4, e) ** 3) * 1.571e22 * 2.0
+        y = rnist * bbn * sig * expfac * 12.56 / max(e, 1.0e-300) * max(float(ptmp_sum), 0.0)
+        c = y * e
+        de = e - prev_e
+        if de > 0.0:
+            total += 0.5 * (prev_y + y) * de
+            cooling_eV += 0.5 * (prev_c + c) * de
+            used += 1
+        prev_e, prev_y, prev_c = e, y, c
+    return {
+        "phint53_milne_ans2_status": "evaluated_source_code_phint53_rrrt_integral_with_reconstructed_rnist",
+        "phint53_milne_threshold_eV": float(eth),
+        "phint53_milne_n_energy_grid_points": ngrid,
+        "phint53_milne_n_intervals_used": used,
+        "phint53_milne_energy_min_eV": emin,
+        "phint53_milne_energy_max_eV": emax,
+        "phint53_milne_q2_saha_prefactor": q2,
+        "phint53_milne_rnist_proxy_before_grid_edge_exp": rnist0,
+        "phint53_milne_first_edge_exp_factor": seed_exp,
+        "phint53_milne_rnist_proxy": rnist,
+        "phint53_milne_ptmp_sum": max(float(ptmp_sum), 0.0),
+        "phint53_milne_ans2_rrrt_s^-1": max(float(total), 0.0),
+        "phint53_milne_rrcl_proxy_eV_s^-1": max(float(cooling_eV), 0.0),
+        "phint53_milne_source_file": "xstarlib/src/phint53.f90",
+        "phint53_milne_missing_context": "exact_ethion_ethtmp_and_emltlv_arrays;real_ptmp1_ptmp2_escape_probabilities;continuum_grid_binning_identical_to_XSTAR",
+    }
+
 
 def _log_energy_grid(emin: float, emax: float, n: int) -> List[float]:
     if n <= 1:
@@ -6498,6 +6690,177 @@ def _global_type74_calt74_matrix_terms_summary(rows: Sequence[dict]) -> dict:
         "total_rate_s^-1": _sum_float(rows, "rate_s^-1"),
     }
 
+
+
+
+def build_phint53_milne_integral_audit_rows(
+    *,
+    type53_phint53_rate_audit_rows: Sequence[dict],
+    type53_milne_inverse_audit_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    he_like_stage: int,
+    temperature: float,
+    electron_density: float,
+) -> List[dict]:
+    """Build a source-code-aligned audit of the type-53 Milne inverse integral.
+
+    v0.3.72 ports the two XSTAR source paths that matter for the recombination
+    side of type-53 records:
+
+    * ``phint53.f90``: the ``rrrt``/``ans2`` integral over the mapped continuum
+      cross section, with a reconstructed ``rnist`` LTE seed.
+    * ``milne.f90`` + ``intin.f90``: the independent Milne-relation check that
+      ``ucalc.f90`` uses to compare ``alphamilne*xnx`` against ``ans2``.
+
+    This function is audit-only.  It does not assemble the new rates into the
+    matrix; it exposes whether the older Python proxy is on the right scale and
+    component balance before any physical treatment is introduced.
+    """
+    by_record_milne = {r.get("record"): r for r in type53_milne_inverse_audit_rows}
+    by_g = {maybe_int(r.get("global_index")): r for r in global_index_rows if maybe_int(r.get("global_index")) is not None}
+    rows: List[dict] = []
+    component_sums: Dict[str, dict] = {}
+
+    def _acc(comp: str, key: str, value: float) -> None:
+        d = component_sums.setdefault(comp, {"component": comp, "n_rows": 0})
+        d[key] = float(d.get(key, 0.0)) + float(value or 0.0)
+
+    for ar in type53_phint53_rate_audit_rows:
+        rec = ar.get("record")
+        full = ar.get("type53_raw_reals_full") or ar.get("raw_reals_preview")
+        e_ry, sigma_cm2 = _type53_cross_section_pairs_from_reals(full)
+        e_ry_mb, sigma_mb = _type53_cross_section_pairs_mb_from_reals(full)
+        bg = maybe_int(ar.get("bound_global_index"))
+        cg = maybe_int(ar.get("continuum_or_parent_global_index"))
+        bound = by_g.get(bg) if bg is not None else None
+        cont = by_g.get(cg) if cg is not None else None
+        comp = _global_index_triplet_component(bound or {}, he_like_stage=he_like_stage) or "other"
+        threshold_eV = None
+        if bound is not None:
+            threshold_eV = maybe_float(bound.get("binding_from_continuum_eV"))
+            if threshold_eV is None or threshold_eV <= 0.0:
+                threshold_eV = maybe_float(bound.get("ionization_potential_eV"))
+        if threshold_eV is None:
+            threshold_eV = maybe_float(ar.get("phint53_threshold_eV"))
+        threshold_ry = (float(threshold_eV) / 13.605692) if threshold_eV is not None and math.isfinite(float(threshold_eV)) else float("nan")
+        gb = maybe_float(bound.get("stat_weight")) if bound else None
+        gc = maybe_float(cont.get("stat_weight")) if cont else None
+        ph_milne = _evaluate_phint53_milne_ans2_integral(
+            e_ry=e_ry,
+            sigma_cm2=sigma_cm2,
+            threshold_eV=float(threshold_eV) if threshold_eV is not None else float("nan"),
+            temperature_K=float(temperature),
+            electron_density=float(electron_density),
+            bound_stat_weight=gb,
+            continuum_stat_weight=gc,
+            ptmp_sum=1.0,
+            n_energy_grid_points=maybe_int(ar.get("phint53_n_energy_grid_points")) or 512,
+        )
+        mf = _evaluate_xstar_milne_f90_integral(
+            e_ry=e_ry_mb,
+            sigma_mb=sigma_mb,
+            threshold_ry=threshold_ry,
+            temperature_K=float(temperature),
+        )
+        alpha = maybe_float(mf.get("milne_f90_alpha_cm3_s")) or 0.0
+        milne_f90_rate = alpha * max(float(electron_density), 0.0)
+        ph_ans2 = maybe_float(ph_milne.get("phint53_milne_ans2_rrrt_s^-1")) or 0.0
+        current_proxy = maybe_float(by_record_milne.get(rec, {}).get("milne_inverse_rate_s^-1")) or 0.0
+        current_unscaled = maybe_float(by_record_milne.get(rec, {}).get("milne_inverse_rate_unscaled_s^-1")) or 0.0
+        fwd = maybe_float(ar.get("photoionization_rate_s^-1")) or 0.0
+        ratio_proxy_ph = (current_proxy / ph_ans2) if ph_ans2 > 0.0 else ""
+        ratio_proxy_mf = (current_proxy / milne_f90_rate) if milne_f90_rate > 0.0 else ""
+        ratio_ph_mf = (ph_ans2 / milne_f90_rate) if milne_f90_rate > 0.0 else ""
+        rows.append({
+            "row_kind": "phint53_milne_integral_audit",
+            "provenance": "v0.3.72_source_code_aligned_phint53_milne_integral_audit",
+            "audit_case": "type53_phint53_milne_integral",
+            "record": rec,
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "bound_level": ar.get("bound_level"),
+            "bound_global_index": bg,
+            "continuum_or_parent_global_index": cg,
+            "bound_label": bound.get("level_label") if bound else "",
+            "continuum_or_parent_label": cont.get("level_label") if cont else "",
+            "triplet_component": comp,
+            "bound_stat_weight_gglo": gb,
+            "continuum_stat_weight_ggup": gc,
+            "statistical_weight_factor_gglo_over_ggup": (gb / gc) if gb is not None and gc not in (None, 0.0) else "",
+            "threshold_eV": threshold_eV,
+            "threshold_ry": threshold_ry,
+            "temperature_K": temperature,
+            "electron_density_cm^-3": electron_density,
+            "current_python_forward_photoionization_ans1_s^-1": fwd,
+            "current_python_proxy_milne_ans2_scaled_s^-1": current_proxy,
+            "current_python_proxy_milne_ans2_unscaled_s^-1": current_unscaled,
+            "source_code_phint53_milne_ans2_rrrt_s^-1": ph_ans2,
+            "source_code_milne_f90_alpha_cm3_s": alpha,
+            "source_code_milne_f90_rate_alpha_ne_s^-1": milne_f90_rate,
+            "current_proxy_over_phint53_ans2": ratio_proxy_ph,
+            "current_proxy_over_milne_f90_alpha_ne": ratio_proxy_mf,
+            "phint53_ans2_over_milne_f90_alpha_ne": ratio_ph_mf,
+            "xstar_source_files": "xstarlib/src/ucalc.f90;xstarlib/src/phint53.f90;xstarlib/src/milne.f90;xstarlib/src/intin.f90",
+            "xstar_ucalc_debug_check": "ucalc compares alphamilne*xnx against phint53 ans2 for type53 when verbose",
+            "matrix_assembly_status": "audit_only_not_assembled",
+            "warning": "source-code integral audit only; exact ethion/ethtmp/emltlv arrays and ptmp escape factors still need full XSTAR context",
+            **ph_milne,
+            **mf,
+        })
+        component_sums.setdefault(comp, {"component": comp, "n_rows": 0})["n_rows"] += 1
+        _acc(comp, "current_python_proxy_milne_ans2_scaled_sum_s^-1", current_proxy)
+        _acc(comp, "source_code_phint53_milne_ans2_sum_s^-1", ph_ans2)
+        _acc(comp, "source_code_milne_f90_alpha_ne_sum_s^-1", milne_f90_rate)
+        _acc(comp, "current_python_forward_photoionization_ans1_sum_s^-1", fwd)
+
+    for comp in sorted(component_sums):
+        d = component_sums[comp]
+        proxy = float(d.get("current_python_proxy_milne_ans2_scaled_sum_s^-1", 0.0))
+        phsum = float(d.get("source_code_phint53_milne_ans2_sum_s^-1", 0.0))
+        mfsum = float(d.get("source_code_milne_f90_alpha_ne_sum_s^-1", 0.0))
+        rows.append({
+            "row_kind": "phint53_milne_integral_audit",
+            "provenance": "v0.3.72_source_code_aligned_phint53_milne_integral_audit",
+            "audit_case": "component_summary",
+            "triplet_component": comp,
+            "n_rows": d.get("n_rows", 0),
+            "current_python_forward_photoionization_ans1_sum_s^-1": d.get("current_python_forward_photoionization_ans1_sum_s^-1", 0.0),
+            "current_python_proxy_milne_ans2_scaled_sum_s^-1": proxy,
+            "source_code_phint53_milne_ans2_sum_s^-1": phsum,
+            "source_code_milne_f90_alpha_ne_sum_s^-1": mfsum,
+            "proxy_over_phint53_ans2_sum": (proxy / phsum) if phsum > 0.0 else "",
+            "proxy_over_milne_f90_alpha_ne_sum": (proxy / mfsum) if mfsum > 0.0 else "",
+            "phint53_ans2_over_milne_f90_alpha_ne_sum": (phsum / mfsum) if mfsum > 0.0 else "",
+            "diagnostic_interpretation": "component-level source-code Milne closure summary; use f/r sums before changing matrix rates",
+        })
+
+    rows.append({
+        "row_kind": "phint53_milne_integral_audit",
+        "provenance": "v0.3.72_source_code_aligned_phint53_milne_integral_audit",
+        "audit_case": "audit_summary",
+        "n_type53_rows": len(type53_phint53_rate_audit_rows),
+        "n_total_rows_including_summaries": len(rows) + 1,
+        "purpose": "port/source-audit real phint53 Milne inverse integral terms before any treatment or scan",
+        "main_hypothesis": "remaining_f_over_r_mismatch_is_due_to_type53_Milne_closure_and_adjacent_ion_normalization_not_type50_escape_alone",
+        "warning": "audit_only; no solver or matrix behavior is intentionally changed",
+    })
+    return rows
+
+
+def _phint53_milne_integral_audit_summary(rows: Sequence[dict]) -> dict:
+    component_rows = [r for r in rows if str(r.get("audit_case")) == "component_summary"]
+    return {
+        "n_phint53_milne_integral_audit_rows": len(rows),
+        "audit_case_counts": _counts(rows, "audit_case"),
+        "triplet_component_counts": _counts(rows, "triplet_component"),
+        "total_current_python_proxy_milne_ans2_scaled_s^-1": _sum_float(rows, "current_python_proxy_milne_ans2_scaled_s^-1"),
+        "total_source_code_phint53_milne_ans2_s^-1": _sum_float(rows, "source_code_phint53_milne_ans2_rrrt_s^-1"),
+        "total_source_code_milne_f90_alpha_ne_s^-1": _sum_float(rows, "source_code_milne_f90_rate_alpha_ne_s^-1"),
+        "component_summaries": component_rows,
+        "warning": "v0.3.72 audit only; source-code Milne integral terms are not assembled into the solver.",
+    }
 
 
 def build_type53_type74_ucalc_closure_audit_rows(
@@ -8889,6 +9252,14 @@ def solve_element_reference(
         temperature=temperature,
         electron_density=electron_density,
     )
+    phint53_milne_integral_audit_rows = build_phint53_milne_integral_audit_rows(
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type53_milne_inverse_audit_rows=type53_milne_inverse_audit_rows,
+        global_index_rows=global_index_rows,
+        he_like_stage=he_like_stage,
+        temperature=temperature,
+        electron_density=electron_density,
+    )
     radiation_normalization_audit_rows = build_radiation_normalization_audit_rows(
         radiation_context_rows=radiation_context_rows,
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
@@ -9140,6 +9511,8 @@ def solve_element_reference(
             "global_type74_calt74_matrix_terms_summary": _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms),
             "n_type53_type74_ucalc_closure_audit_rows": len(type53_type74_ucalc_closure_audit_rows),
             "type53_type74_ucalc_closure_audit_summary": _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows),
+            "n_phint53_milne_integral_audit_rows": len(phint53_milne_integral_audit_rows),
+            "phint53_milne_integral_audit_summary": _phint53_milne_integral_audit_summary(phint53_milne_integral_audit_rows),
             "n_inverse_recombination_scale_scan_rows": len(inverse_recombination_scale_scan_rows),
             "inverse_recombination_scale_scan_summary": _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows),
             "n_inverse_recombination_refined_scale_scan_rows": len(inverse_recombination_refined_scale_scan_rows),
@@ -9218,6 +9591,7 @@ def solve_element_reference(
         "type74_calt74_rate_audit": type74_calt74_rate_audit_rows,
         "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
         "type53_type74_ucalc_closure_audit": type53_type74_ucalc_closure_audit_rows,
+        "phint53_milne_integral_audit": phint53_milne_integral_audit_rows,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,
         "inverse_recombination_refined_scale_scan": inverse_recombination_refined_scale_scan_rows,
         "intercombination_feed_audit": intercombination_feed_audit_rows,
@@ -10938,6 +11312,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type74_calt74_rate_audit_rows = result.get("type74_calt74_rate_audit", [])
     global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
     type53_type74_ucalc_closure_audit_rows = result.get("type53_type74_ucalc_closure_audit", [])
+    phint53_milne_integral_audit_rows = result.get("phint53_milne_integral_audit", [])
     inverse_recombination_scale_scan_rows = result.get("inverse_recombination_scale_scan", [])
     inverse_recombination_refined_scale_scan_rows = result.get("inverse_recombination_refined_scale_scan", [])
     radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
@@ -10989,6 +11364,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_type74_calt74_matrix_terms_summary"] = _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms)
         if type53_type74_ucalc_closure_audit_rows:
             result["summary"]["type53_type74_ucalc_closure_audit_summary"] = _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows)
+        if phint53_milne_integral_audit_rows:
+            result["summary"]["phint53_milne_integral_audit_summary"] = _phint53_milne_integral_audit_summary(phint53_milne_integral_audit_rows)
         if inverse_recombination_scale_scan_rows:
             result["summary"]["inverse_recombination_scale_scan_summary"] = _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows)
         if bremsa_context_rows:
@@ -11062,6 +11439,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type74_calt74_rate_audit.csv", type74_calt74_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
     write_csv(out / "xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv", type53_type74_ucalc_closure_audit_rows)
+    write_csv(out / "xstar_like_element_solver_phint53_milne_integral_audit.csv", phint53_milne_integral_audit_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", inverse_recombination_refined_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_intercombination_feed_audit.csv", result.get("intercombination_feed_audit", []))
