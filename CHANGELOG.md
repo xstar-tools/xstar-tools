@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.69 - 2026-05-05
+
+- Bug-fix release for v0.3.68.
+- Fixes the v0.3.67 type-50 `xstar-escape` treatment so the assembled global bound-bound matrix uses the effective escaped rate in `signed_rate_s^-1`, not only in the audit `rate_s^-1` column.
+- The affected rows are the off-diagonal gain and diagonal loss entries created by `build_global_bound_bound_matrix_terms(...)`; they now use `effective_rate` and `-effective_rate`.
+- The default `raw-A` treatment remains numerically unchanged.
+- No intentional changes to type-50 audit semantics, solver normalization, suppression logic, physical rate decoding, or `calc_emis` audits.
+
 ## v0.3.68 - 2026-05-05
 
 - Bug-fix release for v0.3.67.

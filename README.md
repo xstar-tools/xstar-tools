@@ -15,6 +15,10 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
+### v0.3.69 type-50 escaped-rate matrix bug fix
+
+v0.3.69 fixes the experimental `--type50-bound-bound-treatment xstar-escape` path so the effective escaped rate is used in the actual assembled matrix `signed_rate_s^-1` entries, not only reported in the audit columns. The default `raw-A` behavior is unchanged.
+
 ### v0.3.65 calc_emis_ion runtime-context audit
 
 The element solver now writes `xstar_like_element_solver_calc_emis_context_audit.csv`, a diagnostic companion to the v0.3.64 transparent `calc_emis_ion` triplet audit.  The new context audit keeps the solver unchanged, but reports the available matrix-population context for each He-like f/i/r line, including source-population-weighted feed (`alpha`), loss (`gamma`), dominant feed/loss records, and the line-accounting multipliers that would be required to match the XSTAR triplet target while holding solved populations fixed.  This isolates whether the remaining C V intercombination deficit could plausibly be fixed by `calc_emis_ion` escape/net-emissivity/strong-line accounting or whether the population balance must change.
