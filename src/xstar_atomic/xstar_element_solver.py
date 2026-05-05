@@ -2784,6 +2784,261 @@ def _global_index_summary(rows: Sequence[dict]) -> dict:
     }
 
 
+def build_xstar_matrix_topology_audit_rows(
+    global_index_rows: Sequence[dict],
+    *,
+    stages: Optional[Sequence[int]] = None,
+) -> List[dict]:
+    """Audit current explicit global-index topology against XSTAR element indexing.
+
+    The visible XSTAR ``calc_hmc_element.f90`` element assembly advances the
+    matrix pointer by ``nlev-1`` for each ion.  In that topology the continuum
+    level of an ion is not an independent extra population; it represents the
+    next ion's ground state.  The same routine also assigns the ion ground to
+    one ``nsup`` group and the spectroscopic excited levels ``2..nlev-1`` to a
+    shared excited superlevel before the Lucy solve.
+
+    This audit is intentionally topology-only.  It does not alter the current
+    Python global index, matrix assembly, or solver.  It records which current
+    rows would be kept, aliased, or condensed by the XSTAR-style topology.
+    """
+    rows: List[dict] = []
+    if not global_index_rows:
+        return [{
+            "audit_kind": "xstar_matrix_topology_summary",
+            "status": "no_global_index_rows",
+            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+        }]
+
+    by_stage: Dict[int, List[dict]] = {}
+    by_stage_level: Dict[tuple[int, int], dict] = {}
+    by_global: Dict[int, dict] = {}
+    for r in global_index_rows:
+        stage = maybe_int(r.get("ion_stage"))
+        gi = maybe_int(r.get("global_index"))
+        li = maybe_int(r.get("level_index"))
+        if gi is not None:
+            by_global[int(gi)] = r
+        if stage is None:
+            continue
+        by_stage.setdefault(int(stage), []).append(r)
+        if li is not None:
+            by_stage_level[(int(stage), int(li))] = r
+
+    stage_order = [int(s) for s in (stages or sorted(by_stage, reverse=True)) if int(s) in by_stage]
+    if not stage_order:
+        stage_order = sorted(by_stage, reverse=True)
+
+    # Conceptual XSTAR ipmat scaffold: each ion contributes nlev-1 new slots.
+    # The final continuum level is marked as an alias to the next ion ground
+    # when that parent ground is present in the current adjacent-stage model.
+    ipmat_start_by_stage: Dict[int, int] = {}
+    xstar_slot_by_stage_level: Dict[tuple[int, int], int] = {}
+    ipmat = 0
+    stage_counts: Dict[int, dict] = {}
+    for stage in stage_order:
+        stage_rows = list(by_stage.get(stage, []))
+        real_levels = [r for r in stage_rows if maybe_int(r.get("level_index")) is not None and not bool(r.get("is_parent_continuum_placeholder"))]
+        level_indices = sorted({int(maybe_int(r.get("level_index"))) for r in real_levels if maybe_int(r.get("level_index")) is not None})
+        nlev = max(level_indices) if level_indices else 0
+        ipmat_start_by_stage[stage] = ipmat
+        for li in level_indices:
+            if nlev > 0 and li == nlev and (stage + 1, 1) in by_stage_level:
+                # Continuum of this ion represents the next ion ground.
+                parent = by_stage_level.get((stage + 1, 1))
+                parent_g = maybe_int(parent.get("global_index")) if parent else None
+                # Use the current parent global index for audit readability;
+                # XSTAR's condensed slot number is listed separately.
+                xstar_slot_by_stage_level[(stage, li)] = int(parent_g) if parent_g is not None else ipmat + max(0, li - 1)
+            else:
+                xstar_slot_by_stage_level[(stage, li)] = ipmat + max(0, li - 1)
+        stage_counts[stage] = {
+            "n_current_rows": len(stage_rows),
+            "n_real_level_rows": len(real_levels),
+            "nlev_inferred_max_level_index": nlev,
+            "xstar_ipmat_start": ipmat,
+            "xstar_ipmat_increment_nlev_minus_1": max(0, nlev - 1),
+            "has_parent_stage_ground_for_continuum_alias": bool((stage + 1, 1) in by_stage_level),
+        }
+        ipmat += max(0, nlev - 1)
+
+    group_members: Dict[str, List[int]] = {}
+    def _add_group(label: str, gi: Optional[int]) -> None:
+        if gi is None:
+            return
+        group_members.setdefault(label, []).append(int(gi))
+
+    # First pass: assign XSTAR group labels.
+    per_row_info: Dict[int, dict] = {}
+    for r in sorted(global_index_rows, key=lambda rr: maybe_int(rr.get("global_index")) if maybe_int(rr.get("global_index")) is not None else 10**9):
+        gi = maybe_int(r.get("global_index"))
+        stage = maybe_int(r.get("ion_stage"))
+        li = maybe_int(r.get("level_index"))
+        if gi is None or stage is None:
+            continue
+        stage = int(stage)
+        li_val = int(li) if li is not None else None
+        nlev = int(stage_counts.get(stage, {}).get("nlev_inferred_max_level_index") or 0)
+        parent_stage = maybe_int(r.get("parent_ion_stage"))
+        parent_row = by_stage_level.get((int(parent_stage), 1)) if parent_stage is not None else None
+        parent_g = maybe_int(parent_row.get("global_index")) if parent_row else None
+        parent_label = parent_row.get("level_label") if parent_row else ""
+        is_cont = bool(r.get("is_continuum")) or str(r.get("level_kind") or "").lower() == "continuum"
+        is_placeholder = bool(r.get("is_parent_continuum_placeholder"))
+        if is_placeholder:
+            role = "python_parent_continuum_placeholder_not_xstar_independent_row"
+            group = f"stage{parent_stage}:ground_alias_from_placeholder" if parent_stage is not None else "placeholder_unmapped"
+            alias_g = parent_g
+            condensed = True
+            kept = False
+        elif is_cont and parent_g is not None:
+            role = "continuum_level_alias_to_parent_ion_ground"
+            group = f"stage{parent_stage}:ground"
+            alias_g = parent_g
+            condensed = True
+            kept = False
+        elif li_val == 1:
+            role = "ion_ground_independent_nsup_group"
+            group = f"stage{stage}:ground"
+            alias_g = gi
+            condensed = False
+            kept = True
+        elif li_val is not None and nlev > 0 and li_val < nlev:
+            role = "excited_spectroscopic_level_in_shared_nsup_group"
+            group = f"stage{stage}:excited_levels_2_to_nlev_minus_1"
+            alias_g = ""
+            condensed = True
+            kept = False
+        elif li_val is not None:
+            # Last level without an adjacent parent available, or an unusual row.
+            role = "last_level_without_parent_alias_or_unmapped"
+            group = f"stage{stage}:last_or_unmapped"
+            alias_g = gi
+            condensed = False
+            kept = True
+        else:
+            role = "unmapped_noninteger_level_index"
+            group = f"stage{stage}:unmapped"
+            alias_g = ""
+            condensed = False
+            kept = True
+        _add_group(group, int(gi))
+        per_row_info[int(gi)] = {
+            "xstar_matrix_role": role,
+            "xstar_nsup_group_label": group,
+            "xstar_alias_current_global_index": alias_g,
+            "xstar_would_keep_as_independent_population_row": kept,
+            "xstar_would_condense_or_alias_current_row": condensed,
+            "parent_ground_current_global_index": parent_g if parent_g is not None else "",
+            "parent_ground_label": parent_label,
+            "xstar_conceptual_slot_or_alias": xstar_slot_by_stage_level.get((stage, li_val), "") if li_val is not None else "",
+        }
+
+    for r in sorted(global_index_rows, key=lambda rr: maybe_int(rr.get("global_index")) if maybe_int(rr.get("global_index")) is not None else 10**9):
+        gi = maybe_int(r.get("global_index"))
+        stage = maybe_int(r.get("ion_stage"))
+        li = maybe_int(r.get("level_index"))
+        if gi is None:
+            continue
+        info = per_row_info.get(int(gi), {})
+        group = str(info.get("xstar_nsup_group_label") or "")
+        members = group_members.get(group, [])
+        rows.append({
+            "audit_kind": "xstar_matrix_topology_row",
+            "current_global_index": int(gi),
+            "element": r.get("element"),
+            "ion_stage": stage if stage is not None else "",
+            "ion_roman": r.get("ion_roman"),
+            "level_index": li if li is not None else "",
+            "level_kind": r.get("level_kind"),
+            "level_label": r.get("level_label"),
+            "configuration": r.get("configuration"),
+            "is_continuum": bool(r.get("is_continuum")),
+            "continuum_represents_parent": bool(r.get("continuum_represents_parent")),
+            "parent_ion_stage": r.get("parent_ion_stage"),
+            "parent_level_index": r.get("parent_level_index"),
+            "parent_ground_current_global_index": info.get("parent_ground_current_global_index", ""),
+            "parent_ground_label": info.get("parent_ground_label", ""),
+            "current_python_lucy_condensed_key": f"({stage},{r.get('level_kind')},{gi})",
+            "current_python_explicit_row_status": "independent_current_global_row",
+            "xstar_source_ipmat_rule": "calc_hmc_element.f90 advances ipmat by nlev-1, so ion continuum aliases the next ion ground",
+            "xstar_source_nsup_rule": "calc_hmc_element.f90 assigns level 1 to one nsup group and levels 2..nlev-1 to a shared excited nsup group",
+            "xstar_matrix_role": info.get("xstar_matrix_role", ""),
+            "xstar_conceptual_slot_or_alias": info.get("xstar_conceptual_slot_or_alias", ""),
+            "xstar_alias_current_global_index": info.get("xstar_alias_current_global_index", ""),
+            "xstar_nsup_group_label": group,
+            "xstar_nsup_group_size_current_rows": len(members),
+            "xstar_nsup_group_member_global_indices": ";".join(str(x) for x in members),
+            "xstar_would_keep_as_independent_population_row": bool(info.get("xstar_would_keep_as_independent_population_row", False)),
+            "xstar_would_condense_or_alias_current_row": bool(info.get("xstar_would_condense_or_alias_current_row", False)),
+            "diagnostic_consequence": "current_explicit_topology_may_overresolve_excited_other_levels_and_duplicate_parent_continuum" if bool(info.get("xstar_would_condense_or_alias_current_row", False)) else "current_row_matches_or_approximates_an_xstar_independent_group",
+            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+        })
+
+    for stage in stage_order:
+        stage_rows = [r for r in global_index_rows if maybe_int(r.get("ion_stage")) == stage]
+        c = stage_counts.get(stage, {})
+        n_condense = sum(1 for r in stage_rows if per_row_info.get(int(maybe_int(r.get("global_index")) or -1), {}).get("xstar_would_condense_or_alias_current_row"))
+        n_keep = sum(1 for r in stage_rows if per_row_info.get(int(maybe_int(r.get("global_index")) or -1), {}).get("xstar_would_keep_as_independent_population_row"))
+        n_excited = sum(1 for r in stage_rows if per_row_info.get(int(maybe_int(r.get("global_index")) or -1), {}).get("xstar_matrix_role") == "excited_spectroscopic_level_in_shared_nsup_group")
+        n_alias = sum(1 for r in stage_rows if "alias" in str(per_row_info.get(int(maybe_int(r.get("global_index")) or -1), {}).get("xstar_matrix_role")))
+        rows.append({
+            "audit_kind": "xstar_matrix_topology_stage_summary",
+            "ion_stage": stage,
+            "ion_roman": roman(stage),
+            "n_current_global_rows_for_stage": len(stage_rows),
+            "n_real_level_rows": c.get("n_real_level_rows", ""),
+            "nlev_inferred_max_level_index": c.get("nlev_inferred_max_level_index", ""),
+            "xstar_ipmat_start": c.get("xstar_ipmat_start", ""),
+            "xstar_ipmat_increment_nlev_minus_1": c.get("xstar_ipmat_increment_nlev_minus_1", ""),
+            "n_rows_xstar_would_keep_independent": n_keep,
+            "n_rows_xstar_would_condense_or_alias": n_condense,
+            "n_excited_rows_in_shared_nsup_group": n_excited,
+            "n_continuum_or_placeholder_alias_rows": n_alias,
+            "has_parent_stage_ground_for_continuum_alias": c.get("has_parent_stage_ground_for_continuum_alias", ""),
+            "diagnostic_note": "XSTAR topology has far fewer independent groups than the current explicit Python global-index rows for this ion.",
+            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+        })
+
+    total_current = len(global_index_rows)
+    total_keep = sum(1 for info in per_row_info.values() if info.get("xstar_would_keep_as_independent_population_row"))
+    total_condense = sum(1 for info in per_row_info.values() if info.get("xstar_would_condense_or_alias_current_row"))
+    excited_groups = sorted({str(info.get("xstar_nsup_group_label")) for info in per_row_info.values() if "excited_levels" in str(info.get("xstar_nsup_group_label"))})
+    alias_rows = [gi for gi, info in per_row_info.items() if "alias" in str(info.get("xstar_matrix_role"))]
+    rows.append({
+        "audit_kind": "xstar_matrix_topology_summary",
+        "n_current_global_index_rows": total_current,
+        "n_current_rows_xstar_would_keep_independent": total_keep,
+        "n_current_rows_xstar_would_condense_or_alias": total_condense,
+        "n_xstar_excited_nsup_groups_detected": len(excited_groups),
+        "xstar_excited_nsup_group_labels": ";".join(excited_groups),
+        "n_continuum_alias_or_placeholder_rows_detected": len(alias_rows),
+        "continuum_alias_or_placeholder_global_indices": ";".join(str(x) for x in sorted(alias_rows)),
+        "primary_hypothesis": "remaining_f_over_r_mismatch_may_come_from_current_explicit_topology_overresolving_excited_other_levels_and_not_aliasing_continuum_to_parent_ground_like_xstar",
+        "xstar_source_reference": "calc_hmc_element.f90 ipmat=ipmat+nlev-1 and nsup(mm+ipmat2)=nsp for mm=2..nlev-1",
+        "behavior_change": "audit_only_no_solver_or_matrix_change",
+        "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+    })
+    return rows
+
+
+def _xstar_matrix_topology_audit_summary(rows: Sequence[dict]) -> dict:
+    summary = next((r for r in rows if r.get("audit_kind") == "xstar_matrix_topology_summary"), {})
+    stage_rows = [r for r in rows if r.get("audit_kind") == "xstar_matrix_topology_stage_summary"]
+    return {
+        "n_xstar_matrix_topology_audit_rows": len(rows),
+        "n_topology_row_records": sum(1 for r in rows if r.get("audit_kind") == "xstar_matrix_topology_row"),
+        "n_stage_summary_rows": len(stage_rows),
+        "n_current_global_index_rows": summary.get("n_current_global_index_rows", ""),
+        "n_current_rows_xstar_would_keep_independent": summary.get("n_current_rows_xstar_would_keep_independent", ""),
+        "n_current_rows_xstar_would_condense_or_alias": summary.get("n_current_rows_xstar_would_condense_or_alias", ""),
+        "n_xstar_excited_nsup_groups_detected": summary.get("n_xstar_excited_nsup_groups_detected", ""),
+        "n_continuum_alias_or_placeholder_rows_detected": summary.get("n_continuum_alias_or_placeholder_rows_detected", ""),
+        "primary_hypothesis": summary.get("primary_hypothesis", ""),
+        "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+    }
+
+
 def _global_index_lookup(rows: Sequence[dict]) -> Dict[tuple[int, int], dict]:
     """Return ``(ion_stage, level_index) -> global-index row`` for real levels.
 
@@ -9458,6 +9713,10 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    xstar_matrix_topology_audit_rows = build_xstar_matrix_topology_audit_rows(
+        global_index_rows=global_index_rows,
+        stages=stages,
+    )
     selected_lines = [r for r in line_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
     return {
         "summary": {
@@ -9474,6 +9733,8 @@ def solve_element_reference(
             "n_transition_rows": len(transitions),
             "n_global_index_rows": len(global_index_rows),
             "global_index_summary": _global_index_summary(global_index_rows),
+            "n_xstar_matrix_topology_audit_rows": len(xstar_matrix_topology_audit_rows),
+            "xstar_matrix_topology_audit_summary": _xstar_matrix_topology_audit_summary(xstar_matrix_topology_audit_rows),
             "n_global_bound_bound_matrix_term_rows": len(global_bound_bound_matrix_terms),
             "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
             "type50_bound_bound_treatment": type50_bound_bound_treatment_norm,
@@ -9576,6 +9837,7 @@ def solve_element_reference(
         },
         "ion_blocks": ion_blocks,
         "global_index": global_index_rows,
+        "xstar_matrix_topology_audit": xstar_matrix_topology_audit_rows,
         "coupling_candidates": coupling,
         "populations": populations,
         "line_rows": line_rows,
@@ -11326,6 +11588,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
     type53_type74_ucalc_closure_audit_rows = result.get("type53_type74_ucalc_closure_audit", [])
     phint53_milne_integral_audit_rows = result.get("phint53_milne_integral_audit", [])
+    xstar_matrix_topology_audit_rows = result.get("xstar_matrix_topology_audit", [])
     inverse_recombination_scale_scan_rows = result.get("inverse_recombination_scale_scan", [])
     inverse_recombination_refined_scale_scan_rows = result.get("inverse_recombination_refined_scale_scan", [])
     radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
@@ -11379,6 +11642,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type53_type74_ucalc_closure_audit_summary"] = _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows)
         if phint53_milne_integral_audit_rows:
             result["summary"]["phint53_milne_integral_audit_summary"] = _phint53_milne_integral_audit_summary(phint53_milne_integral_audit_rows)
+        if xstar_matrix_topology_audit_rows:
+            result["summary"]["xstar_matrix_topology_audit_summary"] = _xstar_matrix_topology_audit_summary(xstar_matrix_topology_audit_rows)
         if inverse_recombination_scale_scan_rows:
             result["summary"]["inverse_recombination_scale_scan_summary"] = _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows)
         if bremsa_context_rows:
@@ -11415,6 +11680,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_superlevel_source_matrix_terms_summary"] = _global_superlevel_source_matrix_terms_summary(global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
+    write_csv(out / "xstar_like_element_solver_xstar_matrix_topology_audit.csv", xstar_matrix_topology_audit_rows)
     write_csv(out / "xstar_like_element_solver_coupling_candidates.csv", result.get("coupling_candidates", []))
     write_csv(out / "xstar_like_element_solver_adjacent_coupling_terms.csv", result.get("adjacent_coupling_terms", []))
     write_csv(out / "xstar_like_element_solver_ucalc_adjacent_audit.csv", audit_rows)

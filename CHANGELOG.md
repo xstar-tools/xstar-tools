@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.75 - 2026-05-05
+
+- Added `xstar_like_element_solver_xstar_matrix_topology_audit.csv`, an audit-only comparison between the current explicit Python global-index topology and the visible XSTAR `calc_hmc_element.f90` element matrix topology.
+- The audit records the XSTAR `ipmat = ipmat + nlev - 1` continuum-alias rule, parent-ground alias candidates, and the XSTAR `nsup` grouping rule where level 1 is an independent ground group and levels 2..nlev-1 are grouped into one excited-state superlevel.
+- Added summary columns showing how many current rows XSTAR would keep as independent rows versus condense or alias.
+- No intentional changes to solver behavior, matrix assembly, type-50 treatment, recombination rates, triplet coupling, suppression behavior, or physical-rate behavior.
+
 ## v0.3.74 - 2026-05-05
 
 - Bug-fix release for the v0.3.73 Milne-integral audit handoff.

@@ -31,6 +31,7 @@ def test_xstar_like_element_solver_dry_run(tmp_path):
     assert (out / "xstar_like_element_solver_superlevel_source_audit.csv").exists()
     assert (out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv").exists()
     assert (out / "xstar_like_element_solver_global_bound_bound_type71_solve_comparison.csv").exists()
+    assert (out / "xstar_like_element_solver_xstar_matrix_topology_audit.csv").exists()
     assert (out / "xstar_like_element_solver_calc_emis_triplet_audit.csv").exists()
     assert (out / "xstar_like_element_solver_calc_emis_context_audit.csv").exists()
     assert (out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv").exists()

@@ -148,6 +148,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_lines.csv", [])
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", [])
+        write_csv(out / "xstar_like_element_solver_xstar_matrix_topology_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", [])

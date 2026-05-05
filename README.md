@@ -15,6 +15,8 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
+Current development baseline: v0.3.75 adds an audit-only XSTAR element matrix topology comparison (`xstar_like_element_solver_xstar_matrix_topology_audit.csv`) for continuum aliasing and `nsup` superlevel grouping.
+
 ### v0.3.71 type-53/type-74 ucalc closure audit
 
 v0.3.71 adds `xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv`, a diagnostic-only audit intended to trace the remaining C V f/r mismatch back to XSTAR source-code semantics rather than another empirical scale scan.  The audit compares the current Python type-53/type-74 proxy closure with the relevant `ucalc.f90` branches: type 53 `phint53` forward photoionization and pending Milne inverse recombination, plus type 74 `calt74` forward delta-photoionization and inverse DR alpha after the XSTAR `gglo/ggup` correction.  It also writes component summaries for f/i/r/other inverse-source proxies.  No solver or physical-rate behavior is changed.
