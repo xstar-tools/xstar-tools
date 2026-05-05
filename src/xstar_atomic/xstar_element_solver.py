@@ -6499,6 +6499,217 @@ def _global_type74_calt74_matrix_terms_summary(rows: Sequence[dict]) -> dict:
     }
 
 
+
+def build_type53_type74_ucalc_closure_audit_rows(
+    *,
+    type53_phint53_rate_audit_rows: Sequence[dict],
+    type53_milne_inverse_audit_rows: Sequence[dict],
+    type74_calt74_rate_audit_rows: Sequence[dict],
+    type74_inverse_recombination_audit_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    he_like_stage: int,
+    temperature: float,
+    electron_density: float,
+) -> List[dict]:
+    """Audit source-code-aligned type-53/type-74 recombination closure.
+
+    This v0.3.71 audit is intentionally read-only.  It puts the current Python
+    proxy rates next to the XSTAR ``ucalc.f90`` semantics that still need to be
+    ported before the C V f/r balance can be treated as physical:
+
+    * type 53: ``phint53`` returns a forward photoionization ``ans1`` and a
+      Milne/recombination ``ans2`` using LTE/Saha/statistical context.
+    * type 74: ``calt74`` returns a forward delta-photoionization rate and an
+      inverse DR alpha that XSTAR multiplies by ``gglo/ggup`` before matrix use.
+
+    No row from this audit is assembled into the solver matrix.
+    """
+    meta = _global_index_metadata(global_index_rows)
+    by_record_milne: Dict[object, dict] = {r.get("record"): r for r in type53_milne_inverse_audit_rows}
+    by_record_t74_proxy: Dict[object, dict] = {r.get("record"): r for r in type74_inverse_recombination_audit_rows}
+    kT_eV = 8.617333262e-5 * max(float(temperature), 1.0e-300)
+    rows: List[dict] = []
+
+    component_sums: Dict[str, dict] = {}
+    def _acc(comp: str, key: str, value: object) -> None:
+        c = str(comp or "other")
+        d = component_sums.setdefault(c, {"component": c, "n_rows": 0})
+        d[key] = float(d.get(key, 0.0)) + float(maybe_float(value) or 0.0)
+
+    # Type-53 phint53/Milne closure rows.
+    for ar in type53_phint53_rate_audit_rows:
+        bg = maybe_int(ar.get("bound_global_index"))
+        cg = maybe_int(ar.get("continuum_or_parent_global_index"))
+        bound = meta.get(bg, {}) if bg is not None else {}
+        cont = meta.get(cg, {}) if cg is not None else {}
+        comp = _global_index_triplet_component(bound, he_like_stage=he_like_stage) or "other"
+        milne = by_record_milne.get(ar.get("record"), {})
+        gb = maybe_float(bound.get("stat_weight") or bound.get("statistical_weight_g"))
+        gc = maybe_float(cont.get("stat_weight") or cont.get("statistical_weight_g"))
+        stat = (gb / gc) if (gb is not None and gc not in (None, 0.0)) else ""
+        bind_eV = maybe_float(bound.get("binding_from_continuum_eV") or bound.get("ionization_potential_eV"))
+        # XSTAR ucalc type-53 builds a Saha/LTE-like seed using q2=2.07e-16*n_e*T^-1.5
+        # and an exponential energy factor.  We report the diagnostic ingredients;
+        # the real emltlv/rnist handoff still requires the exact XSTAR level arrays.
+        q2 = 2.07e-16 * float(electron_density) * (max(float(temperature), 1.0e-300) ** -1.5)
+        boltz = ""
+        saha_seed = ""
+        if bind_eV is not None and math.isfinite(bind_eV):
+            x = min(max(float(bind_eV) / max(kT_eV, 1.0e-300), -700.0), 700.0)
+            boltz = math.exp(x)
+            if isinstance(stat, float):
+                saha_seed = q2 * stat * boltz
+        photo = maybe_float(ar.get("photoionization_rate_s^-1")) or 0.0
+        inv_proxy = maybe_float(milne.get("milne_inverse_rate_s^-1")) or 0.0
+        inv_unscaled = maybe_float(milne.get("milne_inverse_rate_unscaled_s^-1")) or 0.0
+        ratio_inv_photo = (inv_proxy / photo) if photo > 0.0 else ""
+        rows.append({
+            "row_kind": "type53_type74_ucalc_closure_audit",
+            "audit_case": "type53_phint53_milne_closure",
+            "provenance": "v0.3.71_source_code_aligned_type53_type74_closure_audit",
+            "ucalc_source_file": "xstarlib/src/ucalc.f90",
+            "xstar_source_routine": "phint53",
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "destination_or_bound_level": ar.get("bound_level"),
+            "destination_or_bound_global_index": bg,
+            "parent_continuum_global_index": cg,
+            "destination_or_bound_label": bound.get("level_label"),
+            "parent_continuum_label": cont.get("level_label"),
+            "triplet_component": comp,
+            "gglo_destination_or_bound": gb,
+            "ggup_parent_or_continuum": gc,
+            "statistical_weight_factor_gglo_over_ggup": stat,
+            "binding_from_continuum_eV": bind_eV,
+            "temperature_K": temperature,
+            "electron_density_cm^-3": electron_density,
+            "kT_eV": kT_eV,
+            "xstar_q2_saha_prefactor_proxy": q2,
+            "xstar_boltzmann_factor_proxy": boltz,
+            "xstar_rnist_lte_seed_proxy": saha_seed,
+            "xstar_ucalc_ans1_role": "photoionization_bound_to_parent_continuum_from_phint53",
+            "xstar_ucalc_ans2_role": "milne_recombination_parent_continuum_to_bound_from_phint53",
+            "current_python_ans1_photoionization_rate_s^-1": photo,
+            "current_python_ans2_milne_inverse_rate_s^-1": inv_proxy,
+            "current_python_milne_unscaled_rate_s^-1": inv_unscaled,
+            "current_inverse_over_forward_ratio": ratio_inv_photo,
+            "phint53_status": ar.get("phint53_status"),
+            "current_milne_status": milne.get("milne_status"),
+            "current_type53_milne_scale": milne.get("type53_milne_scale"),
+            "closure_gap": "milne_ans2_is_currently_proxy_scaled_from_forward_rate_not_the_source_code_phint53_inverse_integral",
+            "matrix_assembly_status": milne.get("assembly_status") or ar.get("assembly_status"),
+            "missing_xstar_context": "exact_emltlv_rnist_arrays;true_Milne_integral;real_bremsa_radiation_field;optical_depth_escape_context;element_ion_fraction_normalization",
+            "warning": "audit_only_not_assembled; use to identify phint53/Milne closure mismatch before changing rates",
+        })
+        component_sums.setdefault(comp, {"component": comp, "n_rows": 0})["n_rows"] += 1
+        _acc(comp, "type53_photoionization_rate_sum_s^-1", photo)
+        _acc(comp, "type53_current_milne_inverse_rate_sum_s^-1", inv_proxy)
+
+    # Type-74 calt74/DR closure rows.
+    for ar in type74_calt74_rate_audit_rows:
+        rec = ar.get("record")
+        proxy = by_record_t74_proxy.get(rec, {})
+        comp = str(ar.get("triplet_component") or "other")
+        alpha_unw = maybe_float(ar.get("type74_calt74_alpha_unweighted_cm3_s")) or 0.0
+        alpha_w = maybe_float(ar.get("type74_calt74_alpha_weighted_cm3_s")) or 0.0
+        forward = maybe_float(ar.get("type74_calt74_rate_forward_unscaled_s^-1")) or 0.0
+        calt_inv = maybe_float(ar.get("type74_calt74_inverse_rate_s^-1")) or 0.0
+        old_inv = maybe_float(proxy.get("type74_inverse_rate_s^-1")) or 0.0
+        ratio_old_calt = (old_inv / calt_inv) if calt_inv > 0.0 else ""
+        rows.append({
+            "row_kind": "type53_type74_ucalc_closure_audit",
+            "audit_case": "type74_calt74_dr_closure",
+            "provenance": "v0.3.71_source_code_aligned_type53_type74_closure_audit",
+            "ucalc_source_file": "xstarlib/src/ucalc.f90",
+            "xstar_source_routine": "calt74",
+            "record": rec,
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "destination_or_bound_level": ar.get("destination_level"),
+            "destination_or_bound_global_index": ar.get("destination_global_index"),
+            "parent_continuum_global_index": ar.get("parent_continuum_global_index"),
+            "destination_or_bound_label": meta.get(maybe_int(ar.get("destination_global_index")) or -1, {}).get("level_label"),
+            "parent_continuum_label": meta.get(maybe_int(ar.get("parent_continuum_global_index")) or -1, {}).get("level_label"),
+            "triplet_component": comp,
+            "gglo_destination_or_bound": ar.get("destination_stat_weight_gglo"),
+            "ggup_parent_or_continuum": ar.get("parent_continuum_stat_weight_ggup"),
+            "statistical_weight_factor_gglo_over_ggup": ar.get("statistical_weight_factor_gglo_over_ggup"),
+            "temperature_K": temperature,
+            "electron_density_cm^-3": electron_density,
+            "xstar_ucalc_ans1_role": "forward_delta_photoionization_rate_from_calt74",
+            "xstar_ucalc_ans2_role": "inverse_DR_alpha_after_gglo_over_ggup_correction",
+            "current_python_calt74_forward_rate_s^-1": forward,
+            "current_python_calt74_alpha_unweighted_cm3_s": alpha_unw,
+            "current_python_calt74_alpha_weighted_cm3_s": alpha_w,
+            "current_python_calt74_inverse_rate_s^-1": calt_inv,
+            "current_older_type74_inverse_proxy_rate_s^-1": old_inv,
+            "older_type74_proxy_over_calt74_weighted_ratio": ratio_old_calt,
+            "type74_calt74_status": ar.get("type74_calt74_status"),
+            "current_type74_inverse_scale": ar.get("type74_inverse_scale"),
+            "closure_gap": "calt74_gglo_over_ggup_is_audited_but_parent_continuum_population_and_absolute_radiation_context_are_still_proxy",
+            "matrix_assembly_status": ar.get("assembly_status"),
+            "missing_xstar_context": "real_bremsa_radiation_field;validated_parent_continuum_population;full_element_ion_fraction_closure;line_escape/opacity_context",
+            "warning": "audit_only_not_assembled; compares source-aligned calt74 alpha with older direct type74 inverse proxy",
+        })
+        component_sums.setdefault(comp, {"component": comp, "n_rows": 0})["n_rows"] += 1
+        _acc(comp, "type74_calt74_forward_rate_sum_s^-1", forward)
+        _acc(comp, "type74_calt74_inverse_rate_sum_s^-1", calt_inv)
+        _acc(comp, "type74_older_inverse_proxy_rate_sum_s^-1", old_inv)
+
+    for comp in sorted(component_sums):
+        d = component_sums[comp]
+        t53inv = float(d.get("type53_current_milne_inverse_rate_sum_s^-1", 0.0))
+        t74inv = float(d.get("type74_calt74_inverse_rate_sum_s^-1", 0.0))
+        old74 = float(d.get("type74_older_inverse_proxy_rate_sum_s^-1", 0.0))
+        rows.append({
+            "row_kind": "type53_type74_ucalc_closure_audit",
+            "audit_case": "component_summary",
+            "provenance": "v0.3.71_source_code_aligned_type53_type74_closure_audit",
+            "triplet_component": comp,
+            "n_rows": d.get("n_rows", 0),
+            "type53_photoionization_rate_sum_s^-1": d.get("type53_photoionization_rate_sum_s^-1", 0.0),
+            "type53_current_milne_inverse_rate_sum_s^-1": t53inv,
+            "type74_calt74_forward_rate_sum_s^-1": d.get("type74_calt74_forward_rate_sum_s^-1", 0.0),
+            "type74_calt74_inverse_rate_sum_s^-1": t74inv,
+            "type74_older_inverse_proxy_rate_sum_s^-1": old74,
+            "total_current_source_code_aligned_inverse_proxy_s^-1": t53inv + t74inv,
+            "total_current_older_inverse_proxy_s^-1": t53inv + old74,
+            "older_vs_calt74_inverse_delta_s^-1": old74 - t74inv,
+            "diagnostic_interpretation": "component-level closure summary; compare f/r source ratios against triplet target before adding any treatment",
+        })
+
+    rows.append({
+        "row_kind": "type53_type74_ucalc_closure_audit",
+        "audit_case": "audit_summary",
+        "provenance": "v0.3.71_source_code_aligned_type53_type74_closure_audit",
+        "n_type53_rows": len(type53_phint53_rate_audit_rows),
+        "n_type74_calt74_rows": len(type74_calt74_rate_audit_rows),
+        "n_total_rows_including_summaries": len(rows) + 1,
+        "purpose": "locate f/r mismatch in source-code semantics rather than empirical scale scans",
+        "main_hypothesis": "remaining_f_over_r_mismatch_is_due_to_type53_phint53_Milne_and_type74_calt74_closure_not_type50_escape_alone",
+        "warning": "audit_only; no solver or physical-rate behavior is intentionally changed",
+    })
+    return rows
+
+
+def _type53_type74_ucalc_closure_audit_summary(rows: Sequence[dict]) -> dict:
+    component_rows = [r for r in rows if str(r.get("audit_case")) == "component_summary"]
+    return {
+        "n_type53_type74_ucalc_closure_audit_rows": len(rows),
+        "audit_case_counts": _counts(rows, "audit_case"),
+        "triplet_component_counts": _counts(rows, "triplet_component"),
+        "total_type53_photoionization_rate_s^-1": _sum_float(rows, "current_python_ans1_photoionization_rate_s^-1"),
+        "total_type53_milne_inverse_rate_s^-1": _sum_float(rows, "current_python_ans2_milne_inverse_rate_s^-1"),
+        "total_type74_calt74_inverse_rate_s^-1": _sum_float(rows, "current_python_calt74_inverse_rate_s^-1"),
+        "component_inverse_source_sums": {str(r.get("triplet_component")): r.get("total_current_source_code_aligned_inverse_proxy_s^-1") for r in component_rows},
+        "warning": "v0.3.71 audit only; type53 Milne inverse, real radiation field, and element ion-fraction closure remain pending.",
+    }
+
 def build_global_type74_inverse_matrix_terms(type74_inverse_recombination_audit_rows: Sequence[dict]) -> List[dict]:
     """Map diagnostic type-74 inverse DR-delta rows into global matrix triplets."""
     rows: List[dict] = []
@@ -8668,6 +8879,16 @@ def solve_element_reference(
     global_type74_calt74_matrix_terms = build_global_type74_calt74_matrix_terms(
         type74_calt74_rate_audit_rows
     )
+    type53_type74_ucalc_closure_audit_rows = build_type53_type74_ucalc_closure_audit_rows(
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        type53_milne_inverse_audit_rows=type53_milne_inverse_audit_rows,
+        type74_calt74_rate_audit_rows=type74_calt74_rate_audit_rows,
+        type74_inverse_recombination_audit_rows=type74_inverse_recombination_audit_rows,
+        global_index_rows=global_index_rows,
+        he_like_stage=he_like_stage,
+        temperature=temperature,
+        electron_density=electron_density,
+    )
     radiation_normalization_audit_rows = build_radiation_normalization_audit_rows(
         radiation_context_rows=radiation_context_rows,
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
@@ -8917,6 +9138,8 @@ def solve_element_reference(
             "type74_calt74_rate_audit_summary": _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows),
             "n_global_type74_calt74_matrix_term_rows": len(global_type74_calt74_matrix_terms),
             "global_type74_calt74_matrix_terms_summary": _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms),
+            "n_type53_type74_ucalc_closure_audit_rows": len(type53_type74_ucalc_closure_audit_rows),
+            "type53_type74_ucalc_closure_audit_summary": _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows),
             "n_inverse_recombination_scale_scan_rows": len(inverse_recombination_scale_scan_rows),
             "inverse_recombination_scale_scan_summary": _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows),
             "n_inverse_recombination_refined_scale_scan_rows": len(inverse_recombination_refined_scale_scan_rows),
@@ -8994,6 +9217,7 @@ def solve_element_reference(
         "global_type74_inverse_matrix_terms": global_type74_inverse_matrix_terms,
         "type74_calt74_rate_audit": type74_calt74_rate_audit_rows,
         "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
+        "type53_type74_ucalc_closure_audit": type53_type74_ucalc_closure_audit_rows,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,
         "inverse_recombination_refined_scale_scan": inverse_recombination_refined_scale_scan_rows,
         "intercombination_feed_audit": intercombination_feed_audit_rows,
@@ -10713,6 +10937,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_type74_inverse_matrix_terms = result.get("global_type74_inverse_matrix_terms", [])
     type74_calt74_rate_audit_rows = result.get("type74_calt74_rate_audit", [])
     global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
+    type53_type74_ucalc_closure_audit_rows = result.get("type53_type74_ucalc_closure_audit", [])
     inverse_recombination_scale_scan_rows = result.get("inverse_recombination_scale_scan", [])
     inverse_recombination_refined_scale_scan_rows = result.get("inverse_recombination_refined_scale_scan", [])
     radiation_normalization_audit_rows = result.get("radiation_normalization_audit", [])
@@ -10762,6 +10987,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type74_calt74_rate_audit_summary"] = _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows)
         if global_type74_calt74_matrix_terms:
             result["summary"]["global_type74_calt74_matrix_terms_summary"] = _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms)
+        if type53_type74_ucalc_closure_audit_rows:
+            result["summary"]["type53_type74_ucalc_closure_audit_summary"] = _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows)
         if inverse_recombination_scale_scan_rows:
             result["summary"]["inverse_recombination_scale_scan_summary"] = _inverse_recombination_scale_scan_summary(inverse_recombination_scale_scan_rows)
         if bremsa_context_rows:
@@ -10834,6 +11061,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", global_type74_inverse_matrix_terms)
     write_csv(out / "xstar_like_element_solver_type74_calt74_rate_audit.csv", type74_calt74_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv", type53_type74_ucalc_closure_audit_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", inverse_recombination_refined_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_intercombination_feed_audit.csv", result.get("intercombination_feed_audit", []))

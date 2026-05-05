@@ -15,6 +15,10 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
+### v0.3.71 type-53/type-74 ucalc closure audit
+
+v0.3.71 adds `xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv`, a diagnostic-only audit intended to trace the remaining C V f/r mismatch back to XSTAR source-code semantics rather than another empirical scale scan.  The audit compares the current Python type-53/type-74 proxy closure with the relevant `ucalc.f90` branches: type 53 `phint53` forward photoionization and pending Milne inverse recombination, plus type 74 `calt74` forward delta-photoionization and inverse DR alpha after the XSTAR `gglo/ggup` correction.  It also writes component summaries for f/i/r/other inverse-source proxies.  No solver or physical-rate behavior is changed.
+
 ### v0.3.70 type-50 escape-factor scan
 
 v0.3.70 adds `xstar_like_element_solver_type50_escape_factor_scan.csv` and the option `--type50-escape-factor-scan`.  The scan runs a controlled sequence of proxy XSTAR `ucalc` type-50 escape factors, using the diagnostic `xstar-escape` treatment for each scanned value while holding the other primary matrix terms fixed.  It reports f/i/r, R, G, L2-to-target, target-aware deltas, and summed raw versus escaped rates for the important He-like `1s2p 3P_J -> 1s2s 3S1` UV drain.  The primary solver remains unchanged unless `--type50-bound-bound-treatment` is explicitly changed from `raw-A`.
