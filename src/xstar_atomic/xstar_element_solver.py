@@ -3011,7 +3011,7 @@ def build_global_bound_bound_matrix_terms(
             "matrix_role": "bound_bound_gain_to_destination",
             "matrix_row_global_index": to_g,
             "matrix_col_global_index": from_g,
-            "signed_rate_s^-1": effective_rate,
+            "signed_rate_s^-1": float(rate),
             **common,
         })
         term_id += 1
@@ -3021,7 +3021,7 @@ def build_global_bound_bound_matrix_terms(
             "matrix_role": "bound_bound_loss_from_source",
             "matrix_row_global_index": from_g,
             "matrix_col_global_index": from_g,
-            "signed_rate_s^-1": -effective_rate,
+            "signed_rate_s^-1": -float(rate),
             **common,
         })
         term_id += 1
@@ -3231,7 +3231,7 @@ def build_global_superlevel_cascade_matrix_terms(
             "matrix_role": "type71_superlevel_cascade_gain_to_spectroscopic_destination",
             "matrix_row_global_index": spec_g,
             "matrix_col_global_index": super_g,
-            "signed_rate_s^-1": effective_rate,
+            "signed_rate_s^-1": float(rate),
             **common,
         })
         term_id += 1
@@ -3241,7 +3241,7 @@ def build_global_superlevel_cascade_matrix_terms(
             "matrix_role": "type71_superlevel_cascade_loss_from_superlevel_source",
             "matrix_row_global_index": super_g,
             "matrix_col_global_index": super_g,
-            "signed_rate_s^-1": -effective_rate,
+            "signed_rate_s^-1": -float(rate),
             **common,
         })
         term_id += 1
