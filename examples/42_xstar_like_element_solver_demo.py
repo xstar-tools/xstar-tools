@@ -160,6 +160,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_inverse_recombination_refined_scale_scan.csv", [])
+        write_csv(out / "xstar_like_element_solver_calc_emis_triplet_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_triplet_coupling_suppression_comparison.csv", [])
         write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type53_phint53_scale_scan.csv", [])

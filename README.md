@@ -1,3 +1,7 @@
+### v0.3.64 calc_emis_ion-style triplet line-output audit
+
+The element solver now writes `xstar_like_element_solver_calc_emis_triplet_audit.csv`, a source-code-aligned diagnostic for the He-like f/i/r line-output stage.  It compares the current transparent `population * A * photon_energy` proxy with the `calc_emis_ion.f90` line-output form `max((ans2*abund2 - ans1*abund1) * E * ptmp, 0)`, while explicitly marking the missing XSTAR contexts: true `ucalc` net `ans1/ans2`, optical depths, `pescl` escape probabilities, covering fraction, abundance factors, and strong-line filtering (`nlbin`/`ncbin`).  No solver or rate behavior is intentionally changed.
+
 ### v0.3.45 note: diagnostic flat-field type-53 photoionization-rate proxy
 
 ### v0.3.63 triplet-coupling suppression diagnostic

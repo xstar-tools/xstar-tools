@@ -8398,6 +8398,12 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    calc_emis_triplet_audit_rows = build_calc_emis_triplet_audit_rows(
+        global_index_rows=global_index_rows,
+        line_rows=line_rows,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        he_like_stage=he_like_stage,
+    )
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -8472,6 +8478,8 @@ def solve_element_reference(
             "triplet_alpha_gamma_audit_summary": _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows),
             "n_triplet_emissivity_branch_audit_rows": len(triplet_emissivity_branch_audit_rows),
             "triplet_emissivity_branch_audit_summary": _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows),
+            "n_calc_emis_triplet_audit_rows": len(calc_emis_triplet_audit_rows),
+            "calc_emis_triplet_audit_summary": _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows),
             "triplet_coupling_treatment": triplet_coupling_treatment_norm,
             "n_triplet_coupling_suppressed_matrix_terms": len(suppressed_triplet_coupling_terms),
             "n_triplet_coupling_suppression_comparison_rows": len(triplet_coupling_suppression_comparison_rows),
@@ -8537,6 +8545,7 @@ def solve_element_reference(
         "triplet_component_balance_audit": triplet_component_balance_audit_rows,
         "triplet_alpha_gamma_audit": triplet_alpha_gamma_audit_rows,
         "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
+        "calc_emis_triplet_audit": calc_emis_triplet_audit_rows,
         "triplet_coupling_record_audit": triplet_coupling_record_audit_rows,
         "triplet_coupling_suppression_comparison": triplet_coupling_suppression_comparison_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
@@ -9147,6 +9156,194 @@ def build_triplet_emissivity_branch_audit_rows(
     return rows
 
 
+
+
+
+def build_calc_emis_triplet_audit_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Build a calc_emis_ion-style audit for He-like triplet line output.
+
+    XSTAR's ``calc_emis_ion`` recomputes ``ucalc`` for selected strong lines and
+    forms line channels approximately as::
+
+        fline(1) = max((ans2*abund2 - ans1*abund1) * E * ptmp1, 0)
+        fline(2) = max((ans2*abund2 - ans1*abund1) * E * ptmp2, 0)
+
+    where ``abund1`` and ``abund2`` contain the lower/upper level populations
+    times ion/element abundance factors, and ``ptmp1``/``ptmp2`` contain escape
+    probabilities and continuum-covering geometry.  The current pure-Python
+    scaffold does not yet port the full ``calc_emis_ion`` context, so this audit
+    writes a transparent, source-code-aligned proxy with explicit placeholders.
+    """
+    he_like_stage = int(he_like_stage)
+    by_ion_level = _global_index_by_ion_level(global_index_rows)
+    pops = _full_global_population_map(full_global_normalized_solve_comparison_rows)
+    target = _xstar_triplet_target(he_like_stage) or {}
+
+    rows: List[dict] = []
+    component_sums: Dict[str, Dict[str, float]] = {
+        c: {"simple": 0.0, "fline1": 0.0, "fline2": 0.0, "fline_total": 0.0, "photon": 0.0, "n": 0.0}
+        for c in ("f", "i", "r")
+    }
+    all_triplet_records = []
+    for row in line_rows:
+        if maybe_int(row.get("ion_stage")) != he_like_stage:
+            continue
+        comp = classify_helike_triplet_line(row)
+        if comp not in {"f", "i", "r"}:
+            continue
+        all_triplet_records.append(str(row.get("record") or ""))
+        upper = maybe_int(row.get("upper_level"))
+        lower = maybe_int(row.get("lower_level"))
+        if upper is None or lower is None:
+            continue
+        ug = by_ion_level.get((he_like_stage, int(upper)))
+        lg = by_ion_level.get((he_like_stage, int(lower)))
+        upper_pop = float(pops.get(int(ug), 0.0)) if ug is not None else 0.0
+        lower_pop = float(pops.get(int(lg), 0.0)) if lg is not None else 0.0
+        A = maybe_float(row.get("A_s^-1")) or 0.0
+        Eerg = line_energy_erg(row) or 0.0
+        EeV = maybe_float(row.get("energy_eV"))
+        # Transparent proxy for ucalc type-4/50 line emissivity.
+        # In the no-stimulated/transparent limit ans2≈A_ul and ans1≈0, so
+        # fline(1) is equal to simple n_upper*A*E.  fline(2) is the second XSTAR
+        # channel and is reported separately, not used to redefine the current
+        # triplet ratio.
+        ans2_emission_proxy_s_inv = max(float(A), 0.0)
+        ans1_absorption_or_stimulated_proxy_s_inv = 0.0
+        xeltp_proxy = 1.0
+        xpx_proxy = 1.0
+        abund1_lower_proxy = lower_pop * xpx_proxy * xeltp_proxy
+        abund2_upper_proxy = upper_pop * xpx_proxy * xeltp_proxy
+        net_rate_proxy = ans2_emission_proxy_s_inv * abund2_upper_proxy - ans1_absorption_or_stimulated_proxy_s_inv * abund1_lower_proxy
+        tau1_proxy = 0.0
+        tau2_proxy = 0.0
+        cfrac_proxy = 0.0
+        pescl_tau1_proxy = 1.0
+        pescl_tau2_proxy = 1.0
+        pescl_tau1_plus_tau2_proxy = 1.0
+        ptmp1_proxy = pescl_tau1_proxy * (1.0 - cfrac_proxy)
+        ptmp2_proxy = pescl_tau2_proxy * (1.0 - cfrac_proxy) + 2.0 * pescl_tau1_plus_tau2_proxy * cfrac_proxy
+        fline1_proxy = max(net_rate_proxy * Eerg * ptmp1_proxy, 0.0)
+        fline2_proxy = max(net_rate_proxy * Eerg * ptmp2_proxy, 0.0)
+        simple_energy = max(upper_pop, 0.0) * max(float(A), 0.0) * max(Eerg, 0.0)
+        simple_photon = max(upper_pop, 0.0) * max(float(A), 0.0)
+        component_sums[comp]["simple"] += simple_energy
+        component_sums[comp]["fline1"] += fline1_proxy
+        component_sums[comp]["fline2"] += fline2_proxy
+        component_sums[comp]["fline_total"] += fline1_proxy + fline2_proxy
+        component_sums[comp]["photon"] += simple_photon
+        component_sums[comp]["n"] += 1.0
+        rows.append({
+            "audit_kind": "calc_emis_triplet_line",
+            "component": comp,
+            "contributes_to_triplet_ratio_proxy": True,
+            "record": row.get("record"),
+            "ion_stage": he_like_stage,
+            "lower_level": lower,
+            "upper_level": upper,
+            "lower_global_index": lg if lg is not None else "",
+            "upper_global_index": ug if ug is not None else "",
+            "lower_label": row.get("lower_label"),
+            "upper_label": row.get("upper_label"),
+            "wavelength_A": row.get("wavelength_A"),
+            "energy_eV": EeV,
+            "photon_energy_erg": Eerg,
+            "A_s^-1": A,
+            "lower_population_fraction": lower_pop,
+            "upper_population_fraction": upper_pop,
+            "xstar_calc_emis_abund1_lower_proxy": abund1_lower_proxy,
+            "xstar_calc_emis_abund2_upper_proxy": abund2_upper_proxy,
+            "xstar_ucalc_ans1_absorption_or_stimulated_proxy_s^-1": ans1_absorption_or_stimulated_proxy_s_inv,
+            "xstar_ucalc_ans2_emission_proxy_s^-1": ans2_emission_proxy_s_inv,
+            "xstar_net_rate_proxy_ans2_abund2_minus_ans1_abund1_s^-1": net_rate_proxy,
+            "tau1_proxy": tau1_proxy,
+            "tau2_proxy": tau2_proxy,
+            "cfrac_proxy": cfrac_proxy,
+            "pescl_tau1_proxy": pescl_tau1_proxy,
+            "pescl_tau2_proxy": pescl_tau2_proxy,
+            "pescl_tau1_plus_tau2_proxy": pescl_tau1_plus_tau2_proxy,
+            "ptmp1_proxy": ptmp1_proxy,
+            "ptmp2_proxy": ptmp2_proxy,
+            "simple_pop_A_E_energy_proxy_erg_s^-1": simple_energy,
+            "simple_pop_A_photon_proxy_s^-1": simple_photon,
+            "calc_emis_fline1_transparent_proxy_erg_s^-1": fline1_proxy,
+            "calc_emis_fline2_transparent_proxy_erg_s^-1": fline2_proxy,
+            "calc_emis_fline_total_transparent_proxy_erg_s^-1": fline1_proxy + fline2_proxy,
+            "simple_to_calc_emis_fline1_ratio": (simple_energy / fline1_proxy if fline1_proxy > 0.0 else ""),
+            "strong_line_selection_status": "selected_output_line_proxy; nlbin/ncbin strong-line lists not yet ported",
+            "missing_calc_emis_ion_context": "true ucalc ans1/ans2 with stimulated terms; tau0/tauc optical depths; pescl/pescv; cfrac; xpx/xeltp abundance factors; nlbin/ncbin strong-line filtering",
+            "xstar_source_reference": "calc_emis_ion.f90 type-4/type-9 branch: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0)",
+            "diagnostic_note": "v0.3.64 transparent calc_emis_ion-style audit; channel-1 proxy should equal simple pop*A*E when ans1=0 and escape=1",
+        })
+
+    total_simple = sum(component_sums[c]["simple"] for c in ("f", "i", "r"))
+    total_fline1 = sum(component_sums[c]["fline1"] for c in ("f", "i", "r"))
+    total_fline_total = sum(component_sums[c]["fline_total"] for c in ("f", "i", "r"))
+    for comp in ("f", "i", "r"):
+        target_frac = maybe_float(target.get(comp) or target.get(f"{comp}_fraction"))
+        frac_simple = component_sums[comp]["simple"] / total_simple if total_simple > 0.0 else 0.0
+        frac_fline1 = component_sums[comp]["fline1"] / total_fline1 if total_fline1 > 0.0 else 0.0
+        frac_total = component_sums[comp]["fline_total"] / total_fline_total if total_fline_total > 0.0 else 0.0
+        rows.append({
+            "audit_kind": "calc_emis_triplet_component_summary",
+            "component": comp,
+            "n_lines": int(component_sums[comp]["n"]),
+            "simple_pop_A_E_energy_sum_erg_s^-1": component_sums[comp]["simple"],
+            "simple_photon_sum_s^-1": component_sums[comp]["photon"],
+            "calc_emis_fline1_transparent_sum_erg_s^-1": component_sums[comp]["fline1"],
+            "calc_emis_fline2_transparent_sum_erg_s^-1": component_sums[comp]["fline2"],
+            "calc_emis_fline_total_transparent_sum_erg_s^-1": component_sums[comp]["fline_total"],
+            "fraction_simple_pop_A_E": frac_simple,
+            "fraction_calc_emis_fline1_transparent": frac_fline1,
+            "fraction_calc_emis_fline_total_transparent": frac_total,
+            "target_component_fraction": target_frac,
+            "delta_fline1_fraction_minus_target": (frac_fline1 - target_frac if target_frac is not None else ""),
+            "diagnostic_note": "component summary for source-code-aligned calc_emis_ion transparent proxy",
+        })
+    f1 = component_sums["f"]["fline1"]
+    i1 = component_sums["i"]["fline1"]
+    r1 = component_sums["r"]["fline1"]
+    rows.append({
+        "audit_kind": "calc_emis_triplet_summary",
+        "component": "summary",
+        "n_triplet_line_records": len([x for x in all_triplet_records if x]),
+        "triplet_records": ";".join([x for x in all_triplet_records if x]),
+        "f_fraction_calc_emis_fline1_transparent": f1 / total_fline1 if total_fline1 else 0.0,
+        "i_fraction_calc_emis_fline1_transparent": i1 / total_fline1 if total_fline1 else 0.0,
+        "r_fraction_calc_emis_fline1_transparent": r1 / total_fline1 if total_fline1 else 0.0,
+        "R_calc_emis_fline1_transparent": f1 / i1 if i1 > 0.0 else "",
+        "G_calc_emis_fline1_transparent": (f1 + i1) / r1 if r1 > 0.0 else "",
+        "total_simple_pop_A_E_energy_erg_s^-1": total_simple,
+        "total_calc_emis_fline1_transparent_erg_s^-1": total_fline1,
+        "total_calc_emis_fline_total_transparent_erg_s^-1": total_fline_total,
+        "simple_to_fline1_total_ratio": total_simple / total_fline1 if total_fline1 > 0.0 else "",
+        "conclusion_scope": "If transparent fractions equal simple fractions, remaining differences require porting true calc_emis_ion contexts: ucalc net ans1/ans2, escape/opacity, abundance factors, and strong-line filtering.",
+        "provenance": "v0.3.64_calc_emis_ion_style_triplet_line_output_audit",
+    })
+    return rows
+
+
+def _calc_emis_triplet_audit_summary(rows: Sequence[dict]) -> dict:
+    summary = next((r for r in rows if r.get("audit_kind") == "calc_emis_triplet_summary"), {})
+    comps = {r.get("component"): r for r in rows if r.get("audit_kind") == "calc_emis_triplet_component_summary"}
+    return {
+        "n_calc_emis_triplet_audit_rows": len(rows),
+        "n_calc_emis_triplet_line_rows": sum(1 for r in rows if r.get("audit_kind") == "calc_emis_triplet_line"),
+        "f_fraction": summary.get("f_fraction_calc_emis_fline1_transparent", comps.get("f", {}).get("fraction_calc_emis_fline1_transparent", "")),
+        "i_fraction": summary.get("i_fraction_calc_emis_fline1_transparent", comps.get("i", {}).get("fraction_calc_emis_fline1_transparent", "")),
+        "r_fraction": summary.get("r_fraction_calc_emis_fline1_transparent", comps.get("r", {}).get("fraction_calc_emis_fline1_transparent", "")),
+        "R": summary.get("R_calc_emis_fline1_transparent", ""),
+        "G": summary.get("G_calc_emis_fline1_transparent", ""),
+        "simple_to_fline1_total_ratio": summary.get("simple_to_fline1_total_ratio", ""),
+        "missing_context": "true calc_emis_ion ucalc ans1/ans2, optical depth, escape probability, covering fraction, abundance scaling, and strong-line filtering",
+        "provenance": "v0.3.64_calc_emis_ion_style_triplet_line_output_audit",
+    }
 
 def _infer_xstar_data_type_from_term(term: Mapping[str, object]) -> Optional[int]:
     """Infer an ATDB/XSTAR data type from a full-global matrix term."""
@@ -9785,6 +9982,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     full_global_normalized_solve_comparison_rows = result.get("full_global_normalized_solve_comparison", [])
     triplet_alpha_gamma_audit_rows = result.get("triplet_alpha_gamma_audit", [])
     triplet_emissivity_branch_audit_rows = result.get("triplet_emissivity_branch_audit", [])
+    calc_emis_triplet_audit_rows = result.get("calc_emis_triplet_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -9848,6 +10046,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["triplet_alpha_gamma_audit_summary"] = _triplet_alpha_gamma_audit_summary(triplet_alpha_gamma_audit_rows)
         if triplet_emissivity_branch_audit_rows:
             result["summary"]["triplet_emissivity_branch_audit_summary"] = _triplet_emissivity_branch_audit_summary(triplet_emissivity_branch_audit_rows)
+        if calc_emis_triplet_audit_rows:
+            result["summary"]["calc_emis_triplet_audit_summary"] = _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -9894,6 +10094,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_triplet_component_balance_audit.csv", result.get("triplet_component_balance_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_alpha_gamma_audit.csv", triplet_alpha_gamma_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
+    write_csv(out / "xstar_like_element_solver_calc_emis_triplet_audit.csv", calc_emis_triplet_audit_rows)
     write_csv(out / "xstar_like_element_solver_triplet_coupling_record_audit.csv", result.get("triplet_coupling_record_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_coupling_suppression_comparison.csv", result.get("triplet_coupling_suppression_comparison", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
