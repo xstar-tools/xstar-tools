@@ -5922,6 +5922,167 @@ def _type53_phint53_scale_scan_summary(rows: Sequence[dict]) -> dict:
 
 
 
+def build_type50_escape_factor_scan_rows(
+    *,
+    transition_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    global_type53_flat_proxy_matrix_terms: Sequence[dict],
+    global_type53_phint53_matrix_terms: Sequence[dict],
+    global_type53_milne_matrix_terms: Sequence[dict],
+    global_type74_inverse_matrix_terms: Sequence[dict],
+    global_type74_calt74_matrix_terms: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+    type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
+    type50_photoexcitation_scale: object = 0.0,
+    triplet_coupling_treatment: str = "normal",
+    linear_solver: str = "xstar-lucy",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+    prune_null_rate_levels: bool = True,
+) -> List[dict]:
+    """Scan controlled XSTAR-ucalc-style type-50 escape factors.
+
+    The scan rebuilds only the bound-bound matrix terms with
+    ``type50_bound_bound_treatment='xstar-escape'`` and varied proxy
+    ``ptmp1+ptmp2`` escape factors.  All other matrix components are held at
+    the primary run settings.  This is diagnostic-only until real XSTAR optical
+    depths, ``pescl``/``pescv``, and radiative pumping terms are ported.
+    """
+    factors = _parse_triplet_source_scales(type50_escape_factor_scan)
+    rows: List[dict] = []
+    target = _xstar_triplet_target(int(he_like_stage))
+    if target is not None:
+        rows.append({
+            "row_kind": "type50_escape_factor_scan",
+            "scan_case": "xstar_target",
+            "type50_escape_factor": "target",
+            "f_fraction": target["f"],
+            "i_fraction": target["i"],
+            "r_fraction": target["r"],
+            "R": target.get("R"),
+            "G": target.get("G"),
+            "provenance": "v0.3.70_type50_escape_factor_scan",
+        })
+    coupling_treatment_norm = _normalise_triplet_coupling_treatment(triplet_coupling_treatment)
+    for factor0 in factors:
+        factor = min(max(float(factor0), 0.0), 1.0)
+        bb_terms = build_global_bound_bound_matrix_terms(
+            transition_rows,
+            global_index_rows,
+            type50_bound_bound_treatment="xstar-escape",
+            type50_escape_factor=factor,
+            type50_photoexcitation_scale=type50_photoexcitation_scale,
+        )
+        full_terms_unsuppressed = build_full_global_matrix_terms(
+            global_index_rows=global_index_rows,
+            global_bound_bound_matrix_terms=bb_terms,
+            global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+            global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+            global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+            global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+            global_type53_milne_matrix_terms=global_type53_milne_matrix_terms,
+            global_type74_inverse_matrix_terms=global_type74_inverse_matrix_terms,
+            global_type74_calt74_matrix_terms=global_type74_calt74_matrix_terms,
+            coupling_rows=coupling_rows,
+            he_like_stage=he_like_stage,
+        )
+        suppressed_terms, suppressed_rows = suppress_triplet_3p_to_3s_radiative_terms(
+            full_terms_unsuppressed,
+            he_like_stage=he_like_stage,
+        )
+        full_terms = suppressed_terms if coupling_treatment_norm == "suppress-3p-to-3s-radiative" else full_terms_unsuppressed
+        solve_rows = build_full_global_normalized_solve_comparison(
+            global_index_rows=global_index_rows,
+            full_global_matrix_terms=full_terms,
+            line_rows=line_rows,
+            he_like_stage=he_like_stage,
+            linear_solver=linear_solver,
+            rank_deficient_action=rank_deficient_action,
+            negative_population_action=negative_population_action,
+            prune_null_rate_levels=prune_null_rate_levels,
+        )
+        sol = next((r for r in solve_rows if str(r.get("row_kind")) == "summary" and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), solve_rows[0] if solve_rows else {})
+        type50_detail = [r for r in bb_terms if _is_type50_radiative_transition(r) and str(r.get("matrix_term_kind")) in {"offdiag_gain", "diagonal_loss"}]
+        triplet_uv = [
+            r for r in type50_detail
+            if maybe_int(r.get("ion_stage")) == int(he_like_stage)
+            and "1s1.2p1.3P" in str(r.get("from_level_label") or "")
+            and "1s1.2s1.3S" in str(r.get("to_level_label") or "")
+        ]
+        rows.append({
+            "row_kind": "type50_escape_factor_scan",
+            "scan_case": "full_global_type50_escape_factor",
+            "type50_bound_bound_treatment": "xstar-escape",
+            "type50_escape_factor": factor,
+            "type50_photoexcitation_scale": float(_bounded_nonnegative_float(type50_photoexcitation_scale, 0.0)),
+            "triplet_coupling_treatment": coupling_treatment_norm,
+            "n_global_bound_bound_matrix_term_rows": len(bb_terms),
+            "n_type50_matrix_rows": len(type50_detail),
+            "n_triplet_3p_to_3s_type50_matrix_rows": len(triplet_uv),
+            "sum_triplet_3p_to_3s_raw_A_s^-1": _sum_float(triplet_uv, "raw_A_s^-1"),
+            "sum_triplet_3p_to_3s_escaped_rate_s^-1": _sum_float(triplet_uv, "escaped_decay_rate_s^-1"),
+            "n_full_global_matrix_terms": len(full_terms),
+            "n_suppressed_triplet_coupling_terms": len(suppressed_rows) if coupling_treatment_norm == "suppress-3p-to-3s-radiative" else 0,
+            "solver": sol.get("solver"),
+            "solve_status": sol.get("solve_status"),
+            "solver_warning": sol.get("solver_warning"),
+            "f_fraction": sol.get("f_fraction"),
+            "i_fraction": sol.get("i_fraction"),
+            "r_fraction": sol.get("r_fraction"),
+            "R": sol.get("R"),
+            "G": sol.get("G"),
+            "l2_distance_to_target": sol.get("l2_distance_to_target"),
+            "sum_population": sol.get("sum_population"),
+            "normalization_residual": sol.get("normalization_residual"),
+            "residual_norm": sol.get("residual_norm"),
+            "n_negative_populations": sol.get("n_negative_populations"),
+            "ion_population_sums_json": sol.get("ion_population_sums_json"),
+            "level_kind_population_sums_json": sol.get("level_kind_population_sums_json"),
+            "xstar_lucy_niter": sol.get("xstar_lucy_niter"),
+            "xstar_lucy_diff": sol.get("xstar_lucy_diff"),
+            "xstar_lucy_last_condensed_rank": sol.get("xstar_lucy_last_condensed_rank"),
+            "xstar_lucy_last_condensed_condition": sol.get("xstar_lucy_last_condensed_condition"),
+            "provenance": "v0.3.70_type50_escape_factor_scan",
+            "warning": "Diagnostic scan only: escape factor is a controlled ptmp1+ptmp2 proxy, not a real XSTAR tau/pescl calculation.",
+        })
+    return _add_refined_triplet_target_metrics(rows, he_like_stage=he_like_stage)
+
+
+def _type50_escape_factor_scan_summary(rows: Sequence[dict]) -> dict:
+    scan_rows = [r for r in rows if str(r.get("scan_case")) == "full_global_type50_escape_factor"]
+    def _best_by(col: str):
+        best = None
+        for r in scan_rows:
+            val = maybe_float(r.get(col))
+            if val is None:
+                continue
+            if best is None or float(val) < float(best.get(col)):
+                best = r
+        return best
+    best_l2 = _best_by("l2_distance_to_target") or _best_by("l2_distance_to_target_recomputed")
+    best_i = _best_by("i_abs_error_to_target")
+    return {
+        "n_type50_escape_factor_scan_rows": len(rows),
+        "scan_cases": _counts(rows, "scan_case"),
+        "escape_factor_values": [r.get("type50_escape_factor") for r in scan_rows],
+        "best_l2_escape_factor": None if best_l2 is None else best_l2.get("type50_escape_factor"),
+        "best_l2_distance_to_target": None if best_l2 is None else best_l2.get("l2_distance_to_target"),
+        "best_l2_f_fraction": None if best_l2 is None else best_l2.get("f_fraction"),
+        "best_l2_i_fraction": None if best_l2 is None else best_l2.get("i_fraction"),
+        "best_l2_r_fraction": None if best_l2 is None else best_l2.get("r_fraction"),
+        "best_i_escape_factor": None if best_i is None else best_i.get("type50_escape_factor"),
+        "best_i_abs_error_to_target": None if best_i is None else best_i.get("i_abs_error_to_target"),
+        "best_i_f_fraction": None if best_i is None else best_i.get("f_fraction"),
+        "best_i_i_fraction": None if best_i is None else best_i.get("i_fraction"),
+        "best_i_r_fraction": None if best_i is None else best_i.get("r_fraction"),
+        "warning": "Type-50 escape-factor scan is diagnostic only until real XSTAR optical-depth and escape-probability contexts are ported.",
+    }
+
+
 def _normalise_inverse_recombination_mode(mode: str | None) -> str:
     """Normalize inverse-recombination diagnostic mode names."""
     m = str(mode or "none").strip().lower().replace("_", "-")
@@ -8185,6 +8346,7 @@ def solve_element_reference(
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
     type50_photoexcitation_scale: object = 0.0,
+    type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -8576,6 +8738,27 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
+    type50_escape_factor_scan_rows = build_type50_escape_factor_scan_rows(
+        transition_rows=transitions,
+        global_index_rows=global_index_rows,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+        global_type53_milne_matrix_terms=global_type53_milne_matrix_terms,
+        global_type74_inverse_matrix_terms=global_type74_inverse_matrix_terms,
+        global_type74_calt74_matrix_terms=global_type74_calt74_matrix_terms,
+        coupling_rows=assembled_coupling_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        type50_escape_factor_scan=type50_escape_factor_scan,
+        type50_photoexcitation_scale=type50_photoexcitation_scale,
+        triplet_coupling_treatment=triplet_coupling_treatment_norm,
+        linear_solver=full_global_linear_solver,
+        rank_deficient_action=full_global_rank_deficient_action,
+        negative_population_action=full_global_negative_population_action,
+        prune_null_rate_levels=full_global_prune_null_rate_levels,
+    )
     triplet_coupling_suppression_comparison_rows = build_triplet_coupling_suppression_comparison_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -8693,6 +8876,9 @@ def solve_element_reference(
             "type50_photoexcitation_scale": type50_photoexcitation_scale,
             "n_type50_ucalc_rate_audit_rows": len(type50_ucalc_rate_audit_rows),
             "type50_ucalc_rate_audit_summary": _type50_ucalc_rate_audit_summary(type50_ucalc_rate_audit_rows),
+            "type50_escape_factor_scan": type50_escape_factor_scan,
+            "n_type50_escape_factor_scan_rows": len(type50_escape_factor_scan_rows),
+            "type50_escape_factor_scan_summary": _type50_escape_factor_scan_summary(type50_escape_factor_scan_rows),
             "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
             "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
             "n_global_bound_bound_type71_solve_comparison_rows": len(global_bound_bound_type71_solve_comparison_rows),
@@ -8787,6 +8973,7 @@ def solve_element_reference(
         "transition_rows": transitions,
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
         "type50_ucalc_rate_audit": type50_ucalc_rate_audit_rows,
+        "type50_escape_factor_scan": type50_escape_factor_scan_rows,
         "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
         "global_superlevel_source_matrix_terms": global_superlevel_source_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
@@ -10537,6 +10724,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     calc_emis_triplet_audit_rows = result.get("calc_emis_triplet_audit", [])
     calc_emis_context_audit_rows = result.get("calc_emis_context_audit", [])
     type50_ucalc_rate_audit_rows = result.get("type50_ucalc_rate_audit", [])
+    type50_escape_factor_scan_rows = result.get("type50_escape_factor_scan", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -10625,6 +10813,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_transitions.csv", result.get("transition_rows", []))
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
     write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", type50_ucalc_rate_audit_rows)
+    write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", type50_escape_factor_scan_rows)
     write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)

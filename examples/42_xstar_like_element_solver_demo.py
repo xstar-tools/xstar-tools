@@ -79,6 +79,7 @@ def main(argv=None):
     p.add_argument("--type50-bound-bound-treatment", default="raw-A", choices=["raw-A", "xstar-escape", "xstar-escape-photoexcitation"], help="v0.3.67 diagnostic treatment for type-50 bound-bound population rates. raw-A preserves v0.3.66. xstar-escape multiplies downward A-values by a proxy ptmp1+ptmp2 escape factor. xstar-escape-photoexcitation also adds a lower->upper pumping proxy. Diagnostic until real ucalc tau/pescl/bremsa/flinabs context is ported.")
     p.add_argument("--type50-escape-factor", default="1", help="Proxy total escape factor ptmp1+ptmp2 used by --type50-bound-bound-treatment xstar-escape modes. Clipped to [0,1]. Default 1 preserves raw-A when the treatment is raw-A.")
     p.add_argument("--type50-photoexcitation-scale", default="0", help="Proxy lower->upper pumping rate as a multiple of raw A for --type50-bound-bound-treatment xstar-escape-photoexcitation. Default 0.")
+    p.add_argument("--type50-escape-factor-scan", default="0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1", help="Comma-separated proxy escape factors for xstar_like_element_solver_type50_escape_factor_scan.csv. The scan always uses the diagnostic xstar-escape type-50 treatment and holds other primary matrix terms fixed.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -125,6 +126,7 @@ def main(argv=None):
             "type50_bound_bound_treatment": args.type50_bound_bound_treatment,
             "type50_escape_factor": args.type50_escape_factor,
             "type50_photoexcitation_scale": args.type50_photoexcitation_scale,
+            "type50_escape_factor_scan": args.type50_escape_factor_scan,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -147,6 +149,7 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_transitions.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", [])
@@ -230,6 +233,7 @@ def main(argv=None):
         type50_bound_bound_treatment=args.type50_bound_bound_treatment,
         type50_escape_factor=args.type50_escape_factor,
         type50_photoexcitation_scale=args.type50_photoexcitation_scale,
+        type50_escape_factor_scan=args.type50_escape_factor_scan,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

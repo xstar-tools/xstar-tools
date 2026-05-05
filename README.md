@@ -15,6 +15,27 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
+### v0.3.70 type-50 escape-factor scan
+
+v0.3.70 adds `xstar_like_element_solver_type50_escape_factor_scan.csv` and the option `--type50-escape-factor-scan`.  The scan runs a controlled sequence of proxy XSTAR `ucalc` type-50 escape factors, using the diagnostic `xstar-escape` treatment for each scanned value while holding the other primary matrix terms fixed.  It reports f/i/r, R, G, L2-to-target, target-aware deltas, and summed raw versus escaped rates for the important He-like `1s2p 3P_J -> 1s2s 3S1` UV drain.  The primary solver remains unchanged unless `--type50-bound-bound-treatment` is explicitly changed from `raw-A`.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/42_xstar_like_element_solver_demo.py \
+  ../xstar/data/atdb.fits \
+  --element C --he-like-stage 5 \
+  --temperature 1000000 --electron-density 1e8 \
+  --wavelength-min 40 --wavelength-max 42 \
+  --max-level 80 \
+  --full-global-linear-solver xstar-lucy \
+  --type50-escape-factor-scan 0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1 \
+  --out-dir c5_xstar_like_element_solver_v0370_type50_escape_scan \
+  --print-summary
+```
+
+The scan is diagnostic only until the real XSTAR optical-depth, escape-probability, and line-pumping contexts are ported.
+
 ### v0.3.69 type-50 escaped-rate matrix bug fix
 
 v0.3.69 fixes the experimental `--type50-bound-bound-treatment xstar-escape` path so the effective escaped rate is used in the actual assembled matrix `signed_rate_s^-1` entries, not only reported in the audit columns. The default `raw-A` behavior is unchanged.
