@@ -15,7 +15,7 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
-Current development baseline: v0.3.75 adds an audit-only XSTAR element matrix topology comparison (`xstar_like_element_solver_xstar_matrix_topology_audit.csv`) for continuum aliasing and `nsup` superlevel grouping.
+Current development baseline: v0.3.76 adds experimental XSTAR topology memberships for the full-global `xstar-lucy` solve. The default `--full-global-topology explicit-current` preserves prior behavior, while `xstar-continuum-alias` aliases continuum rows to the parent-ion ground condensed group and `xstar-continuum-alias-superlevels` also groups levels 2..nlev-1 into one excited `nsup` group per ion.
 
 ### v0.3.71 type-53/type-74 ucalc closure audit
 

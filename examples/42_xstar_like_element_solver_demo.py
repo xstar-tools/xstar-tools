@@ -83,6 +83,7 @@ def main(argv=None):
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
+    p.add_argument("--full-global-topology", default="explicit-current", choices=["explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"], help="v0.3.76 experimental XSTAR element-matrix topology membership for the xstar-lucy full-global solve. explicit-current preserves previous behavior; xstar-continuum-alias aliases continuum rows to the parent ground group; xstar-continuum-alias-superlevels also groups levels 2..nlev-1 into one excited nsup group per ion.")
     p.add_argument("--no-full-global-prune-null-rate-levels", action="store_true", help="Disable pruning of null-rate global_index rows before the diagnostic full-global normalized solve.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
@@ -130,6 +131,7 @@ def main(argv=None):
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
+            "full_global_topology": args.full_global_topology,
             "full_global_prune_null_rate_levels": not args.no_full_global_prune_null_rate_levels,
             "status": "dry_run_not_executed",
         }]
@@ -242,6 +244,7 @@ def main(argv=None):
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,
+        full_global_topology=args.full_global_topology,
         full_global_prune_null_rate_levels=not args.no_full_global_prune_null_rate_levels,
     )
     write_element_solver_outputs(result, out)

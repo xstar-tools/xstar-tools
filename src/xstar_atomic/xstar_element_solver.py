@@ -2807,7 +2807,7 @@ def build_xstar_matrix_topology_audit_rows(
         return [{
             "audit_kind": "xstar_matrix_topology_summary",
             "status": "no_global_index_rows",
-            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+            "provenance": "v0.3.76_xstar_element_matrix_topology_audit",
         }]
 
     by_stage: Dict[int, List[dict]] = {}
@@ -2972,7 +2972,7 @@ def build_xstar_matrix_topology_audit_rows(
             "xstar_would_keep_as_independent_population_row": bool(info.get("xstar_would_keep_as_independent_population_row", False)),
             "xstar_would_condense_or_alias_current_row": bool(info.get("xstar_would_condense_or_alias_current_row", False)),
             "diagnostic_consequence": "current_explicit_topology_may_overresolve_excited_other_levels_and_duplicate_parent_continuum" if bool(info.get("xstar_would_condense_or_alias_current_row", False)) else "current_row_matches_or_approximates_an_xstar_independent_group",
-            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+            "provenance": "v0.3.76_xstar_element_matrix_topology_audit",
         })
 
     for stage in stage_order:
@@ -2997,7 +2997,7 @@ def build_xstar_matrix_topology_audit_rows(
             "n_continuum_or_placeholder_alias_rows": n_alias,
             "has_parent_stage_ground_for_continuum_alias": c.get("has_parent_stage_ground_for_continuum_alias", ""),
             "diagnostic_note": "XSTAR topology has far fewer independent groups than the current explicit Python global-index rows for this ion.",
-            "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+            "provenance": "v0.3.76_xstar_element_matrix_topology_audit",
         })
 
     total_current = len(global_index_rows)
@@ -3017,7 +3017,7 @@ def build_xstar_matrix_topology_audit_rows(
         "primary_hypothesis": "remaining_f_over_r_mismatch_may_come_from_current_explicit_topology_overresolving_excited_other_levels_and_not_aliasing_continuum_to_parent_ground_like_xstar",
         "xstar_source_reference": "calc_hmc_element.f90 ipmat=ipmat+nlev-1 and nsup(mm+ipmat2)=nsp for mm=2..nlev-1",
         "behavior_change": "audit_only_no_solver_or_matrix_change",
-        "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+        "provenance": "v0.3.76_xstar_element_matrix_topology_audit",
     })
     return rows
 
@@ -3035,7 +3035,7 @@ def _xstar_matrix_topology_audit_summary(rows: Sequence[dict]) -> dict:
         "n_xstar_excited_nsup_groups_detected": summary.get("n_xstar_excited_nsup_groups_detected", ""),
         "n_continuum_alias_or_placeholder_rows_detected": summary.get("n_continuum_alias_or_placeholder_rows_detected", ""),
         "primary_hypothesis": summary.get("primary_hypothesis", ""),
-        "provenance": "v0.3.75_xstar_element_matrix_topology_audit",
+        "provenance": "v0.3.76_xstar_element_matrix_topology_audit",
     }
 
 
@@ -6266,6 +6266,7 @@ def build_type53_phint53_scale_scan_rows(
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
     full_global_prune_null_rate_levels: bool = True,
+    full_global_topology: str = "explicit-current",
 ) -> List[dict]:
     """Scan diagnostic type-53 phint53 scale factors through the full-global solve."""
     scales = _parse_triplet_source_scales(type53_phint53_scale)
@@ -6309,6 +6310,7 @@ def build_type53_phint53_scale_scan_rows(
             rank_deficient_action=full_global_rank_deficient_action,
             negative_population_action=full_global_negative_population_action,
             prune_null_rate_levels=full_global_prune_null_rate_levels,
+            full_global_topology=full_global_topology,
         )
         summary = next((r for r in solve_rows if str(r.get("row_kind")) == "summary" and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), {})
         rows.append({
@@ -8350,6 +8352,7 @@ def _xstar_lucy_condensed_solve(
     active_indices: Sequence[int],
     global_to_row: Mapping[int, dict],
     *,
+    topology_mode: str = "explicit-current",
     max_outer: int = 50,
     max_inner: int = 20,
     crit: float = 1.0e-2,
@@ -8379,19 +8382,48 @@ def _xstar_lucy_condensed_solve(
             "solve_status": "empty",
             "solver_warning": "no active global_index rows",
         }
-    # The current global index already contains explicit XSTAR-style superlevel
-    # and continuum rows.  Keep low/spectroscopic rows explicit and let explicit
-    # superlevel/continuum rows act as their own condensed states.  This is the
-    # least destructive first diagnostic analogue to XSTAR's nsup array.
+    # Build XSTAR/Lucy condensed-state memberships.  The historical diagnostic
+    # mode kept every explicit global row as its own condensed state.  v0.3.76
+    # adds source-code-motivated topology experiments based on calc_hmc_element:
+    # (1) continuum rows can alias to the next-ion ground row, and (2) levels
+    # 2..nlev-1 can share one excited-state nsup group per ion.  The returned
+    # population vector is still expanded over the original explicit rows using
+    # the Lucy rr(level)=x(level)/p(superlevel) iteration, so existing line audits
+    # can continue to inspect level-resolved populations.
+    topology = str(topology_mode or "explicit-current").strip().lower().replace("_", "-")
+    if topology not in {"explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"}:
+        topology = "explicit-current"
+    ion_level_to_global = {}
+    for gg, rr in global_to_row.items():
+        st = maybe_int(rr.get("ion_stage"))
+        lev = maybe_int(rr.get("level_index"))
+        if st is not None and lev is not None:
+            ion_level_to_global[(int(st), int(lev))] = int(gg)
+
+    def _topology_super_key(g: int, row: Mapping[str, object]):
+        stage = maybe_int(row.get("ion_stage"))
+        lev = maybe_int(row.get("level_index"))
+        kind = str(row.get("level_kind") or "")
+        is_cont = bool(row.get("is_continuum")) or bool(row.get("is_parent_continuum_placeholder")) or bool(row.get("continuum_represents_parent"))
+        parent_stage = maybe_int(row.get("parent_ion_stage"))
+        parent_level = maybe_int(row.get("parent_level_index"))
+        if topology in {"xstar-continuum-alias", "xstar-continuum-alias-superlevels"} and is_cont and parent_stage is not None:
+            plevel = int(parent_level) if parent_level is not None else 1
+            pg = ion_level_to_global.get((int(parent_stage), plevel))
+            return ("xstar_parent_ground_alias", int(parent_stage), plevel, pg if pg is not None else "missing")
+        if topology == "xstar-continuum-alias-superlevels" and stage is not None and lev is not None:
+            if int(lev) == 1:
+                return ("xstar_ground_nsup", int(stage))
+            if int(lev) > 1 and not is_cont:
+                return ("xstar_excited_nsup", int(stage))
+        return ("explicit", str(stage if stage is not None else ""), kind, int(g))
+
     super_keys = []
     super_key_to_local = {}
     local_to_super = []
     for g in active:
         row = global_to_row.get(int(g), {})
-        # Future versions can map multiple high-n spectroscopic rows into one
-        # superlevel.  For v0.3.50, preserving each global row avoids hiding the
-        # triplet upper populations while still exercising the msolvelucy logic.
-        key = (str(row.get("ion_stage", "")), str(row.get("level_kind", "")), int(g))
+        key = _topology_super_key(int(g), row)
         if key not in super_key_to_local:
             super_key_to_local[key] = len(super_keys)
             super_keys.append(key)
@@ -8527,6 +8559,8 @@ def _xstar_lucy_condensed_solve(
         "xstar_lucy_last_condensed_rank": last_condensed_rank,
         "xstar_lucy_last_condensed_condition": last_condensed_condition,
         "xstar_lucy_last_lu_improvement_norms_json": json.dumps(last_lu_improvement_norms),
+        "xstar_lucy_topology_mode": topology,
+        "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
 
@@ -8541,6 +8575,7 @@ def build_full_global_normalized_solve_comparison(
     negative_population_action: str = "keep",
     prune_null_rate_levels: bool = True,
     svd_rcond: Optional[float] = None,
+    full_global_topology: str = "explicit-current",
 ) -> List[dict]:
     """Solve the first diagnostic full C VI+C V normalized global matrix.
 
@@ -8554,6 +8589,9 @@ def build_full_global_normalized_solve_comparison(
     XSTAR population solution yet.
     """
     he_like_stage = int(he_like_stage)
+    topology_requested = str(full_global_topology or "explicit-current").strip().lower().replace("_", "-")
+    if topology_requested not in {"explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"}:
+        topology_requested = "explicit-current"
     indexed_rows: List[dict] = []
     for r in global_index_rows:
         g = maybe_int(r.get("global_index"))
@@ -8678,6 +8716,7 @@ def build_full_global_normalized_solve_comparison(
                 M,
                 active_indices,
                 global_to_row,
+                topology_mode=topology_requested,
                 max_outer=50,
                 max_inner=20,
                 crit=1.0e-2,
@@ -8795,6 +8834,9 @@ def build_full_global_normalized_solve_comparison(
         "n_pruned_null_rate_global_indices": len(inactive_indices),
         "prune_null_rate_levels": bool(prune_null_rate_levels),
         "solver_requested": requested_solver,
+        "full_global_topology_requested": topology_requested,
+        "xstar_lucy_topology_mode": xstar_meta.get("xstar_lucy_topology_mode"),
+        "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
         "xstar_lucy_n_superlevels": xstar_meta.get("xstar_lucy_n_superlevels"),
@@ -8831,7 +8873,7 @@ def build_full_global_normalized_solve_comparison(
         "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
-        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure, while SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure; v0.3.76 adds experimental topology memberships explicit-current, xstar-continuum-alias, and xstar-continuum-alias-superlevels. SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
         "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
     }
     rows.append({
@@ -9197,6 +9239,7 @@ def solve_element_reference(
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
     full_global_prune_null_rate_levels: bool = True,
+    full_global_topology: str = "explicit-current",
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -9550,6 +9593,7 @@ def solve_element_reference(
         full_global_rank_deficient_action=full_global_rank_deficient_action,
         full_global_negative_population_action=full_global_negative_population_action,
         full_global_prune_null_rate_levels=full_global_prune_null_rate_levels,
+        full_global_topology=full_global_topology,
     )
     full_global_matrix_terms_unsuppressed = build_full_global_matrix_terms(
         global_index_rows=global_index_rows,
@@ -9597,6 +9641,7 @@ def solve_element_reference(
         rank_deficient_action=full_global_rank_deficient_action,
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
+        full_global_topology=full_global_topology,
     )
     type50_escape_factor_scan_rows = build_type50_escape_factor_scan_rows(
         transition_rows=transitions,
