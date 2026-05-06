@@ -15,7 +15,7 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
-Current development baseline: v0.3.76 adds experimental XSTAR topology memberships for the full-global `xstar-lucy` solve. The default `--full-global-topology explicit-current` preserves prior behavior, while `xstar-continuum-alias` aliases continuum rows to the parent-ion ground condensed group and `xstar-continuum-alias-superlevels` also groups levels 2..nlev-1 into one excited `nsup` group per ion.
+Current development baseline: v0.3.77 starts replacing diagnostic topology experiments with a direct XSTAR-code population path. For XSTAR topology modes, continuum / parent-continuum rows are now remapped to the parent-ion ground row before full-global matrix assembly, following `calc_hmc_element.f90` (`ipmat = ipmat + nlev - 1`). The `xstar-lucy` solve also uses a `levwk.f90` / `levwkelement.f90`-style LTE/partition seed when temperature and electron density are available.
 
 ### v0.3.71 type-53/type-74 ucalc closure audit
 

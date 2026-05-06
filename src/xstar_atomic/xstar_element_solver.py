@@ -8328,6 +8328,144 @@ def _xstar_mprove(A: np.ndarray, b: np.ndarray, lu: np.ndarray, indx: np.ndarray
     return x + dx, rnorm, float(np.linalg.norm(dx))
 
 
+
+def _xstar_continuum_alias_map(global_to_row: Mapping[int, dict]) -> Dict[int, int]:
+    """Return XSTAR calc_hmc_element continuum aliases for explicit rows.
+
+    XSTAR advances the element-matrix pointer by ``nlev-1`` for each ion.
+    Consequently the continuum row of ion q is not an independent state; it is
+    the same matrix row as the ground state of ion q+1.  This helper maps the
+    explicit Python continuum/parent-continuum placeholder rows onto the parent
+    ion ground global row when that row is present.
+    """
+    ion_level_to_global: Dict[tuple[int, int], int] = {}
+    for gg, rr in global_to_row.items():
+        st = maybe_int(rr.get("ion_stage"))
+        lev = maybe_int(rr.get("level_index"))
+        if st is not None and lev is not None:
+            ion_level_to_global[(int(st), int(lev))] = int(gg)
+    alias: Dict[int, int] = {}
+    for gg, rr in global_to_row.items():
+        is_cont = bool(rr.get("is_continuum")) or bool(rr.get("is_parent_continuum_placeholder")) or bool(rr.get("continuum_represents_parent"))
+        if not is_cont:
+            continue
+        parent_stage = maybe_int(rr.get("parent_ion_stage"))
+        parent_level = maybe_int(rr.get("parent_level_index")) or 1
+        if parent_stage is None:
+            continue
+        pg = ion_level_to_global.get((int(parent_stage), int(parent_level)))
+        if pg is not None and int(pg) != int(gg):
+            alias[int(gg)] = int(pg)
+    return alias
+
+
+def _safe_exp_for_levwk(x: float) -> float:
+    if x > 700.0:
+        return math.exp(700.0)
+    if x < -700.0:
+        return 0.0
+    return math.exp(x)
+
+
+def _xstar_levwk_seed_weights(
+    active: Sequence[int],
+    global_to_row: Mapping[int, dict],
+    *,
+    temperature_K: Optional[float] = None,
+    electron_density: Optional[float] = None,
+) -> np.ndarray:
+    """Approximate the XSTAR levwk/levwkelement LTE seed over active rows.
+
+    This implements the source-code structure from ``levwk.f90`` and the
+    chained element partitioning in ``levwkelement.f90`` using decoded type-6
+    level energies and statistical weights already present in the Python global
+    index.  It is used only to initialize the Lucy iteration; it does not impose
+    LTE on the converged solution.
+    """
+    active = [int(a) for a in active]
+    out = np.zeros(len(active), dtype=float)
+    if not active:
+        return out
+    tm = float(temperature_K or 0.0)
+    ne = float(electron_density or 0.0)
+    if tm <= 0.0 or ne <= 0.0 or not math.isfinite(tm) or not math.isfinite(ne):
+        return out
+    kT_eV = 8.617333262145e-5 * tm
+    if kT_eV <= 0.0:
+        return out
+    q2 = 2.07e-16 * ne * (tm ** (-1.5))
+    by_stage: Dict[int, List[tuple[int, dict]]] = {}
+    for idx, g in enumerate(active):
+        rr = global_to_row.get(int(g), {})
+        st = maybe_int(rr.get("ion_stage"))
+        lev = maybe_int(rr.get("level_index"))
+        is_cont = bool(rr.get("is_continuum")) or bool(rr.get("is_parent_continuum_placeholder")) or bool(rr.get("continuum_represents_parent"))
+        if st is None or lev is None or is_cont:
+            continue
+        by_stage.setdefault(int(st), []).append((idx, rr))
+    # XSTAR steps through ions in database order and chains the last LTE entry
+    # of one ion into the first continuum/ground entry of the next.  We preserve
+    # the selected stage ordering used by the element solver (highest stage to
+    # lowest stage) and use levwk within each ion.
+    previous_last = None
+    previous_last_rnisi = None
+    previous_prev_rnisi = None
+    for stage in sorted(by_stage, reverse=True):
+        items = sorted(by_stage[stage], key=lambda x: maybe_int(x[1].get("level_index")) or 10**9)
+        if not items:
+            continue
+        # Choose the maximum ionization-potential/continuum energy in the ion
+        # as ethion, matching levwk's use of rlev(1,nlev).  If unavailable, use
+        # the largest decoded level energy as a fallback.
+        eth_candidates=[]
+        for _, rr in items:
+            ip = maybe_float(rr.get("ionization_potential_eV"))
+            en = maybe_float(rr.get("energy_eV"))
+            if ip is not None and math.isfinite(float(ip)) and float(ip) > 0:
+                eth_candidates.append(float(ip))
+            elif en is not None and math.isfinite(float(en)):
+                eth_candidates.append(float(en))
+        ethion=max(eth_candidates) if eth_candidates else 0.0
+        g_cont=maybe_float(items[-1][1].get("statistical_weight_g")) or 1.0
+        rs=q2/max(float(g_cont),1.0e-300)
+        rnisi=[]
+        for _, rr in items:
+            en=maybe_float(rr.get("energy_eV")) or 0.0
+            g=maybe_float(rr.get("statistical_weight_g")) or 1.0
+            dE=max(0.0, float(ethion)-float(en))
+            explev2=_safe_exp_for_levwk(-dE/kT_eV)
+            val=float(g)*rs/max(explev2,1.0e-300)
+            if not math.isfinite(val) or val <= 0.0:
+                val=1.0e-300
+            rnisi.append(val)
+        # levwk sets continuum to 1 before normalizing; for decoded rows that
+        # lack an explicit continuum this still gives a finite top-level scale.
+        if rnisi:
+            rnisi[-1]=max(rnisi[-1],1.0)
+        bb=sum(rnisi) if rnisi else 0.0
+        if bb>0.0 and math.isfinite(bb):
+            rnisi=[v/bb for v in rnisi]
+        for k,(idx, rr) in enumerate(items):
+            if previous_last is None:
+                out[idx]=rnisi[k]
+            else:
+                if k == 0:
+                    # First level of the next ion inherits chained normalization.
+                    out[idx]=previous_last
+                else:
+                    denom=rnisi[k-1] if k-1 < len(rnisi) else 1.0
+                    out[idx]=min(1.0e66, out[items[k-1][0]]*rnisi[k]/max(denom,1.0e-300))
+        if items:
+            previous_last=out[items[-1][0]]
+            previous_last_rnisi=rnisi[-1] if rnisi else None
+            previous_prev_rnisi=rnisi[-2] if len(rnisi)>1 else None
+    if not np.any(out>0.0):
+        return out
+    s=float(np.sum(out))
+    if s>0.0 and math.isfinite(s):
+        out/=s
+    return out
+
 def _xstar_lucy_lu_solve(A: np.ndarray, b: np.ndarray, *, max_improve: int = 2):
     """Solve ``A x = b`` using an explicit XSTAR ``leqt2f`` analogue.
 
@@ -8353,6 +8491,9 @@ def _xstar_lucy_condensed_solve(
     global_to_row: Mapping[int, dict],
     *,
     topology_mode: str = "explicit-current",
+    population_seed: str = "xstar-levwkelement",
+    temperature_K: Optional[float] = None,
+    electron_density: Optional[float] = None,
     max_outer: int = 50,
     max_inner: int = 20,
     crit: float = 1.0e-2,
@@ -8431,16 +8572,25 @@ def _xstar_lucy_condensed_solve(
     nsup = len(super_keys)
     global_to_active_local = {g: k for k, g in enumerate(active)}
     M_active = M[np.ix_(active, active)].astype(float, copy=True)
-    # XSTAR initializes/iterates with a normalized population vector.  Start from
-    # statistical weights when available; otherwise uniform.
+    # XSTAR calls levwkelement before msolvelucy to build the LTE/partition
+    # seed rnise over the element.  Prefer that source-code seed when enough
+    # level metadata are present, otherwise fall back to the older statistical
+    # weight initialization.
+    seed_mode = str(population_seed or "xstar-levwkelement").strip().lower().replace("_", "-")
     x = np.zeros(len(active), dtype=float)
-    for k, g in enumerate(active):
-        wg = maybe_float(global_to_row.get(int(g), {}).get("statistical_weight_g"))
-        if wg is None or not math.isfinite(float(wg)) or float(wg) <= 0.0:
-            wg = 1.0
-        x[k] = float(wg)
+    if seed_mode in {"xstar-levwkelement", "levwkelement", "xstar"}:
+        x = _xstar_levwk_seed_weights(active, global_to_row, temperature_K=temperature_K, electron_density=electron_density)
+    if float(np.sum(x)) <= 0.0 or not np.all(np.isfinite(x)):
+        x = np.zeros(len(active), dtype=float)
+        for k, g in enumerate(active):
+            wg = maybe_float(global_to_row.get(int(g), {}).get("statistical_weight_g"))
+            if wg is None or not math.isfinite(float(wg)) or float(wg) <= 0.0:
+                wg = 1.0
+            x[k] = float(wg)
+        seed_mode = "statistical-weight-fallback"
     if float(np.sum(x)) <= 0.0:
         x[:] = 1.0
+        seed_mode = "uniform-fallback"
     x /= float(np.sum(x))
     diff = float("inf")
     diff2 = float("inf")
@@ -8560,6 +8710,7 @@ def _xstar_lucy_condensed_solve(
         "xstar_lucy_last_condensed_condition": last_condensed_condition,
         "xstar_lucy_last_lu_improvement_norms_json": json.dumps(last_lu_improvement_norms),
         "xstar_lucy_topology_mode": topology,
+        "xstar_lucy_population_seed_mode": seed_mode,
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
@@ -8576,6 +8727,8 @@ def build_full_global_normalized_solve_comparison(
     prune_null_rate_levels: bool = True,
     svd_rcond: Optional[float] = None,
     full_global_topology: str = "explicit-current",
+    temperature_K: Optional[float] = None,
+    electron_density: Optional[float] = None,
 ) -> List[dict]:
     """Solve the first diagnostic full C VI+C V normalized global matrix.
 
@@ -8616,6 +8769,11 @@ def build_full_global_normalized_solve_comparison(
         int(r.get("global_index")): (maybe_int(r.get("ion_stage")), maybe_int(r.get("level_index")))
         for r in indexed_rows
     }
+    # v0.3.77: apply the calc_hmc_element nlev-1 continuum alias at the
+    # matrix-index level for XSTAR topology modes.  Earlier v0.3.76 only
+    # grouped the explicit continuum row with the parent ground in the Lucy
+    # superlevel membership; XSTAR never creates that separate continuum row.
+    continuum_alias_map = _xstar_continuum_alias_map(global_to_row) if topology_requested in {"xstar-continuum-alias", "xstar-continuum-alias-superlevels"} else {}
 
     M = np.zeros((n, n), dtype=float)
     n_triplet_rows_used = 0
@@ -8636,6 +8794,8 @@ def build_full_global_normalized_solve_comparison(
         if int(row) < 0 or int(col) < 0 or int(row) >= n or int(col) >= n:
             n_skipped_bad_index += 1
             continue
+        row = continuum_alias_map.get(int(row), int(row))
+        col = continuum_alias_map.get(int(col), int(col))
         rate = maybe_float(t.get("full_global_signed_rate_s^-1"))
         if rate is None:
             rate = maybe_float(t.get("signed_rate_s^-1"))
@@ -8717,6 +8877,9 @@ def build_full_global_normalized_solve_comparison(
                 active_indices,
                 global_to_row,
                 topology_mode=topology_requested,
+                population_seed="xstar-levwkelement",
+                temperature_K=temperature_K,
+                electron_density=electron_density,
                 max_outer=50,
                 max_inner=20,
                 crit=1.0e-2,
@@ -8835,7 +8998,10 @@ def build_full_global_normalized_solve_comparison(
         "prune_null_rate_levels": bool(prune_null_rate_levels),
         "solver_requested": requested_solver,
         "full_global_topology_requested": topology_requested,
+        "xstar_matrix_continuum_alias_count": len(continuum_alias_map),
+        "xstar_matrix_continuum_alias_json": json.dumps({str(k): int(v) for k, v in sorted(continuum_alias_map.items())}, sort_keys=True),
         "xstar_lucy_topology_mode": xstar_meta.get("xstar_lucy_topology_mode"),
+        "xstar_lucy_population_seed_mode": xstar_meta.get("xstar_lucy_population_seed_mode"),
         "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
@@ -9642,6 +9808,8 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
         full_global_topology=full_global_topology,
+        temperature_K=temperature,
+        electron_density=electron_density,
     )
     type50_escape_factor_scan_rows = build_type50_escape_factor_scan_rows(
         transition_rows=transitions,
