@@ -8578,6 +8578,97 @@ def _xstar_levwk_seed_weights(
 
 
 
+def _xstar_msolvelucy_pairs_from_matrix(M_active: np.ndarray) -> List[dict]:
+    """Reconstruct XSTAR-style ``ajisb`` two-rate pairs from the dense matrix.
+
+    ``calc_hmc_ion.f90`` stores each physical two-level process as forward and
+    reverse rates ``ans1`` and ``ans2`` plus two diagonal bookkeeping rows.  The
+    Lucy solver does not directly condense the already-expanded dense matrix;
+    it uses the two off-diagonal ``ajisb`` entries and the current within-
+    superlevel fractions ``rr``.  This helper derives the same pair abstraction
+    from the current diagnostic matrix by treating positive off-diagonal matrix
+    terms as source->destination rates.
+
+    For local indices ``llo < lup``:
+      * ``ans1`` is the upward/low-to-high rate, i.e. M[lup, llo].
+      * ``ans2`` is the downward/high-to-low rate, i.e. M[llo, lup].
+
+    The returned rows are then expanded internally exactly as in
+    ``calc_hmc_ion.f90`` / ``msolvelucy.f90``.
+    """
+    pairs: List[dict] = []
+    n = int(M_active.shape[0]) if M_active is not None else 0
+    for llo in range(n):
+        for lup in range(llo + 1, n):
+            ans1 = float(M_active[lup, llo]) if M_active[lup, llo] > 0.0 else 0.0
+            ans2 = float(M_active[llo, lup]) if M_active[llo, lup] > 0.0 else 0.0
+            if ans1 > 0.0 or ans2 > 0.0:
+                pairs.append({
+                    "llo": int(llo),
+                    "lup": int(lup),
+                    "ans1_low_to_high_s^-1": float(ans1),
+                    "ans2_high_to_low_s^-1": float(ans2),
+                })
+    return pairs
+
+
+def _xstar_msolvelucy_apply_pair_condensation(
+    pairs: Sequence[Mapping[str, object]],
+    rr: np.ndarray,
+    local_to_super: Sequence[int],
+    nsup: int,
+) -> np.ndarray:
+    """Construct the condensed superlevel matrix using XSTAR's ``ajisb`` rules."""
+    A_sup = np.zeros((int(nsup), int(nsup)), dtype=float)
+    for pair in pairs:
+        llo = int(pair.get("llo"))
+        lup = int(pair.get("lup"))
+        ans1 = float(pair.get("ans1_low_to_high_s^-1") or 0.0)
+        ans2 = float(pair.get("ans2_high_to_low_s^-1") or 0.0)
+        # calc_hmc_ion entry 1: indb=(lup,llo), ajisb=(ans1,ans2)
+        # msolvelucy: A(nspm,nspn)+=ajisb1*rr(nn); A(nspm,nspm)-=ajisb2*rr(mm)
+        for mm, nn, aj1, aj2 in (
+            (lup, llo, ans1, ans2),
+            (llo, lup, ans2, ans1),
+        ):
+            nspm = int(local_to_super[mm])
+            nspn = int(local_to_super[nn])
+            if nspn != nspm and nspn >= 0 and nspm >= 0:
+                if abs(aj1) > 1.0e-48 or abs(aj2) > 1.0e-48:
+                    A_sup[nspm, nspn] += float(aj1) * float(rr[nn])
+                    A_sup[nspm, nspm] -= float(aj2) * float(rr[mm])
+    return A_sup
+
+
+def _xstar_msolvelucy_fixed_point_update_from_pairs(
+    pairs: Sequence[Mapping[str, object]],
+    x: np.ndarray,
+) -> np.ndarray:
+    """One XSTAR msolvelucy inner ``riu/rui/ril/rli`` fixed-point update."""
+    n = int(len(x))
+    riu = np.zeros(n, dtype=float)
+    ril = np.zeros(n, dtype=float)
+    rui = np.zeros(n, dtype=float)
+    rli = np.zeros(n, dtype=float)
+    for pair in pairs:
+        llo = int(pair.get("llo"))
+        lup = int(pair.get("lup"))
+        ans1 = abs(float(pair.get("ans1_low_to_high_s^-1") or 0.0))
+        ans2 = abs(float(pair.get("ans2_high_to_low_s^-1") or 0.0))
+        # Entry indb=(lup,llo): nn < mm branch in msolvelucy.
+        ril[lup] += ans2
+        rli[lup] += ans1 * max(0.0, float(x[llo]))
+        # Entry indb=(llo,lup): nn > mm branch in msolvelucy.
+        riu[llo] += ans1
+        rui[llo] += ans2 * max(0.0, float(x[lup]))
+    x_new = (rli + rui) / (ril + riu + 1.0e-24)
+    sx = float(np.sum(x_new))
+    if sx != 0.0 and math.isfinite(sx):
+        x_new = x_new / sx
+    return x_new
+
+
+
 def build_calc_ion_rates_istruc_audit_rows(
     *,
     he_like_stage: int,
@@ -8590,7 +8681,7 @@ def build_calc_ion_rates_istruc_audit_rows(
 ) -> List[dict]:
     """Build a pre-matrix XSTAR ``calc_ion_rates``/``istruc`` audit table.
 
-    v0.3.83 tightens this reconstruction to the visible source-code logic in
+    v0.3.84 tightens this reconstruction to the visible source-code logic in
     ``calc_ion_rates.f90``.  That routine loops over records and calls
     ``ucalc`` with ``lfpi=1``.  It then increments total ionization ``pirti``
     only for rate types 1, 15, and rate-type 7 records whose destination level
@@ -8651,7 +8742,7 @@ def build_calc_ion_rates_istruc_audit_rows(
         equation_role = "pirti" if pirti_inc else ("rrrti" if rrrti_inc else "not_in_calc_ion_rates_total")
         rows.append({
             "row_kind": "calc_ion_rates_istruc_audit",
-            "provenance": "v0.3.83_source_code_gated_calc_ion_rates_istruc_reconstruction",
+            "provenance": "v0.3.84_source_code_gated_calc_ion_rates_istruc_reconstruction",
             "source_table": source,
             "rate_family": family,
             "ion_process": process,
@@ -8690,7 +8781,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             r.get("photoionization_rate_s^-1") if r.get("photoionization_rate_s^-1") not in (None, "") else r.get("phint53_photoionization_rate_s^-1"),
             record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("phint53_status") or r.get("assembly_status") or "evaluated"),
-            note="pre-matrix photoionization candidate; v0.3.83 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
+            note="pre-matrix photoionization candidate; v0.3.84 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
             calc_role="pirti_candidate",
         )
 
@@ -8833,7 +8924,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             by_process_included[proc] = by_process_included.get(proc, 0.0) + val
     rows.append({
         "row_kind": "calc_ion_rates_istruc_summary",
-        "provenance": "v0.3.83_source_code_gated_calc_ion_rates_istruc_reconstruction",
+        "provenance": "v0.3.84_source_code_gated_calc_ion_rates_istruc_reconstruction",
         "status": status,
         "low_ion_stage": low,
         "high_ion_stage": high,
@@ -9108,6 +9199,11 @@ def _xstar_lucy_condensed_solve(
     nsup = len(super_keys)
     global_to_active_local = {g: k for k, g in enumerate(active)}
     M_active = M[np.ix_(active, active)].astype(float, copy=True)
+    # v0.3.84: msolvelucy does not condense the dense matrix directly.
+    # calc_hmc_ion builds two-rate ajisb pairs (ans1 low->high, ans2 high->low)
+    # plus diagonal bookkeeping rows; msolvelucy constructs the condensed matrix
+    # from those pairs and the current rr=x/p superlevel fractions.
+    xstar_pairs = _xstar_msolvelucy_pairs_from_matrix(M_active)
     # XSTAR calls levwkelement before msolvelucy to build the LTE/partition
     # seed rnise over the element.  Prefer that source-code seed when enough
     # level metadata are present, otherwise fall back to the older statistical
@@ -9116,6 +9212,7 @@ def _xstar_lucy_condensed_solve(
     x = np.zeros(len(active), dtype=float)
     if seed_mode in {"xstar-levwkelement", "levwkelement", "xstar"}:
         x = _xstar_levwk_seed_weights(active, global_to_row, temperature_K=temperature_K, electron_density=electron_density)
+    rnise_seed = np.array(x, dtype=float, copy=True)
     if float(np.sum(x)) <= 0.0 or not np.all(np.isfinite(x)):
         x = np.zeros(len(active), dtype=float)
         for k, g in enumerate(active):
@@ -9128,6 +9225,10 @@ def _xstar_lucy_condensed_solve(
         x[:] = 1.0
         seed_mode = "uniform-fallback"
     x /= float(np.sum(x))
+    if float(np.sum(rnise_seed)) <= 0.0 or not np.all(np.isfinite(rnise_seed)):
+        rnise_seed = np.array(x, dtype=float, copy=True)
+    else:
+        rnise_seed = rnise_seed / max(float(np.sum(rnise_seed)), 1.0e-300)
     closure_mode = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
     closure_info = dict(ion_fraction_closure_info or {})
     # XSTAR calc_hmc_element.f90 uses calc_ion_rates -> istruc to choose the ion
@@ -9160,16 +9261,7 @@ def _xstar_lucy_condensed_solve(
                 rr[k] = x[k] / (1.0e-48 + p[sp])
             else:
                 rr[k] = 1.0
-        A_sup = np.zeros((nsup, nsup), dtype=float)
-        # Condense sum_i M_ij rr_j P_super(j), matching the conservation form
-        # implied by msolvelucy's rr-weighted superlevel matrix.
-        for i_local in range(len(active)):
-            spi = local_to_super[i_local]
-            for j_local in range(len(active)):
-                val = M_active[i_local, j_local]
-                if val != 0.0:
-                    spj = local_to_super[j_local]
-                    A_sup[spi, spj] += float(val) * float(rr[j_local])
+        A_sup = _xstar_msolvelucy_apply_pair_condensation(xstar_pairs, rr, local_to_super, nsup)
         b_sup = np.zeros(nsup, dtype=float)
         nspcon = nsup - 1
         A_solve = A_sup.copy()
@@ -9203,26 +9295,9 @@ def _xstar_lucy_condensed_solve(
         for inner in range(int(max_inner)):
             nit3 += 1
             x_old_inner = x.copy()
-            gain = np.zeros_like(x)
-            loss = np.zeros_like(x)
-            for i in range(len(active)):
-                # Incoming positive off-diagonal rates into i from j.
-                for j in range(len(active)):
-                    if i == j:
-                        continue
-                    rate = M_active[i, j]
-                    if rate > 0.0:
-                        gain[i] += rate * max(0.0, x[j])
-                loss_i = -M_active[i, i]
-                if loss_i > 0.0:
-                    loss[i] = loss_i
-            x_new = np.where(loss > 0.0, gain / (loss + 1.0e-24), x)
-            sx = float(np.sum(x_new))
-            if sx != 0.0 and math.isfinite(sx):
-                x_new = x_new / sx
+            x = _xstar_msolvelucy_fixed_point_update_from_pairs(xstar_pairs, x)
             # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
             # msolvelucy enforces total number conservation only.
-            x = x_new
             diff2 = 0.0
             for old, new in zip(x_old_inner, x):
                 if new > 1.0e-6:
@@ -9243,11 +9318,37 @@ def _xstar_lucy_condensed_solve(
                         break
         if diff < crit:
             break
+    # Final XSTAR msolvelucy bookkeeping: p(superlevel), rr(level)=x/p,
+    # rnise from levwkelement, and bileve=xileve/rnise for emissivity output.
+    p_final = np.zeros(nsup, dtype=float)
+    for k, sp in enumerate(local_to_super):
+        p_final[sp] += float(x[k])
+    detail_by_global: Dict[str, dict] = {}
+    for k, g in enumerate(active):
+        sp = int(local_to_super[k])
+        rr_final = float(x[k]) / (1.0e-48 + float(p_final[sp])) if p_final[sp] > 1.0e-36 else 1.0
+        rn = float(rnise_seed[k]) if k < len(rnise_seed) else 0.0
+        b_departure = float(x[k]) / (1.0e-37 + rn) if rn > 0.0 else None
+        detail_by_global[str(int(g))] = {
+            "xstar_ipmat2_index": int(k + 1),
+            "xstar_nsup": int(sp + 1),
+            "xstar_superlevel_population_p": float(p_final[sp]),
+            "xstar_rr_fraction_within_superlevel": float(rr_final),
+            "xstar_levwkelement_rnise": float(rn),
+            "xstar_bileve_departure_coefficient": b_departure,
+            "xstar_xileve_emissivity_population": float(x[k]),
+        }
     pop = np.zeros(n_full, dtype=float)
     for k, g in enumerate(active):
         pop[int(g)] = float(x[k])
     meta = {
         "solver": "xstar_msolvelucy_lu",
+        "xstar_population_construction_mode": "calc_hmc_element_levwkelement_msolvelucy_exact_p_rr_b_ipmat_nsup",
+        "xstar_msolvelucy_uses_fortran_ajisb_pairs": True,
+        "xstar_msolvelucy_n_two_rate_pairs": int(len(xstar_pairs)),
+        "xstar_msolvelucy_n_ajisb_entries_equivalent": int(4 * len(xstar_pairs)),
+        "xstar_msolvelucy_final_p_json": json.dumps([float(v) for v in p_final]),
+        "_xstar_msolvelucy_population_detail_by_global": detail_by_global,
         "solve_status": "warning" if lu_failures else "ok",
         "solver_warning": "" if not lu_failures else f"condensed_lu_failed_{lu_failures}_times_lstsq_used_for_diagnostic_continuation",
         "xstar_lucy_n_superlevels": int(nsup),
@@ -9322,7 +9423,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -9581,6 +9682,11 @@ def build_full_global_normalized_solve_comparison(
         "xstar_matrix_continuum_alias_json": json.dumps({str(k): int(v) for k, v in sorted(continuum_alias_map.items())}, sort_keys=True),
         "xstar_lucy_topology_mode": xstar_meta.get("xstar_lucy_topology_mode"),
         "xstar_lucy_population_seed_mode": xstar_meta.get("xstar_lucy_population_seed_mode"),
+        "xstar_population_construction_mode": xstar_meta.get("xstar_population_construction_mode"),
+        "xstar_msolvelucy_uses_fortran_ajisb_pairs": xstar_meta.get("xstar_msolvelucy_uses_fortran_ajisb_pairs"),
+        "xstar_msolvelucy_n_two_rate_pairs": xstar_meta.get("xstar_msolvelucy_n_two_rate_pairs"),
+        "xstar_msolvelucy_n_ajisb_entries_equivalent": xstar_meta.get("xstar_msolvelucy_n_ajisb_entries_equivalent"),
+        "xstar_msolvelucy_final_p_json": xstar_meta.get("xstar_msolvelucy_final_p_json"),
         "xstar_istruc_ion_fraction_closure_requested": closure_requested,
         "xstar_istruc_ion_fraction_closure_status": xstar_meta.get("xstar_istruc_ion_fraction_closure_status") or ion_closure_info.get("status"),
         "xstar_istruc_ion_fraction_targets_json": xstar_meta.get("xstar_istruc_ion_fraction_targets_json") or json.dumps({str(k): float(v) for k, v in sorted((ion_closure_info.get("targets") or {}).items())}, sort_keys=True),
@@ -9628,8 +9734,8 @@ def build_full_global_normalized_solve_comparison(
         "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
-        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure; v0.3.76 adds experimental topology memberships explicit-current, xstar-continuum-alias, and xstar-continuum-alias-superlevels. SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
-        "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.84 reconstructs the levwkelement/msolvelucy population construction with p, rr, bmatsup, ipmat2 ordering, nsup memberships, and bileve=xileve/rnise emissivity populations. SVD/lstsq remain available for non-Lucy rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not yet a complete physical XSTAR element model",
+        "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -9661,8 +9767,10 @@ def build_full_global_normalized_solve_comparison(
         "solver_warning": solver_warning,
         **common,
     })
+    lucy_detail_by_global = xstar_meta.get("_xstar_msolvelucy_population_detail_by_global") or {}
     for g in range(n):
         grow = global_to_row.get(g, {})
+        lucy_detail = lucy_detail_by_global.get(str(g), {}) if isinstance(lucy_detail_by_global, dict) else {}
         rows.append({
             "row_kind": "population",
             "comparison_case": "full_global_population_by_global_index",
@@ -9676,9 +9784,16 @@ def build_full_global_normalized_solve_comparison(
             "is_superlevel": grow.get("is_superlevel"),
             "is_continuum": grow.get("is_continuum"),
             "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
+            "xstar_ipmat2_index": lucy_detail.get("xstar_ipmat2_index"),
+            "xstar_nsup": lucy_detail.get("xstar_nsup"),
+            "xstar_superlevel_population_p": lucy_detail.get("xstar_superlevel_population_p"),
+            "xstar_rr_fraction_within_superlevel": lucy_detail.get("xstar_rr_fraction_within_superlevel"),
+            "xstar_levwkelement_rnise": lucy_detail.get("xstar_levwkelement_rnise"),
+            "xstar_bileve_departure_coefficient": lucy_detail.get("xstar_bileve_departure_coefficient"),
+            "xstar_xileve_emissivity_population": lucy_detail.get("xstar_xileve_emissivity_population"),
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
         })
     return rows
 
