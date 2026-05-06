@@ -6547,19 +6547,30 @@ def _normalise_inverse_recombination_mode(mode: str | None) -> str:
         "type53-type74": "type53-type74",
         "type53+type74": "type53-type74",
         "all": "type53-type74",
+        "xstar": "xstar-ucalc",
+        "ucalc": "xstar-ucalc",
+        "xstar-ucalc": "xstar-ucalc",
+        "type53-phint53-type74-calt74": "xstar-ucalc",
     }
     m = aliases.get(m, m)
-    if m not in {"none", "type53-milne-diagnostic", "type74-direct-diagnostic", "type53-type74"}:
+    if m not in {"none", "type53-milne-diagnostic", "type74-direct-diagnostic", "type53-type74", "xstar-ucalc"}:
         m = "none"
     return m
 
 
 def _mode_includes_type53_inverse(mode: str | None) -> bool:
+    """Return True for the older diagnostic type-53 inverse proxy path."""
     return _normalise_inverse_recombination_mode(mode) in {"type53-milne-diagnostic", "type53-type74"}
 
 
 def _mode_includes_type74_inverse(mode: str | None) -> bool:
+    """Return True for the older direct type-74 inverse proxy path."""
     return _normalise_inverse_recombination_mode(mode) in {"type74-direct-diagnostic", "type53-type74"}
+
+
+def _mode_includes_xstar_ucalc_inverse(mode: str | None) -> bool:
+    """Return True for the source-code-aligned XSTAR ucalc inverse path."""
+    return _normalise_inverse_recombination_mode(mode) == "xstar-ucalc"
 
 
 def build_type53_milne_inverse_audit_rows(
@@ -6780,7 +6791,7 @@ def build_type74_calt74_rate_audit_rows(
     weight.  Absolute rates still depend on the placeholder radiation context.
     """
     mode = _normalise_inverse_recombination_mode(inverse_recombination_mode)
-    enabled = _mode_includes_type74_inverse(mode)
+    enabled = _mode_includes_type74_inverse(mode) or _mode_includes_xstar_ucalc_inverse(mode)
     scales = _parse_triplet_source_scales(type74_inverse_scale)
     scale = float(scales[0]) if scales else 1.0
     if not math.isfinite(scale):
@@ -7128,6 +7139,101 @@ def _phint53_milne_integral_audit_summary(rows: Sequence[dict]) -> dict:
         "component_summaries": component_rows,
         "warning": "v0.3.72 audit only; source-code Milne integral terms are not assembled into the solver.",
     }
+
+
+def build_global_type53_xstar_ucalc_matrix_terms(
+    phint53_milne_integral_audit_rows: Sequence[dict],
+    *,
+    inverse_recombination_mode: str = "none",
+) -> List[dict]:
+    """Map source-code phint53 Milne ans2 rows onto the full-global matrix.
+
+    v0.3.78 introduces the first direct XSTAR ``ucalc`` inverse-recombination
+    path.  For ``--inverse-recombination-mode xstar-ucalc`` this uses the
+    source-code phint53/milne audit rate instead of the older scaled proxy:
+
+        M[bound, parent_continuum] += ans2
+        M[parent_continuum, parent_continuum] -= ans2
+
+    Exact XSTAR ethion/ethtmp/emltlv arrays and escape factors are still
+    reconstructed, so the rows are marked experimental rather than final.
+    """
+    mode = _normalise_inverse_recombination_mode(inverse_recombination_mode)
+    enabled = _mode_includes_xstar_ucalc_inverse(mode)
+    rows: List[dict] = []
+    tid = 0
+    for ar in phint53_milne_integral_audit_rows:
+        if str(ar.get("audit_case")) != "type53_phint53_milne_integral":
+            continue
+        bound_g = maybe_int(ar.get("bound_global_index"))
+        cont_g = maybe_int(ar.get("continuum_or_parent_global_index"))
+        rate = maybe_float(ar.get("source_code_phint53_milne_ans2_rrrt_s^-1")) or 0.0
+        status = str(ar.get("phint53_milne_ans2_status") or "")
+        safe = enabled and bound_g is not None and cont_g is not None and rate > 0.0 and status.startswith("evaluated_")
+        base = {
+            "record": ar.get("record"),
+            "data_type": ar.get("data_type"),
+            "rate_type": ar.get("rate_type"),
+            "target_ion_stage": ar.get("target_ion_stage"),
+            "parent_ion_stage": ar.get("parent_ion_stage"),
+            "bound_level": ar.get("bound_level"),
+            "bound_global_index": bound_g,
+            "continuum_or_parent_global_index": cont_g,
+            "triplet_component": ar.get("triplet_component"),
+            "inverse_recombination_mode": mode,
+            "phint53_milne_ans2_status": ar.get("phint53_milne_ans2_status"),
+            "source_code_phint53_milne_ans2_rrrt_s^-1": rate,
+            "source_code_milne_f90_rate_alpha_ne_s^-1": ar.get("source_code_milne_f90_rate_alpha_ne_s^-1"),
+            "current_python_proxy_milne_ans2_scaled_s^-1": ar.get("current_python_proxy_milne_ans2_scaled_s^-1"),
+            "matrix_safe_to_assemble_physically": False,
+            "provenance": "v0.3.78_xstar_ucalc_type53_phint53_milne_matrix",
+            "warning": "experimental source-code ucalc path using reconstructed phint53/milne context; not yet exact XSTAR runtime state",
+        }
+        if not safe:
+            tid += 1
+            rows.append({
+                **base,
+                "global_type53_xstar_ucalc_term_id": tid,
+                "row_kind": "global_type53_milne_matrix_term",
+                "matrix_term_kind": "skipped_xstar_ucalc_phint53_milne_inverse",
+                "matrix_role": "skipped_disabled_or_missing_mapping_or_zero_source_code_ans2",
+                "matrix_row_global_index": "",
+                "matrix_col_global_index": "",
+                "signed_rate_s^-1": "",
+                "rate_s^-1": rate,
+                "assembly_status": "skipped_xstar_ucalc_phint53_milne_inverse",
+                "skip_reason": "mode_not_xstar_ucalc_or_missing_bound_or_continuum_global_index_or_zero_rate_or_unevaluated_integral",
+            })
+            continue
+        tid += 1
+        rows.append({
+            **base,
+            "global_type53_xstar_ucalc_term_id": tid,
+            "row_kind": "global_type53_milne_matrix_term",
+            "matrix_term_kind": "offdiag_parent_continuum_to_bound_xstar_ucalc_phint53_milne_gain",
+            "matrix_role": "M[bound_global_index,continuum_or_parent_global_index]+=phint53_ans2",
+            "matrix_row_global_index": bound_g,
+            "matrix_col_global_index": cont_g,
+            "signed_rate_s^-1": rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_xstar_ucalc_phint53_milne_inverse",
+            "skip_reason": "",
+        })
+        tid += 1
+        rows.append({
+            **base,
+            "global_type53_xstar_ucalc_term_id": tid,
+            "row_kind": "global_type53_milne_matrix_term",
+            "matrix_term_kind": "diagonal_parent_continuum_xstar_ucalc_phint53_milne_loss",
+            "matrix_role": "M[continuum_or_parent_global_index,continuum_or_parent_global_index]-=phint53_ans2",
+            "matrix_row_global_index": cont_g,
+            "matrix_col_global_index": cont_g,
+            "signed_rate_s^-1": -rate,
+            "rate_s^-1": rate,
+            "assembly_status": "assembled_xstar_ucalc_phint53_milne_inverse",
+            "skip_reason": "",
+        })
+    return rows
 
 
 def build_type53_type74_ucalc_closure_audit_rows(
@@ -7834,8 +7940,11 @@ def build_full_global_matrix_terms(
                 _add(r, component="type53_flat_photoionization_proxy", source_row_kind="global_type53_flat_proxy_matrix_term")
 
     for r in (global_type53_milne_matrix_terms or []):
-        if str(r.get("assembly_status")) == "assembled_diagnostic_milne_inverse_topology_proxy":
+        status = str(r.get("assembly_status"))
+        if status == "assembled_diagnostic_milne_inverse_topology_proxy":
             _add(r, component="type53_milne_inverse_recombination_proxy", source_row_kind="global_type53_milne_matrix_term")
+        elif status == "assembled_xstar_ucalc_phint53_milne_inverse":
+            _add(r, component="type53_xstar_ucalc_phint53_milne_inverse", source_row_kind="global_type53_milne_matrix_term")
 
     calt74_terms = list(global_type74_calt74_matrix_terms or [])
     n_calt74_assembled = sum(1 for r in calt74_terms if str(r.get("assembly_status")) == "assembled_diagnostic_type74_calt74_inverse_topology")
@@ -9737,6 +9846,12 @@ def solve_element_reference(
         temperature=temperature,
         electron_density=electron_density,
     )
+    global_type53_xstar_ucalc_matrix_terms = build_global_type53_xstar_ucalc_matrix_terms(
+        phint53_milne_integral_audit_rows,
+        inverse_recombination_mode=inverse_recombination_mode,
+    )
+    if _mode_includes_xstar_ucalc_inverse(inverse_recombination_mode):
+        global_type53_milne_matrix_terms = global_type53_xstar_ucalc_matrix_terms
     radiation_normalization_audit_rows = build_radiation_normalization_audit_rows(
         radiation_context_rows=radiation_context_rows,
         type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,

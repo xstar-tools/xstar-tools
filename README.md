@@ -15,7 +15,7 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
-Current development baseline: v0.3.77 starts replacing diagnostic topology experiments with a direct XSTAR-code population path. For XSTAR topology modes, continuum / parent-continuum rows are now remapped to the parent-ion ground row before full-global matrix assembly, following `calc_hmc_element.f90` (`ipmat = ipmat + nlev - 1`). The `xstar-lucy` solve also uses a `levwk.f90` / `levwkelement.f90`-style LTE/partition seed when temperature and electron density are available.
+Current development baseline: v0.3.78 continues the direct XSTAR-code population path. In addition to the v0.3.77 matrix-level continuum aliasing and `levwk`/`levwkelement`-style population seed, v0.3.78 adds `--inverse-recombination-mode xstar-ucalc`, which assembles type-53 inverse recombination from the source-code `phint53.f90` Milne `ans2` audit and type-74 inverse recombination from the source-aligned `calt74` alpha path with the XSTAR `gglo/ggup` correction. Older inverse-recombination proxy modes remain available for regression.
 
 ### v0.3.71 type-53/type-74 ucalc closure audit
 
@@ -1726,7 +1726,7 @@ v0.3.54 adds a diagnostic `phint53` scale scan for the full-global XSTAR-Lucy pa
 
 ### v0.3.55 inverse-recombination scaffold
 
-The element-solver demo now accepts `--inverse-recombination-mode none|type53-milne-diagnostic|type74-direct-diagnostic|type53-type74`.  The new mode writes diagnostic topology/audit CSVs for type-53 Milne inverse recombination and type-74 direct DR-delta inverse routes. These are scaffolds only: they are not yet physical XSTAR Milne or DR rates.
+The element-solver demo now accepts `--inverse-recombination-mode none|type53-milne-diagnostic|type74-direct-diagnostic|type53-type74|xstar-ucalc`.  The new mode writes diagnostic topology/audit CSVs for type-53 Milne inverse recombination and type-74 direct DR-delta inverse routes. These are scaffolds only: they are not yet physical XSTAR Milne or DR rates.
 
 ### v0.3.56 inverse-recombination scale scan
 
