@@ -8577,6 +8577,248 @@ def _xstar_levwk_seed_weights(
 
 
 
+
+def build_calc_ion_rates_istruc_audit_rows(
+    *,
+    he_like_stage: int,
+    stages: Sequence[int],
+    adjacent_audit_rows: Sequence[dict],
+    type53_phint53_rate_audit_rows: Sequence[dict],
+    phint53_milne_integral_audit_rows: Sequence[dict],
+    type74_calt74_rate_audit_rows: Sequence[dict],
+    include_charge_exchange: bool = False,
+) -> List[dict]:
+    """Build a pre-matrix XSTAR ``calc_ion_rates``/``istruc`` audit table.
+
+    XSTAR computes ion fractions before the detailed level-population matrix,
+    using total ionization and recombination rates for adjacent ions.  Earlier
+    v0.3.79 estimated those totals by summing inter-stage entries in the
+    already-expanded full-global matrix.  This helper instead collects the
+    available source-code rate audits before matrix assembly and classifies them
+    as ion-stage flows:
+
+    * type 53 ``phint53`` photoionization: lower stage -> parent stage;
+    * type 53 Milne ``ans2`` recombination: parent stage -> lower stage;
+    * type 74 ``calt74`` forward delta photoionization: lower -> parent;
+    * type 74 ``calt74`` weighted alpha: parent -> lower;
+    * type 1 total RR/AP rows where available: parent -> lower;
+    * type 57 collisional ionization / three-body recombination where decoded.
+
+    The output is intentionally pre-matrix and target-stage based.  It is still
+    an experimental reconstruction of XSTAR ``calc_ion_rates`` because the full
+    XSTAR thermal/radiation/opacity context is not completely ported.
+    """
+    he_like_stage = int(he_like_stage)
+    parent_stage = he_like_stage + 1
+    selected_stages = sorted({int(s) for s in stages}, reverse=True)
+    rows: List[dict] = []
+
+    def add_row(source: str, family: str, process: str, from_stage: int, to_stage: int,
+                rate: object, record: object = None, data_type: object = None,
+                rate_type: object = None, level: object = None, status: str = "evaluated",
+                note: str = "") -> None:
+        r = maybe_float(rate)
+        if r is None or not math.isfinite(float(r)) or float(r) <= 0.0:
+            return
+        rows.append({
+            "row_kind": "calc_ion_rates_istruc_audit",
+            "provenance": "v0.3.80_pre_matrix_calc_ion_rates_istruc_reconstruction",
+            "source_table": source,
+            "rate_family": family,
+            "ion_process": process,
+            "record": record,
+            "data_type": data_type,
+            "rate_type": rate_type,
+            "from_ion_stage": int(from_stage),
+            "to_ion_stage": int(to_stage),
+            "target_ion_stage": he_like_stage,
+            "parent_ion_stage": parent_stage,
+            "level": level,
+            "rate_s^-1": float(r),
+            "status": status,
+            "note": note,
+        })
+
+    for r in type53_phint53_rate_audit_rows:
+        st = maybe_int(r.get("target_ion_stage"))
+        par = maybe_int(r.get("parent_ion_stage"))
+        if st is None or par is None:
+            continue
+        add_row(
+            "xstar_like_element_solver_type53_phint53_rate_audit.csv",
+            "photoionization",
+            "type53_phint53_bound_free_photoionization",
+            int(st), int(par),
+            r.get("photoionization_rate_s^-1") if r.get("photoionization_rate_s^-1") not in (None, "") else r.get("phint53_photoionization_rate_s^-1"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("bound_level"),
+            status=str(r.get("phint53_status") or r.get("assembly_status") or "evaluated"),
+            note="pre-matrix ionization total; not summed from full-global matrix",
+        )
+
+    for r in phint53_milne_integral_audit_rows:
+        if str(r.get("row_kind")) != "phint53_milne_integral_audit":
+            continue
+        st = maybe_int(r.get("target_ion_stage"))
+        par = maybe_int(r.get("parent_ion_stage"))
+        if st is None or par is None:
+            continue
+        add_row(
+            "xstar_like_element_solver_phint53_milne_integral_audit.csv",
+            "radiative_recombination",
+            "type53_phint53_milne_inverse_recombination",
+            int(par), int(st),
+            r.get("source_code_phint53_milne_ans2_rrrt_s^-1"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("bound_level"),
+            status=str(r.get("phint53_milne_ans2_status") or "evaluated"),
+            note="source-code phint53.f90 rrrt/ans2 reconstruction used for pre-matrix recombination total",
+        )
+
+    for r in type74_calt74_rate_audit_rows:
+        st = maybe_int(r.get("target_ion_stage"))
+        par = maybe_int(r.get("parent_ion_stage"))
+        if st is None or par is None:
+            continue
+        add_row(
+            "xstar_like_element_solver_type74_calt74_rate_audit.csv",
+            "photoionization",
+            "type74_calt74_dr_delta_forward_photoionization",
+            int(st), int(par),
+            r.get("type74_calt74_rate_forward_unscaled_s^-1") if r.get("type74_calt74_rate_forward_unscaled_s^-1") not in (None, "") else r.get("type74_rate_unweighted_s^-1"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("destination_level"),
+            status=str(r.get("type74_calt74_status") or r.get("assembly_status") or "evaluated"),
+            note="calt74 forward delta-photoionization contribution to total ionization",
+        )
+        add_row(
+            "xstar_like_element_solver_type74_calt74_rate_audit.csv",
+            "dielectronic_recombination",
+            "type74_calt74_weighted_alpha_inverse_recombination",
+            int(par), int(st),
+            r.get("type74_calt74_inverse_rate_s^-1") if r.get("type74_calt74_inverse_rate_s^-1") not in (None, "") else r.get("type74_calt74_inverse_rate_unscaled_s^-1"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("destination_level"),
+            status=str(r.get("type74_calt74_status") or r.get("assembly_status") or "evaluated"),
+            note="calt74 alpha after XSTAR gglo/ggup weighting contribution to total DR recombination",
+        )
+
+    for r in adjacent_audit_rows:
+        dt = maybe_int(r.get("data_type"))
+        rt = maybe_int(r.get("rate_type"))
+        rec = r.get("record")
+        if dt == 1:
+            # XSTAR type-1 rows in this scaffold are total RR/AP sources from
+            # parent to target.  The stored source_rate_total already includes
+            # electron density (alpha * ne).
+            add_row(
+                "xstar_like_element_solver_ucalc_adjacent_audit.csv",
+                "radiative_recombination",
+                "type1_total_rr_ap_recombination",
+                int(maybe_int(r.get("parent_ion_stage")) or parent_stage),
+                int(maybe_int(r.get("target_ion_stage")) or he_like_stage),
+                r.get("source_rate_total_s^-1"),
+                record=rec, data_type=dt, rate_type=rt, level=r.get("destination_level"),
+                status=str(r.get("python_eval_status") or r.get("assembly_status") or "evaluated"),
+                note="type-1 total recombination source rate included in pre-matrix calc_ion_rates reconstruction",
+            )
+        elif dt == 57:
+            lower = int(maybe_int(r.get("type57_matrix_lower_ion_stage")) or he_like_stage)
+            upper = int(maybe_int(r.get("type57_matrix_upper_ion_stage")) or parent_stage)
+            add_row(
+                "xstar_like_element_solver_ucalc_adjacent_audit.csv",
+                "collisional_ionization",
+                "type57_collisional_ionization_forward",
+                lower, upper,
+                r.get("python_rate_forward_s^-1"),
+                record=rec, data_type=dt, rate_type=rt, level=r.get("type57_matrix_destination_level"),
+                status=str(r.get("python_eval_status") or r.get("type57_selected_convention_label") or "evaluated"),
+                note="decoded type-57 forward collisional ionization contribution when nonzero",
+            )
+            add_row(
+                "xstar_like_element_solver_ucalc_adjacent_audit.csv",
+                "three_body_recombination",
+                "type57_three_body_recombination_inverse",
+                upper, lower,
+                r.get("python_rate_inverse_s^-1"),
+                record=rec, data_type=dt, rate_type=rt, level=r.get("type57_matrix_destination_level"),
+                status=str(r.get("python_eval_status") or r.get("type57_selected_convention_label") or "evaluated"),
+                note="decoded type-57 inverse three-body recombination contribution when nonzero",
+            )
+        elif include_charge_exchange and dt in {3, 4, 5, 6}:
+            # Placeholder hook for future charge exchange data types; no rows are
+            # expected in the current C V/C VI diagnostic unless decoded upstream.
+            pass
+
+    stages_sorted = sorted({he_like_stage, parent_stage})
+    low, high = int(stages_sorted[0]), int(stages_sorted[-1])
+    ion_total = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == low and int(r.get("to_ion_stage")) == high)
+    rec_total = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == high and int(r.get("to_ion_stage")) == low)
+    denom = ion_total + rec_total
+    if denom > 0.0 and math.isfinite(denom) and ion_total > 0.0 and rec_total > 0.0:
+        x_low = rec_total / denom
+        x_high = ion_total / denom
+        status = "evaluated_two_stage_calc_ion_rates_istruc_balance"
+    else:
+        x_low = x_high = float("nan")
+        status = "not_evaluated_missing_bidirectional_total_rates"
+    by_family: Dict[str, float] = {}
+    for r in rows:
+        fam = str(r.get("rate_family") or "")
+        by_family[fam] = by_family.get(fam, 0.0) + float(r.get("rate_s^-1") or 0.0)
+    rows.append({
+        "row_kind": "calc_ion_rates_istruc_summary",
+        "provenance": "v0.3.80_pre_matrix_calc_ion_rates_istruc_reconstruction",
+        "status": status,
+        "low_ion_stage": low,
+        "high_ion_stage": high,
+        "ionization_total_low_to_high_s^-1": ion_total,
+        "recombination_total_high_to_low_s^-1": rec_total,
+        "target_fraction_low_stage": x_low,
+        "target_fraction_high_stage": x_high,
+        "n_detail_rows": len([r for r in rows if r.get("row_kind") == "calc_ion_rates_istruc_audit"]),
+        "rate_family_sums_json": json.dumps(by_family, sort_keys=True),
+        "purpose": "pre-matrix calc_ion_rates/istruc-style ion-stage closure; not derived from assembled full-global matrix",
+    })
+    return rows
+
+
+def _compute_xstar_calc_ion_rates_istruc_closure(
+    calc_ion_rates_istruc_audit_rows: Sequence[dict],
+) -> dict:
+    """Return ion-fraction targets from the pre-matrix calc_ion_rates audit."""
+    detail = [r for r in calc_ion_rates_istruc_audit_rows if str(r.get("row_kind")) == "calc_ion_rates_istruc_audit"]
+    stages = sorted({int(r.get("from_ion_stage")) for r in detail if maybe_int(r.get("from_ion_stage")) is not None} |
+                    {int(r.get("to_ion_stage")) for r in detail if maybe_int(r.get("to_ion_stage")) is not None})
+    flow: Dict[tuple[int, int], float] = {}
+    by_family: Dict[str, float] = {}
+    for r in detail:
+        a = maybe_int(r.get("from_ion_stage")); b = maybe_int(r.get("to_ion_stage")); rate = maybe_float(r.get("rate_s^-1"))
+        if a is None or b is None or rate is None or not math.isfinite(float(rate)) or float(rate) <= 0.0:
+            continue
+        flow[(int(a), int(b))] = flow.get((int(a), int(b)), 0.0) + float(rate)
+        fam = str(r.get("rate_family") or "")
+        by_family[fam] = by_family.get(fam, 0.0) + float(rate)
+    targets: Dict[int, float] = {}
+    status = "not_applied"
+    note = "requires exactly two adjacent stages and finite bidirectional pre-matrix calc_ion_rates totals"
+    if len(stages) == 2:
+        low, high = int(stages[0]), int(stages[1])
+        ion = float(flow.get((low, high), 0.0))
+        rec = float(flow.get((high, low), 0.0))
+        denom = ion + rec
+        if denom > 0.0 and math.isfinite(denom) and ion > 0.0 and rec > 0.0:
+            targets[low] = rec / denom
+            targets[high] = ion / denom
+            status = "applied_pre_matrix_calc_ion_rates_istruc_balance"
+            note = "x_low=R/(I+R), x_high=I/(I+R) from pre-matrix calc_ion_rates audit totals"
+    return {
+        "status": status,
+        "note": note,
+        "stages": stages,
+        "flow_rates": {f"{a}->{b}": v for (a, b), v in sorted(flow.items())},
+        "rate_family_sums": by_family,
+        "targets": targets,
+        "target_sum": float(sum(targets.values())) if targets else 0.0,
+        "source": "pre_matrix_calc_ion_rates_istruc_audit",
+    }
+
 def _compute_xstar_istruc_ion_fraction_closure(
     M: np.ndarray,
     active: Sequence[int],
@@ -8936,6 +9178,8 @@ def _xstar_lucy_condensed_solve(
         "xstar_istruc_ion_fraction_closure_status": closure_info.get("status") if closure_info else "not_requested",
         "xstar_istruc_ion_fraction_targets_json": json.dumps({str(k): float(v) for k, v in sorted(closure_targets.items())}, sort_keys=True),
         "xstar_istruc_ion_fraction_flow_rates_json": json.dumps(closure_info.get("flow_rates") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_source": closure_info.get("source") if closure_info else "",
+        "xstar_istruc_ion_fraction_rate_family_sums_json": json.dumps(closure_info.get("rate_family_sums") or {}, sort_keys=True),
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
@@ -8953,6 +9197,7 @@ def build_full_global_normalized_solve_comparison(
     svd_rcond: Optional[float] = None,
     full_global_topology: str = "explicit-current",
     ion_fraction_closure: str = "none",
+    calc_ion_rates_istruc_audit_rows: Optional[Sequence[dict]] = None,
     temperature_K: Optional[float] = None,
     electron_density: Optional[float] = None,
 ) -> List[dict]:
@@ -9057,9 +9302,17 @@ def build_full_global_normalized_solve_comparison(
     n_solve = int(M_solve.shape[0])
 
     closure_requested = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
-    if closure_requested not in {"none", "xstar-istruc", "istruc", "xstar-ion-balance"}:
+    if closure_requested not in {"none", "xstar-istruc", "istruc", "xstar-ion-balance", "xstar-calc-ion-rates", "calc-ion-rates"}:
         closure_requested = "none"
-    ion_closure_info = _compute_xstar_istruc_ion_fraction_closure(M, active_indices, global_to_row) if closure_requested != "none" else {"status": "not_requested", "targets": {}, "flow_rates": {}}
+    if closure_requested in {"xstar-calc-ion-rates", "calc-ion-rates", "xstar-istruc", "istruc", "xstar-ion-balance"} and calc_ion_rates_istruc_audit_rows:
+        ion_closure_info = _compute_xstar_calc_ion_rates_istruc_closure(calc_ion_rates_istruc_audit_rows)
+        ion_closure_info["requested_mode"] = closure_requested
+    elif closure_requested != "none":
+        ion_closure_info = _compute_xstar_istruc_ion_fraction_closure(M, active_indices, global_to_row)
+        ion_closure_info["requested_mode"] = closure_requested
+        ion_closure_info["source"] = "assembled_full_global_matrix_fallback"
+    else:
+        ion_closure_info = {"status": "not_requested", "targets": {}, "flow_rates": {}, "source": "none"}
 
     # Diagnostic normalization row.  XSTAR's msolvelucy replaces one row of the
     # condensed superlevel system by number conservation and then calls the
@@ -9239,6 +9492,8 @@ def build_full_global_normalized_solve_comparison(
         "xstar_istruc_ion_fraction_closure_status": xstar_meta.get("xstar_istruc_ion_fraction_closure_status") or ion_closure_info.get("status"),
         "xstar_istruc_ion_fraction_targets_json": xstar_meta.get("xstar_istruc_ion_fraction_targets_json") or json.dumps({str(k): float(v) for k, v in sorted((ion_closure_info.get("targets") or {}).items())}, sort_keys=True),
         "xstar_istruc_ion_fraction_flow_rates_json": xstar_meta.get("xstar_istruc_ion_fraction_flow_rates_json") or json.dumps(ion_closure_info.get("flow_rates") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_source": xstar_meta.get("xstar_istruc_ion_fraction_source") or ion_closure_info.get("source"),
+        "xstar_istruc_ion_fraction_rate_family_sums_json": xstar_meta.get("xstar_istruc_ion_fraction_rate_family_sums_json") or json.dumps(ion_closure_info.get("rate_family_sums") or {}, sort_keys=True),
         "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
@@ -9718,6 +9973,7 @@ def solve_element_reference(
         global_type74_inverse_matrix_terms: List[dict] = []
         type74_calt74_rate_audit_rows: List[dict] = []
         global_type74_calt74_matrix_terms: List[dict] = []
+        calc_ion_rates_istruc_audit_rows: List[dict] = []
         inverse_recombination_scale_scan_rows: List[dict] = []
         global_superlevel_cascade_matrix_terms: List[dict] = []
         if he_like_stage + 1 in stages:
@@ -9975,6 +10231,15 @@ def solve_element_reference(
         temperature=temperature,
         electron_density=electron_density,
     )
+    calc_ion_rates_istruc_audit_rows = build_calc_ion_rates_istruc_audit_rows(
+        he_like_stage=he_like_stage,
+        stages=stages,
+        adjacent_audit_rows=assembled_coupling_terms,
+        type53_phint53_rate_audit_rows=type53_phint53_rate_audit_rows,
+        phint53_milne_integral_audit_rows=phint53_milne_integral_audit_rows,
+        type74_calt74_rate_audit_rows=type74_calt74_rate_audit_rows,
+        include_charge_exchange=include_charge_exchange,
+    )
     global_type53_xstar_ucalc_matrix_terms = build_global_type53_xstar_ucalc_matrix_terms(
         phint53_milne_integral_audit_rows,
         inverse_recombination_mode=inverse_recombination_mode,
@@ -10053,6 +10318,7 @@ def solve_element_reference(
         prune_null_rate_levels=full_global_prune_null_rate_levels,
         full_global_topology=full_global_topology,
         ion_fraction_closure=ion_fraction_closure,
+        calc_ion_rates_istruc_audit_rows=calc_ion_rates_istruc_audit_rows,
         temperature_K=temperature,
         electron_density=electron_density,
     )
@@ -10241,6 +10507,8 @@ def solve_element_reference(
             "type74_calt74_rate_audit_summary": _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows),
             "n_global_type74_calt74_matrix_term_rows": len(global_type74_calt74_matrix_terms),
             "global_type74_calt74_matrix_terms_summary": _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms),
+            "n_calc_ion_rates_istruc_audit_rows": len(calc_ion_rates_istruc_audit_rows),
+            "calc_ion_rates_istruc_audit_summary": _calc_ion_rates_istruc_audit_summary(calc_ion_rates_istruc_audit_rows),
             "n_type53_type74_ucalc_closure_audit_rows": len(type53_type74_ucalc_closure_audit_rows),
             "type53_type74_ucalc_closure_audit_summary": _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows),
             "n_phint53_milne_integral_audit_rows": len(phint53_milne_integral_audit_rows),
@@ -12015,6 +12283,37 @@ def _triplet_source_scale_scan_summary(rows: Sequence[dict]) -> dict:
         },
     }
 
+
+def _calc_ion_rates_istruc_audit_summary(rows: Sequence[dict]) -> dict:
+    detail = [r for r in rows if str(r.get("row_kind")) == "calc_ion_rates_istruc_audit"]
+    summary = next((r for r in rows if str(r.get("row_kind")) == "calc_ion_rates_istruc_summary"), {})
+    by_family: Dict[str, float] = {}
+    by_process: Dict[str, float] = {}
+    flow: Dict[str, float] = {}
+    for r in detail:
+        rate = float(maybe_float(r.get("rate_s^-1")) or 0.0)
+        fam = str(r.get("rate_family") or "")
+        proc = str(r.get("ion_process") or "")
+        a = r.get("from_ion_stage"); b = r.get("to_ion_stage")
+        by_family[fam] = by_family.get(fam, 0.0) + rate
+        by_process[proc] = by_process.get(proc, 0.0) + rate
+        flow[f"{a}->{b}"] = flow.get(f"{a}->{b}", 0.0) + rate
+    return {
+        "n_calc_ion_rates_istruc_rows": len(rows),
+        "n_detail_rows": len(detail),
+        "status": summary.get("status", ""),
+        "low_ion_stage": summary.get("low_ion_stage", ""),
+        "high_ion_stage": summary.get("high_ion_stage", ""),
+        "ionization_total_low_to_high_s^-1": summary.get("ionization_total_low_to_high_s^-1", ""),
+        "recombination_total_high_to_low_s^-1": summary.get("recombination_total_high_to_low_s^-1", ""),
+        "target_fraction_low_stage": summary.get("target_fraction_low_stage", ""),
+        "target_fraction_high_stage": summary.get("target_fraction_high_stage", ""),
+        "rate_family_sums": by_family,
+        "ion_process_sums": by_process,
+        "flow_sums": flow,
+        "provenance": "v0.3.80_pre_matrix_calc_ion_rates_istruc_reconstruction",
+    }
+
 def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -12044,6 +12343,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     global_type74_inverse_matrix_terms = result.get("global_type74_inverse_matrix_terms", [])
     type74_calt74_rate_audit_rows = result.get("type74_calt74_rate_audit", [])
     global_type74_calt74_matrix_terms = result.get("global_type74_calt74_matrix_terms", [])
+    calc_ion_rates_istruc_audit_rows = result.get("calc_ion_rates_istruc_audit", [])
     type53_type74_ucalc_closure_audit_rows = result.get("type53_type74_ucalc_closure_audit", [])
     phint53_milne_integral_audit_rows = result.get("phint53_milne_integral_audit", [])
     xstar_matrix_topology_audit_rows = result.get("xstar_matrix_topology_audit", [])
@@ -12096,6 +12396,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["type74_calt74_rate_audit_summary"] = _type74_calt74_rate_audit_summary(type74_calt74_rate_audit_rows)
         if global_type74_calt74_matrix_terms:
             result["summary"]["global_type74_calt74_matrix_terms_summary"] = _global_type74_calt74_matrix_terms_summary(global_type74_calt74_matrix_terms)
+        if calc_ion_rates_istruc_audit_rows:
+            result["summary"]["calc_ion_rates_istruc_audit_summary"] = _calc_ion_rates_istruc_audit_summary(calc_ion_rates_istruc_audit_rows)
         if type53_type74_ucalc_closure_audit_rows:
             result["summary"]["type53_type74_ucalc_closure_audit_summary"] = _type53_type74_ucalc_closure_audit_summary(type53_type74_ucalc_closure_audit_rows)
         if phint53_milne_integral_audit_rows:
@@ -12175,6 +12477,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_type74_inverse_matrix_terms.csv", global_type74_inverse_matrix_terms)
     write_csv(out / "xstar_like_element_solver_type74_calt74_rate_audit.csv", type74_calt74_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_type74_calt74_matrix_terms.csv", global_type74_calt74_matrix_terms)
+    write_csv(out / "xstar_like_element_solver_calc_ion_rates_istruc_audit.csv", calc_ion_rates_istruc_audit_rows)
     write_csv(out / "xstar_like_element_solver_type53_type74_ucalc_closure_audit.csv", type53_type74_ucalc_closure_audit_rows)
     write_csv(out / "xstar_like_element_solver_phint53_milne_integral_audit.csv", phint53_milne_integral_audit_rows)
     write_csv(out / "xstar_like_element_solver_inverse_recombination_scale_scan.csv", inverse_recombination_scale_scan_rows)

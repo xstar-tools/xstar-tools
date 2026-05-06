@@ -1,3 +1,7 @@
+# xstar-atomic
+
+Current development baseline: v0.3.80 adds a pre-matrix XSTAR `calc_ion_rates` / `istruc` ion-fraction closure audit and `--ion-fraction-closure xstar-calc-ion-rates`. This mode derives adjacent C V/C VI ion-stage targets from source-code rate audits before full-global matrix assembly, rather than from summed assembled matrix entries.
+
 ### v0.3.66 calc_emis context writer fix
 
 ### v0.3.67 type-50 `ucalc` bound-bound diagnostic
@@ -15,7 +19,7 @@ v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_
 
 # xstar-atomic
 
-Current development baseline: v0.3.78 continues the direct XSTAR-code population path. In addition to the v0.3.77 matrix-level continuum aliasing and `levwk`/`levwkelement`-style population seed, v0.3.78 adds `--inverse-recombination-mode xstar-ucalc`, which assembles type-53 inverse recombination from the source-code `phint53.f90` Milne `ans2` audit and type-74 inverse recombination from the source-aligned `calt74` alpha path with the XSTAR `gglo/ggup` correction. Older inverse-recombination proxy modes remain available for regression.
+Current development baseline: v0.3.80 continues the direct XSTAR-code population path. In addition to the v0.3.77 matrix-level continuum aliasing and `levwk`/`levwkelement`-style population seed, v0.3.78 adds `--inverse-recombination-mode xstar-ucalc`, which assembles type-53 inverse recombination from the source-code `phint53.f90` Milne `ans2` audit and type-74 inverse recombination from the source-aligned `calt74` alpha path with the XSTAR `gglo/ggup` correction. Older inverse-recombination proxy modes remain available for regression.
 
 ### v0.3.71 type-53/type-74 ucalc closure audit
 

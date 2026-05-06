@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.80 - 2026-05-06
+
+- Added `xstar_like_element_solver_calc_ion_rates_istruc_audit.csv`, a pre-matrix XSTAR `calc_ion_rates` / `istruc` reconstruction for adjacent C V/C VI ion-stage closure.
+- Added `--ion-fraction-closure xstar-calc-ion-rates` and changed `xstar-istruc` to use the pre-matrix ion-rate audit when available instead of summed full-global matrix entries.
+- The audit separates available ion-stage rates into photoionization, radiative recombination, dielectronic recombination, collisional ionization, and three-body recombination contributions from type 53, type 74, type 1, and type 57 diagnostics.
+- Full-global solve metadata now records whether ion-fraction targets came from the pre-matrix `calc_ion_rates` audit or the older assembled-matrix fallback.
+- Default `--ion-fraction-closure none` remains unchanged; no default solver/rate behavior changes.
+
 ## v0.3.79 - 2026-05-06
 
 - Added experimental `--ion-fraction-closure none|xstar-istruc`.
