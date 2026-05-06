@@ -8590,39 +8590,68 @@ def build_calc_ion_rates_istruc_audit_rows(
 ) -> List[dict]:
     """Build a pre-matrix XSTAR ``calc_ion_rates``/``istruc`` audit table.
 
-    XSTAR computes ion fractions before the detailed level-population matrix,
-    using total ionization and recombination rates for adjacent ions.  Earlier
-    v0.3.79 estimated those totals by summing inter-stage entries in the
-    already-expanded full-global matrix.  This helper instead collects the
-    available source-code rate audits before matrix assembly and classifies them
-    as ion-stage flows:
-
-    * type 53 ``phint53`` photoionization: lower stage -> parent stage;
-    * type 53 Milne ``ans2`` recombination: parent stage -> lower stage;
-    * type 74 ``calt74`` forward delta photoionization: lower -> parent;
-    * type 74 ``calt74`` weighted alpha: parent -> lower;
-    * type 1 total RR/AP rows where available: parent -> lower;
-    * type 57 collisional ionization / three-body recombination where decoded.
-
-    The output is intentionally pre-matrix and target-stage based.  It is still
-    an experimental reconstruction of XSTAR ``calc_ion_rates`` because the full
-    XSTAR thermal/radiation/opacity context is not completely ported.
+    v0.3.82 tightens this reconstruction to the visible source-code logic in
+    ``calc_ion_rates.f90``.  That routine loops over records and calls
+    ``ucalc`` with ``lfpi=1``.  It then increments total ionization ``pirti``
+    only for rate types 1, 15, and rate-type 7 records whose destination level
+    is the ground/state ``idest1=1``.  It increments total recombination
+    ``rrrti`` only for rate types 8 and 6, using ``ans1`` total recombination
+    rates.  Level-resolved Milne/type-53 inverse terms and calt74 weighted-alpha
+    terms are retained as explicit recombination-side candidates, but are marked
+    as not included in the source-code ``rrrti`` total unless a later port of the
+    exact XSTAR total-rate array shows otherwise.
     """
     he_like_stage = int(he_like_stage)
     parent_stage = he_like_stage + 1
-    selected_stages = sorted({int(s) for s in stages}, reverse=True)
     rows: List[dict] = []
+
+    def _level_is_ground(level: object) -> bool:
+        try:
+            return int(float(str(level))) == 1
+        except Exception:
+            return False
+
+    def _pirti_included(rate_type: object, level: object) -> tuple[bool, str]:
+        rt = maybe_int(rate_type)
+        if rt in {1, 15}:
+            return True, "calc_ion_rates.f90 pirti += ans1 for lrtyp=1 or 15"
+        if rt == 7 and _level_is_ground(level):
+            return True, "calc_ion_rates.f90 pirti += ans1 for lrtyp=7 only when idest1=1"
+        if rt == 7:
+            return False, "excluded_from_pirti: calc_ion_rates.f90 requires lrtyp=7 with idest1=1; excited-level bound-free rows are level-population rates only"
+        return False, "excluded_from_pirti: rate_type not in source-code calc_ion_rates ionization set {1,15,7-ground}"
+
+    def _rrrti_included(rate_type: object) -> tuple[bool, str]:
+        rt = maybe_int(rate_type)
+        if rt in {6, 8}:
+            return True, "calc_ion_rates.f90 rrrti += ans1 for lrtyp=6 or 8 total recombination rows"
+        return False, "excluded_from_rrrti: source-code calc_ion_rates recombination total uses lrtyp=6 or 8 ans1, not level-resolved inverse ans2"
 
     def add_row(source: str, family: str, process: str, from_stage: int, to_stage: int,
                 rate: object, record: object = None, data_type: object = None,
                 rate_type: object = None, level: object = None, status: str = "evaluated",
-                note: str = "") -> None:
+                note: str = "", calc_role: str = "candidate") -> None:
         r = maybe_float(rate)
         if r is None or not math.isfinite(float(r)) or float(r) <= 0.0:
             return
+        # Source-code inclusion flags.
+        pirti_inc, pirti_reason = (False, "not_an_ionization_process")
+        rrrti_inc, rrrti_reason = (False, "not_a_recombination_process")
+        if str(calc_role) == "pirti_candidate":
+            pirti_inc, pirti_reason = _pirti_included(rate_type, level)
+        elif str(calc_role) == "rrrti_total_candidate":
+            rrrti_inc, rrrti_reason = _rrrti_included(rate_type)
+        elif str(calc_role) == "rrrti_level_resolved_candidate":
+            rrrti_inc = False
+            rrrti_reason = "diagnostic recombination candidate only: level-resolved inverse ans2/alpha is not summed into calc_ion_rates.f90 rrrti"
+        elif str(calc_role) == "excluded_inventory":
+            pirti_reason = "inventory/diagnostic row not included by calc_ion_rates.f90 total-rate gate"
+            rrrti_reason = "inventory/diagnostic row not included by calc_ion_rates.f90 total-rate gate"
+        included_total = bool(pirti_inc or rrrti_inc)
+        equation_role = "pirti" if pirti_inc else ("rrrti" if rrrti_inc else "not_in_calc_ion_rates_total")
         rows.append({
             "row_kind": "calc_ion_rates_istruc_audit",
-            "provenance": "v0.3.80_pre_matrix_calc_ion_rates_istruc_reconstruction",
+            "provenance": "v0.3.82_source_code_gated_calc_ion_rates_istruc_reconstruction",
             "source_table": source,
             "rate_family": family,
             "ion_process": process,
@@ -8635,146 +8664,192 @@ def build_calc_ion_rates_istruc_audit_rows(
             "parent_ion_stage": parent_stage,
             "level": level,
             "rate_s^-1": float(r),
+            "calc_ion_rates_role_candidate": calc_role,
+            "calc_ion_rates_pirti_included": bool(pirti_inc),
+            "calc_ion_rates_rrrti_included": bool(rrrti_inc),
+            "calc_ion_rates_total_included": bool(included_total),
+            "calc_ion_rates_equation_role": equation_role,
+            "calc_ion_rates_inclusion_reason": pirti_reason if str(calc_role).startswith("pirti") else rrrti_reason,
             "status": status,
             "note": note,
         })
 
+    # Bound-free photoionization rows.  In calc_ion_rates.f90 only ground-level
+    # lrtyp=7 rows contribute to pirti; excited-level rows remain visible in the
+    # audit but are not used for the ion-stage closure total.
     for r in type53_phint53_rate_audit_rows:
-        st = maybe_int(r.get("target_ion_stage"))
-        par = maybe_int(r.get("parent_ion_stage"))
+        st = maybe_int(r.get("target_ion_stage")); par = maybe_int(r.get("parent_ion_stage"))
         if st is None or par is None:
             continue
+        lev = r.get("bound_level")
         add_row(
             "xstar_like_element_solver_type53_phint53_rate_audit.csv",
             "photoionization",
             "type53_phint53_bound_free_photoionization",
             int(st), int(par),
             r.get("photoionization_rate_s^-1") if r.get("photoionization_rate_s^-1") not in (None, "") else r.get("phint53_photoionization_rate_s^-1"),
-            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("bound_level"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("phint53_status") or r.get("assembly_status") or "evaluated"),
-            note="pre-matrix ionization total; not summed from full-global matrix",
+            note="pre-matrix photoionization candidate; v0.3.82 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
+            calc_role="pirti_candidate",
         )
 
+    # Level-resolved Milne inverse rows are useful diagnostics, but calc_ion_rates
+    # does not add lrtyp=7 ans2 to rrrti in the visible source branch.  Keep both
+    # phint53 rrrt and independent milne.f90 alpha*ne for recombination-side audit.
     for r in phint53_milne_integral_audit_rows:
         if str(r.get("row_kind")) != "phint53_milne_integral_audit":
             continue
-        st = maybe_int(r.get("target_ion_stage"))
-        par = maybe_int(r.get("parent_ion_stage"))
+        st = maybe_int(r.get("target_ion_stage")); par = maybe_int(r.get("parent_ion_stage"))
         if st is None or par is None:
             continue
+        common = dict(record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("bound_level"),
+                      status=str(r.get("phint53_milne_ans2_status") or "evaluated"))
         add_row(
             "xstar_like_element_solver_phint53_milne_integral_audit.csv",
-            "radiative_recombination",
-            "type53_phint53_milne_inverse_recombination",
-            int(par), int(st),
-            r.get("source_code_phint53_milne_ans2_rrrt_s^-1"),
-            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("bound_level"),
-            status=str(r.get("phint53_milne_ans2_status") or "evaluated"),
-            note="source-code phint53.f90 rrrt/ans2 reconstruction used for pre-matrix recombination total",
+            "radiative_recombination_level_resolved_candidate",
+            "type53_phint53_milne_inverse_recombination_rrrt_candidate_not_rrrti",
+            int(par), int(st), r.get("source_code_phint53_milne_ans2_rrrt_s^-1"),
+            note="source-code phint53.f90 rrrt/ans2 level-resolved candidate; not summed into calc_ion_rates.f90 rrrti gate",
+            calc_role="rrrti_level_resolved_candidate", **common,
+        )
+        add_row(
+            "xstar_like_element_solver_phint53_milne_integral_audit.csv",
+            "radiative_recombination_level_resolved_candidate",
+            "type53_milne_f90_alpha_ne_candidate_not_rrrti",
+            int(par), int(st), r.get("source_code_milne_f90_rate_alpha_ne_s^-1"),
+            note="independent milne.f90 alpha*ne check; diagnostic candidate, not calc_ion_rates.f90 rrrti",
+            calc_role="rrrti_level_resolved_candidate", **common,
         )
 
     for r in type74_calt74_rate_audit_rows:
-        st = maybe_int(r.get("target_ion_stage"))
-        par = maybe_int(r.get("parent_ion_stage"))
+        st = maybe_int(r.get("target_ion_stage")); par = maybe_int(r.get("parent_ion_stage"))
         if st is None or par is None:
             continue
+        lev = r.get("destination_level")
         add_row(
             "xstar_like_element_solver_type74_calt74_rate_audit.csv",
             "photoionization",
             "type74_calt74_dr_delta_forward_photoionization",
             int(st), int(par),
             r.get("type74_calt74_rate_forward_unscaled_s^-1") if r.get("type74_calt74_rate_forward_unscaled_s^-1") not in (None, "") else r.get("type74_rate_unweighted_s^-1"),
-            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("destination_level"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("type74_calt74_status") or r.get("assembly_status") or "evaluated"),
-            note="calt74 forward delta-photoionization contribution to total ionization",
+            note="calt74 forward candidate; calc_ion_rates lrtyp=7 gate would include only idest1=1 rows",
+            calc_role="pirti_candidate",
         )
         add_row(
             "xstar_like_element_solver_type74_calt74_rate_audit.csv",
-            "dielectronic_recombination",
-            "type74_calt74_weighted_alpha_inverse_recombination",
+            "dielectronic_recombination_level_resolved_candidate",
+            "type74_calt74_weighted_alpha_inverse_candidate_not_rrrti",
             int(par), int(st),
             r.get("type74_calt74_inverse_rate_s^-1") if r.get("type74_calt74_inverse_rate_s^-1") not in (None, "") else r.get("type74_calt74_inverse_rate_unscaled_s^-1"),
-            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=r.get("destination_level"),
+            record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("type74_calt74_status") or r.get("assembly_status") or "evaluated"),
-            note="calt74 alpha after XSTAR gglo/ggup weighting contribution to total DR recombination",
+            note="calt74 weighted alpha inverse candidate; not a calc_ion_rates.f90 lrtyp=6/8 total recombination row",
+            calc_role="rrrti_level_resolved_candidate",
         )
 
     for r in adjacent_audit_rows:
-        dt = maybe_int(r.get("data_type"))
-        rt = maybe_int(r.get("rate_type"))
-        rec = r.get("record")
+        dt = maybe_int(r.get("data_type")); rt = maybe_int(r.get("rate_type")); rec = r.get("record")
         if dt == 1:
-            # XSTAR type-1 rows in this scaffold are total RR/AP sources from
-            # parent to target.  The stored source_rate_total already includes
-            # electron density (alpha * ne).
             add_row(
                 "xstar_like_element_solver_ucalc_adjacent_audit.csv",
-                "radiative_recombination",
-                "type1_total_rr_ap_recombination",
+                "radiative_recombination_total_rr_ap",
+                "type1_total_rr_ap_recombination_rrrti",
                 int(maybe_int(r.get("parent_ion_stage")) or parent_stage),
                 int(maybe_int(r.get("target_ion_stage")) or he_like_stage),
                 r.get("source_rate_total_s^-1"),
                 record=rec, data_type=dt, rate_type=rt, level=r.get("destination_level"),
                 status=str(r.get("python_eval_status") or r.get("assembly_status") or "evaluated"),
-                note="type-1 total recombination source rate included in pre-matrix calc_ion_rates reconstruction",
+                note="source-code total recombination row: calc_ion_rates.f90 rrrti += ans1 for lrtyp=8/6",
+                calc_role="rrrti_total_candidate",
             )
         elif dt == 57:
             lower = int(maybe_int(r.get("type57_matrix_lower_ion_stage")) or he_like_stage)
             upper = int(maybe_int(r.get("type57_matrix_upper_ion_stage")) or parent_stage)
             add_row(
                 "xstar_like_element_solver_ucalc_adjacent_audit.csv",
-                "collisional_ionization",
-                "type57_collisional_ionization_forward",
-                lower, upper,
-                r.get("python_rate_forward_s^-1"),
+                "collisional_ionization_candidate",
+                "type57_collisional_ionization_forward_candidate_not_pirti",
+                lower, upper, r.get("python_rate_forward_s^-1"),
                 record=rec, data_type=dt, rate_type=rt, level=r.get("type57_matrix_destination_level"),
                 status=str(r.get("python_eval_status") or r.get("type57_selected_convention_label") or "evaluated"),
-                note="decoded type-57 forward collisional ionization contribution when nonzero",
+                note="decoded type-57 candidate; visible calc_ion_rates gate does not include lrtyp=5 in pirti",
+                calc_role="excluded_inventory",
             )
             add_row(
                 "xstar_like_element_solver_ucalc_adjacent_audit.csv",
-                "three_body_recombination",
-                "type57_three_body_recombination_inverse",
-                upper, lower,
-                r.get("python_rate_inverse_s^-1"),
+                "three_body_recombination_candidate",
+                "type57_three_body_recombination_inverse_candidate_not_rrrti",
+                upper, lower, r.get("python_rate_inverse_s^-1"),
                 record=rec, data_type=dt, rate_type=rt, level=r.get("type57_matrix_destination_level"),
                 status=str(r.get("python_eval_status") or r.get("type57_selected_convention_label") or "evaluated"),
-                note="decoded type-57 inverse three-body recombination contribution when nonzero",
+                note="decoded type-57 inverse candidate; visible calc_ion_rates gate does not include lrtyp=5 in rrrti",
+                calc_role="excluded_inventory",
             )
-        elif include_charge_exchange and dt in {3, 4, 5, 6}:
-            # Placeholder hook for future charge exchange data types; no rows are
-            # expected in the current C V/C VI diagnostic unless decoded upstream.
+        elif dt == 95:
+            lower = int(maybe_int(r.get("target_ion_stage")) or he_like_stage)
+            upper = int(maybe_int(r.get("parent_ion_stage")) or parent_stage)
+            add_row(
+                "xstar_like_element_solver_ucalc_adjacent_audit.csv",
+                "collisional_ionization",
+                "type95_bryans_collisional_ionization_pirti",
+                lower, upper, r.get("python_rate_forward_s^-1"),
+                record=rec, data_type=dt, rate_type=rt, level=r.get("idest1_guess"),
+                status=str(r.get("python_eval_status") or "evaluated"),
+                note="type95/Bryans collisional ionization candidate; included in pirti only for calc_ion_rates lrtyp=15 gate",
+                calc_role="pirti_candidate",
+            )
+        elif include_charge_exchange and dt in {2, 3, 4, 5, 6, 9}:
+            # Future source-code charge-exchange branches can be added here when
+            # their density partners and target-stage direction are ported.
             pass
 
     stages_sorted = sorted({he_like_stage, parent_stage})
     low, high = int(stages_sorted[0]), int(stages_sorted[-1])
-    ion_total = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == low and int(r.get("to_ion_stage")) == high)
-    rec_total = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == high and int(r.get("to_ion_stage")) == low)
-    denom = ion_total + rec_total
-    if denom > 0.0 and math.isfinite(denom) and ion_total > 0.0 and rec_total > 0.0:
-        x_low = rec_total / denom
-        x_high = ion_total / denom
-        status = "evaluated_two_stage_calc_ion_rates_istruc_balance"
+    ion_total_included = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if bool(r.get("calc_ion_rates_pirti_included")) and int(r.get("from_ion_stage")) == low and int(r.get("to_ion_stage")) == high)
+    rec_total_included = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if bool(r.get("calc_ion_rates_rrrti_included")) and int(r.get("from_ion_stage")) == high and int(r.get("to_ion_stage")) == low)
+    ion_total_candidates = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == low and int(r.get("to_ion_stage")) == high)
+    rec_total_candidates = sum(float(r.get("rate_s^-1") or 0.0) for r in rows if int(r.get("from_ion_stage")) == high and int(r.get("to_ion_stage")) == low)
+    denom = ion_total_included + rec_total_included
+    if denom > 0.0 and math.isfinite(denom) and ion_total_included > 0.0 and rec_total_included > 0.0:
+        x_low = rec_total_included / denom
+        x_high = ion_total_included / denom
+        status = "evaluated_source_code_gated_calc_ion_rates_istruc_balance"
     else:
         x_low = x_high = float("nan")
-        status = "not_evaluated_missing_bidirectional_total_rates"
+        status = "not_evaluated_missing_source_code_gated_bidirectional_total_rates"
     by_family: Dict[str, float] = {}
+    by_family_included: Dict[str, float] = {}
+    by_process_included: Dict[str, float] = {}
     for r in rows:
         fam = str(r.get("rate_family") or "")
-        by_family[fam] = by_family.get(fam, 0.0) + float(r.get("rate_s^-1") or 0.0)
+        val = float(r.get("rate_s^-1") or 0.0)
+        by_family[fam] = by_family.get(fam, 0.0) + val
+        if bool(r.get("calc_ion_rates_total_included")):
+            by_family_included[fam] = by_family_included.get(fam, 0.0) + val
+            proc = str(r.get("ion_process") or "")
+            by_process_included[proc] = by_process_included.get(proc, 0.0) + val
     rows.append({
         "row_kind": "calc_ion_rates_istruc_summary",
-        "provenance": "v0.3.80_pre_matrix_calc_ion_rates_istruc_reconstruction",
+        "provenance": "v0.3.82_source_code_gated_calc_ion_rates_istruc_reconstruction",
         "status": status,
         "low_ion_stage": low,
         "high_ion_stage": high,
-        "ionization_total_low_to_high_s^-1": ion_total,
-        "recombination_total_high_to_low_s^-1": rec_total,
+        "ionization_total_low_to_high_s^-1": ion_total_included,
+        "recombination_total_high_to_low_s^-1": rec_total_included,
+        "candidate_ionization_total_low_to_high_s^-1": ion_total_candidates,
+        "candidate_recombination_total_high_to_low_s^-1": rec_total_candidates,
         "target_fraction_low_stage": x_low,
         "target_fraction_high_stage": x_high,
         "n_detail_rows": len([r for r in rows if r.get("row_kind") == "calc_ion_rates_istruc_audit"]),
+        "n_source_code_included_rows": len([r for r in rows if bool(r.get("calc_ion_rates_total_included"))]),
         "rate_family_sums_json": json.dumps(by_family, sort_keys=True),
-        "purpose": "pre-matrix calc_ion_rates/istruc-style ion-stage closure; not derived from assembled full-global matrix",
+        "source_code_included_rate_family_sums_json": json.dumps(by_family_included, sort_keys=True),
+        "source_code_included_process_sums_json": json.dumps(by_process_included, sort_keys=True),
+        "purpose": "source-code-gated pre-matrix calc_ion_rates/istruc closure; level-resolved inverse candidates audited separately from rrrti totals",
+        "main_recombination_diagnosis": "calc_ion_rates.f90 rrrti is populated by lrtyp=6/8 total recombination rows; type53/type74 inverse candidates are not total rrrti rows in the visible source-code branch",
     })
     return rows
 
@@ -8782,22 +8857,27 @@ def build_calc_ion_rates_istruc_audit_rows(
 def _compute_xstar_calc_ion_rates_istruc_closure(
     calc_ion_rates_istruc_audit_rows: Sequence[dict],
 ) -> dict:
-    """Return ion-fraction targets from the pre-matrix calc_ion_rates audit."""
+    """Return ion-fraction targets from source-code-gated pre-matrix totals."""
     detail = [r for r in calc_ion_rates_istruc_audit_rows if str(r.get("row_kind")) == "calc_ion_rates_istruc_audit"]
     stages = sorted({int(r.get("from_ion_stage")) for r in detail if maybe_int(r.get("from_ion_stage")) is not None} |
                     {int(r.get("to_ion_stage")) for r in detail if maybe_int(r.get("to_ion_stage")) is not None})
     flow: Dict[tuple[int, int], float] = {}
+    candidate_flow: Dict[tuple[int, int], float] = {}
     by_family: Dict[str, float] = {}
+    by_family_included: Dict[str, float] = {}
     for r in detail:
         a = maybe_int(r.get("from_ion_stage")); b = maybe_int(r.get("to_ion_stage")); rate = maybe_float(r.get("rate_s^-1"))
         if a is None or b is None or rate is None or not math.isfinite(float(rate)) or float(rate) <= 0.0:
             continue
-        flow[(int(a), int(b))] = flow.get((int(a), int(b)), 0.0) + float(rate)
+        candidate_flow[(int(a), int(b))] = candidate_flow.get((int(a), int(b)), 0.0) + float(rate)
         fam = str(r.get("rate_family") or "")
         by_family[fam] = by_family.get(fam, 0.0) + float(rate)
+        if bool(r.get("calc_ion_rates_total_included")):
+            flow[(int(a), int(b))] = flow.get((int(a), int(b)), 0.0) + float(rate)
+            by_family_included[fam] = by_family_included.get(fam, 0.0) + float(rate)
     targets: Dict[int, float] = {}
     status = "not_applied"
-    note = "requires exactly two adjacent stages and finite bidirectional pre-matrix calc_ion_rates totals"
+    note = "requires exactly two adjacent stages and finite source-code-gated calc_ion_rates pirti/rrrti totals"
     if len(stages) == 2:
         low, high = int(stages[0]), int(stages[1])
         ion = float(flow.get((low, high), 0.0))
@@ -8806,18 +8886,21 @@ def _compute_xstar_calc_ion_rates_istruc_closure(
         if denom > 0.0 and math.isfinite(denom) and ion > 0.0 and rec > 0.0:
             targets[low] = rec / denom
             targets[high] = ion / denom
-            status = "applied_pre_matrix_calc_ion_rates_istruc_balance"
-            note = "x_low=R/(I+R), x_high=I/(I+R) from pre-matrix calc_ion_rates audit totals"
+            status = "applied_source_code_gated_calc_ion_rates_istruc_balance"
+            note = "x_low=R/(I+R), x_high=I/(I+R) from source-code-gated pirti/rrrti totals before level-matrix assembly"
     return {
         "status": status,
         "note": note,
         "stages": stages,
         "flow_rates": {f"{a}->{b}": v for (a, b), v in sorted(flow.items())},
+        "candidate_flow_rates": {f"{a}->{b}": v for (a, b), v in sorted(candidate_flow.items())},
         "rate_family_sums": by_family,
+        "source_code_included_rate_family_sums": by_family_included,
         "targets": targets,
         "target_sum": float(sum(targets.values())) if targets else 0.0,
-        "source": "pre_matrix_calc_ion_rates_istruc_audit",
+        "source": "pre_matrix_source_code_gated_calc_ion_rates_istruc_audit",
     }
+
 
 def _compute_xstar_istruc_ion_fraction_closure(
     M: np.ndarray,
@@ -9180,6 +9263,8 @@ def _xstar_lucy_condensed_solve(
         "xstar_istruc_ion_fraction_flow_rates_json": json.dumps(closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source": closure_info.get("source") if closure_info else "",
         "xstar_istruc_ion_fraction_rate_family_sums_json": json.dumps(closure_info.get("rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_source_code_included_rate_family_sums_json": json.dumps(closure_info.get("source_code_included_rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_candidate_flow_rates_json": json.dumps(closure_info.get("candidate_flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_targets_applied": bool(closure_targets),
         "xstar_istruc_ion_fraction_targets_application_status": ("applied_to_lucy_iteration" if closure_targets else ("skipped_no_valid_targets" if closure_mode != "none" else "not_requested")),
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
@@ -9496,6 +9581,8 @@ def build_full_global_normalized_solve_comparison(
         "xstar_istruc_ion_fraction_flow_rates_json": xstar_meta.get("xstar_istruc_ion_fraction_flow_rates_json") or json.dumps(ion_closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source": xstar_meta.get("xstar_istruc_ion_fraction_source") or ion_closure_info.get("source"),
         "xstar_istruc_ion_fraction_rate_family_sums_json": xstar_meta.get("xstar_istruc_ion_fraction_rate_family_sums_json") or json.dumps(ion_closure_info.get("rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_source_code_included_rate_family_sums_json": xstar_meta.get("xstar_istruc_ion_fraction_source_code_included_rate_family_sums_json") or json.dumps(ion_closure_info.get("source_code_included_rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_candidate_flow_rates_json": xstar_meta.get("xstar_istruc_ion_fraction_candidate_flow_rates_json") or json.dumps(ion_closure_info.get("candidate_flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_targets_applied": xstar_meta.get("xstar_istruc_ion_fraction_targets_applied"),
         "xstar_istruc_ion_fraction_targets_application_status": xstar_meta.get("xstar_istruc_ion_fraction_targets_application_status"),
         "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
