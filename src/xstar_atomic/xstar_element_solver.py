@@ -9047,7 +9047,7 @@ def _xstar_lucy_condensed_solve(
     x /= float(np.sum(x))
     closure_mode = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
     closure_info = dict(ion_fraction_closure_info or {})
-    closure_targets = {int(k): float(v) for k, v in (closure_info.get("targets") or {}).items()} if closure_mode in {"xstar-istruc", "istruc", "xstar-ion-balance"} else {}
+    closure_targets = {int(k): float(v) for k, v in (closure_info.get("targets") or {}).items()} if closure_mode in {"xstar-istruc", "istruc", "xstar-ion-balance", "xstar-calc-ion-rates", "calc-ion-rates"} else {}
     if closure_targets:
         x = _apply_ion_fraction_targets_to_active(x, active, global_to_row, closure_targets)
         seed_mode = str(seed_mode) + "+xstar-istruc-stage-closure"
@@ -9180,6 +9180,8 @@ def _xstar_lucy_condensed_solve(
         "xstar_istruc_ion_fraction_flow_rates_json": json.dumps(closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source": closure_info.get("source") if closure_info else "",
         "xstar_istruc_ion_fraction_rate_family_sums_json": json.dumps(closure_info.get("rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_targets_applied": bool(closure_targets),
+        "xstar_istruc_ion_fraction_targets_application_status": ("applied_to_lucy_iteration" if closure_targets else ("skipped_no_valid_targets" if closure_mode != "none" else "not_requested")),
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
@@ -9494,6 +9496,8 @@ def build_full_global_normalized_solve_comparison(
         "xstar_istruc_ion_fraction_flow_rates_json": xstar_meta.get("xstar_istruc_ion_fraction_flow_rates_json") or json.dumps(ion_closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source": xstar_meta.get("xstar_istruc_ion_fraction_source") or ion_closure_info.get("source"),
         "xstar_istruc_ion_fraction_rate_family_sums_json": xstar_meta.get("xstar_istruc_ion_fraction_rate_family_sums_json") or json.dumps(ion_closure_info.get("rate_family_sums") or {}, sort_keys=True),
+        "xstar_istruc_ion_fraction_targets_applied": xstar_meta.get("xstar_istruc_ion_fraction_targets_applied"),
+        "xstar_istruc_ion_fraction_targets_application_status": xstar_meta.get("xstar_istruc_ion_fraction_targets_application_status"),
         "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
@@ -10591,6 +10595,7 @@ def solve_element_reference(
         "global_type74_inverse_matrix_terms": global_type74_inverse_matrix_terms,
         "type74_calt74_rate_audit": type74_calt74_rate_audit_rows,
         "global_type74_calt74_matrix_terms": global_type74_calt74_matrix_terms,
+        "calc_ion_rates_istruc_audit": calc_ion_rates_istruc_audit_rows,
         "type53_type74_ucalc_closure_audit": type53_type74_ucalc_closure_audit_rows,
         "phint53_milne_integral_audit": phint53_milne_integral_audit_rows,
         "inverse_recombination_scale_scan": inverse_recombination_scale_scan_rows,

@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.80 adds a pre-matrix XSTAR `calc_ion_rates` / `istruc` ion-fraction closure audit and `--ion-fraction-closure xstar-calc-ion-rates`. This mode derives adjacent C V/C VI ion-stage targets from source-code rate audits before full-global matrix assembly, rather than from summed assembled matrix entries.
+Current development baseline: v0.3.81 is a focused bug-fix release for the v0.3.80 pre-matrix XSTAR `calc_ion_rates` / `istruc` ion-fraction closure diagnostics. It fixes writing of `xstar_like_element_solver_calc_ion_rates_istruc_audit.csv`, fixes `xstar_istruc_ion_fraction_targets_json` for `--ion-fraction-closure xstar-calc-ion-rates`, and reports whether stage targets were applied or skipped.
 
 ### v0.3.66 calc_emis context writer fix
 
