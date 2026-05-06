@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.82 is a focused bug-fix release for the v0.3.80 pre-matrix XSTAR `calc_ion_rates` / `istruc` ion-fraction closure diagnostics. It fixes writing of `xstar_like_element_solver_calc_ion_rates_istruc_audit.csv`, fixes `xstar_istruc_ion_fraction_targets_json` for `--ion-fraction-closure xstar-calc-ion-rates`, and reports whether stage targets were applied or skipped.
+Current development baseline: v0.3.83 fixes the `--ion-fraction-closure xstar-calc-ion-rates` interpretation after direct inspection of XSTAR `calc_hmc_element.f90`, `levwkelement.f90`, and `msolvelucy.f90`. XSTAR uses `calc_ion_rates -> istruc` to choose ion limits and build the LTE/partition seed before `msolvelucy`; it does not impose those ion fractions as hard stage-normalization constraints during the Lucy iteration. v0.3.83 therefore keeps the source-code-gated `pirti`/`rrrti` targets in metadata and the calc-ion-rates audit, but no longer rescales the Lucy population vector to those targets. This removes the v0.3.79-v0.3.82 artificial C VI-forcing behavior while preserving default behavior and all rate paths.
 
 ### v0.3.66 calc_emis context writer fix
 
@@ -1761,4 +1761,3 @@ the full-global `xstar-lucy` path.  It sums positive inter-stage matrix rates,
 forms the adjacent-stage equilibrium `x_low I = x_high R`, and applies the
 resulting ion-stage targets during the Lucy level-population iteration.  The
 default `--ion-fraction-closure none` preserves earlier behavior.
-

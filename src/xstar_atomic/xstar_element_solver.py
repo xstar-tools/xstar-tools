@@ -8590,7 +8590,7 @@ def build_calc_ion_rates_istruc_audit_rows(
 ) -> List[dict]:
     """Build a pre-matrix XSTAR ``calc_ion_rates``/``istruc`` audit table.
 
-    v0.3.82 tightens this reconstruction to the visible source-code logic in
+    v0.3.83 tightens this reconstruction to the visible source-code logic in
     ``calc_ion_rates.f90``.  That routine loops over records and calls
     ``ucalc`` with ``lfpi=1``.  It then increments total ionization ``pirti``
     only for rate types 1, 15, and rate-type 7 records whose destination level
@@ -8651,7 +8651,7 @@ def build_calc_ion_rates_istruc_audit_rows(
         equation_role = "pirti" if pirti_inc else ("rrrti" if rrrti_inc else "not_in_calc_ion_rates_total")
         rows.append({
             "row_kind": "calc_ion_rates_istruc_audit",
-            "provenance": "v0.3.82_source_code_gated_calc_ion_rates_istruc_reconstruction",
+            "provenance": "v0.3.83_source_code_gated_calc_ion_rates_istruc_reconstruction",
             "source_table": source,
             "rate_family": family,
             "ion_process": process,
@@ -8690,7 +8690,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             r.get("photoionization_rate_s^-1") if r.get("photoionization_rate_s^-1") not in (None, "") else r.get("phint53_photoionization_rate_s^-1"),
             record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("phint53_status") or r.get("assembly_status") or "evaluated"),
-            note="pre-matrix photoionization candidate; v0.3.82 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
+            note="pre-matrix photoionization candidate; v0.3.83 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
             calc_role="pirti_candidate",
         )
 
@@ -8833,7 +8833,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             by_process_included[proc] = by_process_included.get(proc, 0.0) + val
     rows.append({
         "row_kind": "calc_ion_rates_istruc_summary",
-        "provenance": "v0.3.82_source_code_gated_calc_ion_rates_istruc_reconstruction",
+        "provenance": "v0.3.83_source_code_gated_calc_ion_rates_istruc_reconstruction",
         "status": status,
         "low_ion_stage": low,
         "high_ion_stage": high,
@@ -9130,10 +9130,16 @@ def _xstar_lucy_condensed_solve(
     x /= float(np.sum(x))
     closure_mode = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
     closure_info = dict(ion_fraction_closure_info or {})
-    closure_targets = {int(k): float(v) for k, v in (closure_info.get("targets") or {}).items()} if closure_mode in {"xstar-istruc", "istruc", "xstar-ion-balance", "xstar-calc-ion-rates", "calc-ion-rates"} else {}
-    if closure_targets:
-        x = _apply_ion_fraction_targets_to_active(x, active, global_to_row, closure_targets)
-        seed_mode = str(seed_mode) + "+xstar-istruc-stage-closure"
+    # XSTAR calc_hmc_element.f90 uses calc_ion_rates -> istruc to choose the ion
+    # limits (mml/mmu) before levwkelement and then calls msolvelucy with only a
+    # number-conservation row in the condensed superlevel system.  It does not
+    # re-impose the istruc ion fractions as hard constraints during the Lucy
+    # iteration.  v0.3.79-v0.3.82 incorrectly used these rates as per-stage hard
+    # normalization targets, which drove the C V/C VI test almost entirely into
+    # C VI.  Keep the source-code ion-fraction targets in metadata, but do not
+    # rescale the Lucy vector by them.
+    closure_targets_reported = {int(k): float(v) for k, v in (closure_info.get("targets") or {}).items()} if closure_mode in {"xstar-istruc", "istruc", "xstar-ion-balance", "xstar-calc-ion-rates", "calc-ion-rates"} else {}
+    closure_targets: Dict[int, float] = {}
     diff = float("inf")
     diff2 = float("inf")
     niter = 0
@@ -9190,8 +9196,8 @@ def _xstar_lucy_condensed_solve(
         x = np.zeros_like(x)
         for k, sp in enumerate(local_to_super):
             x[k] = float(rr[k]) * float(p_new[sp])
-        if closure_targets:
-            x = _apply_ion_fraction_targets_to_active(x, active, global_to_row, closure_targets)
+        # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
+        # msolvelucy enforces total number conservation only.
         # Lucy fixed-point update on level populations using total incoming and
         # outgoing rates.  This follows the riu/rui/ril/rli spirit in msolvelucy.
         for inner in range(int(max_inner)):
@@ -9214,8 +9220,8 @@ def _xstar_lucy_condensed_solve(
             sx = float(np.sum(x_new))
             if sx != 0.0 and math.isfinite(sx):
                 x_new = x_new / sx
-            if closure_targets:
-                x_new = _apply_ion_fraction_targets_to_active(x_new, active, global_to_row, closure_targets)
+            # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
+            # msolvelucy enforces total number conservation only.
             x = x_new
             diff2 = 0.0
             for old, new in zip(x_old_inner, x):
@@ -9259,14 +9265,14 @@ def _xstar_lucy_condensed_solve(
         "xstar_lucy_population_seed_mode": seed_mode,
         "xstar_istruc_ion_fraction_closure_mode": closure_mode,
         "xstar_istruc_ion_fraction_closure_status": closure_info.get("status") if closure_info else "not_requested",
-        "xstar_istruc_ion_fraction_targets_json": json.dumps({str(k): float(v) for k, v in sorted(closure_targets.items())}, sort_keys=True),
+        "xstar_istruc_ion_fraction_targets_json": json.dumps({str(k): float(v) for k, v in sorted(closure_targets_reported.items())}, sort_keys=True),
         "xstar_istruc_ion_fraction_flow_rates_json": json.dumps(closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source": closure_info.get("source") if closure_info else "",
         "xstar_istruc_ion_fraction_rate_family_sums_json": json.dumps(closure_info.get("rate_family_sums") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_source_code_included_rate_family_sums_json": json.dumps(closure_info.get("source_code_included_rate_family_sums") or {}, sort_keys=True),
         "xstar_istruc_ion_fraction_candidate_flow_rates_json": json.dumps(closure_info.get("candidate_flow_rates") or {}, sort_keys=True),
-        "xstar_istruc_ion_fraction_targets_applied": bool(closure_targets),
-        "xstar_istruc_ion_fraction_targets_application_status": ("applied_to_lucy_iteration" if closure_targets else ("skipped_no_valid_targets" if closure_mode != "none" else "not_requested")),
+        "xstar_istruc_ion_fraction_targets_applied": False,
+        "xstar_istruc_ion_fraction_targets_application_status": ("not_applied_source_code_uses_istruc_for_ion_limits_and_levwkelement_seed_not_hard_lucy_constraint" if closure_mode != "none" and closure_targets_reported else ("skipped_no_valid_targets" if closure_mode != "none" else "not_requested")),
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
@@ -9316,7 +9322,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -9623,7 +9629,7 @@ def build_full_global_normalized_solve_comparison(
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
         "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.50 adds an xstar-lucy diagnostic mode following that structure; v0.3.76 adds experimental topology memberships explicit-current, xstar-continuum-alias, and xstar-continuum-alias-superlevels. SVD/lstsq remain available for rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not physical XSTAR rates",
-        "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
+        "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -9672,7 +9678,7 @@ def build_full_global_normalized_solve_comparison(
             "population_fraction": float(pop[g]) if g < len(pop) else 0.0,
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.51_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.83_full_global_xstar_lucy_nr_lu_solve_comparison",
         })
     return rows
 
