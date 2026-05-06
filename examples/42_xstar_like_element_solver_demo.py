@@ -84,6 +84,7 @@ def main(argv=None):
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
     p.add_argument("--full-global-topology", default="explicit-current", choices=["explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"], help="v0.3.76 experimental XSTAR element-matrix topology membership for the xstar-lucy full-global solve. explicit-current preserves previous behavior; xstar-continuum-alias aliases continuum rows to the parent ground group; xstar-continuum-alias-superlevels also groups levels 2..nlev-1 into one excited nsup group per ion.")
+    p.add_argument("--ion-fraction-closure", default="none", choices=["none", "xstar-istruc"], help="v0.3.79 experimental XSTAR calc_ion_rates/istruc-style adjacent-stage ion-fraction closure. xstar-istruc derives two-stage fractions from summed inter-stage matrix rates and applies them during the xstar-lucy population iteration.")
     p.add_argument("--no-full-global-prune-null-rate-levels", action="store_true", help="Disable pruning of null-rate global_index rows before the diagnostic full-global normalized solve.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
@@ -132,6 +133,7 @@ def main(argv=None):
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
             "full_global_topology": args.full_global_topology,
+            "ion_fraction_closure": args.ion_fraction_closure,
             "full_global_prune_null_rate_levels": not args.no_full_global_prune_null_rate_levels,
             "status": "dry_run_not_executed",
         }]
@@ -245,6 +247,7 @@ def main(argv=None):
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,
         full_global_topology=args.full_global_topology,
+        ion_fraction_closure=args.ion_fraction_closure,
         full_global_prune_null_rate_levels=not args.no_full_global_prune_null_rate_levels,
     )
     write_element_solver_outputs(result, out)

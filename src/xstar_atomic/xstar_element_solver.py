@@ -8575,6 +8575,106 @@ def _xstar_levwk_seed_weights(
         out/=s
     return out
 
+
+
+def _compute_xstar_istruc_ion_fraction_closure(
+    M: np.ndarray,
+    active: Sequence[int],
+    global_to_row: Mapping[int, dict],
+) -> dict:
+    """Estimate the two-stage XSTAR ``calc_ion_rates``/``istruc`` closure.
+
+    XSTAR computes total ionization/recombination rates before the detailed
+    ``calc_hmc_element`` level solve.  This helper extracts the same kind of
+    adjacent-stage balance from the already assembled full-global matrix: all
+    positive off-diagonal rates that move population from one ion stage to a
+    different ion stage are summed as stage-to-stage flow coefficients.  For the
+    two-stage C VI/C V diagnostic used here, the equilibrium is
+
+        x_low * I(low->high) = x_high * R(high->low),
+        x_low + x_high = 1.
+
+    It is intentionally conservative: if there are not exactly two stages or if
+    one side of the balance is missing, the caller can ignore the closure.
+    """
+    active = [int(a) for a in active]
+    stages = sorted({int(maybe_int(global_to_row.get(g, {}).get("ion_stage"))) for g in active if maybe_int(global_to_row.get(g, {}).get("ion_stage")) is not None})
+    flow: Dict[tuple[int, int], float] = {}
+    for i, gi in enumerate(active):
+        sti = maybe_int(global_to_row.get(int(gi), {}).get("ion_stage"))
+        if sti is None:
+            continue
+        for j, gj in enumerate(active):
+            if i == j:
+                continue
+            stj = maybe_int(global_to_row.get(int(gj), {}).get("ion_stage"))
+            if stj is None or int(stj) == int(sti):
+                continue
+            rate = float(M[int(gi), int(gj)]) if int(gi) < M.shape[0] and int(gj) < M.shape[1] else 0.0
+            if rate > 0.0 and math.isfinite(rate):
+                flow[(int(stj), int(sti))] = flow.get((int(stj), int(sti)), 0.0) + rate
+    targets: Dict[int, float] = {}
+    status = "not_applied"
+    note = "requires exactly two adjacent stages and finite bidirectional flow"
+    if len(stages) == 2:
+        low, high = int(stages[0]), int(stages[1])
+        ion = float(flow.get((low, high), 0.0))
+        rec = float(flow.get((high, low), 0.0))
+        denom = ion + rec
+        if denom > 0.0 and math.isfinite(denom) and ion > 0.0 and rec > 0.0:
+            targets[low] = rec / denom
+            targets[high] = ion / denom
+            status = "applied_two_stage_istruc_balance"
+            note = "x_low=R/(I+R), x_high=I/(I+R) from summed inter-stage matrix rates"
+    return {
+        "status": status,
+        "note": note,
+        "stages": stages,
+        "flow_rates": {f"{a}->{b}": v for (a, b), v in sorted(flow.items())},
+        "targets": targets,
+        "target_sum": float(sum(targets.values())) if targets else 0.0,
+    }
+
+
+def _apply_ion_fraction_targets_to_active(
+    x: np.ndarray,
+    active: Sequence[int],
+    global_to_row: Mapping[int, dict],
+    targets: Mapping[int, float],
+) -> np.ndarray:
+    """Rescale active level populations so each ion stage matches target sum."""
+    if not targets:
+        sx = float(np.sum(x))
+        if sx > 0.0 and math.isfinite(sx):
+            return x / sx
+        return x
+    x = np.array(x, dtype=float, copy=True)
+    active = [int(a) for a in active]
+    for st, targ in targets.items():
+        idxs = [k for k, g in enumerate(active) if maybe_int(global_to_row.get(int(g), {}).get("ion_stage")) == int(st)]
+        if not idxs:
+            continue
+        current = float(np.sum(x[idxs]))
+        if current > 0.0 and math.isfinite(current):
+            x[idxs] *= float(targ) / current
+        else:
+            x[idxs] = float(targ) / max(len(idxs), 1)
+    # Stages not covered by the closure are kept but renormalized into any
+    # leftover probability mass, if present.
+    covered = set(int(k) for k in targets.keys())
+    other = [k for k, g in enumerate(active) if (maybe_int(global_to_row.get(int(g), {}).get("ion_stage")) not in covered)]
+    leftover = max(0.0, 1.0 - float(sum(float(v) for v in targets.values())))
+    if other:
+        cur = float(np.sum(x[other]))
+        if cur > 0.0 and math.isfinite(cur):
+            x[other] *= leftover / cur
+        else:
+            x[other] = leftover / len(other)
+    sx = float(np.sum(x))
+    if sx > 0.0 and math.isfinite(sx):
+        x /= sx
+    return x
+
 def _xstar_lucy_lu_solve(A: np.ndarray, b: np.ndarray, *, max_improve: int = 2):
     """Solve ``A x = b`` using an explicit XSTAR ``leqt2f`` analogue.
 
@@ -8601,6 +8701,8 @@ def _xstar_lucy_condensed_solve(
     *,
     topology_mode: str = "explicit-current",
     population_seed: str = "xstar-levwkelement",
+    ion_fraction_closure: str = "none",
+    ion_fraction_closure_info: Optional[Mapping[str, object]] = None,
     temperature_K: Optional[float] = None,
     electron_density: Optional[float] = None,
     max_outer: int = 50,
@@ -8701,6 +8803,12 @@ def _xstar_lucy_condensed_solve(
         x[:] = 1.0
         seed_mode = "uniform-fallback"
     x /= float(np.sum(x))
+    closure_mode = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
+    closure_info = dict(ion_fraction_closure_info or {})
+    closure_targets = {int(k): float(v) for k, v in (closure_info.get("targets") or {}).items()} if closure_mode in {"xstar-istruc", "istruc", "xstar-ion-balance"} else {}
+    if closure_targets:
+        x = _apply_ion_fraction_targets_to_active(x, active, global_to_row, closure_targets)
+        seed_mode = str(seed_mode) + "+xstar-istruc-stage-closure"
     diff = float("inf")
     diff2 = float("inf")
     niter = 0
@@ -8757,6 +8865,8 @@ def _xstar_lucy_condensed_solve(
         x = np.zeros_like(x)
         for k, sp in enumerate(local_to_super):
             x[k] = float(rr[k]) * float(p_new[sp])
+        if closure_targets:
+            x = _apply_ion_fraction_targets_to_active(x, active, global_to_row, closure_targets)
         # Lucy fixed-point update on level populations using total incoming and
         # outgoing rates.  This follows the riu/rui/ril/rli spirit in msolvelucy.
         for inner in range(int(max_inner)):
@@ -8779,6 +8889,8 @@ def _xstar_lucy_condensed_solve(
             sx = float(np.sum(x_new))
             if sx != 0.0 and math.isfinite(sx):
                 x_new = x_new / sx
+            if closure_targets:
+                x_new = _apply_ion_fraction_targets_to_active(x_new, active, global_to_row, closure_targets)
             x = x_new
             diff2 = 0.0
             for old, new in zip(x_old_inner, x):
@@ -8820,6 +8932,10 @@ def _xstar_lucy_condensed_solve(
         "xstar_lucy_last_lu_improvement_norms_json": json.dumps(last_lu_improvement_norms),
         "xstar_lucy_topology_mode": topology,
         "xstar_lucy_population_seed_mode": seed_mode,
+        "xstar_istruc_ion_fraction_closure_mode": closure_mode,
+        "xstar_istruc_ion_fraction_closure_status": closure_info.get("status") if closure_info else "not_requested",
+        "xstar_istruc_ion_fraction_targets_json": json.dumps({str(k): float(v) for k, v in sorted(closure_targets.items())}, sort_keys=True),
+        "xstar_istruc_ion_fraction_flow_rates_json": json.dumps(closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_lucy_super_keys_json": json.dumps([list(k) for k in super_keys]),
     }
     return pop, meta
@@ -8836,6 +8952,7 @@ def build_full_global_normalized_solve_comparison(
     prune_null_rate_levels: bool = True,
     svd_rcond: Optional[float] = None,
     full_global_topology: str = "explicit-current",
+    ion_fraction_closure: str = "none",
     temperature_K: Optional[float] = None,
     electron_density: Optional[float] = None,
 ) -> List[dict]:
@@ -8939,6 +9056,11 @@ def build_full_global_normalized_solve_comparison(
     M_solve = M[np.ix_(active_indices, active_indices)] if active_indices else M.copy()
     n_solve = int(M_solve.shape[0])
 
+    closure_requested = str(ion_fraction_closure or "none").strip().lower().replace("_", "-")
+    if closure_requested not in {"none", "xstar-istruc", "istruc", "xstar-ion-balance"}:
+        closure_requested = "none"
+    ion_closure_info = _compute_xstar_istruc_ion_fraction_closure(M, active_indices, global_to_row) if closure_requested != "none" else {"status": "not_requested", "targets": {}, "flow_rates": {}}
+
     # Diagnostic normalization row.  XSTAR's msolvelucy replaces one row of the
     # condensed superlevel system by number conservation and then calls the
     # Numerical-Recipes LU path (leqt2f -> ludcmp/lubksb/mprove).  Here we keep
@@ -8987,6 +9109,8 @@ def build_full_global_normalized_solve_comparison(
                 global_to_row,
                 topology_mode=topology_requested,
                 population_seed="xstar-levwkelement",
+                ion_fraction_closure=closure_requested,
+                ion_fraction_closure_info=ion_closure_info,
                 temperature_K=temperature_K,
                 electron_density=electron_density,
                 max_outer=50,
@@ -9111,6 +9235,10 @@ def build_full_global_normalized_solve_comparison(
         "xstar_matrix_continuum_alias_json": json.dumps({str(k): int(v) for k, v in sorted(continuum_alias_map.items())}, sort_keys=True),
         "xstar_lucy_topology_mode": xstar_meta.get("xstar_lucy_topology_mode"),
         "xstar_lucy_population_seed_mode": xstar_meta.get("xstar_lucy_population_seed_mode"),
+        "xstar_istruc_ion_fraction_closure_requested": closure_requested,
+        "xstar_istruc_ion_fraction_closure_status": xstar_meta.get("xstar_istruc_ion_fraction_closure_status") or ion_closure_info.get("status"),
+        "xstar_istruc_ion_fraction_targets_json": xstar_meta.get("xstar_istruc_ion_fraction_targets_json") or json.dumps({str(k): float(v) for k, v in sorted((ion_closure_info.get("targets") or {}).items())}, sort_keys=True),
+        "xstar_istruc_ion_fraction_flow_rates_json": xstar_meta.get("xstar_istruc_ion_fraction_flow_rates_json") or json.dumps(ion_closure_info.get("flow_rates") or {}, sort_keys=True),
         "xstar_lucy_super_keys_json": xstar_meta.get("xstar_lucy_super_keys_json"),
         "rank_deficient_action": rank_action,
         "negative_population_action": neg_action,
@@ -9136,7 +9264,7 @@ def build_full_global_normalized_solve_comparison(
         "n_skipped_bad_index_rows": n_skipped_bad_index,
         "n_skipped_bad_rate_rows": n_skipped_bad_rate,
         "normalization_row_global_index": normalization_row,
-        "normalization_equation": "sum_all_global_populations_equals_1",
+        "normalization_equation": "sum_all_global_populations_equals_1" if closure_requested == "none" else "xstar_istruc_stage_fractions_plus_sum_all_global_populations_equals_1",
         "matrix_rank_after_normalization": rank,
         "condition_number_after_normalization": condition_number,
         "residual_norm": residual_norm,
@@ -9515,6 +9643,7 @@ def solve_element_reference(
     full_global_negative_population_action: str = "keep",
     full_global_prune_null_rate_levels: bool = True,
     full_global_topology: str = "explicit-current",
+    ion_fraction_closure: str = "none",
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -9923,6 +10052,7 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
         full_global_topology=full_global_topology,
+        ion_fraction_closure=ion_fraction_closure,
         temperature_K=temperature,
         electron_density=electron_density,
     )

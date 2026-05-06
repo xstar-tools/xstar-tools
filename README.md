@@ -1749,4 +1749,12 @@ Version 0.3.57 adds `xstar_like_element_solver_type74_calt74_rate_audit.csv` and
 ### v0.3.73 diagnostic correction
 
 v0.3.73 fixes the v0.3.72 `phint53` Milne integral audit so the audit uses the original type-53 cross-section grids from the raw type-53 audit rows. The solver behavior is unchanged.
+### v0.3.79 experimental XSTAR ion-fraction closure
+
+`v0.3.79` adds `--ion-fraction-closure xstar-istruc`, an experimental
+implementation of the two-stage XSTAR `calc_ion_rates` / `istruc` closure for
+the full-global `xstar-lucy` path.  It sums positive inter-stage matrix rates,
+forms the adjacent-stage equilibrium `x_low I = x_high R`, and applies the
+resulting ion-stage targets during the Lucy level-population iteration.  The
+default `--ion-fraction-closure none` preserves earlier behavior.
 

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.79 - 2026-05-06
+
+- Added experimental `--ion-fraction-closure none|xstar-istruc`.
+- `xstar-istruc` derives a two-stage XSTAR `calc_ion_rates`/`istruc`-style ion fraction closure from summed inter-stage matrix rates, using `x_low=R/(I+R)` and `x_high=I/(I+R)`.
+- The `xstar-lucy` population iteration can now apply these ion-stage targets during the level-population fixed-point update, so the aliased parent continuum/parent ground is constrained consistently with the adjacent-stage balance rather than only by global `sum n_i = 1`.
+- Full-global output records `xstar_istruc_ion_fraction_closure_requested`, `xstar_istruc_ion_fraction_closure_status`, `xstar_istruc_ion_fraction_targets_json`, and `xstar_istruc_ion_fraction_flow_rates_json`.
+- Existing behavior remains available with the default `--ion-fraction-closure none`.
+- Validation: `4 passed, 1 skipped`.
+
 ## v0.3.78 - 2026-05-06
 
 Direct XSTAR `ucalc` inverse-recombination implementation step.
