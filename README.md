@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.85 implements the exact XSTAR `msolvelucy.f90` fixed-point sub-iteration for the full-global `xstar-lucy` path.  Building on v0.3.84, the condensed superlevel solve still uses XSTAR-style `ipmat2`, `nsup`, `p(superlevel)`, and `rr(level)=x(level)/p(nsup)`, but the redistribution of level populations after each condensed solve now follows the source-code `riu/rui/ril/rli` `nit2` loop from the full `ajisb` entry list, including global renormalization and the original `diff2` convergence test.  The previous `calc_ion_rates -> istruc` correction is preserved: ion-rate targets are reported as metadata/seed-structure information and are not imposed as hard Lucy stage constraints.
+Current development baseline: v0.3.86 implements the XSTAR `calc_emis_ion.f90` emergent triplet line construction for the full-global `xstar-lucy` path.  Building on v0.3.85, the population solve still follows the XSTAR `levwkelement` / `msolvelucy` `ipmat/nsup/p/rr` and fixed-point sub-iteration machinery, but the triplet line-output comparison now also ports the source-code `fline(1/2)=max((ans2*abund2-ans1*abund1)*E*ptmp,0)` construction.  The new output `xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv` reports raw `pop*A*E`, transparent `tau0=0` calc-emis output, and the active type-50 escape/pumping path using the source-code swapped `ans1/ans2` orientation.  True spatial `tau0` transfer history is still not present in the stand-alone ATDB demo.
 
 ### v0.3.66 calc_emis context writer fix
 

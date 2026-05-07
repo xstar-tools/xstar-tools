@@ -178,6 +178,246 @@ def _normalise_triplet(line_rows: Sequence[dict]) -> dict:
     return {**{f"{k}_emissivity": sums[k] for k in ("f", "i", "r")}, **frac, "R": R, "G": G}
 
 
+
+
+def _xstar_pescl_source(tau: float) -> float:
+    """Port XSTAR ``pescl.f90`` line escape probability."""
+    tau = float(tau or 0.0)
+    pi = 3.1415927
+    tauw = 1.0e5
+    if tau < 1.0:
+        if tau < 1.0e-5:
+            val = 1.0
+        else:
+            aa = 2.0 * tau
+            val = (1.0 - math.exp(-aa)) / aa
+    else:
+        bb = 0.5 * math.sqrt(max(0.0, math.log(tau))) / (1.0 + tau / tauw)
+        val = 1.0 / (tau * math.sqrt(pi) * (1.2 + bb))
+    return float(val / 2.0)
+
+
+def _xstar_calc_emis_ptmp_from_tau(tau1: float, tau2: float, cfrac: float) -> tuple[float, float]:
+    """Port the ``calc_emis_ion.f90`` type-4/type-9 line escape channels."""
+    cfrac = max(0.0, min(1.0, float(cfrac or 0.0)))
+    ptmp1 = _xstar_pescl_source(float(tau1 or 0.0)) * (1.0 - cfrac)
+    ptmp2 = _xstar_pescl_source(float(tau2 or 0.0)) * (1.0 - cfrac) + 2.0 * _xstar_pescl_source(float(tau1 or 0.0) + float(tau2 or 0.0)) * cfrac
+    return float(ptmp1), float(ptmp2)
+
+
+def _component_fraction_summary_from_emissivities(values: Mapping[str, float]) -> dict:
+    f = max(0.0, float(values.get("f", 0.0) or 0.0))
+    i = max(0.0, float(values.get("i", 0.0) or 0.0))
+    r = max(0.0, float(values.get("r", 0.0) or 0.0))
+    total = f + i + r
+    return {
+        "f_emissivity": f,
+        "i_emissivity": i,
+        "r_emissivity": r,
+        "f_fraction": f / total if total > 0.0 else 0.0,
+        "i_fraction": i / total if total > 0.0 else 0.0,
+        "r_fraction": r / total if total > 0.0 else 0.0,
+        "R": f / i if i > 0.0 else None,
+        "G": (f + i) / r if r > 0.0 else None,
+    }
+
+
+def build_calc_emis_ion_triplet_emergent_rows(
+    *,
+    global_index_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    full_global_normalized_solve_comparison_rows: Sequence[dict],
+    type50_ucalc_rate_audit_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Build XSTAR ``calc_emis_ion`` emergent-triplet line rows.
+
+    v0.3.86 ports the source-code line-output construction for the selected
+    He-like triplet records.  For line data (XSTAR type-50 / rate-type-4),
+    ``ucalc.f90`` computes an escaped decay rate ``A*(ptmp1+ptmp2)``, computes
+    any lower-to-upper photoexcitation rate, and then swaps the rates so that
+    ``ans1`` is pumping and ``ans2`` is escaped decay.  ``calc_emis_ion.f90``
+    then writes local emergent flux channels as::
+
+        fline(1)=max((ans2*abund2 - ans1*abund1) * E * ptmp1, 0)
+        fline(2)=max((ans2*abund2 - ans1*abund1) * E * ptmp2, 0)
+
+    where ``ptmp1`` and ``ptmp2`` come from ``pescl(tau0)`` and covering
+    fraction.  The current stand-alone element solver has no spatial transfer
+    history, so this table reports two source-code paths: a transparent
+    ``tau0=0,cfrac=0`` path and the active matrix type-50 escape/pumping path
+    from ``xstar_like_element_solver_type50_ucalc_rate_audit.csv``.
+    """
+    he_like_stage = int(he_like_stage)
+    lookup = _global_index_lookup(global_index_rows)
+    pop_by_global: Dict[int, float] = {}
+    pop_by_ion_level: Dict[tuple[int, int], float] = {}
+    for r in full_global_normalized_solve_comparison_rows:
+        if str(r.get("row_kind")) != "population":
+            continue
+        g = maybe_int(r.get("global_index"))
+        st = maybe_int(r.get("ion_stage"))
+        lev = maybe_int(r.get("level_index"))
+        val = maybe_float(r.get("xstar_xileve_emissivity_population"))
+        if val is None:
+            val = maybe_float(r.get("population_fraction"))
+        if val is None:
+            continue
+        if g is not None:
+            pop_by_global[int(g)] = float(val)
+        if st is not None and lev is not None:
+            pop_by_ion_level[(int(st), int(lev))] = float(val)
+    type50_by_record: Dict[int, dict] = {}
+    for r in type50_ucalc_rate_audit_rows:
+        rec = maybe_int(r.get("record"))
+        if rec is not None:
+            type50_by_record[int(rec)] = r
+    target = _xstar_triplet_target(he_like_stage)
+    rows: List[dict] = []
+    sums_raw = {"f": 0.0, "i": 0.0, "r": 0.0}
+    sums_trans = {"f": 0.0, "i": 0.0, "r": 0.0}
+    sums_matrix = {"f": 0.0, "i": 0.0, "r": 0.0}
+    # XSTAR transparent line escape from source functions.
+    tau0_ptmp1, tau0_ptmp2 = _xstar_calc_emis_ptmp_from_tau(0.0, 0.0, 0.0)
+    for line in line_rows:
+        if maybe_int(line.get("ion_stage")) != he_like_stage:
+            continue
+        comp = classify_helike_triplet_line(line)
+        if comp not in {"f", "i", "r"}:
+            continue
+        rec = maybe_int(line.get("record"))
+        lower = maybe_int(line.get("lower_level"))
+        upper = maybe_int(line.get("upper_level"))
+        if lower is None or upper is None:
+            continue
+        lower_row = lookup.get((he_like_stage, int(lower)))
+        upper_row = lookup.get((he_like_stage, int(upper)))
+        lower_global = maybe_int(lower_row.get("global_index")) if lower_row else None
+        upper_global = maybe_int(upper_row.get("global_index")) if upper_row else None
+        lower_pop = pop_by_global.get(int(lower_global), pop_by_ion_level.get((he_like_stage, int(lower)), 0.0)) if lower_global is not None else pop_by_ion_level.get((he_like_stage, int(lower)), 0.0)
+        upper_pop = pop_by_global.get(int(upper_global), pop_by_ion_level.get((he_like_stage, int(upper)), 0.0)) if upper_global is not None else pop_by_ion_level.get((he_like_stage, int(upper)), 0.0)
+        A = maybe_float(line.get("A_s^-1")) or 0.0
+        eerg = line_energy_erg(line) or 0.0
+        raw = max(float(upper_pop) * float(A) * float(eerg), 0.0)
+        # Transparent source-code construction: tau0=0 => pescl=0.5 for each channel,
+        # ptmp1+ptmp2=1, ans1=0, ans2=A.
+        trans_ans1 = 0.0
+        trans_ans2 = float(A) * (tau0_ptmp1 + tau0_ptmp2)
+        trans_net = trans_ans2 * float(upper_pop) - trans_ans1 * float(lower_pop)
+        trans_f1 = max(trans_net * float(eerg) * tau0_ptmp1, 0.0)
+        trans_f2 = max(trans_net * float(eerg) * tau0_ptmp2, 0.0)
+        # Active matrix type-50 path: use the same ptmp/ans proxies that fed the
+        # population matrix.  This is not a true RT tau0 history, but it applies
+        # the exact calc_emis_ion fline formula to the current source-code rate
+        # orientation and shows whether line escape attenuates the resonance line
+        # relative to pop*A*E in the current run.
+        t50 = type50_by_record.get(int(rec)) if rec is not None else None
+        m_ptmp1 = maybe_float(t50.get("ptmp1_proxy")) if t50 else None
+        m_ptmp2 = maybe_float(t50.get("ptmp2_proxy")) if t50 else None
+        if m_ptmp1 is None:
+            m_ptmp1 = tau0_ptmp1
+        if m_ptmp2 is None:
+            m_ptmp2 = tau0_ptmp2
+        m_ans1 = maybe_float(t50.get("ucalc_ans1_matrix_lower_to_upper_proxy_s^-1")) if t50 else None
+        m_ans2 = maybe_float(t50.get("ucalc_ans2_matrix_upper_to_lower_proxy_s^-1")) if t50 else None
+        if m_ans1 is None:
+            m_ans1 = 0.0
+        if m_ans2 is None:
+            m_ans2 = float(A) * (float(m_ptmp1) + float(m_ptmp2))
+        m_net = float(m_ans2) * float(upper_pop) - float(m_ans1) * float(lower_pop)
+        m_f1 = max(m_net * float(eerg) * float(m_ptmp1), 0.0)
+        m_f2 = max(m_net * float(eerg) * float(m_ptmp2), 0.0)
+        sums_raw[comp] += raw
+        sums_trans[comp] += (trans_f1 + trans_f2)
+        sums_matrix[comp] += (m_f1 + m_f2)
+        rows.append({
+            "row_kind": "calc_emis_ion_triplet_emergent_line",
+            "component": comp,
+            "record": rec,
+            "ion_stage": he_like_stage,
+            "lower_level": int(lower),
+            "upper_level": int(upper),
+            "lower_global_index": lower_global,
+            "upper_global_index": upper_global,
+            "lower_label": line.get("lower_label"),
+            "upper_label": line.get("upper_label"),
+            "wavelength_A": line.get("wavelength_A"),
+            "energy_eV": line.get("energy_eV"),
+            "photon_energy_erg": eerg,
+            "A_s^-1": float(A),
+            "xstar_xileve_lower_population": float(lower_pop),
+            "xstar_xileve_upper_population": float(upper_pop),
+            "raw_pop_A_E_erg_s^-1": raw,
+            "transparent_tau1": 0.0,
+            "transparent_tau2": 0.0,
+            "transparent_cfrac": 0.0,
+            "transparent_ptmp1_pescl": tau0_ptmp1,
+            "transparent_ptmp2_pescl": tau0_ptmp2,
+            "transparent_ucalc_ans1_lower_to_upper_s^-1": trans_ans1,
+            "transparent_ucalc_ans2_upper_to_lower_s^-1": trans_ans2,
+            "transparent_calc_emis_fline1_erg_s^-1": trans_f1,
+            "transparent_calc_emis_fline2_erg_s^-1": trans_f2,
+            "transparent_calc_emis_fline_total_erg_s^-1": trans_f1 + trans_f2,
+            "matrix_escape_ptmp1": float(m_ptmp1),
+            "matrix_escape_ptmp2": float(m_ptmp2),
+            "matrix_escape_ptmp_sum": float(m_ptmp1) + float(m_ptmp2),
+            "matrix_escape_ucalc_ans1_lower_to_upper_s^-1": float(m_ans1),
+            "matrix_escape_ucalc_ans2_upper_to_lower_s^-1": float(m_ans2),
+            "matrix_escape_calc_emis_net_rate_s^-1": float(m_net),
+            "matrix_escape_calc_emis_fline1_erg_s^-1": m_f1,
+            "matrix_escape_calc_emis_fline2_erg_s^-1": m_f2,
+            "matrix_escape_calc_emis_fline_total_erg_s^-1": m_f1 + m_f2,
+            "matrix_escape_attenuation_vs_raw_pop_A_E": (m_f1 + m_f2) / raw if raw > 0.0 else "",
+            "source_code_formula": "calc_emis_ion.f90 type-4/type-9: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0); ucalc.f90 type-50 swaps ans1/ans2 so ans2 is escaped decay and ans1 is photoexcitation",
+            "tau0_context_status": "transparent_tau0_and_active_matrix_escape_proxy; full XSTAR spatial tau0 history is not present in standalone ATDB demo",
+            "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+        })
+    for label, sums in (("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("matrix_escape_calc_emis_ion", sums_matrix)):
+        summ = _component_fraction_summary_from_emissivities(sums)
+        rows.append({
+            "row_kind": "calc_emis_ion_triplet_emergent_summary",
+            "comparison_case": label,
+            "f_fraction": summ["f_fraction"],
+            "i_fraction": summ["i_fraction"],
+            "r_fraction": summ["r_fraction"],
+            "R": summ["R"],
+            "G": summ["G"],
+            "l2_distance_to_target": _triplet_l2_distance(summ, target),
+            "f_emissivity_erg_s^-1": summ["f_emissivity"],
+            "i_emissivity_erg_s^-1": summ["i_emissivity"],
+            "r_emissivity_erg_s^-1": summ["r_emissivity"],
+            "total_triplet_emissivity_erg_s^-1": summ["f_emissivity"] + summ["i_emissivity"] + summ["r_emissivity"],
+            "target_f_fraction": target.get("f") if target else "",
+            "target_i_fraction": target.get("i") if target else "",
+            "target_r_fraction": target.get("r") if target else "",
+            "source_code_formula": "calc_emis_ion.f90 fline channels with ucalc.f90 type-50 swapped ans1/ans2",
+            "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+        })
+    return rows
+
+
+def _calc_emis_ion_triplet_emergent_summary(rows: Sequence[dict]) -> dict:
+    summaries = [r for r in rows if r.get("row_kind") == "calc_emis_ion_triplet_emergent_summary"]
+    by_case = {str(r.get("comparison_case")): r for r in summaries}
+    matrix = by_case.get("matrix_escape_calc_emis_ion", {})
+    transparent = by_case.get("transparent_tau0_calc_emis_ion", {})
+    return {
+        "n_calc_emis_ion_triplet_emergent_rows": len(rows),
+        "n_calc_emis_ion_triplet_emergent_line_rows": sum(1 for r in rows if r.get("row_kind") == "calc_emis_ion_triplet_emergent_line"),
+        "matrix_escape_f_fraction": matrix.get("f_fraction", ""),
+        "matrix_escape_i_fraction": matrix.get("i_fraction", ""),
+        "matrix_escape_r_fraction": matrix.get("r_fraction", ""),
+        "matrix_escape_R": matrix.get("R", ""),
+        "matrix_escape_G": matrix.get("G", ""),
+        "matrix_escape_l2_distance_to_target": matrix.get("l2_distance_to_target", ""),
+        "transparent_f_fraction": transparent.get("f_fraction", ""),
+        "transparent_i_fraction": transparent.get("i_fraction", ""),
+        "transparent_r_fraction": transparent.get("r_fraction", ""),
+        "conclusion_scope": "Ports calc_emis_ion fline formula for triplet records; true spatial tau0 history is still unavailable unless supplied by a future transfer context.",
+        "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+    }
+
+
 def _select_records(db: ATDB, z: int, ion_stage: int, *, use_cache: bool, cache_path: Optional[str]) -> list:
     return db.select_records(z=z, ion_stage=ion_stage, use_cache=use_cache, cache_path=cache_path)
 
@@ -10846,6 +11086,33 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         he_like_stage=he_like_stage,
     )
+    calc_emis_ion_triplet_emergent_rows = build_calc_emis_ion_triplet_emergent_rows(
+        global_index_rows=global_index_rows,
+        line_rows=line_rows,
+        full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
+        type50_ucalc_rate_audit_rows=type50_ucalc_rate_audit_rows,
+        he_like_stage=he_like_stage,
+    )
+    # Add compact calc_emis_ion emergent triplet summaries to the primary full-global
+    # comparison CSV so users can compare raw pop*A*E and emergent fline fractions
+    # in one place.
+    for _ce in calc_emis_ion_triplet_emergent_rows:
+        if _ce.get("row_kind") == "calc_emis_ion_triplet_emergent_summary":
+            full_global_normalized_solve_comparison_rows.append({
+                "row_kind": "summary",
+                "comparison_case": "full_global_" + str(_ce.get("comparison_case")),
+                "f_fraction": _ce.get("f_fraction"),
+                "i_fraction": _ce.get("i_fraction"),
+                "r_fraction": _ce.get("r_fraction"),
+                "R": _ce.get("R"),
+                "G": _ce.get("G"),
+                "l2_distance_to_target": _ce.get("l2_distance_to_target"),
+                "solve_status": "postprocess_calc_emis_ion_line_construction",
+                "solver": full_global_linear_solver,
+                "full_global_topology_requested": full_global_topology,
+                "xstar_calc_emis_ion_source_code_formula": _ce.get("source_code_formula"),
+                "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+            })
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -10944,6 +11211,8 @@ def solve_element_reference(
             "calc_emis_triplet_audit_summary": _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows),
             "n_calc_emis_context_audit_rows": len(calc_emis_context_audit_rows),
             "calc_emis_context_audit_summary": _calc_emis_context_audit_summary(calc_emis_context_audit_rows),
+            "n_calc_emis_ion_triplet_emergent_rows": len(calc_emis_ion_triplet_emergent_rows),
+            "calc_emis_ion_triplet_emergent_summary": _calc_emis_ion_triplet_emergent_summary(calc_emis_ion_triplet_emergent_rows),
             "triplet_coupling_treatment": triplet_coupling_treatment_norm,
             "n_triplet_coupling_suppressed_matrix_terms": len(suppressed_triplet_coupling_terms),
             "n_triplet_coupling_suppression_comparison_rows": len(triplet_coupling_suppression_comparison_rows),
@@ -11017,6 +11286,7 @@ def solve_element_reference(
         "triplet_emissivity_branch_audit": triplet_emissivity_branch_audit_rows,
         "calc_emis_triplet_audit": calc_emis_triplet_audit_rows,
         "calc_emis_context_audit": calc_emis_context_audit_rows,
+        "calc_emis_ion_triplet_emergent": calc_emis_ion_triplet_emergent_rows,
         "triplet_coupling_record_audit": triplet_coupling_record_audit_rows,
         "triplet_coupling_suppression_comparison": triplet_coupling_suppression_comparison_rows,
         "radiation_normalization_audit": radiation_normalization_audit_rows,
@@ -12773,6 +13043,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     triplet_emissivity_branch_audit_rows = result.get("triplet_emissivity_branch_audit", [])
     calc_emis_triplet_audit_rows = result.get("calc_emis_triplet_audit", [])
     calc_emis_context_audit_rows = result.get("calc_emis_context_audit", [])
+    calc_emis_ion_triplet_emergent_rows = result.get("calc_emis_ion_triplet_emergent", [])
     type50_ucalc_rate_audit_rows = result.get("type50_ucalc_rate_audit", [])
     type50_escape_factor_scan_rows = result.get("type50_escape_factor_scan", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
@@ -12850,6 +13121,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["calc_emis_triplet_audit_summary"] = _calc_emis_triplet_audit_summary(calc_emis_triplet_audit_rows)
         if calc_emis_context_audit_rows:
             result["summary"]["calc_emis_context_audit_summary"] = _calc_emis_context_audit_summary(calc_emis_context_audit_rows)
+        if calc_emis_ion_triplet_emergent_rows:
+            result["summary"]["calc_emis_ion_triplet_emergent_summary"] = _calc_emis_ion_triplet_emergent_summary(calc_emis_ion_triplet_emergent_rows)
         if global_superlevel_cascade_matrix_terms:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
@@ -12904,6 +13177,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_triplet_emissivity_branch_audit.csv", triplet_emissivity_branch_audit_rows)
     write_csv(out / "xstar_like_element_solver_calc_emis_triplet_audit.csv", calc_emis_triplet_audit_rows)
     write_csv(out / "xstar_like_element_solver_calc_emis_context_audit.csv", calc_emis_context_audit_rows)
+    write_csv(out / "xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv", calc_emis_ion_triplet_emergent_rows)
     write_csv(out / "xstar_like_element_solver_triplet_coupling_record_audit.csv", result.get("triplet_coupling_record_audit", []))
     write_csv(out / "xstar_like_element_solver_triplet_coupling_suppression_comparison.csv", result.get("triplet_coupling_suppression_comparison", []))
     write_csv(out / "xstar_like_element_solver_radiation_normalization_audit.csv", radiation_normalization_audit_rows)
