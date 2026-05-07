@@ -4889,7 +4889,17 @@ def build_global_superlevel_source_matrix_terms(
         n99 = int(n99_val) if n99_val is not None and math.isfinite(float(n99_val)) else 0
         if n99 <= 0:
             continue
-        stage = maybe_int(row.get("record_ion_stage") or row.get("target_ion_stage"))
+        # XSTAR type-99 rows can be carried on source-audit rows whose
+        # record_ion_stage is the adjacent parent ion (for example O VIII)
+        # while the destination/superlevel belongs to the target ion
+        # (for example O VII).  Matrix assembly must therefore use
+        # target_ion_stage for the destination side when it is present.
+        # Using record_ion_stage here made the idat(nidt-3)=0 continuum
+        # rows evaluate in the audit but fail to assemble, because it looked
+        # for (parent_stage, destination_level) instead of
+        # (target_stage, destination_level).
+        stage = maybe_int(row.get("target_ion_stage") or row.get("record_ion_stage"))
+        record_stage = maybe_int(row.get("record_ion_stage"))
         sl = maybe_int(row.get("superlevel_level"))
         if stage is None or sl is None:
             out.append({
@@ -4955,7 +4965,7 @@ def build_global_superlevel_source_matrix_terms(
         else:
             proxy = float(n99)
             proxy_basis = "type99_candidate_count_proxy"
-        parent_stage = int(stage) + 1
+        parent_stage = int(parent_stage_unique) if parent_stage_unique is not None else int(stage) + 1
         common = {
             "data_type": 99,
             "rate_type": "type99_superlevel_photoionization_recombination_linked_record",
@@ -5003,7 +5013,7 @@ def build_global_superlevel_source_matrix_terms(
                 "type99_calt99_rec_total_cm3_s": row.get("type99_calt99_rec_total_cm3_s"),
                 "matrix_safe_to_solve": True,
                 "unsafe_reason": "source_code_type99_calt99_phint53hunt_rate_available;explicit_parent_ion_level_mapping",
-                "provenance": "v0.3.95_global_type99_calt99_phint53hunt_explicit_parent_level_matrix_terms",
+                "provenance": "v0.3.98_global_type99_calt99_phint53hunt_target_stage_destination_matrix_terms",
             })
             if float(ans2_rr) > 0.0:
                 out.append({

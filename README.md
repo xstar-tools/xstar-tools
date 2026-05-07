@@ -1,5 +1,10 @@
 # xstar-atomic
 
+### v0.3.98 type-99 target-stage destination assembly fix
+
+For XSTAR data-type 99 records, the destination level belongs to the target ion even when the audit/source row carries `record_ion_stage` from the adjacent parent ion.  v0.3.98 therefore uses `target_ion_stage` for the destination/superlevel global-index lookup in the physical `calt99/phint53hunt` matrix assembly path.  This completes the v0.3.97 `idat(nidt-3)=0` continuum-alias fix by allowing the evaluated source-code rates to enter `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv` as `assembled_global_type99_calt99_phint53hunt` rows.
+
+
 ## v0.3.97 type-99 continuum-parent mapping and physical-only fallback
 
 v0.3.97 fixes the remaining XSTAR `ucalc.f90` type-99 parent-side mapping case: when `idat(nidt-3) <= 0`, XSTAR computes `idest2 = nlev + idat(nidt-3) - 1` and then clips it with `idest2 = max(idest2, nlev)`.  Therefore the parent side is the target-ion continuum slot, not an invalid parent level zero.
