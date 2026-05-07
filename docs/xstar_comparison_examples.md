@@ -1,4 +1,22 @@
 
+## v0.3.93: type-77 superlevel collisional coupling
+
+For O VII and other He-like ions, type-71 radiative cascades from ATDB superlevels must be paired with the source-code type-77 collisional coupling terms.  v0.3.93 ports `calt77.f90` and assembles both XSTAR `ucalc` rates into the full global/Lucy matrix:
+
+```text
+ans1 = clu   # spectroscopic -> superlevel
+ans2 = cul   # superlevel -> spectroscopic
+```
+
+The recommended C V comparison case remains:
+
+```text
+full_global_xstar_tau0_calc_emis_ion
+```
+
+After rerunning O VII, inspect `xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv` for `data_type=77`, `type77_rate_source=calt77.f90`, `type77_calt77_cul_s^-1`, and `type77_calt77_clu_s^-1`.
+
+
 ## v0.3.91 C V detail-population comparison and O VII validation handoff
 
 The recommended C V triplet comparison row is still:

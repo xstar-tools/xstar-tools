@@ -1,5 +1,10 @@
 # xstar-atomic
 
+## v0.3.93 type-77 superlevel collisional coupling
+
+v0.3.93 ports the XSTAR `calt77.f90` data-type 77 evaluator and assembles the paired collisional rates into the full global/Lucy matrix.  In XSTAR `ucalc.f90`, type 77 uses `ans1=clu` for spectroscopic-to-superlevel coupling and `ans2=cul` for superlevel-to-spectroscopic coupling.  This release preserves the v0.3.92 `calt71` type-71 radiative cascade path and adds the missing collisional back-coupling needed for O VII superlevel population validation.
+
+
 Current development baseline: v0.3.92 ports the XSTAR `calt71.f90` type-71 superlevel-to-spectroscopic cascade evaluator and replaces the old placeholder `type71_A_or_rate_preview_s^-1` / rate=2.0 scaffold in global type-71 cascade assembly.  Type-71 rows now report source-code `type71_calt71_aij_s^-1` rates, grid interpolation status, wavelength, and legacy preview values for comparison.  The C V recommended comparison case remains `full_global_xstar_tau0_calc_emis_ion` as the regression benchmark, while O VII validation should be rerun to test whether the real calt71 cascade rates improve the resonance source balance.  No intentional changes are made to type-50 matrix rates, inverse recombination, line optical-depth construction, `calc_emis_ion`, or `calc_ion_rates/istruc` behavior.
 
 ### Recommended C V XSTAR triplet comparison row
