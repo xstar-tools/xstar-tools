@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.87 implements the XSTAR type-50 line optical-depth context feeding `calc_emis_ion.f90` triplet emergent-line construction.  Building on v0.3.86, the population solve remains unchanged, but the triplet line-output comparison now reconstructs component-specific `tau0(1/2)`, `pescl`, `ptmp1`, and `ptmp2` from the source-code type-50 oscillator strength / thermal-width formula and an explicit equivalent line column.  The old common triplet escape proxy is no longer used for the emergent-line comparison; raw `pop*A*E` and transparent `tau0=0` cases remain for reference.
+Current development baseline: v0.3.88 implements the XSTAR type-50 line optical-depth context feeding `calc_emis_ion.f90` triplet emergent-line construction.  Building on v0.3.86, the population solve remains unchanged, but the triplet line-output comparison now reconstructs component-specific `tau0(1/2)`, `pescl`, `ptmp1`, and `ptmp2` from the source-code type-50 oscillator strength / thermal-width formula and an explicit equivalent line column.  The old common triplet escape proxy is no longer used for the emergent-line comparison; raw `pop*A*E` and transparent `tau0=0` cases remain for reference.
 ### v0.3.66 calc_emis context writer fix
 
 ### v0.3.67 type-50 `ucalc` bound-bound diagnostic

@@ -221,7 +221,7 @@ def _xstar_atomic_mass_amu_from_symbol(symbol: object) -> float:
     if not sym:
         return 1.0
     sym = sym[0].upper() + sym[1:].lower()
-    return float(_XSTAR_APPROX_ATOMIC_MASS_AMU.get(sym, max(1.0, float(SYMBOL_TO_Z.get(sym, 1) or 1))))
+    return float(_XSTAR_APPROX_ATOMIC_MASS_AMU.get(sym, 1.0))
 
 
 def _xstar_type50_line_opacity_context(
