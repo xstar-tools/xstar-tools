@@ -8669,6 +8669,177 @@ def _xstar_msolvelucy_fixed_point_update_from_pairs(
 
 
 
+def _xstar_msolvelucy_ajisb_entries_from_pairs(
+    pairs: Sequence[Mapping[str, object]],
+) -> List[dict]:
+    """Expand two-rate pairs into the four ``calc_hmc_ion`` ajisb rows.
+
+    XSTAR ``calc_hmc_ion.f90`` stores each bidirectional rate pair as two
+    off-diagonal rows plus two diagonal bookkeeping rows.  The diagonal rows are
+    ignored by the ``msolvelucy`` condensed-population and fixed-point loops
+    because they have ``nn == mm``, but carrying them explicitly makes the local
+    implementation follow the source-code iteration structure and preserves the
+    ajisb-entry accounting.
+    """
+    entries: List[dict] = []
+    for pair in pairs:
+        llo = int(pair.get("llo"))
+        lup = int(pair.get("lup"))
+        ans1 = float(pair.get("ans1_low_to_high_s^-1") or 0.0)
+        ans2 = float(pair.get("ans2_high_to_low_s^-1") or 0.0)
+        if ans1 == 0.0 and ans2 == 0.0:
+            continue
+        # Off-diagonal gain/loss rows used by msolvelucy.
+        entries.append({
+            "row_role": "offdiag_lup_llo",
+            "mm": int(lup),
+            "nn": int(llo),
+            "ajisb1": float(ans1),
+            "ajisb2": float(ans2),
+            "llo": int(llo),
+            "lup": int(lup),
+        })
+        entries.append({
+            "row_role": "offdiag_llo_lup",
+            "mm": int(llo),
+            "nn": int(lup),
+            "ajisb1": float(ans2),
+            "ajisb2": float(ans1),
+            "llo": int(llo),
+            "lup": int(lup),
+        })
+        # Diagonal bookkeeping rows.  These do not enter the nn.gt.mm / nn.lt.mm
+        # fixed-point branches, but are part of the four-row ajisb structure.
+        entries.append({
+            "row_role": "diag_lup_lup",
+            "mm": int(lup),
+            "nn": int(lup),
+            "ajisb1": -abs(float(ans2)),
+            "ajisb2": -abs(float(ans2)),
+            "llo": int(llo),
+            "lup": int(lup),
+        })
+        entries.append({
+            "row_role": "diag_llo_llo",
+            "mm": int(llo),
+            "nn": int(llo),
+            "ajisb1": -abs(float(ans1)),
+            "ajisb2": -abs(float(ans1)),
+            "llo": int(llo),
+            "lup": int(lup),
+        })
+    return entries
+
+
+def _xstar_msolvelucy_apply_ajisb_condensation(
+    entries: Sequence[Mapping[str, object]],
+    rr: np.ndarray,
+    local_to_super: Sequence[int],
+    nsup: int,
+) -> np.ndarray:
+    """Construct the condensed matrix by looping over ajisb rows as XSTAR does."""
+    A_sup = np.zeros((int(nsup), int(nsup)), dtype=float)
+    n_local = int(len(local_to_super))
+    for entry in entries:
+        mm = int(entry.get("mm"))
+        nn = int(entry.get("nn"))
+        if mm < 0 or nn < 0 or mm >= n_local or nn >= n_local:
+            continue
+        nspm = int(local_to_super[mm])
+        nspn = int(local_to_super[nn])
+        aj1 = float(entry.get("ajisb1") or 0.0)
+        aj2 = float(entry.get("ajisb2") or 0.0)
+        if (
+            nspn != nspm
+            and nspn >= 0
+            and nspm >= 0
+            and (abs(aj1) > 1.0e-48 or abs(aj2) > 1.0e-48)
+        ):
+            A_sup[nspm, nspn] += aj1 * float(rr[nn])
+            A_sup[nspm, nspm] -= aj2 * float(rr[mm])
+    return A_sup
+
+
+def _xstar_msolvelucy_fixed_point_subiteration_exact(
+    entries: Sequence[Mapping[str, object]],
+    x: np.ndarray,
+    *,
+    max_inner: int,
+    crit2: float,
+    eps2: float = 1.0e-6,
+) -> tuple[np.ndarray, dict]:
+    """Run the exact XSTAR ``riu/rui/ril/rli`` fixed-point sub-iteration.
+
+    This mirrors the inner ``nit2`` loop in ``msolvelucy.f90`` after the
+    condensed superlevel solve has set ``x(mm)=rr(mm)*p(nsup(mm))``:
+
+    * zero ``riu``, ``rui``, ``ril``, and ``rli``;
+    * loop over ajisb rows with ``nn > mm`` and ``nn < mm`` branches;
+    * update ``x(mm)=(rli(mm)+rui(mm))/(ril(mm)+riu(mm)+1d-24)``;
+    * renormalize by the total ``xm``;
+    * test convergence using the source-code ``diff2`` expression.
+
+    No non-negativity clipping is applied to incoming populations; this is
+    intentional because the source routine uses the current ``x(nn)`` directly.
+    """
+    n = int(len(x))
+    x = np.array(x, dtype=float, copy=True)
+    diff2 = 10.0
+    nit2 = 0
+    last_riu = np.zeros(n, dtype=float)
+    last_rui = np.zeros(n, dtype=float)
+    last_ril = np.zeros(n, dtype=float)
+    last_rli = np.zeros(n, dtype=float)
+    while nit2 < int(max_inner) and diff2 >= float(crit2):
+        nit2 += 1
+        xoo = x.copy()
+        riu = np.zeros(n, dtype=float)
+        rui = np.zeros(n, dtype=float)
+        ril = np.zeros(n, dtype=float)
+        rli = np.zeros(n, dtype=float)
+        for entry in entries:
+            mm = int(entry.get("mm"))
+            nn = int(entry.get("nn"))
+            if mm < 0 or nn < 0 or mm >= n or nn >= n:
+                continue
+            aj1 = float(entry.get("ajisb1") or 0.0)
+            aj2 = float(entry.get("ajisb2") or 0.0)
+            if nn > mm:
+                riu[mm] += abs(aj2)
+                rui[mm] += abs(aj1) * float(x[nn])
+            elif nn < mm:
+                ril[mm] += abs(aj2)
+                rli[mm] += abs(aj1) * float(x[nn])
+        x = (rli + rui) / (ril + riu + 1.0e-24)
+        xm = float(np.sum(x))
+        if xm != 0.0 and math.isfinite(xm):
+            x = x / (1.0e-24 + xm)
+        diff2 = 0.0
+        tst = 0.0
+        m2 = 0
+        while diff2 < 1.0e3 and m2 < n and tst < 1.0e3:
+            tst = 1.0
+            if x[m2] > eps2:
+                tst = float(xoo[m2]) / float(x[m2])
+            diffs = (tst - 1.0) * (tst - 1.0)
+            diff2 += diffs
+            m2 += 1
+        last_riu, last_rui, last_ril, last_rli = riu, rui, ril, rli
+    meta = {
+        "nit2": int(nit2),
+        "diff2": float(diff2),
+        "riu": last_riu,
+        "rui": last_rui,
+        "ril": last_ril,
+        "rli": last_rli,
+        "riu_sum": float(np.sum(last_riu)),
+        "rui_sum": float(np.sum(last_rui)),
+        "ril_sum": float(np.sum(last_ril)),
+        "rli_sum": float(np.sum(last_rli)),
+    }
+    return x, meta
+
+
 def build_calc_ion_rates_istruc_audit_rows(
     *,
     he_like_stage: int,
@@ -8742,7 +8913,7 @@ def build_calc_ion_rates_istruc_audit_rows(
         equation_role = "pirti" if pirti_inc else ("rrrti" if rrrti_inc else "not_in_calc_ion_rates_total")
         rows.append({
             "row_kind": "calc_ion_rates_istruc_audit",
-            "provenance": "v0.3.84_source_code_gated_calc_ion_rates_istruc_reconstruction",
+            "provenance": "v0.3.85_source_code_gated_calc_ion_rates_istruc_reconstruction",
             "source_table": source,
             "rate_family": family,
             "ion_process": process,
@@ -8781,7 +8952,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             r.get("photoionization_rate_s^-1") if r.get("photoionization_rate_s^-1") not in (None, "") else r.get("phint53_photoionization_rate_s^-1"),
             record=r.get("record"), data_type=r.get("data_type"), rate_type=r.get("rate_type"), level=lev,
             status=str(r.get("phint53_status") or r.get("assembly_status") or "evaluated"),
-            note="pre-matrix photoionization candidate; v0.3.84 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
+            note="pre-matrix photoionization candidate; v0.3.85 source-code gate includes only calc_ion_rates lrtyp=7,idest1=1 rows in pirti",
             calc_role="pirti_candidate",
         )
 
@@ -8924,7 +9095,7 @@ def build_calc_ion_rates_istruc_audit_rows(
             by_process_included[proc] = by_process_included.get(proc, 0.0) + val
     rows.append({
         "row_kind": "calc_ion_rates_istruc_summary",
-        "provenance": "v0.3.84_source_code_gated_calc_ion_rates_istruc_reconstruction",
+        "provenance": "v0.3.85_source_code_gated_calc_ion_rates_istruc_reconstruction",
         "status": status,
         "low_ion_stage": low,
         "high_ion_stage": high,
@@ -9199,11 +9370,12 @@ def _xstar_lucy_condensed_solve(
     nsup = len(super_keys)
     global_to_active_local = {g: k for k, g in enumerate(active)}
     M_active = M[np.ix_(active, active)].astype(float, copy=True)
-    # v0.3.84: msolvelucy does not condense the dense matrix directly.
+    # v0.3.85: msolvelucy does not condense the dense matrix directly.
     # calc_hmc_ion builds two-rate ajisb pairs (ans1 low->high, ans2 high->low)
     # plus diagonal bookkeeping rows; msolvelucy constructs the condensed matrix
     # from those pairs and the current rr=x/p superlevel fractions.
     xstar_pairs = _xstar_msolvelucy_pairs_from_matrix(M_active)
+    xstar_ajisb_entries = _xstar_msolvelucy_ajisb_entries_from_pairs(xstar_pairs)
     # XSTAR calls levwkelement before msolvelucy to build the LTE/partition
     # seed rnise over the element.  Prefer that source-code seed when enough
     # level metadata are present, otherwise fall back to the older statistical
@@ -9249,6 +9421,9 @@ def _xstar_lucy_condensed_solve(
     lu_failures = 0
     last_condensed_rank = None
     last_condensed_condition = None
+    nit2_last = 0
+    nit2_total = 0
+    last_fixed_point_meta: Dict[str, object] = {}
     for outer in range(int(max_outer)):
         niter = outer + 1
         xo = x.copy()
@@ -9261,7 +9436,7 @@ def _xstar_lucy_condensed_solve(
                 rr[k] = x[k] / (1.0e-48 + p[sp])
             else:
                 rr[k] = 1.0
-        A_sup = _xstar_msolvelucy_apply_pair_condensation(xstar_pairs, rr, local_to_super, nsup)
+        A_sup = _xstar_msolvelucy_apply_ajisb_condensation(xstar_ajisb_entries, rr, local_to_super, nsup)
         b_sup = np.zeros(nsup, dtype=float)
         nspcon = nsup - 1
         A_solve = A_sup.copy()
@@ -9290,23 +9465,23 @@ def _xstar_lucy_condensed_solve(
             x[k] = float(rr[k]) * float(p_new[sp])
         # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
         # msolvelucy enforces total number conservation only.
-        # Lucy fixed-point update on level populations using total incoming and
-        # outgoing rates.  This follows the riu/rui/ril/rli spirit in msolvelucy.
-        for inner in range(int(max_inner)):
-            nit3 += 1
-            x_old_inner = x.copy()
-            x = _xstar_msolvelucy_fixed_point_update_from_pairs(xstar_pairs, x)
-            # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
-            # msolvelucy enforces total number conservation only.
-            diff2 = 0.0
-            for old, new in zip(x_old_inner, x):
-                if new > 1.0e-6:
-                    tst = old / new
-                    diff2 += (tst - 1.0) * (tst - 1.0)
-                    if diff2 >= 1.0e3:
-                        break
-            if diff2 < crit2:
-                break
+        # Exact XSTAR fixed-point sub-iteration on the level populations.
+        # This is the msolvelucy.f90 nit2 loop using riu/rui/ril/rli from the
+        # full ajisb row list, followed by global normalization.
+        x, fixed_point_meta = _xstar_msolvelucy_fixed_point_subiteration_exact(
+            xstar_ajisb_entries,
+            x,
+            max_inner=int(max_inner),
+            crit2=float(crit2),
+            eps2=1.0e-6,
+        )
+        nit2_last = int(fixed_point_meta.get("nit2") or 0)
+        nit2_total += nit2_last
+        nit3 += nit2_last
+        diff2 = float(fixed_point_meta.get("diff2") or 0.0)
+        last_fixed_point_meta = fixed_point_meta
+        # Source-code note: do not hard-apply calc_ion_rates/istruc targets here;
+        # msolvelucy enforces total number conservation only.
         diff = 0.0
         for old, new in zip(xo, x):
             if new > 1.0e-6:
@@ -9329,6 +9504,10 @@ def _xstar_lucy_condensed_solve(
         rr_final = float(x[k]) / (1.0e-48 + float(p_final[sp])) if p_final[sp] > 1.0e-36 else 1.0
         rn = float(rnise_seed[k]) if k < len(rnise_seed) else 0.0
         b_departure = float(x[k]) / (1.0e-37 + rn) if rn > 0.0 else None
+        last_riu = last_fixed_point_meta.get("riu")
+        last_rui = last_fixed_point_meta.get("rui")
+        last_ril = last_fixed_point_meta.get("ril")
+        last_rli = last_fixed_point_meta.get("rli")
         detail_by_global[str(int(g))] = {
             "xstar_ipmat2_index": int(k + 1),
             "xstar_nsup": int(sp + 1),
@@ -9337,22 +9516,34 @@ def _xstar_lucy_condensed_solve(
             "xstar_levwkelement_rnise": float(rn),
             "xstar_bileve_departure_coefficient": b_departure,
             "xstar_xileve_emissivity_population": float(x[k]),
+            "xstar_msolvelucy_riu": float(last_riu[k]) if isinstance(last_riu, np.ndarray) and k < len(last_riu) else None,
+            "xstar_msolvelucy_rui": float(last_rui[k]) if isinstance(last_rui, np.ndarray) and k < len(last_rui) else None,
+            "xstar_msolvelucy_ril": float(last_ril[k]) if isinstance(last_ril, np.ndarray) and k < len(last_ril) else None,
+            "xstar_msolvelucy_rli": float(last_rli[k]) if isinstance(last_rli, np.ndarray) and k < len(last_rli) else None,
         }
     pop = np.zeros(n_full, dtype=float)
     for k, g in enumerate(active):
         pop[int(g)] = float(x[k])
     meta = {
         "solver": "xstar_msolvelucy_lu",
-        "xstar_population_construction_mode": "calc_hmc_element_levwkelement_msolvelucy_exact_p_rr_b_ipmat_nsup",
+        "xstar_population_construction_mode": "calc_hmc_element_levwkelement_msolvelucy_exact_p_rr_b_ipmat_nsup_fixed_point",
         "xstar_msolvelucy_uses_fortran_ajisb_pairs": True,
+        "xstar_msolvelucy_fixed_point_mode": "exact_fortran_riu_rui_ril_rli_subiteration",
+        "xstar_msolvelucy_fixed_point_population_clipping": False,
         "xstar_msolvelucy_n_two_rate_pairs": int(len(xstar_pairs)),
-        "xstar_msolvelucy_n_ajisb_entries_equivalent": int(4 * len(xstar_pairs)),
+        "xstar_msolvelucy_n_ajisb_entries_equivalent": int(len(xstar_ajisb_entries)),
         "xstar_msolvelucy_final_p_json": json.dumps([float(v) for v in p_final]),
+        "xstar_msolvelucy_last_riu_sum": float(last_fixed_point_meta.get("riu_sum") or 0.0),
+        "xstar_msolvelucy_last_rui_sum": float(last_fixed_point_meta.get("rui_sum") or 0.0),
+        "xstar_msolvelucy_last_ril_sum": float(last_fixed_point_meta.get("ril_sum") or 0.0),
+        "xstar_msolvelucy_last_rli_sum": float(last_fixed_point_meta.get("rli_sum") or 0.0),
         "_xstar_msolvelucy_population_detail_by_global": detail_by_global,
         "solve_status": "warning" if lu_failures else "ok",
         "solver_warning": "" if not lu_failures else f"condensed_lu_failed_{lu_failures}_times_lstsq_used_for_diagnostic_continuation",
         "xstar_lucy_n_superlevels": int(nsup),
         "xstar_lucy_niter": int(niter),
+        "xstar_lucy_nit2_last": int(nit2_last),
+        "xstar_lucy_nit2_total": int(nit2_total),
         "xstar_lucy_nit3": int(nit3),
         "xstar_lucy_diff": float(diff) if math.isfinite(float(diff)) else None,
         "xstar_lucy_diff2": float(diff2) if math.isfinite(float(diff2)) else None,
@@ -9423,7 +9614,7 @@ def build_full_global_normalized_solve_comparison(
             "comparison_case": "full_global_normalized_proxy_topology_solve",
             "solve_status": "empty",
             "solver_warning": "no global_index rows available",
-            "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.85_full_global_xstar_lucy_nr_lu_solve_comparison",
         }]
 
     indexed_rows = sorted(indexed_rows, key=lambda r: int(r.get("global_index")))
@@ -9684,9 +9875,15 @@ def build_full_global_normalized_solve_comparison(
         "xstar_lucy_population_seed_mode": xstar_meta.get("xstar_lucy_population_seed_mode"),
         "xstar_population_construction_mode": xstar_meta.get("xstar_population_construction_mode"),
         "xstar_msolvelucy_uses_fortran_ajisb_pairs": xstar_meta.get("xstar_msolvelucy_uses_fortran_ajisb_pairs"),
+        "xstar_msolvelucy_fixed_point_mode": xstar_meta.get("xstar_msolvelucy_fixed_point_mode"),
+        "xstar_msolvelucy_fixed_point_population_clipping": xstar_meta.get("xstar_msolvelucy_fixed_point_population_clipping"),
         "xstar_msolvelucy_n_two_rate_pairs": xstar_meta.get("xstar_msolvelucy_n_two_rate_pairs"),
         "xstar_msolvelucy_n_ajisb_entries_equivalent": xstar_meta.get("xstar_msolvelucy_n_ajisb_entries_equivalent"),
         "xstar_msolvelucy_final_p_json": xstar_meta.get("xstar_msolvelucy_final_p_json"),
+        "xstar_msolvelucy_last_riu_sum": xstar_meta.get("xstar_msolvelucy_last_riu_sum"),
+        "xstar_msolvelucy_last_rui_sum": xstar_meta.get("xstar_msolvelucy_last_rui_sum"),
+        "xstar_msolvelucy_last_ril_sum": xstar_meta.get("xstar_msolvelucy_last_ril_sum"),
+        "xstar_msolvelucy_last_rli_sum": xstar_meta.get("xstar_msolvelucy_last_rli_sum"),
         "xstar_istruc_ion_fraction_closure_requested": closure_requested,
         "xstar_istruc_ion_fraction_closure_status": xstar_meta.get("xstar_istruc_ion_fraction_closure_status") or ion_closure_info.get("status"),
         "xstar_istruc_ion_fraction_targets_json": xstar_meta.get("xstar_istruc_ion_fraction_targets_json") or json.dumps({str(k): float(v) for k, v in sorted((ion_closure_info.get("targets") or {}).items())}, sort_keys=True),
@@ -9702,6 +9899,8 @@ def build_full_global_normalized_solve_comparison(
         "negative_population_action": neg_action,
         "xstar_lucy_n_superlevels": xstar_meta.get("xstar_lucy_n_superlevels"),
         "xstar_lucy_niter": xstar_meta.get("xstar_lucy_niter"),
+        "xstar_lucy_nit2_last": xstar_meta.get("xstar_lucy_nit2_last"),
+        "xstar_lucy_nit2_total": xstar_meta.get("xstar_lucy_nit2_total"),
         "xstar_lucy_nit3": xstar_meta.get("xstar_lucy_nit3"),
         "xstar_lucy_diff": xstar_meta.get("xstar_lucy_diff"),
         "xstar_lucy_diff2": xstar_meta.get("xstar_lucy_diff2"),
@@ -9734,8 +9933,8 @@ def build_full_global_normalized_solve_comparison(
         "rows_by_matrix_term_kind_used": json.dumps(dict(sorted(kind_counts.items())), sort_keys=True),
         "ion_population_sums_json": json.dumps(dict(sorted(ion_population_sums.items())), sort_keys=True),
         "level_kind_population_sums_json": json.dumps(dict(sorted(kind_population_sums.items())), sort_keys=True),
-        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.84 reconstructs the levwkelement/msolvelucy population construction with p, rr, bmatsup, ipmat2 ordering, nsup memberships, and bileve=xileve/rnise emissivity populations. SVD/lstsq remain available for non-Lucy rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not yet a complete physical XSTAR element model",
-        "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
+        "warning": "diagnostic proxy-topology normalized solve; source-vector rows excluded; XSTAR uses msolvelucy with LU on a condensed superlevel matrix; v0.3.85 implements the exact msolvelucy riu/rui/ril/rli fixed-point sub-iteration with p, rr, bmatsup, ipmat2 ordering, nsup memberships, and bileve=xileve/rnise emissivity populations. SVD/lstsq remain available for non-Lucy rank-deficient proxy topology; type53/type99/type1 proxy topology terms are not yet a complete physical XSTAR element model",
+        "provenance": "v0.3.85_full_global_xstar_lucy_nr_lu_solve_comparison",
     }
     rows.append({
         "row_kind": "summary",
@@ -9791,9 +9990,13 @@ def build_full_global_normalized_solve_comparison(
             "xstar_levwkelement_rnise": lucy_detail.get("xstar_levwkelement_rnise"),
             "xstar_bileve_departure_coefficient": lucy_detail.get("xstar_bileve_departure_coefficient"),
             "xstar_xileve_emissivity_population": lucy_detail.get("xstar_xileve_emissivity_population"),
+            "xstar_msolvelucy_riu": lucy_detail.get("xstar_msolvelucy_riu"),
+            "xstar_msolvelucy_rui": lucy_detail.get("xstar_msolvelucy_rui"),
+            "xstar_msolvelucy_ril": lucy_detail.get("xstar_msolvelucy_ril"),
+            "xstar_msolvelucy_rli": lucy_detail.get("xstar_msolvelucy_rli"),
             "population_abs": abs(float(pop[g])) if g < len(pop) else 0.0,
             "population_negative": bool(g < len(pop) and pop[g] < -1.0e-12),
-            "provenance": "v0.3.84_full_global_xstar_lucy_nr_lu_solve_comparison",
+            "provenance": "v0.3.85_full_global_xstar_lucy_nr_lu_solve_comparison",
         })
     return rows
 
