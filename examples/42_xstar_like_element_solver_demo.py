@@ -85,7 +85,12 @@ def main(argv=None):
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
     p.add_argument("--full-global-topology", default="explicit-current", choices=["explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"], help="v0.3.76 experimental XSTAR element-matrix topology membership for the xstar-lucy full-global solve. explicit-current preserves previous behavior; xstar-continuum-alias aliases continuum rows to the parent ground group; xstar-continuum-alias-superlevels also groups levels 2..nlev-1 into one excited nsup group per ion.")
     p.add_argument("--ion-fraction-closure", default="none", choices=["none", "xstar-istruc", "xstar-calc-ion-rates"], help="v0.3.80 experimental XSTAR calc_ion_rates/istruc-style adjacent-stage ion-fraction closure. v0.3.83+ treats xstar-calc-ion-rates/xstar-istruc as source-code metadata/seed-structure information, not a hard Lucy stage constraint; none preserves earlier behavior.")
-    p.add_argument("--xstar-line-column-density", default="0", help="v0.3.87 equivalent column for XSTAR type-50 line tau0 construction, representing xpx*xeltp*delr in cm^-2. The lower-level column is xileve_lower times this value. Default 0 gives transparent tau0=0.")
+    p.add_argument("--xstar-line-column-density", default="0", help="Backward-compatible explicit equivalent column for XSTAR type-50 line tau0 construction, representing xpx*xeltp*delr in cm^-2. In v0.3.89 the default column source is auto/geometry, so this is used only when --xstar-line-column-source auto with a nonzero value or source=manual.")
+    p.add_argument("--xstar-line-column-source", default="geometry", choices=["geometry", "auto", "manual", "rt", "xstar"], help="v0.3.89 source for the type-50 line tau0 column. geometry/rt/xstar derives xpx*xeltp*delr from density, abundance, and zone thickness; manual uses --xstar-line-column-density; auto preserves a nonzero manual column for backward compatibility, otherwise geometry.")
+    p.add_argument("--xstar-line-zone-thickness-cm", default="1e10", help="One-zone geometry thickness delr in cm for v0.3.89 XSTAR tau0 += oplin*delr reconstruction. Default 1e10 cm for the stand-alone C V demo; set from the real XSTAR zone when available.")
+    p.add_argument("--xstar-line-hydrogen-density-cm3", default=None, help="Optional H density xpx in cm^-3 for line tau0 geometry. If omitted, electron_density / --xstar-line-electron-per-hydrogen is used.")
+    p.add_argument("--xstar-line-electron-per-hydrogen", default="1", help="Electron-per-H factor xee used to infer xpx from electron density when --xstar-line-hydrogen-density-cm3 is omitted. Default 1.")
+    p.add_argument("--xstar-line-element-abundance", default=None, help="Element abundance xeltp per H for line tau0 geometry. If omitted, an explicit internal default for the element is used and reported.")
     p.add_argument("--xstar-line-vturb-km-s", default="0", help="Turbulent velocity in km/s for XSTAR type-50 vtherm in the line tau0 construction. Default 0 uses thermal broadening only.")
     p.add_argument("--xstar-line-cfrac", default="0", help="Covering fraction cfrac for XSTAR calc_emis_ion ptmp1/ptmp2 escape channels. Default 0.")
     p.add_argument("--xstar-line-tau1-fraction", default="1", help="Fraction of the supplied line column assigned to tau0(1,jkkl). Default 1.")
@@ -140,6 +145,11 @@ def main(argv=None):
             "full_global_topology": args.full_global_topology,
             "ion_fraction_closure": args.ion_fraction_closure,
             "xstar_line_column_density": args.xstar_line_column_density,
+            "xstar_line_column_source": args.xstar_line_column_source,
+            "xstar_line_zone_thickness_cm": args.xstar_line_zone_thickness_cm,
+            "xstar_line_hydrogen_density_cm3": args.xstar_line_hydrogen_density_cm3,
+            "xstar_line_electron_per_hydrogen": args.xstar_line_electron_per_hydrogen,
+            "xstar_line_element_abundance": args.xstar_line_element_abundance,
             "xstar_line_vturb_km_s": args.xstar_line_vturb_km_s,
             "xstar_line_cfrac": args.xstar_line_cfrac,
             "xstar_line_tau1_fraction": args.xstar_line_tau1_fraction,
@@ -260,6 +270,11 @@ def main(argv=None):
         full_global_topology=args.full_global_topology,
         ion_fraction_closure=args.ion_fraction_closure,
         xstar_line_column_density=args.xstar_line_column_density,
+        xstar_line_column_source=args.xstar_line_column_source,
+        xstar_line_zone_thickness_cm=args.xstar_line_zone_thickness_cm,
+        xstar_line_hydrogen_density_cm3=args.xstar_line_hydrogen_density_cm3,
+        xstar_line_electron_per_hydrogen=args.xstar_line_electron_per_hydrogen,
+        xstar_line_element_abundance=args.xstar_line_element_abundance,
         xstar_line_vturb_km_s=args.xstar_line_vturb_km_s,
         xstar_line_cfrac=args.xstar_line_cfrac,
         xstar_line_tau1_fraction=args.xstar_line_tau1_fraction,

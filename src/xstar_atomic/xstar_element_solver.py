@@ -216,12 +216,118 @@ _XSTAR_APPROX_ATOMIC_MASS_AMU = {
 }
 
 
+# Approximate gas-phase elemental abundance per H nucleus used only by the
+# stand-alone single-zone tau0 reconstruction when the full XSTAR radial
+# abundance/geometry arrays are not available.  The values are intentionally
+# explicit and reported in the output rows; users can override them with
+# --xstar-line-element-abundance.
+_XSTAR_DEFAULT_ELEMENT_ABUNDANCE_PER_H = {
+    "H": 1.0, "He": 0.1, "C": 3.0e-4, "N": 1.0e-4, "O": 6.0e-4,
+    "Ne": 1.0e-4, "Mg": 4.0e-5, "Si": 3.5e-5, "S": 1.6e-5,
+    "Ar": 3.6e-6, "Ca": 2.2e-6, "Fe": 3.2e-5,
+}
+
+
 def _xstar_atomic_mass_amu_from_symbol(symbol: object) -> float:
     sym = str(symbol or "").strip()
     if not sym:
         return 1.0
     sym = sym[0].upper() + sym[1:].lower()
     return float(_XSTAR_APPROX_ATOMIC_MASS_AMU.get(sym, 1.0))
+
+
+def _xstar_default_abundance_per_h(symbol: object) -> float:
+    sym = str(symbol or "").strip()
+    if not sym:
+        return 1.0
+    sym = sym[0].upper() + sym[1:].lower()
+    return float(_XSTAR_DEFAULT_ELEMENT_ABUNDANCE_PER_H.get(sym, 1.0))
+
+
+def _xstar_resolve_line_tau0_column_context(
+    *,
+    element: object,
+    manual_line_column_density_cm2: object,
+    electron_density_cm3: object,
+    hydrogen_density_cm3: object,
+    electron_per_hydrogen: object,
+    element_abundance_per_h: object,
+    zone_thickness_cm: object,
+    line_column_source: object,
+) -> dict:
+    """Resolve the XSTAR ``xpx*xeltp*delr`` column for line tau0.
+
+    XSTAR does not supply a free line column to ``calc_emis_ion``.  The
+    line optical depth is accumulated by ``stpcut.f90`` as
+
+        tau0(lind,line) += oplin(line) * delr
+
+    with ``oplin = sigvtherm*xileve_lower*xpx*xeltp`` from
+    ``calc_emisab_ion.f90``.  Therefore the non-level part of the column is
+    ``xpx*xeltp*delr``.  In the stand-alone one-zone example v0.3.89 derives
+    this quantity from the supplied density/abundance/zone geometry instead
+    of requiring a hand-tuned equivalent line column.
+    """
+    source = str(line_column_source or "auto").strip().lower() or "auto"
+    manual = max(0.0, float(maybe_float(manual_line_column_density_cm2) or 0.0))
+    sym = str(element or "").strip()
+    if sym:
+        sym = sym[0].upper() + sym[1:].lower()
+    default_abund = _xstar_default_abundance_per_h(sym)
+    abund = maybe_float(element_abundance_per_h)
+    if abund is None or not math.isfinite(float(abund)) or float(abund) < 0.0:
+        abund = default_abund
+    abund = max(0.0, float(abund))
+    xee = maybe_float(electron_per_hydrogen)
+    if xee is None or not math.isfinite(float(xee)) or float(xee) <= 0.0:
+        xee = 1.0
+    xee = float(xee)
+    xpx = maybe_float(hydrogen_density_cm3)
+    ne = maybe_float(electron_density_cm3)
+    if xpx is None or not math.isfinite(float(xpx)) or float(xpx) <= 0.0:
+        if ne is not None and math.isfinite(float(ne)) and float(ne) > 0.0:
+            xpx = float(ne) / xee
+        else:
+            xpx = 0.0
+    xpx = max(0.0, float(xpx))
+    delr = maybe_float(zone_thickness_cm)
+    if delr is None or not math.isfinite(float(delr)) or float(delr) < 0.0:
+        # One-zone fallback for the stand-alone example.  This is not a fitted
+        # line column; it is the local XSTAR geometry factor delr in
+        # tau0 += oplin*delr.  Users can override it with
+        # --xstar-line-zone-thickness-cm when a real zone thickness is known.
+        delr = 1.0e10
+    delr = max(0.0, float(delr))
+    geom_col = xpx * abund * delr
+    if source in {"manual", "explicit", "column"}:
+        col = manual
+        status = "manual_equivalent_column_used"
+    elif source in {"geometry", "rt", "auto", "xstar"}:
+        if manual > 0.0 and source == "auto":
+            # Preserve backwards compatibility when an old command supplies the
+            # explicit column; otherwise use the source-code geometry.
+            col = manual
+            status = "manual_equivalent_column_used_for_backward_compatibility"
+        else:
+            col = geom_col
+            status = "derived_from_xstar_geometry_xpx_xeltp_delr"
+    else:
+        col = geom_col
+        status = f"derived_from_xstar_geometry_xpx_xeltp_delr_unknown_source_{source}"
+    return {
+        "xstar_line_column_source": source,
+        "xstar_line_column_status": status,
+        "xstar_line_manual_column_density_cm^-2": manual,
+        "xstar_line_geometry_column_density_cm^-2": geom_col,
+        "xstar_line_column_density_cm^-2": max(0.0, float(col)),
+        "xstar_line_hydrogen_density_xpx_cm^-3": xpx,
+        "xstar_line_electron_density_cm^-3": float(ne) if ne is not None and math.isfinite(float(ne)) else "",
+        "xstar_line_electron_per_hydrogen_xee": xee,
+        "xstar_line_element_abundance_xeltp": abund,
+        "xstar_line_default_element_abundance_xeltp": default_abund,
+        "xstar_line_zone_thickness_delr_cm": delr,
+        "xstar_line_column_source_code_formula": "tau0(lind,jkkl)+=oplin(jkkl)*delr; oplin=sigvtherm*xileve_lower*xpx*xeltp",
+    }
 
 
 def _xstar_type50_line_opacity_context(
@@ -233,9 +339,10 @@ def _xstar_type50_line_opacity_context(
     temperature_K: float,
     vturb_km_s: float,
     line_column_density_cm2: float,
-    tau1_column_fraction: float,
-    tau2_column_fraction: float,
-    cfrac: float,
+    line_column_context: Optional[Mapping[str, object]] = None,
+    tau1_column_fraction: float = 1.0,
+    tau2_column_fraction: float = 1.0,
+    cfrac: float = 0.0,
 ) -> dict:
     """Reconstruct the XSTAR type-50 line optical-depth context.
 
@@ -251,10 +358,10 @@ def _xstar_type50_line_opacity_context(
         oplin(jkkl)=opakb1 [line opacity per length]
         tau0(lind,jkkl)+=oplin(jkkl)*delr
 
-    In the stand-alone ATDB demo there is no radial transfer history, so the
-    caller supplies an equivalent column for ``xpx*xeltp*delr``.  The lower
-    level column is then ``xileve_lower * column`` and the source-code optical
-    depth is ``tau=sigvtherm*N_lower`` for each direction.
+    v0.3.89 derives the one-zone ``xpx*xeltp*delr`` column from the
+    stand-alone geometry context when no explicit manual column is requested.
+    The lower-level column is then ``xileve_lower * xpx*xeltp*delr`` and the
+    source-code optical depth is ``tau=sigvtherm*N_lower`` for each direction.
     """
     A = float(maybe_float(line.get("A_s^-1")) or 0.0)
     lam = float(maybe_float(line.get("wavelength_A")) or 0.0)
@@ -272,15 +379,26 @@ def _xstar_type50_line_opacity_context(
     vtherm = math.sqrt((float(vturb_km_s or 0.0) * 1.0e5) ** 2 + (1.29e6 / math.sqrt(max(atomic_mass / t_xstar, 1.0e-300))) ** 2)
     flin = 1.0e-16 * A * g_up * lam * lam / (0.667274 * g_lo)
     sigvtherm = 0.02655 * flin * lam * 1.0e-8 / max(vtherm, 1.0e-300)
-    col_total = max(0.0, float(line_column_density_cm2 or 0.0))
+    col_ctx = dict(line_column_context or {})
+    col_total = max(0.0, float(col_ctx.get("xstar_line_column_density_cm^-2", line_column_density_cm2) or 0.0))
     lower_column = max(0.0, float(lower_population or 0.0)) * col_total
     tau1 = sigvtherm * lower_column * max(0.0, float(tau1_column_fraction or 0.0))
     tau2 = sigvtherm * lower_column * max(0.0, float(tau2_column_fraction or 0.0))
     ptmp1, ptmp2 = _xstar_calc_emis_ptmp_from_tau(tau1, tau2, cfrac)
     return {
-        "status": "evaluated_source_code_tau0_from_type50_sigvtherm_and_supplied_column",
-        "xstar_tau0_source_code_path": "ucalc.f90 type50 sigvtherm -> calc_emisab_ion/stpcut tau0=tau0+oplin*delr; standalone column replaces xpx*xeltp*delr",
+        "status": "evaluated_source_code_tau0_from_type50_sigvtherm_and_geometry_column",
+        "xstar_tau0_source_code_path": "ucalc.f90 type50 sigvtherm -> calc_emisab_ion oplin=sigvtherm*xileve*xpx*xeltp -> stpcut tau0=tau0+oplin*delr",
         "xstar_line_column_density_cm^-2": col_total,
+        "xstar_line_column_source": col_ctx.get("xstar_line_column_source", "manual"),
+        "xstar_line_column_status": col_ctx.get("xstar_line_column_status", "manual_equivalent_column_used"),
+        "xstar_line_manual_column_density_cm^-2": col_ctx.get("xstar_line_manual_column_density_cm^-2", ""),
+        "xstar_line_geometry_column_density_cm^-2": col_ctx.get("xstar_line_geometry_column_density_cm^-2", ""),
+        "xstar_line_hydrogen_density_xpx_cm^-3": col_ctx.get("xstar_line_hydrogen_density_xpx_cm^-3", ""),
+        "xstar_line_electron_density_cm^-3": col_ctx.get("xstar_line_electron_density_cm^-3", ""),
+        "xstar_line_electron_per_hydrogen_xee": col_ctx.get("xstar_line_electron_per_hydrogen_xee", ""),
+        "xstar_line_element_abundance_xeltp": col_ctx.get("xstar_line_element_abundance_xeltp", ""),
+        "xstar_line_zone_thickness_delr_cm": col_ctx.get("xstar_line_zone_thickness_delr_cm", ""),
+        "xstar_line_column_source_code_formula": col_ctx.get("xstar_line_column_source_code_formula", ""),
         "xstar_line_lower_level_column_cm^-2": lower_column,
         "xstar_line_tau1_column_fraction": float(tau1_column_fraction or 0.0),
         "xstar_line_tau2_column_fraction": float(tau2_column_fraction or 0.0),
@@ -323,7 +441,13 @@ def build_calc_emis_ion_triplet_emergent_rows(
     type50_ucalc_rate_audit_rows: Sequence[dict],
     he_like_stage: int,
     temperature_K: float,
+    electron_density_cm3: object = None,
     xstar_line_column_density: object = 0.0,
+    xstar_line_column_source: object = "auto",
+    xstar_line_zone_thickness_cm: object = 1.0e10,
+    xstar_line_hydrogen_density_cm3: object = None,
+    xstar_line_electron_per_hydrogen: object = 1.0,
+    xstar_line_element_abundance: object = None,
     xstar_line_vturb_km_s: object = 0.0,
     xstar_line_cfrac: object = 0.0,
     xstar_line_tau1_fraction: object = 1.0,
@@ -332,7 +456,8 @@ def build_calc_emis_ion_triplet_emergent_rows(
     """Build XSTAR ``calc_emis_ion`` emergent-triplet line rows.
 
     v0.3.87 ports the source-code line-output construction for the selected
-    He-like triplet records.  For line data (XSTAR type-50 / rate-type-4),
+    He-like triplet records.  v0.3.89 derives the line optical-depth column
+    from the XSTAR geometry factor ``xpx*xeltp*delr`` by default.  For line data (XSTAR type-50 / rate-type-4),
     ``ucalc.f90`` computes an escaped decay rate ``A*(ptmp1+ptmp2)``, computes
     any lower-to-upper photoexcitation rate, and then swaps the rates so that
     ``ans1`` is pumping and ``ans2`` is escaped decay.  ``calc_emis_ion.f90``
@@ -374,6 +499,16 @@ def build_calc_emis_ion_triplet_emergent_rows(
             type50_by_record[int(rec)] = r
     target = _xstar_triplet_target(he_like_stage)
     line_column_density = max(0.0, float(maybe_float(xstar_line_column_density) or 0.0))
+    line_column_context = _xstar_resolve_line_tau0_column_context(
+        element=(line_rows[0].get("element") if line_rows else ""),
+        manual_line_column_density_cm2=line_column_density,
+        electron_density_cm3=electron_density_cm3,
+        hydrogen_density_cm3=xstar_line_hydrogen_density_cm3,
+        electron_per_hydrogen=xstar_line_electron_per_hydrogen,
+        element_abundance_per_h=xstar_line_element_abundance,
+        zone_thickness_cm=xstar_line_zone_thickness_cm,
+        line_column_source=xstar_line_column_source,
+    )
     line_vturb = max(0.0, float(maybe_float(xstar_line_vturb_km_s) or 0.0))
     line_cfrac = max(0.0, min(1.0, float(maybe_float(xstar_line_cfrac) or 0.0)))
     tau1_fraction = max(0.0, float(maybe_float(xstar_line_tau1_fraction) or 0.0))
@@ -422,7 +557,8 @@ def build_calc_emis_ion_triplet_emergent_rows(
             lower_population=float(lower_pop),
             temperature_K=float(temperature_K),
             vturb_km_s=line_vturb,
-            line_column_density_cm2=line_column_density,
+            line_column_density_cm2=float(line_column_context.get("xstar_line_column_density_cm^-2", line_column_density) or 0.0),
+            line_column_context=line_column_context,
             tau1_column_fraction=tau1_fraction,
             tau2_column_fraction=tau2_fraction,
             cfrac=line_cfrac,
@@ -465,7 +601,17 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "transparent_calc_emis_fline1_erg_s^-1": trans_f1,
             "transparent_calc_emis_fline2_erg_s^-1": trans_f2,
             "transparent_calc_emis_fline_total_erg_s^-1": trans_f1 + trans_f2,
+            "xstar_tau0_line_column_source": tau_ctx.get("xstar_line_column_source", ""),
+            "xstar_tau0_line_column_status": tau_ctx.get("xstar_line_column_status", ""),
             "xstar_tau0_line_column_density_cm^-2": tau_ctx.get("xstar_line_column_density_cm^-2", ""),
+            "xstar_tau0_manual_column_density_cm^-2": tau_ctx.get("xstar_line_manual_column_density_cm^-2", ""),
+            "xstar_tau0_geometry_column_density_cm^-2": tau_ctx.get("xstar_line_geometry_column_density_cm^-2", ""),
+            "xstar_tau0_hydrogen_density_xpx_cm^-3": tau_ctx.get("xstar_line_hydrogen_density_xpx_cm^-3", ""),
+            "xstar_tau0_electron_density_cm^-3": tau_ctx.get("xstar_line_electron_density_cm^-3", ""),
+            "xstar_tau0_electron_per_hydrogen_xee": tau_ctx.get("xstar_line_electron_per_hydrogen_xee", ""),
+            "xstar_tau0_element_abundance_xeltp": tau_ctx.get("xstar_line_element_abundance_xeltp", ""),
+            "xstar_tau0_zone_thickness_delr_cm": tau_ctx.get("xstar_line_zone_thickness_delr_cm", ""),
+            "xstar_tau0_column_source_code_formula": tau_ctx.get("xstar_line_column_source_code_formula", ""),
             "xstar_tau0_lower_level_column_cm^-2": tau_ctx.get("xstar_line_lower_level_column_cm^-2", ""),
             "xstar_tau0_vturb_km_s": tau_ctx.get("xstar_line_vturb_km_s", ""),
             "xstar_tau0_vtherm_cm_s": tau_ctx.get("xstar_line_vtherm_cm_s", ""),
@@ -487,7 +633,7 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "source_code_formula": "calc_emis_ion.f90 type-4/type-9: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0); ucalc.f90 type-50 provides ans2=A*(ptmp1+ptmp2) after tau0->pescl escape",
             "tau0_context_status": tau_ctx.get("status", ""),
             "tau0_source_code_path": tau_ctx.get("xstar_tau0_source_code_path", ""),
-            "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
+            "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
         })
     for label, sums in (("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("xstar_tau0_calc_emis_ion", sums_xstar_tau0)):
         summ = _component_fraction_summary_from_emissivities(sums)
@@ -508,7 +654,7 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "target_i_fraction": target.get("i") if target else "",
             "target_r_fraction": target.get("r") if target else "",
             "source_code_formula": "calc_emis_ion.f90 fline channels with ucalc.f90 type-50 swapped ans1/ans2",
-            "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
+            "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
         })
     return rows
 
@@ -531,7 +677,7 @@ def _calc_emis_ion_triplet_emergent_summary(rows: Sequence[dict]) -> dict:
         "transparent_i_fraction": transparent.get("i_fraction", ""),
         "transparent_r_fraction": transparent.get("r_fraction", ""),
         "conclusion_scope": "Ports calc_emis_ion fline formula and XSTAR tau0->pescl context for triplet records; standalone column options replace the missing radial transfer history.",
-        "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
+        "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
     }
 
 
@@ -10672,6 +10818,11 @@ def solve_element_reference(
     full_global_topology: str = "explicit-current",
     ion_fraction_closure: str = "none",
     xstar_line_column_density: object = 0.0,
+    xstar_line_column_source: object = "auto",
+    xstar_line_zone_thickness_cm: object = 1.0e10,
+    xstar_line_hydrogen_density_cm3: object = None,
+    xstar_line_electron_per_hydrogen: object = 1.0,
+    xstar_line_element_abundance: object = None,
     xstar_line_vturb_km_s: object = 0.0,
     xstar_line_cfrac: object = 0.0,
     xstar_line_tau1_fraction: object = 1.0,
@@ -11215,7 +11366,13 @@ def solve_element_reference(
         type50_ucalc_rate_audit_rows=type50_ucalc_rate_audit_rows,
         he_like_stage=he_like_stage,
         temperature_K=temperature,
+        electron_density_cm3=electron_density,
         xstar_line_column_density=xstar_line_column_density,
+        xstar_line_column_source=xstar_line_column_source,
+        xstar_line_zone_thickness_cm=xstar_line_zone_thickness_cm,
+        xstar_line_hydrogen_density_cm3=xstar_line_hydrogen_density_cm3,
+        xstar_line_electron_per_hydrogen=xstar_line_electron_per_hydrogen,
+        xstar_line_element_abundance=xstar_line_element_abundance,
         xstar_line_vturb_km_s=xstar_line_vturb_km_s,
         xstar_line_cfrac=xstar_line_cfrac,
         xstar_line_tau1_fraction=xstar_line_tau1_fraction,
@@ -11239,7 +11396,7 @@ def solve_element_reference(
                 "solver": full_global_linear_solver,
                 "full_global_topology_requested": full_global_topology,
                 "xstar_calc_emis_ion_source_code_formula": _ce.get("source_code_formula"),
-                "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
+                "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
             })
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
