@@ -1,7 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.86 implements the XSTAR `calc_emis_ion.f90` emergent triplet line construction for the full-global `xstar-lucy` path.  Building on v0.3.85, the population solve still follows the XSTAR `levwkelement` / `msolvelucy` `ipmat/nsup/p/rr` and fixed-point sub-iteration machinery, but the triplet line-output comparison now also ports the source-code `fline(1/2)=max((ans2*abund2-ans1*abund1)*E*ptmp,0)` construction.  The new output `xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv` reports raw `pop*A*E`, transparent `tau0=0` calc-emis output, and the active type-50 escape/pumping path using the source-code swapped `ans1/ans2` orientation.  True spatial `tau0` transfer history is still not present in the stand-alone ATDB demo.
-
+Current development baseline: v0.3.87 implements the XSTAR type-50 line optical-depth context feeding `calc_emis_ion.f90` triplet emergent-line construction.  Building on v0.3.86, the population solve remains unchanged, but the triplet line-output comparison now reconstructs component-specific `tau0(1/2)`, `pescl`, `ptmp1`, and `ptmp2` from the source-code type-50 oscillator strength / thermal-width formula and an explicit equivalent line column.  The old common triplet escape proxy is no longer used for the emergent-line comparison; raw `pop*A*E` and transparent `tau0=0` cases remain for reference.
 ### v0.3.66 calc_emis context writer fix
 
 ### v0.3.67 type-50 `ucalc` bound-bound diagnostic

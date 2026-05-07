@@ -205,6 +205,99 @@ def _xstar_calc_emis_ptmp_from_tau(tau1: float, tau2: float, cfrac: float) -> tu
     return float(ptmp1), float(ptmp2)
 
 
+
+
+_XSTAR_APPROX_ATOMIC_MASS_AMU = {
+    "H": 1.0079, "He": 4.0026, "Li": 6.94, "Be": 9.0122, "B": 10.81,
+    "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998, "Ne": 20.180,
+    "Na": 22.990, "Mg": 24.305, "Al": 26.982, "Si": 28.085, "P": 30.974,
+    "S": 32.06, "Cl": 35.45, "Ar": 39.948, "K": 39.098, "Ca": 40.078,
+    "Fe": 55.845,
+}
+
+
+def _xstar_atomic_mass_amu_from_symbol(symbol: object) -> float:
+    sym = str(symbol or "").strip()
+    if not sym:
+        return 1.0
+    sym = sym[0].upper() + sym[1:].lower()
+    return float(_XSTAR_APPROX_ATOMIC_MASS_AMU.get(sym, max(1.0, float(SYMBOL_TO_Z.get(sym, 1) or 1))))
+
+
+def _xstar_type50_line_opacity_context(
+    *,
+    line: Mapping[str, object],
+    lower_row: Optional[Mapping[str, object]],
+    upper_row: Optional[Mapping[str, object]],
+    lower_population: float,
+    temperature_K: float,
+    vturb_km_s: float,
+    line_column_density_cm2: float,
+    tau1_column_fraction: float,
+    tau2_column_fraction: float,
+    cfrac: float,
+) -> dict:
+    """Reconstruct the XSTAR type-50 line optical-depth context.
+
+    The visible XSTAR source path is::
+
+      ucalc.f90 type 50:
+        flin=(1d-16)*aij*ggup*elin**2/(0.667274*gglo)
+        vtherm=sqrt((vturb*1d5)**2 + (1.29d6/sqrt(a/t))**2)
+        sigvtherm=(0.02655)*flin*elin*1d-8/vtherm
+        opakb1=sigvtherm*abund1
+
+      calc_emisab_ion.f90 / stpcut.f90:
+        oplin(jkkl)=opakb1 [line opacity per length]
+        tau0(lind,jkkl)+=oplin(jkkl)*delr
+
+    In the stand-alone ATDB demo there is no radial transfer history, so the
+    caller supplies an equivalent column for ``xpx*xeltp*delr``.  The lower
+    level column is then ``xileve_lower * column`` and the source-code optical
+    depth is ``tau=sigvtherm*N_lower`` for each direction.
+    """
+    A = float(maybe_float(line.get("A_s^-1")) or 0.0)
+    lam = float(maybe_float(line.get("wavelength_A")) or 0.0)
+    if A <= 0.0 or lam <= 0.0:
+        return {"status": "not_evaluated_missing_A_or_wavelength"}
+    g_lo = float(maybe_float((lower_row or {}).get("statistical_weight_g")) or maybe_float((lower_row or {}).get("stat_weight")) or 1.0)
+    g_up = float(maybe_float((upper_row or {}).get("statistical_weight_g")) or maybe_float((upper_row or {}).get("stat_weight")) or 1.0)
+    if g_lo <= 0.0:
+        g_lo = 1.0
+    if g_up <= 0.0:
+        g_up = 1.0
+    element = line.get("element") or (lower_row or {}).get("element") or (upper_row or {}).get("element")
+    atomic_mass = _xstar_atomic_mass_amu_from_symbol(element)
+    t_xstar = max(float(temperature_K or 0.0) / 1.0e4, 1.0e-30)
+    vtherm = math.sqrt((float(vturb_km_s or 0.0) * 1.0e5) ** 2 + (1.29e6 / math.sqrt(max(atomic_mass / t_xstar, 1.0e-300))) ** 2)
+    flin = 1.0e-16 * A * g_up * lam * lam / (0.667274 * g_lo)
+    sigvtherm = 0.02655 * flin * lam * 1.0e-8 / max(vtherm, 1.0e-300)
+    col_total = max(0.0, float(line_column_density_cm2 or 0.0))
+    lower_column = max(0.0, float(lower_population or 0.0)) * col_total
+    tau1 = sigvtherm * lower_column * max(0.0, float(tau1_column_fraction or 0.0))
+    tau2 = sigvtherm * lower_column * max(0.0, float(tau2_column_fraction or 0.0))
+    ptmp1, ptmp2 = _xstar_calc_emis_ptmp_from_tau(tau1, tau2, cfrac)
+    return {
+        "status": "evaluated_source_code_tau0_from_type50_sigvtherm_and_supplied_column",
+        "xstar_tau0_source_code_path": "ucalc.f90 type50 sigvtherm -> calc_emisab_ion/stpcut tau0=tau0+oplin*delr; standalone column replaces xpx*xeltp*delr",
+        "xstar_line_column_density_cm^-2": col_total,
+        "xstar_line_lower_level_column_cm^-2": lower_column,
+        "xstar_line_tau1_column_fraction": float(tau1_column_fraction or 0.0),
+        "xstar_line_tau2_column_fraction": float(tau2_column_fraction or 0.0),
+        "xstar_line_cfrac": max(0.0, min(1.0, float(cfrac or 0.0))),
+        "xstar_line_vturb_km_s": float(vturb_km_s or 0.0),
+        "xstar_line_temperature_t_1e4K": t_xstar,
+        "xstar_line_atomic_mass_amu": atomic_mass,
+        "xstar_line_vtherm_cm_s": vtherm,
+        "xstar_line_flin_oscillator_strength": flin,
+        "xstar_line_sigvtherm_cm2": sigvtherm,
+        "xstar_line_tau1": tau1,
+        "xstar_line_tau2": tau2,
+        "xstar_line_ptmp1": ptmp1,
+        "xstar_line_ptmp2": ptmp2,
+        "xstar_line_ptmp_sum": ptmp1 + ptmp2,
+    }
+
 def _component_fraction_summary_from_emissivities(values: Mapping[str, float]) -> dict:
     f = max(0.0, float(values.get("f", 0.0) or 0.0))
     i = max(0.0, float(values.get("i", 0.0) or 0.0))
@@ -229,10 +322,16 @@ def build_calc_emis_ion_triplet_emergent_rows(
     full_global_normalized_solve_comparison_rows: Sequence[dict],
     type50_ucalc_rate_audit_rows: Sequence[dict],
     he_like_stage: int,
+    temperature_K: float,
+    xstar_line_column_density: object = 0.0,
+    xstar_line_vturb_km_s: object = 0.0,
+    xstar_line_cfrac: object = 0.0,
+    xstar_line_tau1_fraction: object = 1.0,
+    xstar_line_tau2_fraction: object = 1.0,
 ) -> List[dict]:
     """Build XSTAR ``calc_emis_ion`` emergent-triplet line rows.
 
-    v0.3.86 ports the source-code line-output construction for the selected
+    v0.3.87 ports the source-code line-output construction for the selected
     He-like triplet records.  For line data (XSTAR type-50 / rate-type-4),
     ``ucalc.f90`` computes an escaped decay rate ``A*(ptmp1+ptmp2)``, computes
     any lower-to-upper photoexcitation rate, and then swaps the rates so that
@@ -243,10 +342,11 @@ def build_calc_emis_ion_triplet_emergent_rows(
         fline(2)=max((ans2*abund2 - ans1*abund1) * E * ptmp2, 0)
 
     where ``ptmp1`` and ``ptmp2`` come from ``pescl(tau0)`` and covering
-    fraction.  The current stand-alone element solver has no spatial transfer
-    history, so this table reports two source-code paths: a transparent
-    ``tau0=0,cfrac=0`` path and the active matrix type-50 escape/pumping path
-    from ``xstar_like_element_solver_type50_ucalc_rate_audit.csv``.
+    fraction.  v0.3.87 adds the XSTAR tau0 context feeding these ptmp values:
+    it reconstructs the type-50 oscillator strength, thermal width, line
+    cross section, lower-level column, and directional tau0 values.  The
+    old common matrix escape proxy is no longer used for the emergent-line
+    comparison; it remains only in the population matrix if explicitly chosen.
     """
     he_like_stage = int(he_like_stage)
     lookup = _global_index_lookup(global_index_rows)
@@ -273,10 +373,15 @@ def build_calc_emis_ion_triplet_emergent_rows(
         if rec is not None:
             type50_by_record[int(rec)] = r
     target = _xstar_triplet_target(he_like_stage)
+    line_column_density = max(0.0, float(maybe_float(xstar_line_column_density) or 0.0))
+    line_vturb = max(0.0, float(maybe_float(xstar_line_vturb_km_s) or 0.0))
+    line_cfrac = max(0.0, min(1.0, float(maybe_float(xstar_line_cfrac) or 0.0)))
+    tau1_fraction = max(0.0, float(maybe_float(xstar_line_tau1_fraction) or 0.0))
+    tau2_fraction = max(0.0, float(maybe_float(xstar_line_tau2_fraction) or 0.0))
     rows: List[dict] = []
     sums_raw = {"f": 0.0, "i": 0.0, "r": 0.0}
     sums_trans = {"f": 0.0, "i": 0.0, "r": 0.0}
-    sums_matrix = {"f": 0.0, "i": 0.0, "r": 0.0}
+    sums_xstar_tau0 = {"f": 0.0, "i": 0.0, "r": 0.0}
     # XSTAR transparent line escape from source functions.
     tau0_ptmp1, tau0_ptmp2 = _xstar_calc_emis_ptmp_from_tau(0.0, 0.0, 0.0)
     for line in line_rows:
@@ -306,30 +411,32 @@ def build_calc_emis_ion_triplet_emergent_rows(
         trans_net = trans_ans2 * float(upper_pop) - trans_ans1 * float(lower_pop)
         trans_f1 = max(trans_net * float(eerg) * tau0_ptmp1, 0.0)
         trans_f2 = max(trans_net * float(eerg) * tau0_ptmp2, 0.0)
-        # Active matrix type-50 path: use the same ptmp/ans proxies that fed the
-        # population matrix.  This is not a true RT tau0 history, but it applies
-        # the exact calc_emis_ion fline formula to the current source-code rate
-        # orientation and shows whether line escape attenuates the resonance line
-        # relative to pop*A*E in the current run.
-        t50 = type50_by_record.get(int(rec)) if rec is not None else None
-        m_ptmp1 = maybe_float(t50.get("ptmp1_proxy")) if t50 else None
-        m_ptmp2 = maybe_float(t50.get("ptmp2_proxy")) if t50 else None
-        if m_ptmp1 is None:
-            m_ptmp1 = tau0_ptmp1
-        if m_ptmp2 is None:
-            m_ptmp2 = tau0_ptmp2
-        m_ans1 = maybe_float(t50.get("ucalc_ans1_matrix_lower_to_upper_proxy_s^-1")) if t50 else None
-        m_ans2 = maybe_float(t50.get("ucalc_ans2_matrix_upper_to_lower_proxy_s^-1")) if t50 else None
-        if m_ans1 is None:
-            m_ans1 = 0.0
-        if m_ans2 is None:
-            m_ans2 = float(A) * (float(m_ptmp1) + float(m_ptmp2))
-        m_net = float(m_ans2) * float(upper_pop) - float(m_ans1) * float(lower_pop)
-        m_f1 = max(m_net * float(eerg) * float(m_ptmp1), 0.0)
-        m_f2 = max(m_net * float(eerg) * float(m_ptmp2), 0.0)
+        # v0.3.87 source-code tau0 construction: compute component-specific
+        # line optical depth from the type-50 oscillator strength and a supplied
+        # equivalent XSTAR abundance column.  This replaces the former common
+        # triplet escape proxy in the emergent-line path.
+        tau_ctx = _xstar_type50_line_opacity_context(
+            line=line,
+            lower_row=lower_row,
+            upper_row=upper_row,
+            lower_population=float(lower_pop),
+            temperature_K=float(temperature_K),
+            vturb_km_s=line_vturb,
+            line_column_density_cm2=line_column_density,
+            tau1_column_fraction=tau1_fraction,
+            tau2_column_fraction=tau2_fraction,
+            cfrac=line_cfrac,
+        )
+        x_ptmp1 = float(tau_ctx.get("xstar_line_ptmp1") or tau0_ptmp1)
+        x_ptmp2 = float(tau_ctx.get("xstar_line_ptmp2") or tau0_ptmp2)
+        x_ans1 = 0.0
+        x_ans2 = float(A) * (x_ptmp1 + x_ptmp2)
+        x_net = x_ans2 * float(upper_pop) - x_ans1 * float(lower_pop)
+        x_f1 = max(x_net * float(eerg) * x_ptmp1, 0.0)
+        x_f2 = max(x_net * float(eerg) * x_ptmp2, 0.0)
         sums_raw[comp] += raw
         sums_trans[comp] += (trans_f1 + trans_f2)
-        sums_matrix[comp] += (m_f1 + m_f2)
+        sums_xstar_tau0[comp] += (x_f1 + x_f2)
         rows.append({
             "row_kind": "calc_emis_ion_triplet_emergent_line",
             "component": comp,
@@ -358,21 +465,31 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "transparent_calc_emis_fline1_erg_s^-1": trans_f1,
             "transparent_calc_emis_fline2_erg_s^-1": trans_f2,
             "transparent_calc_emis_fline_total_erg_s^-1": trans_f1 + trans_f2,
-            "matrix_escape_ptmp1": float(m_ptmp1),
-            "matrix_escape_ptmp2": float(m_ptmp2),
-            "matrix_escape_ptmp_sum": float(m_ptmp1) + float(m_ptmp2),
-            "matrix_escape_ucalc_ans1_lower_to_upper_s^-1": float(m_ans1),
-            "matrix_escape_ucalc_ans2_upper_to_lower_s^-1": float(m_ans2),
-            "matrix_escape_calc_emis_net_rate_s^-1": float(m_net),
-            "matrix_escape_calc_emis_fline1_erg_s^-1": m_f1,
-            "matrix_escape_calc_emis_fline2_erg_s^-1": m_f2,
-            "matrix_escape_calc_emis_fline_total_erg_s^-1": m_f1 + m_f2,
-            "matrix_escape_attenuation_vs_raw_pop_A_E": (m_f1 + m_f2) / raw if raw > 0.0 else "",
-            "source_code_formula": "calc_emis_ion.f90 type-4/type-9: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0); ucalc.f90 type-50 swaps ans1/ans2 so ans2 is escaped decay and ans1 is photoexcitation",
-            "tau0_context_status": "transparent_tau0_and_active_matrix_escape_proxy; full XSTAR spatial tau0 history is not present in standalone ATDB demo",
-            "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+            "xstar_tau0_line_column_density_cm^-2": tau_ctx.get("xstar_line_column_density_cm^-2", ""),
+            "xstar_tau0_lower_level_column_cm^-2": tau_ctx.get("xstar_line_lower_level_column_cm^-2", ""),
+            "xstar_tau0_vturb_km_s": tau_ctx.get("xstar_line_vturb_km_s", ""),
+            "xstar_tau0_vtherm_cm_s": tau_ctx.get("xstar_line_vtherm_cm_s", ""),
+            "xstar_tau0_flin_oscillator_strength": tau_ctx.get("xstar_line_flin_oscillator_strength", ""),
+            "xstar_tau0_sigvtherm_cm2": tau_ctx.get("xstar_line_sigvtherm_cm2", ""),
+            "xstar_tau0_tau1": tau_ctx.get("xstar_line_tau1", ""),
+            "xstar_tau0_tau2": tau_ctx.get("xstar_line_tau2", ""),
+            "xstar_tau0_cfrac": tau_ctx.get("xstar_line_cfrac", ""),
+            "xstar_tau0_ptmp1": x_ptmp1,
+            "xstar_tau0_ptmp2": x_ptmp2,
+            "xstar_tau0_ptmp_sum": x_ptmp1 + x_ptmp2,
+            "xstar_tau0_ucalc_ans1_lower_to_upper_s^-1": x_ans1,
+            "xstar_tau0_ucalc_ans2_upper_to_lower_s^-1": x_ans2,
+            "xstar_tau0_calc_emis_net_rate_s^-1": x_net,
+            "xstar_tau0_calc_emis_fline1_erg_s^-1": x_f1,
+            "xstar_tau0_calc_emis_fline2_erg_s^-1": x_f2,
+            "xstar_tau0_calc_emis_fline_total_erg_s^-1": x_f1 + x_f2,
+            "xstar_tau0_attenuation_vs_raw_pop_A_E": (x_f1 + x_f2) / raw if raw > 0.0 else "",
+            "source_code_formula": "calc_emis_ion.f90 type-4/type-9: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0); ucalc.f90 type-50 provides ans2=A*(ptmp1+ptmp2) after tau0->pescl escape",
+            "tau0_context_status": tau_ctx.get("status", ""),
+            "tau0_source_code_path": tau_ctx.get("xstar_tau0_source_code_path", ""),
+            "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
         })
-    for label, sums in (("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("matrix_escape_calc_emis_ion", sums_matrix)):
+    for label, sums in (("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("xstar_tau0_calc_emis_ion", sums_xstar_tau0)):
         summ = _component_fraction_summary_from_emissivities(sums)
         rows.append({
             "row_kind": "calc_emis_ion_triplet_emergent_summary",
@@ -391,7 +508,7 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "target_i_fraction": target.get("i") if target else "",
             "target_r_fraction": target.get("r") if target else "",
             "source_code_formula": "calc_emis_ion.f90 fline channels with ucalc.f90 type-50 swapped ans1/ans2",
-            "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+            "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
         })
     return rows
 
@@ -399,22 +516,22 @@ def build_calc_emis_ion_triplet_emergent_rows(
 def _calc_emis_ion_triplet_emergent_summary(rows: Sequence[dict]) -> dict:
     summaries = [r for r in rows if r.get("row_kind") == "calc_emis_ion_triplet_emergent_summary"]
     by_case = {str(r.get("comparison_case")): r for r in summaries}
-    matrix = by_case.get("matrix_escape_calc_emis_ion", {})
+    xstar_tau = by_case.get("xstar_tau0_calc_emis_ion", {})
     transparent = by_case.get("transparent_tau0_calc_emis_ion", {})
     return {
         "n_calc_emis_ion_triplet_emergent_rows": len(rows),
         "n_calc_emis_ion_triplet_emergent_line_rows": sum(1 for r in rows if r.get("row_kind") == "calc_emis_ion_triplet_emergent_line"),
-        "matrix_escape_f_fraction": matrix.get("f_fraction", ""),
-        "matrix_escape_i_fraction": matrix.get("i_fraction", ""),
-        "matrix_escape_r_fraction": matrix.get("r_fraction", ""),
-        "matrix_escape_R": matrix.get("R", ""),
-        "matrix_escape_G": matrix.get("G", ""),
-        "matrix_escape_l2_distance_to_target": matrix.get("l2_distance_to_target", ""),
+        "xstar_tau0_f_fraction": xstar_tau.get("f_fraction", ""),
+        "xstar_tau0_i_fraction": xstar_tau.get("i_fraction", ""),
+        "xstar_tau0_r_fraction": xstar_tau.get("r_fraction", ""),
+        "xstar_tau0_R": xstar_tau.get("R", ""),
+        "xstar_tau0_G": xstar_tau.get("G", ""),
+        "xstar_tau0_l2_distance_to_target": xstar_tau.get("l2_distance_to_target", ""),
         "transparent_f_fraction": transparent.get("f_fraction", ""),
         "transparent_i_fraction": transparent.get("i_fraction", ""),
         "transparent_r_fraction": transparent.get("r_fraction", ""),
-        "conclusion_scope": "Ports calc_emis_ion fline formula for triplet records; true spatial tau0 history is still unavailable unless supplied by a future transfer context.",
-        "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+        "conclusion_scope": "Ports calc_emis_ion fline formula and XSTAR tau0->pescl context for triplet records; standalone column options replace the missing radial transfer history.",
+        "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
     }
 
 
@@ -10554,6 +10671,11 @@ def solve_element_reference(
     full_global_prune_null_rate_levels: bool = True,
     full_global_topology: str = "explicit-current",
     ion_fraction_closure: str = "none",
+    xstar_line_column_density: object = 0.0,
+    xstar_line_vturb_km_s: object = 0.0,
+    xstar_line_cfrac: object = 0.0,
+    xstar_line_tau1_fraction: object = 1.0,
+    xstar_line_tau2_fraction: object = 1.0,
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -11092,6 +11214,12 @@ def solve_element_reference(
         full_global_normalized_solve_comparison_rows=full_global_normalized_solve_comparison_rows,
         type50_ucalc_rate_audit_rows=type50_ucalc_rate_audit_rows,
         he_like_stage=he_like_stage,
+        temperature_K=temperature,
+        xstar_line_column_density=xstar_line_column_density,
+        xstar_line_vturb_km_s=xstar_line_vturb_km_s,
+        xstar_line_cfrac=xstar_line_cfrac,
+        xstar_line_tau1_fraction=xstar_line_tau1_fraction,
+        xstar_line_tau2_fraction=xstar_line_tau2_fraction,
     )
     # Add compact calc_emis_ion emergent triplet summaries to the primary full-global
     # comparison CSV so users can compare raw pop*A*E and emergent fline fractions
@@ -11111,7 +11239,7 @@ def solve_element_reference(
                 "solver": full_global_linear_solver,
                 "full_global_topology_requested": full_global_topology,
                 "xstar_calc_emis_ion_source_code_formula": _ce.get("source_code_formula"),
-                "provenance": "v0.3.86_exact_calc_emis_ion_triplet_emergent_line_construction",
+                "provenance": "v0.3.87_exact_calc_emis_ion_triplet_emergent_line_construction",
             })
     triplet_coupling_record_audit_rows = build_triplet_coupling_record_audit_rows(
         global_index_rows=global_index_rows,
