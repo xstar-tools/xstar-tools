@@ -2056,6 +2056,234 @@ def _xstar_calt77_rates(
         "type77_calt77_xt": float(xt),
         "type77_calt77_note": ";".join(notes),
     })
+
+    return out
+
+
+def _xstar_calt99_superlevel_bound_free(
+    *,
+    temperature: float,
+    electron_density: float,
+    threshold_ry: float,
+    bound_stat_weight: Optional[float],
+    continuum_stat_weight: Optional[float],
+    reals: Sequence[float],
+    ints: Sequence[int],
+    radiation_context_rows: Sequence[dict] | None = None,
+) -> dict:
+    """Evaluate XSTAR ``calt99.f90`` plus the type-99 ``phint53hunt`` closure.
+
+    XSTAR's type-99 branch in ``ucalc.f90`` calls ``calt99`` to get a
+    density/temperature recombination coefficient ``rec`` and a scaled
+    superlevel photoionization cross section.  It then calls ``phint53hunt`` and
+    rescales the forward PI integral so that the inverse recombination side is
+    exactly ``rec*xnx``::
+
+        scale = rec*xnx/ans2d
+        ans1  = ans1*scale
+        ans2  = rec*xnx
+
+    This Python reference follows that source-code normalization.  The radiation
+    field remains the same explicit diagnostic ``bremsa`` context used by the
+    existing type-53/type-74 kernels, so the rate provenance is reported
+    separately from the source-code algebra.
+    """
+    rd = [float(x) for x in reals]
+    it = [int(x) for x in ints]
+    out = {
+        "type99_calt99_status": "not_evaluated",
+        "type99_calt99_rec_cm3_s": None,
+        "type99_calt99_alpha_milne_cm3_s": None,
+        "type99_calt99_scale_rec_over_alpha": None,
+        "type99_calt99_n_cross_section_pairs": None,
+        "type99_calt99_nden": None,
+        "type99_calt99_ntem": None,
+        "type99_calt99_nxs": None,
+        "type99_calt99_log10_ne_used": None,
+        "type99_calt99_log10_temperature_used": None,
+        "type99_calt99_density_bracket_index0": None,
+        "type99_calt99_temperature_bracket_index0": None,
+        "type99_phint53hunt_status": "not_evaluated",
+        "type99_phint53hunt_ans1_photoionization_s^-1": None,
+        "type99_phint53hunt_ans2_recombination_s^-1": None,
+        "type99_phint53hunt_ans2d_unscaled_s^-1": None,
+        "type99_phint53hunt_scale": None,
+        "type99_phint53hunt_forward_unscaled_s^-1": None,
+        "type99_threshold_ry": threshold_ry,
+        "type99_threshold_eV": (float(threshold_ry) * 13.6 if threshold_ry else None),
+        "type99_source_file": "xstarlib/src/calt99.f90; xstarlib/src/ucalc.f90 type 99; xstarlib/src/phint53hunt.f90",
+        "type99_note": "",
+    }
+    if len(it) < 3:
+        out["type99_calt99_status"] = "not_evaluated_missing_nden_ntem_nxs"
+        return out
+    nden, ntem, nxs = int(it[0]), int(it[1]), int(it[2])
+    out.update({"type99_calt99_nden": nden, "type99_calt99_ntem": ntem, "type99_calt99_nxs": nxs})
+    if nden <= 0 or ntem <= 1 or nxs <= 1:
+        out["type99_calt99_status"] = "not_evaluated_invalid_grid_dimensions"
+        return out
+    min_len = nden + ntem + nden * ntem + 2 * nxs
+    if len(rd) < min_len:
+        out["type99_calt99_status"] = "not_evaluated_short_record"
+        out["type99_note"] = f"need at least {min_len} reals, got {len(rd)}"
+        return out
+    if temperature <= 0.0 or electron_density <= 0.0:
+        out["type99_calt99_status"] = "not_evaluated_nonpositive_temperature_or_density"
+        return out
+    eth = maybe_float(threshold_ry)
+    if eth is None or not math.isfinite(float(eth)) or float(eth) <= 0.0:
+        out["type99_calt99_status"] = "not_evaluated_missing_or_bad_threshold"
+        return out
+
+    dens_grid = rd[:nden]
+    temp_grid = rd[nden:nden + ntem]
+    table0 = nden + ntem
+    xs0 = table0 + nden * ntem
+    # calt99 stores recombination coefficients in linear scale except for
+    # already-negative log-like entries.  XSTAR converts positives to log10.
+    def rcoef(it_idx: int, id_idx: int) -> float:
+        val = rd[table0 + it_idx * nden + id_idx]
+        return math.log10(val + 1.0e-30) if val > -1.0e-31 else float(val)
+
+    rne = math.log10(float(electron_density))
+    rte = math.log10(float(temperature))
+    notes = []
+    # calt99 clips temperature to just inside the tabulated range.  Its density
+    # handling is historically less strict; use a bracketed endpoint-preserving
+    # interpretation that avoids invalid Python indices while reporting clips.
+    if rte < temp_grid[0] or rte > temp_grid[-1]:
+        rte_old = rte
+        rte = min(0.999 * temp_grid[-1], max(1.001 * temp_grid[0], rte))
+        notes.append(f"logT_clipped_from_{rte_old:g}_to_{rte:g}")
+    if rne <= dens_grid[0]:
+        in0 = 0
+        notes.append("logne_at_or_below_grid_min_uses_first_density_branch")
+    elif rne >= dens_grid[-1]:
+        in0 = max(0, nden - 2)
+        notes.append("logne_at_or_above_grid_max_clipped_to_last_interval")
+    else:
+        in0 = 0
+        for k in range(nden - 1):
+            if dens_grid[k] <= rne <= dens_grid[k + 1]:
+                in0 = k
+                break
+    it0 = 0
+    for k in range(ntem - 1):
+        if temp_grid[k] <= rte < temp_grid[k + 1]:
+            it0 = k
+            break
+    it0 = min(max(it0, 0), ntem - 2)
+    t0, t1 = temp_grid[it0], temp_grid[it0 + 1]
+    if t1 == t0:
+        out["type99_calt99_status"] = "not_evaluated_degenerate_temperature_grid"
+        return out
+    rec1 = rcoef(it0, in0) + (rcoef(it0 + 1, in0) - rcoef(it0, in0)) / (t1 - t0) * (rte - t0)
+    # Source-code branch: if density is first/last branch, do not interpolate in density.
+    if in0 <= 0 or in0 >= nden - 1:
+        log_rec = rec1
+    else:
+        n0, n1 = dens_grid[in0], dens_grid[in0 + 1]
+        if n1 == n0:
+            out["type99_calt99_status"] = "not_evaluated_degenerate_density_grid"
+            return out
+        rec2 = rcoef(it0, in0 + 1) + (rcoef(it0 + 1, in0 + 1) - rcoef(it0, in0 + 1)) / (t1 - t0) * (rte - t0)
+        log_rec = rec1 + (rec2 - rec1) / (n1 - n0) * (rne - n0)
+    rec = 10.0 ** log_rec
+    if not math.isfinite(rec) or rec < 0.0:
+        out["type99_calt99_status"] = "not_evaluated_bad_interpolated_recombination"
+        return out
+    e_ry = [rd[xs0 + 2 * i] for i in range(nxs)]
+    xs_mb_raw = [max(rd[xs0 + 2 * i + 1], 0.0) for i in range(nxs)]
+    milne = _evaluate_xstar_milne_f90_integral(e_ry=e_ry, sigma_mb=xs_mb_raw, threshold_ry=float(eth), temperature_K=float(temperature))
+    alpha = maybe_float(milne.get("milne_f90_alpha_cm3_s"))
+    if alpha is None or not math.isfinite(float(alpha)) or float(alpha) <= 0.0:
+        out.update(milne)
+        out["type99_calt99_status"] = "not_evaluated_milne_alpha_nonpositive"
+        return out
+    scale_xs = rec / float(alpha)
+    xs_mb_scaled = [max(x * scale_xs, 0.0) for x in xs_mb_raw]
+    sigma_cm2_scaled = [x * 1.0e-18 for x in xs_mb_scaled]
+    out.update(milne)
+    out.update({
+        "type99_calt99_status": "evaluated_calt99_logT_logne_interpolation_and_milne_scaled_cross_section",
+        "type99_calt99_rec_cm3_s": float(rec),
+        "type99_calt99_alpha_milne_cm3_s": float(alpha),
+        "type99_calt99_scale_rec_over_alpha": float(scale_xs),
+        "type99_calt99_n_cross_section_pairs": int(nxs),
+        "type99_calt99_log10_rec": float(log_rec),
+        "type99_calt99_log10_ne_used": float(rne),
+        "type99_calt99_log10_temperature_used": float(rte),
+        "type99_calt99_density_bracket_index0": int(in0),
+        "type99_calt99_temperature_bracket_index0": int(it0),
+        "type99_cross_section_energy_ry_min": min(e_ry) if e_ry else None,
+        "type99_cross_section_energy_ry_max": max(e_ry) if e_ry else None,
+        "type99_cross_section_scaled_mb_min": min(xs_mb_scaled) if xs_mb_scaled else None,
+        "type99_cross_section_scaled_mb_max": max(xs_mb_scaled) if xs_mb_scaled else None,
+        "type99_note": ";".join(notes),
+    })
+
+    # Source-code phint53hunt closure.  The ans2 side is rec*xnx after the
+    # unscaled phint53hunt Milne integral ans2d has been used only to define the
+    # forward-rate scale.  We reconstruct ans2d with the existing phint53 Milne
+    # helper and ptmp1+ptmp2=1 until the full RRC escape context is available.
+    ctx = dict((radiation_context_rows or [{}])[0] if radiation_context_rows else {})
+    mode = str(ctx.get("radiation_field_mode", "none"))
+    ngrid = int(maybe_float(ctx.get("n_energy_grid_points")) or 256)
+    bscale = float(maybe_float(ctx.get("radiation_bremsa_scale")) or 1.0)
+    alpha_pl = float(maybe_float(ctx.get("radiation_powerlaw_index")) or 1.0)
+    emin = maybe_float(ctx.get("energy_min_eV"))
+    emax = maybe_float(ctx.get("energy_max_eV"))
+    threshold_eV = float(eth) * 13.6
+    gb = maybe_float(bound_stat_weight)
+    gc = maybe_float(continuum_stat_weight)
+    photo = _evaluate_type53_phint53_photoionization_kernel(
+        e_ry=e_ry,
+        sigma_cm2=sigma_cm2_scaled,
+        threshold_eV=threshold_eV,
+        radiation_mode=mode,
+        temperature_K=float(temperature),
+        n_energy_grid_points=ngrid,
+        bremsa_scale=bscale,
+        powerlaw_index=alpha_pl,
+        energy_min_eV=emin,
+        energy_max_eV=emax,
+    )
+    milne2 = _evaluate_phint53_milne_ans2_integral(
+        e_ry=e_ry,
+        sigma_cm2=sigma_cm2_scaled,
+        threshold_eV=threshold_eV,
+        temperature_K=float(temperature),
+        electron_density=float(electron_density),
+        bound_stat_weight=gb,
+        continuum_stat_weight=gc,
+        n_energy_grid_points=ngrid,
+        ptmp_sum=1.0,
+    )
+    ans2d = maybe_float(milne2.get("phint53_milne_ans2_rrrt_s^-1"))
+    ans2 = float(rec) * float(electron_density)
+    pirt0 = maybe_float(photo.get("phint53_photoionization_rate_s^-1")) or 0.0
+    if ans2d is None or not math.isfinite(float(ans2d)) or float(ans2d) <= 1.0e-48:
+        ans1 = 0.0
+        ans2 = 0.0
+        scale = 0.0
+        ph_status = "not_assembled_phint53hunt_ans2d_nonpositive_source_code_zeroes_ans1_ans2"
+    else:
+        scale = ans2 / float(ans2d)
+        ans1 = max(float(pirt0) * scale, 0.0)
+        ph_status = "evaluated_ucalc_type99_calt99_phint53hunt_scaled_closure"
+    out.update(photo)
+    out.update(milne2)
+    out.update({
+        "type99_phint53hunt_status": ph_status,
+        "type99_phint53hunt_ans1_photoionization_s^-1": float(ans1),
+        "type99_phint53hunt_ans2_recombination_s^-1": float(ans2),
+        "type99_phint53hunt_ans2d_unscaled_s^-1": None if ans2d is None else float(ans2d),
+        "type99_phint53hunt_scale": float(scale),
+        "type99_phint53hunt_forward_unscaled_s^-1": float(pirt0),
+        "type99_phint53hunt_radiation_field_mode": mode,
+        "type99_ucalc_ans1_role": "superlevel_photoionization_sink_to_parent_continuum",
+        "type99_ucalc_ans2_role": "parent_continuum_to_superlevel_recombination_source_rec_times_xnx",
+    })
     return out
 
 
@@ -2066,9 +2294,11 @@ def _audit_superlevel_cascade_record(
     target_ion_stage: int,
     parent_ion_stage: int,
     level_rows: Sequence[dict],
+    parent_level_rows: Optional[Sequence[dict]] = None,
     level_indices: Optional[Sequence[int]] = None,
     temperature: Optional[float] = None,
     electron_density: Optional[float] = None,
+    radiation_context_rows: Sequence[dict] | None = None,
 ) -> dict:
     """Classify type 70/71/74/77/99 superlevel/cascade records.
 
@@ -2240,17 +2470,77 @@ def _audit_superlevel_cascade_record(
             "type74_recombined_or_source_triplet_component": comp(initial_level),
         }
     elif dt == 99:
-        # Newer XSTAR superlevel PI/RR records: layout is not fully documented
-        # in the 2001 appendix, so keep raw destination guesses conservative.
+        # XSTAR ucalc.f90 type 99: superlevel/spectroscopic bound-free route.
+        # The source-code mapping is subtle and was fixed in v0.3.95:
+        #
+        #   idest1 = idat(nidt-2) clipped to nlev-1      (target ion level)
+        #   idest2 = nlev + idat(nidt-3) - 1             (parent-ion level in local block)
+        #
+        # In the Python global element matrix the second integer must map to the
+        # *explicit parent ion level* (parent_ion_stage, parent_level_index), not
+        # to the target-ion continuum row.
         g = _guess_ucalc_levels(dt, rt, it, nlevp=None)
-        destination_level = maybe_int(g.get("idest1_guess"))
+        continuum_rows = [r for r in level_rows if bool(r.get("is_continuum"))]
+        continuum_row = continuum_rows[0] if continuum_rows else None
+        nlevp = maybe_int(continuum_row.get("level_index")) if continuum_row else None
+        if len(it) >= 10:
+            destination_level = int(it[-2])
+            if nlevp is not None:
+                destination_level = min(destination_level, int(nlevp) - 1)
+        else:
+            destination_level = maybe_int(g.get("idest1_guess"))
         spectroscopic_level = destination_level
-        route_kind = "superlevel_photoionization_recombination_linked_record"
-        cascade_direction = "superlevel_bound_free_context_required"
-        source_provenance = "ucalc_type99_superlevel_photoionization_recombination_phint53pl_context_not_fully_documented_in_2001_appendix"
-        requires += ["linked_superlevel_records", "radiation_field", "phint53pl_context", "superlevel_population_balance"]
-        unsafe += ["type99_layout_requires_source_code_linkage_validation", "not_a_standalone_cascade_rate"]
-        extra = {"type99_idest1_guess": g.get("idest1_guess"), "type99_idest2_guess": g.get("idest2_guess"), "type99_raw_int_count": len(it)}
+        # Keep the historical field name but now it may be a spectroscopic
+        # target level, because XSTAR does not require a direct f/i/r triplet
+        # destination for type 99.
+        superlevel_level = destination_level
+        parent_level_index = int(it[-3]) if len(it) >= 11 else None
+        parent_continuum_level = None if nlevp is None or parent_level_index is None else int(nlevp) + int(parent_level_index) - 1
+        parent_stage_for_type99 = int(parent_ion_stage)
+        parent_rows = list(parent_level_rows or [])
+        parent_row = next((r for r in parent_rows if maybe_int(r.get("level_index")) == parent_level_index), None)
+        route_kind = "superlevel_photoionization_recombination_calt99_phint53hunt"
+        cascade_direction = "parent_ion_level_to_type99_destination_and_reverse_photoionization"
+        source_provenance = "XSTAR_ucalc_type99_calt99_phint53hunt_rec_xnx_source_code_route"
+        requires += ["radiation_field", "calt99", "phint53hunt", "explicit_parent_ion_level_population"]
+        dest_row = next((r for r in level_rows if maybe_int(r.get("level_index")) == destination_level), None)
+        threshold_row = parent_row if parent_row is not None else continuum_row
+        if dest_row is not None and threshold_row is not None and temperature is not None and electron_density is not None:
+            de = abs(float(maybe_float(dest_row.get("energy_eV")) or 0.0) - float(maybe_float(threshold_row.get("energy_eV")) or 0.0))
+            ettry = de / 13.6 if de > 0.0 else 0.0
+            type99_eval = _xstar_calt99_superlevel_bound_free(
+                temperature=float(temperature),
+                electron_density=float(electron_density),
+                threshold_ry=ettry,
+                bound_stat_weight=maybe_float(dest_row.get("stat_weight")),
+                continuum_stat_weight=maybe_float(threshold_row.get("stat_weight")),
+                reals=rd,
+                ints=it,
+                radiation_context_rows=radiation_context_rows,
+            )
+            type99_eval["type99_threshold_source"] = "explicit_parent_ion_level_energy_difference" if parent_row is not None else "target_continuum_energy_difference_fallback"
+        else:
+            type99_eval = {
+                "type99_calt99_status": "not_evaluated_missing_destination_or_parent_level_or_temperature_density",
+                "type99_phint53hunt_status": "not_evaluated_missing_destination_or_parent_level_or_temperature_density",
+                "type99_phint53hunt_ans1_photoionization_s^-1": None,
+                "type99_phint53hunt_ans2_recombination_s^-1": None,
+                "type99_threshold_source": "not_evaluated",
+            }
+        safe99 = (maybe_float(type99_eval.get("type99_phint53hunt_ans1_photoionization_s^-1")) or 0.0) > 0.0 or (maybe_float(type99_eval.get("type99_phint53hunt_ans2_recombination_s^-1")) or 0.0) > 0.0
+        if not safe99:
+            unsafe += ["type99_calt99_phint53hunt_not_matrix_ready"]
+        extra = {
+            "type99_idest1_guess": g.get("idest1_guess"),
+            "type99_idest2_guess": g.get("idest2_guess"),
+            "type99_ucalc_idest1_destination_level": destination_level,
+            "type99_ucalc_idest2_local_matrix_level": parent_continuum_level,
+            "type99_ucalc_parent_ion_stage": parent_stage_for_type99,
+            "type99_ucalc_parent_ion_level_index": parent_level_index,
+            "type99_ucalc_parent_ion_level_label": parent_row.get("level_label") if parent_row is not None else "",
+            "type99_raw_int_count": len(it),
+            **type99_eval,
+        }
     else:
         extra = {}
         route_kind = "not_superlevel_cascade_audit_type"
@@ -2265,8 +2555,13 @@ def _audit_superlevel_cascade_record(
     in_matrix = bool(comp_level in level_set) if comp_level is not None else False
     stage_relation = _superlevel_stage_relation(rec_stage, target_ion_stage, parent_ion_stage)
 
-    if not feeds_any:
+    if not feeds_any and dt != 99:
         unsafe.append("no_direct_destination_match_to_identified_helike_triplet_upper_level")
+    elif not feeds_any and dt == 99:
+        # Source-code type 99 can feed high spectroscopic/superlevel target
+        # levels that subsequently redistribute through the global Lucy system;
+        # a direct f/i/r match is not required for matrix assembly.
+        unsafe.append("type99_destination_not_direct_triplet_upper_allowed_by_ucalc")
     if rec_stage != int(target_ion_stage):
         unsafe.append("record_not_in_current_helike_target_ion_stage")
     if not in_matrix and comp_level is not None:
@@ -2307,6 +2602,9 @@ def _audit_superlevel_cascade_record(
         "raw_ints_preview": str(it[:12]),
     }
     row.update(extra)
+    if maybe_int(row.get("data_type")) == 99 and str(row.get("type99_phint53hunt_status", "")).startswith("evaluated_ucalc_type99"):
+        row["matrix_safe_to_assemble"] = True
+        row["unsafe_reason"] = "source_code_calt99_phint53hunt_rate_available"
     return row
 
 
@@ -2317,9 +2615,11 @@ def build_superlevel_cascade_audit(
     target_ion_stage: int,
     parent_ion_stage: int,
     level_rows: Sequence[dict],
+    parent_level_rows: Optional[Sequence[dict]] = None,
     level_indices: Optional[Sequence[int]] = None,
     temperature: Optional[float] = None,
     electron_density: Optional[float] = None,
+    radiation_context_rows: Sequence[dict] | None = None,
     use_cache: bool = True,
     cache_path: Optional[str] = None,
 ) -> List[dict]:
@@ -2334,9 +2634,11 @@ def build_superlevel_cascade_audit(
                     target_ion_stage=target_ion_stage,
                     parent_ion_stage=parent_ion_stage,
                     level_rows=level_rows,
+                    parent_level_rows=parent_level_rows,
                     level_indices=level_indices,
                     temperature=temperature,
                     electron_density=electron_density,
+                    radiation_context_rows=radiation_context_rows,
                 )
                 row.update({"element": Z_TO_SYMBOL.get(z, str(z)), "element_z": z})
                 rows.append(row)
@@ -2581,6 +2883,24 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
         n70 = len(rows_by_dt[70])
         n74 = len(rows_by_dt[74])
         n99 = len(rows_by_dt[99])
+        type99_ans1_total = float(sum((maybe_float(r.get("type99_phint53hunt_ans1_photoionization_s^-1")) or 0.0) for r in rows_by_dt[99]))
+        type99_ans2_total = float(sum((maybe_float(r.get("type99_phint53hunt_ans2_recombination_s^-1")) or 0.0) for r in rows_by_dt[99]))
+        type99_rec_total = float(sum((maybe_float(r.get("type99_calt99_rec_cm3_s")) or 0.0) for r in rows_by_dt[99]))
+        type99_statuses = ";".join(str(r.get("type99_phint53hunt_status")) for r in rows_by_dt[99] if r.get("type99_phint53hunt_status") not in (None, ""))
+        def uniq_ints(key: str) -> List[int]:
+            vals: List[int] = []
+            for rr in rows_by_dt[99]:
+                vv = maybe_int(rr.get(key))
+                if vv is not None and int(vv) not in vals:
+                    vals.append(int(vv))
+            return sorted(vals)
+        type99_parent_levels = uniq_ints("type99_ucalc_parent_ion_level_index")
+        type99_parent_stages = uniq_ints("type99_ucalc_parent_ion_stage")
+        type99_local_idest2 = uniq_ints("type99_ucalc_idest2_local_matrix_level")
+        type99_dest_levels = uniq_ints("type99_ucalc_idest1_destination_level")
+        type99_parent_level_unique = type99_parent_levels[0] if len(type99_parent_levels) == 1 else None
+        type99_parent_stage_unique = type99_parent_stages[0] if len(type99_parent_stages) == 1 else None
+        type99_dest_level_unique = type99_dest_levels[0] if len(type99_dest_levels) == 1 else None
         source_proxy = float(sum(_source_proxy_from_row(r) for r in rows))
         # Prefer type-71 physical radiative branching for source-weighted proxy.
         br71 = branch_by_key.get((st, sl, 71), {})
@@ -2605,7 +2925,7 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
         target_stage = rows[0].get("target_ion_stage") if rows else (br71 or br77).get("target_ion_stage")
         parent_stage = rows[0].get("parent_ion_stage") if rows else (br71 or br77).get("parent_ion_stage")
         out.append({
-            "source_audit_version": "v0.3.25",
+            "source_audit_version": "v0.3.95",
             "record_ion_stage": st,
             "target_ion_stage": target_stage,
             "parent_ion_stage": parent_stage,
@@ -2619,6 +2939,17 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
             "n_type99_superlevel_source_candidates": n99,
             "type99_records": records_by_dt[99],
             "type99_coeff_abs_sum_preview": coeff_abs_by_dt[99],
+            "type99_calt99_rec_total_cm3_s": type99_rec_total,
+            "type99_phint53hunt_ans1_total_photoionization_s^-1": type99_ans1_total,
+            "type99_phint53hunt_ans2_total_recombination_s^-1": type99_ans2_total,
+            "type99_phint53hunt_statuses": type99_statuses,
+            "type99_ucalc_parent_ion_stage_unique": type99_parent_stage_unique,
+            "type99_ucalc_parent_ion_level_index_unique": type99_parent_level_unique,
+            "type99_ucalc_destination_level_unique": type99_dest_level_unique,
+            "type99_ucalc_parent_ion_stage_list": ";".join(str(v) for v in type99_parent_stages),
+            "type99_ucalc_parent_ion_level_index_list": ";".join(str(v) for v in type99_parent_levels),
+            "type99_ucalc_idest2_local_matrix_level_list": ";".join(str(v) for v in type99_local_idest2),
+            "type99_ucalc_destination_level_list": ";".join(str(v) for v in type99_dest_levels),
             "n_total_source_candidates": len(rows),
             "source_proxy_basis": "count_per_type70_74_99_source_candidate_nonphysical",
             "source_proxy_total": source_proxy,
@@ -4538,6 +4869,14 @@ def build_global_superlevel_source_matrix_terms(
             term_id += 1
             continue
         super_row = lookup.get((int(stage), int(sl)))
+        # v0.3.95 source-code type-99 mapping: the parent side is the explicit
+        # adjacent ion level encoded by idat(nidt-3), not the target-ion
+        # continuum proxy row used by the older scaffold.
+        parent_stage_unique = maybe_int(row.get("type99_ucalc_parent_ion_stage_unique"))
+        parent_level_unique = maybe_int(row.get("type99_ucalc_parent_ion_level_index_unique"))
+        parent_row = None
+        if parent_stage_unique is not None and parent_level_unique is not None:
+            parent_row = lookup.get((int(parent_stage_unique), int(parent_level_unique)))
         cont_row = _find_parent_continuum_global_row(global_index_rows, ion_stage=int(stage))
         if super_row is None:
             out.append({
@@ -4594,6 +4933,97 @@ def build_global_superlevel_source_matrix_terms(
             "unsafe_reason": "diagnostic_proxy_only;type99_phint53pl_rate_not_evaluated;parent_continuum_population_not_physically_normalized",
             "provenance": "v0.3.38_global_type99_superlevel_source_scaffold",
         }
+        ans1_pi = maybe_float(row.get("type99_phint53hunt_ans1_total_photoionization_s^-1")) or 0.0
+        ans2_rr = maybe_float(row.get("type99_phint53hunt_ans2_total_recombination_s^-1")) or 0.0
+        if parent_row is not None and (float(ans1_pi) > 0.0 or float(ans2_rr) > 0.0):
+            parent_g = maybe_int(parent_row.get("global_index"))
+            dest_g = maybe_int(super_row.get("global_index"))
+            common.update({
+                "type99_rate_source": "calt99.f90+phint53hunt.f90",
+                "type99_parent_mapping_source": "ucalc_idat_nidt_minus_3_explicit_parent_ion_level",
+                "type99_ucalc_parent_ion_stage": maybe_int(row.get("type99_ucalc_parent_ion_stage_unique")),
+                "type99_ucalc_parent_ion_level_index": maybe_int(row.get("type99_ucalc_parent_ion_level_index_unique")),
+                "type99_ucalc_destination_level": maybe_int(row.get("type99_ucalc_destination_level_unique")),
+                "type99_phint53hunt_ans1_total_photoionization_s^-1": float(ans1_pi),
+                "type99_phint53hunt_ans2_total_recombination_s^-1": float(ans2_rr),
+                "type99_phint53hunt_statuses": row.get("type99_phint53hunt_statuses"),
+                "type99_calt99_rec_total_cm3_s": row.get("type99_calt99_rec_total_cm3_s"),
+                "matrix_safe_to_solve": True,
+                "unsafe_reason": "source_code_type99_calt99_phint53hunt_rate_available;explicit_parent_ion_level_mapping",
+                "provenance": "v0.3.95_global_type99_calt99_phint53hunt_explicit_parent_level_matrix_terms",
+            })
+            if float(ans2_rr) > 0.0:
+                out.append({
+                    "global_superlevel_source_term_id": term_id,
+                    "matrix_term_kind": "offdiag_parent_continuum_to_type99_destination",
+                    "matrix_role": "M[type99_destination,parent_continuum] += ans2_rec_xnx",
+                    "matrix_row_global_index": dest_g,
+                    "matrix_col_global_index": parent_g,
+                    "parent_continuum_global_index": parent_g,
+                    "parent_continuum_level_index": parent_row.get("level_index"),
+                    "parent_continuum_level_label": parent_row.get("level_label"),
+                    "parent_continuum_ion_stage": parent_row.get("ion_stage"),
+                    "signed_rate_s^-1": float(ans2_rr),
+                    "rate_s^-1": float(ans2_rr),
+                    "assembly_status": "assembled_global_type99_calt99_phint53hunt",
+                    "skip_reason": "",
+                    **common,
+                })
+                term_id += 1
+                out.append({
+                    "global_superlevel_source_term_id": term_id,
+                    "matrix_term_kind": "diagonal_parent_continuum_type99_recombination_loss",
+                    "matrix_role": "M[parent_continuum,parent_continuum] -= ans2_rec_xnx",
+                    "matrix_row_global_index": parent_g,
+                    "matrix_col_global_index": parent_g,
+                    "parent_continuum_global_index": parent_g,
+                    "parent_continuum_level_index": parent_row.get("level_index"),
+                    "parent_continuum_level_label": parent_row.get("level_label"),
+                    "parent_continuum_ion_stage": parent_row.get("ion_stage"),
+                    "signed_rate_s^-1": -float(ans2_rr),
+                    "rate_s^-1": float(ans2_rr),
+                    "assembly_status": "assembled_global_type99_calt99_phint53hunt",
+                    "skip_reason": "",
+                    **common,
+                })
+                term_id += 1
+            if float(ans1_pi) > 0.0:
+                out.append({
+                    "global_superlevel_source_term_id": term_id,
+                    "matrix_term_kind": "offdiag_type99_destination_to_parent_continuum",
+                    "matrix_role": "M[parent_continuum,type99_destination] += ans1_photoionization",
+                    "matrix_row_global_index": parent_g,
+                    "matrix_col_global_index": dest_g,
+                    "parent_continuum_global_index": parent_g,
+                    "parent_continuum_level_index": parent_row.get("level_index"),
+                    "parent_continuum_level_label": parent_row.get("level_label"),
+                    "parent_continuum_ion_stage": parent_row.get("ion_stage"),
+                    "signed_rate_s^-1": float(ans1_pi),
+                    "rate_s^-1": float(ans1_pi),
+                    "assembly_status": "assembled_global_type99_calt99_phint53hunt",
+                    "skip_reason": "",
+                    **common,
+                })
+                term_id += 1
+                out.append({
+                    "global_superlevel_source_term_id": term_id,
+                    "matrix_term_kind": "diagonal_type99_destination_photoionization_loss",
+                    "matrix_role": "M[type99_destination,type99_destination] -= ans1_photoionization",
+                    "matrix_row_global_index": dest_g,
+                    "matrix_col_global_index": dest_g,
+                    "parent_continuum_global_index": parent_g,
+                    "parent_continuum_level_index": parent_row.get("level_index"),
+                    "parent_continuum_level_label": parent_row.get("level_label"),
+                    "parent_continuum_ion_stage": parent_row.get("ion_stage"),
+                    "signed_rate_s^-1": -float(ans1_pi),
+                    "rate_s^-1": float(ans1_pi),
+                    "assembly_status": "assembled_global_type99_calt99_phint53hunt",
+                    "skip_reason": "",
+                    **common,
+                })
+                term_id += 1
+            continue
+
         out.append({
             "global_superlevel_source_term_id": term_id,
             "matrix_term_kind": "source_vector_gain_proxy",
@@ -4659,18 +5089,23 @@ def build_global_superlevel_source_matrix_terms(
 
 
 def _global_superlevel_source_matrix_terms_summary(rows: Sequence[dict]) -> dict:
-    assembled = [r for r in rows if str(r.get("assembly_status")) == "assembled_global_type99_superlevel_source_scaffold_proxy"]
+    assembled = [r for r in rows if str(r.get("assembly_status")) in {"assembled_global_type99_superlevel_source_scaffold_proxy", "assembled_global_type99_calt99_phint53hunt"}]
+    physical = [r for r in rows if str(r.get("assembly_status")) == "assembled_global_type99_calt99_phint53hunt"]
     skipped = [r for r in rows if str(r.get("assembly_status")) == "skipped"]
-    gain = [r for r in assembled if str(r.get("matrix_term_kind")) == "source_vector_gain_proxy"]
+    gain = [r for r in assembled if str(r.get("matrix_term_kind")) in {"source_vector_gain_proxy", "offdiag_parent_continuum_to_type99_destination"}]
     return {
         "n_global_superlevel_source_matrix_term_rows": len(rows),
-        "n_global_superlevel_source_assembled_proxy_rows": len(assembled),
+        "n_global_superlevel_source_assembled_rows": len(assembled),
+        "n_global_superlevel_source_assembled_physical_type99_rows": len(physical),
+        "n_global_superlevel_source_assembled_proxy_rows": sum(1 for r in assembled if str(r.get("assembly_status")) == "assembled_global_type99_superlevel_source_scaffold_proxy"),
         "n_global_superlevel_source_skipped_rows": len(skipped),
         "rows_by_matrix_term_kind": _counts(rows, "matrix_term_kind"),
         "rows_by_ion_stage": _counts(assembled, "ion_stage"),
         "n_unique_type99_record_groups": len({str(r.get("type99_records")) for r in gain if r.get("type99_records") not in (None, "")}),
         "n_source_vector_gain_proxy_rows": len(gain),
         "total_type99_source_proxy_value": sum(float(maybe_float(r.get("source_proxy_value")) or 0.0) for r in gain),
+        "total_type99_calt99_recombination_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in physical if str(r.get("matrix_term_kind")) == "offdiag_parent_continuum_to_type99_destination"),
+        "total_type99_calt99_photoionization_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in physical if str(r.get("matrix_term_kind")) == "offdiag_type99_destination_to_parent_continuum"),
         "source_proxy_basis_counts": _counts(gain, "source_proxy_basis"),
         "n_source_rows_with_type71_branching": sum(1 for r in gain if str(r.get("has_type71_branching")).strip().lower() in {"true", "1", "yes"}),
         "provenance": {
@@ -8861,9 +9296,14 @@ def build_full_global_matrix_terms(
             _add(r, component=comp, source_row_kind="global_superlevel_cascade_matrix_term")
 
     for r in global_superlevel_source_matrix_terms:
-        if str(r.get("assembly_status")) != "assembled_global_type99_superlevel_source_scaffold_proxy":
-            continue
+        status = str(r.get("assembly_status"))
         kind = str(r.get("matrix_term_kind"))
+        if status == "assembled_global_type99_calt99_phint53hunt":
+            comp = "type99_calt99_recombination_source" if "parent_continuum_to_type99_destination" in kind or "recombination_loss" in kind else "type99_phint53hunt_photoionization_sink"
+            _add(r, component=comp, source_row_kind="global_superlevel_source_matrix_term")
+            continue
+        if status != "assembled_global_type99_superlevel_source_scaffold_proxy":
+            continue
         if kind in {"offdiag_parent_continuum_to_superlevel_proxy", "diagonal_parent_continuum_loss_proxy"}:
             _add(r, component="type99_parent_continuum_to_superlevel_proxy", source_row_kind="global_superlevel_source_matrix_term")
         elif kind == "source_vector_gain_proxy":
@@ -11322,6 +11762,21 @@ def solve_element_reference(
                 tr["diagnostic_ion_stage"] = stage
                 triplet_rows.append(tr)
         coupling = []
+        radiation_context_rows = build_radiation_context_rows(
+            radiation_field_mode=radiation_field_mode,
+            temperature=temperature,
+            electron_density=electron_density,
+            element=Z_TO_SYMBOL.get(z, str(z)),
+            element_z=z,
+            stages=stages,
+            he_like_stage=he_like_stage,
+            radiation_bremsa_scale=radiation_bremsa_scale,
+            radiation_energy_min_eV=radiation_energy_min_eV,
+            radiation_energy_max_eV=radiation_energy_max_eV,
+            radiation_n_energy_grid=radiation_n_energy_grid,
+            radiation_powerlaw_index=radiation_powerlaw_index,
+        )
+        bremsa_context_rows = build_bremsa_context_rows(radiation_context_rows)
         superlevel_cascade_audit_rows: List[dict] = []
         superlevel_branching_audit_rows: List[dict] = []
         superlevel_source_audit_rows: List[dict] = []
@@ -11352,6 +11807,7 @@ def solve_element_reference(
                 cache_path=index_cache_path,
             )))
             target_level_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage]
+            parent_level_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage + 1]
             target_level_indices = [int(r.get("level_index")) for r in target_level_rows if maybe_int(r.get("level_index")) is not None]
             superlevel_cascade_audit_rows = build_superlevel_cascade_audit(
                 db,
@@ -11359,9 +11815,11 @@ def solve_element_reference(
                 target_ion_stage=he_like_stage,
                 parent_ion_stage=he_like_stage + 1,
                 level_rows=target_level_rows,
+                parent_level_rows=parent_level_rows,
                 level_indices=target_level_indices,
                 temperature=temperature,
                 electron_density=electron_density,
+                radiation_context_rows=radiation_context_rows,
                 use_cache=index_cache,
                 cache_path=index_cache_path,
             )

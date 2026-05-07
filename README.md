@@ -1,4 +1,37 @@
+## v0.3.95 type-99 ucalc parent-level mapping fix
+
+v0.3.95 fixes the XSTAR `ucalc.f90` data-type 99 level mapping introduced with the v0.3.94 `calt99`/`phint53hunt` port.  XSTAR maps the target side as `idest1=idat(nidt-2)` and the parent side as `idest2=nlev+idat(nidt-3)-1`; in the global Python matrix this parent side must be the explicit adjacent-ion level `(parent_ion_stage, parent_level_index)`, not the target-ion continuum proxy row.
+
+The type-99 matrix terms now assemble the source-code pair against the explicit parent level when it exists in the global index:
+
+```text
+M[target_level, parent_ion_level] += ans2 = rec*xnx
+M[parent_ion_level, parent_ion_level] -= ans2
+M[parent_ion_level, target_level] += ans1
+M[target_level, target_level] -= ans1
+```
+
+The audit and matrix files report the resolved parent mapping through fields such as `type99_ucalc_parent_ion_stage`, `type99_ucalc_parent_ion_level_index`, `type99_ucalc_idest2_local_matrix_level`, and `type99_parent_mapping_source`.  Type 99 rows no longer require a direct f/i/r triplet destination; high spectroscopic or superlevel targets are allowed to feed the Lucy/global redistribution, matching XSTAR source-code behavior.
+
 # xstar-atomic
+
+## v0.3.94 type-99 superlevel bound-free calt99/phint53hunt rates
+
+v0.3.94 ports the XSTAR `calt99.f90` data-type 99 superlevel bound-free evaluator and wires the source-code type-99 `ucalc.f90` closure into the full global/Lucy matrix.  The implementation evaluates the log-density/log-temperature recombination coefficient, rescales the tabulated superlevel cross section through the Milne integral, evaluates the diagnostic `phint53hunt` forward/recombination kernels, and assembles the source-code pair `ans1`/`ans2` as matrix terms:
+
+```text
+ans1 = scaled phint53hunt photoionization rate       # destination -> parent continuum
+ans2 = rec * xnx                                    # parent continuum -> destination
+```
+
+Type 71 (`calt71.f90`) and type 77 (`calt77.f90`) remain active.  The recommended C V comparison row remains:
+
+```text
+full_global_xstar_tau0_calc_emis_ion
+```
+
+The new type-99 rates are reported in `xstar_like_element_solver_superlevel_cascade_audit.csv` and assembled terms appear in `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv` with `assembly_status=assembled_global_type99_calt99_phint53hunt`.
+
 
 ## v0.3.93 type-77 superlevel collisional coupling
 

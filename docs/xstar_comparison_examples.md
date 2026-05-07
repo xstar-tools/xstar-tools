@@ -1,3 +1,7 @@
+## v0.3.95: type-99 explicit parent-level mapping
+
+For type-99 superlevel bound-free records, use the XSTAR `ucalc.f90` mapping `idest1=idat(nidt-2)` and `idest2=nlev+idat(nidt-3)-1`.  In the global element matrix, `idat(nidt-3)` is the adjacent parent-ion level index, so records such as O VII level 30 ↔ O VIII level 24 and C V level 48 ↔ C VI level 9 should assemble as physical `calt99/phint53hunt` matrix terms when those parent levels are present.  The recommended validation check is that `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv` contains `assembly_status=assembled_global_type99_calt99_phint53hunt` rows with `type99_parent_mapping_source=ucalc_idat_nidt_minus_3_explicit_parent_ion_level`.
+
 
 ## v0.3.93: type-77 superlevel collisional coupling
 
