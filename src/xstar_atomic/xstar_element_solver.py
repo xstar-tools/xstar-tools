@@ -11806,8 +11806,16 @@ def solve_element_reference(
                 use_cache=index_cache,
                 cache_path=index_cache_path,
             )))
-            target_level_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage]
-            parent_level_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage + 1]
+            target_population_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage]
+            parent_population_rows = [r for r in populations if maybe_int(r.get("ion_stage")) == he_like_stage + 1]
+            # v0.3.96: type-99/calt99 records can target ATDB superlevel rows
+            # that are present in the explicit global index but not in the
+            # legacy per-ion population table.  Use the global-index rows for
+            # source-code level lookup so C V sprlevls/sprlevlt and the
+            # explicit parent-ion excited levels are available to ucalc-style
+            # type-99 mapping.
+            target_level_rows = [r for r in global_index_rows if maybe_int(r.get("ion_stage")) == he_like_stage]
+            parent_level_rows = [r for r in global_index_rows if maybe_int(r.get("ion_stage")) == he_like_stage + 1]
             target_level_indices = [int(r.get("level_index")) for r in target_level_rows if maybe_int(r.get("level_index")) is not None]
             superlevel_cascade_audit_rows = build_superlevel_cascade_audit(
                 db,

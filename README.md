@@ -1,5 +1,10 @@
 ## v0.3.95 type-99 ucalc parent-level mapping fix
 
+## v0.3.96 note
+
+`v0.3.96` fixes the remaining type-99 activation path by using the explicit global element index for XSTAR `ucalc.f90` type-99 target/parent level lookup.  This allows `calt99/phint53hunt` rows to assemble physically as `assembled_global_type99_calt99_phint53hunt` when the source-code closure returns nonzero rates, instead of falling back to the old scaffold proxy because ATDB superlevels or parent excited levels were absent from the legacy population table.
+
+
 v0.3.95 fixes the XSTAR `ucalc.f90` data-type 99 level mapping introduced with the v0.3.94 `calt99`/`phint53hunt` port.  XSTAR maps the target side as `idest1=idat(nidt-2)` and the parent side as `idest2=nlev+idat(nidt-3)-1`; in the global Python matrix this parent side must be the explicit adjacent-ion level `(parent_ion_stage, parent_level_index)`, not the target-ion continuum proxy row.
 
 The type-99 matrix terms now assemble the source-code pair against the explicit parent level when it exists in the global index:
