@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Current development baseline: v0.3.90 is a cleanup/validation release after the v0.3.89 geometry-derived XSTAR type-50 line optical-depth implementation.  The `--print-summary` output from `examples/42_xstar_like_element_solver_demo.py` now reports the recommended full-global emergent triplet comparison case, `full_global_xstar_tau0_calc_emis_ion`, instead of the obsolete simple per-ion baseline.  Documentation now treats `full_global_xstar_tau0_calc_emis_ion` as the primary XSTAR C V triplet validation row because it combines the full-global `xstar-lucy` population solution with the source-code-aligned `calc_emis_ion.f90` emergent-line construction and geometry-derived `tau0`/`ptmp1`/`ptmp2` escape context.  No solver, matrix, optical-depth, or rate physics is intentionally changed from v0.3.89.
+Current development baseline: v0.3.91 is a C V detail-population validation release after the v0.3.90 print-summary cleanup.  The recommended triplet comparison case remains `full_global_xstar_tau0_calc_emis_ion`.  v0.3.91 adds `examples/43_compare_xstar_detail_populations.py`, which reads a full-global solver output directory, reports the recommended emergent C V triplet row, writes a solver population table, and optionally compares those populations against an external XSTAR detail population CSV/FITS table by ion stage and level index.  The same utility is prepared for the next O VII validation step via `--element O --he-like-stage 7`.  No solver, matrix, optical-depth, or rate physics is intentionally changed from v0.3.90.
 
 ### Recommended C V XSTAR triplet comparison row
 
@@ -347,6 +347,43 @@ XSTAR_ATDB_FITS
 datapath
 data/atdb.fits
 interactive download/configuration
+```
+
+
+### C V detail-population comparison and O VII handoff (v0.3.91)
+
+After running `examples/42_xstar_like_element_solver_demo.py`, compare the full-global C V populations and the recommended emergent triplet row with:
+
+```bash
+PYTHONPATH=src python examples/43_compare_xstar_detail_populations.py \
+  --solver-out-dir c5_xstar_like_element_solver_v0390_xstar_msolvelucy_superlevels \
+  --element C --he-like-stage 5 \
+  --comparison-case full_global_xstar_tau0_calc_emis_ion \
+  --print-summary
+```
+
+If an XSTAR detail population table is available as CSV or FITS, add:
+
+```bash
+  --xstar-detail path/to/xstar_detail_populations.csv
+```
+
+The utility writes:
+
+```text
+xstar_detail_population_comparison.csv
+xstar_detail_population_comparison_summary.json
+xstar_detail_population_comparison.md
+```
+
+For the next O VII validation step, generate an O VII full-global output directory with `--element O --he-like-stage 7` and then run the same comparison utility with:
+
+```bash
+PYTHONPATH=src python examples/43_compare_xstar_detail_populations.py \
+  --solver-out-dir o7_xstar_like_element_solver_output \
+  --element O --he-like-stage 7 \
+  --target-f nan --target-i nan --target-r nan \
+  --print-summary
 ```
 
 ## Installation

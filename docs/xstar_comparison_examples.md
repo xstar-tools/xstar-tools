@@ -1,3 +1,24 @@
+
+## v0.3.91 C V detail-population comparison and O VII validation handoff
+
+The recommended C V triplet comparison row is still:
+
+```text
+full_global_xstar_tau0_calc_emis_ion
+```
+
+Use the new detail-population comparison utility after generating a full-global output directory:
+
+```bash
+PYTHONPATH=src python examples/43_compare_xstar_detail_populations.py \
+  --solver-out-dir c5_xstar_like_element_solver_v0390_xstar_msolvelucy_superlevels \
+  --element C --he-like-stage 5 \
+  --comparison-case full_global_xstar_tau0_calc_emis_ion \
+  --print-summary
+```
+
+With an external XSTAR detail population CSV/FITS table, add `--xstar-detail`.  Rows are matched conservatively by ion stage and level index.  For O VII validation, run the same utility with `--element O --he-like-stage 7` after producing an O VII full-global output directory.
+
 # XSTAR comparison validation examples
 
 This page documents saved validation comparisons between `xstar-atomic` and direct XSTAR model outputs.

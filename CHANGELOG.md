@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.91 - 2026-05-07
+
+- Added `examples/43_compare_xstar_detail_populations.py` for the next validation milestone after the C V triplet match.
+- The new comparison utility reads a full-global solver output directory, extracts population rows from `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`, reports the recommended `full_global_xstar_tau0_calc_emis_ion` triplet row, and writes CSV/JSON/Markdown validation products.
+- Optional external XSTAR detail population tables can be supplied as CSV or FITS and are matched by ion stage plus level index.
+- The utility defaults to C V (`--element C --he-like-stage 5`) and is prepared for the next O VII validation step via `--element O --he-like-stage 7`.
+- No intentional solver, matrix, optical-depth, `calc_emis_ion`, type-50, inverse-recombination, or `calc_ion_rates/istruc` physics changes from v0.3.90.
+
 ## v0.3.90 - Print and document recommended full-global emergent triplet comparison - 2026-05-07
 
 - Updated `examples/42_xstar_like_element_solver_demo.py --print-summary` so the compact terminal summary reports the recommended full-global emergent line-output row, `full_global_xstar_tau0_calc_emis_ion`, instead of the obsolete simple per-ion triplet baseline.
