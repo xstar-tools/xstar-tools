@@ -1100,6 +1100,7 @@ def _evaluate_type57_calt57_record(
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
+    type99_source_fallback_mode: str = "physical-only",
     type53_flat_proxy_scale: object = 1.0,
     type53_phint53_scale: object = 1.0,
 ) -> dict:
@@ -2495,10 +2496,25 @@ def _audit_superlevel_cascade_record(
         # destination for type 99.
         superlevel_level = destination_level
         parent_level_index = int(it[-3]) if len(it) >= 11 else None
-        parent_continuum_level = None if nlevp is None or parent_level_index is None else int(nlevp) + int(parent_level_index) - 1
+        # XSTAR ucalc.f90 type 99 computes
+        #   idest2 = nlev + idat(nidt-3) - 1
+        #   idest2 = max(idest2, nlev)
+        # Therefore idat(nidt-3) <= 0 does not mean parent level zero; it means
+        # the target-ion continuum slot.  In the XSTAR continuum-alias topology
+        # that slot is later aliased to the adjacent parent-ion ground row by
+        # calc_hmc_element's ipmat += nlev-1 convention.
+        parent_continuum_level = None
+        if nlevp is not None and parent_level_index is not None:
+            parent_continuum_level = max(int(nlevp), int(nlevp) + int(parent_level_index) - 1)
         parent_stage_for_type99 = int(parent_ion_stage)
         parent_rows = list(parent_level_rows or [])
-        parent_row = next((r for r in parent_rows if maybe_int(r.get("level_index")) == parent_level_index), None)
+        parent_mapping_source = ""
+        if parent_level_index is not None and int(parent_level_index) <= 0:
+            parent_row = continuum_row
+            parent_mapping_source = "ucalc_idat_nidt_minus_3_zero_maps_to_target_continuum_alias"
+        else:
+            parent_row = next((r for r in parent_rows if maybe_int(r.get("level_index")) == parent_level_index), None)
+            parent_mapping_source = "ucalc_idat_nidt_minus_3_explicit_parent_ion_level"
         route_kind = "superlevel_photoionization_recombination_calt99_phint53hunt"
         cascade_direction = "parent_ion_level_to_type99_destination_and_reverse_photoionization"
         source_provenance = "XSTAR_ucalc_type99_calt99_phint53hunt_rec_xnx_source_code_route"
@@ -2538,6 +2554,9 @@ def _audit_superlevel_cascade_record(
             "type99_ucalc_parent_ion_stage": parent_stage_for_type99,
             "type99_ucalc_parent_ion_level_index": parent_level_index,
             "type99_ucalc_parent_ion_level_label": parent_row.get("level_label") if parent_row is not None else "",
+            "type99_parent_mapping_source": parent_mapping_source,
+            "type99_parent_maps_to_target_continuum_alias": bool(parent_level_index is not None and int(parent_level_index) <= 0),
+            "type99_parent_global_index": maybe_int(parent_row.get("global_index")) if parent_row is not None else None,
             "type99_raw_int_count": len(it),
             **type99_eval,
         }
@@ -2887,6 +2906,15 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
         type99_ans2_total = float(sum((maybe_float(r.get("type99_phint53hunt_ans2_recombination_s^-1")) or 0.0) for r in rows_by_dt[99]))
         type99_rec_total = float(sum((maybe_float(r.get("type99_calt99_rec_cm3_s")) or 0.0) for r in rows_by_dt[99]))
         type99_statuses = ";".join(str(r.get("type99_phint53hunt_status")) for r in rows_by_dt[99] if r.get("type99_phint53hunt_status") not in (None, ""))
+        def uniq_strings(key: str) -> List[str]:
+            vals: List[str] = []
+            for rr in rows_by_dt[99]:
+                vv = rr.get(key)
+                if vv not in (None, ""):
+                    sv = str(vv)
+                    if sv not in vals:
+                        vals.append(sv)
+            return sorted(vals)
         def uniq_ints(key: str) -> List[int]:
             vals: List[int] = []
             for rr in rows_by_dt[99]:
@@ -2898,9 +2926,12 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
         type99_parent_stages = uniq_ints("type99_ucalc_parent_ion_stage")
         type99_local_idest2 = uniq_ints("type99_ucalc_idest2_local_matrix_level")
         type99_dest_levels = uniq_ints("type99_ucalc_idest1_destination_level")
+        type99_parent_mapping_sources = uniq_strings("type99_parent_mapping_source")
+        type99_parent_alias_flags = uniq_strings("type99_parent_maps_to_target_continuum_alias")
         type99_parent_level_unique = type99_parent_levels[0] if len(type99_parent_levels) == 1 else None
         type99_parent_stage_unique = type99_parent_stages[0] if len(type99_parent_stages) == 1 else None
         type99_dest_level_unique = type99_dest_levels[0] if len(type99_dest_levels) == 1 else None
+        type99_parent_mapping_source_unique = type99_parent_mapping_sources[0] if len(type99_parent_mapping_sources) == 1 else None
         source_proxy = float(sum(_source_proxy_from_row(r) for r in rows))
         # Prefer type-71 physical radiative branching for source-weighted proxy.
         br71 = branch_by_key.get((st, sl, 71), {})
@@ -2950,6 +2981,9 @@ def build_superlevel_source_audit(superlevel_rows: Sequence[dict], branching_row
             "type99_ucalc_parent_ion_level_index_list": ";".join(str(v) for v in type99_parent_levels),
             "type99_ucalc_idest2_local_matrix_level_list": ";".join(str(v) for v in type99_local_idest2),
             "type99_ucalc_destination_level_list": ";".join(str(v) for v in type99_dest_levels),
+            "type99_parent_mapping_source_unique": type99_parent_mapping_source_unique,
+            "type99_parent_mapping_source_list": ";".join(type99_parent_mapping_sources),
+            "type99_parent_maps_to_target_continuum_alias_list": ";".join(type99_parent_alias_flags),
             "n_total_source_candidates": len(rows),
             "source_proxy_basis": "count_per_type70_74_99_source_candidate_nonphysical",
             "source_proxy_total": source_proxy,
@@ -4821,6 +4855,8 @@ def _find_parent_continuum_global_row(global_index_rows: Sequence[dict], *, ion_
 def build_global_superlevel_source_matrix_terms(
     superlevel_source_rows: Sequence[dict],
     global_index_rows: Sequence[dict],
+    *,
+    type99_source_fallback_mode: str = "physical-only",
 ) -> List[dict]:
     """Map type-99 superlevel source candidates onto the global index.
 
@@ -4836,10 +4872,15 @@ def build_global_superlevel_source_matrix_terms(
     * a matching parent-continuum diagonal-loss proxy, clearly marked as a
       proxy, so the future matrix topology is explicit.
 
-    The proxy value is the type-99 coefficient-magnitude preview when available;
-    otherwise it falls back to one count unit per type-99 source candidate.  No
-    proxy term is included in any solved matrix in this version.
+    v0.3.97 makes the source-code path the default: legacy scaffold proxy
+    rows are emitted only when ``type99_source_fallback_mode`` is
+    ``"legacy-proxy"``.  The default ``"physical-only"`` avoids mixing real
+    ``calt99/phint53hunt`` rows with nonphysical source-vector gain proxies.
     """
+    mode = str(type99_source_fallback_mode or "physical-only").strip().lower().replace("_", "-")
+    if mode not in {"physical-only", "legacy-proxy"}:
+        mode = "physical-only"
+    emit_proxy = mode == "legacy-proxy"
     lookup = _global_index_lookup(global_index_rows)
     out: List[dict] = []
     term_id = 0
@@ -4874,10 +4915,21 @@ def build_global_superlevel_source_matrix_terms(
         # continuum proxy row used by the older scaffold.
         parent_stage_unique = maybe_int(row.get("type99_ucalc_parent_ion_stage_unique"))
         parent_level_unique = maybe_int(row.get("type99_ucalc_parent_ion_level_index_unique"))
+        parent_maps_to_continuum = False
+        parent_mapping_source = str(row.get("type99_parent_mapping_source_unique") or row.get("type99_parent_mapping_source") or "")
         parent_row = None
-        if parent_stage_unique is not None and parent_level_unique is not None:
-            parent_row = lookup.get((int(parent_stage_unique), int(parent_level_unique)))
         cont_row = _find_parent_continuum_global_row(global_index_rows, ion_stage=int(stage))
+        if parent_level_unique is not None and int(parent_level_unique) <= 0:
+            # XSTAR idat(nidt-3)=0 -> idest2=max(nlev-1,nlev)=nlev, i.e.
+            # the target-ion continuum slot.  The full-global XSTAR topology
+            # later aliases this explicit continuum row to the adjacent parent
+            # ground row when --full-global-topology requests continuum aliasing.
+            parent_row = cont_row
+            parent_maps_to_continuum = True
+            parent_mapping_source = "ucalc_idat_nidt_minus_3_zero_maps_to_target_continuum_alias"
+        elif parent_stage_unique is not None and parent_level_unique is not None:
+            parent_row = lookup.get((int(parent_stage_unique), int(parent_level_unique)))
+            parent_mapping_source = parent_mapping_source or "ucalc_idat_nidt_minus_3_explicit_parent_ion_level"
         if super_row is None:
             out.append({
                 "global_superlevel_source_term_id": term_id,
@@ -4940,7 +4992,8 @@ def build_global_superlevel_source_matrix_terms(
             dest_g = maybe_int(super_row.get("global_index"))
             common.update({
                 "type99_rate_source": "calt99.f90+phint53hunt.f90",
-                "type99_parent_mapping_source": "ucalc_idat_nidt_minus_3_explicit_parent_ion_level",
+                "type99_parent_mapping_source": parent_mapping_source or "ucalc_idat_nidt_minus_3_explicit_parent_ion_level",
+                "type99_parent_maps_to_target_continuum_alias": bool(parent_maps_to_continuum),
                 "type99_ucalc_parent_ion_stage": maybe_int(row.get("type99_ucalc_parent_ion_stage_unique")),
                 "type99_ucalc_parent_ion_level_index": maybe_int(row.get("type99_ucalc_parent_ion_level_index_unique")),
                 "type99_ucalc_destination_level": maybe_int(row.get("type99_ucalc_destination_level_unique")),
@@ -5022,6 +5075,23 @@ def build_global_superlevel_source_matrix_terms(
                     **common,
                 })
                 term_id += 1
+            continue
+
+        if not emit_proxy:
+            out.append({
+                "global_superlevel_source_term_id": term_id,
+                "matrix_term_kind": "skipped_type99_scaffold_proxy_default_disabled",
+                "matrix_role": "not_assembled_legacy_proxy_disabled_by_type99_source_fallback_mode",
+                "matrix_row_global_index": maybe_int(super_row.get("global_index")),
+                "matrix_col_global_index": "",
+                "signed_rate_proxy": 0.0,
+                "rate_proxy": 0.0,
+                "assembly_status": "skipped",
+                "skip_reason": "physical_type99_calt99_phint53hunt_not_ready_and_legacy_proxy_disabled",
+                "type99_source_fallback_mode": mode,
+                **common,
+            })
+            term_id += 1
             continue
 
         out.append({
@@ -11671,6 +11741,7 @@ def solve_element_reference(
     triplet_source_mode: str = "none",
     triplet_source_scale: object = 1.0,
     type99_proxy_scale: object = "1",
+    type99_source_fallback_mode: str = "physical-only",
     type53_flat_proxy_scale: object = 1.0,
     type53_phint53_scale: object = 1.0,
     inverse_recombination_mode: str = "none",
@@ -11925,6 +11996,7 @@ def solve_element_reference(
     global_superlevel_source_matrix_terms = build_global_superlevel_source_matrix_terms(
         superlevel_source_audit_rows,
         global_index_rows,
+        type99_source_fallback_mode=type99_source_fallback_mode,
     )
     global_bound_bound_solve_comparison_rows = build_global_bound_bound_solve_comparison(
         global_index_rows=global_index_rows,
@@ -12348,6 +12420,7 @@ def solve_element_reference(
             "global_bound_bound_type71_solve_comparison_summary": _global_bound_bound_type71_solve_comparison_summary(global_bound_bound_type71_solve_comparison_rows),
             "n_global_bound_bound_type71_type99_proxy_solve_comparison_rows": len(global_bound_bound_type71_type99_proxy_solve_comparison_rows),
             "global_bound_bound_type71_type99_proxy_solve_comparison_summary": _global_bound_bound_type71_type99_proxy_solve_comparison_summary(global_bound_bound_type71_type99_proxy_solve_comparison_rows),
+            "type99_source_fallback_mode": type99_source_fallback_mode,
             "n_type99_proxy_scale_scan_rows": len(type99_proxy_scale_scan_rows),
             "type99_proxy_scale_scan_summary": _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows),
             "radiation_field_mode": radiation_field_mode,

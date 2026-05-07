@@ -1,24 +1,24 @@
-## v0.3.95 type-99 ucalc parent-level mapping fix
+# xstar-atomic
 
-## v0.3.96 note
+## v0.3.97 type-99 continuum-parent mapping and physical-only fallback
 
-`v0.3.96` fixes the remaining type-99 activation path by using the explicit global element index for XSTAR `ucalc.f90` type-99 target/parent level lookup.  This allows `calt99/phint53hunt` rows to assemble physically as `assembled_global_type99_calt99_phint53hunt` when the source-code closure returns nonzero rates, instead of falling back to the old scaffold proxy because ATDB superlevels or parent excited levels were absent from the legacy population table.
+v0.3.97 fixes the remaining XSTAR `ucalc.f90` type-99 parent-side mapping case: when `idat(nidt-3) <= 0`, XSTAR computes `idest2 = nlev + idat(nidt-3) - 1` and then clips it with `idest2 = max(idest2, nlev)`.  Therefore the parent side is the target-ion continuum slot, not an invalid parent level zero.
 
+In the Python global matrix this maps to the explicit target-ion continuum row.  When `--full-global-topology xstar-continuum-alias` or `xstar-continuum-alias-superlevels` is used, that row is then aliased to the adjacent parent-ion ground row, following the XSTAR `calc_hmc_element` `ipmat = ipmat + nlev - 1` convention.
 
-v0.3.95 fixes the XSTAR `ucalc.f90` data-type 99 level mapping introduced with the v0.3.94 `calt99`/`phint53hunt` port.  XSTAR maps the target side as `idest1=idat(nidt-2)` and the parent side as `idest2=nlev+idat(nidt-3)-1`; in the global Python matrix this parent side must be the explicit adjacent-ion level `(parent_ion_stage, parent_level_index)`, not the target-ion continuum proxy row.
+The default type-99 source fallback is now source-code-only:
 
-The type-99 matrix terms now assemble the source-code pair against the explicit parent level when it exists in the global index:
-
-```text
-M[target_level, parent_ion_level] += ans2 = rec*xnx
-M[parent_ion_level, parent_ion_level] -= ans2
-M[parent_ion_level, target_level] += ans1
-M[target_level, target_level] -= ans1
+```bash
+--type99-source-fallback-mode physical-only
 ```
 
-The audit and matrix files report the resolved parent mapping through fields such as `type99_ucalc_parent_ion_stage`, `type99_ucalc_parent_ion_level_index`, `type99_ucalc_idest2_local_matrix_level`, and `type99_parent_mapping_source`.  Type 99 rows no longer require a direct f/i/r triplet destination; high spectroscopic or superlevel targets are allowed to feed the Lucy/global redistribution, matching XSTAR source-code behavior.
+If `calt99/phint53hunt` cannot produce physical rates, old `source_vector_gain_proxy` scaffold rows are skipped instead of assembled.  The legacy diagnostic proxy can still be restored explicitly with:
 
-# xstar-atomic
+```bash
+--type99-source-fallback-mode legacy-proxy
+```
+
+No intentional changes were made to type-50 escape rates, type-71 `calt71`, type-77 `calt77`, geometry-derived line optical depth, `calc_emis_ion`, inverse recombination modes, or `calc_ion_rates/istruc`.
 
 ## v0.3.94 type-99 superlevel bound-free calt99/phint53hunt rates
 

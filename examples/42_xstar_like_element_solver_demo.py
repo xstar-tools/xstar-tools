@@ -62,6 +62,7 @@ def main(argv=None):
     p.add_argument("--triplet-source-mode", default="none", choices=["none", "type74-direct-diagnostic"], help="Optional diagnostic source injection into the He-like triplet upper levels. Off by default; type74-direct-diagnostic injects evaluated type-74 direct triplet source rates into a before/after solve without changing the baseline matrix outputs.")
     p.add_argument("--triplet-source-scale", default="1", help="Scale factor(s) for --triplet-source-mode type74-direct-diagnostic. Accepts one value or a comma-separated list, e.g. '1,1e2,1e4,1e6,1e8,1e10'.")
     p.add_argument("--type99-proxy-scale", default="0,1e-8,1e-6,1e-4,1e-2,1,1e2", help="Scale factor(s) for the nonphysical type-99 proxy source scan in the global bound-bound+type71 diagnostic block. Accepts one value or a comma-separated list.")
+    p.add_argument("--type99-source-fallback-mode", default="physical-only", choices=["physical-only", "legacy-proxy"], help="v0.3.97 fallback for type-99 global source assembly. physical-only disables old scaffold proxy rows when calt99/phint53hunt is unavailable; legacy-proxy restores the previous diagnostic proxy rows for comparison only.")
     p.add_argument("--radiation-field-mode", default="none", choices=["none", "flat", "blackbody", "table", "powerlaw", "xstar-powerlaw"], help="Diagnostic XSTAR-style radiation/bremsa context for type-53/type-74 audits. The bremsa array has XSTAR units but is still a diagnostic continuum unless supplied by a future physical transfer context.")
     p.add_argument("--radiation-bremsa-scale", default="1", help="Absolute scale for the diagnostic bremsa array in XSTAR units erg s^-1 cm^-2 erg^-1. This replaces ad hoc post-hoc phint53 scaling for source-code-aligned radiation tests.")
     p.add_argument("--radiation-energy-min-eV", type=float, default=None, help="Minimum energy for the diagnostic epi/bremsa grid. Default 1 eV.")
@@ -121,6 +122,7 @@ def main(argv=None):
             "triplet_source_mode": args.triplet_source_mode,
             "triplet_source_scale": args.triplet_source_scale,
             "type99_proxy_scale": args.type99_proxy_scale,
+            "type99_source_fallback_mode": args.type99_source_fallback_mode,
             "radiation_field_mode": args.radiation_field_mode,
             "radiation_bremsa_scale": args.radiation_bremsa_scale,
             "radiation_energy_min_eV": args.radiation_energy_min_eV,
@@ -246,6 +248,7 @@ def main(argv=None):
         triplet_source_mode=args.triplet_source_mode,
         triplet_source_scale=args.triplet_source_scale,
         type99_proxy_scale=args.type99_proxy_scale,
+        type99_source_fallback_mode=args.type99_source_fallback_mode,
         radiation_field_mode=args.radiation_field_mode,
         radiation_bremsa_scale=args.radiation_bremsa_scale,
         radiation_energy_min_eV=args.radiation_energy_min_eV,
