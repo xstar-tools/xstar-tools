@@ -1747,6 +1747,152 @@ def _superlevel_stage_relation(record_ion_stage: int, target_ion_stage: int, par
     return "not_current_target_parent_pair"
 
 
+
+
+def _xstar_calt71_rate(
+    *,
+    temperature: float,
+    electron_density: float,
+    ion_charge: Optional[int],
+    reals: Sequence[float],
+    ints: Sequence[int],
+) -> dict:
+    """Evaluate XSTAR ``calt71.f90`` for a type-71 superlevel cascade row.
+
+    XSTAR data type 71 stores radiative transition probabilities from
+    superlevels to spectroscopic levels.  The source routine uses either a
+    single tabulated log10(A) value or a density/temperature interpolation grid:
+
+    * if ``nden == 1`` and ``ntem == 1``, ``A = 10**dtmp`` with
+      ``dtmp = log10(rdat[3])`` for values larger than 30 and ``dtmp = rdat[3]``
+      otherwise, and wavelength ``rdat[4]``;
+    * otherwise, interpolate the log10(A) table in ``log10(ne)`` and
+      ``log10(T)`` and return ``A = 10**rec``.
+
+    The implementation deliberately mirrors the visible Fortran indexing while
+    guarding the table brackets against out-of-range values.  ``ion_charge`` is
+    accepted for provenance parity with the Fortran call but is not used in the
+    calculation.
+    """
+    rd = [float(x) for x in reals]
+    it = [int(x) for x in ints]
+    out = {
+        "type71_calt71_status": "not_evaluated",
+        "type71_calt71_aij_s^-1": None,
+        "type71_calt71_wavelength_A": None,
+        "type71_calt71_log10_aij": None,
+        "type71_calt71_nden": None,
+        "type71_calt71_ntem": None,
+        "type71_calt71_log10_ne_used": None,
+        "type71_calt71_log10_temperature_used": None,
+        "type71_calt71_density_bracket_index0": None,
+        "type71_calt71_temperature_bracket_index0": None,
+        "type71_calt71_source": "calt71.f90",
+        "type71_calt71_note": "",
+    }
+    if len(it) < 2 or len(rd) < 4:
+        out["type71_calt71_status"] = "not_evaluated_missing_nden_ntem_or_reals"
+        return out
+    nden = int(it[0])
+    ntem = int(it[1])
+    out["type71_calt71_nden"] = nden
+    out["type71_calt71_ntem"] = ntem
+    if nden <= 0 or ntem <= 0:
+        out["type71_calt71_status"] = "not_evaluated_invalid_grid_dimensions"
+        return out
+    if nden == 1 and ntem == 1:
+        if len(rd) < 4:
+            out["type71_calt71_status"] = "not_evaluated_short_single_point_record"
+            return out
+        dtmp = math.log10(float(rd[2])) if float(rd[2]) > 30.0 else float(rd[2])
+        wav = float(rd[3])
+        aij = 10.0 ** dtmp
+        out.update({
+            "type71_calt71_status": "evaluated_single_point_calt71",
+            "type71_calt71_aij_s^-1": float(aij),
+            "type71_calt71_wavelength_A": float(wav),
+            "type71_calt71_log10_aij": float(dtmp),
+            "type71_calt71_note": "single nden=1,ntem=1 calt71 branch",
+        })
+        return out
+
+    min_len = nden + ntem + nden * ntem + 1
+    if len(rd) < min_len:
+        out["type71_calt71_status"] = "not_evaluated_short_grid_record"
+        out["type71_calt71_note"] = f"need at least {min_len} real values, got {len(rd)}"
+        return out
+    if temperature <= 0.0 or electron_density <= 0.0:
+        out["type71_calt71_status"] = "not_evaluated_nonpositive_temperature_or_density"
+        return out
+
+    dens_grid = rd[:nden]
+    temp_grid = rd[nden:nden + ntem]
+    table0 = nden + ntem
+    wav = rd[nden * ntem + nden + ntem]
+    rne_orig = math.log10(float(electron_density))
+    rte_orig = math.log10(float(temperature))
+    rne = rne_orig
+    rte = rte_orig
+    notes = []
+    if rne > dens_grid[-1]:
+        rne = dens_grid[-1]
+        notes.append("logne_clipped_to_grid_max")
+    # calt71 only clips the low-temperature side, not low density; keep the
+    # bracket selection below responsible for density lower-bound handling.
+    if rte > temp_grid[-1] + 1.0:
+        rte = temp_grid[-1] + 1.0
+        notes.append("logT_clipped_to_grid_max_plus_one")
+    if rte < temp_grid[0] - 1.0:
+        rte = temp_grid[0] - 1.0
+        notes.append("logT_clipped_to_grid_min_minus_one")
+
+    if nden < 2 or ntem < 2:
+        out["type71_calt71_status"] = "not_evaluated_grid_requires_at_least_two_points_per_axis"
+        return out
+
+    def bracket_index(grid: Sequence[float], x: float) -> int:
+        if x <= grid[0]:
+            return 0
+        for k in range(0, len(grid) - 1):
+            if x < grid[k + 1]:
+                return k
+        return len(grid) - 2
+
+    in0 = bracket_index(dens_grid, rne)
+    it0 = bracket_index(temp_grid, rte)
+    t0 = temp_grid[it0]
+    t1 = temp_grid[it0 + 1]
+    n0 = dens_grid[in0]
+    n1 = dens_grid[in0 + 1]
+    if t1 == t0 or n1 == n0:
+        out["type71_calt71_status"] = "not_evaluated_degenerate_grid_bracket"
+        return out
+
+    def table(in_idx: int, it_idx: int) -> float:
+        return float(rd[table0 + in_idx * ntem + it_idx])
+
+    rec_n0_t0 = table(in0, it0)
+    rec_n0_t1 = table(in0, it0 + 1)
+    rec_n1_t0 = table(in0 + 1, it0)
+    rec_n1_t1 = table(in0 + 1, it0 + 1)
+    rec1 = rec_n0_t0 + (rec_n0_t1 - rec_n0_t0) / (t1 - t0) * (rte - t0)
+    rec2 = rec_n1_t0 + (rec_n1_t1 - rec_n1_t0) / (t1 - t0) * (rte - t0)
+    rec = rec1 + (rec2 - rec1) / (n1 - n0) * (rne - n0)
+    aij = 10.0 ** rec
+    out.update({
+        "type71_calt71_status": "evaluated_grid_calt71_logne_logT_interpolation",
+        "type71_calt71_aij_s^-1": float(aij),
+        "type71_calt71_wavelength_A": float(wav),
+        "type71_calt71_log10_aij": float(rec),
+        "type71_calt71_log10_ne_used": float(rne),
+        "type71_calt71_log10_temperature_used": float(rte),
+        "type71_calt71_density_bracket_index0": int(in0),
+        "type71_calt71_temperature_bracket_index0": int(it0),
+        "type71_calt71_note": ";".join(notes),
+    })
+    return out
+
+
 def _audit_superlevel_cascade_record(
     db: ATDB,
     rec,
@@ -1755,6 +1901,8 @@ def _audit_superlevel_cascade_record(
     parent_ion_stage: int,
     level_rows: Sequence[dict],
     level_indices: Optional[Sequence[int]] = None,
+    temperature: Optional[float] = None,
+    electron_density: Optional[float] = None,
 ) -> dict:
     """Classify type 70/71/74/77/99 superlevel/cascade records.
 
@@ -1825,11 +1973,30 @@ def _audit_superlevel_cascade_record(
         source_provenance = "Bautista_Kallman_2001_appendix_type71_radiative_transition_rates_from_superlevels_to_spectroscopic_levels"
         requires += ["superlevel_population_from_type70_or_other_recombination_source"]
         unsafe += ["superlevel_population_not_solved_explicitly", "cascade_branching_not_normalized_over_all_superlevel_decays"]
+        if temperature is not None and electron_density is not None:
+            calt71 = _xstar_calt71_rate(
+                temperature=float(temperature),
+                electron_density=float(electron_density),
+                ion_charge=rec_stage,
+                reals=rd,
+                ints=it,
+            )
+        else:
+            calt71 = {
+                "type71_calt71_status": "not_evaluated_missing_temperature_or_density",
+                "type71_calt71_aij_s^-1": None,
+                "type71_calt71_wavelength_A": None,
+                "type71_calt71_log10_aij": None,
+                "type71_calt71_nden": it[0] if len(it) >= 1 else None,
+                "type71_calt71_ntem": it[1] if len(it) >= 2 else None,
+                "type71_calt71_source": "calt71.f90",
+            }
         extra = {
             "type71_lower_spectroscopic_level": lower_level,
             "type71_upper_superlevel_level": upper_level,
             "type71_A_or_rate_preview_s^-1": rd[0] if rd else None,
             "type71_wavelength_or_energy_preview": rd[1] if len(rd) > 1 else None,
+            **calt71,
         }
     elif dt == 77:
         # Appendix: collisional transition rates from superlevels to
@@ -1964,6 +2131,8 @@ def build_superlevel_cascade_audit(
     parent_ion_stage: int,
     level_rows: Sequence[dict],
     level_indices: Optional[Sequence[int]] = None,
+    temperature: Optional[float] = None,
+    electron_density: Optional[float] = None,
     use_cache: bool = True,
     cache_path: Optional[str] = None,
 ) -> List[dict]:
@@ -1979,6 +2148,8 @@ def build_superlevel_cascade_audit(
                     parent_ion_stage=parent_ion_stage,
                     level_rows=level_rows,
                     level_indices=level_indices,
+                    temperature=temperature,
+                    electron_density=electron_density,
                 )
                 row.update({"element": Z_TO_SYMBOL.get(z, str(z)), "element_z": z})
                 rows.append(row)
@@ -2030,9 +2201,11 @@ def build_superlevel_branching_audit(superlevel_rows: Sequence[dict]) -> List[di
     out: List[dict] = []
     for (dt, rec_stage, sl), rows in sorted(groups.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
         if dt == 71:
-            weight_basis = "type71_radiative_A_s^-1"
+            weight_basis = "type71_calt71_aij_s^-1"
             def weight(row):
-                val = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
+                val = maybe_float(row.get("type71_calt71_aij_s^-1"))
+                if val is None or not math.isfinite(float(val)) or float(val) <= 0.0:
+                    val = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
                 return float(val) if val is not None and math.isfinite(float(val)) and float(val) > 0.0 else 0.0
             unsafe_extra = "superlevel_population_not_solved_explicitly;branching_is_radiative_only_until_type70_population_source_is_available"
         else:
@@ -3877,7 +4050,11 @@ def build_global_superlevel_cascade_matrix_terms(
         stage = maybe_int(row.get("record_ion_stage"))
         lower = maybe_int(row.get("type71_lower_spectroscopic_level") or row.get("spectroscopic_level") or row.get("lower_level"))
         upper = maybe_int(row.get("type71_upper_superlevel_level") or row.get("superlevel_level") or row.get("upper_level"))
-        rate = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
+        rate = maybe_float(row.get("type71_calt71_aij_s^-1"))
+        rate_source = "calt71.f90"
+        if rate is None:
+            rate = maybe_float(row.get("type71_A_or_rate_preview_s^-1"))
+            rate_source = "legacy_preview_fallback"
         if stage is None or lower is None or upper is None or rate is None:
             out.append({
                 "global_superlevel_term_id": term_id,
@@ -3889,6 +4066,8 @@ def build_global_superlevel_cascade_matrix_terms(
                 "spectroscopic_level": lower if lower is not None else "",
                 "superlevel_level": upper if upper is not None else "",
                 "rate_s^-1": rate if rate is not None else "",
+                "type71_rate_source": rate_source,
+                "type71_calt71_status": row.get("type71_calt71_status"),
                 "signed_rate_s^-1": 0.0,
                 "assembly_status": "skipped",
                 "skip_reason": "missing_stage_or_level_or_type71_rate",
@@ -3907,6 +4086,8 @@ def build_global_superlevel_cascade_matrix_terms(
                 "spectroscopic_level": int(lower),
                 "superlevel_level": int(upper),
                 "rate_s^-1": float(rate),
+                "type71_rate_source": rate_source,
+                "type71_calt71_status": row.get("type71_calt71_status"),
                 "signed_rate_s^-1": 0.0,
                 "assembly_status": "skipped",
                 "skip_reason": "nonpositive_or_nonfinite_type71_rate",
@@ -3945,10 +4126,12 @@ def build_global_superlevel_cascade_matrix_terms(
                 "spectroscopic_level_kind": "" if spec_row is None else spec_row.get("level_kind"),
                 "superlevel_level_kind": "" if super_row is None else super_row.get("level_kind"),
                 "rate_s^-1": float(rate),
+                "type71_rate_source": rate_source,
+                "type71_calt71_status": row.get("type71_calt71_status"),
                 "signed_rate_s^-1": 0.0,
                 "assembly_status": "skipped",
                 "skip_reason": ";".join(missing),
-                "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
+                "provenance": "v0.3.92_global_type71_superlevel_cascade_calt71",
             })
             term_id += 1
             continue
@@ -3978,10 +4161,17 @@ def build_global_superlevel_cascade_matrix_terms(
             "feeds_resonance_upper": bool(row.get("feeds_resonance_upper")),
             "feeds_any_triplet_component": bool(row.get("feeds_any_triplet_component")),
             "rate_s^-1": float(rate),
+            "type71_rate_source": rate_source,
+            "type71_calt71_status": row.get("type71_calt71_status"),
+            "type71_calt71_log10_aij": row.get("type71_calt71_log10_aij"),
+            "type71_calt71_wavelength_A": row.get("type71_calt71_wavelength_A"),
+            "type71_calt71_nden": row.get("type71_calt71_nden"),
+            "type71_calt71_ntem": row.get("type71_calt71_ntem"),
+            "type71_legacy_preview_rate_s^-1": row.get("type71_A_or_rate_preview_s^-1"),
             "assembly_status": "assembled_global_type71_superlevel_cascade_scaffold",
             "skip_reason": "",
-            "provenance": "v0.3.35_global_type71_superlevel_cascade_matrix_scaffold",
-            "notes": "Diagnostic scaffold only; no global element-wide solve includes these terms yet.",
+            "provenance": "v0.3.92_global_type71_superlevel_cascade_calt71",
+            "notes": "Source-code calt71.f90 type-71 superlevel cascade evaluator; M[spectroscopic,superlevel]+=aij*(ptmp1+ptmp2) with transparent ptmp sum=1 in current global matrix.",
         }
         out.append({
             "global_superlevel_term_id": term_id,
@@ -4021,9 +4211,9 @@ def _global_superlevel_cascade_matrix_terms_summary(rows: Sequence[dict]) -> dic
         "total_type71_gain_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in assembled if str(r.get("matrix_term_kind")) == "offdiag_gain"),
         "total_type71_triplet_gain_rate_s^-1": sum(float(maybe_float(r.get("rate_s^-1")) or 0.0) for r in assembled if str(r.get("matrix_term_kind")) == "offdiag_gain" and bool(r.get("feeds_any_triplet_component"))),
         "provenance": {
-            "mode": "v0.3.35 maps type-71 radiative superlevel-to-spectroscopic cascade records onto explicit global_index rows.",
-            "assembly": "Diagnostic scaffold only: writes M[spectroscopic,superlevel]+=A and M[superlevel,superlevel]-=A matrix triplets but does not include them in the solved global matrix yet.",
-            "excluded": "Type-77 collisional superlevel cascades and type-70/type-74/type-99 superlevel source terms remain diagnostic-only.",
+            "mode": "v0.3.92 maps type-71 radiative superlevel-to-spectroscopic cascade records using the source-code calt71.f90 evaluator.",
+            "assembly": "Writes M[spectroscopic,superlevel]+=aij and M[superlevel,superlevel]-=aij matrix triplets; these terms are included in the full-global xstar-lucy path when global type-71 terms are enabled.",
+            "excluded": "Type-77 collisional superlevel cascades and type-70/type-74/type-99 superlevel source terms remain separate diagnostic/proxy terms.",
         },
     }
 
@@ -10922,6 +11112,8 @@ def solve_element_reference(
                 parent_ion_stage=he_like_stage + 1,
                 level_rows=target_level_rows,
                 level_indices=target_level_indices,
+                temperature=temperature,
+                electron_density=electron_density,
                 use_cache=index_cache,
                 cache_path=index_cache_path,
             )
