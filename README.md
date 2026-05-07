@@ -1,6 +1,17 @@
 # xstar-atomic
 
-Current development baseline: v0.3.89 derives the XSTAR type-50 line optical-depth column from the source-code geometry/transfer quantity `xpx*xeltp*delr` by default, instead of requiring a manually supplied equivalent line column.  The `calc_emis_ion.f90` triplet emergent-line comparison still uses component-specific `tau0(1/2)`, `pescl`, `ptmp1`, and `ptmp2`, but the default `--xstar-line-column-source geometry` now computes the non-level column from electron/H density, element abundance, and zone thickness, following `calc_emisab_ion.f90` and `stpcut.f90`.  Population solving, type-50 matrix rates, inverse recombination, and `calc_ion_rates -> istruc` behavior are unchanged from v0.3.88.
+Current development baseline: v0.3.90 is a cleanup/validation release after the v0.3.89 geometry-derived XSTAR type-50 line optical-depth implementation.  The `--print-summary` output from `examples/42_xstar_like_element_solver_demo.py` now reports the recommended full-global emergent triplet comparison case, `full_global_xstar_tau0_calc_emis_ion`, instead of the obsolete simple per-ion baseline.  Documentation now treats `full_global_xstar_tau0_calc_emis_ion` as the primary XSTAR C V triplet validation row because it combines the full-global `xstar-lucy` population solution with the source-code-aligned `calc_emis_ion.f90` emergent-line construction and geometry-derived `tau0`/`ptmp1`/`ptmp2` escape context.  No solver, matrix, optical-depth, or rate physics is intentionally changed from v0.3.89.
+
+### Recommended C V XSTAR triplet comparison row
+
+For the current C V full-global XSTAR-like validation workflow, use the row
+
+```text
+comparison_case = full_global_xstar_tau0_calc_emis_ion
+```
+
+in `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`.  This row is the preferred comparison to the XSTAR detailed/emergent C V triplet fractions because it includes the full-global `xstar-lucy` population path, XSTAR-style continuum alias/superlevel handling, and `calc_emis_ion.f90` emergent-line escape treatment with geometry-derived type-50 optical depths.  The older simple per-ion printed baseline is retained only as a legacy diagnostic and should not be used for the current XSTAR C V triplet comparison.
+
 ### v0.3.66 calc_emis context writer fix
 
 ### v0.3.67 type-50 `ucalc` bound-bound diagnostic

@@ -428,3 +428,13 @@ PYTHONPATH=src python examples/40_audit_signed_triplet_response.py \
   --out-dir c5_signed_triplet_response_audit \
   --print-summary
 ```
+
+## Recommended full-global C V triplet comparison case
+
+For the current C V full-global XSTAR-like validation run, compare XSTAR against the row
+
+```text
+comparison_case = full_global_xstar_tau0_calc_emis_ion
+```
+
+from `xstar_like_element_solver_full_global_normalized_solve_comparison.csv`.  This is the recommended row because it combines the full-global `xstar-lucy` population solution with the XSTAR `calc_emis_ion.f90` emergent-line construction and geometry-derived type-50 optical-depth context.  The legacy per-ion `triplet f/i/r` printed by older releases was a local baseline and is not the preferred XSTAR comparison target.

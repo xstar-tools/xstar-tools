@@ -285,10 +285,45 @@ def main(argv=None):
     if args.print_summary:
         summ = result["summary"]
         trip = summ.get("he_like_triplet", {})
+        full_global_rows = result.get("full_global_normalized_solve_comparison", [])
+        recommended_case = "full_global_xstar_tau0_calc_emis_ion"
+        recommended = next(
+            (r for r in full_global_rows
+             if r.get("row_kind") == "summary" and r.get("comparison_case") == recommended_case),
+            None,
+        )
+        fallback_case = "full_global_normalized_proxy_topology_solve"
+        fallback = next(
+            (r for r in full_global_rows
+             if r.get("row_kind") == "summary" and r.get("comparison_case") == fallback_case),
+            None,
+        )
         print("XSTAR-like element solver")
         print("-------------------------")
         print(f"element={summ.get('element')} stages={summ.get('stages')} coupling={summ.get('adjacent_coupling_status')} assembled={summ.get('n_adjacent_coupling_assembled')}")
-        print(f"triplet f/i/r={trip.get('f_fraction'):.6g}/{trip.get('i_fraction'):.6g}/{trip.get('r_fraction'):.6g} R={trip.get('R')} G={trip.get('G')}")
+        if recommended is not None:
+            print(f"recommended comparison={recommended_case}")
+            print(
+                "full-global emergent f/i/r="
+                f"{float(recommended.get('f_fraction')):.6g}/"
+                f"{float(recommended.get('i_fraction')):.6g}/"
+                f"{float(recommended.get('r_fraction')):.6g} "
+                f"R={recommended.get('R')} G={recommended.get('G')} "
+                f"L2={recommended.get('l2_distance_to_target')}"
+            )
+        elif fallback is not None:
+            print(f"recommended comparison={recommended_case} (not available; showing {fallback_case})")
+            print(
+                "full-global f/i/r="
+                f"{float(fallback.get('f_fraction')):.6g}/"
+                f"{float(fallback.get('i_fraction')):.6g}/"
+                f"{float(fallback.get('r_fraction')):.6g} "
+                f"R={fallback.get('R')} G={fallback.get('G')} "
+                f"L2={fallback.get('l2_distance_to_target')}"
+            )
+        else:
+            print("recommended comparison=full_global_xstar_tau0_calc_emis_ion (not available)")
+            print(f"legacy per-ion baseline f/i/r={trip.get('f_fraction'):.6g}/{trip.get('i_fraction'):.6g}/{trip.get('r_fraction'):.6g} R={trip.get('R')} G={trip.get('G')}")
         print(f"wrote: {out / 'xstar_like_element_solver_summary.md'}")
 
 
