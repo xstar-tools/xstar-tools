@@ -206,6 +206,95 @@ def _xstar_calc_emis_ptmp_from_tau(tau1: float, tau2: float, cfrac: float) -> tu
 
 
 
+def _read_xstar_reference_line_csv(path: object) -> List[dict]:
+    """Read a converted XSTAR ``xout_lines1`` CSV for line-depth validation.
+
+    This is intentionally a light-weight CSV reader so the pure-Python solver
+    can use packaged/reference XSTAR line lists without requiring FITS access.
+    Missing or empty paths simply return an empty list.
+    """
+    if path is None:
+        return []
+    text = str(path).strip()
+    if not text:
+        return []
+    p = Path(text)
+    if not p.exists():
+        return []
+    with p.open(newline="", encoding="utf-8") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def _line_wavelength_value(row: Mapping[str, object]) -> Optional[float]:
+    return maybe_float(row.get("wavelength_A") or row.get("wavelength") or row.get("lambda") or row.get("lambda_A"))
+
+
+def _match_xstar_reference_line(
+    line: Mapping[str, object],
+    reference_rows: Sequence[dict],
+    *,
+    wavelength_tolerance_A: float = 0.035,
+) -> Optional[dict]:
+    """Match one solver triplet line to a converted XSTAR reference line.
+
+    Matching is by He-like component plus nearest wavelength.  The component
+    constraint avoids mixing the close O VII intercombination subcomponents with
+    the resonance line when a broad wavelength window is used.
+    """
+    if not reference_rows:
+        return None
+    comp = classify_helike_triplet_line(dict(line))
+    wav = _line_wavelength_value(line)
+    if comp is None or wav is None:
+        return None
+    best: Optional[dict] = None
+    best_dw = float("inf")
+    for ref in reference_rows:
+        rcomp = classify_helike_triplet_line(ref)
+        if rcomp != comp:
+            continue
+        rwav = _line_wavelength_value(ref)
+        if rwav is None:
+            continue
+        dw = abs(float(wav) - float(rwav))
+        if dw < best_dw:
+            best = ref
+            best_dw = dw
+    if best is None or best_dw > float(wavelength_tolerance_A):
+        return None
+    out = dict(best)
+    out["match_delta_wavelength_A"] = best_dw
+    return out
+
+
+def _xstar_reference_triplet_summary(reference_rows: Sequence[dict], value_column: object = "emit_outward") -> dict:
+    """Return normalized f/i/r target fractions from a converted XSTAR line CSV."""
+    col = str(value_column or "emit_outward")
+    sums = {"f": 0.0, "i": 0.0, "r": 0.0}
+    counts = {"f": 0, "i": 0, "r": 0}
+    for row in reference_rows:
+        comp = classify_helike_triplet_line(row)
+        val = maybe_float(row.get(col))
+        if comp in sums and val is not None and math.isfinite(float(val)):
+            sums[comp] += max(float(val), 0.0)
+            counts[comp] += 1
+    total = sum(sums.values())
+    return {
+        "reference_value_column": col,
+        "reference_f_emissivity": sums["f"],
+        "reference_i_emissivity": sums["i"],
+        "reference_r_emissivity": sums["r"],
+        "reference_total_emissivity": total,
+        "reference_f_fraction": sums["f"] / total if total > 0.0 else None,
+        "reference_i_fraction": sums["i"] / total if total > 0.0 else None,
+        "reference_r_fraction": sums["r"] / total if total > 0.0 else None,
+        "reference_R": sums["f"] / sums["i"] if sums["i"] > 0.0 else None,
+        "reference_G": (sums["f"] + sums["i"]) / sums["r"] if sums["r"] > 0.0 else None,
+        "reference_counts_json": json.dumps(counts, sort_keys=True),
+    }
+
+
+
 
 _XSTAR_APPROX_ATOMIC_MASS_AMU = {
     "H": 1.0079, "He": 4.0026, "Li": 6.94, "Be": 9.0122, "B": 10.81,
@@ -452,6 +541,9 @@ def build_calc_emis_ion_triplet_emergent_rows(
     xstar_line_cfrac: object = 0.0,
     xstar_line_tau1_fraction: object = 1.0,
     xstar_line_tau2_fraction: object = 1.0,
+    xstar_reference_lines_csv: object = None,
+    xstar_reference_value_column: object = "emit_outward",
+    xstar_reference_depth_scale: object = 1.0,
 ) -> List[dict]:
     """Build XSTAR ``calc_emis_ion`` emergent-triplet line rows.
 
@@ -513,10 +605,14 @@ def build_calc_emis_ion_triplet_emergent_rows(
     line_cfrac = max(0.0, min(1.0, float(maybe_float(xstar_line_cfrac) or 0.0)))
     tau1_fraction = max(0.0, float(maybe_float(xstar_line_tau1_fraction) or 0.0))
     tau2_fraction = max(0.0, float(maybe_float(xstar_line_tau2_fraction) or 0.0))
+    reference_rows = _read_xstar_reference_line_csv(xstar_reference_lines_csv)
+    reference_summary = _xstar_reference_triplet_summary(reference_rows, xstar_reference_value_column) if reference_rows else {}
+    reference_depth_scale = max(0.0, float(maybe_float(xstar_reference_depth_scale) or 0.0))
     rows: List[dict] = []
     sums_raw = {"f": 0.0, "i": 0.0, "r": 0.0}
     sums_trans = {"f": 0.0, "i": 0.0, "r": 0.0}
     sums_xstar_tau0 = {"f": 0.0, "i": 0.0, "r": 0.0}
+    sums_reference_depth_outward = {"f": 0.0, "i": 0.0, "r": 0.0}
     # XSTAR transparent line escape from source functions.
     tau0_ptmp1, tau0_ptmp2 = _xstar_calc_emis_ptmp_from_tau(0.0, 0.0, 0.0)
     for line in line_rows:
@@ -570,9 +666,25 @@ def build_calc_emis_ion_triplet_emergent_rows(
         x_net = x_ans2 * float(upper_pop) - x_ans1 * float(lower_pop)
         x_f1 = max(x_net * float(eerg) * x_ptmp1, 0.0)
         x_f2 = max(x_net * float(eerg) * x_ptmp2, 0.0)
+        ref = _match_xstar_reference_line(line, reference_rows) if reference_rows else None
+        ref_depth_in = max(0.0, float(maybe_float((ref or {}).get("depth_inward")) or 0.0))
+        ref_depth_out = max(0.0, float(maybe_float((ref or {}).get("depth_outward")) or 0.0))
+        ref_value = maybe_float((ref or {}).get(str(xstar_reference_value_column or "emit_outward")))
+        ref_tau1 = reference_depth_scale * ref_depth_in
+        ref_tau2 = reference_depth_scale * ref_depth_out
+        ref_ptmp1, ref_ptmp2 = _xstar_calc_emis_ptmp_from_tau(ref_tau1, ref_tau2, line_cfrac)
+        # XSTAR line tables usually compare against emit_outward.  For that
+        # channel, calc_emis_ion writes fline(2), while ucalc type-50 supplies
+        # the escaped ans2=A*(ptmp1+ptmp2).  This intentionally remains a
+        # validation/postprocessing mode: it uses XSTAR's own line depths to
+        # test whether the remaining G mismatch is a line-output/escape issue.
+        ref_ans2 = float(A) * (ref_ptmp1 + ref_ptmp2)
+        ref_net = ref_ans2 * float(upper_pop)
+        ref_f2 = max(ref_net * float(eerg) * ref_ptmp2, 0.0) if ref is not None else 0.0
         sums_raw[comp] += raw
         sums_trans[comp] += (trans_f1 + trans_f2)
         sums_xstar_tau0[comp] += (x_f1 + x_f2)
+        sums_reference_depth_outward[comp] += ref_f2
         rows.append({
             "row_kind": "calc_emis_ion_triplet_emergent_line",
             "component": comp,
@@ -630,12 +742,29 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "xstar_tau0_calc_emis_fline2_erg_s^-1": x_f2,
             "xstar_tau0_calc_emis_fline_total_erg_s^-1": x_f1 + x_f2,
             "xstar_tau0_attenuation_vs_raw_pop_A_E": (x_f1 + x_f2) / raw if raw > 0.0 else "",
+            "xstar_reference_line_csv": str(xstar_reference_lines_csv or ""),
+            "xstar_reference_match_status": "matched_component_wavelength" if ref is not None else ("not_requested" if not reference_rows else "no_match"),
+            "xstar_reference_match_delta_wavelength_A": (ref or {}).get("match_delta_wavelength_A", ""),
+            "xstar_reference_value_column": str(xstar_reference_value_column or "emit_outward"),
+            "xstar_reference_value": ref_value if ref_value is not None else "",
+            "xstar_reference_depth_inward": ref_depth_in if ref is not None else "",
+            "xstar_reference_depth_outward": ref_depth_out if ref is not None else "",
+            "xstar_reference_depth_scale": reference_depth_scale,
+            "xstar_reference_scaled_tau1": ref_tau1 if ref is not None else "",
+            "xstar_reference_scaled_tau2": ref_tau2 if ref is not None else "",
+            "xstar_reference_depth_ptmp1": ref_ptmp1 if ref is not None else "",
+            "xstar_reference_depth_ptmp2": ref_ptmp2 if ref is not None else "",
+            "xstar_reference_depth_calc_emis_fline2_outward_erg_s^-1": ref_f2 if ref is not None else "",
+            "xstar_reference_depth_outward_attenuation_vs_raw_pop_A_E": ref_f2 / raw if ref is not None and raw > 0.0 else "",
             "source_code_formula": "calc_emis_ion.f90 type-4/type-9: fline=max((ans2*abund2-ans1*abund1)*E*ptmp,0); ucalc.f90 type-50 provides ans2=A*(ptmp1+ptmp2) after tau0->pescl escape",
             "tau0_context_status": tau_ctx.get("status", ""),
             "tau0_source_code_path": tau_ctx.get("xstar_tau0_source_code_path", ""),
             "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
         })
-    for label, sums in (("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("xstar_tau0_calc_emis_ion", sums_xstar_tau0)):
+    summary_cases = [("raw_pop_A_E", sums_raw), ("transparent_tau0_calc_emis_ion", sums_trans), ("xstar_tau0_calc_emis_ion", sums_xstar_tau0)]
+    if reference_rows:
+        summary_cases.append(("xstar_reference_depth_emit_outward_calc_emis_ion", sums_reference_depth_outward))
+    for label, sums in summary_cases:
         summ = _component_fraction_summary_from_emissivities(sums)
         rows.append({
             "row_kind": "calc_emis_ion_triplet_emergent_summary",
@@ -653,6 +782,14 @@ def build_calc_emis_ion_triplet_emergent_rows(
             "target_f_fraction": target.get("f") if target else "",
             "target_i_fraction": target.get("i") if target else "",
             "target_r_fraction": target.get("r") if target else "",
+            "xstar_reference_line_csv": str(xstar_reference_lines_csv or ""),
+            "xstar_reference_value_column": str(xstar_reference_value_column or "emit_outward"),
+            "xstar_reference_depth_scale": reference_depth_scale if reference_rows else "",
+            "xstar_reference_f_fraction": reference_summary.get("reference_f_fraction", ""),
+            "xstar_reference_i_fraction": reference_summary.get("reference_i_fraction", ""),
+            "xstar_reference_r_fraction": reference_summary.get("reference_r_fraction", ""),
+            "xstar_reference_R": reference_summary.get("reference_R", ""),
+            "xstar_reference_G": reference_summary.get("reference_G", ""),
             "source_code_formula": "calc_emis_ion.f90 fline channels with ucalc.f90 type-50 swapped ans1/ans2",
             "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
         })
@@ -664,6 +801,7 @@ def _calc_emis_ion_triplet_emergent_summary(rows: Sequence[dict]) -> dict:
     by_case = {str(r.get("comparison_case")): r for r in summaries}
     xstar_tau = by_case.get("xstar_tau0_calc_emis_ion", {})
     transparent = by_case.get("transparent_tau0_calc_emis_ion", {})
+    reference_depth = by_case.get("xstar_reference_depth_emit_outward_calc_emis_ion", {})
     return {
         "n_calc_emis_ion_triplet_emergent_rows": len(rows),
         "n_calc_emis_ion_triplet_emergent_line_rows": sum(1 for r in rows if r.get("row_kind") == "calc_emis_ion_triplet_emergent_line"),
@@ -676,7 +814,17 @@ def _calc_emis_ion_triplet_emergent_summary(rows: Sequence[dict]) -> dict:
         "transparent_f_fraction": transparent.get("f_fraction", ""),
         "transparent_i_fraction": transparent.get("i_fraction", ""),
         "transparent_r_fraction": transparent.get("r_fraction", ""),
-        "conclusion_scope": "Ports calc_emis_ion fline formula and XSTAR tau0->pescl context for triplet records; standalone column options replace the missing radial transfer history.",
+        "xstar_reference_depth_f_fraction": reference_depth.get("f_fraction", ""),
+        "xstar_reference_depth_i_fraction": reference_depth.get("i_fraction", ""),
+        "xstar_reference_depth_r_fraction": reference_depth.get("r_fraction", ""),
+        "xstar_reference_depth_R": reference_depth.get("R", ""),
+        "xstar_reference_depth_G": reference_depth.get("G", ""),
+        "xstar_reference_f_fraction": reference_depth.get("xstar_reference_f_fraction", ""),
+        "xstar_reference_i_fraction": reference_depth.get("xstar_reference_i_fraction", ""),
+        "xstar_reference_r_fraction": reference_depth.get("xstar_reference_r_fraction", ""),
+        "xstar_reference_R": reference_depth.get("xstar_reference_R", ""),
+        "xstar_reference_G": reference_depth.get("xstar_reference_G", ""),
+        "conclusion_scope": "Ports calc_emis_ion fline formula and XSTAR tau0->pescl context for triplet records; optional XSTAR reference line CSV depths can be used as a validation-only emergent-line postprocess.",
         "provenance": "v0.3.89_geometry_derived_type50_tau0_calc_emis_ion",
     }
 
@@ -11786,6 +11934,9 @@ def solve_element_reference(
     xstar_line_cfrac: object = 0.0,
     xstar_line_tau1_fraction: object = 1.0,
     xstar_line_tau2_fraction: object = 1.0,
+    xstar_reference_lines_csv: object = None,
+    xstar_reference_value_column: object = "emit_outward",
+    xstar_reference_depth_scale: object = 1.0,
 ) -> dict:
     z = choose_z(str(element)) if not isinstance(element, int) else int(element)
     if z is None:
@@ -12365,6 +12516,9 @@ def solve_element_reference(
         xstar_line_cfrac=xstar_line_cfrac,
         xstar_line_tau1_fraction=xstar_line_tau1_fraction,
         xstar_line_tau2_fraction=xstar_line_tau2_fraction,
+        xstar_reference_lines_csv=xstar_reference_lines_csv,
+        xstar_reference_value_column=xstar_reference_value_column,
+        xstar_reference_depth_scale=xstar_reference_depth_scale,
     )
     # Add compact calc_emis_ion emergent triplet summaries to the primary full-global
     # comparison CSV so users can compare raw pop*A*E and emergent fline fractions

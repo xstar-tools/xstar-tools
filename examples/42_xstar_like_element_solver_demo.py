@@ -96,6 +96,9 @@ def main(argv=None):
     p.add_argument("--xstar-line-cfrac", default="0", help="Covering fraction cfrac for XSTAR calc_emis_ion ptmp1/ptmp2 escape channels. Default 0.")
     p.add_argument("--xstar-line-tau1-fraction", default="1", help="Fraction of the supplied line column assigned to tau0(1,jkkl). Default 1.")
     p.add_argument("--xstar-line-tau2-fraction", default="1", help="Fraction of the supplied line column assigned to tau0(2,jkkl). Default 1.")
+    p.add_argument("--xstar-reference-lines-csv", default="", help="Optional converted XSTAR xout_lines1 CSV whose line depths and emit_outward values are used for validation-only triplet line-escape postprocessing.")
+    p.add_argument("--xstar-reference-value-column", default="emit_outward", help="XSTAR reference line CSV column used to report target f/i/r fractions. Default emit_outward.")
+    p.add_argument("--xstar-reference-depth-scale", default="1", help="Scale factor applied to reference depth_inward/depth_outward before pescl in the validation-only reference-depth postprocess. Default 1.")
     p.add_argument("--no-full-global-prune-null-rate-levels", action="store_true", help="Disable pruning of null-rate global_index rows before the diagnostic full-global normalized solve.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
@@ -282,6 +285,9 @@ def main(argv=None):
         xstar_line_cfrac=args.xstar_line_cfrac,
         xstar_line_tau1_fraction=args.xstar_line_tau1_fraction,
         xstar_line_tau2_fraction=args.xstar_line_tau2_fraction,
+        xstar_reference_lines_csv=args.xstar_reference_lines_csv,
+        xstar_reference_value_column=args.xstar_reference_value_column,
+        xstar_reference_depth_scale=args.xstar_reference_depth_scale,
         full_global_prune_null_rate_levels=not args.no_full_global_prune_null_rate_levels,
     )
     write_element_solver_outputs(result, out)

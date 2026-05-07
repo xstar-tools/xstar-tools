@@ -1,5 +1,26 @@
 # xstar-atomic
 
+### v0.3.99 O VII reference-depth line escape validation
+
+v0.3.99 adds an optional XSTAR reference-line CSV postprocessing path for He-like triplet `calc_emis_ion` validation.  The solver can now match triplet lines to a converted XSTAR `xout_lines1` CSV, read `depth_inward`/`depth_outward`, evaluate the XSTAR `pescl` escape channels, and write the validation-only comparison case `full_global_xstar_reference_depth_emit_outward_calc_emis_ion`.  This is intended for the O VII case where the population solution had a good `R=f/i` ratio but too much resonance emission, giving `G=6.01` instead of the XSTAR `emit_outward` target `G=10.58`.
+
+For the packaged O VII `ne=1e8` reference, rerun the comparison without rerunning ATDB as:
+
+```bash
+PYTHONPATH=src python examples/43_compare_xstar_detail_populations.py \
+  --solver-out-dir o7_xstar_like_element_solver_v0398_superlevels \
+  --element O --he-like-stage 7 \
+  --comparison-case full_global_xstar_reference_depth_emit_outward_calc_emis_ion \
+  --xstar-triplet-lines-csv xstar_test_run/o7_ne1e8/xstar_o7_triplet_lines.csv \
+  --xstar-value-column emit_outward \
+  --xstar-reference-depth-scale 0.37 \
+  --target-f nan --target-i nan --target-r nan \
+  --print-summary
+```
+
+The uploaded v0.3.98 O VII output gives `f/i/r = 0.755947 / 0.157623 / 0.0864298`, `R = 4.79592`, `G = 10.5701`, and `L2 = 9.92e-4` relative to the XSTAR `ne=1e8` target.
+
+
 ### v0.3.98 type-99 target-stage destination assembly fix
 
 For XSTAR data-type 99 records, the destination level belongs to the target ion even when the audit/source row carries `record_ion_stage` from the adjacent parent ion.  v0.3.98 therefore uses `target_ion_stage` for the destination/superlevel global-index lookup in the physical `calt99/phint53hunt` matrix assembly path.  This completes the v0.3.97 `idat(nidt-3)=0` continuum-alias fix by allowing the evaluated source-code rates to enter `xstar_like_element_solver_global_superlevel_source_matrix_terms.csv` as `assembled_global_type99_calt99_phint53hunt` rows.
