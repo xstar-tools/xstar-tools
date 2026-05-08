@@ -1,5 +1,10 @@
 # xstar-atomic
 
+### v0.3.101 C V triplet-balance diagnostics
+
+v0.3.101 adds two validation helpers for the remaining C V intercombination/resonance residual. `examples/44_diagnose_helike_triplet_balance.py` compares C V and O VII solver-output audits, including type-50 3P_J -> 3S1 drains, density-scaled 3S/3P collisional coupling, type-71 cascade feed, and type-99 superlevel-source branch proxies. `examples/45_prepare_c5_xstar_triplet_reference.py` prepares the C V `xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv` reference path or converts an existing C V `xout_lines1.fits` file.
+
+
 ### v0.3.100 reference-depth scale warning
 
 v0.3.100 keeps the v0.3.99 O VII reference-depth postprocess unchanged, but prevents accidental silent use of the default depth scale.  When `examples/43_compare_xstar_detail_populations.py` is run with:

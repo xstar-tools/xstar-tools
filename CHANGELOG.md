@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.101 - C V triplet-balance diagnostics and C V XSTAR reference preparation - 2026-05-07
+
+- Added `examples/44_diagnose_helike_triplet_balance.py`, a diagnostic aggregator for full-global He-like solver outputs. It collates triplet component balances, type-50 3P_J -> 3S1 radiative drains, density-scaled 3S/3P collisional coupling, intercombination-feed categories, type-71 cascade feed into f/i/r, and type-99 superlevel-source branch proxies.
+- Added `examples/45_prepare_c5_xstar_triplet_reference.py`, a targeted helper to create the C V `ne=1e8` XSTAR run/conversion plan and, when an existing `xout_lines1.fits` is supplied, convert it to `xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv`.
+- Added regression tests for both new helpers.
+- No core population-matrix, type-50, type-53, type-71, type-74, type-77, type-99, ion-fraction-closure, or O VII reference-depth postprocess rates were changed.
+
 ## v0.3.100 - Reference-depth scale warning for O VII validation - 2026-05-07
 
 - Changed `examples/43_compare_xstar_detail_populations.py` so the validation-only comparison case `full_global_xstar_reference_depth_emit_outward_calc_emis_ion` no longer silently uses the default XSTAR reference depth scale when `--xstar-triplet-lines-csv` is supplied but `--xstar-reference-depth-scale` is omitted.
