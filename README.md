@@ -1,5 +1,7 @@
 # xstar-atomic
 
+Latest package note: v0.3.109 extends the C V resonance-collisional-feed diagnostics from v0.3.108. It adds `xstar_like_element_solver_resonance_collisional_feed_sourcecode_audit.csv`, corrects the resonance-feed scale scan to use the same `full_global_xstar_tau0_calc_emis_ion` comparison as the printed result, and expands the default diagnostic scan grid to include the C V optimum near scale 3.25. The scale remains diagnostic and the default matrix physics is unchanged.
+
 Latest package note: v0.3.108 adds a real direct collisional resonance-feed audit and matrix-scale diagnostic for the C V `1s2p 1P1` resonance upper level. `examples/42_xstar_like_element_solver_demo.py` now supports `--resonance-collisional-feed-scale` and writes `xstar_like_element_solver_resonance_collisional_feed_audit.csv` plus a scale-scan CSV.
 
 Previous package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.

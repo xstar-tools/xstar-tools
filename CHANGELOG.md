@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# v0.3.109 - 2026-05-08
+
+- Added `xstar_like_element_solver_resonance_collisional_feed_sourcecode_audit.csv`, a source-code-oriented diagnostic for the C V / He-like resonance upper `1s2p 1P1` collisional-feed rows.
+- The source-code audit records the type-63/type-69 `ucalc`/`calt*` formula path, source/helper Fortran files, statistical weights, global-index energy gaps, best diagnostic scan scale, and the inferred missing feed rate implied by the C V scale scan.
+- Corrected the internal `--resonance-collisional-feed-scale-scan` summary path to prefer the same `full_global_xstar_tau0_calc_emis_ion` comparison used by the top-level printed result, rather than the proxy normalized-topology summary row.
+- Expanded the default scan grid from `1,1.5,2,2.5` to `1,1.5,2,2.5,3,3.25,3.5,4` so the C V diagnostic optimum near 3.25 is sampled by default.
+- The empirical resonance-collisional scale remains diagnostic only. Default matrix physics remains `--resonance-collisional-feed-scale 1`; no core rates are changed unless the user explicitly supplies a different scale.
+
+Validation: `compileall` passed; selected pytest suite passed with expected skips.
+
 # v0.3.108 - 2026-05-08
 
 - Added a direct collisional feed audit for the He-like resonance/singlet upper level `1s2p 1P1`.

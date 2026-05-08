@@ -8232,7 +8232,7 @@ def build_resonance_collisional_feed_audit_rows(
             "factor_two_scaled_rate_s^-1": None if unscaled is None else 2.0 * float(unscaled),
             "xstar_comparison_status": "uses_solver_evaluated_calt_or_ucalc_rate; no independent XSTAR detail rate table supplied",
             "notes": "direct bound-bound collisional offdiag gain into He-like 1s2p 1P1 resonance upper level",
-            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+            "provenance": "v0.3.109_resonance_collisional_feed_audit",
         })
     rows.extend(detail)
     if detail:
@@ -8255,7 +8255,7 @@ def build_resonance_collisional_feed_audit_rows(
             "current_matrix_to_solver_rate_ratio": (total_scaled / total_unscaled) if total_unscaled > 0 else None,
             "factor_two_hypothesis_rate_sum_s^-1": 2.0 * total_unscaled,
             "factor_two_hypothesis_note": "v0.3.107 fixed-population scan suggested ~2x direct collisional feed into r has the right sign; this audit identifies the exact matrix rows.",
-            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+            "provenance": "v0.3.109_resonance_collisional_feed_audit",
         })
     else:
         rows.append({
@@ -8263,7 +8263,7 @@ def build_resonance_collisional_feed_audit_rows(
             "ion_stage": int(he_like_stage),
             "n_resonance_collisional_feed_rows": 0,
             "warning": "no direct collisional feed rows into He-like 1s2p 1P1 were found",
-            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+            "provenance": "v0.3.109_resonance_collisional_feed_audit",
         })
     return rows
 
@@ -8293,7 +8293,7 @@ def _resonance_collisional_feed_audit_summary(rows: Sequence[dict]) -> dict:
         "sum_solver_evaluated_rate_s^-1": _sum_float(detail, "solver_evaluated_rate_s^-1"),
         "sum_matrix_rate_s^-1": _sum_float(detail, "matrix_rate_s^-1"),
         "scale_values": sorted({str(r.get("resonance_collisional_feed_scale")) for r in detail}),
-        "provenance": "v0.3.108_resonance_collisional_feed_audit",
+        "provenance": "v0.3.109_resonance_collisional_feed_audit",
     }
 
 
@@ -8314,7 +8314,7 @@ def build_resonance_collisional_feed_scale_scan_rows(
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
     type50_photoexcitation_scale: object = 0.0,
-    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5",
+    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5,3,3.25,3.5,4",
     triplet_coupling_treatment: str = "normal",
     linear_solver: str = "xstar-lucy",
     rank_deficient_action: str = "svd",
@@ -8335,7 +8335,7 @@ def build_resonance_collisional_feed_scale_scan_rows(
             "r_fraction": target["r"],
             "R": target.get("R"),
             "G": target.get("G"),
-            "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+            "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
         })
     coupling_treatment_norm = _normalise_triplet_coupling_treatment(triplet_coupling_treatment)
     for scale0 in scales:
@@ -8380,7 +8380,17 @@ def build_resonance_collisional_feed_scale_scan_rows(
             negative_population_action=negative_population_action,
             prune_null_rate_levels=prune_null_rate_levels,
         )
-        sol = next((r for r in solve_rows if str(r.get("row_kind")) == "summary" and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), solve_rows[0] if solve_rows else {})
+        preferred_sol = next((
+            r for r in solve_rows
+            if str(r.get("row_kind")) == "summary"
+            and str(r.get("comparison_case")) == "full_global_xstar_tau0_calc_emis_ion"
+        ), None)
+        fallback_sol = next((
+            r for r in solve_rows
+            if str(r.get("row_kind")) == "summary"
+            and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"
+        ), None)
+        sol = preferred_sol or fallback_sol or (solve_rows[0] if solve_rows else {})
         detail = [r for r in audit if str(r.get("row_kind")) == "resonance_collisional_feed_audit"]
         rows.append({
             "row_kind": "resonance_collisional_feed_scale_scan",
@@ -8405,7 +8415,7 @@ def build_resonance_collisional_feed_scale_scan_rows(
             "l2_distance_to_target": sol.get("l2_distance_to_target"),
             "sum_population": sol.get("sum_population"),
             "normalization_residual": sol.get("normalization_residual"),
-            "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+            "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
         })
     return rows
 
@@ -8424,7 +8434,146 @@ def _resonance_collisional_feed_scale_scan_summary(rows: Sequence[dict]) -> dict
         "best_f_fraction": None if best is None else best.get("f_fraction"),
         "best_i_fraction": None if best is None else best.get("i_fraction"),
         "best_r_fraction": None if best is None else best.get("r_fraction"),
-        "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+        "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
+    }
+
+
+def _state_lookup_by_global_index(global_index_rows: Sequence[dict]) -> Dict[int, dict]:
+    out: Dict[int, dict] = {}
+    for row in global_index_rows:
+        gi = maybe_int(row.get("global_index"))
+        if gi is not None:
+            out[int(gi)] = dict(row)
+    return out
+
+
+def build_resonance_collisional_feed_sourcecode_audit_rows(
+    *,
+    resonance_collisional_feed_audit_rows: Sequence[dict],
+    resonance_collisional_feed_scale_scan_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Source-code-oriented audit for resonance-upper collisional feed.
+
+    This supplements the matrix-row audit with XSTAR ``ucalc`` formula notes and
+    target-aware scale diagnostics.  It is intentionally diagnostic-only: the
+    empirical scale inferred from the C V scan is not applied unless the user
+    explicitly sets ``--resonance-collisional-feed-scale``.
+    """
+    detail = [dict(r) for r in resonance_collisional_feed_audit_rows if str(r.get("row_kind")) == "resonance_collisional_feed_audit"]
+    scan = [dict(r) for r in resonance_collisional_feed_scale_scan_rows if str(r.get("scan_case")) == "full_global_resonance_collisional_feed_scale"]
+    target = next((dict(r) for r in resonance_collisional_feed_scale_scan_rows if str(r.get("scan_case")) == "xstar_target"), {})
+    by_g = _state_lookup_by_global_index(global_index_rows)
+
+    def _finite_or_none(v):
+        try:
+            x = float(v)
+            return x if math.isfinite(x) else None
+        except Exception:
+            return None
+
+    best = None
+    for row in scan:
+        l2 = _finite_or_none(row.get("l2_distance_to_target"))
+        if l2 is None:
+            continue
+        if best is None or l2 < float(best.get("l2_distance_to_target", float("inf"))):
+            best = row
+
+    target_r = _finite_or_none(target.get("r_fraction"))
+    baseline = next((r for r in scan if abs((_finite_or_none(r.get("resonance_collisional_feed_scale")) or -1.0) - 1.0) < 1e-12), None)
+    best_scale = None if best is None else _finite_or_none(best.get("resonance_collisional_feed_scale"))
+    baseline_r = None if baseline is None else _finite_or_none(baseline.get("r_fraction"))
+    best_r = None if best is None else _finite_or_none(best.get("r_fraction"))
+    needed_scale_linear_r = None
+    if target_r is not None and baseline_r is not None and best_r is not None and best_scale not in (None, 1.0):
+        denom = best_r - baseline_r
+        if abs(denom) > 0.0:
+            needed_scale_linear_r = 1.0 + (target_r - baseline_r) * (best_scale - 1.0) / denom
+
+    rows: List[dict] = []
+    total_unscaled = sum(float(r.get("solver_evaluated_rate_s^-1") or 0.0) for r in detail)
+    total_needed = None if best_scale is None else total_unscaled * best_scale
+    rows.append({
+        "row_kind": "resonance_collisional_feed_sourcecode_summary",
+        "ion_stage": int(he_like_stage),
+        "n_resonance_collisional_feed_rows": len(detail),
+        "unscaled_rate_sum_s^-1": total_unscaled,
+        "best_scan_scale": best_scale,
+        "best_scan_l2_distance_to_target": None if best is None else best.get("l2_distance_to_target"),
+        "best_scan_f_fraction": None if best is None else best.get("f_fraction"),
+        "best_scan_i_fraction": None if best is None else best.get("i_fraction"),
+        "best_scan_r_fraction": None if best is None else best.get("r_fraction"),
+        "xstar_target_f_fraction": target.get("f_fraction"),
+        "xstar_target_i_fraction": target.get("i_fraction"),
+        "xstar_target_r_fraction": target.get("r_fraction"),
+        "needed_scale_linear_from_r": needed_scale_linear_r,
+        "needed_rate_sum_from_best_scan_s^-1": total_needed,
+        "missing_rate_sum_relative_to_unscaled_s^-1": None if total_needed is None else total_needed - total_unscaled,
+        "diagnostic_conclusion": "C V scale scans indicate a resonance collisional feed factor near 3.25; this audit records the source-code path and rows but does not make that empirical factor default physics.",
+        "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
+    })
+
+    for r in detail:
+        dt = maybe_int(r.get("data_type"))
+        from_state = by_g.get(maybe_int(r.get("from_global_index")) or -999999, {})
+        to_state = by_g.get(maybe_int(r.get("to_global_index")) or -999999, {})
+        g_from = _finite_or_none(from_state.get("stat_weight")) or _finite_or_none(from_state.get("g"))
+        g_to = _finite_or_none(to_state.get("stat_weight")) or _finite_or_none(to_state.get("g"))
+        e_from = _finite_or_none(from_state.get("energy_eV"))
+        e_to = _finite_or_none(to_state.get("energy_eV"))
+        delta_e = None if e_from is None or e_to is None else abs(e_from - e_to)
+        unscaled = _finite_or_none(r.get("solver_evaluated_rate_s^-1"))
+        rows.append({
+            "row_kind": "resonance_collisional_feed_sourcecode_audit",
+            "element": r.get("element"),
+            "ion_stage": r.get("ion_stage"),
+            "record": r.get("record"),
+            "data_type": dt,
+            "transition_kind": r.get("transition_kind"),
+            "from_level": r.get("from_level"),
+            "to_level": r.get("to_level"),
+            "from_global_index": r.get("from_global_index"),
+            "to_global_index": r.get("to_global_index"),
+            "from_level_label": r.get("from_level_label"),
+            "to_level_label": r.get("to_level_label"),
+            "from_stat_weight": g_from,
+            "to_stat_weight": g_to,
+            "delta_e_eV_from_global_index": delta_e,
+            "solver_evaluated_rate_s^-1": unscaled,
+            "matrix_rate_s^-1": r.get("matrix_rate_s^-1"),
+            "best_scan_scaled_rate_s^-1": None if unscaled is None or best_scale is None else unscaled * best_scale,
+            "best_scan_scale": best_scale,
+            "xstar_ucalc_formula_note": (
+                "ucalc type 69: call calt69(temp=t*1e4), cji=8.626e-8*gamma/sqrt(T)/g_up, cij=cji*g_up*exp(-DeltaE/kT)/g_lo, ans1=cij*ne, ans2=cji*ne"
+                if dt == 69 else
+                "ucalc type 63 nf!=ni: call anl1/erc, ans1=se*(2*lf+1)*aa1/sum*ne and ans2=sd*(2*li+1)*aa1/sum*ne, with an in-source comment checking whether ans1/ans2 are inverted"
+                if dt == 63 else
+                "ucalc collisional bound-bound formula; source-code formula not specialized in this diagnostic"
+            ),
+            "xstar_source_file": "xstarlib/src/ucalc.f90" if dt in (63,69) else "xstarlib/src/ucalc.f90",
+            "xstar_helper_file": "xstarlib/src/calt69.f90" if dt == 69 else ("xstarlib/src/erc.f90; xstarlib/src/anl1.f90" if dt == 63 else ""),
+            "sourcecode_alignment_status": "solver uses its evaluated ucalc/calt path; empirical scale remains diagnostic pending independent XSTAR detail-rate comparison",
+            "possible_discrepancy_tests": "check ans1/ans2 direction, statistical-weight factors, n/l branch selector, unresolved fine-structure sum, and whether XSTAR line/detail output includes additional resonance feed routes",
+            "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
+        })
+    return rows
+
+
+def _resonance_collisional_feed_sourcecode_audit_summary(rows: Sequence[dict]) -> dict:
+    summary = next((r for r in rows if str(r.get("row_kind")) == "resonance_collisional_feed_sourcecode_summary"), {})
+    detail = [r for r in rows if str(r.get("row_kind")) == "resonance_collisional_feed_sourcecode_audit"]
+    return {
+        "n_rows": len(rows),
+        "n_detail_rows": len(detail),
+        "best_scan_scale": summary.get("best_scan_scale"),
+        "best_scan_l2_distance_to_target": summary.get("best_scan_l2_distance_to_target"),
+        "needed_scale_linear_from_r": summary.get("needed_scale_linear_from_r"),
+        "unscaled_rate_sum_s^-1": summary.get("unscaled_rate_sum_s^-1"),
+        "needed_rate_sum_from_best_scan_s^-1": summary.get("needed_rate_sum_from_best_scan_s^-1"),
+        "records_by_data_type": _counts(detail, "data_type"),
+        "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
     }
 
 def build_type50_escape_factor_scan_rows(
@@ -12366,7 +12515,7 @@ def solve_element_reference(
     type50_photoexcitation_scale: object = 0.0,
     type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
     resonance_collisional_feed_scale: object = 1.0,
-    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5",
+    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5,3,3.25,3.5,4",
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -12893,6 +13042,12 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
+    resonance_collisional_feed_sourcecode_audit_rows = build_resonance_collisional_feed_sourcecode_audit_rows(
+        resonance_collisional_feed_audit_rows=resonance_collisional_feed_audit_rows,
+        resonance_collisional_feed_scale_scan_rows=resonance_collisional_feed_scale_scan_rows,
+        global_index_rows=global_index_rows,
+        he_like_stage=he_like_stage,
+    )
     triplet_coupling_suppression_comparison_rows = build_triplet_coupling_suppression_comparison_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -13067,6 +13222,8 @@ def solve_element_reference(
             "resonance_collisional_feed_audit_summary": _resonance_collisional_feed_audit_summary(resonance_collisional_feed_audit_rows),
             "n_resonance_collisional_feed_scale_scan_rows": len(resonance_collisional_feed_scale_scan_rows),
             "resonance_collisional_feed_scale_scan_summary": _resonance_collisional_feed_scale_scan_summary(resonance_collisional_feed_scale_scan_rows),
+            "n_resonance_collisional_feed_sourcecode_audit_rows": len(resonance_collisional_feed_sourcecode_audit_rows),
+            "resonance_collisional_feed_sourcecode_audit_summary": _resonance_collisional_feed_sourcecode_audit_summary(resonance_collisional_feed_sourcecode_audit_rows),
             "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
             "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
             "n_global_bound_bound_type71_solve_comparison_rows": len(global_bound_bound_type71_solve_comparison_rows),
@@ -13174,6 +13331,7 @@ def solve_element_reference(
         "type50_escape_factor_scan": type50_escape_factor_scan_rows,
         "resonance_collisional_feed_audit": resonance_collisional_feed_audit_rows,
         "resonance_collisional_feed_scale_scan": resonance_collisional_feed_scale_scan_rows,
+        "resonance_collisional_feed_sourcecode_audit": resonance_collisional_feed_sourcecode_audit_rows,
         "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
         "global_superlevel_source_matrix_terms": global_superlevel_source_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
@@ -14967,6 +15125,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     type50_escape_factor_scan_rows = result.get("type50_escape_factor_scan", [])
     resonance_collisional_feed_audit_rows = result.get("resonance_collisional_feed_audit", [])
     resonance_collisional_feed_scale_scan_rows = result.get("resonance_collisional_feed_scale_scan", [])
+    resonance_collisional_feed_sourcecode_audit_rows = result.get("resonance_collisional_feed_sourcecode_audit", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -15048,6 +15207,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
             result["summary"]["global_superlevel_cascade_matrix_terms_summary"] = _global_superlevel_cascade_matrix_terms_summary(global_superlevel_cascade_matrix_terms)
         if global_superlevel_source_matrix_terms:
             result["summary"]["global_superlevel_source_matrix_terms_summary"] = _global_superlevel_source_matrix_terms_summary(global_superlevel_source_matrix_terms)
+        if resonance_collisional_feed_sourcecode_audit_rows:
+            result["summary"]["resonance_collisional_feed_sourcecode_audit_summary"] = _resonance_collisional_feed_sourcecode_audit_summary(resonance_collisional_feed_sourcecode_audit_rows)
     write_csv(out / "xstar_like_element_solver_ion_blocks.csv", result.get("ion_blocks", []))
     write_csv(out / "xstar_like_element_solver_global_index.csv", result.get("global_index", []))
     write_csv(out / "xstar_like_element_solver_xstar_matrix_topology_audit.csv", xstar_matrix_topology_audit_rows)
@@ -15069,6 +15230,7 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", type50_escape_factor_scan_rows)
     write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_audit.csv", resonance_collisional_feed_audit_rows)
     write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv", resonance_collisional_feed_scale_scan_rows)
+    write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_sourcecode_audit.csv", resonance_collisional_feed_sourcecode_audit_rows)
     write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
