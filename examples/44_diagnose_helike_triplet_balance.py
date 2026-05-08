@@ -108,6 +108,34 @@ def _path(solver_dir: Path, name: str) -> Path:
     return path
 
 
+def _read_solver_csv(
+    label: str,
+    solver_dir: Path,
+    name: str,
+    warnings: List[str],
+) -> List[Dict[str, Any]]:
+    """Read an optional solver audit CSV.
+
+    Older output directories, partially copied validation directories, or quick
+    reruns may not contain every diagnostic audit written by the newest solver.
+    This triplet-balance aggregator should still collate the available pieces
+    instead of aborting on the first missing optional file.
+    """
+    path = solver_dir / name
+    if not path.exists():
+        warnings.append(f"{label}: missing optional audit {name} in {solver_dir}; skipped that diagnostic block.")
+        return []
+    return _read_csv(path)
+
+
+def _missing_row(label: str, name: str) -> Dict[str, Any]:
+    return {
+        "case_label": label,
+        "status": "missing_optional_audit",
+        "missing_file": name,
+    }
+
+
 def _parse_case(text: str) -> Tuple[str, Path]:
     if ":" not in text:
         path = Path(text)
@@ -123,8 +151,13 @@ def _parse_label_path(text: str) -> Tuple[str, Path]:
     return label.strip(), Path(path.strip())
 
 
-def _component_balance(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_triplet_component_balance_audit.csv"))
+def _component_balance(label: str, solver_dir: Path, warnings: List[str]) -> List[Dict[str, Any]]:
+    name = "xstar_like_element_solver_triplet_component_balance_audit.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
+    if not rows:
+        row = _missing_row(label, name)
+        row["component"] = "missing_audit"
+        return [row]
     out: List[Dict[str, Any]] = []
     by_comp: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -171,8 +204,9 @@ def _component_balance(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def _type50_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_triplet_coupling_record_audit.csv"))
+def _type50_summary(label: str, solver_dir: Path, warnings: List[str]) -> List[Dict[str, Any]]:
+    name = "xstar_like_element_solver_triplet_coupling_record_audit.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
     out: List[Dict[str, Any]] = []
     for row in rows:
         if str(row.get("audit_kind", "")) == "triplet_3S_3P_coupling_audit_summary":
@@ -187,7 +221,8 @@ def _type50_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
                     "diagnostic_conclusion": row.get("diagnostic_conclusion", ""),
                 }
             )
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_type50_ucalc_rate_audit.csv"))
+    name = "xstar_like_element_solver_type50_ucalc_rate_audit.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
     for row in rows:
         if str(row.get("row_kind", "")) == "type50_ucalc_rate_audit_summary":
             out.append(
@@ -206,8 +241,11 @@ def _type50_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def _intercombination_feed_categories(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_intercombination_feed_audit.csv"))
+def _intercombination_feed_categories(label: str, solver_dir: Path, warnings: List[str]) -> List[Dict[str, Any]]:
+    name = "xstar_like_element_solver_intercombination_feed_audit.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
+    if not rows:
+        return [_missing_row(label, name)]
     grouped: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for row in rows:
         key = (
@@ -233,8 +271,13 @@ def _intercombination_feed_categories(label: str, solver_dir: Path) -> List[Dict
     return sorted(grouped.values(), key=lambda r: abs(float(r.get("rate_sum_s^-1") or 0.0)), reverse=True)
 
 
-def _type71_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv"))
+def _type71_summary(label: str, solver_dir: Path, warnings: List[str]) -> List[Dict[str, Any]]:
+    name = "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
+    if not rows:
+        row = _missing_row(label, name)
+        row["destination_triplet_component"] = "missing_audit"
+        return [row]
     grouped: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         comp = str(row.get("destination_triplet_component", "")).strip()
@@ -260,8 +303,11 @@ def _type71_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def _type99_summary(label: str, solver_dir: Path) -> List[Dict[str, Any]]:
-    rows = _read_csv(_path(solver_dir, "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv"))
+def _type99_summary(label: str, solver_dir: Path, warnings: List[str]) -> List[Dict[str, Any]]:
+    name = "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv"
+    rows = _read_solver_csv(label, solver_dir, name, warnings)
+    if not rows:
+        return [_missing_row(label, name)]
     grouped: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for row in rows:
         key = (
@@ -376,6 +422,13 @@ def _write_markdown(path: Path, payload: Dict[str, Any]) -> None:
         lines.append(
             f"| {row.get('case_label')} | {sf}/{si}/{sr} | {row.get('solver_R')} | {row.get('solver_G')} | {xf}/{xi}/{xr} | {row.get('xstar_R')} | {row.get('xstar_G')} |"
         )
+    lines += ["", "## Warnings", ""]
+    warnings = payload.get("warnings", [])
+    if warnings:
+        for warning in warnings:
+            lines.append(f"- {warning}")
+    else:
+        lines.append("- None.")
     lines += ["", "## Type-50 / 3P-3S coupling summary", "", "| case | row | radiative i->f | collisional f->i | ratio | escaped 3P->3S sum |", "|---|---|---:|---:|---:|---:|"]
     for row in payload.get("type50_summary", []):
         lines.append(
@@ -443,14 +496,15 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         "intercombination_feed_categories": [],
         "type71_summary": [],
         "type99_summary": [],
+        "warnings": [],
     }
     for label, solver_dir in cases:
         payload["triplet_summary"].append(_triplet_summary(label, solver_dir, xstar_by_label.get(label), args.xstar_value_column))
-        payload["component_balance"].extend(_component_balance(label, solver_dir))
-        payload["type50_summary"].extend(_type50_summary(label, solver_dir))
-        payload["intercombination_feed_categories"].extend(_intercombination_feed_categories(label, solver_dir))
-        payload["type71_summary"].extend(_type71_summary(label, solver_dir))
-        payload["type99_summary"].extend(_type99_summary(label, solver_dir))
+        payload["component_balance"].extend(_component_balance(label, solver_dir, payload["warnings"]))
+        payload["type50_summary"].extend(_type50_summary(label, solver_dir, payload["warnings"]))
+        payload["intercombination_feed_categories"].extend(_intercombination_feed_categories(label, solver_dir, payload["warnings"]))
+        payload["type71_summary"].extend(_type71_summary(label, solver_dir, payload["warnings"]))
+        payload["type99_summary"].extend(_type99_summary(label, solver_dir, payload["warnings"]))
     payload["conclusions"] = _automatic_conclusions(payload)
 
     _write_csv(out_dir / "helike_triplet_summary.csv", payload["triplet_summary"])
@@ -474,6 +528,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print("conclusions:")
         for item in payload["conclusions"]:
             print(f"- {item}")
+        if payload.get("warnings"):
+            print("warnings:")
+            for item in payload["warnings"]:
+                print(f"- {item}")
         print(f"wrote: {out_dir / 'helike_triplet_balance_diagnostic.md'}")
 
 

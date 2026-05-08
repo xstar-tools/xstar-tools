@@ -120,6 +120,34 @@ def test_diagnose_helike_triplet_balance_outputs(tmp_path: Path) -> None:
     assert any("C V intercombination fraction is high" in c for c in payload["conclusions"])
 
 
+def test_diagnose_helike_triplet_balance_skips_missing_optional_audits(tmp_path: Path) -> None:
+    solver = tmp_path / "solver_missing_optional"
+    _make_solver_dir(solver)
+    # Simulate a partially copied or older solver output directory.  The
+    # diagnostic should still write summaries and warn, instead of aborting.
+    (solver / "xstar_like_element_solver_triplet_component_balance_audit.csv").unlink()
+    out = tmp_path / "diag_missing"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "examples" / "44_diagnose_helike_triplet_balance.py"),
+            "--case",
+            f"C V:{solver}",
+            "--out-dir",
+            str(out),
+            "--print-summary",
+        ],
+        check=True,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert "missing optional audit xstar_like_element_solver_triplet_component_balance_audit.csv" in completed.stdout
+    payload = json.loads((out / "helike_triplet_balance_diagnostic_summary.json").read_text(encoding="utf-8"))
+    assert payload["warnings"]
+    assert payload["component_balance"][0]["status"] == "missing_optional_audit"
+
+
 def test_prepare_c5_xstar_triplet_reference_plan(tmp_path: Path) -> None:
     subprocess.run(
         [

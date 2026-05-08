@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.102 - 2026-05-08
+
+- Made `examples/44_diagnose_helike_triplet_balance.py` robust to partially copied or older solver-output directories. Missing diagnostic audit CSVs are now treated as optional for the triplet-balance aggregator: the script records a warning, writes placeholder `missing_optional_audit` rows in the corresponding summary CSV, and continues collating the available triplet, type-50, type-71, type-99, and XSTAR-line-reference information.
+- Added regression coverage for the missing-optional-audit path.
+- Added the generated C V `ne=1e8` XSTAR triplet reference CSV at `xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv` from the local XSTAR 2.59g run/conversion workflow. Its `emit_outward` target is `f/i/r = 0.807706219 / 0.006633342 / 0.185660439`, `R = 121.765`, and `G = 4.38618`.
+- No changes were made to the core population matrix, type-99 `calt99/phint53hunt`, type-71 `calt71`, type-77 `calt77`, type-53/type-74 inverse paths, ion-fraction closure, O VII reference-depth postprocess, or C V/O VII solver results.
+
 ## v0.3.101 - C V triplet-balance diagnostics and C V XSTAR reference preparation - 2026-05-07
 
 - Added `examples/44_diagnose_helike_triplet_balance.py`, a diagnostic aggregator for full-global He-like solver outputs. It collates triplet component balances, type-50 3P_J -> 3S1 radiative drains, density-scaled 3S/3P collisional coupling, intercombination-feed categories, type-71 cascade feed into f/i/r, and type-99 superlevel-source branch proxies.
