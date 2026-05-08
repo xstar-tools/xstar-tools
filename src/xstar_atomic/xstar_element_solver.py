@@ -4435,7 +4435,7 @@ def _global_index_lookup(rows: Sequence[dict]) -> Dict[tuple[int, int], dict]:
 
 
 def _normalise_type50_bound_bound_treatment(value: object) -> str:
-    """Return a supported v0.3.67 type-50 bound-bound treatment string."""
+    """Return a supported type-50 bound-bound treatment string."""
     text = str(value or "raw-A").strip().lower().replace("_", "-")
     aliases = {
         "": "raw-A",
@@ -4446,6 +4446,10 @@ def _normalise_type50_bound_bound_treatment(value: object) -> str:
         "raw-A": "raw-A",
         "xstar-escape": "xstar-escape",
         "escape": "xstar-escape",
+        "xstar-line-escape": "xstar-line-escape",
+        "line-escape": "xstar-line-escape",
+        "xstar-pescl": "xstar-line-escape",
+        "pescl": "xstar-line-escape",
         "xstar-escape-photoexcitation": "xstar-escape-photoexcitation",
         "escape-photoexcitation": "xstar-escape-photoexcitation",
         "photoexcitation": "xstar-escape-photoexcitation",
@@ -4479,37 +4483,179 @@ def _is_type50_radiative_transition(row: Mapping[str, object]) -> bool:
     return str(row.get("kind") or row.get("transition_kind") or "") == "radiative_decay" and _infer_transition_data_type(row) == 50
 
 
+def _first_finite_float(row: Mapping[str, object], names: Sequence[str]) -> Optional[float]:
+    """Return the first finite float found under one of ``names``."""
+    for name in names:
+        val = maybe_float(row.get(name))
+        if val is not None and math.isfinite(float(val)):
+            return float(val)
+    return None
+
+
+def _state_text_matches(state: Optional[Mapping[str, object]], pattern: str) -> bool:
+    if state is None:
+        return False
+    text = " ".join(
+        str(state.get(key) or "")
+        for key in ("level_label", "configuration", "term", "label")
+    )
+    return pattern in text.replace(" ", "")
+
+
+def _is_helike_triplet_3p_to_3s_drain(
+    row: Mapping[str, object],
+    *,
+    from_state: Optional[Mapping[str, object]] = None,
+    to_state: Optional[Mapping[str, object]] = None,
+) -> bool:
+    """Identify He-like intra-triplet ``1s2p 3P_J -> 1s2s 3S1`` decays.
+
+    These type-50 UV/IR drains are optically thin in the current C V/O VII
+    XSTAR reference cases.  They strongly control the 3P_J population and
+    therefore the intercombination component.  The v0.3.104
+    ``xstar-line-escape`` interim mode treats them as tau0=0 when no explicit
+    line optical depth is present, so ``ptmp1+ptmp2=1`` instead of using the
+    old scalar escape proxy for all type-50 lines.
+    """
+    if not _is_type50_radiative_transition(row):
+        return False
+    from_level = maybe_int(row.get("from_level"))
+    to_level = maybe_int(row.get("to_level"))
+    # Fast path for the common ATDB He-like level ordering used by C V/O VII.
+    if from_level in {4, 5, 6} and to_level == 2:
+        return True
+    # Label-based path for audits where state metadata is available.
+    from_is_3p = _state_text_matches(from_state, "1s1.2p1.3P") or _state_text_matches(from_state, "1s2p3P")
+    to_is_3s = _state_text_matches(to_state, "1s1.2s1.3S") or _state_text_matches(to_state, "1s2s3S")
+    return bool(from_is_3p and to_is_3s)
+
+
+def _xstar_line_escape_from_row(
+    row: Mapping[str, object],
+    *,
+    from_state: Optional[Mapping[str, object]] = None,
+    to_state: Optional[Mapping[str, object]] = None,
+    fallback_escape_factor: object = 1.0,
+) -> dict:
+    """Evaluate XSTAR-style type-50 line escape or an audited fallback.
+
+    If a row already carries line optical depths, use the source-code
+    ``pescl(tau0)`` channels.  The present solver outputs do not yet carry
+    true per-line ``tau0`` for every population-matrix transition, so the
+    interim source-code-aligned fallback handles the known optically-thin
+    He-like ``3P_J -> 3S1`` drains as ``tau0=0`` while preserving the previous
+    scalar proxy for other type-50 lines.
+    """
+    tau1 = _first_finite_float(row, (
+        "tau1", "tau_1", "tau0_1", "tau0_inward", "tau_inward",
+        "depth_inward", "line_depth_inward", "xstar_depth_inward",
+        "tau1_xstar", "tau0_1_xstar",
+    ))
+    tau2 = _first_finite_float(row, (
+        "tau2", "tau_2", "tau0_2", "tau0_outward", "tau_outward",
+        "depth_outward", "line_depth_outward", "xstar_depth_outward",
+        "tau2_xstar", "tau0_2_xstar",
+    ))
+    cfrac = _first_finite_float(row, ("cfrac", "covering_fraction", "xstar_cfrac"))
+    if cfrac is None:
+        cfrac = 0.0
+    if tau1 is not None or tau2 is not None:
+        ptmp1, ptmp2 = _xstar_calc_emis_ptmp_from_tau(float(tau1 or 0.0), float(tau2 or 0.0), float(cfrac))
+        return {
+            "ptmp1": ptmp1,
+            "ptmp2": ptmp2,
+            "ptmp_sum": ptmp1 + ptmp2,
+            "tau1": float(tau1 or 0.0),
+            "tau2": float(tau2 or 0.0),
+            "cfrac": float(cfrac),
+            "status": "xstar_line_escape_from_row_tau0_pescl",
+            "fallback_used": False,
+        }
+    if _is_helike_triplet_3p_to_3s_drain(row, from_state=from_state, to_state=to_state):
+        ptmp1, ptmp2 = _xstar_calc_emis_ptmp_from_tau(0.0, 0.0, 0.0)
+        return {
+            "ptmp1": ptmp1,
+            "ptmp2": ptmp2,
+            "ptmp_sum": ptmp1 + ptmp2,
+            "tau1": 0.0,
+            "tau2": 0.0,
+            "cfrac": 0.0,
+            "status": "xstar_line_escape_tau0_missing_optically_thin_helike_3p_to_3s_fallback",
+            "fallback_used": True,
+        }
+    user_escape = _bounded_nonnegative_float(fallback_escape_factor, 1.0)
+    user_escape = min(user_escape, 1.0)
+    return {
+        "ptmp1": 0.5 * user_escape,
+        "ptmp2": 0.5 * user_escape,
+        "ptmp_sum": user_escape,
+        "tau1": None,
+        "tau2": None,
+        "cfrac": float(cfrac),
+        "status": "xstar_line_escape_tau0_missing_scalar_proxy_fallback",
+        "fallback_used": True,
+    }
+
+
 def _type50_effective_rates(
     row: Mapping[str, object],
     *,
     treatment: str,
     escape_factor: object = 1.0,
     photoexcitation_scale: object = 0.0,
+    from_state: Optional[Mapping[str, object]] = None,
+    to_state: Optional[Mapping[str, object]] = None,
 ) -> dict:
-    """Return controlled v0.3.67 XSTAR-ucalc-style type-50 rate proxies.
+    """Return controlled XSTAR-ucalc-style type-50 population rates.
 
     XSTAR's ``ucalc`` type-50 branch does not pass a raw A-value directly to
-    the population matrix.  It forms an escaped downward rate roughly
-    ``A*(ptmp1+ptmp2)`` and an upward radiation-field pumping term.  This helper
-    keeps the default ``raw-A`` behavior unchanged while exposing a controlled
-    diagnostic treatment for testing the impact of escape and pumping.
+    the population matrix.  It forms an escaped downward rate
+    ``A*(ptmp1+ptmp2)`` from the line optical depths and ``pescl`` escape
+    channels.  ``raw-A`` preserves the historic solver behavior.
+
+    ``xstar-escape`` keeps the older scalar proxy.  ``xstar-line-escape`` is the
+    v0.3.104 source-code-aligned path: use row-provided tau0 when present; if
+    tau0 is not yet available, use an optically-thin tau0=0 fallback only for
+    He-like ``1s2p 3P_J -> 1s2s 3S1`` intra-triplet drains and retain the
+    scalar fallback for other lines.
     """
     treatment_norm = _normalise_type50_bound_bound_treatment(treatment)
     raw_a = _bounded_nonnegative_float(row.get("rate_s^-1"), 0.0)
     user_escape = _bounded_nonnegative_float(escape_factor, 1.0)
     user_escape = min(user_escape, 1.0)
-    # In the absence of a ported optical-depth/escape calculation, split the
-    # user-supplied total escape factor equally into the two XSTAR fline channels.
     ptmp1 = 0.5 * user_escape
     ptmp2 = 0.5 * user_escape
     ptmp_sum = ptmp1 + ptmp2
+    xstar_tau1 = None
+    xstar_tau2 = None
+    xstar_cfrac = None
+    line_escape_fallback_used = False
+    intra_triplet_3p_to_3s = _is_helike_triplet_3p_to_3s_drain(row, from_state=from_state, to_state=to_state)
     if treatment_norm == "raw-A" or not _is_type50_radiative_transition(row):
         decay = raw_a
         ptmp1 = 0.5
         ptmp2 = 0.5
         ptmp_sum = 1.0
         pumping = 0.0
+        context_status = "raw_A_default"
     else:
+        if treatment_norm == "xstar-line-escape":
+            esc = _xstar_line_escape_from_row(
+                row,
+                from_state=from_state,
+                to_state=to_state,
+                fallback_escape_factor=user_escape,
+            )
+            ptmp1 = float(esc["ptmp1"])
+            ptmp2 = float(esc["ptmp2"])
+            ptmp_sum = float(esc["ptmp_sum"])
+            xstar_tau1 = esc.get("tau1")
+            xstar_tau2 = esc.get("tau2")
+            xstar_cfrac = esc.get("cfrac")
+            line_escape_fallback_used = bool(esc.get("fallback_used"))
+            context_status = str(esc.get("status"))
+        else:
+            context_status = "diagnostic_escape_proxy_no_real_tau_or_bremsa_line_integral"
         decay = raw_a * ptmp_sum
         pumping_scale = _bounded_nonnegative_float(photoexcitation_scale, 0.0)
         pumping = raw_a * pumping_scale if treatment_norm == "xstar-escape-photoexcitation" else 0.0
@@ -4519,13 +4665,18 @@ def _type50_effective_rates(
         "ptmp1_proxy": ptmp1,
         "ptmp2_proxy": ptmp2,
         "ptmp_sum_proxy": ptmp_sum,
+        "xstar_tau1_for_type50_escape": xstar_tau1,
+        "xstar_tau2_for_type50_escape": xstar_tau2,
+        "xstar_cfrac_for_type50_escape": xstar_cfrac,
+        "type50_line_escape_fallback_used": line_escape_fallback_used,
+        "type50_is_helike_3p_to_3s_drain": intra_triplet_3p_to_3s,
         "escaped_decay_rate_s^-1": decay,
         "photoexcitation_rate_s^-1": pumping,
         "decay_rate_multiplier_vs_raw_A": (decay / raw_a) if raw_a > 0 else None,
         "photoexcitation_rate_multiplier_vs_raw_A": (pumping / raw_a) if raw_a > 0 else None,
         "ucalc_ans1_matrix_lower_to_upper_proxy_s^-1": pumping,
         "ucalc_ans2_matrix_upper_to_lower_proxy_s^-1": decay,
-        "ucalc_context_status": "raw_A_default" if treatment_norm == "raw-A" else "diagnostic_escape_proxy_no_real_tau_or_bremsa_line_integral",
+        "ucalc_context_status": context_status,
     }
 
 def build_global_bound_bound_matrix_terms(
@@ -4572,15 +4723,17 @@ def build_global_bound_bound_matrix_terms(
             continue
         if not math.isfinite(float(rate)) or float(rate) <= 0.0:
             continue
+        from_row = lookup.get((int(stage), int(from_level)))
+        to_row = lookup.get((int(stage), int(to_level)))
         type50_rates = _type50_effective_rates(
             tr,
             treatment=type50_bound_bound_treatment,
             escape_factor=type50_escape_factor,
             photoexcitation_scale=type50_photoexcitation_scale,
+            from_state=from_row,
+            to_state=to_row,
         )
         effective_rate = float(type50_rates["escaped_decay_rate_s^-1"]) if _is_type50_radiative_transition(tr) else float(rate)
-        from_row = lookup.get((int(stage), int(from_level)))
-        to_row = lookup.get((int(stage), int(to_level)))
         if from_row is None or to_row is None:
             missing = []
             if from_row is None:
@@ -9716,7 +9869,7 @@ def build_type50_ucalc_rate_audit_rows(
             "sum_escaped_decay_helike_3p_to_3s_s^-1": sum(float(r.get("escaped_decay_rate_s^-1") or 0.0) for r in triplet),
             "sum_photoexcitation_3s_to_3p_proxy_s^-1": sum(float(r.get("photoexcitation_rate_s^-1") or 0.0) for r in triplet),
             "treatment": triplet[0].get("type50_bound_bound_treatment") if triplet else "",
-            "diagnostic_note": "Default raw-A reproduces v0.3.66. xstar-escape and xstar-escape-photoexcitation are controlled diagnostics until real tau, pescl/pescv, bremsa, and flinabs are ported.",
+            "diagnostic_note": "Default raw-A reproduces v0.3.66. xstar-escape is the legacy scalar proxy; xstar-line-escape uses source-code pescl(tau0) when tau is present and an optically thin fallback for He-like 3P_J->3S1 drains; xstar-escape-photoexcitation remains diagnostic until real bremsa/flinabs pumping is ported.",
             "provenance": "v0.3.67_type50_ucalc_bound_bound_rate_audit",
         })
     return out

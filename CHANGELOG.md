@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## v0.3.104 - 2026-05-08
+
+- Added `--type50-bound-bound-treatment xstar-line-escape` for the XSTAR-like element solver.
+- The new mode is a source-code-aligned type-50 population-rate path: when a transition row carries line optical depths, it evaluates the XSTAR `pescl(tau0)` escape channels and uses `A * (ptmp1 + ptmp2)` in the population matrix.
+- Because true per-line `tau0` is still not available for every population-matrix transition, the interim fallback treats He-like intra-triplet `1s2p 3P_J -> 1s2s 3S1` drains as optically thin (`tau0=0`, `ptmp1+ptmp2=1.0`) while preserving the previous scalar escape-factor fallback for other missing-tau type-50 lines.
+- Added audit columns to type-50 matrix terms: `xstar_tau1_for_type50_escape`, `xstar_tau2_for_type50_escape`, `xstar_cfrac_for_type50_escape`, `type50_line_escape_fallback_used`, and `type50_is_helike_3p_to_3s_drain`.
+- Kept `xstar-escape` as the legacy scalar proxy and `xstar-escape-photoexcitation` as the diagnostic pumping proxy. No type-71, type-77, type-99, type-53/type-74 inverse, ion-fraction-closure, or reference-depth postprocessing behavior was intentionally changed.
+- Added a focused regression test for `xstar-line-escape` fallback behavior.
+
+Validation in this environment:
+
+```text
+compileall: passed
+pytest tests/test_type50_line_escape.py tests/test_helike_triplet_balance_diagnostics.py tests/test_xstar_detail_population_compare_example.py tests/test_package_metadata.py tests/test_cli_smoke.py
+9 passed, 3 skipped
+```
+
 ## v0.3.103 - 2026-05-08
 
 - Made `examples/44_diagnose_helike_triplet_balance.py` recover the top-level solver triplet f/i/r summary from available summary products before optional audit diagnostics are read.
