@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.103 - 2026-05-08
+
+- Made `examples/44_diagnose_helike_triplet_balance.py` recover the top-level solver triplet f/i/r summary from available summary products before optional audit diagnostics are read.
+- Added fallback readers for `xstar_like_element_solver_summary.json`, `xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv`, and `xstar_like_element_solver_triplet.csv`.
+- Missing optional audit CSVs still produce warnings/placeholders, but the printed case summary no longer degrades to `solver f/i/r=None` when comparison or solver summary products exist.
+- No core population matrix, type-99, type-71, type-77, type-53/type-74, ion-fraction, or line-depth physics were changed.
+
+# Changelog
+
 ## v0.3.102 - 2026-05-08
 
 - Made `examples/44_diagnose_helike_triplet_balance.py` robust to partially copied or older solver-output directories. Missing diagnostic audit CSVs are now treated as optional for the triplet-balance aggregator: the script records a warning, writes placeholder `missing_optional_audit` rows in the corresponding summary CSV, and continues collating the available triplet, type-50, type-71, type-99, and XSTAR-line-reference information.

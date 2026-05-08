@@ -339,17 +339,180 @@ def _type99_summary(label: str, solver_dir: Path, warnings: List[str]) -> List[D
     return sorted(grouped.values(), key=lambda r: abs(float(r.get("rate_sum_s^-1") or 0.0)), reverse=True)
 
 
+def _copy_triplet_fields(out: Dict[str, Any], trip: Dict[str, Any], source: str) -> bool:
+    """Copy a triplet summary into the canonical solver_* fields.
+
+    The balance diagnostic is often run on older or partially copied output
+    directories.  Some of those directories contain only the main solver summary,
+    only the compare-script summary, or only the calc_emis triplet CSV.  Keep the
+    top-level f/i/r summary robust by accepting any of those sources.
+    """
+    if not isinstance(trip, dict):
+        return False
+    fields = (
+        "f_fraction",
+        "i_fraction",
+        "r_fraction",
+        "R",
+        "G",
+        "l2_distance_to_target",
+        "target_f_fraction",
+        "target_i_fraction",
+        "target_r_fraction",
+    )
+    copied = False
+    for key in fields:
+        value = trip.get(key)
+        if value is not None and str(value).strip() != "":
+            out[f"solver_{key}"] = value
+            copied = True
+    if copied and not out.get("solver_triplet_source"):
+        out["solver_triplet_source"] = source
+    return copied
+
+
+def _summary_json_triplet_candidates(payload: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+    """Return triplet-like dictionaries from the main solver summary JSON."""
+    candidates: List[Tuple[str, Dict[str, Any]]] = []
+    keys = (
+        "calc_emis_ion_triplet_emergent_summary",
+        "calc_emis_triplet_audit_summary",
+        "triplet_emissivity_branch_audit_summary",
+        "full_global_normalized_solve_comparison_summary",
+        "he_like_triplet",
+    )
+    for key in keys:
+        item = payload.get(key)
+        if not isinstance(item, dict):
+            continue
+        if key == "calc_emis_ion_triplet_emergent_summary":
+            trip: Dict[str, Any] = {}
+            for prefix in ("xstar_tau0", "transparent"):
+                if item.get(f"{prefix}_f_fraction") not in (None, ""):
+                    trip = {
+                        "f_fraction": item.get(f"{prefix}_f_fraction"),
+                        "i_fraction": item.get(f"{prefix}_i_fraction"),
+                        "r_fraction": item.get(f"{prefix}_r_fraction"),
+                        "R": item.get(f"{prefix}_R"),
+                        "G": item.get(f"{prefix}_G"),
+                        "l2_distance_to_target": item.get(f"{prefix}_l2_distance_to_target"),
+                    }
+                    break
+            if trip:
+                candidates.append((f"xstar_like_element_solver_summary.json:{key}", trip))
+        elif key == "full_global_normalized_solve_comparison_summary":
+            trip = {
+                "f_fraction": item.get("full_global_f_fraction"),
+                "i_fraction": item.get("full_global_i_fraction"),
+                "r_fraction": item.get("full_global_r_fraction"),
+                "R": item.get("full_global_R") or item.get("R"),
+                "G": item.get("full_global_G") or item.get("G"),
+                "target_f_fraction": item.get("target_f_fraction"),
+                "target_i_fraction": item.get("target_i_fraction"),
+                "target_r_fraction": item.get("target_r_fraction"),
+            }
+            candidates.append((f"xstar_like_element_solver_summary.json:{key}", trip))
+        else:
+            candidates.append((f"xstar_like_element_solver_summary.json:{key}", item))
+    return candidates
+
+
+def _read_triplet_from_calc_emis_csv(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    try:
+        rows = _read_csv(path)
+    except Exception:
+        return None
+    preferred = None
+    fallback = None
+    for row in rows:
+        if str(row.get("row_kind", "")) != "calc_emis_ion_triplet_emergent_summary":
+            continue
+        case = str(row.get("comparison_case", ""))
+        if case == "xstar_tau0_calc_emis_ion":
+            preferred = row
+        elif fallback is None:
+            fallback = row
+    row = preferred or fallback
+    if row is None:
+        return None
+    return {
+        "f_fraction": row.get("f_fraction"),
+        "i_fraction": row.get("i_fraction"),
+        "r_fraction": row.get("r_fraction"),
+        "R": row.get("R"),
+        "G": row.get("G"),
+        "l2_distance_to_target": row.get("l2_distance_to_target"),
+        "target_f_fraction": row.get("target_f_fraction"),
+        "target_i_fraction": row.get("target_i_fraction"),
+        "target_r_fraction": row.get("target_r_fraction"),
+    }
+
+
+def _read_triplet_from_legacy_triplet_csv(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    try:
+        rows = _read_csv(path)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    row = rows[0]
+    f = _as_float(row.get("forbidden_energy_per_ion_erg_s^-1"))
+    i = _as_float(row.get("intercombination_energy_per_ion_erg_s^-1"))
+    r = _as_float(row.get("resonance_energy_per_ion_erg_s^-1"))
+    if f is None or i is None or r is None:
+        return None
+    total = f + i + r
+    if total == 0.0:
+        return None
+    return {
+        "f_fraction": f / total,
+        "i_fraction": i / total,
+        "r_fraction": r / total,
+        "R": _ratio(f, i),
+        "G": _ratio(f + i, r),
+    }
+
+
 def _triplet_summary(label: str, solver_dir: Path, xstar_csv: Optional[Path], value_column: str) -> Dict[str, Any]:
     out: Dict[str, Any] = {"case_label": label}
+
     comparison = solver_dir / "xstar_detail_population_comparison_summary.json"
     if comparison.exists():
         try:
             payload = json.loads(comparison.read_text(encoding="utf-8"))
-            trip = payload.get("triplet", {})
-            for key in ("f_fraction", "i_fraction", "r_fraction", "R", "G", "l2_distance_to_target", "target_f_fraction", "target_i_fraction", "target_r_fraction"):
-                out[f"solver_{key}"] = trip.get(key)
+            _copy_triplet_fields(out, payload.get("triplet", {}), "xstar_detail_population_comparison_summary.json:triplet")
         except Exception as exc:
             out["comparison_summary_read_error"] = str(exc)
+
+    if out.get("solver_f_fraction") in (None, ""):
+        summary = solver_dir / "xstar_like_element_solver_summary.json"
+        if summary.exists():
+            try:
+                payload = json.loads(summary.read_text(encoding="utf-8"))
+                for source, trip in _summary_json_triplet_candidates(payload):
+                    if _copy_triplet_fields(out, trip, source):
+                        break
+            except Exception as exc:
+                out["solver_summary_read_error"] = str(exc)
+
+    if out.get("solver_f_fraction") in (None, ""):
+        trip = _read_triplet_from_calc_emis_csv(solver_dir / "xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv")
+        if trip is not None:
+            _copy_triplet_fields(out, trip, "xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv")
+
+    if out.get("solver_f_fraction") in (None, ""):
+        trip = _read_triplet_from_legacy_triplet_csv(solver_dir / "xstar_like_element_solver_triplet.csv")
+        if trip is not None:
+            _copy_triplet_fields(out, trip, "xstar_like_element_solver_triplet.csv")
+
+    if out.get("solver_f_fraction") in (None, ""):
+        out["solver_triplet_source"] = "not_found"
+        out["solver_triplet_status"] = "missing_solver_triplet_summary"
+
     if xstar_csv is not None:
         out["xstar_triplet_lines_csv"] = str(xstar_csv)
         if xstar_csv.exists():

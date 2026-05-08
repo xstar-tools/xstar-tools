@@ -164,3 +164,43 @@ def test_prepare_c5_xstar_triplet_reference_plan(tmp_path: Path) -> None:
     assert (tmp_path / "xstar_runs" / "c5_ne1e8" / "convert_c5_triplet.sh").exists()
     mapping = (tmp_path / "xstar_test_run" / "xstar_c5_density_grid_references.csv").read_text(encoding="utf-8")
     assert "xstar_test_run/c5_ne1e8/xstar_c5_triplet_lines.csv" in mapping
+
+
+def test_diagnose_helike_triplet_balance_recovers_triplet_from_solver_summary(tmp_path: Path) -> None:
+    solver = tmp_path / "solver_summary_only"
+    solver.mkdir(parents=True)
+    (solver / "xstar_like_element_solver_summary.json").write_text(
+        json.dumps(
+            {
+                "calc_emis_ion_triplet_emergent_summary": {
+                    "xstar_tau0_f_fraction": 0.7,
+                    "xstar_tau0_i_fraction": 0.2,
+                    "xstar_tau0_r_fraction": 0.1,
+                    "xstar_tau0_R": 3.5,
+                    "xstar_tau0_G": 9.0,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "diag_summary_only"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "examples" / "44_diagnose_helike_triplet_balance.py"),
+            "--case",
+            f"O VII:{solver}",
+            "--out-dir",
+            str(out),
+            "--print-summary",
+        ],
+        check=True,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert "O VII: solver f/i/r=0.7/0.2/0.1" in completed.stdout
+    payload = json.loads((out / "helike_triplet_balance_diagnostic_summary.json").read_text(encoding="utf-8"))
+    row = payload["triplet_summary"][0]
+    assert row["solver_f_fraction"] == 0.7
+    assert row["solver_triplet_source"].endswith("calc_emis_ion_triplet_emergent_summary")

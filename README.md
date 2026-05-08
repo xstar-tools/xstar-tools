@@ -1,6 +1,8 @@
 # xstar-atomic
 
-Latest package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.
+Latest package note: v0.3.103 makes `examples/44_diagnose_helike_triplet_balance.py` recover the top-level solver f/i/r summary from multiple fallback products (`xstar_detail_population_comparison_summary.json`, `xstar_like_element_solver_summary.json`, `xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv`, or `xstar_like_element_solver_triplet.csv`) before optional audit blocks are inspected. This prevents partially copied output directories from reporting `solver f/i/r=None` when basic summary products are present.
+
+Previous package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.
 
 
 ### v0.3.101 C V triplet-balance diagnostics
