@@ -82,6 +82,8 @@ def main(argv=None):
     p.add_argument("--type50-escape-factor", default="1", help="Fallback total escape factor ptmp1+ptmp2 used by --type50-bound-bound-treatment xstar-escape modes and by non-special lines in xstar-line-escape when no per-line tau0 is available. Clipped to [0,1]. Default 1 preserves raw-A when the treatment is raw-A.")
     p.add_argument("--type50-photoexcitation-scale", default="0", help="Proxy lower->upper pumping rate as a multiple of raw A for --type50-bound-bound-treatment xstar-escape-photoexcitation. Default 0.")
     p.add_argument("--type50-escape-factor-scan", default="0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1", help="Comma-separated proxy escape factors for xstar_like_element_solver_type50_escape_factor_scan.csv. The scan always uses the diagnostic xstar-escape type-50 treatment and holds other primary matrix terms fixed.")
+    p.add_argument("--resonance-collisional-feed-scale", default="1", help="Diagnostic matrix-scale factor applied only to direct collisional bound-bound gain into the He-like resonance/singlet upper level 1s2p 1P1, with the paired source-loss term scaled consistently. Default 1 leaves the core rates unchanged.")
+    p.add_argument("--resonance-collisional-feed-scale-scan", default="1,1.5,2,2.5", help="Comma-separated diagnostic matrix re-solve scan factors for direct collisional feed into 1s2p 1P1. Writes xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"], help="Linear solver for the diagnostic full-global normalized proxy-topology solve. Use xstar-lucy to follow the XSTAR msolvelucy structure: condensed superlevel matrix, number-conservation row, LU solve, and iterative-improvement diagnostics.")
     p.add_argument("--full-global-rank-deficient-action", default="svd", choices=["solve", "lstsq", "svd", "error"], help="Fallback/action for the diagnostic full-global normalized solve when the proxy-topology matrix is rank deficient.")
     p.add_argument("--full-global-negative-population-action", default="keep", choices=["keep", "clip", "error"], help="How to handle negative populations in the diagnostic full-global normalized solve.")
@@ -149,6 +151,8 @@ def main(argv=None):
             "type50_escape_factor": args.type50_escape_factor,
             "type50_photoexcitation_scale": args.type50_photoexcitation_scale,
             "type50_escape_factor_scan": args.type50_escape_factor_scan,
+            "resonance_collisional_feed_scale": args.resonance_collisional_feed_scale,
+            "resonance_collisional_feed_scale_scan": args.resonance_collisional_feed_scale_scan,
             "full_global_linear_solver": args.full_global_linear_solver,
             "full_global_rank_deficient_action": args.full_global_rank_deficient_action,
             "full_global_negative_population_action": args.full_global_negative_population_action,
@@ -185,6 +189,8 @@ def main(argv=None):
         write_csv(out / "xstar_like_element_solver_xstar_matrix_topology_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", [])
         write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", [])
+        write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_audit.csv", [])
+        write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", [])
         write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", [])
@@ -282,6 +288,8 @@ def main(argv=None):
         type50_escape_factor=args.type50_escape_factor,
         type50_photoexcitation_scale=args.type50_photoexcitation_scale,
         type50_escape_factor_scan=args.type50_escape_factor_scan,
+        resonance_collisional_feed_scale=args.resonance_collisional_feed_scale,
+        resonance_collisional_feed_scale_scan=args.resonance_collisional_feed_scale_scan,
         full_global_linear_solver=args.full_global_linear_solver,
         full_global_rank_deficient_action=args.full_global_rank_deficient_action,
         full_global_negative_population_action=args.full_global_negative_population_action,

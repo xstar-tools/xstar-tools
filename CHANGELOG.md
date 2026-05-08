@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# v0.3.108 - 2026-05-08
+
+- Added a direct collisional feed audit for the He-like resonance/singlet upper level `1s2p 1P1`.
+- `examples/42_xstar_like_element_solver_demo.py` now supports `--resonance-collisional-feed-scale` to scale only direct collisional bound-bound matrix routes into `1s2p 1P1`, with paired source-loss terms scaled consistently.
+- Added `--resonance-collisional-feed-scale-scan` and new outputs `xstar_like_element_solver_resonance_collisional_feed_audit.csv` and `xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv`.
+- The audit identifies data-type 56/63/67/68/69 collisional rows feeding the resonance upper level, reports the evaluated solver/XSTAR-calt path, and records whether the matrix rate has been scaled.
+- No default physics changes: the new scale defaults to 1.0.
+
 # v0.3.107 - 2026-05-08
 
 - Extended `examples/46_cv_source_attribution_scan.py` for the C V high-forbidden/low-resonance residual after v0.3.104.

@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: v0.3.107 extends `examples/46_cv_source_attribution_scan.py` with direct bound-bound resonance/singlet feed attribution. It now writes direct f/i/r feed tables and a first-order f/r balance scan for the C V high-forbidden/low-resonance residual after v0.3.104.
+Latest package note: v0.3.108 adds a real direct collisional resonance-feed audit and matrix-scale diagnostic for the C V `1s2p 1P1` resonance upper level. `examples/42_xstar_like_element_solver_demo.py` now supports `--resonance-collisional-feed-scale` and writes `xstar_like_element_solver_resonance_collisional_feed_audit.csv` plus a scale-scan CSV.
 
 Previous package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.
 

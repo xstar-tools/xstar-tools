@@ -21,6 +21,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -4471,11 +4472,17 @@ def _infer_transition_data_type(row: Mapping[str, object]) -> Optional[int]:
     if data_type is not None:
         return int(data_type)
     text = str(row.get("source_method") or "")
-    if "data_type_" in text:
-        try:
-            return int(text.split("data_type_", 1)[1].split("_", 1)[0])
-        except Exception:
-            return None
+    # Transition logs use both ``data_type_69_rate_type_...`` and compact
+    # evaluator labels such as ``type63_same_n_lmixing_amcrs_velimp``.
+    # Recognise both so collisional audits can be keyed to XSTAR/ATDB data
+    # types without re-reading the raw FITS row.
+    for pat in (r"data_type_(\d+)", r"type(\d+)", r"calt(\d+)"):
+        m = re.search(pat, text)
+        if m:
+            try:
+                return int(m.group(1))
+            except Exception:
+                return None
     return None
 
 
@@ -4529,6 +4536,40 @@ def _is_helike_triplet_3p_to_3s_drain(
     to_is_3s = _state_text_matches(to_state, "1s1.2s1.3S") or _state_text_matches(to_state, "1s2s3S")
     return bool(from_is_3p and to_is_3s)
 
+
+
+def _is_helike_resonance_singlet_upper_state(state: Optional[Mapping[str, object]]) -> bool:
+    """Return True for the He-like resonance/singlet upper state ``1s2p 1P1``."""
+    if not state:
+        return False
+    text = " ".join(str(state.get(k) or "") for k in ("level_label", "configuration", "term", "label"))
+    compact = text.replace(" ", "")
+    return ("1s1.2p1.1P_1" in compact) or ("1s2p1P" in compact) or ("2p1.1P_1" in compact)
+
+
+def _is_direct_collisional_feed_to_resonance_upper(
+    row: Mapping[str, object],
+    *,
+    to_state: Optional[Mapping[str, object]] = None,
+) -> bool:
+    """Identify direct bound-bound collisional gain into ``1s2p 1P1``.
+
+    This covers the XSTAR/ATDB collisional record families requested for the
+    C V f/r residual audit: data types 56, 63, 67, 68, and 69.  The function is
+    used before matrix assembly, so it matches the transition-log direction
+    ``from_level -> to_level`` and the paired diagonal loss is scaled with the
+    same factor to preserve the transition rate pair.
+    """
+    kind = str(row.get("kind") or row.get("transition_kind") or "").lower()
+    if "collisional" not in kind and "collision" not in kind:
+        return False
+    dt = _infer_transition_data_type(row)
+    if dt is not None and int(dt) not in {56, 63, 67, 68, 69}:
+        return False
+    source_method = str(row.get("source_method") or "")
+    if dt is None and not any(tok in source_method for tok in ("type56", "type63", "type67", "type68", "type69", "calt69")):
+        return False
+    return _is_helike_resonance_singlet_upper_state(to_state)
 
 def _xstar_line_escape_from_row(
     row: Mapping[str, object],
@@ -4686,6 +4727,7 @@ def build_global_bound_bound_matrix_terms(
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
     type50_photoexcitation_scale: object = 0.0,
+    resonance_collisional_feed_scale: object = 1.0,
 ) -> List[dict]:
     """Map existing intra-ion bound-bound transition logs onto global indices.
 
@@ -4733,7 +4775,11 @@ def build_global_bound_bound_matrix_terms(
             from_state=from_row,
             to_state=to_row,
         )
-        effective_rate = float(type50_rates["escaped_decay_rate_s^-1"]) if _is_type50_radiative_transition(tr) else float(rate)
+        resonance_feed_scale = max(0.0, _bounded_nonnegative_float(resonance_collisional_feed_scale, 1.0))
+        is_resonance_collisional_feed = _is_direct_collisional_feed_to_resonance_upper(tr, to_state=to_row)
+        data_type = _infer_transition_data_type(tr)
+        unscaled_effective_rate = float(type50_rates["escaped_decay_rate_s^-1"]) if _is_type50_radiative_transition(tr) else float(rate)
+        effective_rate = unscaled_effective_rate * (resonance_feed_scale if is_resonance_collisional_feed else 1.0)
         if from_row is None or to_row is None:
             missing = []
             if from_row is None:
@@ -4752,6 +4798,10 @@ def build_global_bound_bound_matrix_terms(
                 "to_level": int(to_level),
                 "rate_s^-1": effective_rate,
                 "raw_rate_s^-1": float(rate),
+                "unscaled_effective_rate_s^-1": unscaled_effective_rate,
+                "resonance_collisional_feed_scale": resonance_feed_scale,
+                "is_resonance_upper_direct_collisional_feed": bool(is_resonance_collisional_feed),
+                "resonance_collisional_feed_data_type": data_type,
                 "signed_rate_s^-1": 0.0,
                 **type50_rates,
                 "record": tr.get("record"),
@@ -4780,6 +4830,11 @@ def build_global_bound_bound_matrix_terms(
             "to_level_kind": to_row.get("level_kind"),
             "rate_s^-1": effective_rate,
             "raw_rate_s^-1": float(rate),
+            "unscaled_effective_rate_s^-1": unscaled_effective_rate,
+            "resonance_collisional_feed_scale": resonance_feed_scale,
+            "is_resonance_upper_direct_collisional_feed": bool(is_resonance_collisional_feed),
+            "resonance_collisional_feed_data_type": data_type,
+            "resonance_collisional_feed_status": "scaled_in_matrix" if bool(is_resonance_collisional_feed) and abs(resonance_feed_scale - 1.0) > 0 else ("identified_unscaled" if bool(is_resonance_collisional_feed) else "not_resonance_collisional_feed"),
             **type50_rates,
             "record": tr.get("record"),
             "source_method": tr.get("source_method"),
@@ -8126,6 +8181,251 @@ def _type53_phint53_scale_scan_summary(rows: Sequence[dict]) -> dict:
 
 
 
+
+
+def build_resonance_collisional_feed_audit_rows(
+    *,
+    global_bound_bound_matrix_terms: Sequence[dict],
+    he_like_stage: int,
+) -> List[dict]:
+    """Audit direct collisional feed into the He-like resonance upper level.
+
+    The rows are derived from assembled global bound-bound terms so they report
+    the exact matrix rate used by the current run.  They target the C V
+    diagnostic residual found in v0.3.107, but the label/state matching is
+    general for He-like ``1s2p 1P1`` rows.
+    """
+    rows: List[dict] = []
+    detail: List[dict] = []
+    for r in global_bound_bound_matrix_terms:
+        if str(r.get("matrix_term_kind")) != "offdiag_gain":
+            continue
+        if maybe_int(r.get("ion_stage")) != int(he_like_stage):
+            continue
+        if not bool(r.get("is_resonance_upper_direct_collisional_feed")):
+            continue
+        dt = maybe_int(r.get("resonance_collisional_feed_data_type"))
+        source = str(r.get("source_method") or "")
+        unscaled = maybe_float(r.get("unscaled_effective_rate_s^-1"))
+        scaled = maybe_float(r.get("rate_s^-1"))
+        scale = maybe_float(r.get("resonance_collisional_feed_scale")) or 1.0
+        detail.append({
+            "row_kind": "resonance_collisional_feed_audit",
+            "element": r.get("element"),
+            "ion_stage": r.get("ion_stage"),
+            "record": r.get("record"),
+            "data_type": dt,
+            "from_level": r.get("from_level"),
+            "to_level": r.get("to_level"),
+            "from_global_index": r.get("from_global_index"),
+            "to_global_index": r.get("to_global_index"),
+            "from_level_label": r.get("from_level_label"),
+            "to_level_label": r.get("to_level_label"),
+            "transition_kind": r.get("transition_kind"),
+            "source_method": source,
+            "xstar_ucalc_calt_path": _xstar_collisional_path_label(dt, source),
+            "solver_evaluated_rate_s^-1": unscaled,
+            "matrix_rate_s^-1": scaled,
+            "resonance_collisional_feed_scale": scale,
+            "factor_applied_to_solver_rate": (scaled / unscaled) if unscaled not in (None, 0.0) and scaled is not None else None,
+            "candidate_for_factor_two_test": True,
+            "factor_two_scaled_rate_s^-1": None if unscaled is None else 2.0 * float(unscaled),
+            "xstar_comparison_status": "uses_solver_evaluated_calt_or_ucalc_rate; no independent XSTAR detail rate table supplied",
+            "notes": "direct bound-bound collisional offdiag gain into He-like 1s2p 1P1 resonance upper level",
+            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+        })
+    rows.extend(detail)
+    if detail:
+        sums: Dict[str, float] = {}
+        counts: Dict[str, int] = {}
+        for d in detail:
+            key = str(d.get("data_type"))
+            counts[key] = counts.get(key, 0) + 1
+            sums[key] = sums.get(key, 0.0) + float(d.get("matrix_rate_s^-1") or 0.0)
+        total_unscaled = sum(float(d.get("solver_evaluated_rate_s^-1") or 0.0) for d in detail)
+        total_scaled = sum(float(d.get("matrix_rate_s^-1") or 0.0) for d in detail)
+        rows.append({
+            "row_kind": "resonance_collisional_feed_summary",
+            "ion_stage": int(he_like_stage),
+            "n_resonance_collisional_feed_rows": len(detail),
+            "records_by_data_type": json.dumps(counts, sort_keys=True),
+            "matrix_rate_sum_by_data_type_s^-1": json.dumps(sums, sort_keys=True),
+            "solver_evaluated_rate_sum_s^-1": total_unscaled,
+            "matrix_rate_sum_s^-1": total_scaled,
+            "current_matrix_to_solver_rate_ratio": (total_scaled / total_unscaled) if total_unscaled > 0 else None,
+            "factor_two_hypothesis_rate_sum_s^-1": 2.0 * total_unscaled,
+            "factor_two_hypothesis_note": "v0.3.107 fixed-population scan suggested ~2x direct collisional feed into r has the right sign; this audit identifies the exact matrix rows.",
+            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+        })
+    else:
+        rows.append({
+            "row_kind": "resonance_collisional_feed_summary",
+            "ion_stage": int(he_like_stage),
+            "n_resonance_collisional_feed_rows": 0,
+            "warning": "no direct collisional feed rows into He-like 1s2p 1P1 were found",
+            "provenance": "v0.3.108_resonance_collisional_feed_audit",
+        })
+    return rows
+
+
+def _xstar_collisional_path_label(data_type: Optional[int], source_method: str) -> str:
+    dt = None if data_type is None else int(data_type)
+    if dt == 56:
+        return "ucalc/collisional type56 tabulated upsilon evaluator"
+    if dt == 63:
+        return "ucalc type63 hydrogenic/nl collisional evaluator"
+    if dt == 67:
+        return "ucalc type67 collisional evaluator"
+    if dt == 68:
+        return "ucalc type68 collisional evaluator"
+    if dt == 69:
+        return "ucalc/calt69 He-like collisional excitation evaluator"
+    if "calt69" in source_method:
+        return "ucalc/calt69 He-like collisional excitation evaluator"
+    return "collisional evaluator inferred from transition log"
+
+
+def _resonance_collisional_feed_audit_summary(rows: Sequence[dict]) -> dict:
+    detail = [r for r in rows if str(r.get("row_kind")) == "resonance_collisional_feed_audit"]
+    return {
+        "n_resonance_collisional_feed_rows": len(detail),
+        "records_by_data_type": _counts(detail, "data_type"),
+        "sum_solver_evaluated_rate_s^-1": _sum_float(detail, "solver_evaluated_rate_s^-1"),
+        "sum_matrix_rate_s^-1": _sum_float(detail, "matrix_rate_s^-1"),
+        "scale_values": sorted({str(r.get("resonance_collisional_feed_scale")) for r in detail}),
+        "provenance": "v0.3.108_resonance_collisional_feed_audit",
+    }
+
+
+def build_resonance_collisional_feed_scale_scan_rows(
+    *,
+    transition_rows: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    global_superlevel_cascade_matrix_terms: Sequence[dict],
+    global_superlevel_source_matrix_terms: Sequence[dict],
+    global_type53_flat_proxy_matrix_terms: Sequence[dict],
+    global_type53_phint53_matrix_terms: Sequence[dict],
+    global_type53_milne_matrix_terms: Sequence[dict],
+    global_type74_inverse_matrix_terms: Sequence[dict],
+    global_type74_calt74_matrix_terms: Sequence[dict],
+    coupling_rows: Sequence[dict],
+    line_rows: Sequence[dict],
+    he_like_stage: int,
+    type50_bound_bound_treatment: str = "raw-A",
+    type50_escape_factor: object = 1.0,
+    type50_photoexcitation_scale: object = 0.0,
+    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5",
+    triplet_coupling_treatment: str = "normal",
+    linear_solver: str = "xstar-lucy",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+    prune_null_rate_levels: bool = True,
+) -> List[dict]:
+    """Matrix re-solve scan for direct collisional feed into ``1s2p 1P1``."""
+    scales = _parse_triplet_source_scales(resonance_collisional_feed_scale_scan)
+    rows: List[dict] = []
+    target = _xstar_triplet_target(int(he_like_stage))
+    if target is not None:
+        rows.append({
+            "row_kind": "resonance_collisional_feed_scale_scan",
+            "scan_case": "xstar_target",
+            "resonance_collisional_feed_scale": "target",
+            "f_fraction": target["f"],
+            "i_fraction": target["i"],
+            "r_fraction": target["r"],
+            "R": target.get("R"),
+            "G": target.get("G"),
+            "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+        })
+    coupling_treatment_norm = _normalise_triplet_coupling_treatment(triplet_coupling_treatment)
+    for scale0 in scales:
+        scale = max(0.0, float(scale0))
+        bb_terms = build_global_bound_bound_matrix_terms(
+            transition_rows,
+            global_index_rows,
+            type50_bound_bound_treatment=type50_bound_bound_treatment,
+            type50_escape_factor=type50_escape_factor,
+            type50_photoexcitation_scale=type50_photoexcitation_scale,
+            resonance_collisional_feed_scale=scale,
+        )
+        audit = build_resonance_collisional_feed_audit_rows(
+            global_bound_bound_matrix_terms=bb_terms,
+            he_like_stage=he_like_stage,
+        )
+        full_terms_unsuppressed = build_full_global_matrix_terms(
+            global_index_rows=global_index_rows,
+            global_bound_bound_matrix_terms=bb_terms,
+            global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+            global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+            global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+            global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+            global_type53_milne_matrix_terms=global_type53_milne_matrix_terms,
+            global_type74_inverse_matrix_terms=global_type74_inverse_matrix_terms,
+            global_type74_calt74_matrix_terms=global_type74_calt74_matrix_terms,
+            coupling_rows=coupling_rows,
+            he_like_stage=he_like_stage,
+        )
+        suppressed_terms, suppressed_rows = suppress_triplet_3p_to_3s_radiative_terms(
+            full_terms_unsuppressed,
+            he_like_stage=he_like_stage,
+        )
+        full_terms = suppressed_terms if coupling_treatment_norm == "suppress-3p-to-3s-radiative" else full_terms_unsuppressed
+        solve_rows = build_full_global_normalized_solve_comparison(
+            global_index_rows=global_index_rows,
+            full_global_matrix_terms=full_terms,
+            line_rows=line_rows,
+            he_like_stage=he_like_stage,
+            linear_solver=linear_solver,
+            rank_deficient_action=rank_deficient_action,
+            negative_population_action=negative_population_action,
+            prune_null_rate_levels=prune_null_rate_levels,
+        )
+        sol = next((r for r in solve_rows if str(r.get("row_kind")) == "summary" and str(r.get("comparison_case")) == "full_global_normalized_proxy_topology_solve"), solve_rows[0] if solve_rows else {})
+        detail = [r for r in audit if str(r.get("row_kind")) == "resonance_collisional_feed_audit"]
+        rows.append({
+            "row_kind": "resonance_collisional_feed_scale_scan",
+            "scan_case": "full_global_resonance_collisional_feed_scale",
+            "resonance_collisional_feed_scale": scale,
+            "type50_bound_bound_treatment": type50_bound_bound_treatment,
+            "type50_escape_factor": type50_escape_factor,
+            "n_resonance_collisional_feed_rows": len(detail),
+            "resonance_collisional_feed_unscaled_sum_s^-1": _sum_float(detail, "solver_evaluated_rate_s^-1"),
+            "resonance_collisional_feed_matrix_sum_s^-1": _sum_float(detail, "matrix_rate_s^-1"),
+            "records_by_data_type": json.dumps(_counts(detail, "data_type"), sort_keys=True),
+            "n_full_global_matrix_terms": len(full_terms),
+            "n_suppressed_triplet_coupling_terms": len(suppressed_rows) if coupling_treatment_norm == "suppress-3p-to-3s-radiative" else 0,
+            "solver": sol.get("solver"),
+            "solve_status": sol.get("solve_status"),
+            "solver_warning": sol.get("solver_warning"),
+            "f_fraction": sol.get("f_fraction"),
+            "i_fraction": sol.get("i_fraction"),
+            "r_fraction": sol.get("r_fraction"),
+            "R": sol.get("R"),
+            "G": sol.get("G"),
+            "l2_distance_to_target": sol.get("l2_distance_to_target"),
+            "sum_population": sol.get("sum_population"),
+            "normalization_residual": sol.get("normalization_residual"),
+            "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+        })
+    return rows
+
+
+def _resonance_collisional_feed_scale_scan_summary(rows: Sequence[dict]) -> dict:
+    scan_rows = [r for r in rows if str(r.get("scan_case")) == "full_global_resonance_collisional_feed_scale"]
+    def _as_float_row(row: dict, key: str) -> float:
+        val = maybe_float(row.get(key))
+        return float("inf") if val is None else float(val)
+    best = min(scan_rows, key=lambda r: _as_float_row(r, "l2_distance_to_target"), default=None)
+    return {
+        "n_resonance_collisional_feed_scale_scan_rows": len(rows),
+        "scale_values": [r.get("resonance_collisional_feed_scale") for r in scan_rows],
+        "best_l2_scale": None if best is None else best.get("resonance_collisional_feed_scale"),
+        "best_l2_distance_to_target": None if best is None else best.get("l2_distance_to_target"),
+        "best_f_fraction": None if best is None else best.get("f_fraction"),
+        "best_i_fraction": None if best is None else best.get("i_fraction"),
+        "best_r_fraction": None if best is None else best.get("r_fraction"),
+        "provenance": "v0.3.108_resonance_collisional_feed_scale_scan",
+    }
 
 def build_type50_escape_factor_scan_rows(
     *,
@@ -12065,6 +12365,8 @@ def solve_element_reference(
     type50_escape_factor: object = 1.0,
     type50_photoexcitation_scale: object = 0.0,
     type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
+    resonance_collisional_feed_scale: object = 1.0,
+    resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5",
     radiation_field_mode: str = "none",
     radiation_bremsa_scale: object = 1.0,
     radiation_energy_min_eV: Optional[float] = None,
@@ -12298,6 +12600,11 @@ def solve_element_reference(
         type50_bound_bound_treatment=type50_bound_bound_treatment_norm,
         type50_escape_factor=type50_escape_factor,
         type50_photoexcitation_scale=type50_photoexcitation_scale,
+        resonance_collisional_feed_scale=resonance_collisional_feed_scale,
+    )
+    resonance_collisional_feed_audit_rows = build_resonance_collisional_feed_audit_rows(
+        global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
+        he_like_stage=he_like_stage,
     )
     type50_ucalc_rate_audit_rows = build_type50_ucalc_rate_audit_rows(
         global_bound_bound_matrix_terms=global_bound_bound_matrix_terms,
@@ -12563,6 +12870,29 @@ def solve_element_reference(
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
     )
+    resonance_collisional_feed_scale_scan_rows = build_resonance_collisional_feed_scale_scan_rows(
+        transition_rows=transitions,
+        global_index_rows=global_index_rows,
+        global_superlevel_cascade_matrix_terms=global_superlevel_cascade_matrix_terms,
+        global_superlevel_source_matrix_terms=global_superlevel_source_matrix_terms,
+        global_type53_flat_proxy_matrix_terms=global_type53_flat_proxy_matrix_terms,
+        global_type53_phint53_matrix_terms=global_type53_phint53_matrix_terms,
+        global_type53_milne_matrix_terms=global_type53_milne_matrix_terms,
+        global_type74_inverse_matrix_terms=global_type74_inverse_matrix_terms,
+        global_type74_calt74_matrix_terms=global_type74_calt74_matrix_terms,
+        coupling_rows=assembled_coupling_terms,
+        line_rows=line_rows,
+        he_like_stage=he_like_stage,
+        type50_bound_bound_treatment=type50_bound_bound_treatment_norm,
+        type50_escape_factor=type50_escape_factor,
+        type50_photoexcitation_scale=type50_photoexcitation_scale,
+        resonance_collisional_feed_scale_scan=resonance_collisional_feed_scale_scan,
+        triplet_coupling_treatment=triplet_coupling_treatment_norm,
+        linear_solver=full_global_linear_solver,
+        rank_deficient_action=full_global_rank_deficient_action,
+        negative_population_action=full_global_negative_population_action,
+        prune_null_rate_levels=full_global_prune_null_rate_levels,
+    )
     triplet_coupling_suppression_comparison_rows = build_triplet_coupling_suppression_comparison_rows(
         global_index_rows=global_index_rows,
         full_global_matrix_terms=full_global_matrix_terms_unsuppressed,
@@ -12731,6 +13061,12 @@ def solve_element_reference(
             "type50_escape_factor_scan": type50_escape_factor_scan,
             "n_type50_escape_factor_scan_rows": len(type50_escape_factor_scan_rows),
             "type50_escape_factor_scan_summary": _type50_escape_factor_scan_summary(type50_escape_factor_scan_rows),
+            "resonance_collisional_feed_scale": resonance_collisional_feed_scale,
+            "resonance_collisional_feed_scale_scan": resonance_collisional_feed_scale_scan,
+            "n_resonance_collisional_feed_audit_rows": len(resonance_collisional_feed_audit_rows),
+            "resonance_collisional_feed_audit_summary": _resonance_collisional_feed_audit_summary(resonance_collisional_feed_audit_rows),
+            "n_resonance_collisional_feed_scale_scan_rows": len(resonance_collisional_feed_scale_scan_rows),
+            "resonance_collisional_feed_scale_scan_summary": _resonance_collisional_feed_scale_scan_summary(resonance_collisional_feed_scale_scan_rows),
             "n_global_bound_bound_solve_comparison_rows": len(global_bound_bound_solve_comparison_rows),
             "global_bound_bound_solve_comparison_summary": _global_bound_bound_solve_comparison_summary(global_bound_bound_solve_comparison_rows),
             "n_global_bound_bound_type71_solve_comparison_rows": len(global_bound_bound_type71_solve_comparison_rows),
@@ -12836,6 +13172,8 @@ def solve_element_reference(
         "global_bound_bound_matrix_terms": global_bound_bound_matrix_terms,
         "type50_ucalc_rate_audit": type50_ucalc_rate_audit_rows,
         "type50_escape_factor_scan": type50_escape_factor_scan_rows,
+        "resonance_collisional_feed_audit": resonance_collisional_feed_audit_rows,
+        "resonance_collisional_feed_scale_scan": resonance_collisional_feed_scale_scan_rows,
         "global_superlevel_cascade_matrix_terms": global_superlevel_cascade_matrix_terms,
         "global_superlevel_source_matrix_terms": global_superlevel_source_matrix_terms,
         "global_bound_bound_solve_comparison": global_bound_bound_solve_comparison_rows,
@@ -14627,6 +14965,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     calc_emis_ion_triplet_emergent_rows = result.get("calc_emis_ion_triplet_emergent", [])
     type50_ucalc_rate_audit_rows = result.get("type50_ucalc_rate_audit", [])
     type50_escape_factor_scan_rows = result.get("type50_escape_factor_scan", [])
+    resonance_collisional_feed_audit_rows = result.get("resonance_collisional_feed_audit", [])
+    resonance_collisional_feed_scale_scan_rows = result.get("resonance_collisional_feed_scale_scan", [])
     global_superlevel_cascade_matrix_terms = result.get("global_superlevel_cascade_matrix_terms", [])
     global_superlevel_source_matrix_terms = result.get("global_superlevel_source_matrix_terms", [])
     if "summary" in result:
@@ -14727,6 +15067,8 @@ def write_element_solver_outputs(result: dict, out_dir: str | Path) -> None:
     write_csv(out / "xstar_like_element_solver_global_bound_bound_matrix_terms.csv", result.get("global_bound_bound_matrix_terms", []))
     write_csv(out / "xstar_like_element_solver_type50_ucalc_rate_audit.csv", type50_ucalc_rate_audit_rows)
     write_csv(out / "xstar_like_element_solver_type50_escape_factor_scan.csv", type50_escape_factor_scan_rows)
+    write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_audit.csv", resonance_collisional_feed_audit_rows)
+    write_csv(out / "xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv", resonance_collisional_feed_scale_scan_rows)
     write_csv(out / "xstar_like_element_solver_global_superlevel_cascade_matrix_terms.csv", global_superlevel_cascade_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_superlevel_source_matrix_terms.csv", global_superlevel_source_matrix_terms)
     write_csv(out / "xstar_like_element_solver_global_bound_bound_solve_comparison.csv", global_bound_bound_solve_comparison_rows)
