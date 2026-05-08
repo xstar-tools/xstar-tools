@@ -633,6 +633,213 @@ def _stored_solver_triplet_summary(solver_dir: Path, target: Tuple[Optional[floa
                     }
     return None
 
+
+def _population_by_global_from_solver_dir(solver_dir: Path) -> Dict[int, float]:
+    """Best-effort population map from already-written solver products."""
+    out: Dict[int, float] = {}
+    rows = _read_csv(solver_dir / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv")
+    for row in rows:
+        if str(row.get("row_kind")) != "population":
+            continue
+        g = _maybe_int(row.get("global_index"))
+        val = _maybe_float(row.get("xstar_xileve_emissivity_population"))
+        if val is None:
+            val = _maybe_float(row.get("population_fraction"))
+        if g is not None and val is not None:
+            out[int(g)] = float(val)
+    if out:
+        return out
+    rows = _read_csv(solver_dir / "xstar_detail_population_comparison.csv")
+    for row in rows:
+        g = _maybe_int(row.get("global_index") or row.get("solver_global_index"))
+        val = _maybe_float(row.get("solver_population_fraction") or row.get("population_fraction"))
+        if g is not None and val is not None:
+            out[int(g)] = float(val)
+    return out
+
+
+def _baseline_component_rates_from_solver_dir(
+    solver_dir: Path,
+    stored: Optional[dict],
+) -> Tuple[Dict[str, float], str]:
+    """Return f/i/r component strengths in photon-like s^-1 units if available."""
+    rows = _read_csv(solver_dir / "xstar_like_element_solver_calc_emis_ion_triplet_emergent.csv")
+    sums = {"f": 0.0, "i": 0.0, "r": 0.0}
+    source = ""
+    for row in rows:
+        if str(row.get("row_kind")) != "calc_emis_ion_triplet_emergent_line":
+            continue
+        comp = str(row.get("component") or "").strip().lower()
+        if comp not in sums:
+            continue
+        val = _maybe_float(row.get("xstar_tau0_calc_emis_net_rate_s^-1"))
+        if val is None:
+            val = _maybe_float(row.get("transparent_ucalc_ans2_upper_to_lower_s^-1"))
+        if val is None:
+            upop = _maybe_float(row.get("xstar_xileve_upper_population"))
+            A = _maybe_float(row.get("A_s^-1"))
+            if upop is not None and A is not None:
+                val = float(upop) * float(A)
+        if val is not None:
+            sums[comp] += max(0.0, float(val))
+            source = "calc_emis_ion_triplet_emergent_rates"
+    if sum(sums.values()) > 0:
+        return sums, source
+    if stored:
+        for comp in ("f", "i", "r"):
+            val = _maybe_float(stored.get(f"{comp}_fraction"))
+            if val is not None:
+                sums[comp] = float(val)
+        if sum(sums.values()) > 0:
+            return sums, "stored_fraction_unit_total"
+    return {"f": 0.0, "i": 0.0, "r": 0.0}, "unavailable"
+
+
+def _make_population_weighted_attribution_rows(
+    full_terms: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    population_by_global: Dict[int, float],
+) -> List[dict]:
+    """Population-weighted flow attribution into triplet upper levels.
+
+    The raw type-71/type-99 rates can look large but have negligible leverage
+    when the source superlevel/parent population is tiny.  This table multiplies
+    off-diagonal gains by the current stored source population.  It is a
+    diagnostic first-order flow proxy, not a re-solved XSTAR matrix.
+    """
+    triplet_by_global = _component_from_global_index(global_index_rows)
+    acc: Dict[str, dict] = {}
+    for row in full_terms:
+        fam = _family_for_row(row, triplet_by_global)
+        if not fam:
+            continue
+        col = _maybe_int(row.get("matrix_col_global_index"))
+        pop_col = population_by_global.get(int(col), 0.0) if col is not None else 0.0
+        rate = _maybe_float(row.get("full_global_signed_rate_s^-1") or row.get("signed_rate_s^-1"))
+        if rate is None or float(rate) <= 0.0 or pop_col == 0.0:
+            continue
+        flow = float(pop_col) * float(rate)
+        r = acc.setdefault(fam, {
+            "source_family": fam,
+            "n_population_weighted_gain_rows": 0,
+            "population_weighted_gain_sum_s^-1": 0.0,
+            "population_weighted_direct_f_gain_s^-1": 0.0,
+            "population_weighted_direct_i_gain_s^-1": 0.0,
+            "population_weighted_direct_r_gain_s^-1": 0.0,
+            "population_weighted_branch_proxy_f_gain_s^-1": 0.0,
+            "population_weighted_branch_proxy_i_gain_s^-1": 0.0,
+            "population_weighted_branch_proxy_r_gain_s^-1": 0.0,
+            "max_source_population_used": 0.0,
+            "example_records": [],
+            "notes": "population-weighted first-order flow proxy; not a matrix re-solve",
+        })
+        r["n_population_weighted_gain_rows"] += 1
+        r["population_weighted_gain_sum_s^-1"] += flow
+        r["max_source_population_used"] = max(float(r["max_source_population_used"]), float(pop_col))
+        row_g = _maybe_int(row.get("matrix_row_global_index"))
+        comp = str(row.get("triplet_component") or row.get("destination_triplet_component") or "").strip().lower()
+        if row_g is not None and comp not in {"f", "i", "r"}:
+            comp = triplet_by_global.get(int(row_g), "")
+        if comp in {"f", "i", "r"}:
+            r[f"population_weighted_direct_{comp}_gain_s^-1"] += flow
+        if fam.startswith("type99_"):
+            for c in ("f", "i", "r"):
+                b = _maybe_float(row.get(f"type71_B_{c}"))
+                if b is not None:
+                    r[f"population_weighted_branch_proxy_{c}_gain_s^-1"] += flow * float(b)
+        recid = row.get("record")
+        if recid not in (None, "", "nan") and len(r["example_records"]) < 8:
+            r["example_records"].append(str(recid))
+    rows: List[dict] = []
+    for fam, r in sorted(acc.items()):
+        direct_total = sum(float(r[f"population_weighted_direct_{c}_gain_s^-1"]) for c in ("f", "i", "r"))
+        proxy_total = sum(float(r[f"population_weighted_branch_proxy_{c}_gain_s^-1"]) for c in ("f", "i", "r"))
+        rr = dict(r)
+        rr["population_weighted_triplet_direct_total_s^-1"] = direct_total
+        rr["population_weighted_triplet_branch_proxy_total_s^-1"] = proxy_total
+        for c in ("f", "i", "r"):
+            rr[f"population_weighted_direct_{c}_fraction"] = rr[f"population_weighted_direct_{c}_gain_s^-1"] / direct_total if direct_total > 0 else ""
+            rr[f"population_weighted_branch_proxy_{c}_fraction"] = rr[f"population_weighted_branch_proxy_{c}_gain_s^-1"] / proxy_total if proxy_total > 0 else ""
+        rr["example_records"] = ";".join(r["example_records"])
+        rows.append(rr)
+    return rows
+
+
+def _make_population_weighted_leverage_scan_rows(
+    weighted_rows: Sequence[dict],
+    baseline_component_rates: Dict[str, float],
+    target: Tuple[Optional[float], Optional[float], Optional[float]],
+    scales: Sequence[float],
+) -> List[dict]:
+    """First-order fixed-population component scan.
+
+    This does not re-solve the population matrix.  It asks: if the currently
+    population-weighted flow from a family were scaled while all other stored
+    populations and type-50 drains were held fixed, which direction would f/i/r
+    move?  It is intended to identify families with real leverage and to avoid
+    mistaking large raw rates from nearly unpopulated superlevels for important
+    routes.
+    """
+    base_total = sum(max(0.0, float(baseline_component_rates.get(c, 0.0))) for c in ("f", "i", "r"))
+    rows: List[dict] = []
+    if base_total <= 0:
+        return rows
+    base_frac = {c: float(baseline_component_rates.get(c, 0.0)) / base_total for c in ("f", "i", "r")}
+    R, G = _ratio_R_G(base_frac["f"], base_frac["i"], base_frac["r"])
+    rows.append({
+        "scan_model": "population_weighted_fixed_population_first_order",
+        "scan_name": "stored_component_baseline",
+        "scaled_group": "stored_baseline",
+        "scale_factor": 1.0,
+        "weighted_family_total_s^-1": 0.0,
+        "baseline_total_component_rate_s^-1": base_total,
+        "f_fraction": base_frac["f"],
+        "i_fraction": base_frac["i"],
+        "r_fraction": base_frac["r"],
+        "R": R,
+        "G": G,
+        "l2_distance_to_target": _l2(base_frac["f"], base_frac["i"], base_frac["r"], target),
+        "notes": "baseline from stored calc_emis/component rates",
+    })
+    for wr in weighted_rows:
+        fam = str(wr.get("source_family"))
+        comp_flow = {}
+        for c in ("f", "i", "r"):
+            direct = _maybe_float(wr.get(f"population_weighted_direct_{c}_gain_s^-1")) or 0.0
+            proxy = _maybe_float(wr.get(f"population_weighted_branch_proxy_{c}_gain_s^-1")) or 0.0
+            comp_flow[c] = float(direct) + float(proxy)
+        flow_total = sum(max(0.0, comp_flow[c]) for c in ("f", "i", "r"))
+        for scale in scales:
+            new = {c: max(0.0, float(baseline_component_rates.get(c, 0.0)) + (float(scale) - 1.0) * comp_flow[c]) for c in ("f", "i", "r")}
+            total = sum(new.values())
+            if total <= 0:
+                continue
+            f, i, r = new["f"] / total, new["i"] / total, new["r"] / total
+            R, G = _ratio_R_G(f, i, r)
+            rows.append({
+                "scan_model": "population_weighted_fixed_population_first_order",
+                "scan_name": f"{fam}_x{float(scale):g}",
+                "scaled_group": fam,
+                "scale_factor": float(scale),
+                "weighted_family_total_s^-1": flow_total,
+                "baseline_total_component_rate_s^-1": base_total,
+                "family_to_baseline_total_ratio": flow_total / base_total if base_total > 0 else "",
+                "weighted_f_flow_s^-1": comp_flow["f"],
+                "weighted_i_flow_s^-1": comp_flow["i"],
+                "weighted_r_flow_s^-1": comp_flow["r"],
+                "f_fraction": f,
+                "i_fraction": i,
+                "r_fraction": r,
+                "R": R,
+                "G": G,
+                "l2_distance_to_target": _l2(f, i, r, target),
+                "delta_f_minus_target": "" if target[0] is None else f - float(target[0]),
+                "delta_i_minus_target": "" if target[1] is None else i - float(target[1]),
+                "delta_r_minus_target": "" if target[2] is None else r - float(target[2]),
+                "notes": "first-order fixed-population scan; not a matrix re-solve",
+            })
+    return rows
+
 def _write_markdown(path: Path, scan_rows: Sequence[dict], attr_rows: Sequence[dict], target: Tuple[Optional[float], Optional[float], Optional[float]], target_meta: dict) -> None:
     best = None
     candidates = [r for r in scan_rows if _maybe_float(r.get("l2_distance_to_target")) is not None]
@@ -673,6 +880,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--resonance-cascade-scales", default="0.5,0.75,1,1.25,1.5,2")
     p.add_argument("--extra-groups", default="", help="Optional comma-separated extra groups to scan: type99_continuum_alias_level32,type71_from_sprlevlt,type71_from_sprlevls,type53_milne_inverse_to_resonance,type74_inverse_to_resonance")
     p.add_argument("--extra-group-scales", default="0.5,0.75,1,1.25,1.5,2")
+    p.add_argument("--population-weighted-scales", default="0,0.5,0.75,1,1.25,1.5,2", help="Scales for the population-weighted fixed-population leverage scan written to cv_population_weighted_source_scan.csv.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"])
     p.add_argument("--full-global-topology", default="xstar-continuum-alias-superlevels", choices=["explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"])
     p.add_argument("--ion-fraction-closure", default="xstar-calc-ion-rates")
@@ -710,6 +918,24 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     attr_rows = _make_attribution_rows(full_terms, global_rows)
     write_csv(out_dir / "cv_source_family_attribution.csv", attr_rows)
+
+    # v0.3.106: raw source rates can be misleading when the source superlevel
+    # population is tiny.  Add a population-weighted, fixed-population leverage
+    # diagnostic that uses the stored solution products as the baseline.
+    stored_for_weighting = _stored_solver_triplet_summary(solver_dir, target_tuple)
+    population_by_global = _population_by_global_from_solver_dir(solver_dir)
+    weighted_attr_rows = _make_population_weighted_attribution_rows(full_terms, global_rows, population_by_global)
+    write_csv(out_dir / "cv_population_weighted_source_attribution.csv", weighted_attr_rows)
+    baseline_component_rates, baseline_component_source = _baseline_component_rates_from_solver_dir(solver_dir, stored_for_weighting)
+    weighted_scan_rows = _make_population_weighted_leverage_scan_rows(
+        weighted_attr_rows,
+        baseline_component_rates,
+        target_tuple,
+        _parse_scale_list(args.population_weighted_scales),
+    )
+    for row in weighted_scan_rows:
+        row["baseline_component_rate_source"] = baseline_component_source
+    write_csv(out_dir / "cv_population_weighted_source_scan.csv", weighted_scan_rows)
 
     triplet_by_global = _component_from_global_index(global_rows)
     scan_plan: List[Tuple[str, str, float]] = []
@@ -781,14 +1007,30 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         scan_rows.append(row)
 
     write_csv(out_dir / "cv_source_group_scan.csv", scan_rows)
+    weighted_candidates = [r for r in weighted_scan_rows if r.get("l2_distance_to_target") not in (None, "")]
+    best_weighted = min(weighted_candidates, key=lambda r: float(r.get("l2_distance_to_target"))) if weighted_candidates else {}
+    recomputed_candidates = [r for r in scan_rows if r.get("scan_name") == "baseline" and r.get("l2_distance_to_target") not in (None, "")]
+    stored_candidates = [r for r in scan_rows if r.get("scan_name") == "stored_solver_baseline" and r.get("l2_distance_to_target") not in (None, "")]
+    roundtrip_delta = ""
+    if recomputed_candidates and stored_candidates:
+        rf = _maybe_float(recomputed_candidates[0].get("f_fraction")); sf = _maybe_float(stored_candidates[0].get("f_fraction"))
+        ri = _maybe_float(recomputed_candidates[0].get("i_fraction")); si = _maybe_float(stored_candidates[0].get("i_fraction"))
+        rr = _maybe_float(recomputed_candidates[0].get("r_fraction")); sr = _maybe_float(stored_candidates[0].get("r_fraction"))
+        if None not in (rf, sf, ri, si, rr, sr):
+            roundtrip_delta = math.sqrt((float(rf)-float(sf))**2 + (float(ri)-float(si))**2 + (float(rr)-float(sr))**2)
     summary = {
         "solver_out_dir": str(solver_dir),
         "target": {"f": target_tuple[0], "i": target_tuple[1], "r": target_tuple[2]},
         "target_meta": target_meta,
         "n_source_family_rows": len(attr_rows),
+        "n_population_weighted_source_family_rows": len(weighted_attr_rows),
         "n_scan_rows": len(scan_rows),
+        "n_population_weighted_scan_rows": len(weighted_scan_rows),
         "best_scan_row": min(scan_rows, key=lambda r: float(r.get("l2_distance_to_target") if r.get("l2_distance_to_target") not in (None, "") else 1e99)) if scan_rows else {},
-        "notes": "Diagnostic-only source-family scaling; type-50 line-escape/drain rows are kept fixed by construction.",
+        "best_population_weighted_scan_row": best_weighted,
+        "matrix_recompute_vs_stored_baseline_l2_delta": roundtrip_delta,
+        "baseline_component_rate_source": baseline_component_source,
+        "notes": "Diagnostic-only source-family scaling; type-50 line-escape/drain rows are kept fixed by construction. v0.3.106 adds population-weighted fixed-population leverage scans because CSV-roundtrip matrix re-solves may not reproduce the stored in-memory solver baseline exactly.",
     }
     (out_dir / "cv_source_attribution_scan_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
     _write_markdown(out_dir / "cv_source_attribution_scan.md", scan_rows, attr_rows, target_tuple, target_meta)
@@ -801,8 +1043,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         best = summary.get("best_scan_row") or {}
         print(f"best scan={best.get('scan_name')} group={best.get('scaled_group')} scale={best.get('scale_factor')}")
         print(f"best f/i/r={best.get('f_fraction')}/{best.get('i_fraction')}/{best.get('r_fraction')} R={best.get('R')} G={best.get('G')} L2={best.get('l2_distance_to_target')}")
+        bw = summary.get("best_population_weighted_scan_row") or {}
+        if bw:
+            print(f"best population-weighted scan={bw.get('scan_name')} group={bw.get('scaled_group')} scale={bw.get('scale_factor')}")
+            print(f"best population-weighted f/i/r={bw.get('f_fraction')}/{bw.get('i_fraction')}/{bw.get('r_fraction')} R={bw.get('R')} G={bw.get('G')} L2={bw.get('l2_distance_to_target')}")
         print(f"wrote: {out_dir / 'cv_source_family_attribution.csv'}")
+        print(f"wrote: {out_dir / 'cv_population_weighted_source_attribution.csv'}")
         print(f"wrote: {out_dir / 'cv_source_group_scan.csv'}")
+        print(f"wrote: {out_dir / 'cv_population_weighted_source_scan.csv'}")
         print(f"wrote: {out_dir / 'cv_source_attribution_scan.md'}")
 
 

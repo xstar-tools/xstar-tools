@@ -34,13 +34,19 @@ def test_cv_source_attribution_scan_smoke(tmp_path: Path):
     assert "C V source-attribution f/r scan" in proc.stdout
     attr = out_dir / "cv_source_family_attribution.csv"
     scan = out_dir / "cv_source_group_scan.csv"
+    weighted_attr = out_dir / "cv_population_weighted_source_attribution.csv"
+    weighted_scan = out_dir / "cv_population_weighted_source_scan.csv"
     assert attr.exists()
     assert scan.exists()
+    assert weighted_attr.exists()
+    assert weighted_scan.exists()
     attr_rows = list(csv.DictReader(attr.open()))
     scan_rows = list(csv.DictReader(scan.open()))
+    weighted_scan_rows = list(csv.DictReader(weighted_scan.open()))
     families = {r["source_family"] for r in attr_rows}
     assert "type71_from_sprlevlt" in families
     assert "type71_from_sprlevls" in families
     assert "type99_into_sprlevlt" in families
     assert any(r["scaled_group"] == "type71_resonance_singlet_cascade" for r in scan_rows)
     assert any(r["scaled_group"] == "none" for r in scan_rows)
+    assert any(r["scan_model"] == "population_weighted_fixed_population_first_order" for r in weighted_scan_rows)

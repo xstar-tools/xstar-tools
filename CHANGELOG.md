@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# v0.3.106 - 2026-05-08
+
+- Improved `examples/46_cv_source_attribution_scan.py` after the v0.3.105 matrix-resolve scan showed no improvement over the stored C V baseline.
+- Added population-weighted source attribution: `cv_population_weighted_source_attribution.csv`. This multiplies off-diagonal gains by the stored source-level population so raw type-71/type-99 rates from nearly unpopulated superlevels are not overinterpreted.
+- Added a fixed-population first-order leverage scan: `cv_population_weighted_source_scan.csv`. This reports f/i/r, R, G, and L2 for population-weighted source-family scaling while keeping the v0.3.104 type-50 3P_J->3S1 line-escape/drain balance fixed.
+- Added a matrix-recompute-vs-stored-baseline diagnostic in the summary JSON because post-processing a CSV roundtrip can differ from the in-memory `examples/42` solver result.
+- No core population matrix/rate physics were changed.
+
 # v0.3.105 - 2026-05-08
 
 - Added `examples/46_cv_source_attribution_scan.py`, a diagnostic C V He-like triplet f/r source-attribution and source-group scan.

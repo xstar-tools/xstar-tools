@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: v0.3.105 adds `examples/46_cv_source_attribution_scan.py`, a diagnostic C V f/r source-attribution and source-group scan. It reads existing solver-output CSVs, attributes source routes into type-71/type-99/type-53/type-74/direct families, keeps the v0.3.104 type-50 `3P_J -> 3S1` line-escape/drain treatment fixed, and scans selected superlevel/source/cascade groups against the C V XSTAR `ne=1e8` triplet-line target.
+Latest package note: v0.3.106 improves `examples/46_cv_source_attribution_scan.py` with population-weighted source attribution and a fixed-population first-order leverage scan, so C V f/r diagnostics are based on source population times rate rather than raw type-71/type-99 rates alone. It also records when CSV-roundtrip matrix re-solves differ from the stored in-memory solver baseline.
 
 Previous package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.
 
