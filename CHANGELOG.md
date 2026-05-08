@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.3.107 - 2026-05-08
+
+- Extended `examples/46_cv_source_attribution_scan.py` for the C V high-forbidden/low-resonance residual after v0.3.104.
+- Added direct bound-bound resonance/singlet feed diagnostics:
+  - `cv_direct_bound_bound_source_attribution.csv`,
+  - `cv_direct_bound_bound_resonance_singlet_scan.csv`.
+- The new direct-bound-bound scan separates radiative/collisional feed into f, i, and r upper levels and adds a first-order 2-D f/r balance scan that boosts the resonance/singlet feed while optionally suppressing direct forbidden feed.
+- This remains diagnostic-only: no core population matrix, type-50 line escape, type-71, type-77, type-99, type-53/type-74, or ion-fraction closure changes were made.
+
 # v0.3.106 - 2026-05-08
 
 - Improved `examples/46_cv_source_attribution_scan.py` after the v0.3.105 matrix-resolve scan showed no improvement over the stored C V baseline.

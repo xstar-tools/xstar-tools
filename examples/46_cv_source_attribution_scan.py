@@ -10,7 +10,8 @@ source-family rows.
 The default scan is aimed at the v0.3.104 C V residual: intercombination is now
 close to the XSTAR reference, while forbidden is high and resonance is low.  The
 script therefore leaves type-50 1s2p 3P_J -> 1s2s 3S1 line-escape/drain terms
-unchanged and scans superlevel/source/cascade groups instead.
+unchanged and scans superlevel/source/cascade groups plus direct bound-bound
+resonance/singlet feed diagnostics.
 """
 from __future__ import annotations
 
@@ -838,7 +839,267 @@ def _make_population_weighted_leverage_scan_rows(
                 "delta_r_minus_target": "" if target[2] is None else r - float(target[2]),
                 "notes": "first-order fixed-population scan; not a matrix re-solve",
             })
+
     return rows
+
+
+def _direct_bound_bound_groups_for_row(row: dict, triplet_by_global: Dict[int, str]) -> List[str]:
+    """Return direct bound-bound f/i/r feed groups for an off-diagonal gain row.
+
+    The generic population-weighted attribution table is useful for identifying
+    whether superlevel/source rows have leverage, but the current C V residual
+    after v0.3.104 is specifically high f / low r.  This helper therefore
+    splits direct bound-bound gain rows by destination component, with an alias
+    group for the resonance/singlet upper level (1s2p 1P1).  It uses only
+    off-diagonal gains; paired diagonal-loss rows are not part of the
+    fixed-population first-order flow proxy.
+    """
+    if str(row.get("full_global_component") or "") != "bound_bound_blocks_CVI_CV":
+        return []
+    if not _is_offdiag_gain(row):
+        return []
+    row_g = _maybe_int(row.get("matrix_row_global_index"))
+    comp = str(row.get("triplet_component") or row.get("destination_triplet_component") or "").strip().lower()
+    if row_g is not None and comp not in {"f", "i", "r"}:
+        comp = triplet_by_global.get(int(row_g), "")
+    if comp not in {"f", "i", "r"}:
+        return []
+    source_method = str(row.get("source_method") or "")
+    trans = str(row.get("transition_kind") or "")
+    if "data_type_50" in source_method or trans == "radiative_decay":
+        kind = "radiative"
+    elif "collision" in trans or "type63" in source_method or "type56" in source_method or "type69" in source_method:
+        kind = "collisional"
+    else:
+        kind = "other"
+    groups = [f"direct_bound_bound_{kind}_to_{comp}", f"direct_bound_bound_all_to_{comp}"]
+    if comp == "r":
+        groups.append("direct_bound_bound_resonance_singlet_feed")
+    if comp == "f":
+        groups.append("direct_bound_bound_forbidden_triplet_feed")
+    return groups
+
+
+def _make_direct_bound_bound_attribution_rows(
+    full_terms: Sequence[dict],
+    global_index_rows: Sequence[dict],
+    population_by_global: Dict[int, float],
+) -> List[dict]:
+    """Population-weighted direct bound-bound feed into f/i/r upper levels."""
+    triplet_by_global = _component_from_global_index(global_index_rows)
+    acc: Dict[str, dict] = {}
+    for row in full_terms:
+        groups = _direct_bound_bound_groups_for_row(row, triplet_by_global)
+        if not groups:
+            continue
+        col = _maybe_int(row.get("matrix_col_global_index"))
+        pop_col = population_by_global.get(int(col), 0.0) if col is not None else 0.0
+        rate = _maybe_float(row.get("full_global_signed_rate_s^-1") or row.get("signed_rate_s^-1"))
+        if rate is None or float(rate) <= 0.0:
+            continue
+        flow = float(pop_col) * float(rate)
+        if flow == 0.0:
+            # Keep zero-flow groups visible because they are useful for deciding
+            # whether a raw route is unimportant due to a tiny source population.
+            pass
+        row_g = _maybe_int(row.get("matrix_row_global_index"))
+        comp = str(row.get("triplet_component") or row.get("destination_triplet_component") or "").strip().lower()
+        if row_g is not None and comp not in {"f", "i", "r"}:
+            comp = triplet_by_global.get(int(row_g), "")
+        for group in groups:
+            r = acc.setdefault(group, {
+                "direct_bound_bound_group": group,
+                "n_gain_rows": 0,
+                "raw_gain_sum_s^-1": 0.0,
+                "population_weighted_gain_sum_s^-1": 0.0,
+                "population_weighted_f_gain_s^-1": 0.0,
+                "population_weighted_i_gain_s^-1": 0.0,
+                "population_weighted_r_gain_s^-1": 0.0,
+                "max_source_population_used": 0.0,
+                "example_records": [],
+                "notes": "population-weighted direct bound-bound offdiag gain; fixed-population diagnostic",
+            })
+            r["n_gain_rows"] += 1
+            r["raw_gain_sum_s^-1"] += float(rate)
+            r["population_weighted_gain_sum_s^-1"] += flow
+            if comp in {"f", "i", "r"}:
+                r[f"population_weighted_{comp}_gain_s^-1"] += flow
+            r["max_source_population_used"] = max(float(r["max_source_population_used"]), float(pop_col))
+            recid = row.get("record")
+            if recid not in (None, "", "nan") and len(r["example_records"]) < 10:
+                r["example_records"].append(str(recid))
+    rows: List[dict] = []
+    for group, r in sorted(acc.items()):
+        rr = dict(r)
+        total = sum(float(rr.get(f"population_weighted_{c}_gain_s^-1") or 0.0) for c in ("f", "i", "r"))
+        for c in ("f", "i", "r"):
+            rr[f"population_weighted_{c}_fraction_within_group"] = (float(rr.get(f"population_weighted_{c}_gain_s^-1") or 0.0) / total) if total > 0 else ""
+        rr["example_records"] = ";".join(rr["example_records"])
+        if group == "direct_bound_bound_resonance_singlet_feed":
+            rr["notes"] = "all direct bound-bound offdiag gains into the C V resonance/singlet upper level 1s2p 1P1"
+        elif group == "direct_bound_bound_forbidden_triplet_feed":
+            rr["notes"] = "all direct bound-bound offdiag gains into the C V forbidden upper level 1s2s 3S1"
+        rows.append(rr)
+    return rows
+
+
+def _direct_group_flow_map(direct_rows: Sequence[dict]) -> Dict[str, Dict[str, float]]:
+    out: Dict[str, Dict[str, float]] = {}
+    for row in direct_rows:
+        group = str(row.get("direct_bound_bound_group") or "")
+        if not group:
+            continue
+        out[group] = {c: float(_maybe_float(row.get(f"population_weighted_{c}_gain_s^-1")) or 0.0) for c in ("f", "i", "r")}
+    return out
+
+
+def _apply_component_group_scale(
+    baseline_component_rates: Dict[str, float],
+    flow_map: Dict[str, Dict[str, float]],
+    group_scales: Dict[str, float],
+) -> Dict[str, float]:
+    new = {c: max(0.0, float(baseline_component_rates.get(c, 0.0))) for c in ("f", "i", "r")}
+    for group, scale in group_scales.items():
+        flows = flow_map.get(group, {})
+        for c in ("f", "i", "r"):
+            new[c] = max(0.0, new[c] + (float(scale) - 1.0) * float(flows.get(c, 0.0)))
+    return new
+
+
+def _component_rates_to_fraction_row(
+    *,
+    scan_name: str,
+    scan_model: str,
+    scaled_group: str,
+    scale_factor,
+    component_rates: Dict[str, float],
+    target: Tuple[Optional[float], Optional[float], Optional[float]],
+    baseline_total: float,
+    notes: str,
+    extra: Optional[dict] = None,
+) -> dict:
+    total = sum(max(0.0, float(component_rates.get(c, 0.0))) for c in ("f", "i", "r"))
+    if total <= 0:
+        f = i = r = None
+    else:
+        f, i, r = (float(component_rates.get("f", 0.0)) / total,
+                   float(component_rates.get("i", 0.0)) / total,
+                   float(component_rates.get("r", 0.0)) / total)
+    R, G = _ratio_R_G(f, i, r)
+    row = {
+        "scan_model": scan_model,
+        "scan_name": scan_name,
+        "scaled_group": scaled_group,
+        "scale_factor": scale_factor,
+        "baseline_total_component_rate_s^-1": baseline_total,
+        "new_total_component_rate_s^-1": total,
+        "new_f_component_rate_s^-1": component_rates.get("f", 0.0),
+        "new_i_component_rate_s^-1": component_rates.get("i", 0.0),
+        "new_r_component_rate_s^-1": component_rates.get("r", 0.0),
+        "f_fraction": f,
+        "i_fraction": i,
+        "r_fraction": r,
+        "R": R,
+        "G": G,
+        "l2_distance_to_target": _l2(f, i, r, target),
+        "delta_f_minus_target": "" if f is None or target[0] is None else f - float(target[0]),
+        "delta_i_minus_target": "" if i is None or target[1] is None else i - float(target[1]),
+        "delta_r_minus_target": "" if r is None or target[2] is None else r - float(target[2]),
+        "notes": notes,
+    }
+    if extra:
+        row.update(extra)
+    return row
+
+
+def _make_direct_bound_bound_resonance_scan_rows(
+    direct_rows: Sequence[dict],
+    baseline_component_rates: Dict[str, float],
+    target: Tuple[Optional[float], Optional[float], Optional[float]],
+    direct_scales: Sequence[float],
+    resonance_scales: Sequence[float],
+    forbidden_scales: Sequence[float],
+) -> List[dict]:
+    """Fixed-population scans for direct resonance/singlet feed.
+
+    This diagnostic is intentionally separate from the matrix re-solve.  It asks
+    whether the *currently populated* direct bound-bound routes have enough
+    leverage to move C V from high-f/low-r toward the XSTAR target when the
+    resonance/singlet feed is boosted and/or the forbidden feed is reduced.
+    """
+    flow_map = _direct_group_flow_map(direct_rows)
+    baseline_total = sum(max(0.0, float(baseline_component_rates.get(c, 0.0))) for c in ("f", "i", "r"))
+    rows: List[dict] = []
+    if baseline_total <= 0:
+        return rows
+    rows.append(_component_rates_to_fraction_row(
+        scan_name="stored_component_baseline",
+        scan_model="direct_bound_bound_fixed_population_first_order",
+        scaled_group="stored_baseline",
+        scale_factor=1.0,
+        component_rates={c: float(baseline_component_rates.get(c, 0.0)) for c in ("f", "i", "r")},
+        target=target,
+        baseline_total=baseline_total,
+        notes="baseline from stored calc_emis/component rates",
+    ))
+    for group in [
+        "direct_bound_bound_resonance_singlet_feed",
+        "direct_bound_bound_radiative_to_r",
+        "direct_bound_bound_collisional_to_r",
+        "direct_bound_bound_forbidden_triplet_feed",
+        "direct_bound_bound_radiative_to_f",
+    ]:
+        flows = flow_map.get(group)
+        if not flows:
+            continue
+        flow_total = sum(max(0.0, flows.get(c, 0.0)) for c in ("f", "i", "r"))
+        for scale in direct_scales:
+            comp_rates = _apply_component_group_scale(baseline_component_rates, flow_map, {group: float(scale)})
+            rows.append(_component_rates_to_fraction_row(
+                scan_name=f"{group}_x{float(scale):g}",
+                scan_model="direct_bound_bound_fixed_population_first_order",
+                scaled_group=group,
+                scale_factor=float(scale),
+                component_rates=comp_rates,
+                target=target,
+                baseline_total=baseline_total,
+                notes="single direct bound-bound group scale; fixed-population diagnostic, not a matrix re-solve",
+                extra={
+                    "direct_group_weighted_flow_total_s^-1": flow_total,
+                    "direct_group_to_baseline_total_ratio": flow_total / baseline_total if baseline_total > 0 else "",
+                },
+            ))
+    # 2-D f/r balance scan: boost direct resonance/singlet feed while reducing
+    # direct forbidden feed.  This is the most relevant diagnostic for the
+    # v0.3.104 C V residual (f high, r low, i close).
+    r_group = "direct_bound_bound_resonance_singlet_feed"
+    f_group = "direct_bound_bound_forbidden_triplet_feed"
+    if r_group in flow_map and f_group in flow_map:
+        for r_scale in resonance_scales:
+            for f_scale in forbidden_scales:
+                comp_rates = _apply_component_group_scale(
+                    baseline_component_rates,
+                    flow_map,
+                    {r_group: float(r_scale), f_group: float(f_scale)},
+                )
+                rows.append(_component_rates_to_fraction_row(
+                    scan_name=f"resonance_singlet_x{float(r_scale):g}__forbidden_x{float(f_scale):g}",
+                    scan_model="direct_bound_bound_resonance_forbidden_2d_fixed_population",
+                    scaled_group="direct_bound_bound_resonance_singlet_vs_forbidden_feed",
+                    scale_factor=f"r={float(r_scale):g};f={float(f_scale):g}",
+                    component_rates=comp_rates,
+                    target=target,
+                    baseline_total=baseline_total,
+                    notes="2-D first-order scan: boost/suppress direct resonance/singlet feed and forbidden feed; fixed-population diagnostic, not a matrix re-solve",
+                    extra={
+                        "direct_resonance_singlet_scale": float(r_scale),
+                        "direct_forbidden_feed_scale": float(f_scale),
+                        "direct_resonance_singlet_weighted_flow_s^-1": sum(flow_map[r_group].values()),
+                        "direct_forbidden_weighted_flow_s^-1": sum(flow_map[f_group].values()),
+                    },
+                ))
+    return rows
+
 
 def _write_markdown(path: Path, scan_rows: Sequence[dict], attr_rows: Sequence[dict], target: Tuple[Optional[float], Optional[float], Optional[float]], target_meta: dict) -> None:
     best = None
@@ -881,6 +1142,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--extra-groups", default="", help="Optional comma-separated extra groups to scan: type99_continuum_alias_level32,type71_from_sprlevlt,type71_from_sprlevls,type53_milne_inverse_to_resonance,type74_inverse_to_resonance")
     p.add_argument("--extra-group-scales", default="0.5,0.75,1,1.25,1.5,2")
     p.add_argument("--population-weighted-scales", default="0,0.5,0.75,1,1.25,1.5,2", help="Scales for the population-weighted fixed-population leverage scan written to cv_population_weighted_source_scan.csv.")
+    p.add_argument("--direct-bound-bound-scales", default="0,0.25,0.5,0.75,1,1.25,1.5,2,3,5", help="Single-group scales for direct bound-bound resonance/singlet and forbidden-feed first-order scans.")
+    p.add_argument("--direct-bound-bound-resonance-scales", default="0.5,0.75,1,1.25,1.5,2,3,5", help="Resonance/singlet feed scales for the 2-D direct bound-bound f/r balance scan.")
+    p.add_argument("--direct-bound-bound-forbidden-scales", default="0,0.25,0.5,0.75,1,1.25", help="Forbidden-feed scales for the 2-D direct bound-bound f/r balance scan.")
     p.add_argument("--full-global-linear-solver", default="xstar-lucy", choices=["solve", "dense", "lstsq", "svd", "xstar-lucy"])
     p.add_argument("--full-global-topology", default="xstar-continuum-alias-superlevels", choices=["explicit-current", "xstar-continuum-alias", "xstar-continuum-alias-superlevels"])
     p.add_argument("--ion-fraction-closure", default="xstar-calc-ion-rates")
@@ -936,6 +1200,20 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     for row in weighted_scan_rows:
         row["baseline_component_rate_source"] = baseline_component_source
     write_csv(out_dir / "cv_population_weighted_source_scan.csv", weighted_scan_rows)
+
+    direct_bb_rows = _make_direct_bound_bound_attribution_rows(full_terms, global_rows, population_by_global)
+    write_csv(out_dir / "cv_direct_bound_bound_source_attribution.csv", direct_bb_rows)
+    direct_bb_scan_rows = _make_direct_bound_bound_resonance_scan_rows(
+        direct_bb_rows,
+        baseline_component_rates,
+        target_tuple,
+        _parse_scale_list(args.direct_bound_bound_scales),
+        _parse_scale_list(args.direct_bound_bound_resonance_scales),
+        _parse_scale_list(args.direct_bound_bound_forbidden_scales),
+    )
+    for row in direct_bb_scan_rows:
+        row["baseline_component_rate_source"] = baseline_component_source
+    write_csv(out_dir / "cv_direct_bound_bound_resonance_singlet_scan.csv", direct_bb_scan_rows)
 
     triplet_by_global = _component_from_global_index(global_rows)
     scan_plan: List[Tuple[str, str, float]] = []
@@ -1026,11 +1304,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         "n_population_weighted_source_family_rows": len(weighted_attr_rows),
         "n_scan_rows": len(scan_rows),
         "n_population_weighted_scan_rows": len(weighted_scan_rows),
+        "n_direct_bound_bound_source_family_rows": len(direct_bb_rows),
+        "n_direct_bound_bound_scan_rows": len(direct_bb_scan_rows),
         "best_scan_row": min(scan_rows, key=lambda r: float(r.get("l2_distance_to_target") if r.get("l2_distance_to_target") not in (None, "") else 1e99)) if scan_rows else {},
         "best_population_weighted_scan_row": best_weighted,
+        "best_direct_bound_bound_scan_row": min(direct_bb_scan_rows, key=lambda r: float(r.get("l2_distance_to_target") if r.get("l2_distance_to_target") not in (None, "") else 1e99)) if direct_bb_scan_rows else {},
         "matrix_recompute_vs_stored_baseline_l2_delta": roundtrip_delta,
         "baseline_component_rate_source": baseline_component_source,
-        "notes": "Diagnostic-only source-family scaling; type-50 line-escape/drain rows are kept fixed by construction. v0.3.106 adds population-weighted fixed-population leverage scans because CSV-roundtrip matrix re-solves may not reproduce the stored in-memory solver baseline exactly.",
+        "notes": "Diagnostic-only source-family scaling; type-50 line-escape/drain rows are kept fixed by construction. v0.3.107 adds direct bound-bound resonance/singlet feed attribution and a first-order f/r balance scan because the C V residual after v0.3.104 is high f / low r with i already close.",
     }
     (out_dir / "cv_source_attribution_scan_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
     _write_markdown(out_dir / "cv_source_attribution_scan.md", scan_rows, attr_rows, target_tuple, target_meta)
@@ -1047,10 +1328,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         if bw:
             print(f"best population-weighted scan={bw.get('scan_name')} group={bw.get('scaled_group')} scale={bw.get('scale_factor')}")
             print(f"best population-weighted f/i/r={bw.get('f_fraction')}/{bw.get('i_fraction')}/{bw.get('r_fraction')} R={bw.get('R')} G={bw.get('G')} L2={bw.get('l2_distance_to_target')}")
+        dbb = summary.get("best_direct_bound_bound_scan_row") or {}
+        if dbb:
+            print(f"best direct-bound-bound scan={dbb.get('scan_name')} group={dbb.get('scaled_group')} scale={dbb.get('scale_factor')}")
+            print(f"best direct-bound-bound f/i/r={dbb.get('f_fraction')}/{dbb.get('i_fraction')}/{dbb.get('r_fraction')} R={dbb.get('R')} G={dbb.get('G')} L2={dbb.get('l2_distance_to_target')}")
         print(f"wrote: {out_dir / 'cv_source_family_attribution.csv'}")
         print(f"wrote: {out_dir / 'cv_population_weighted_source_attribution.csv'}")
+        print(f"wrote: {out_dir / 'cv_direct_bound_bound_source_attribution.csv'}")
         print(f"wrote: {out_dir / 'cv_source_group_scan.csv'}")
         print(f"wrote: {out_dir / 'cv_population_weighted_source_scan.csv'}")
+        print(f"wrote: {out_dir / 'cv_direct_bound_bound_resonance_singlet_scan.csv'}")
         print(f"wrote: {out_dir / 'cv_source_attribution_scan.md'}")
 
 

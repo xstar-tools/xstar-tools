@@ -36,13 +36,19 @@ def test_cv_source_attribution_scan_smoke(tmp_path: Path):
     scan = out_dir / "cv_source_group_scan.csv"
     weighted_attr = out_dir / "cv_population_weighted_source_attribution.csv"
     weighted_scan = out_dir / "cv_population_weighted_source_scan.csv"
+    direct_attr = out_dir / "cv_direct_bound_bound_source_attribution.csv"
+    direct_scan = out_dir / "cv_direct_bound_bound_resonance_singlet_scan.csv"
     assert attr.exists()
     assert scan.exists()
     assert weighted_attr.exists()
     assert weighted_scan.exists()
+    assert direct_attr.exists()
+    assert direct_scan.exists()
     attr_rows = list(csv.DictReader(attr.open()))
     scan_rows = list(csv.DictReader(scan.open()))
     weighted_scan_rows = list(csv.DictReader(weighted_scan.open()))
+    direct_attr_rows = list(csv.DictReader(direct_attr.open()))
+    direct_scan_rows = list(csv.DictReader(direct_scan.open()))
     families = {r["source_family"] for r in attr_rows}
     assert "type71_from_sprlevlt" in families
     assert "type71_from_sprlevls" in families
@@ -50,3 +56,8 @@ def test_cv_source_attribution_scan_smoke(tmp_path: Path):
     assert any(r["scaled_group"] == "type71_resonance_singlet_cascade" for r in scan_rows)
     assert any(r["scaled_group"] == "none" for r in scan_rows)
     assert any(r["scan_model"] == "population_weighted_fixed_population_first_order" for r in weighted_scan_rows)
+    direct_groups = {r["direct_bound_bound_group"] for r in direct_attr_rows}
+    assert "direct_bound_bound_resonance_singlet_feed" in direct_groups
+    assert "direct_bound_bound_forbidden_triplet_feed" in direct_groups
+    assert any(r["scaled_group"] == "direct_bound_bound_resonance_singlet_feed" for r in direct_scan_rows)
+    assert any(r["scan_model"] == "direct_bound_bound_resonance_forbidden_2d_fixed_population" for r in direct_scan_rows)

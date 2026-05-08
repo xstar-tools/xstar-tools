@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: v0.3.106 improves `examples/46_cv_source_attribution_scan.py` with population-weighted source attribution and a fixed-population first-order leverage scan, so C V f/r diagnostics are based on source population times rate rather than raw type-71/type-99 rates alone. It also records when CSV-roundtrip matrix re-solves differ from the stored in-memory solver baseline.
+Latest package note: v0.3.107 extends `examples/46_cv_source_attribution_scan.py` with direct bound-bound resonance/singlet feed attribution. It now writes direct f/i/r feed tables and a first-order f/r balance scan for the C V high-forbidden/low-resonance residual after v0.3.104.
 
 Previous package note: v0.3.102 makes the He-like triplet-balance diagnostic robust to missing optional audit CSVs in older or partially copied solver-output directories, while preserving all v0.3.101 C V/O VII physics and validation results.
 
