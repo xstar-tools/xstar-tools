@@ -8320,8 +8320,20 @@ def build_resonance_collisional_feed_scale_scan_rows(
     rank_deficient_action: str = "svd",
     negative_population_action: str = "keep",
     prune_null_rate_levels: bool = True,
+    full_global_topology: str = "explicit-current",
+    ion_fraction_closure: str = "none",
+    calc_ion_rates_istruc_audit_rows: Optional[Sequence[dict]] = None,
+    temperature_K: Optional[float] = None,
+    electron_density: Optional[float] = None,
 ) -> List[dict]:
-    """Matrix re-solve scan for direct collisional feed into ``1s2p 1P1``."""
+    """Matrix re-solve scan for direct collisional feed into ``1s2p 1P1``.
+
+    v0.3.110: use the same full-global topology and ion-fraction closure
+    context as the primary run.  v0.3.109 rebuilt the matrix with the scanned
+    bound-bound terms but accidentally used the default explicit-current
+    topology/no-closure solve, so the CSV scan could disagree with the
+    printed ``full_global_xstar_tau0_calc_emis_ion`` result.
+    """
     scales = _parse_triplet_source_scales(resonance_collisional_feed_scale_scan)
     rows: List[dict] = []
     target = _xstar_triplet_target(int(he_like_stage))
@@ -8335,7 +8347,7 @@ def build_resonance_collisional_feed_scale_scan_rows(
             "r_fraction": target["r"],
             "R": target.get("R"),
             "G": target.get("G"),
-            "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
+            "provenance": "v0.3.110_resonance_collisional_feed_scale_scan",
         })
     coupling_treatment_norm = _normalise_triplet_coupling_treatment(triplet_coupling_treatment)
     for scale0 in scales:
@@ -8379,6 +8391,11 @@ def build_resonance_collisional_feed_scale_scan_rows(
             rank_deficient_action=rank_deficient_action,
             negative_population_action=negative_population_action,
             prune_null_rate_levels=prune_null_rate_levels,
+            full_global_topology=full_global_topology,
+            ion_fraction_closure=ion_fraction_closure,
+            calc_ion_rates_istruc_audit_rows=calc_ion_rates_istruc_audit_rows,
+            temperature_K=temperature_K,
+            electron_density=electron_density,
         )
         preferred_sol = next((
             r for r in solve_rows
@@ -8415,7 +8432,9 @@ def build_resonance_collisional_feed_scale_scan_rows(
             "l2_distance_to_target": sol.get("l2_distance_to_target"),
             "sum_population": sol.get("sum_population"),
             "normalization_residual": sol.get("normalization_residual"),
-            "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
+            "full_global_topology": full_global_topology,
+            "ion_fraction_closure": ion_fraction_closure,
+            "provenance": "v0.3.110_resonance_collisional_feed_scale_scan",
         })
     return rows
 
@@ -8434,7 +8453,7 @@ def _resonance_collisional_feed_scale_scan_summary(rows: Sequence[dict]) -> dict
         "best_f_fraction": None if best is None else best.get("f_fraction"),
         "best_i_fraction": None if best is None else best.get("i_fraction"),
         "best_r_fraction": None if best is None else best.get("r_fraction"),
-        "provenance": "v0.3.109_resonance_collisional_feed_scale_scan",
+        "provenance": "v0.3.110_resonance_collisional_feed_scale_scan",
     }
 
 
@@ -8512,7 +8531,7 @@ def build_resonance_collisional_feed_sourcecode_audit_rows(
         "needed_rate_sum_from_best_scan_s^-1": total_needed,
         "missing_rate_sum_relative_to_unscaled_s^-1": None if total_needed is None else total_needed - total_unscaled,
         "diagnostic_conclusion": "C V scale scans indicate a resonance collisional feed factor near 3.25; this audit records the source-code path and rows but does not make that empirical factor default physics.",
-        "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
+        "provenance": "v0.3.110_resonance_collisional_feed_sourcecode_audit",
     })
 
     for r in detail:
@@ -8556,7 +8575,7 @@ def build_resonance_collisional_feed_sourcecode_audit_rows(
             "xstar_helper_file": "xstarlib/src/calt69.f90" if dt == 69 else ("xstarlib/src/erc.f90; xstarlib/src/anl1.f90" if dt == 63 else ""),
             "sourcecode_alignment_status": "solver uses its evaluated ucalc/calt path; empirical scale remains diagnostic pending independent XSTAR detail-rate comparison",
             "possible_discrepancy_tests": "check ans1/ans2 direction, statistical-weight factors, n/l branch selector, unresolved fine-structure sum, and whether XSTAR line/detail output includes additional resonance feed routes",
-            "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
+            "provenance": "v0.3.110_resonance_collisional_feed_sourcecode_audit",
         })
     return rows
 
@@ -8573,7 +8592,7 @@ def _resonance_collisional_feed_sourcecode_audit_summary(rows: Sequence[dict]) -
         "unscaled_rate_sum_s^-1": summary.get("unscaled_rate_sum_s^-1"),
         "needed_rate_sum_from_best_scan_s^-1": summary.get("needed_rate_sum_from_best_scan_s^-1"),
         "records_by_data_type": _counts(detail, "data_type"),
-        "provenance": "v0.3.109_resonance_collisional_feed_sourcecode_audit",
+        "provenance": "v0.3.110_resonance_collisional_feed_sourcecode_audit",
     }
 
 def build_type50_escape_factor_scan_rows(
@@ -13041,6 +13060,11 @@ def solve_element_reference(
         rank_deficient_action=full_global_rank_deficient_action,
         negative_population_action=full_global_negative_population_action,
         prune_null_rate_levels=full_global_prune_null_rate_levels,
+        full_global_topology=full_global_topology,
+        ion_fraction_closure=ion_fraction_closure,
+        calc_ion_rates_istruc_audit_rows=calc_ion_rates_istruc_audit_rows,
+        temperature_K=temperature,
+        electron_density=electron_density,
     )
     resonance_collisional_feed_sourcecode_audit_rows = build_resonance_collisional_feed_sourcecode_audit_rows(
         resonance_collisional_feed_audit_rows=resonance_collisional_feed_audit_rows,

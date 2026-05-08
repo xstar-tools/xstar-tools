@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.3.110 - 2026-05-08
+
+- Fixed the internal `--resonance-collisional-feed-scale-scan` context. v0.3.109 rebuilt the scanned matrix with the requested resonance-feed scale but solved it with the default `explicit-current` topology and no ion-fraction closure, so `xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv` could disagree with the top-level printed `full_global_xstar_tau0_calc_emis_ion` result.
+- The scan now passes through the same `--full-global-topology`, `--ion-fraction-closure`, calc-ion-rates audit rows, temperature, and electron density used by the primary full-global solve.
+- Added `full_global_topology` and `ion_fraction_closure` columns to the resonance-collisional feed scale scan output for provenance.
+- No default physics changes: `--resonance-collisional-feed-scale` still defaults to 1 and remains diagnostic unless explicitly changed.
+
+Validation: `compileall` passed.
+
 # v0.3.109 - 2026-05-08
 
 - Added `xstar_like_element_solver_resonance_collisional_feed_sourcecode_audit.csv`, a source-code-oriented diagnostic for the C V / He-like resonance upper `1s2p 1P1` collisional-feed rows.
