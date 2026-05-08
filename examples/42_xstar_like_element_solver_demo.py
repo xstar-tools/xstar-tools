@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import csv
@@ -98,7 +99,11 @@ def main(argv=None):
     p.add_argument("--xstar-line-tau2-fraction", default="1", help="Fraction of the supplied line column assigned to tau0(2,jkkl). Default 1.")
     p.add_argument("--xstar-reference-lines-csv", default="", help="Optional converted XSTAR xout_lines1 CSV whose line depths and emit_outward values are used for validation-only triplet line-escape postprocessing.")
     p.add_argument("--xstar-reference-value-column", default="emit_outward", help="XSTAR reference line CSV column used to report target f/i/r fractions. Default emit_outward.")
-    p.add_argument("--xstar-reference-depth-scale", default="1", help="Scale factor applied to reference depth_inward/depth_outward before pescl in the validation-only reference-depth postprocess. Default 1.")
+    p.add_argument(
+        "--xstar-reference-depth-scale",
+        default=None,
+        help="Scale factor applied to reference depth_inward/depth_outward before pescl in the validation-only reference-depth postprocess. Default 1; when omitted with --xstar-reference-lines-csv, a warning is printed because the O VII ne=1e8 validation used 0.37.",
+    )
     p.add_argument("--no-full-global-prune-null-rate-levels", action="store_true", help="Disable pruning of null-rate global_index rows before the diagnostic full-global normalized solve.")
     p.add_argument("--out-dir", default="xstar_like_element_solver")
     p.add_argument("--dry-run", action="store_true", help="Write command/intent files without opening atdb.fits")
@@ -226,6 +231,13 @@ def main(argv=None):
 
     from xstar_atomic.xstar_element_solver import solve_element_reference, write_element_solver_outputs
 
+    reference_depth_scale = "1" if args.xstar_reference_depth_scale is None else args.xstar_reference_depth_scale
+    if args.xstar_reference_lines_csv and args.xstar_reference_depth_scale is None:
+        print(
+            "Warning: Using default depth scale 1.0; O VII ne=1e8 validation used 0.37.",
+            file=sys.stderr,
+        )
+
     result = solve_element_reference(
         args.fitsfile,
         element=args.element,
@@ -287,7 +299,7 @@ def main(argv=None):
         xstar_line_tau2_fraction=args.xstar_line_tau2_fraction,
         xstar_reference_lines_csv=args.xstar_reference_lines_csv,
         xstar_reference_value_column=args.xstar_reference_value_column,
-        xstar_reference_depth_scale=args.xstar_reference_depth_scale,
+        xstar_reference_depth_scale=reference_depth_scale,
         full_global_prune_null_rate_levels=not args.no_full_global_prune_null_rate_levels,
     )
     write_element_solver_outputs(result, out)

@@ -23,6 +23,7 @@ import argparse
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -521,7 +522,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--target-r", type=float, default=DEFAULT_CV_TARGET["r"], help="Target resonance fraction; use NaN to omit")
     p.add_argument("--xstar-triplet-lines-csv", help="Optional converted XSTAR triplet line CSV, e.g. xstar_test_run/o7_ne1e8/xstar_o7_triplet_lines.csv. When supplied, this script derives target f/i/r and a validation-only reference-depth emit_outward postprocess.")
     p.add_argument("--xstar-value-column", default="emit_outward", help="Column in --xstar-triplet-lines-csv used as the XSTAR target. Default emit_outward.")
-    p.add_argument("--xstar-reference-depth-scale", type=float, default=1.0, help="Scale applied to XSTAR depth_inward/depth_outward before the validation-only pescl postprocess. Default 1.")
+    p.add_argument(
+        "--xstar-reference-depth-scale",
+        type=float,
+        default=None,
+        help="Scale applied to XSTAR depth_inward/depth_outward before the validation-only pescl postprocess. Default 1; when omitted in the O VII ne=1e8 reference-depth validation mode, a warning is printed because the validated scale was 0.37.",
+    )
     p.add_argument("--print-summary", action="store_true")
     return p
 
@@ -544,12 +550,22 @@ def main(argv: list[str] | None = None) -> None:
     triplet_summary = _build_triplet_payload(_load_recommended_triplet_summary(solver_out_dir, args.comparison_case), target)
     xstar_reference_summary: dict[str, Any] = {}
     xstar_reference_rows: list[dict[str, Any]] = []
+    reference_depth_scale = 1.0 if args.xstar_reference_depth_scale is None else args.xstar_reference_depth_scale
+    if (
+        args.xstar_triplet_lines_csv
+        and args.comparison_case == "full_global_xstar_reference_depth_emit_outward_calc_emis_ion"
+        and args.xstar_reference_depth_scale is None
+    ):
+        print(
+            "Warning: Using default depth scale 1.0; O VII ne=1e8 validation used 0.37.",
+            file=sys.stderr,
+        )
     if args.xstar_triplet_lines_csv:
         xstar_reference_summary, xstar_reference_rows = _build_xstar_reference_depth_postprocess(
             solver_out_dir,
             Path(args.xstar_triplet_lines_csv),
             args.xstar_value_column,
-            args.xstar_reference_depth_scale,
+            reference_depth_scale,
         )
         if args.comparison_case == xstar_reference_summary.get("comparison_case"):
             triplet_summary = {

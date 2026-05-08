@@ -1,5 +1,26 @@
 # xstar-atomic
 
+### v0.3.100 reference-depth scale warning
+
+v0.3.100 keeps the v0.3.99 O VII reference-depth postprocess unchanged, but prevents accidental silent use of the default depth scale.  When `examples/43_compare_xstar_detail_populations.py` is run with:
+
+```bash
+--comparison-case full_global_xstar_reference_depth_emit_outward_calc_emis_ion \
+--xstar-triplet-lines-csv xstar_test_run/o7_ne1e8/xstar_o7_triplet_lines.csv
+```
+
+and `--xstar-reference-depth-scale` is omitted, the script still uses the backward-compatible default scale `1.0` but prints:
+
+```text
+Warning: Using default depth scale 1.0; O VII ne=1e8 validation used 0.37.
+```
+
+For the validated O VII `ne=1e8` comparison, continue to pass:
+
+```bash
+--xstar-reference-depth-scale 0.37
+```
+
 ### v0.3.99 O VII reference-depth line escape validation
 
 v0.3.99 adds an optional XSTAR reference-line CSV postprocessing path for He-like triplet `calc_emis_ion` validation.  The solver can now match triplet lines to a converted XSTAR `xout_lines1` CSV, read `depth_inward`/`depth_outward`, evaluate the XSTAR `pescl` escape channels, and write the validation-only comparison case `full_global_xstar_reference_depth_emit_outward_calc_emis_ion`.  This is intended for the O VII case where the population solution had a good `R=f/i` ratio but too much resonance emission, giving `G=6.01` instead of the XSTAR `emit_outward` target `G=10.58`.
