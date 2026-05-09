@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.119 - 2026-05-09
+
+- Added `examples/51_run_helike_local_state_validation.py`, a source-code-first driver that reads XSTAR `xout_abund1.fits` local-zone states and prepares/runs He-like solver comparisons at those local `T`, `ne`, and `log xi` conditions for C V, O VII, Mg XI, and Ca XIX.
+- The new driver writes `helike_local_state_cases.csv`, `helike_local_state_zone_candidates.csv`, `helike_local_state_summary.json`, `helike_local_state_validation_plan.md`, and reproducible shell scripts for solver and comparison commands.
+- Supports `--selection-mode grid|max` and `--log-xi` for either full local-state grids or a single selected log-xi comparison.
+- Keeps the source-code-first policy: no empirical triplet scale fitting and no default solver-physics changes. The generated commands use XSTAR local `T` and `ne`; radiation normalization remains explicitly marked as not yet tied to XSTAR xi/transfer.
+- On the supplied `xstar_runs` Mg/Ca grid, the driver finds usable local-state cases for Mg XI and Ca XIX but reports C V and O VII as missing/nonzero local-state targets in that specific run tree, because the Mg/Ca `xout_abund1.fits` files have zero C V and O VII He-like fractions.
+
 # v0.3.118 - 2026-05-09
 
 - Added a lightweight FITS ASCII-table fallback reader in `xstar_atomic.xstar_outputs` for XSTAR products such as `xout_abund1.fits`, so Mg/Ca local-state audits can read `ABUNDANCES`, `COLUMNS`, `HEATING`, and `COOLING` extensions even when `astropy` is unavailable.
