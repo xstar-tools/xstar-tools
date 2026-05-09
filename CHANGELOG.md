@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.121 - 2026-05-09
+
+- Improved `examples/51_run_helike_local_state_validation.py` for He-like validation trees that contain C/O density-only runs such as `helike_type69/c5_ne1e8` and `helike_type69/o7_ne1e8`.
+- The driver now records available local `log xi` and electron-density values when a requested `--log-xi` / density filter excludes an ion-specific XSTAR run. This makes it clear when C V/O VII are present but not at the requested `log xi=3` Mg/Ca condition.
+- Added automatic triplet-target CSV creation from the matched XSTAR `xout_lines1.fits` when a preconverted `xstar_*_triplet_lines.csv` is absent. Generated CSVs are written under `auto_xstar_triplet_targets/`, and the compare script includes the conversion command before running `examples/43_compare_xstar_detail_populations.py`.
+- This supports source-code-first local-state validation for C V, O VII, Mg XI, and Ca XIX from the same `xstar_runs` tree without requiring separate manual conversion steps.
+- No solver physics changed and no empirical triplet scale fitting was added.
+
 ## v0.3.120 - 2026-05-09
 
 - Improved `examples/51_run_helike_local_state_validation.py` for practical local-state validation against XSTAR `xout_abund1.fits` products.

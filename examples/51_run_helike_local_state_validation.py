@@ -6,7 +6,8 @@ zone conditions to the pure-Python He-like solver.  It is intended for the next
 validation step after reading ``xout_abund1.fits``: run C V, O VII, Mg XI and
 Ca XIX at the XSTAR-selected local temperature and electron density for a given
 log xi, then compare the solver triplet fractions with the matching XSTAR
-``xout_lines1`` triplet target CSV.
+``xout_lines1`` triplet target.  If a preconverted triplet CSV is absent,
+the script can generate one from the matched ``xout_lines1.fits`` file.
 
 The script does not fit triplet scale factors.  It reads local gas conditions
 from the ``ABUNDANCES`` table in ``xout_abund1.fits`` and writes reproducible
@@ -225,6 +226,69 @@ def _find_target_csv(roots: Iterable[Path], tag: str, logxi: float | None) -> Pa
             return exact[0]
     # For C/O density-only targets there may not be a log-xi token.
     return unique[0]
+
+
+def _find_xout_lines_for_zone(roots: Iterable[Path], tag: str, zone: dict[str, Any] | None, logxi: float | None) -> Path | None:
+    """Find the XSTAR ``xout_lines1.fits`` file matching a selected local-state row.
+
+    The strongest match is the same directory as the selected ``xout_abund1``.
+    This is important for density-only C/O runs such as
+    ``helike_type69/c5_ne1e8`` and ``helike_type69/o7_ne1e8``, where a
+    preconverted triplet CSV may not exist but ``xout_lines1.fits`` does.
+    """
+    if zone is not None:
+        abund = str(zone.get("xstar_abund_path", "") or "")
+        if abund:
+            same_dir = Path(abund).parent / "xout_lines1.fits"
+            if same_dir.exists():
+                return same_dir
+    xtok = _xi_token_from_float(logxi)
+    candidates: list[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        if xtok:
+            candidates.extend(root.glob(f"**/{tag}_{xtok}*/xout_lines1.fits"))
+            candidates.extend(root.glob(f"**/{tag}*{xtok}*/xout_lines1.fits"))
+        candidates.extend(root.glob(f"**/{tag}*/xout_lines1.fits"))
+    unique = sorted(set(candidates), key=lambda p: (len(str(p)), str(p)))
+    if xtok:
+        exact = [p for p in unique if xtok.lower() in str(p).lower()]
+        if exact:
+            return exact[0]
+    return unique[0] if unique else None
+
+
+def _make_xout_lines_convert_command(tag: str, xout_lines: Path, out_csv: Path, python_exe: str = "python") -> list[str]:
+    info = ION_INFO[tag]
+    return [
+        "PYTHONPATH=src", python_exe, "-m", "xstar_atomic.xstar_outputs",
+        str(xout_lines),
+        "--ion", str(info["ion"]),
+        "--wavelength-min", str(info["window_min"]),
+        "--wavelength-max", str(info["window_max"]),
+        "--out-csv", str(out_csv),
+        "--print-summary",
+    ]
+
+
+def _try_make_target_csv_from_xout_lines(tag: str, xout_lines: Path, out_csv: Path) -> tuple[bool, str]:
+    """Create a triplet target CSV from ``xout_lines1.fits`` when possible."""
+    try:
+        from xstar_atomic.xstar_outputs import convert_xout_lines
+
+        info = ION_INFO[tag]
+        out_csv.parent.mkdir(parents=True, exist_ok=True)
+        convert_xout_lines(
+            xout_lines,
+            out_csv=out_csv,
+            ion=str(info["ion"]),
+            wavelength_min=float(info["window_min"]),
+            wavelength_max=float(info["window_max"]),
+        )
+        return out_csv.exists() and out_csv.stat().st_size > 0, ""
+    except Exception as exc:  # pragma: no cover - depends on external FITS files
+        return False, f"{type(exc).__name__}: {exc}"
 
 
 def _find_xout_files(roots: Iterable[Path]) -> list[Path]:
@@ -502,7 +566,20 @@ def build(
             row["status"] = "local_state_selected"
             row["can_generate_solver_command"] = bool(atdb)
             row["recommended_action"] = "rerun solver at XSTAR selected-zone T/ne, then compare to matching XSTAR triplet CSV"
-        target_csv = _find_target_csv(roots, tag, _as_float(zone.get("xstar_log_xi_local")))
+        local_logxi = _as_float(zone.get("xstar_log_xi_local"))
+        target_csv = _find_target_csv(roots, tag, local_logxi)
+        target_csv_preexisting = bool(target_csv)
+        xout_lines = _find_xout_lines_for_zone(roots, tag, zone, local_logxi)
+        row["xstar_lines_fits_path"] = str(xout_lines) if xout_lines else ""
+        row["target_csv_preexisting"] = target_csv_preexisting
+        row["target_csv_generated_from_xout_lines1"] = False
+        row["target_csv_generation_error"] = ""
+        if target_csv is None and xout_lines is not None:
+            auto_csv = out_dir / "auto_xstar_triplet_targets" / str(zone.get("xstar_case_directory", f"{tag}_case")) / str(info["target_file"])
+            ok, err = _try_make_target_csv_from_xout_lines(tag, xout_lines, auto_csv)
+            row["target_csv_generated_from_xout_lines1"] = ok
+            row["target_csv_generation_error"] = err
+            target_csv = auto_csv if ok else None
         row["target_csv_found"] = bool(target_csv)
         row["target_csv_path"] = str(target_csv) if target_csv else ""
         if target_csv:
@@ -517,6 +594,12 @@ def build(
             solver_script_lines.append(" \\\n  ".join(solver_cmd))
             solver_script_lines.append("")
             if cmp_cmd:
+                if row.get("target_csv_generated_from_xout_lines1") and xout_lines is not None and target_csv is not None:
+                    convert_cmd = _make_xout_lines_convert_command(tag, xout_lines, Path(target_csv), python_exe=python_exe)
+                    compare_script_lines.append(f"mkdir -p {shlex.quote(str(Path(target_csv).parent))}")
+                    compare_script_lines.append(" \\\n  ".join(convert_cmd))
+                    compare_script_lines.append("")
+                    row["target_csv_conversion_command"] = _quote_cmd(convert_cmd)
                 compare_script_lines.append(" \\\n  ".join(cmp_cmd))
                 compare_script_lines.append("")
             if run_solver:
@@ -557,9 +640,23 @@ def build(
         source_rows = _dedupe_zone_rows(source_rows)
         if not source_rows:
             add_case(tag, None)
+            def _uniq(vals: list[Any]) -> str:
+                out_vals: list[str] = []
+                for val in vals:
+                    fval = _as_float(val)
+                    if fval is None:
+                        continue
+                    sval = f"{fval:.8g}"
+                    if sval not in out_vals:
+                        out_vals.append(sval)
+                return ";".join(out_vals)
+            case_rows[-1]["n_matching_xout_rows_before_filters"] = len(matching_tag_rows)
+            case_rows[-1]["available_local_logxi_values"] = _uniq([r.get("xstar_log_xi_local") for r in matching_tag_rows])
+            case_rows[-1]["available_local_ne_values_cm^-3"] = _uniq([r.get("xstar_electron_density_cm^-3") for r in matching_tag_rows])
             case_rows[-1]["recommended_action"] = (
                 f"no xout_abund1.fits local state matched the requested log-xi/density filters for {info['ion']}; "
-                "loosen --electron-density-tolerance-dex, use --nearest-density, or provide matching XSTAR runs"
+                "inspect available_local_logxi_values/available_local_ne_values_cm^-3, loosen --electron-density-tolerance-dex, "
+                "use --nearest-density, remove --log-xi for density-only C/O runs, or provide matching XSTAR runs"
             )
             continue
         if selection_mode == "max":
@@ -637,13 +734,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ions", default="c5,o7,mg11,ca19", help="Comma-separated tags: c5,o7,mg11,ca19.")
     p.add_argument("--atdb", default="", help="Path to atdb.fits. If supplied, runnable solver commands are generated.")
     p.add_argument("--run-solver", action="store_true", help="Execute generated solver and comparison commands. Requires --atdb.")
-    p.add_argument("--version-label", default="v03120", help="Label embedded in generated output directories.")
+    p.add_argument("--version-label", default="v03121", help="Label embedded in generated output directories.")
     p.add_argument("--selection-mode", choices=["grid", "max"], default="grid", help="grid: one max-fraction zone per xout file; max: one global max-fraction zone per ion.")
     p.add_argument("--log-xi", type=float, default=None, help="Optional log10(xi) filter, e.g. 3.0 for a single local-state comparison.")
     p.add_argument("--target-electron-density", type=float, default=None, help="Optional electron-density filter in cm^-3. Example: 1e8 keeps local XSTAR states near ne=1e8.")
     p.add_argument("--electron-density-tolerance-dex", type=float, default=0.15, help="Allowed |log10(ne/target_ne)| when --target-electron-density is used. Default 0.15 dex.")
     p.add_argument("--nearest-density", action="store_true", help="When --target-electron-density is supplied, keep the closest-density state for each ion/log-xi group even if outside the tolerance.")
-    p.add_argument("--out-dir", default="helike_local_state_validation_v03120")
+    p.add_argument("--out-dir", default="helike_local_state_validation_v03121")
     p.add_argument("--python-exe", default="python")
     p.add_argument("--print-summary", action="store_true")
     return p
