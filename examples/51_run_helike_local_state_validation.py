@@ -417,10 +417,37 @@ def _dedupe_zone_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _nearest_density_rows(rows: list[dict[str, Any]], target_ne: float | None) -> list[dict[str, Any]]:
-    """Keep rows at the closest local electron density for each ion/log-xi group."""
+def _nearest_density_rows(
+    rows: list[dict[str, Any]],
+    target_ne: float | None,
+    *,
+    group_by_logxi: bool = True,
+) -> list[dict[str, Any]]:
+    """Keep rows at the closest local electron density.
+
+    For grid validation, keeping the closest density for each local log-xi
+    group is useful because each log-xi target remains represented.  For
+    max-fraction validation, however, grouping by log-xi can accidentally keep
+    several density grids and then let the maximum ion fraction choose the wrong
+    density.  In that case use ``group_by_logxi=False`` so the requested
+    density constraint is applied before the max-fraction selection.
+    """
     if target_ne is None:
         return rows
+    if not group_by_logxi:
+        finite = [
+            row for row in rows
+            if _density_distance_dex(row, target_ne) is not None
+        ]
+        if not finite:
+            return []
+        min_dist = min(_density_distance_dex(row, target_ne) or float("inf") for row in finite)
+        # Keep all rows at the closest density to allow the following max/grid
+        # selection to choose among zones/log-xi values at that one density.
+        return [
+            row for row in finite
+            if abs((_density_distance_dex(row, target_ne) or float("inf")) - min_dist) <= 1e-9
+        ]
     groups: dict[float, list[dict[str, Any]]] = {}
     for row in rows:
         lx = _as_float(row.get("xstar_log_xi_local"))
@@ -428,8 +455,17 @@ def _nearest_density_rows(rows: list[dict[str, Any]], target_ne: float | None) -
         groups.setdefault(key, []).append(row)
     out: list[dict[str, Any]] = []
     for _, group in sorted(groups.items()):
-        best = min(group, key=lambda r: _density_distance_dex(r, target_ne) if _density_distance_dex(r, target_ne) is not None else float("inf"))
-        out.append(best)
+        finite = [
+            row for row in group
+            if _density_distance_dex(row, target_ne) is not None
+        ]
+        if not finite:
+            continue
+        best_dist = min(_density_distance_dex(row, target_ne) or float("inf") for row in finite)
+        out.extend([
+            row for row in finite
+            if abs((_density_distance_dex(row, target_ne) or float("inf")) - best_dist) <= 1e-9
+        ])
     return out
 
 
@@ -567,19 +603,36 @@ def build(
             row["can_generate_solver_command"] = bool(atdb)
             row["recommended_action"] = "rerun solver at XSTAR selected-zone T/ne, then compare to matching XSTAR triplet CSV"
         local_logxi = _as_float(zone.get("xstar_log_xi_local"))
-        target_csv = _find_target_csv(roots, tag, local_logxi)
-        target_csv_preexisting = bool(target_csv)
         xout_lines = _find_xout_lines_for_zone(roots, tag, zone, local_logxi)
         row["xstar_lines_fits_path"] = str(xout_lines) if xout_lines else ""
-        row["target_csv_preexisting"] = target_csv_preexisting
+        row["target_csv_preexisting"] = False
         row["target_csv_generated_from_xout_lines1"] = False
         row["target_csv_generation_error"] = ""
-        if target_csv is None and xout_lines is not None:
-            auto_csv = out_dir / "auto_xstar_triplet_targets" / str(zone.get("xstar_case_directory", f"{tag}_case")) / str(info["target_file"])
-            ok, err = _try_make_target_csv_from_xout_lines(tag, xout_lines, auto_csv)
-            row["target_csv_generated_from_xout_lines1"] = ok
-            row["target_csv_generation_error"] = err
-            target_csv = auto_csv if ok else None
+        row["target_csv_source_policy"] = "prefer_same_xstar_run_xout_lines1"
+        target_csv: Path | None = None
+
+        # The physically correct target for a local-state comparison is the
+        # triplet line list from the same XSTAR run directory as the selected
+        # xout_abund1.fits.  Do not prefer a generic/preconverted target CSV
+        # from another run simply because it matches the ion name.
+        if xout_lines is not None:
+            same_dir_csv = xout_lines.parent / str(info["target_file"])
+            if same_dir_csv.exists() and same_dir_csv.stat().st_size > 0:
+                target_csv = same_dir_csv
+                row["target_csv_preexisting"] = True
+                row["target_csv_source"] = "same_xstar_run_directory"
+            else:
+                auto_csv = out_dir / "auto_xstar_triplet_targets" / str(zone.get("xstar_case_directory", f"{tag}_case")) / str(info["target_file"])
+                ok, err = _try_make_target_csv_from_xout_lines(tag, xout_lines, auto_csv)
+                row["target_csv_generated_from_xout_lines1"] = ok
+                row["target_csv_generation_error"] = err
+                if ok:
+                    target_csv = auto_csv
+                    row["target_csv_source"] = "generated_from_same_xstar_run_xout_lines1"
+        if target_csv is None:
+            target_csv = _find_target_csv(roots, tag, local_logxi)
+            row["target_csv_preexisting"] = bool(target_csv)
+            row["target_csv_source"] = "fallback_search_by_ion_and_logxi" if target_csv else "missing"
         row["target_csv_found"] = bool(target_csv)
         row["target_csv_path"] = str(target_csv) if target_csv else ""
         if target_csv:
@@ -634,7 +687,11 @@ def build(
         source_rows = matching_tag_rows
         source_rows = _filter_logxi(source_rows, logxi)
         if target_electron_density is not None and nearest_density:
-            source_rows = _nearest_density_rows(source_rows, target_electron_density)
+            source_rows = _nearest_density_rows(
+                source_rows,
+                target_electron_density,
+                group_by_logxi=(selection_mode != "max"),
+            )
         else:
             source_rows = _filter_density(source_rows, target_electron_density, electron_density_tolerance_dex)
         source_rows = _dedupe_zone_rows(source_rows)
@@ -734,13 +791,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ions", default="c5,o7,mg11,ca19", help="Comma-separated tags: c5,o7,mg11,ca19.")
     p.add_argument("--atdb", default="", help="Path to atdb.fits. If supplied, runnable solver commands are generated.")
     p.add_argument("--run-solver", action="store_true", help="Execute generated solver and comparison commands. Requires --atdb.")
-    p.add_argument("--version-label", default="v03121", help="Label embedded in generated output directories.")
+    p.add_argument("--version-label", default="v03122", help="Label embedded in generated output directories.")
     p.add_argument("--selection-mode", choices=["grid", "max"], default="grid", help="grid: one max-fraction zone per xout file; max: one global max-fraction zone per ion.")
     p.add_argument("--log-xi", type=float, default=None, help="Optional log10(xi) filter, e.g. 3.0 for a single local-state comparison.")
     p.add_argument("--target-electron-density", type=float, default=None, help="Optional electron-density filter in cm^-3. Example: 1e8 keeps local XSTAR states near ne=1e8.")
     p.add_argument("--electron-density-tolerance-dex", type=float, default=0.15, help="Allowed |log10(ne/target_ne)| when --target-electron-density is used. Default 0.15 dex.")
     p.add_argument("--nearest-density", action="store_true", help="When --target-electron-density is supplied, keep the closest-density state for each ion/log-xi group even if outside the tolerance.")
-    p.add_argument("--out-dir", default="helike_local_state_validation_v03121")
+    p.add_argument("--out-dir", default="helike_local_state_validation_v03122")
     p.add_argument("--python-exe", default="python")
     p.add_argument("--print-summary", action="store_true")
     return p
