@@ -290,10 +290,60 @@ def _select_zone(abund_path: Path | None, ion_col: str) -> tuple[dict[str, Any],
     return best, zone_rows
 
 
-def _solver_dirs(results_root: Path) -> list[Path]:
-    dirs = sorted(p for p in results_root.glob("*xstar_like_element_solver*superlevels") if p.is_dir())
-    dirs = [p for p in dirs if ("mg11" in p.name.lower() or "ca19" in p.name.lower())]
-    return dirs
+def _is_mg_ca_solver_dir(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    name = path.name.lower()
+    return (
+        ("mg11" in name or "ca19" in name)
+        and "xstar_like_element_solver" in name
+        and "superlevels" in name
+        and (path / "xstar_like_element_solver_summary.json").exists()
+    )
+
+
+def _solver_dirs(results_root: Path, explicit_solver_dirs: Sequence[Path] | None = None, include_cwd_fallback: bool = True) -> list[Path]:
+    """Return Mg/Ca solver output directories.
+
+    Historically this audit only scanned direct children of ``--results-root``.
+    That made local validation brittle: if the user reran one or two solver
+    cases in the current package directory and passed an older XSTAR target tree
+    as ``--xstar-runs-root``, the audit could report ``cases=0`` even though the
+    solver outputs were present nearby.  Keep direct-child discovery for the
+    large v0.3.111 grid, but also support explicit solver directories and a
+    conservative current-working-directory fallback when no cases are found.
+    """
+    seen: set[Path] = set()
+    dirs: list[Path] = []
+
+    def add(path: Path) -> None:
+        try:
+            rp = path.resolve()
+        except Exception:
+            rp = path.absolute()
+        if rp in seen:
+            return
+        if _is_mg_ca_solver_dir(path):
+            seen.add(rp)
+            dirs.append(path)
+
+    for p in results_root.glob("*xstar_like_element_solver*superlevels"):
+        add(p)
+
+    if explicit_solver_dirs:
+        for p in explicit_solver_dirs:
+            add(p)
+
+    if not dirs and include_cwd_fallback:
+        cwd = Path.cwd()
+        # Direct children only; avoid accidentally walking an entire XSTAR data
+        # tree.  This catches the common case where solver outputs are in the
+        # current package directory but --results-root points elsewhere.
+        if cwd != results_root:
+            for p in cwd.glob("*xstar_like_element_solver*superlevels"):
+                add(p)
+
+    return sorted(dirs, key=lambda p: str(p))
 
 
 def _solver_summary(sdir: Path) -> dict[str, Any]:
@@ -339,7 +389,7 @@ def _solver_summary(sdir: Path) -> dict[str, Any]:
     }
 
 
-def build(results_root: Path, xstar_runs_root: Path | None = None, value_column: str = "emit_outward") -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def build(results_root: Path, xstar_runs_root: Path | None = None, value_column: str = "emit_outward", explicit_solver_dirs: Sequence[Path] | None = None, include_cwd_fallback: bool = True) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     roots = [results_root]
     if xstar_runs_root is not None:
         roots.append(xstar_runs_root)
@@ -349,7 +399,8 @@ def build(results_root: Path, xstar_runs_root: Path | None = None, value_column:
         roots.append(results_root / "xstar_runs")
     audit_rows: list[dict[str, Any]] = []
     zone_rows_all: list[dict[str, Any]] = []
-    for sdir in _solver_dirs(results_root):
+    solver_dirs = _solver_dirs(results_root, explicit_solver_dirs=explicit_solver_dirs, include_cwd_fallback=include_cwd_fallback)
+    for sdir in solver_dirs:
         tag, xi, ne = _case_from_name(sdir.name)
         if tag is None:
             continue
@@ -387,10 +438,15 @@ def build(results_root: Path, xstar_runs_root: Path | None = None, value_column:
         audit_rows.append(row)
     summary = {
         "n_solver_cases": len(audit_rows),
+        "n_discovered_solver_dirs": len(solver_dirs),
+        "results_root": str(results_root),
+        "xstar_runs_root": str(xstar_runs_root) if xstar_runs_root is not None else "",
+        "cwd_fallback_enabled": include_cwd_fallback,
         "n_cases_with_xout_abund1": sum(1 for r in audit_rows if r.get("xstar_local_state_status") == "selected_max_he_like_ion_fraction_zone"),
         "n_cases_missing_xout_abund1": sum(1 for r in audit_rows if r.get("xstar_local_state_status") == "missing_xout_abund1_fits"),
         "source_code_basis": "pprint.f90 print options 11/12 write xout_abund1.fits ABUNDANCES with radius, delta_r, ion_parameter, x_e, n_p, pressure, temperature(1e4 K), frac_heat_error and ion fractions",
         "policy": "do not fit triplet scale factors before matching XSTAR local zone T/ne/xi and radiation normalization",
+        "zero_case_guidance": "if n_solver_cases is zero, pass one or more --solver-out-dir paths or run from the directory containing Mg/Ca solver outputs",
     }
     return audit_rows, zone_rows_all, summary
 
@@ -422,9 +478,11 @@ def write_markdown(path: Path, rows: list[dict[str, Any]], summary: dict[str, An
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--results-root", default=".", help="Directory containing Mg/Ca solver outputs and/or xstar_test_run targets.")
-    p.add_argument("--xstar-runs-root", default="", help="Optional root containing XSTAR run directories with xout_abund1.fits.")
+    p.add_argument("--xstar-runs-root", default="", help="Optional root containing XSTAR run directories with xout_abund1.fits and/or triplet target CSVs.")
+    p.add_argument("--solver-out-dir", action="append", default=[], help="Explicit Mg/Ca solver output directory. May be supplied multiple times; useful when --results-root contains only XSTAR targets.")
+    p.add_argument("--no-cwd-fallback", action="store_true", help="Disable fallback scan of the current working directory when --results-root has no solver cases.")
     p.add_argument("--xstar-value-column", default="emit_outward")
-    p.add_argument("--out-dir", default="mg_ca_xstar_local_state_audit_v03116")
+    p.add_argument("--out-dir", default="mg_ca_xstar_local_state_audit_v03117")
     p.add_argument("--print-summary", action="store_true")
     return p
 
@@ -434,7 +492,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     results_root = Path(args.results_root)
     xstar_runs_root = Path(args.xstar_runs_root) if args.xstar_runs_root else None
     out_dir = Path(args.out_dir)
-    rows, zone_rows, summary = build(results_root, xstar_runs_root=xstar_runs_root, value_column=args.xstar_value_column)
+    explicit_solver_dirs = [Path(p) for p in args.solver_out_dir]
+    rows, zone_rows, summary = build(
+        results_root,
+        xstar_runs_root=xstar_runs_root,
+        value_column=args.xstar_value_column,
+        explicit_solver_dirs=explicit_solver_dirs,
+        include_cwd_fallback=not args.no_cwd_fallback,
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(out_dir / "mg_ca_xstar_local_state_audit.csv", rows)
     _write_csv(out_dir / "mg_ca_xstar_local_zone_candidates.csv", zone_rows)
@@ -445,6 +510,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         print("--------------------------------")
         print("This audit checks XSTAR local zone T/ne/xi and radiation-normalization prerequisites; it does not fit triplet scale factors.")
         print(f"cases={summary['n_solver_cases']} with_xout_abund1={summary['n_cases_with_xout_abund1']} missing_xout_abund1={summary['n_cases_missing_xout_abund1']}")
+        if summary['n_solver_cases'] == 0:
+            print("warning: no Mg/Ca solver directories found; pass --solver-out-dir explicitly or run from the directory containing solver outputs")
         print(f"wrote: {out_dir/'mg_ca_xstar_local_state_audit.csv'}")
         print(f"wrote: {out_dir/'mg_ca_xstar_local_state_audit.md'}")
 

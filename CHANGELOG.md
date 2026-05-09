@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# v0.3.117 - 2026-05-09
+
+- Improved `examples/50_mg_ca_xstar_local_state_audit.py` discovery for local Mg XI / Ca XIX validation.
+- Added repeated `--solver-out-dir` support so one or more solver-output directories can be audited even when `--results-root` points only to an XSTAR target tree or an empty/nonexistent staging directory.
+- Added a conservative current-working-directory fallback when `--results-root` has no Mg/Ca solver cases, preventing misleading `cases=0` results during local two-case Mg/Ca tests.
+- Added provenance fields to the local-state audit summary: `n_discovered_solver_dirs`, `results_root`, `xstar_runs_root`, `cwd_fallback_enabled`, and zero-case guidance.
+- No solver physics changes and no empirical triplet scale fitting. The Mg/Ca prerequisite remains preserving matching XSTAR `xout_abund1.fits` files before interpreting f/i/r, R, or G.
+
 # v0.3.116 - 2026-05-09
 
 XSTAR-local-state audit for Mg XI / Ca XIX validation.
