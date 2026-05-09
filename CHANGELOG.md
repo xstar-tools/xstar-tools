@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.112 - 2026-05-08
+
+- Added `examples/48_sourcecode_first_mg_ca_validation.py`, a source-code-first Mg XI / Ca XIX validation audit.
+- The new diagnostic compares solver outputs with XSTAR triplet CSV targets across the log-xi grid, flags xi-invariant solver states, and writes source-method audit rows tied to XSTAR Fortran files (`calc_hmc_element.f90`, `ucalc.f90`, `calt69.f90`, `amcrs.f90`, `velimp.f90`, `calc_emis_ion.f90`).
+- This release intentionally does not add or search for empirical best-fit scale factors for Mg XI or Ca XIX. It records that XSTAR source-code alignment of radiation normalization and type-63/type-69 row-level rates should precede any scale interpretation.
+- No default solver physics changed.
+
 # v0.3.111 - 2026-05-08
 
 - Added `examples/47_prepare_mg_ca_xstar_triplet_targets.py`, a targeted Mg XI/Ca XIX XSTAR target-plan helper. It writes reproducible XSTAR run scripts, `xout_lines1.fits` conversion scripts, a `xstar_runs/mg_ca_triplet_target_plan.csv` summary, and `xstar_runs/README_mg_ca_triplet_targets.md` containing solver and comparison commands.

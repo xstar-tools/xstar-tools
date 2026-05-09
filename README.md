@@ -1912,3 +1912,7 @@ the full-global `xstar-lucy` path.  It sums positive inter-stage matrix rates,
 forms the adjacent-stage equilibrium `x_low I = x_high R`, and applies the
 resulting ion-stage targets during the Lucy level-population iteration.  The
 default `--ion-fraction-closure none` preserves earlier behavior.
+
+### v0.3.112 Mg XI / Ca XIX source-code-first validation
+
+Use `examples/48_sourcecode_first_mg_ca_validation.py` to review Mg XI and Ca XIX XSTAR-target grids without fitting empirical scale factors. The diagnostic flags cases where the solver state is unchanged across log xi while the XSTAR target changes, and maps required next steps to the relevant XSTAR source files.
