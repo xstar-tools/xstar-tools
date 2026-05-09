@@ -8,10 +8,11 @@ triplet target.
 
 XSTAR writes the relevant local-state table to ``xout_abund1.fits`` in
 ``pprint.f90``.  The ``ABUNDANCES`` extension contains columns such as
-``radius``, ``delta_r``, ``ion_parameter`` (the XSTAR ``xi = L/(n r^2)`` value),
-``x_e``, ``n_p``, ``pressure`` and ``temperature`` in units of 10^4 K, plus one
-column per ion.  For a He-like triplet target, the most useful first comparison
-zone is the row where the corresponding He-like ion fraction is largest.
+``radius``, ``delta_r``, ``ion_parameter`` (printed as the log10(xi) run value
+for the standard Mg/Ca target grid), ``x_e``, ``n_p``, ``pressure`` and
+``temperature`` in units of 10^4 K, plus one column per ion.  For a He-like
+triplet target, the most useful first comparison zone is the row where the
+corresponding He-like ion fraction is largest.
 """
 from __future__ import annotations
 
@@ -94,27 +95,10 @@ def _normalize_fits_col(name: str) -> str:
 
 def _read_xout_abundances_lazy(path: Path) -> dict[str, list[dict[str, Any]]]:
     # Lazy import so this diagnostic can still report missing xout_abund1.fits
-    # on systems where astropy is not installed.
-    from astropy.io import fits  # type: ignore
+    # on systems where optional FITS dependencies are not installed.
+    from xstar_atomic.xstar_outputs import read_xout_abundances
 
-    out: dict[str, list[dict[str, Any]]] = {}
-    with fits.open(path) as hdul:
-        for hdu_name in ("ABUNDANCES", "COLUMNS", "HEATING", "COOLING"):
-            if hdu_name not in hdul:
-                continue
-            hdu = hdul[hdu_name]
-            if getattr(hdu, "data", None) is None or getattr(hdu, "columns", None) is None:
-                continue
-            names = list(hdu.columns.names)
-            rows: list[dict[str, Any]] = []
-            for rec in hdu.data:
-                row: dict[str, Any] = {}
-                for name in names:
-                    row[_normalize_fits_col(name)] = _decode_fits_value(rec[name])
-                rows.append(row)
-            if rows:
-                out[hdu_name.lower()] = rows
-    return out
+    return read_xout_abundances(path)
 
 
 def _case_from_name(name: str) -> tuple[str | None, str | None, str | None]:
@@ -226,6 +210,7 @@ def _find_xout_abund(search_roots: Iterable[Path], target_csv: Path | None, tag:
         parent_name = target_csv.parent.name
         for root in search_roots:
             candidates.append(root / "xstar_runs" / "mg_ca_triplet_targets" / parent_name / "xout_abund1.fits")
+            candidates.append(root / "mg_ca_triplet_targets" / parent_name / "xout_abund1.fits")
             candidates.append(root / parent_name / "xout_abund1.fits")
     xtok = _xi_token(xi) or "xi*"
     for root in search_roots:
@@ -258,7 +243,15 @@ def _select_zone(abund_path: Path | None, ion_col: str) -> tuple[dict[str, Any],
         frac = _as_float(row.get(col))
         radius = _as_float(row.get("radius"))
         delta_r = _as_float(row.get("delta_r"))
-        xi = _as_float(row.get("ion_parameter"))
+        ion_parameter_raw = _as_float(row.get("ion_parameter"))
+        # In xout_abund1.fits XSTAR labels this column ``ion_parameter`` and
+        # gives the unit as erg cm s^-1, but for the standard run grid used here
+        # the printed values are the log10(xi) control values (1.5, 2, ..., 4).
+        # Preserve the raw value and provide both the log and linear xi columns
+        # explicitly so downstream comparisons do not accidentally take log10
+        # a second time.
+        log_xi_local = ion_parameter_raw
+        xi_linear = (10.0 ** ion_parameter_raw if ion_parameter_raw is not None else None)
         xe = _as_float(row.get("x_e"))
         np = _as_float(row.get("n_p"))
         temp_1e4 = _as_float(row.get("temperature"))
@@ -269,8 +262,11 @@ def _select_zone(abund_path: Path | None, ion_col: str) -> tuple[dict[str, Any],
             "xstar_ion_fraction": frac,
             "xstar_radius_cm": radius,
             "xstar_delta_r_cm": delta_r,
-            "xstar_ion_parameter_xi_erg_cm_s^-1": xi,
-            "xstar_log_xi_local": (math.log10(xi) if xi and xi > 0 else None),
+            "xstar_ion_parameter_raw": ion_parameter_raw,
+            "xstar_ion_parameter_interpretation": "log10_xi_from_xout_abund1_for_standard_xstar_grid",
+            "xstar_log_xi_local": log_xi_local,
+            "xstar_xi_erg_cm_s^-1": xi_linear,
+            "xstar_ion_parameter_xi_erg_cm_s^-1": xi_linear,
             "xstar_x_e": xe,
             "xstar_n_p_cm^-3": np,
             "xstar_electron_density_cm^-3": (xe * np if xe is not None and np is not None else None),
@@ -467,7 +463,7 @@ def write_markdown(path: Path, rows: list[dict[str, Any]], summary: dict[str, An
         lines.append(f"- XSTAR target f/i/r: `{r.get('xstar_target_f_fraction')}` / `{r.get('xstar_target_i_fraction')}` / `{r.get('xstar_target_r_fraction')}`")
         lines.append(f"- local-state status: `{r.get('xstar_local_state_status')}`")
         if r.get("xstar_local_state_status") == "selected_max_he_like_ion_fraction_zone":
-            lines.append(f"- selected zone: `{r.get('zone_index')}`, T=`{r.get('xstar_temperature_K')}` K, ne=`{r.get('xstar_electron_density_cm^-3')}` cm^-3, xi=`{r.get('xstar_ion_parameter_xi_erg_cm_s^-1')}`")
+            lines.append(f"- selected zone: `{r.get('zone_index')}`, T=`{r.get('xstar_temperature_K')}` K, ne=`{r.get('xstar_electron_density_cm^-3')}` cm^-3, logxi=`{r.get('xstar_log_xi_local')}`, xi=`{r.get('xstar_xi_erg_cm_s^-1')}`")
             lines.append(f"- solver/XSTAR T ratio: `{r.get('solver_over_xstar_temperature_ratio')}`")
             lines.append(f"- solver/XSTAR ne ratio: `{r.get('solver_over_xstar_electron_density_ratio')}`")
         lines.append(f"- recommended next action: {r.get('recommended_next_action')}\n")

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# v0.3.118 - 2026-05-09
+
+- Added a lightweight FITS ASCII-table fallback reader in `xstar_atomic.xstar_outputs` for XSTAR products such as `xout_abund1.fits`, so Mg/Ca local-state audits can read `ABUNDANCES`, `COLUMNS`, `HEATING`, and `COOLING` extensions even when `astropy` is unavailable.
+- Updated `examples/50_mg_ca_xstar_local_state_audit.py` to use the shared XSTAR output reader and to find `xout_abund1.fits` in both `xstar_runs/mg_ca_triplet_targets/...` and `mg_ca_triplet_targets/...` layouts.
+- Corrected the Mg/Ca local-state audit interpretation of XSTAR `ion_parameter`: for the standard Mg/Ca target grid this is the printed log10(xi) run value. The audit now writes `xstar_ion_parameter_raw`, `xstar_log_xi_local`, and derived linear `xstar_xi_erg_cm_s^-1`.
+- Verified against the supplied `xstar_runs` archive: all 12 Mg/Ca target-grid cases now pair with `xout_abund1.fits`; explicit Mg XI/Ca XIX xi=3 solver outputs also pair successfully.
+- No default solver physics changed; no empirical triplet scale fitting was added.
+
 # v0.3.117 - 2026-05-09
 
 - Improved `examples/50_mg_ca_xstar_local_state_audit.py` discovery for local Mg XI / Ca XIX validation.

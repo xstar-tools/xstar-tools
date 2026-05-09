@@ -26,18 +26,26 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-import numpy as np
-from astropy.io import fits
+try:
+    import numpy as np  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    np = None  # type: ignore
+
+try:
+    from astropy.io import fits  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    fits = None  # type: ignore
 
 
 def _decode_value(value: Any) -> Any:
     """Return a JSON/CSV-friendly scalar from a FITS table value."""
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace").strip()
-    if isinstance(value, np.bytes_):
-        return bytes(value).decode("utf-8", errors="replace").strip()
-    if isinstance(value, np.generic):
-        value = value.item()
+    if np is not None:
+        if isinstance(value, np.bytes_):
+            return bytes(value).decode("utf-8", errors="replace").strip()
+        if isinstance(value, np.generic):
+            value = value.item()
     if isinstance(value, str):
         return value.strip()
     return value
@@ -47,7 +55,196 @@ def _normalize_column_name(name: str) -> str:
     return str(name).strip().lower().replace(" ", "_").replace("-", "_")
 
 
-def table_hdu_to_rows(hdu: fits.hdu.base.ExtensionHDU) -> List[Dict[str, Any]]:
+
+
+def _parse_fits_value(raw: str) -> Any:
+    """Parse a simple FITS header value from an 80-character card."""
+    text = raw.strip()
+    if not text:
+        return ""
+    if text.startswith("'"):
+        # FITS strings are quoted with doubled quotes for literal quotes.  The
+        # first closing quote terminates the value; comments after it are
+        # ignored by the caller before this function is invoked.
+        out = []
+        i = 1
+        while i < len(text):
+            ch = text[i]
+            if ch == "'":
+                if i + 1 < len(text) and text[i + 1] == "'":
+                    out.append("'")
+                    i += 2
+                    continue
+                break
+            out.append(ch)
+            i += 1
+        return "".join(out).strip()
+    low = text.lower()
+    if text in ("T", "F"):
+        return text == "T"
+    try:
+        if any(c in low for c in (".", "e", "d")):
+            return float(text.replace("D", "E").replace("d", "e"))
+        return int(text)
+    except Exception:
+        return text
+
+
+def _parse_header_cards(header_bytes: bytes) -> Dict[str, Any]:
+    header: Dict[str, Any] = {}
+    cards = header_bytes.decode("ascii", errors="replace")
+    for i in range(0, len(cards), 80):
+        card = cards[i:i + 80]
+        key = card[:8].strip()
+        if not key:
+            continue
+        if key == "END":
+            break
+        if len(card) >= 10 and card[8:10] == "= ":
+            value_part = card[10:80]
+            # Remove comments outside quoted strings.
+            in_quote = False
+            cut = len(value_part)
+            j = 0
+            while j < len(value_part):
+                ch = value_part[j]
+                if ch == "'":
+                    if in_quote and j + 1 < len(value_part) and value_part[j + 1] == "'":
+                        j += 2
+                        continue
+                    in_quote = not in_quote
+                elif ch == "/" and not in_quote:
+                    cut = j
+                    break
+                j += 1
+            header[key] = _parse_fits_value(value_part[:cut])
+    return header
+
+
+def _raw_fits_hdus(path: str | Path) -> List[Dict[str, Any]]:
+    """Return raw FITS HDU metadata and data blocks without astropy.
+
+    This intentionally implements only the small subset required for XSTAR
+    ASCII-table products such as ``xout_abund1.fits``.  It is not a general FITS
+    replacement, but it lets diagnostics run on minimal systems where astropy is
+    unavailable.
+    """
+    path = Path(path)
+    hdus: List[Dict[str, Any]] = []
+    with path.open("rb") as handle:
+        idx = 0
+        while True:
+            first = handle.read(2880)
+            if not first:
+                break
+            if len(first) < 2880:
+                break
+            header_bytes = bytearray(first)
+            while b"END" not in header_bytes[-2880:]:
+                block = handle.read(2880)
+                if not block:
+                    break
+                header_bytes.extend(block)
+            header = _parse_header_cards(bytes(header_bytes))
+            data_offset = handle.tell()
+            naxis = int(header.get("NAXIS", 0) or 0)
+            pcount = int(header.get("PCOUNT", 0) or 0)
+            gcount = int(header.get("GCOUNT", 1) or 1)
+            if str(header.get("XTENSION", "")).strip().upper() in {"TABLE", "BINTABLE"}:
+                rowlen = int(header.get("NAXIS1", 0) or 0)
+                nrows = int(header.get("NAXIS2", 0) or 0)
+                data_len = rowlen * nrows + pcount
+            elif naxis > 0:
+                bitpix = abs(int(header.get("BITPIX", 8) or 8))
+                nvals = 1
+                for ax in range(1, naxis + 1):
+                    nvals *= int(header.get(f"NAXIS{ax}", 0) or 0)
+                data_len = (bitpix // 8) * nvals * gcount + pcount
+            else:
+                data_len = 0
+            pad = (2880 - (data_len % 2880)) % 2880
+            data = handle.read(data_len)
+            if pad:
+                handle.seek(pad, 1)
+            hdus.append({"index": idx, "header": header, "data_offset": data_offset, "data_size": data_len, "data": data})
+            idx += 1
+    return hdus
+
+
+def _fits_form_width(form: str, next_start: int | None, start: int, rowlen: int) -> int:
+    text = str(form or "").strip().upper()
+    import re
+    m = re.match(r"(\d*)([AIFED])\s*(\d+)?(?:\.\d+)?", text)
+    if m:
+        repeat = int(m.group(1) or "1")
+        code = m.group(2)
+        width = int(m.group(3) or "0")
+        if code == "A" and width == 0:
+            width = repeat
+            repeat = 1
+        if width > 0:
+            return repeat * width
+    if next_start is not None:
+        return max(0, next_start - start)
+    return max(0, rowlen - start + 1)
+
+
+def _parse_ascii_table_hdu(hdu: Dict[str, Any]) -> List[Dict[str, Any]]:
+    header = hdu["header"]
+    if str(header.get("XTENSION", "")).strip().upper() != "TABLE":
+        return []
+    rowlen = int(header.get("NAXIS1", 0) or 0)
+    nrows = int(header.get("NAXIS2", 0) or 0)
+    nfields = int(header.get("TFIELDS", 0) or 0)
+    cols: List[Dict[str, Any]] = []
+    for idx in range(1, nfields + 1):
+        name = str(header.get(f"TTYPE{idx}", f"col{idx}")).strip()
+        start = int(header.get(f"TBCOL{idx}", 1) or 1)
+        form = str(header.get(f"TFORM{idx}", "")).strip()
+        cols.append({"name": _normalize_column_name(name), "start": start, "form": form})
+    starts = [int(c["start"]) for c in cols]
+    for i, col in enumerate(cols):
+        next_start = starts[i + 1] if i + 1 < len(starts) else None
+        col["width"] = _fits_form_width(str(col["form"]), next_start, int(col["start"]), rowlen)
+    text = hdu["data"].decode("ascii", errors="replace")
+    rows: List[Dict[str, Any]] = []
+    for ridx in range(nrows):
+        rec = text[ridx * rowlen:(ridx + 1) * rowlen]
+        row: Dict[str, Any] = {}
+        for col in cols:
+            start0 = int(col["start"]) - 1
+            end = start0 + int(col["width"])
+            raw = rec[start0:end].strip()
+            form = str(col["form"]).upper().strip()
+            if not raw:
+                value: Any = None
+            elif "A" in form:
+                value = raw
+            elif "I" in form:
+                try:
+                    value = int(raw)
+                except Exception:
+                    value = raw
+            else:
+                try:
+                    value = float(raw.replace("D", "E").replace("d", "e"))
+                except Exception:
+                    value = raw
+            row[str(col["name"])] = value
+        rows.append(row)
+    return rows
+
+
+def _read_fits_table_fallback(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
+    wanted = hdu_name.strip().lower()
+    for hdu in _raw_fits_hdus(path):
+        header = hdu["header"]
+        name = str(header.get("EXTNAME", "")).strip().lower()
+        if name == wanted:
+            return _parse_ascii_table_hdu(hdu)
+    return []
+
+def table_hdu_to_rows(hdu: Any) -> List[Dict[str, Any]]:
     """Convert a FITS table HDU to a list of dictionaries.
 
     Parameters
@@ -89,6 +286,12 @@ def read_xout_lines(path: str | Path, hdu_name: str = "XSTAR_LINES") -> List[Dic
         ``upper_level``, ``wavelength``, ``emit_inward`` and ``emit_outward``.
     """
     path = Path(path)
+    if fits is None:
+        # A minimal fallback is available for XSTAR ASCII TABLE HDUs.
+        rows = _read_fits_table_fallback(path, hdu_name)
+        if rows:
+            return rows
+        raise ImportError("astropy is required to read this FITS table; the built-in fallback only supports XSTAR ASCII TABLE HDUs")
     with fits.open(path) as hdul:
         if hdu_name in hdul:
             hdu = hdul[hdu_name]
@@ -108,6 +311,8 @@ def read_xout_lines(path: str | Path, hdu_name: str = "XSTAR_LINES") -> List[Dic
 def read_xout_parameters(path: str | Path, hdu_name: str = "PARAMETERS") -> List[Dict[str, Any]]:
     """Read the ``PARAMETERS`` table from an XSTAR output FITS file if present."""
     path = Path(path)
+    if fits is None:
+        return _read_fits_table_fallback(path, hdu_name)
     with fits.open(path) as hdul:
         if hdu_name not in hdul:
             return []
@@ -120,9 +325,24 @@ def list_fits_hdus(path: str | Path) -> List[Dict[str, Any]]:
 
     This is useful for XSTAR local-state products whose exact HDU names can vary
     between run modes, such as ``xout_abund1.fits`` and ``xout_detail.fits``.
+    If astropy is unavailable, a lightweight FITS ASCII-table fallback is used.
     """
     path = Path(path)
     rows: List[Dict[str, Any]] = []
+    if fits is None:
+        for hdu in _raw_fits_hdus(path):
+            header = hdu["header"]
+            nfields = int(header.get("TFIELDS", 0) or 0)
+            columns = [str(header.get(f"TTYPE{i}", f"col{i}")).strip() for i in range(1, nfields + 1)]
+            rows.append({
+                "index": hdu["index"],
+                "name": str(header.get("EXTNAME", "") or ""),
+                "class": str(header.get("XTENSION", "PRIMARY") or "PRIMARY"),
+                "n_rows": int(header.get("NAXIS2", 0) or 0),
+                "n_columns": len(columns),
+                "columns": ";".join(columns),
+            })
+        return rows
     with fits.open(path) as hdul:
         for idx, hdu in enumerate(hdul):
             columns = []
@@ -150,8 +370,12 @@ def read_fits_table(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
 
     Unlike :func:`read_xout_lines`, this routine is deliberately generic and is
     used by diagnostics for ``xout_abund1.fits`` and related local-state files.
+    If astropy is unavailable, XSTAR ASCII TABLE extensions are parsed by a
+    lightweight built-in reader.
     """
     path = Path(path)
+    if fits is None:
+        return _read_fits_table_fallback(path, hdu_name)
     with fits.open(path) as hdul:
         if hdu_name not in hdul:
             return []
