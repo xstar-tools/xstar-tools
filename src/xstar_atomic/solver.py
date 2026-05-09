@@ -728,6 +728,60 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
         })
 
     # Collisions: lower -> upper and upper -> lower.
+    #
+    # Keep a source-code audit trail from the collision evaluator in the
+    # transition log.  Earlier versions only propagated record/source_method,
+    # which meant source-alignment columns such as the XSTAR type-63 ans1/ans2
+    # swap and type-56 interpolation diagnostics were available in the raw
+    # collision table but disappeared from the matrix-term products.
+    collision_audit_keys = (
+        "data_type",
+        "rate_type",
+        "source_format",
+        "delta_e_eV",
+        "wavelength_A",
+        "upsilon",
+        "q_excitation_cm3_s",
+        "q_deexcitation_cm3_s",
+        "eval_method",
+        "eval_diagnostic",
+        "collision_rate_scale_applied",
+        "collision_excitation_direction_scale_applied",
+        "collision_deexcitation_direction_scale_applied",
+        "xstar_calt67_68_effective_temperature_K",
+        "xstar_calt67_68_temperature_floor_applied",
+        "type63_case",
+        "type63_reason",
+        "type63_angular_sum",
+        "type63_aa1",
+        "type63_aa1_fortran_selector",
+        "type63_lower_shell_l",
+        "type63_upper_shell_l",
+        "type63_n_lower_shell",
+        "type63_n_upper_shell",
+        "type63_se_shell_cm3_s",
+        "type63_sd_shell_cm3_s",
+        "type63_ordering_mode",
+        "type63_record_initial_n",
+        "type63_record_initial_l",
+        "type63_record_final_n",
+        "type63_record_final_l",
+        "type63_ucalc_ans_swap_applied",
+        "type63_ucalc_ans1_forward_cm3_s",
+        "type63_ucalc_ans2_reverse_cm3_s",
+        "type63_forward_direction",
+        "type63_energy_order_q_excitation_cm3_s",
+        "type63_energy_order_q_deexcitation_cm3_s",
+        "type63_energy_order_reason",
+        "type63_energy_order_aa1",
+        "type63_energy_order_aa1_fortran_selector",
+        "type63_same_n_sum_A",
+        "type63_same_n_cn_l_high_to_low_cm3_s",
+        "type63_same_n_lii",
+        "type63_same_n_lff",
+        "type63_same_n_ne_cm^-3",
+        "type63_same_n_psi",
+    )
     for row in coll_rows_T:
         lower = maybe_int(row.get("lower_level"))
         upper = maybe_int(row.get("upper_level"))
@@ -735,6 +789,7 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
             continue
         qij_rate = maybe_float(row.get("C_excitation_s^-1"))
         qji_rate = maybe_float(row.get("C_deexcitation_s^-1"))
+        common_collision_audit = {k: row.get(k) for k in collision_audit_keys if k in row}
         if qij_rate is not None and qij_rate > 0:
             R[idx[upper], idx[lower]] += qij_rate
             transition_log.append({
@@ -744,6 +799,8 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
                 "rate_s^-1": qij_rate,
                 "record": row.get("record"),
                 "source_method": row.get("eval_method"),
+                "directional_q_cm3_s": row.get("q_excitation_cm3_s"),
+                **common_collision_audit,
             })
         if qji_rate is not None and qji_rate > 0:
             R[idx[lower], idx[upper]] += qji_rate
@@ -754,6 +811,8 @@ def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_r
                 "rate_s^-1": qji_rate,
                 "record": row.get("record"),
                 "source_method": row.get("eval_method"),
+                "directional_q_cm3_s": row.get("q_deexcitation_cm3_s"),
+                **common_collision_audit,
             })
 
     # Optional phenomenological same-n l-mixing.

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.3.115 - 2026-05-09
+
+Source-code-first Mg XI / Ca XIX audit bookkeeping update.
+
+- Propagates collision-evaluator diagnostics from `build_collision_rates_for_T()` through `assemble_rate_matrix()` into the transition log, and then into `xstar_like_element_solver_global_bound_bound_matrix_terms.csv` / `xstar_like_element_solver_full_global_matrix_terms.csv`.
+- Future Mg XI/Ca XIX solver outputs now retain row-level source-code audit fields for type-63 rows, including the XSTAR record-order mode, ans1/ans2 swap flag, forward/reverse coefficients, legacy energy-order comparison rates, and same-n l-mixing diagnostics.
+- Future type-67/type-68 matrix products retain the XSTAR effective-temperature floor diagnostics added in v0.3.113.
+- Updates `examples/49_mg_ca_triplet_source_path_audit.py` so it can audit either v0.3.111 or newer Mg/Ca output directories, not only `*v03111*` names.
+- Adds explicit XSTAR source-branch mapping for type-56 tabulated effective collision strengths. This is important for Ca XIX, where many triplet-feeding bound-bound collisional rows are `linear_logT_type56` rather than type-63.
+- Infers data type from `source_method` when the matrix row does not carry an explicit `data_type` column, so existing v0.3.114 outputs can still be classified as type 56/63/68/69 in the source-path audit.
+- No default physics changed. `--resonance-collisional-feed-scale` remains diagnostic-only and defaults to 1.
+
+Validation: `python -m compileall -q src examples tests` passed; selected pytest suite passed in the container.
+
 # v0.3.114 - 2026-05-09
 
 - Source-code-first type-63 alignment: n-changing type-63 collisions now follow the XSTAR `ucalc.f90` record-order convention. The evaluator uses ATDB `idest1/idest2` order for the `anl1/erc` branch, applies the literal `aa1` selector, applies the XSTAR `ans1/ans2` swap when `(nf.gt.ni).or.(lf.gt.li)`, and then maps the forward/reverse rates back to lower->upper and upper->lower coefficients for the Python matrix.

@@ -71,6 +71,13 @@ def _component(label: str) -> str | None:
 
 
 def _xstar_branch(dt: int | None, method: str) -> dict[str, str]:
+    if dt == 56 or 'linear_logT_type56' in method:
+        return {
+            'xstar_branch': 'ucalc.f90 type 56',
+            'xstar_helpers': 'hunt3.f90 interpolation over log10(T[K]) grid',
+            'source_formula': 'cijpp is linearly interpolated in log10(T*1e4) over tabulated effective collision strengths; cij=8.626e-8*cijpp*exp(-dE/kT)/sqrt(T/1e4)/g_lo; cji=8.626e-8*cijpp/sqrt(T/1e4)/g_up; ans1=cij*xnx, ans2=cji*xnx',
+            'source_alignment_check': 'audit type-56 tabulated-upsilon interpolation, endpoint ordering, statistical weights, and temperature convention; important for Ca XIX where type-56 dominates many bound-bound rows',
+        }
     if dt == 63 or 'type63' in method:
         return {
             'xstar_branch': 'ucalc.f90 type 63',
@@ -131,8 +138,49 @@ def _triplet_rate_rows(solver_dir: Path) -> list[dict[str, Any]]:
         except Exception:
             dt = None
         method = str(r.get('source_method') or '')
+        method_l = method.lower()
+        if dt is None:
+            if 'linear_logt_type56' in method_l:
+                dt = 56
+            elif 'type63' in method_l:
+                dt = 63
+            elif 'calt67' in method_l:
+                dt = 67
+            elif 'calt68' in method_l:
+                dt = 68
+            elif 'calt69' in method_l:
+                dt = 69
+            elif 'data_type_50' in method_l:
+                dt = 50
         rate = _as_float(r.get('rate_s^-1')) or _as_float(r.get('raw_rate_s^-1')) or 0.0
         branch = _xstar_branch(dt, method)
+        extra = {
+            k: r.get(k) for k in (
+                'directional_q_cm3_s',
+                'q_excitation_cm3_s',
+                'q_deexcitation_cm3_s',
+                'upsilon',
+                'eval_method',
+                'eval_diagnostic',
+                'xstar_calt67_68_effective_temperature_K',
+                'xstar_calt67_68_temperature_floor_applied',
+                'type63_ordering_mode',
+                'type63_ucalc_ans_swap_applied',
+                'type63_ucalc_ans1_forward_cm3_s',
+                'type63_ucalc_ans2_reverse_cm3_s',
+                'type63_forward_direction',
+                'type63_energy_order_q_excitation_cm3_s',
+                'type63_energy_order_q_deexcitation_cm3_s',
+                'type63_energy_order_reason',
+                'type63_energy_order_aa1_fortran_selector',
+                'type63_same_n_sum_A',
+                'type63_same_n_cn_l_high_to_low_cm3_s',
+                'type63_same_n_ne_cm^-3',
+                'collision_rate_scale_applied',
+                'collision_excitation_direction_scale_applied',
+                'collision_deexcitation_direction_scale_applied',
+            ) if str(r.get(k) or '').strip()
+        }
         out.append({
             'record': r.get('record'),
             'data_type': dt,
@@ -147,6 +195,7 @@ def _triplet_rate_rows(solver_dir: Path) -> list[dict[str, Any]]:
             'rate_s^-1': rate,
             'temperature_K': r.get('temperature_K'),
             'electron_density_cm^-3': r.get('electron_density_cm^-3'),
+            **extra,
             **branch,
         })
     return out
@@ -155,7 +204,7 @@ def _triplet_rate_rows(solver_dir: Path) -> list[dict[str, Any]]:
 def build(results_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     detail_rows: list[dict[str, Any]] = []
     summary: dict[tuple[str, str, str, str], float] = {}
-    for sdir in sorted(results_root.glob('*xstar_like_element_solver*v03111*superlevels')):
+    for sdir in sorted(results_root.glob('*xstar_like_element_solver*superlevels')):
         if not sdir.is_dir():
             continue
         ion, xi = _case_from_dir(sdir)
@@ -177,8 +226,8 @@ def build(results_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]
         'n_summary_rows': len(summary_rows),
         'conclusion': 'This audit maps Mg XI/Ca XIX triplet-feeding paths to XSTAR source-code branches. It does not fit scale factors.',
         'source_code_first_next_steps': [
-            'Compare type-63 ans1/ans2 and aa1 branch selection against XSTAR debug/detail rates.',
-            'Use XSTAR radiation/log-xi normalization so solver state varies across the Mg/Ca xi grid.',
+            'Compare type-56 and type-63 ans1/ans2, endpoint order, interpolation, statistical weights, and aa1 branch selection against XSTAR debug/detail rates.',
+            'Use XSTAR radiation/log-xi normalization and XSTAR zone temperatures so the solver state varies across the Mg/Ca xi grid before judging physics.',
             'Use line-depth/escape context before judging emergent Mg/Ca resonance line fractions.',
         ],
     }
@@ -187,7 +236,7 @@ def build(results_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--results-root', required=True, help='Directory containing v0.3.111 Mg/Ca solver outputs')
+    ap.add_argument('--results-root', required=True, help='Directory containing Mg/Ca solver outputs, e.g. v0.3.111 or v0.3.114 results')
     ap.add_argument('--out-dir', default='mg_ca_triplet_source_path_audit_v03113')
     ap.add_argument('--print-summary', action='store_true')
     args = ap.parse_args()
