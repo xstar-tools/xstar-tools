@@ -301,29 +301,57 @@ def upsil_bt_general(k: int, eij_ryd: float, c: float, xgrid: Sequence[float], y
 # He-like collision-strength fits from XSTAR calt67/68/69
 # ----------------------------------------------------------------------
 
-def calt67_upsilon(reals: Sequence[float], temperature_k: float) -> Optional[float]:
+def xstar_helike_calt67_68_effective_temperature(temperature_k: float, wavelength_A: Optional[float] = None) -> float:
+    """Return the temperature passed by XSTAR ``ucalc`` to ``calt67/68``.
+
+    The type-67 and type-68 branches in ``ucalc.f90`` do not always pass the
+    raw plasma temperature to the He-like collision-strength fits.  They first
+    apply
+
+    ``temp = max(t*1.e4, 2.8777e6 / elin)``
+
+    where ``elin`` is the transition wavelength in Angstrom.  This helper keeps
+    that source-code behavior explicit and testable.
+    """
+    temp = float(temperature_k)
+    if wavelength_A is None:
+        return temp
+    try:
+        elin = abs(float(wavelength_A))
+    except Exception:
+        return temp
+    if elin <= 1.0e-24:
+        return temp
+    return max(temp, 2.8777e6 / elin)
+
+
+def calt67_upsilon(reals: Sequence[float], temperature_k: float, wavelength_A: Optional[float] = None) -> Optional[float]:
     """Evaluate XSTAR ``calt67.f90`` for He-like type-67 records.
 
-    XSTAR uses the Keenan, McCann, & Kingston form
-    ``gamma = a + b log10(T) + c log10(T)^2`` with ``T`` in Kelvin.
-    The returned ``gamma`` is the effective collision strength ``Upsilon``.
+    XSTAR's ``ucalc.f90`` type-67 branch applies the source-code temperature
+    floor ``max(T, 2.8777e6 / wavelength_A)`` before calling ``calt67``.
+    The Keenan, McCann, & Kingston fit then uses
+    ``gamma = a + b log10(T_eff) + c log10(T_eff)^2`` with ``T_eff`` in Kelvin.
     """
     if temperature_k <= 0 or len(reals) < 3:
         return None
     try:
-        tp = math.log10(float(temperature_k))
+        teff = xstar_helike_calt67_68_effective_temperature(float(temperature_k), wavelength_A)
+        tp = math.log10(teff)
         gamma = float(reals[0]) + float(reals[1]) * tp + float(reals[2]) * tp * tp
         return max(0.0, float(gamma))
     except Exception:
         return None
 
 
-def calt68_upsilon(reals: Sequence[float], ints: Sequence[int], temperature_k: float) -> Optional[float]:
+def calt68_upsilon(reals: Sequence[float], ints: Sequence[int], temperature_k: float, wavelength_A: Optional[float] = None) -> Optional[float]:
     """Evaluate XSTAR ``calt68.f90`` for He-like type-68 records.
 
-    XSTAR uses ``z = idat[3]`` in Fortran 1-based indexing, i.e. Python
-    ``ints[2]``, and ``tt = log10(T / z^3)``.  The returned value is the
-    effective collision strength ``Upsilon``.
+    XSTAR's ``ucalc.f90`` type-68 branch applies the same source-code
+    temperature floor as type 67, ``max(T, 2.8777e6 / wavelength_A)``, before
+    calling ``calt68``.  ``calt68`` then uses ``z = idat[3]`` in Fortran
+    1-based indexing, i.e. Python ``ints[2]``, and
+    ``tt = log10(T_eff / z^3)``.
     """
     if temperature_k <= 0 or len(reals) < 3 or len(ints) < 3:
         return None
@@ -331,7 +359,8 @@ def calt68_upsilon(reals: Sequence[float], ints: Sequence[int], temperature_k: f
         zval = float(ints[2])
         if zval <= 0:
             return None
-        tt = math.log10(float(temperature_k) / (zval ** 3))
+        teff = xstar_helike_calt67_68_effective_temperature(float(temperature_k), wavelength_A)
+        tt = math.log10(teff / (zval ** 3))
         gamma = float(reals[0]) + float(reals[1]) * tt + float(reals[2]) * tt * tt
         return max(0.0, float(gamma))
     except Exception:
@@ -1226,7 +1255,7 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
             reals = json.loads(row.get("helike_fit_reals") or "[]")
         except Exception:
             reals = []
-        ups = calt67_upsilon(reals, temperature_k)
+        ups = calt67_upsilon(reals, temperature_k, row.get("wavelength_from_levels_A"))
         method = "helike_calt67_keenan_polynomial"
         if ups is None:
             diagnostic = "missing_or_invalid_calt67_inputs"
@@ -1237,7 +1266,7 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         except Exception:
             reals = []
             ints = []
-        ups = calt68_upsilon(reals, ints, temperature_k)
+        ups = calt68_upsilon(reals, ints, temperature_k, row.get("wavelength_from_levels_A"))
         method = "helike_calt68_zhang_sampson"
         if ups is None:
             diagnostic = "missing_or_invalid_calt68_inputs"
@@ -1325,6 +1354,14 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         "temperature_K": temperature_k,
         "electron_density_for_lmixing_cm^-3": electron_density_cm3,
         "upsilon": ups,
+        "xstar_calt67_68_effective_temperature_K": (
+            xstar_helike_calt67_68_effective_temperature(temperature_k, row.get("wavelength_from_levels_A"))
+            if dt in (67, 68) else None
+        ),
+        "xstar_calt67_68_temperature_floor_applied": (
+            bool(dt in (67, 68) and row.get("wavelength_from_levels_A") is not None
+                 and xstar_helike_calt67_68_effective_temperature(temperature_k, row.get("wavelength_from_levels_A")) > float(temperature_k))
+        ),
         "q_excitation_cm3_s": q_exc,
         "q_deexcitation_cm3_s": q_deexc,
         "eval_method": method,

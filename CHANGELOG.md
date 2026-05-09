@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.3.113 - 2026-05-08
+
+- Source-code alignment update for He-like type-67/type-68 collisions. The Python `calt67_upsilon` and `calt68_upsilon` evaluators now apply the same `ucalc.f90` temperature floor used by XSTAR before calling `calt67.f90`/`calt68.f90`: `temp = max(T, 2.8777e6 / wavelength_A)`.
+- The collision evaluator now reports `xstar_calt67_68_effective_temperature_K` and `xstar_calt67_68_temperature_floor_applied` for type-67/type-68 rows, so Mg XI/Ca XIX audits can verify whether the source-code floor matters for each transition.
+- Added `examples/49_mg_ca_triplet_source_path_audit.py`, a source-code-first Mg XI/Ca XIX triplet-path audit. It maps triplet-feeding rows to XSTAR branches (`ucalc` type 63/67/68/69 and type-50 escape), writes detail/summary CSVs, and explicitly avoids empirical scale fitting.
+- No default diagnostic scale changes. `--resonance-collisional-feed-scale` remains diagnostic-only and defaults to 1.
+
+Validation: `compileall` passed; selected pytest suite passed with expected skips.
+
 ## v0.3.112 - 2026-05-08
 
 - Added `examples/48_sourcecode_first_mg_ca_validation.py`, a source-code-first Mg XI / Ca XIX validation audit.

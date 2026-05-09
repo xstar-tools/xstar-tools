@@ -1,5 +1,7 @@
 # xstar-atomic
 
+Latest package note: v0.3.113 continues the source-code-first Mg XI/Ca XIX validation. It aligns He-like type-67/type-68 collision-strength evaluation with XSTAR `ucalc.f90` by applying the `temp=max(T,2.8777e6/wavelength_A)` floor before `calt67/calt68`, records that effective temperature in collision audits, and adds `examples/49_mg_ca_triplet_source_path_audit.py` to map Mg/Ca triplet-feeding rows to XSTAR source-code branches without fitting scale factors.
+
 Latest package note: v0.3.111 starts the Mg XI and Ca XIX XSTAR-target validation workflow. It adds `examples/47_prepare_mg_ca_xstar_triplet_targets.py` to generate Mg XI/Ca XIX XSTAR run scripts, triplet-line conversion scripts, target-plan CSVs, and solver/compare commands across a log-xi grid. `examples/43_compare_xstar_detail_populations.py` now automatically derives target f/i/r from a supplied `--xstar-triplet-lines-csv`, so Mg/Ca comparisons no longer accidentally use the historical built-in C V target. No default solver physics changed.
 
 Latest package note: v0.3.110 fixes the internal C V resonance-collisional-feed scale-scan context. The scan now uses the same full-global topology, ion-fraction closure, temperature, electron density, and calc-ion-rates audit context as the primary `full_global_xstar_tau0_calc_emis_ion` solve, so `xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv` is aligned with the printed comparison result. The resonance-feed scale remains diagnostic and default physics is unchanged.
@@ -132,6 +134,8 @@ context is ported.
 v0.3.66 fixes the v0.3.65 output writer so `xstar_like_element_solver_calc_emis_context_audit.csv` is retrieved from the result dictionary before writing. It preserves the v0.3.65 diagnostic semantics and makes no intentional solver, matrix, or physical-rate changes.
 
 # xstar-atomic
+
+Latest package note: v0.3.113 continues the source-code-first Mg XI/Ca XIX validation. It aligns He-like type-67/type-68 collision-strength evaluation with XSTAR `ucalc.f90` by applying the `temp=max(T,2.8777e6/wavelength_A)` floor before `calt67/calt68`, records that effective temperature in collision audits, and adds `examples/49_mg_ca_triplet_source_path_audit.py` to map Mg/Ca triplet-feeding rows to XSTAR source-code branches without fitting scale factors.
 
 Current development baseline: v0.3.80 continues the direct XSTAR-code population path. In addition to the v0.3.77 matrix-level continuum aliasing and `levwk`/`levwkelement`-style population seed, v0.3.78 adds `--inverse-recombination-mode xstar-ucalc`, which assembles type-53 inverse recombination from the source-code `phint53.f90` Milne `ans2` audit and type-74 inverse recombination from the source-aligned `calt74` alpha path with the XSTAR `gglo/ggup` correction. Older inverse-recombination proxy modes remain available for regression.
 
@@ -1912,7 +1916,3 @@ the full-global `xstar-lucy` path.  It sums positive inter-stage matrix rates,
 forms the adjacent-stage equilibrium `x_low I = x_high R`, and applies the
 resulting ion-stage targets during the Lucy level-population iteration.  The
 default `--ion-fraction-closure none` preserves earlier behavior.
-
-### v0.3.112 Mg XI / Ca XIX source-code-first validation
-
-Use `examples/48_sourcecode_first_mg_ca_validation.py` to review Mg XI and Ca XIX XSTAR-target grids without fitting empirical scale factors. The diagnostic flags cases where the solver state is unchanged across log xi while the XSTAR target changes, and maps required next steps to the relevant XSTAR source files.
