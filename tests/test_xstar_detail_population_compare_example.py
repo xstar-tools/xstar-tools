@@ -139,3 +139,45 @@ def test_detail_population_compare_warns_when_reference_depth_scale_omitted(tmp_
     assert 'Warning: Using default depth scale 1.0; O VII ne=1e8 validation used 0.37.' in result.stderr
     assert (out / 'xstar_reference_depth_triplet_postprocess.csv').exists()
 
+
+
+def test_detail_population_compare_uses_xstar_csv_target_for_normal_case(tmp_path):
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    out = tmp_path / 'solver_mg'
+    _write_csv(out / 'xstar_like_element_solver_full_global_normalized_solve_comparison.csv', [
+        {
+            'row_kind': 'summary',
+            'comparison_case': 'full_global_xstar_tau0_calc_emis_ion',
+            'f_fraction': '0.50',
+            'i_fraction': '0.20',
+            'r_fraction': '0.30',
+            'R': '2.5',
+            'G': '2.3333333333',
+        },
+        {'row_kind': 'population', 'global_index': '0', 'ion_stage': '11', 'level_index': '1', 'population_fraction': '1'},
+    ])
+    xstar = tmp_path / 'xstar_mg11_triplet_lines.csv'
+    _write_csv(xstar, [
+        {'ion': 'mg_xi', 'lower_level': '1s2.1S_0', 'upper_level': '1s1.2s1.3S_1', 'wavelength': '9.3143', 'emit_outward': '60', 'depth_inward': '0', 'depth_outward': '0'},
+        {'ion': 'mg_xi', 'lower_level': '1s2.1S_0', 'upper_level': '1s1.2p1.3P_1', 'wavelength': '9.2300', 'emit_outward': '10', 'depth_inward': '0', 'depth_outward': '0'},
+        {'ion': 'mg_xi', 'lower_level': '1s2.1S_0', 'upper_level': '1s1.2p1.1P_1', 'wavelength': '9.1688', 'emit_outward': '30', 'depth_inward': '0', 'depth_outward': '0'},
+    ])
+    cmd = [
+        sys.executable,
+        str(root / 'examples' / '43_compare_xstar_detail_populations.py'),
+        '--solver-out-dir', str(out),
+        '--element', 'Mg', '--he-like-stage', '11',
+        '--comparison-case', 'full_global_xstar_tau0_calc_emis_ion',
+        '--xstar-triplet-lines-csv', str(xstar),
+        '--xstar-value-column', 'emit_outward',
+        '--target-f', 'nan', '--target-i', 'nan', '--target-r', 'nan',
+    ]
+    subprocess.run(cmd, cwd=root, text=True, capture_output=True, check=True)
+    payload = json.loads((out / 'xstar_detail_population_comparison_summary.json').read_text(encoding='utf-8'))
+    triplet = payload['triplet']
+    assert abs(triplet['target_f_fraction'] - 0.60) < 1e-12
+    assert abs(triplet['target_i_fraction'] - 0.10) < 1e-12
+    assert abs(triplet['target_r_fraction'] - 0.30) < 1e-12
+    assert abs(triplet['l2_distance_to_target'] - ((0.5 - 0.6) ** 2 + (0.2 - 0.1) ** 2) ** 0.5) < 1e-12

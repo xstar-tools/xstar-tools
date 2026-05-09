@@ -468,11 +468,17 @@ def _build_triplet_payload(summary: dict[str, Any], target: dict[str, float] | N
         "l2_distance_to_target": _as_float(summary.get("l2_distance_to_target")),
     }
     if target:
+        deltas: list[float] = []
         for comp in ("f", "i", "r"):
             val = out.get(f"{comp}_fraction")
             ref = target.get(comp)
             out[f"target_{comp}_fraction"] = ref
-            out[f"delta_{comp}_fraction"] = None if val is None or ref is None else val - ref
+            delta = None if val is None or ref is None else val - ref
+            out[f"delta_{comp}_fraction"] = delta
+            if delta is not None:
+                deltas.append(float(delta))
+        if len(deltas) == 3:
+            out["l2_distance_to_target"] = math.sqrt(sum(delta * delta for delta in deltas))
     return out
 
 
@@ -545,11 +551,27 @@ def main(argv: list[str] | None = None) -> None:
     comparison_rows = _merge_with_xstar_detail(solver_rows, detail_rows)
 
     target = None
-    if all(math.isfinite(x) for x in (args.target_f, args.target_i, args.target_r)):
+    explicit_cli_target = all(math.isfinite(x) for x in (args.target_f, args.target_i, args.target_r))
+    if explicit_cli_target:
         target = {"f": args.target_f, "i": args.target_i, "r": args.target_r}
-    triplet_summary = _build_triplet_payload(_load_recommended_triplet_summary(solver_out_dir, args.comparison_case), target)
     xstar_reference_summary: dict[str, Any] = {}
     xstar_reference_rows: list[dict[str, Any]] = []
+    xstar_target_summary: dict[str, Any] = {}
+    if args.xstar_triplet_lines_csv:
+        xstar_rows_for_target = _read_csv(Path(args.xstar_triplet_lines_csv))
+        xstar_target_summary = _triplet_target_from_xstar_lines(xstar_rows_for_target, args.xstar_value_column)
+        # When a real converted XSTAR triplet CSV is supplied, prefer its
+        # target fractions over the historical built-in C V defaults.  This is
+        # essential for Mg XI/Ca XIX validation, where the C V defaults are
+        # physically meaningless.  Explicit --target-f/i/r values still work
+        # when no XSTAR CSV is provided.
+        if all(xstar_target_summary.get(f"target_{comp}_fraction") is not None for comp in ("f", "i", "r")):
+            target = {
+                "f": float(xstar_target_summary["target_f_fraction"]),
+                "i": float(xstar_target_summary["target_i_fraction"]),
+                "r": float(xstar_target_summary["target_r_fraction"]),
+            }
+    triplet_summary = _build_triplet_payload(_load_recommended_triplet_summary(solver_out_dir, args.comparison_case), target)
     reference_depth_scale = 1.0 if args.xstar_reference_depth_scale is None else args.xstar_reference_depth_scale
     if (
         args.xstar_triplet_lines_csv

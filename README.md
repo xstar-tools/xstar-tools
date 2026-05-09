@@ -1,5 +1,7 @@
 # xstar-atomic
 
+Latest package note: v0.3.111 starts the Mg XI and Ca XIX XSTAR-target validation workflow. It adds `examples/47_prepare_mg_ca_xstar_triplet_targets.py` to generate Mg XI/Ca XIX XSTAR run scripts, triplet-line conversion scripts, target-plan CSVs, and solver/compare commands across a log-xi grid. `examples/43_compare_xstar_detail_populations.py` now automatically derives target f/i/r from a supplied `--xstar-triplet-lines-csv`, so Mg/Ca comparisons no longer accidentally use the historical built-in C V target. No default solver physics changed.
+
 Latest package note: v0.3.110 fixes the internal C V resonance-collisional-feed scale-scan context. The scan now uses the same full-global topology, ion-fraction closure, temperature, electron density, and calc-ion-rates audit context as the primary `full_global_xstar_tau0_calc_emis_ion` solve, so `xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv` is aligned with the printed comparison result. The resonance-feed scale remains diagnostic and default physics is unchanged.
 
 Latest package note: v0.3.108 adds a real direct collisional resonance-feed audit and matrix-scale diagnostic for the C V `1s2p 1P1` resonance upper level. `examples/42_xstar_like_element_solver_demo.py` now supports `--resonance-collisional-feed-scale` and writes `xstar_like_element_solver_resonance_collisional_feed_audit.csv` plus a scale-scan CSV.

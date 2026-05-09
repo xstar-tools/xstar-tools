@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.3.111 - 2026-05-08
+
+- Added `examples/47_prepare_mg_ca_xstar_triplet_targets.py`, a targeted Mg XI/Ca XIX XSTAR target-plan helper. It writes reproducible XSTAR run scripts, `xout_lines1.fits` conversion scripts, a `xstar_runs/mg_ca_triplet_target_plan.csv` summary, and `xstar_runs/README_mg_ca_triplet_targets.md` containing solver and comparison commands.
+- Default Mg/Ca target plans use `ne=1e8 cm^-3` and a log-xi grid `1.5,2.0,2.5,3.0,3.5,4.0`, because high-Z He-like ions may be absent at the C/O reference ionization parameter.
+- Updated `examples/43_compare_xstar_detail_populations.py` so any supplied `--xstar-triplet-lines-csv` is used to derive the target f/i/r for the normal `full_global_xstar_tau0_calc_emis_ion` comparison. This prevents Mg XI/Ca XIX validation from silently comparing against the built-in C V target.
+- No default population-matrix physics changed. The C V resonance-collisional-feed scale remains diagnostic-only and defaults to 1.
+
+Validation: `compileall` passed; selected pytest suite passed with expected skips.
+
 # v0.3.110 - 2026-05-08
 
 - Fixed the internal `--resonance-collisional-feed-scale-scan` context. v0.3.109 rebuilt the scanned matrix with the requested resonance-feed scale but solved it with the default `explicit-current` topology and no ion-fraction closure, so `xstar_like_element_solver_resonance_collisional_feed_scale_scan.csv` could disagree with the top-level printed `full_global_xstar_tau0_calc_emis_ion` result.
