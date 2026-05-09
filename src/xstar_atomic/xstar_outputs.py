@@ -114,6 +114,67 @@ def read_xout_parameters(path: str | Path, hdu_name: str = "PARAMETERS") -> List
         return table_hdu_to_rows(hdul[hdu_name])
 
 
+
+def list_fits_hdus(path: str | Path) -> List[Dict[str, Any]]:
+    """Return a compact inventory of HDUs and table columns in a FITS file.
+
+    This is useful for XSTAR local-state products whose exact HDU names can vary
+    between run modes, such as ``xout_abund1.fits`` and ``xout_detail.fits``.
+    """
+    path = Path(path)
+    rows: List[Dict[str, Any]] = []
+    with fits.open(path) as hdul:
+        for idx, hdu in enumerate(hdul):
+            columns = []
+            if getattr(hdu, "columns", None) is not None:
+                columns = list(getattr(hdu.columns, "names", []) or [])
+            nrows = None
+            if getattr(hdu, "data", None) is not None and hasattr(hdu.data, "__len__"):
+                try:
+                    nrows = len(hdu.data)
+                except Exception:
+                    nrows = None
+            rows.append({
+                "index": idx,
+                "name": str(getattr(hdu, "name", "") or ""),
+                "class": hdu.__class__.__name__,
+                "n_rows": nrows,
+                "n_columns": len(columns),
+                "columns": ";".join(str(c) for c in columns),
+            })
+    return rows
+
+
+def read_fits_table(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
+    """Read a named FITS table HDU into normalized row dictionaries.
+
+    Unlike :func:`read_xout_lines`, this routine is deliberately generic and is
+    used by diagnostics for ``xout_abund1.fits`` and related local-state files.
+    """
+    path = Path(path)
+    with fits.open(path) as hdul:
+        if hdu_name not in hdul:
+            return []
+        return table_hdu_to_rows(hdul[hdu_name])
+
+
+def read_xout_abundances(path: str | Path) -> Dict[str, List[Dict[str, Any]]]:
+    """Read XSTAR ``xout_abund1.fits`` local-state tables.
+
+    XSTAR writes this file in ``pprint.f90``.  The ``ABUNDANCES`` extension
+    carries one row per radial zone with columns such as ``radius``,
+    ``delta_r``, ``ion_parameter``, ``x_e``, ``n_p``, ``pressure``,
+    ``temperature`` (in units of 10^4 K), ``frac_heat_error`` and one column per
+    ion.  The ``COLUMNS`` extension stores integrated ionic columns, while
+    ``HEATING`` and ``COOLING`` contain thermal-balance terms.
+    """
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for hdu_name in ("ABUNDANCES", "COLUMNS", "HEATING", "COOLING"):
+        rows = read_fits_table(path, hdu_name)
+        if rows:
+            out[hdu_name.lower()] = rows
+    return out
+
 def filter_rows(
     rows: Sequence[Dict[str, Any]],
     ion: Optional[str] = None,

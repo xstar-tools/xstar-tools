@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.3.116 - 2026-05-09
+
+XSTAR-local-state audit for Mg XI / Ca XIX validation.
+
+- Adds `examples/50_mg_ca_xstar_local_state_audit.py`, a source-code-first diagnostic that checks whether each Mg XI / Ca XIX solver comparison has the matching XSTAR local gas state before interpreting f/i/r, R, or G.
+- The audit searches for the matching XSTAR triplet target CSV and `xout_abund1.fits`, reads the XSTAR `ABUNDANCES` extension when present, and selects the first comparison zone by maximum He-like ion fraction (`Mg_XI` or `Ca_XIX`).
+- The selected-zone table reports XSTAR radius, thickness, ionization parameter `xi`, `x_e`, `n_p`, inferred electron density, pressure, temperature in K, heat-balance error, and the He-like ion fraction.
+- The audit compares these XSTAR local values against the solver assumptions (`temperature_K`, `electron_density_cm^-3`, `xstar-powerlaw` diagnostic bremsa normalization), and writes recommended rerun conditions when `xout_abund1.fits` is available.
+- Adds generic FITS-table helpers in `xstar_atomic.xstar_outputs`: `list_fits_hdus`, `read_fits_table`, and `read_xout_abundances`.
+- Updates `examples/47_prepare_mg_ca_xstar_triplet_targets.py` documentation so future Mg/Ca XSTAR runs explicitly preserve `xout_abund1.fits`; this file is required for local-zone validation.
+- No triplet scale fitting and no default solver-physics change. The Mg/Ca mismatch should now be addressed by matching XSTAR local zone T/ne/xi and radiation normalization before row-level type-56/type-63/type-68/type-69 rate comparisons.
+
+Validation: `python -m compileall -q src examples tests` passed; selected pytest suite passed in the container.
+
 # v0.3.115 - 2026-05-09
 
 Source-code-first Mg XI / Ca XIX audit bookkeeping update.
