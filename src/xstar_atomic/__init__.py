@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.119"
+__version__ = "0.3.120"
 
 try:
     from .hierarchy import ATDB

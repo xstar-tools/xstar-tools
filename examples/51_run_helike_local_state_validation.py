@@ -302,6 +302,73 @@ def _filter_logxi(rows: list[dict[str, Any]], wanted_logxi: float | None, tol: f
     return out
 
 
+def _density_distance_dex(row: dict[str, Any], target_ne: float | None) -> float | None:
+    if target_ne is None or target_ne <= 0.0:
+        return None
+    ne = _as_float(row.get("xstar_electron_density_cm^-3"))
+    if ne is None or ne <= 0.0:
+        return None
+    return abs(math.log10(ne / target_ne))
+
+
+def _filter_density(
+    rows: list[dict[str, Any]],
+    target_ne: float | None,
+    tolerance_dex: float,
+) -> list[dict[str, Any]]:
+    if target_ne is None:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        dist = _density_distance_dex(row, target_ne)
+        row["target_electron_density_cm^-3"] = target_ne
+        row["target_ne_distance_dex"] = dist
+        if dist is not None and dist <= tolerance_dex:
+            out.append(row)
+    return out
+
+
+def _dedupe_zone_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove repeated discoveries of the same physical XSTAR local state.
+
+    Some working trees contain both ``xstar_runs/mg_ca_triplet_targets`` and
+    copied ``mg_ca_triplet_targets`` layouts.  The parent directory name, zone,
+    local log xi, local density, and He-like fraction are sufficient to suppress
+    duplicate commands while keeping deliberately different density grids.
+    """
+    seen: set[tuple[Any, ...]] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        key = (
+            row.get("xstar_case_directory"),
+            row.get("zone_index"),
+            round(_as_float(row.get("xstar_log_xi_local")) or -999.0, 8),
+            round(math.log10(_as_float(row.get("xstar_electron_density_cm^-3")) or 1.0), 8),
+            round(_as_float(row.get("xstar_helike_fraction")) or 0.0, 12),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
+def _nearest_density_rows(rows: list[dict[str, Any]], target_ne: float | None) -> list[dict[str, Any]]:
+    """Keep rows at the closest local electron density for each ion/log-xi group."""
+    if target_ne is None:
+        return rows
+    groups: dict[float, list[dict[str, Any]]] = {}
+    for row in rows:
+        lx = _as_float(row.get("xstar_log_xi_local"))
+        key = round(lx if lx is not None else -999.0, 6)
+        groups.setdefault(key, []).append(row)
+    out: list[dict[str, Any]] = []
+    for _, group in sorted(groups.items()):
+        best = min(group, key=lambda r: _density_distance_dex(r, target_ne) if _density_distance_dex(r, target_ne) is not None else float("inf"))
+        out.append(best)
+    return out
+
+
 def _solver_out_dir(tag: str, zone: dict[str, Any] | None, version_label: str) -> str:
     logxi = _as_float(zone.get("xstar_log_xi_local")) if zone else None
     t = _as_float(zone.get("xstar_temperature_K")) if zone else None
@@ -388,6 +455,9 @@ def build(
     python_exe: str = "python",
     selection_mode: str = "grid",
     logxi: float | None = None,
+    target_electron_density: float | None = None,
+    electron_density_tolerance_dex: float = 0.15,
+    nearest_density: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str], dict[str, Any]]:
     roots = [xstar_runs_root]
     if target_root is not None:
@@ -408,6 +478,9 @@ def build(
             "has_xout_abund1": bool(zone),
             "selection_policy": selection_mode,
             "requested_log_xi": logxi,
+            "target_electron_density_cm^-3": target_electron_density,
+            "electron_density_tolerance_dex": electron_density_tolerance_dex,
+            "nearest_density": nearest_density,
             "case_rank": case_rank,
             "radiation_normalization_status": "not_yet_tied_to_XSTAR_xi_or_transfer; local T/ne/logxi are used first",
         }
@@ -470,20 +543,30 @@ def build(
             zone_candidates.extend(rows)
             if _case_tag_from_path(xp) == tag:
                 matching_tag_rows.extend(rows)
-        # Use the ion's own XSTAR target grid when available (Mg/Ca here).
-        # For C/O in the supplied Mg/Ca xout tree, no matching-tag rows exist;
-        # we keep one global zero-fraction diagnostic row instead of producing
-        # misleading commands for every Mg/Ca grid file.
-        source_rows = matching_tag_rows if matching_tag_rows else zone_candidates
+        # Use only the ion's own XSTAR target grid.  Do not borrow Mg/Ca
+        # xout_abund1.fits rows for C/O merely because those tables contain
+        # zero-valued C V or O VII columns; that produces misleading local-state
+        # commands.  If matching-tag rows are absent, report a missing local
+        # state and ask for a matching XSTAR run for that ion.
+        source_rows = matching_tag_rows
         source_rows = _filter_logxi(source_rows, logxi)
+        if target_electron_density is not None and nearest_density:
+            source_rows = _nearest_density_rows(source_rows, target_electron_density)
+        else:
+            source_rows = _filter_density(source_rows, target_electron_density, electron_density_tolerance_dex)
+        source_rows = _dedupe_zone_rows(source_rows)
         if not source_rows:
             add_case(tag, None)
+            case_rows[-1]["recommended_action"] = (
+                f"no xout_abund1.fits local state matched the requested log-xi/density filters for {info['ion']}; "
+                "loosen --electron-density-tolerance-dex, use --nearest-density, or provide matching XSTAR runs"
+            )
             continue
         if selection_mode == "max":
             add_case(tag, _choose_zone(source_rows), case_rank=1)
         elif selection_mode == "grid":
             if matching_tag_rows:
-                chosen_rows = _choose_one_zone_per_xout(source_rows)
+                chosen_rows = _dedupe_zone_rows(_choose_one_zone_per_xout(source_rows))
             else:
                 # No C/O-specific xout grid is present in the supplied Mg/Ca
                 # tree; report a single global maximum/zero diagnostic row
@@ -504,6 +587,9 @@ def build(
         "n_cases_with_solver_command": sum(1 for r in case_rows if r.get("solver_command")),
         "selection_mode": selection_mode,
         "requested_log_xi": logxi,
+        "target_electron_density_cm^-3": target_electron_density,
+        "electron_density_tolerance_dex": electron_density_tolerance_dex,
+        "nearest_density": nearest_density,
         "run_solver": run_solver,
         "atdb": atdb or "",
         "xstar_runs_root": str(xstar_runs_root),
@@ -551,10 +637,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ions", default="c5,o7,mg11,ca19", help="Comma-separated tags: c5,o7,mg11,ca19.")
     p.add_argument("--atdb", default="", help="Path to atdb.fits. If supplied, runnable solver commands are generated.")
     p.add_argument("--run-solver", action="store_true", help="Execute generated solver and comparison commands. Requires --atdb.")
-    p.add_argument("--version-label", default="v03119", help="Label embedded in generated output directories.")
+    p.add_argument("--version-label", default="v03120", help="Label embedded in generated output directories.")
     p.add_argument("--selection-mode", choices=["grid", "max"], default="grid", help="grid: one max-fraction zone per xout file; max: one global max-fraction zone per ion.")
     p.add_argument("--log-xi", type=float, default=None, help="Optional log10(xi) filter, e.g. 3.0 for a single local-state comparison.")
-    p.add_argument("--out-dir", default="helike_local_state_validation_v03119")
+    p.add_argument("--target-electron-density", type=float, default=None, help="Optional electron-density filter in cm^-3. Example: 1e8 keeps local XSTAR states near ne=1e8.")
+    p.add_argument("--electron-density-tolerance-dex", type=float, default=0.15, help="Allowed |log10(ne/target_ne)| when --target-electron-density is used. Default 0.15 dex.")
+    p.add_argument("--nearest-density", action="store_true", help="When --target-electron-density is supplied, keep the closest-density state for each ion/log-xi group even if outside the tolerance.")
+    p.add_argument("--out-dir", default="helike_local_state_validation_v03120")
     p.add_argument("--python-exe", default="python")
     p.add_argument("--print-summary", action="store_true")
     return p
@@ -580,6 +669,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         python_exe=args.python_exe,
         selection_mode=args.selection_mode,
         logxi=args.log_xi,
+        target_electron_density=args.target_electron_density,
+        electron_density_tolerance_dex=args.electron_density_tolerance_dex,
+        nearest_density=args.nearest_density,
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(out_dir / "helike_local_state_cases.csv", rows)

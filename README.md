@@ -11,3 +11,21 @@ Recommended next validation: rerun one Mg XI and one Ca XIX v0.3.115 solver case
 ### v0.3.119 He-like local-state validation
 
 `examples/51_run_helike_local_state_validation.py` prepares C V, O VII, Mg XI, and Ca XIX solver runs using local XSTAR zone conditions read from `xout_abund1.fits`. It can write full-grid or selected-log-xi command scripts and optional comparisons against matching triplet target CSVs. This is a prerequisite step before judging Mg/Ca triplet discrepancies or row-level type-56/type-63/type-68/type-69 rates.
+### v0.3.120 density-filtered local-state validation
+
+`examples/51_run_helike_local_state_validation.py` can now prepare He-like solver runs at XSTAR `xout_abund1.fits` local states while filtering to a requested electron density:
+
+```bash
+PYTHONPATH=src python examples/51_run_helike_local_state_validation.py \
+  --xstar-runs-root xstar_runs \
+  --target-root xstar_atomic_v0.3.111_results \
+  --atdb ../xstar/data/atdb.fits \
+  --selection-mode grid \
+  --log-xi 3 \
+  --target-electron-density 1e8 \
+  --out-dir helike_local_state_validation_v03120_logxi3_ne1e8 \
+  --print-summary
+```
+
+The script does not fit triplet scale factors. It uses only matching ion-specific `xout_abund1.fits` directories for C V, O VII, Mg XI, and Ca XIX, and reports missing local state when no matching XSTAR run is available.
+
