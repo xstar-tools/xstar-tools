@@ -942,12 +942,11 @@ def evaluate_type63_same_n_lmixing(
     diag["type63_reason"] = "evaluated_same_n_lmixing_amcrs_velimp"
     return q_lower_to_upper, q_upper_to_lower, sum_a, diag
 
-def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temperature_k: float) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
-    """Evaluate the XSTAR type-63 branch for nf != ni and absolute delta-l equal to 1.
+def evaluate_type63_nf_ne_ni_energy_order(ni: int, li: int, nf: int, lf: int, iq: int, temperature_k: float) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
+    """Evaluate type-63 with the historical xstar-atomic energy-ordered selector.
 
-    Returns (q_excitation, q_deexcitation, angular_sum, diagnostics). The q values
-    follow XSTAR ans1/ans2 before density multiplication: excitation low->high and
-    de-excitation high->low when the decoded row is ordered by energy.
+    This is retained for diagnostics only.  XSTAR ucalc.f90 evaluates type-63
+    records in the ATDB idat record order, not after sorting endpoints by energy.
     """
     diag = {
         "type63_case": None,
@@ -957,6 +956,7 @@ def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temper
         "type63_n_lower_shell": None,
         "type63_n_upper_shell": None,
         "type63_iq": iq,
+        "type63_ordering_mode": "energy_order_legacy",
     }
     vals = [ni, li, nf, lf, iq]
     if any(v is None for v in vals):
@@ -983,18 +983,6 @@ def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temper
 
     nu = max(ni, nf)
     nll = min(ni, nf)
-
-    # In the XSTAR type-63 branch the shell sum is over the angular
-    # momenta lff of the lower-n shell.  For common ground -> np records
-    # (n_lower=1, l_lower=0, n_upper>1, l_upper=1), the literal Fortran
-    # aa1 selector `if (lff.eq.lf ...)` leaves aa1=0 because the only
-    # lower-shell lff is 0 while the upper level has lf=1.  For an explicit
-    # Python table of energy-ordered transitions, the physically intended
-    # branch factor is the A-value connecting the actual lower-shell l to
-    # the actual upper-shell l.  We therefore compute the shell sum as in
-    # XSTAR, then select aa1 explicitly from anl1(n_upper_shell,n_lower_shell,
-    # l_lower_shell,iq).  The old Fortran-like selector is retained as
-    # aa1_fortran_selector for diagnostics.
     lower_shell_l = li if ni == nll else lf
     upper_shell_l = lf if nf == nu else li
 
@@ -1005,7 +993,6 @@ def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temper
         sum_a += alp * (2*lff + 3)
         if lff > 0:
             sum_a += alm * (2*lff - 1)
-        # Literal ucalc.f90 selector, kept only as a diagnostic.
         if lff == lf and li > lf:
             aa1_fortran_selector = alp
         if lff == lf and li < lf:
@@ -1032,17 +1019,144 @@ def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temper
         return None, None, sum_a, diag
 
     se, sd = erc_py(nll, nu, temperature_k, iq, sum_a)
-    # Explicit lower-energy -> upper-energy and upper-energy -> lower-energy
-    # coefficients.  se/sd are shell rates from erc; the branching factor
-    # distributes them over the resolved l sublevels.
     q_exc = se * (2*upper_shell_l + 1) * aa1 / sum_a
     q_deexc = sd * (2*lower_shell_l + 1) * aa1 / sum_a
-    diag["type63_reason"] = "evaluated"
+    diag["type63_reason"] = "evaluated_energy_order_legacy"
     if aa1_fortran_selector <= 0.0:
-        diag["type63_reason"] = "evaluated_with_explicit_branch_selector"
+        diag["type63_reason"] = "evaluated_with_explicit_branch_selector_energy_order_legacy"
     diag["type63_se_shell_cm3_s"] = se
     diag["type63_sd_shell_cm3_s"] = sd
     return float(max(0.0, q_exc)), float(max(0.0, q_deexc)), sum_a, diag
+
+
+def evaluate_type63_nf_ne_ni_xstar_record_order(
+    ni: int,
+    li: int,
+    nf: int,
+    lf: int,
+    iq: int,
+    temperature_k: float,
+    energy_initial_eV: Optional[float] = None,
+    energy_final_eV: Optional[float] = None,
+) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
+    """Evaluate XSTAR ucalc.f90 type-63 n-changing branch in record order.
+
+    XSTAR does not sort the type-63 endpoints by level energy before evaluating
+    the branch.  It reads ``idest1`` and ``idest2`` directly from ATDB idat,
+    evaluates the literal ``aa1`` selector, then performs the same ans1/ans2 swap
+    in ucalc.f90 when ``nf.gt.ni`` or ``lf.gt.li``.  The returned q values are
+    mapped to energy-ordered lower->upper and upper->lower coefficients when the
+    endpoint energies are available.
+    """
+    diag = {
+        "type63_case": None,
+        "type63_reason": "",
+        "type63_angular_sum": None,
+        "type63_aa1": None,
+        "type63_aa1_fortran_selector": None,
+        "type63_n_lower_shell": None,
+        "type63_n_upper_shell": None,
+        "type63_iq": iq,
+        "type63_ordering_mode": "xstar_record_order",
+        "type63_record_initial_n": ni,
+        "type63_record_initial_l": li,
+        "type63_record_final_n": nf,
+        "type63_record_final_l": lf,
+    }
+    vals = [ni, li, nf, lf, iq]
+    if any(v is None for v in vals):
+        diag["type63_case"] = "not_evaluated"
+        diag["type63_reason"] = "missing record-order quantum numbers or ionic charge"
+        return None, None, None, diag
+    ni = int(ni); li = int(li); nf = int(nf); lf = int(lf); iq = int(iq)
+    if ni <= 0 or nf <= 0 or li < 0 or lf < 0 or iq <= 0:
+        diag["type63_case"] = "not_evaluated"
+        diag["type63_reason"] = "invalid record-order quantum numbers or ionic charge"
+        return None, None, None, diag
+    if nf == ni:
+        diag["type63_case"] = "same_n"
+        diag["type63_reason"] = "same_n_lmixing_uses_separate_amcrs_branch"
+        return None, None, None, diag
+    if abs(lf - li) != 1:
+        diag["type63_case"] = "not_evaluated"
+        diag["type63_reason"] = "delta_l_not_equal_1"
+        return None, None, None, diag
+    if temperature_k <= 0:
+        diag["type63_case"] = "not_evaluated"
+        diag["type63_reason"] = "nonpositive_temperature"
+        return None, None, None, diag
+
+    nu = max(ni, nf)
+    nll = min(ni, nf)
+    sum_a = 0.0
+    aa1 = 0.0
+    for lff in range(0, nll):
+        alm, alp = anl1_py(nu, nll, lff, iq)
+        sum_a += alp * (2*lff + 3)
+        if lff > 0:
+            sum_a += alm * (2*lff - 1)
+        # Literal ucalc.f90 selector.  This is intentionally in ATDB record
+        # order; do not replace ``lf`` with the energy-ordered lower-shell l.
+        if lff == lf and li > lf:
+            aa1 = alp
+        if lff == lf and li < lf:
+            aa1 = alm
+
+    diag["type63_case"] = "nf_ne_ni_delta_l_1"
+    diag["type63_angular_sum"] = sum_a
+    diag["type63_aa1"] = aa1
+    diag["type63_aa1_fortran_selector"] = aa1
+    diag["type63_n_lower_shell"] = nll
+    diag["type63_n_upper_shell"] = nu
+    if sum_a <= 0.0:
+        diag["type63_reason"] = "nonpositive_angular_sum"
+        return None, None, sum_a, diag
+    if aa1 <= 0.0:
+        diag["type63_reason"] = "nonpositive_xstar_record_order_aa1"
+        return None, None, sum_a, diag
+
+    se, sd = erc_py(nll, nu, temperature_k, iq, sum_a)
+    ans1 = se * (2*lf + 1) * aa1 / sum_a
+    ans2 = sd * (2*li + 1) * aa1 / sum_a
+    swapped = False
+    if (nf > ni) or (lf > li):
+        ans1, ans2 = ans2, ans1
+        swapped = True
+    diag["type63_ucalc_ans_swap_applied"] = swapped
+    diag["type63_ucalc_ans1_forward_cm3_s"] = ans1
+    diag["type63_ucalc_ans2_reverse_cm3_s"] = ans2
+    diag["type63_se_shell_cm3_s"] = se
+    diag["type63_sd_shell_cm3_s"] = sd
+
+    # ucalc.f90 documents ans1 as the forward idest1->idest2 rate and ans2 as
+    # the reverse rate.  Convert those to lower->upper / upper->lower for the
+    # xstar-atomic population matrix.
+    q_exc = q_deexc = None
+    if energy_initial_eV is not None and energy_final_eV is not None:
+        e1 = float(energy_initial_eV)
+        e2 = float(energy_final_eV)
+        if e1 <= e2:
+            q_exc = ans1
+            q_deexc = ans2
+            diag["type63_forward_direction"] = "initial_lower_to_final_upper"
+        else:
+            q_exc = ans2
+            q_deexc = ans1
+            diag["type63_forward_direction"] = "initial_upper_to_final_lower"
+    else:
+        # Fallback for legacy callers without endpoint energies: preserve the
+        # historical interpretation that ans1 is excitation and ans2 de-excitation.
+        q_exc = ans1
+        q_deexc = ans2
+        diag["type63_forward_direction"] = "unknown_energy_fallback_ans1_excitation"
+    diag["type63_reason"] = "evaluated_xstar_record_order"
+    return float(max(0.0, q_exc)), float(max(0.0, q_deexc)), sum_a, diag
+
+
+# Backward-compatible public name: now source-code aligned by default.
+def evaluate_type63_nf_ne_ni(ni: int, li: int, nf: int, lf: int, iq: int, temperature_k: float) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
+    return evaluate_type63_nf_ne_ni_xstar_record_order(ni, li, nf, lf, iq, temperature_k)
+
 
 # ----------------------------------------------------------------------
 # Record decoder
@@ -1158,6 +1272,16 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
     type63_iq = safe_int(it[-2]) if (r.data_type == 63 and len(it) >= 2) else None
     type63_initial_level = lev_a if r.data_type == 63 else None
     type63_final_level = lev_b if r.data_type == 63 else None
+    type63_initial_row = level_by_index.get(type63_initial_level, {}) if type63_initial_level is not None else {}
+    type63_final_row = level_by_index.get(type63_final_level, {}) if type63_final_level is not None else {}
+    type63_initial_n = type63_initial_row.get("n_principal")
+    type63_initial_l = type63_initial_row.get("orbital_l")
+    type63_final_n = type63_final_row.get("n_principal")
+    type63_final_l = type63_final_row.get("orbital_l")
+    type63_initial_energy_eV = energies.get(type63_initial_level) if type63_initial_level is not None else None
+    type63_final_energy_eV = energies.get(type63_final_level) if type63_final_level is not None else None
+    type63_initial_g = gs.get(type63_initial_level) if type63_initial_level is not None else None
+    type63_final_g = gs.get(type63_final_level) if type63_final_level is not None else None
 
     summary = {
         "record": r.recno,
@@ -1183,6 +1307,16 @@ def decode_collision_record(db: ATDB, r: IndexedRecord, labels: Dict[int, str], 
         "type63_iq": type63_iq,
         "type63_initial_level": type63_initial_level,
         "type63_final_level": type63_final_level,
+        "type63_initial_label": labels.get(type63_initial_level, "") if type63_initial_level is not None else "",
+        "type63_final_label": labels.get(type63_final_level, "") if type63_final_level is not None else "",
+        "type63_initial_n": type63_initial_n,
+        "type63_initial_l": type63_initial_l,
+        "type63_final_n": type63_final_n,
+        "type63_final_l": type63_final_l,
+        "type63_initial_energy_eV": type63_initial_energy_eV,
+        "type63_final_energy_eV": type63_final_energy_eV,
+        "type63_initial_g": type63_initial_g,
+        "type63_final_g": type63_final_g,
         "delta_e_level_eV": delta_e_ev,
         "wavelength_from_levels_A": wavelength_a,
         "energy_from_levels_keV": delta_e_ev / 1000.0 if delta_e_ev is not None else None,
@@ -1307,7 +1441,18 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
             if method == "evaluated_same_n_lmixing_amcrs_velimp":
                 method = "type63_same_n_lmixing_amcrs_velimp"
         else:
-            q_exc, q_deexc, _sum_a, diag = evaluate_type63_nf_ne_ni(
+            q_exc, q_deexc, _sum_a, diag = evaluate_type63_nf_ne_ni_xstar_record_order(
+                row.get("type63_initial_n"),
+                row.get("type63_initial_l"),
+                row.get("type63_final_n"),
+                row.get("type63_final_l"),
+                row.get("type63_iq"),
+                temperature_k,
+                energy_initial_eV=row.get("type63_initial_energy_eV"),
+                energy_final_eV=row.get("type63_final_energy_eV"),
+            )
+            # Also compute the historical energy-ordered branch for row-level audits.
+            _qeo, _qdeo, _sumeo, diag_energy = evaluate_type63_nf_ne_ni_energy_order(
                 row.get("n_lower"),
                 row.get("l_lower"),
                 row.get("n_upper"),
@@ -1315,9 +1460,14 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
                 row.get("type63_iq"),
                 temperature_k,
             )
+            diag["type63_energy_order_q_excitation_cm3_s"] = _qeo
+            diag["type63_energy_order_q_deexcitation_cm3_s"] = _qdeo
+            diag["type63_energy_order_reason"] = diag_energy.get("type63_reason")
+            diag["type63_energy_order_aa1"] = diag_energy.get("type63_aa1")
+            diag["type63_energy_order_aa1_fortran_selector"] = diag_energy.get("type63_aa1_fortran_selector")
             method = diag.get("type63_reason") or "type63_not_evaluated"
-            if method in ("evaluated", "evaluated_with_explicit_branch_selector"):
-                method = "type63_anl1_erc_nf_ne_ni_delta_l_1"
+            if method == "evaluated_xstar_record_order":
+                method = "type63_ucalc_record_order_anl1_erc"
         diagnostic = diag.get("type63_reason", "")
         extra_diag = diag
     else:
@@ -1379,6 +1529,20 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         "type63_n_upper_shell",
         "type63_se_shell_cm3_s",
         "type63_sd_shell_cm3_s",
+        "type63_ordering_mode",
+        "type63_record_initial_n",
+        "type63_record_initial_l",
+        "type63_record_final_n",
+        "type63_record_final_l",
+        "type63_ucalc_ans_swap_applied",
+        "type63_ucalc_ans1_forward_cm3_s",
+        "type63_ucalc_ans2_reverse_cm3_s",
+        "type63_forward_direction",
+        "type63_energy_order_q_excitation_cm3_s",
+        "type63_energy_order_q_deexcitation_cm3_s",
+        "type63_energy_order_reason",
+        "type63_energy_order_aa1",
+        "type63_energy_order_aa1_fortran_selector",
         "type63_same_n_sum_A",
         "type63_same_n_cn_l_high_to_low_cm3_s",
         "type63_same_n_lii",

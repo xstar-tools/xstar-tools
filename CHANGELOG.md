@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# v0.3.114 - 2026-05-09
+
+- Source-code-first type-63 alignment: n-changing type-63 collisions now follow the XSTAR `ucalc.f90` record-order convention. The evaluator uses ATDB `idest1/idest2` order for the `anl1/erc` branch, applies the literal `aa1` selector, applies the XSTAR `ans1/ans2` swap when `(nf.gt.ni).or.(lf.gt.li)`, and then maps the forward/reverse rates back to lower->upper and upper->lower coefficients for the Python matrix.
+- The previous energy-ordered branch is retained as an audit-only diagnostic and written as `type63_energy_order_*` columns so Mg XI/Ca XIX and C V rows can be compared directly.
+- Collision summaries now retain type-63 record-order endpoint labels, quantum numbers, statistical weights, and energies (`type63_initial_*`, `type63_final_*`) to support row-level source-code comparison against XSTAR debug/detail output.
+- No empirical scale fitting or default diagnostic scale changes were added. The C V `--resonance-collisional-feed-scale` option remains diagnostic-only and defaults to 1.
+
 # v0.3.113 - 2026-05-08
 
 - Source-code alignment update for He-like type-67/type-68 collisions. The Python `calt67_upsilon` and `calt68_upsilon` evaluators now apply the same `ucalc.f90` temperature floor used by XSTAR before calling `calt67.f90`/`calt68.f90`: `temp = max(T, 2.8777e6 / wavelength_A)`.
