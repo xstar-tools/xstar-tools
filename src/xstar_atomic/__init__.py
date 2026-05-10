@@ -1,12 +1,30 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.130"
+__version__ = "0.3.131"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
-from .context import LocalPlasmaState, RadiationField, EscapeContext
+from .context import LocalPlasmaState, RadiationField, EscapeContext, XSTARContext, context_from_values, context_from_xstar_run
 from .rates_type50 import RateEvaluation, evaluate_type50_bound_bound
 from .audit import type50_line_pumping
+from .workflow import (
+    TripletResult,
+    open_database,
+    get_levels,
+    get_lines,
+    get_wavelengths,
+    get_energies,
+    match_line,
+    match_lines,
+    get_collisions,
+    get_photoionization,
+    get_recombination,
+    calc_emissivity,
+    calc_rate,
+    calc_triplet,
+    solve_populations,
+    build_matrix,
+)
 
 try:
     from .hierarchy import ATDB
@@ -43,7 +61,26 @@ __all__ = [
     "LocalPlasmaState",
     "RadiationField",
     "EscapeContext",
+    "XSTARContext",
+    "context_from_values",
+    "context_from_xstar_run",
     "RateEvaluation",
     "evaluate_type50_bound_bound",
     "type50_line_pumping",
+    "TripletResult",
+    "open_database",
+    "get_levels",
+    "get_lines",
+    "get_wavelengths",
+    "get_energies",
+    "match_line",
+    "match_lines",
+    "get_collisions",
+    "get_photoionization",
+    "get_recombination",
+    "calc_emissivity",
+    "calc_rate",
+    "calc_triplet",
+    "solve_populations",
+    "build_matrix",
 ]

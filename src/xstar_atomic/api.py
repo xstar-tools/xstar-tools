@@ -5,7 +5,7 @@ The :class:`XSTARAtomic` class is a convenience wrapper around the lower-level
 and script-friendly methods for the currently implemented decoders while keeping
 ``ATDB`` available for direct record access.
 
-This API is intentionally thin in v0.1.x: it delegates to the same validated
+This API is intentionally thin and workflow-oriented: it delegates to the same validated
 module-level functions used by the command-line tools, so results should match
 CLI output.
 """
@@ -161,6 +161,100 @@ class AtomicSelection:
     element: Optional[str]
 
 
+
+class _ContextNamespace:
+    """Context constructors exposed as ``db.context``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def from_values(self, **kwargs):
+        from .context import context_from_values
+        return context_from_values(**kwargs)
+
+    def from_xstar_run(self, run_dir, **kwargs):
+        from .context import context_from_xstar_run
+        return context_from_xstar_run(run_dir, **kwargs)
+
+
+class _RatesNamespace:
+    """Rate evaluators exposed as ``db.rates``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def type50(self, *args, **kwargs):
+        if args:
+            if "ion" not in kwargs:
+                kwargs["ion"] = args[0]
+            else:
+                raise TypeError("ion was supplied both positionally and by keyword")
+            if len(args) > 1:
+                raise TypeError("type50 accepts at most one positional ion argument")
+        from .rates_type50 import evaluate_type50_bound_bound
+        return evaluate_type50_bound_bound(**kwargs)
+
+    def type50_bound_bound(self, *args, **kwargs):
+        return self.type50(*args, **kwargs)
+
+
+class _AuditNamespace:
+    """Audit workflows exposed as ``db.audit``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def type50_line_pumping(self, cases_csv, **kwargs):
+        from .audit import type50_line_pumping
+        return type50_line_pumping(cases_csv, **kwargs)
+
+    def resonance_deficit(self, *args, **kwargs):
+        raise NotImplementedError(
+            "resonance_deficit is still implemented as examples/53_audit_helike_resonance_deficit.py; "
+            "it is scheduled for migration into xstar_atomic.audit in a later API release."
+        )
+
+    def resonance_population_flux(self, *args, **kwargs):
+        raise NotImplementedError(
+            "resonance_population_flux is still implemented as examples/54_audit_helike_resonance_population_flux.py; "
+            "it is scheduled for migration into xstar_atomic.audit in a later API release."
+        )
+
+
+class _MatrixNamespace:
+    """Population-matrix helpers exposed as ``db.matrix``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def build_ion(self, ion, **kwargs):
+        from .workflow import build_matrix
+        return build_matrix(ion, db=self._owner, **kwargs)
+
+
+class _SolveNamespace:
+    """Population-solver helpers exposed as ``db.solve``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def ion(self, ion, **kwargs):
+        from .workflow import solve_populations
+        return solve_populations(ion, db=self._owner, **kwargs)
+
+
+class _ValidateNamespace:
+    """Validation helpers exposed as ``db.validate``."""
+
+    def __init__(self, owner: "XSTARAtomic"):
+        self._owner = owner
+
+    def compare_xstar_run(self, run_dir, *, ion=None, wavelength=None, value_column="emit_outward", **kwargs):
+        from .workflow import calc_triplet
+        ctx = self._owner.context.from_xstar_run(run_dir, ion=ion, **kwargs)
+        triplet = calc_triplet(ion=ion, context=ctx, wavelength=wavelength, value_column=value_column)
+        return {"context": ctx.to_dict(), "triplet": triplet.to_dict(), "lines": list(triplet.lines)}
+
 class XSTARAtomic:
     """High-level interface to XSTAR's packed ``atdb.fits`` atomic database.
 
@@ -196,6 +290,12 @@ class XSTARAtomic:
         self._records = None
         self._elements = None
         self._ions = None
+        self.context = _ContextNamespace(self)
+        self.rates = _RatesNamespace(self)
+        self.audit = _AuditNamespace(self)
+        self.matrix = _MatrixNamespace(self)
+        self.solve = _SolveNamespace(self)
+        self.validate = _ValidateNamespace(self)
         if build_index:
             self.build_index()
 
@@ -536,6 +636,61 @@ class XSTARAtomic:
             # Backward-compatible alias used by examples and early API tests.
             "rows": emiss_rows,
         }
+
+
+    def get_levels(self, *args, **kwargs):
+        """Alias for :meth:`levels` for workflow-style code."""
+        return self.levels(*args, **kwargs)
+
+    def get_lines(self, *args, **kwargs):
+        """Alias for :meth:`lines` for workflow-style code."""
+        return self.lines(*args, **kwargs)
+
+    def get_wavelengths(self, ion: IonLike = None, **kwargs) -> list[float]:
+        """Return sorted wavelengths in Angstrom for selected line records."""
+        vals = []
+        for row in self.lines(ion, **kwargs):
+            value = row.get("wavelength_A", row.get("wavelength"))
+            if value is not None:
+                try:
+                    vals.append(float(value))
+                except Exception:
+                    pass
+        return sorted(vals)
+
+    def match_line(self, ion: IonLike = None, **kwargs):
+        """Return the closest selected line by wavelength or energy."""
+        from .workflow import match_line
+        return match_line(ion, db=self, **kwargs)
+
+    def get_collisions(self, *args, **kwargs):
+        """Alias for :meth:`collisions`."""
+        return self.collisions(*args, **kwargs)
+
+    def get_photoionization(self, *args, **kwargs):
+        """Alias for :meth:`photoionization`."""
+        return self.photoionization(*args, **kwargs)
+
+    def get_recombination(self, *args, **kwargs):
+        """Alias for :meth:`recombination`."""
+        return self.recombination(*args, **kwargs)
+
+    def calc_emissivity(self, *args, **kwargs):
+        """Alias for :meth:`emissivity`."""
+        return self.emissivity(*args, **kwargs)
+
+    def calc_triplet(self, ion: str | None = None, **kwargs):
+        """Calculate a He-like triplet summary from rows or an XSTAR context."""
+        from .workflow import calc_triplet
+        return calc_triplet(ion=ion, **kwargs)
+
+    def solve_populations(self, ion: IonLike, **kwargs):
+        """Workflow-style alias for ``db.solve.ion(...)``."""
+        return self.solve.ion(ion, **kwargs)
+
+    def build_matrix(self, ion: IonLike, **kwargs):
+        """Workflow-style alias for ``db.matrix.build_ion(...)``."""
+        return self.matrix.build_ion(ion, **kwargs)
 
     def type50_rate(self, **kwargs):
         """Evaluate an audit-only XSTAR type-50 bound-bound radiative rate.

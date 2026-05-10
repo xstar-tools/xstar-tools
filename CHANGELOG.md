@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.3.131 - 2026-05-10
+
+- Added the first workflow-first module-level public API layer inspired by the earlier `chianti-tools` review:
+  - `open_database(...)`
+  - `get_levels(...)`, `get_lines(...)`, `get_wavelengths(...)`, `get_energies(...)`
+  - `match_line(...)`, `match_lines(...)`
+  - `get_collisions(...)`, `get_photoionization(...)`, `get_recombination(...)`
+  - `calc_emissivity(...)`, `calc_rate(...)`, `calc_triplet(...)`
+  - `solve_populations(...)`, `build_matrix(...)` wrappers around the current solver workflow.
+- Added `XSTARContext` plus `context_from_values(...)` and `context_from_xstar_run(...)` for lightweight local XSTAR contexts selected from `xout_abund1.fits`.
+- Added namespace-style expert API attributes on `XSTARAtomic`:
+  - `db.context.from_values(...)`, `db.context.from_xstar_run(...)`
+  - `db.rates.type50(...)`
+  - `db.audit.type50_line_pumping(...)`
+  - `db.matrix.build_ion(...)`
+  - `db.solve.ion(...)`
+  - `db.validate.compare_xstar_run(...)`.
+- Added public namespace modules `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs` as stable import locations for future API growth.
+- Expanded Markdown and LaTeX docs with the new workflow-first API calls and expert namespace examples.
+- Added API tests for public workflow functions and namespace modules.
+- No solver physics changed; type-50 photoexcitation remains audit-only and is not injected into the population matrix.
+
 ## v0.3.130 - 2026-05-10
 
 - Expanded `examples/README.md` so every example script has its own section with a copy-pasteable `bash` command block.

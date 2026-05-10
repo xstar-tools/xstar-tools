@@ -1,6 +1,35 @@
 # xstar-atomic
 
-Latest package note: **v0.3.128** adds the first public API-infrastructure layer for source-code-first XSTAR alignment.
+Latest package note: **v0.3.131** implements the first workflow-first public API layer requested from the chianti-tools review.
+
+The simple API now includes:
+
+```python
+import xstar_atomic as xa
+
+db = xa.open_database("/path/to/atdb.fits")
+levels = xa.get_levels("O VII", db=db)
+lines = xa.get_lines("O VII", db=db, wavelength=(21.4, 22.2))
+rate = xa.calc_rate("type50", aij_s_inv=..., oscillator_strength=..., wavelength_A=...)
+triplet = xa.calc_triplet("O VII", rows=xstar_line_rows)
+```
+
+The expert object API now exposes namespace-style entry points:
+
+```python
+from xstar_atomic import XSTARAtomic
+
+db = XSTARAtomic("/path/to/atdb.fits")
+ctx = db.context.from_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+rate = db.rates.type50("O VII", aij_s_inv=..., oscillator_strength=..., wavelength_A=...)
+comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+```
+
+Public namespace modules were also added for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
+
+No solver physics changed in v0.3.131. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
+
+## Earlier v0.3.128 API infrastructure
 
 New public objects and functions:
 
@@ -9,33 +38,12 @@ from xstar_atomic import (
     LocalPlasmaState,
     RadiationField,
     EscapeContext,
+    XSTARContext,
     RateEvaluation,
     evaluate_type50_bound_bound,
     type50_line_pumping,
 )
 ```
-
-v0.3.128 adds:
-
-- `src/xstar_atomic/context.py` with `LocalPlasmaState`, `RadiationField`, and `EscapeContext`.
-- `src/xstar_atomic/rates_type50.py` with the audit-only `RateEvaluation` result class and `evaluate_type50_bound_bound(...)` source-code-aligned type-50 evaluator.
-- `src/xstar_atomic/audit.py` with reusable `type50_line_pumping(...)` audit logic.
-- A converted `examples/55_audit_helike_type50_line_pumping.py` wrapper, preserving the CLI while moving reusable logic into the package.
-- Reorganized Markdown and LaTeX user guides modeled after workflow-first `chianti-tools` documentation.
-- `docs/example_to_source_api_map.md`, mapping examples that should migrate into stable source modules.
-
-The type-50 evaluator records the XSTAR `ucalc.f90` source-code formula:
-
-```fortran
-ans1 = aij * (ptmp1 + ptmp2)
-sigma = 0.02655 * flin * elin * 1.d-8 / vtherm
-ans2 = sigma * bremsa(nb1) * vtherm / 3.e10 * flinabs(ptmp1)
-ans2 = ans2 * max(0., 1.d0-cfrac)
-! final swap: ans1 is lower->upper photoexcitation; ans2 is upper->lower escaped decay
-```
-
-No solver physics changed in v0.3.128. The type-50 photoexcitation/line-pumping path remains **audit-only**; no empirical triplet scale fitting was added.
-
 
 ## Examples
 

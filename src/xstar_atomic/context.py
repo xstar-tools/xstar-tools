@@ -255,4 +255,201 @@ class EscapeContext:
         }
 
 
-__all__ = ["LocalPlasmaState", "RadiationField", "EscapeContext"]
+@dataclass(frozen=True)
+class XSTARContext:
+    """Bundle local plasma, radiation, escape, and run provenance.
+
+    This is the public context object used by the workflow API.  It is small on
+    purpose: v0.3.131 uses it to pass local XSTAR state into audit and solver
+    wrappers without pretending that a full radiation-transfer state has already
+    been reconstructed.
+    """
+
+    plasma: LocalPlasmaState = field(default_factory=LocalPlasmaState)
+    radiation: RadiationField | None = None
+    escape: EscapeContext | None = None
+    ion: str | None = None
+    run_dir: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON/CSV-friendly representation."""
+        return {
+            "ion": self.ion,
+            "run_dir": self.run_dir,
+            "plasma": self.plasma.to_dict(),
+            "radiation": self.radiation.to_dict() if self.radiation is not None else None,
+            "escape": self.escape.to_dict() if self.escape is not None else None,
+            "metadata": dict(self.metadata),
+        }
+
+
+def _normalize_key(text: Any) -> str:
+    return str(text or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _ion_column_candidates(ion: str | None) -> tuple[str, ...]:
+    if not ion:
+        return ()
+    import re
+    from .api import parse_ion
+
+    try:
+        _z, stage, symbol = parse_ion(ion)
+    except Exception:
+        return (_normalize_key(ion),)
+    if symbol is None or stage is None:
+        return (_normalize_key(ion),)
+    roman_map = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+        (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    ]
+    n = int(stage)
+    roman = []
+    for value, glyph in roman_map:
+        while n >= value:
+            roman.append(glyph)
+            n -= value
+    roman_text = "".join(roman).lower()
+    sym = symbol.lower()
+    return (
+        f"{sym}_{roman_text}",
+        f"{sym}{roman_text}",
+        f"{sym}_{stage}",
+        f"{sym}{stage}",
+        _normalize_key(ion),
+        re.sub(r"[^a-z0-9]+", "_", str(ion).lower()).strip("_"),
+    )
+
+
+def _find_ion_fraction_column(row: Mapping[str, Any], ion: str | None) -> str | None:
+    norm_to_key = {_normalize_key(k): k for k in row.keys()}
+    for cand in _ion_column_candidates(ion):
+        if cand in norm_to_key:
+            return norm_to_key[cand]
+    # XSTAR abundance tables often use labels like c_v or o_vii.  Fallback to a
+    # contains match only when the requested ion has a known normalized label.
+    candidates = [c for c in _ion_column_candidates(ion) if c]
+    for nk, original in norm_to_key.items():
+        if nk in candidates or any(nk == c for c in candidates):
+            return original
+    return None
+
+
+def context_from_values(
+    *,
+    temperature_K: float | None = None,
+    electron_density_cm3: float | None = None,
+    ion: str | None = None,
+    log_xi: float | None = None,
+    ionization_parameter: float | None = None,
+    radius_cm: float | None = None,
+    thickness_cm: float | None = None,
+    ion_fraction: float | None = None,
+    radiation: RadiationField | None = None,
+    escape: EscapeContext | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> XSTARContext:
+    """Create an :class:`XSTARContext` from explicit local physical values."""
+    plasma = LocalPlasmaState(
+        temperature_K=temperature_K,
+        electron_density_cm3=electron_density_cm3,
+        ionization_parameter=ionization_parameter,
+        log_xi=log_xi,
+        radius_cm=radius_cm,
+        thickness_cm=thickness_cm,
+        ion_fraction=ion_fraction,
+        metadata=dict(metadata or {}),
+    )
+    return XSTARContext(plasma=plasma, radiation=radiation, escape=escape, ion=ion, metadata=dict(metadata or {}))
+
+
+def context_from_xstar_run(
+    run_dir: str | Path,
+    *,
+    ion: str | None = None,
+    zone_index: int | None = None,
+    selection: str = "max_fraction",
+    xout_abund_filename: str = "xout_abund1.fits",
+) -> XSTARContext:
+    """Build a lightweight local context from an XSTAR run directory.
+
+    The current implementation reads ``xout_abund1.fits`` and selects either a
+    requested ``zone_index`` or the zone with the largest fraction for ``ion``.
+    It records run provenance and local ``T``, ``ne``, ``log_xi``, radius, and
+    thickness.  Radiation and detailed escape contexts are intentionally left
+    empty until the v0.3.13x radiation/escape API is source-matched.
+    """
+    run_path = Path(run_dir)
+    abund_path = run_path / xout_abund_filename
+    if not abund_path.exists():
+        raise FileNotFoundError(f"Could not find {xout_abund_filename!r} in {run_path}")
+    from .xstar_outputs import read_xout_abundances
+
+    tables = read_xout_abundances(abund_path)
+    rows = list(tables.get("abundances", []))
+    if not rows:
+        raise ValueError(f"No ABUNDANCES rows found in {abund_path}")
+    ion_col = _find_ion_fraction_column(rows[0], ion)
+
+    enriched: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows, start=1):
+        xe = _finite_or_none(row.get("x_e"))
+        np_ = _finite_or_none(row.get("n_p"))
+        temp_1e4 = _finite_or_none(row.get("temperature"))
+        logxi = _finite_or_none(row.get("ion_parameter"))
+        frac = _finite_or_none(row.get(ion_col)) if ion_col is not None else None
+        enriched.append({
+            "zone_index": idx,
+            "temperature_K": 1.0e4 * temp_1e4 if temp_1e4 is not None else None,
+            "electron_density_cm3": xe * np_ if xe is not None and np_ is not None else None,
+            "log_xi": logxi,
+            "ionization_parameter": 10.0 ** logxi if logxi is not None else None,
+            "radius_cm": _finite_or_none(row.get("radius")),
+            "thickness_cm": _finite_or_none(row.get("delta_r")),
+            "ion_fraction": frac,
+            "raw_row": dict(row),
+        })
+    if zone_index is not None:
+        matches = [r for r in enriched if int(r["zone_index"]) == int(zone_index)]
+        if not matches:
+            raise ValueError(f"zone_index={zone_index} not found in {abund_path}")
+        chosen = matches[0]
+        selection_policy = "zone_index"
+    elif selection == "max_fraction" and ion_col is not None:
+        chosen = max(enriched, key=lambda r: -1.0 if r.get("ion_fraction") is None else float(r["ion_fraction"]))
+        selection_policy = "max_fraction"
+    else:
+        chosen = enriched[0]
+        selection_policy = "first_zone"
+    plasma = LocalPlasmaState(
+        temperature_K=chosen.get("temperature_K"),
+        electron_density_cm3=chosen.get("electron_density_cm3"),
+        ionization_parameter=chosen.get("ionization_parameter"),
+        log_xi=chosen.get("log_xi"),
+        radius_cm=chosen.get("radius_cm"),
+        thickness_cm=chosen.get("thickness_cm"),
+        zone_index=chosen.get("zone_index"),
+        ion_fraction=chosen.get("ion_fraction"),
+        metadata={
+            "xstar_abund_path": str(abund_path),
+            "xstar_case_directory": run_path.name,
+            "selection": selection_policy,
+            "ion_fraction_column": ion_col,
+        },
+    )
+    return XSTARContext(
+        plasma=plasma,
+        ion=ion,
+        run_dir=str(run_path),
+        metadata={
+            "xstar_abund_path": str(abund_path),
+            "selection": selection_policy,
+            "n_zones": len(rows),
+            "ion_fraction_column": ion_col,
+        },
+    )
+
+
+__all__ = ["LocalPlasmaState", "RadiationField", "EscapeContext", "XSTARContext", "context_from_values", "context_from_xstar_run"]
