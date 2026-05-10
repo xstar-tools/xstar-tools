@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.134 - 2026-05-10
+
+- Added `src/xstar_atomic/benchmark.py`, a same-run XSTAR local-output reproduction layer for C V, O VII, Mg XI, and Ca XIX benchmarks.
+- Added `XSTARLocalTarget` and `XSTARBenchmarkComparison` result objects that keep the exact local state from `xout_abund1.fits` and exact He-like triplet target from `xout_lines1.fits` separate from any solver residual.
+- Added public helpers `build_xstar_local_target(...)`, `reproduce_xstar_run(...)`, `run_xstar_benchmark_suite(...)`, `write_xstar_benchmark_outputs(...)`, and `write_xstar_benchmark_suite(...)`. These are exported at the top level and through `xstar_atomic.validate`/`XSTARAtomic.validate`.
+- Added `examples/56_reproduce_xstar_local_outputs.py`, a CLI wrapper that writes local-state, triplet-target, selected-line, comparison, JSON, and Markdown benchmark products.
+- Updated Markdown, LaTeX, and Sphinx user guides with the new same-run reproduction benchmark API and CLI example.
+- Updated `examples/README.md` and the example-to-source migration map for example 56.
+- No solver physics changed; type-50 photoexcitation remains audit-only. This release establishes exact XSTAR-output targets before further solver corrections.
+
 ## v0.3.133 - 2026-05-10
 
 - Expanded `docs/user_guide.md`, `docs/user_guide.tex`, and `docs/sphinx/source/user_guide.rst` with function-by-function examples for the top-level workflow API, context classes, `RateEvaluation`, audit-only type-50 evaluation, and expert object namespaces.

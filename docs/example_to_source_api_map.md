@@ -64,3 +64,5 @@ examples/55_audit_helike_type50_line_pumping.py
 ```
 
 The example is now a CLI wrapper and the reusable audit is available from Python.
+
+| `56_reproduce_xstar_local_outputs.py` | `xstar_atomic.benchmark.reproduce_xstar_run(...)` / `xstar_atomic.benchmark.write_xstar_benchmark_outputs(...)` | Exact same-run XSTAR local-target extraction from `xout_abund1.fits` and `xout_lines1.fits`. |

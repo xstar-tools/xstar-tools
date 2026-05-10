@@ -61,6 +61,12 @@ Matrix and solver namespaces
 Same-run validation and XSTAR-run helpers
 -----------------------------------------
 
+.. automodule:: xstar_atomic.benchmark
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 .. automodule:: xstar_atomic.validate
    :members:
    :undoc-members:

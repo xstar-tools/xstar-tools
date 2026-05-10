@@ -255,6 +255,22 @@ class _ValidateNamespace:
         triplet = calc_triplet(ion=ion, context=ctx, wavelength=wavelength, value_column=value_column)
         return {"context": ctx.to_dict(), "triplet": triplet.to_dict(), "lines": list(triplet.lines)}
 
+    def reproduce_xstar_run(self, run_dir, *, ion=None, wavelength=None, value_column="emit_outward", run_solver=False, **kwargs):
+        from .benchmark import reproduce_xstar_run
+        return reproduce_xstar_run(
+            run_dir,
+            ion=ion,
+            wavelength=wavelength,
+            value_column=value_column,
+            run_solver=run_solver,
+            db=self._owner,
+            **kwargs,
+        )
+
+    def build_xstar_local_target(self, run_dir, *, ion=None, wavelength=None, value_column="emit_outward", **kwargs):
+        from .benchmark import build_xstar_local_target
+        return build_xstar_local_target(run_dir, ion=ion, wavelength=wavelength, value_column=value_column, **kwargs)
+
 class XSTARAtomic:
     """High-level interface to XSTAR's packed ``atdb.fits`` atomic database.
 
@@ -713,3 +729,21 @@ class XSTARAtomic:
         from .audit import type50_line_pumping
 
         return type50_line_pumping(cases_csv, **kwargs)
+
+    def reproduce_xstar_run(self, run_dir, *, ion=None, wavelength=None, value_column="emit_outward", run_solver=False, **kwargs):
+        """Extract exact same-run XSTAR local targets and optionally compare the solver."""
+        from .benchmark import reproduce_xstar_run
+        return reproduce_xstar_run(
+            run_dir,
+            ion=ion,
+            wavelength=wavelength,
+            value_column=value_column,
+            run_solver=run_solver,
+            db=self,
+            **kwargs,
+        )
+
+    def build_xstar_local_target(self, run_dir, *, ion=None, wavelength=None, value_column="emit_outward", **kwargs):
+        """Extract exact local-state/triplet target values from XSTAR outputs."""
+        from .benchmark import build_xstar_local_target
+        return build_xstar_local_target(run_dir, ion=ion, wavelength=wavelength, value_column=value_column, **kwargs)

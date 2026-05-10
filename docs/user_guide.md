@@ -151,7 +151,7 @@ In v0.3.128 through v0.3.133 this evaluator is **audit-only**. It records the XS
 
 ## 3. Public API cookbook: workflow-first and expert APIs
 
-This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.133.  The design follows the useful `chianti-tools` pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
+This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.134.  The design follows the useful `chianti-tools` pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
 
 There are three supported public layers:
 
@@ -161,7 +161,7 @@ There are three supported public layers:
 | `XSTARAtomic` object API | You want to keep one opened `atdb.fits` handle and reuse cached indices. | `db.lines("O VII", wavelength=(21.4, 22.2))` |
 | Expert namespace API | You want source-code-first contexts, rate evaluators, audits, validation, and future matrix/solver workflows. | `db.rates.type50("O VII", ...)` |
 
-The current API intentionally separates **implemented stable helpers** from **future namespace placeholders**.  In v0.3.132--v0.3.133, `db.rates.type50(...)`, `db.audit.type50_line_pumping(...)`, `db.context.*`, and `db.validate.compare_xstar_run(...)` are callable.  Some planned functions, such as full `db.audit.resonance_deficit(...)` and full type-50 solver injection, are still intentionally not active as public solver physics.
+The current API intentionally separates **implemented stable helpers** from **future namespace placeholders**.  In v0.3.132--v0.3.134, `db.rates.type50(...)`, `db.audit.type50_line_pumping(...)`, `db.context.*`, and `db.validate.compare_xstar_run(...)` and `db.validate.reproduce_xstar_run(...)` are callable.  Some planned functions, such as full `db.audit.resonance_deficit(...)` and full type-50 solver injection, are still intentionally not active as public solver physics.
 
 ### 3.1 Module-level workflow API
 
@@ -208,6 +208,8 @@ The same calls can receive `fitsfile="/path/to/atdb.fits"` instead of `db=db`.  
 | `xa.calc_triplet(...)` | Summarize He-like f/i/r line rows. | implemented for supplied/same-run rows |
 | `xa.solve_populations(...)` | Wrapper around the current diagnostic population solver. | prototype |
 | `xa.build_matrix(...)` | Return available matrix-related solver products. | prototype |
+| `xa.build_xstar_local_target(...)` | Extract exact local-state and triplet targets from `xout_abund1.fits`/`xout_lines1.fits`. | implemented |
+| `xa.reproduce_xstar_run(...)` | Build the exact XSTAR target and optionally compare the current solver. | implemented |
 
 ### 3.3 Function-by-function top-level API examples
 
@@ -315,16 +317,15 @@ ctx = xa.context_from_values(
     electron_density_cm3=state.electron_density_cm3,
     log_xi=state.log_xi,
     ion_fraction=state.ion_fraction,
-    radiation_field=radiation,
-    escape_context=escape,
+    radiation=radiation,
+    escape=escape,
 )
 
 # xa.context_from_xstar_run(...): start from an XSTAR run directory when available.
 ctx_from_run = xa.context_from_xstar_run(
     "xstar_runs/helike_type69/o7_ne1e8",
     ion="O VII",
-    target_electron_density=1e8,
-    nearest_density=True,
+    selection="max_fraction",
 )
 ```
 
@@ -343,8 +344,8 @@ rate = xa.calc_rate(
     vtherm_cm_s=1.0e7,
     bremsa_nb1=2.5e4,
     plasma_state=state,
-    radiation_field=radiation,
-    escape_context=escape,
+    radiation=radiation,
+    escape=escape,
 )
 assert isinstance(rate, xa.RateEvaluation)
 print(rate.to_dict())
@@ -412,6 +413,46 @@ comparison = db.validate.compare_xstar_run(
 solution = db.solve.ion("O VII", context=ctx)
 matrix_products = db.matrix.build_ion("O VII", context=ctx)
 ```
+
+#### Same-run XSTAR reproduction benchmark helpers
+
+The first benchmark step after API reorganization is to reproduce exactly what the same XSTAR run wrote to `xout_abund1.fits` and `xout_lines1.fits`.  The helper below is target extraction: it records XSTAR local `T`, `ne`, `log xi`, ion fraction, and triplet `f/i/r` before any solver correction is attempted.
+
+```python
+# xa.build_xstar_local_target(...): exact local-state and triplet target.
+target = xa.build_xstar_local_target(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+)
+print(target.local_state_row())
+print(target.triplet_row())
+
+# xa.reproduce_xstar_run(...): target extraction plus optional solver residuals.
+comparison = xa.reproduce_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    run_solver=False,
+)
+print(comparison.comparison_row())
+
+# The object API exposes the same workflow.
+comparison = db.validate.reproduce_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+)
+```
+
+The companion CLI wrapper is:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_o7_local_reproduction \
+  --print-summary
+```
+
+For the C V / O VII / Mg XI / Ca XIX benchmark suite, use a CSV with columns `ion,run_dir` and call `examples/56_reproduce_xstar_local_outputs.py --cases-csv ...`.
 
 ### 3.4 Open and summarize an XSTAR database object
 
@@ -506,8 +547,8 @@ ctx = context_from_values(
     electron_density_cm3=state.electron_density_cm3,
     log_xi=state.log_xi,
     ion_fraction=state.ion_fraction,
-    radiation_field=rad,
-    escape_context=escape,
+    radiation=rad,
+    escape=escape,
 )
 ```
 
@@ -519,8 +560,7 @@ To start from an existing XSTAR run directory:
 ctx = xa.context_from_xstar_run(
     "xstar_runs/helike_type69/o7_ne1e8",
     ion="O VII",
-    target_electron_density=1e8,
-    nearest_density=True,
+    selection="max_fraction",
 )
 ```
 
@@ -536,8 +576,8 @@ rate = evaluate_type50_bound_bound(
     vtherm_cm_s=1.0e7,
     bremsa_nb1=2.5e4,
     plasma_state=state,
-    radiation_field=rad,
-    escape_context=escape,
+    radiation=rad,
+    escape=escape,
     ion="O VII",
     lower_level=1,
     upper_level=7,
@@ -1010,9 +1050,11 @@ v0.3.130: examples README command-completeness update with one bash block for ev
 v0.3.131: workflow-first public API, expert namespaces, and context-based helper functions.
 v0.3.132: documentation consistency across Markdown, LaTeX, and Sphinx for the public API.
 v0.3.133: add function-by-function API examples to Markdown/LaTeX/Sphinx docs and fix the LaTeX migration table layout.
-v0.3.133: XSTAR radiation-field reader and exact line-energy bin mapping.
-v0.3.134: type-50 matrix-injection preview, still audit-only.
-v0.3.135: optional solver mode for xstar-line-escape-and-pumping.
+v0.3.133: function-by-function API examples and LaTeX migration-table fix.
+v0.3.134: exact same-run XSTAR local-output reproduction targets.
+v0.3.135: XSTAR radiation-field reader and exact line-energy bin mapping.
+v0.3.136: type-50 matrix-injection preview, still audit-only.
+v0.3.137: optional solver mode for xstar-line-escape-and-pumping.
 ```
 
 Longer-term:

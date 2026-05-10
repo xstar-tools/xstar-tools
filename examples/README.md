@@ -477,14 +477,28 @@ Run the v0.3.128+ API-backed type-50 line-pumping audit wrapper.
 PYTHONPATH=src python examples/55_audit_helike_type50_line_pumping.py --cases-csv helike_local_state_validation_v03130/helike_local_state_cases.csv --solver-root . --xstar-source-root ../xstar --print-summary
 ```
 
+### `56_reproduce_xstar_local_outputs.py`
+
+Extract exact same-run XSTAR benchmark targets from `xout_abund1.fits` and `xout_lines1.fits` before any solver comparison. This is the recommended first check for C V, O VII, Mg XI, and Ca XIX local-state benchmarks.
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --run-dir xstar_runs/helike_type69/o7_ne1e8 --ion "O VII" --out-dir xstar_o7_local_reproduction --print-summary
+```
+
+For the four-ion suite, create a CSV such as `helike_reproduction_cases.csv` with columns `ion,run_dir`, then run:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --cases-csv helike_reproduction_cases.csv --out-dir helike_local_reproduction_suite --print-summary
+```
+
 ## Recommended learning paths
 
 - **New user:** 14 -> 05 -> 06 -> 01 -> 02 -> 03.
 - **Atomic-data decoder developer:** 05 -> 01 -> 04 -> 07 -> 28 -> 31.
 - **Emissivity/export user:** 02 -> 03 -> 09 -> 12.
 - **O VII triplet development:** 13 -> 15 -> 17 -> 19 -> 21 -> 22 -> 24 -> 30.
-- **Full-global/XSTAR validation:** 42 -> 43 -> 44 -> 51 -> 52 -> 53 -> 54 -> 55.
-- **Mg XI / Ca XIX validation:** 47 -> 48 -> 49 -> 50 -> 51 -> 52 -> 55.
+- **Full-global/XSTAR validation:** 42 -> 43 -> 44 -> 51 -> 56 -> 52 -> 53 -> 54 -> 55.
+- **Mg XI / Ca XIX validation:** 47 -> 48 -> 49 -> 50 -> 51 -> 56 -> 52 -> 55.
 
 ## Migration policy
 

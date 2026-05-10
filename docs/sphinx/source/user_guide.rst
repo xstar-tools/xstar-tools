@@ -76,7 +76,7 @@ Run without installation from a checkout:
 Public API layers
 -----------------
 
-The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.133 make
+The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.134 make
 this layer explicit in Markdown, LaTeX, and Sphinx documentation.
 
 .. list-table:: Public API layers
@@ -97,9 +97,9 @@ this layer explicit in Markdown, LaTeX, and Sphinx documentation.
      - ``db.rates.type50("O VII", ...)``
 
 The API intentionally separates implemented stable helpers from future
-namespace placeholders.  In v0.3.132--v0.3.133, ``db.rates.type50(...)``,
+namespace placeholders.  In v0.3.132--v0.3.134, ``db.rates.type50(...)``,
 ``db.audit.type50_line_pumping(...)``, ``db.context.*``, and
-``db.validate.compare_xstar_run(...)`` are callable.  Full type-50 solver
+``db.validate.compare_xstar_run(...)`` and ``db.validate.reproduce_xstar_run(...)`` are callable.  Full type-50 solver
 injection and some resonance-budget audits remain future work.
 
 Workflow-first module-level API
@@ -630,3 +630,46 @@ Development policy
 - Radiation-dependent rates must expose the radiation context.
 - Escape-dependent rates must expose ``cfrac``, ``tau``/``ptmp``, and escape treatment.
 - Same-run XSTAR outputs are preferred over generic target CSVs.
+
+
+Same-run XSTAR reproduction benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After the API reorganization, the first benchmark step is to reproduce exactly
+what the same XSTAR run wrote to ``xout_abund1.fits`` and ``xout_lines1.fits``.
+This is target extraction, not a new solver-physics correction.
+
+.. code-block:: python
+
+   import xstar_atomic as xa
+
+   target = xa.build_xstar_local_target(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+   )
+   print(target.local_state_row())
+   print(target.triplet_row())
+
+   comparison = xa.reproduce_xstar_run(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+       run_solver=False,
+   )
+   print(comparison.comparison_row())
+
+   comparison = db.validate.reproduce_xstar_run(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+   )
+
+The command-line wrapper is:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+     --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+     --ion "O VII" \
+     --out-dir xstar_o7_local_reproduction \
+     --print-summary
+
+Use a cases CSV with columns ``ion,run_dir`` for the C V / O VII / Mg XI / Ca XIX suite.

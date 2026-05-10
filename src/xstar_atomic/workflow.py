@@ -410,6 +410,27 @@ def build_matrix(ion: IonLike, **kwargs: Any) -> dict:
     return {k: result.get(k) for k in keys if k in result}
 
 
+def reproduce_xstar_run(run_dir, *, ion=None, wavelength=None, value_column="emit_outward", run_solver=False, db=None, fitsfile=None, **kwargs):
+    """Extract exact same-run XSTAR local targets and optionally compare the solver."""
+    from .benchmark import reproduce_xstar_run as _reproduce
+    return _reproduce(
+        run_dir,
+        ion=ion,
+        wavelength=wavelength,
+        value_column=value_column,
+        run_solver=run_solver,
+        db=db,
+        fitsfile=fitsfile,
+        **kwargs,
+    )
+
+
+def build_xstar_local_target(run_dir, *, ion=None, wavelength=None, value_column="emit_outward", **kwargs):
+    """Extract exact local-state/triplet target values from XSTAR outputs."""
+    from .benchmark import build_xstar_local_target as _target
+    return _target(run_dir, ion=ion, wavelength=wavelength, value_column=value_column, **kwargs)
+
+
 __all__ = [
     "TripletResult",
     "open_database",
@@ -427,6 +448,8 @@ __all__ = [
     "calc_triplet",
     "solve_populations",
     "build_matrix",
+    "build_xstar_local_target",
+    "reproduce_xstar_run",
     "context_from_values",
     "context_from_xstar_run",
 ]

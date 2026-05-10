@@ -1,12 +1,22 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.133"
+__version__ = "0.3.134"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
 from .context import LocalPlasmaState, RadiationField, EscapeContext, XSTARContext, context_from_values, context_from_xstar_run
 from .rates_type50 import RateEvaluation, evaluate_type50_bound_bound
 from .audit import type50_line_pumping
+from .benchmark import (
+    XSTARLocalTarget,
+    XSTARBenchmarkComparison,
+    build_xstar_local_target,
+    compare_solver_to_xstar_target,
+    reproduce_xstar_run,
+    run_xstar_benchmark_suite,
+    write_xstar_benchmark_outputs,
+    write_xstar_benchmark_suite,
+)
 from .workflow import (
     TripletResult,
     open_database,
@@ -67,6 +77,14 @@ __all__ = [
     "RateEvaluation",
     "evaluate_type50_bound_bound",
     "type50_line_pumping",
+    "XSTARLocalTarget",
+    "XSTARBenchmarkComparison",
+    "build_xstar_local_target",
+    "compare_solver_to_xstar_target",
+    "reproduce_xstar_run",
+    "run_xstar_benchmark_suite",
+    "write_xstar_benchmark_outputs",
+    "write_xstar_benchmark_suite",
     "TripletResult",
     "open_database",
     "get_levels",

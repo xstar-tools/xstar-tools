@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.133** is a documentation/examples release for the public API. It adds function-by-function examples for the workflow-first API in Markdown, LaTeX, and Sphinx docs, and fixes the LaTeX layout of the example-to-source migration table.
+Latest package note: **v0.3.134** returns to same-run XSTAR benchmark reproduction after the public API cleanup. It adds an `xstar_atomic.benchmark` layer and example 56 to extract the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -31,8 +31,32 @@ comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", 
 ```
 
 Public namespace modules are available for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
+The same-run XSTAR reproduction API is now available:
 
-No solver physics changed in v0.3.133. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
+```python
+target = xa.build_xstar_local_target(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+)
+comparison = xa.reproduce_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    run_solver=False,
+)
+```
+
+CLI wrapper:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_o7_local_reproduction \
+  --print-summary
+```
+
+
+No solver physics changed in v0.3.134. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
 
 ## Earlier v0.3.128 API infrastructure
 
