@@ -1,5 +1,10 @@
 Latest package note: v0.3.123 fixes shell quoting in generated He-like local-state validation scripts. `examples/51_run_helike_local_state_validation.py` now shell-quotes every token when writing `run_helike_local_state_solvers.sh` and `compare_helike_local_state_solvers.sh`, so spaced ion labels such as `C V` and `O VII` are passed correctly to `python -m xstar_atomic.xstar_outputs --ion ...`. No solver physics changed and no triplet scale fitting was added.
 
+### v0.3.124 local-state comparison summary
+
+Version 0.3.124 adds `examples/52_summarize_helike_local_state_comparison.py`, which summarizes the C V, O VII, Mg XI, and Ca XIX local-state comparisons after `examples/51_run_helike_local_state_validation.py` has generated and compared solver outputs.  It is a diagnostic report only: it does not fit scale factors or change solver physics.
+
+
 Recommended all-ion local-state discovery at `ne≈1e8`:
 
 ```bash
