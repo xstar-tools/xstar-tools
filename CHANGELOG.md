@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.133 - 2026-05-10
+
+- Expanded `docs/user_guide.md`, `docs/user_guide.tex`, and `docs/sphinx/source/user_guide.rst` with function-by-function examples for the top-level workflow API, context classes, `RateEvaluation`, audit-only type-50 evaluation, and expert object namespaces.
+- Fixed the LaTeX `Examples and source-module migration` table layout by using breakable path-style entries so long example filenames and API names no longer overlap.
+- Updated documentation regression tests so the API examples are checked across Markdown, LaTeX, and Sphinx sources.
+- No solver physics changed; type-50 photoexcitation / line pumping remains audit-only.
+
 ## v0.3.132 - 2026-05-10
 
 - Expanded and clarified the public API documentation in `docs/user_guide.md` with a canonical workflow-first API section, a top-level function summary table, expert namespace examples, public namespace-module examples, and explicit notes about prototype/not-yet-final physics APIs.

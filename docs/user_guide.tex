@@ -58,7 +58,7 @@
 
 \title{\texttt{xstar-atomic} User Guide}
 \author{XSTAR ATDB direct decoder, source-code-aligned rate audits, and prototype solvers}
-\date{Version 0.3.132}
+\date{Version 0.3.133}
 
 \begin{document}
 \maketitle
@@ -186,13 +186,13 @@ print(rate.upper_to_lower_escaped_decay_s_inv)
 print(rate.source_formula)
 \end{lstlisting}
 
-In v0.3.128 through v0.3.132 this evaluator is audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and returns a \texttt{RateEvaluation} object; it does not inject photoexcitation into the population solver.
+In v0.3.128 through v0.3.133 this evaluator is audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and returns a \texttt{RateEvaluation} object; it does not inject photoexcitation into the population solver.
 
 
 
 \section{Public API cookbook: workflow-first and expert APIs}
 
-This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132. The design follows the useful \texttt{chianti-tools} pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
+This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.133. The design follows the useful \texttt{chianti-tools} pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
 
 There are three supported public layers:
 
@@ -206,7 +206,7 @@ Expert namespace API & Source-code-first contexts, rate evaluators, audits, vali
 \bottomrule
 \end{longtable}
 
-The current API intentionally separates implemented stable helpers from future namespace placeholders. In v0.3.132, \texttt{db.rates.type50(...)}, \texttt{db.audit.type50\_line\_pumping(...)}, \texttt{db.context.*}, and \texttt{db.validate.compare\_xstar\_run(...)} are callable. Some planned functions, such as full \texttt{db.audit.resonance\_deficit(...)} and full type-50 solver injection, are still intentionally not active as public solver physics.
+The current API intentionally separates implemented stable helpers from future namespace placeholders. In v0.3.132--v0.3.133, \texttt{db.rates.type50(...)}, \texttt{db.audit.type50\_line\_pumping(...)}, \texttt{db.context.*}, and \texttt{db.validate.compare\_xstar\_run(...)} are callable. Some planned functions, such as full \texttt{db.audit.resonance\_deficit(...)} and full type-50 solver injection, are still intentionally not active as public solver physics.
 
 \subsection{Module-level workflow API}
 
@@ -257,6 +257,210 @@ Function & Purpose & Status \\
 \texttt{xa.build\_matrix(...)} & Return available matrix-related solver products. & prototype \\
 \bottomrule
 \end{longtable}
+
+
+\subsection{Function-by-function top-level API examples}
+
+The examples below make each top-level public helper visible as a copy-pasteable call. They assume:
+
+\begin{lstlisting}[style=ctpython]
+import xstar_atomic as xa
+
+ATDB = "/path/to/xstar/data/atdb.fits"
+db = xa.open_database(ATDB, index_cache=True)
+\end{lstlisting}
+
+\subsubsection{Database and data-path helpers}
+
+\begin{lstlisting}[style=ctpython]
+# xa.open_database(...): open one reusable database handle.
+db = xa.open_database(ATDB, index_cache=True)
+
+# xa.set_data_path(...) and xa.get_data_path(...): configure a default ATDB path.
+xa.set_data_path(ATDB)
+print(xa.get_data_path())
+
+# xa.find_atdb_file(...) and xa.resolve_atdb_path(...): locate the database.
+candidate = xa.find_atdb_file()
+resolved = xa.resolve_atdb_path(ATDB)
+
+# xa.download_data(...): fetch or configure the XSTAR database when needed.
+# db_path = xa.download_data()
+\end{lstlisting}
+
+\subsubsection{Atomic level and line helpers}
+
+\begin{lstlisting}[style=ctpython]
+# xa.get_levels(...): decoded level rows.
+levels = xa.get_levels("O VII", db=db)
+
+# xa.get_lines(...): decoded radiative lines in a wavelength window.
+lines = xa.get_lines("O VII", db=db, wavelength=(21.4, 22.2), slim=True)
+
+# xa.get_wavelengths(...) and xa.get_energies(...): quick arrays.
+wavelengths = xa.get_wavelengths("O VIII", db=db, wavelength=(18.8, 19.1))
+energies = xa.get_energies("O VIII", db=db, wavelength=(18.8, 19.1))
+
+# xa.match_line(...) and xa.match_lines(...): nearest line identification.
+ly_alpha = xa.match_line("O VIII", db=db, wavelength=18.969, tolerance_A=0.02)
+matches = xa.match_lines("O VIII", db=db, wavelengths=[18.969, 18.973], tolerance_A=0.03)
+\end{lstlisting}
+
+\subsubsection{Atomic-process helpers}
+
+\begin{lstlisting}[style=ctpython]
+# xa.get_collisions(...): collision summaries and evaluated rates.
+collisions = xa.get_collisions(
+    "O VIII",
+    db=db,
+    temperatures=[1.0e6, 3.0e6],
+    wavelength=(18.8, 19.1),
+)
+
+# xa.get_photoionization(...): bound-free records, optionally including grids.
+photoionization = xa.get_photoionization("O VII", db=db, include_grid=True)
+
+# xa.get_recombination(...): recombination records/evaluations.
+recombination = xa.get_recombination(
+    "O VII",
+    db=db,
+    temperatures=[1.0e6],
+    electron_densities=[1.0e8],
+)
+
+# xa.calc_emissivity(...): direct-excitation emissivity products.
+emissivity = xa.calc_emissivity(
+    "O VIII",
+    db=db,
+    temperatures=[1.0e6],
+    wavelength=(18.8, 19.1),
+)
+\end{lstlisting}
+
+\subsubsection{Context helpers}
+
+\begin{lstlisting}[style=ctpython]
+# xa.LocalPlasmaState(...): local thermodynamic/ionization state.
+state = xa.LocalPlasmaState(
+    temperature_K=7.66552e4,
+    electron_density_cm3=1.20466e8,
+    log_xi=1.5,
+    ion_fraction=0.255926,
+)
+
+# xa.RadiationField(...): sampled local radiation field.
+radiation = xa.RadiationField.from_pairs(
+    [(0.50, 1.0e4), (0.574, 2.5e4), (1.00, 1.0e4)],
+    source="manual example",
+)
+
+# xa.EscapeContext(...): escape/covering quantities used by type-50 audits.
+escape = xa.EscapeContext(cfrac=0.0, ptmp1=0.2, ptmp2=0.3, flinabs_ptmp1=0.8)
+
+# xa.context_from_values(...): combine explicit local inputs into XSTARContext.
+ctx = xa.context_from_values(
+    ion="O VII",
+    temperature_K=state.temperature_K,
+    electron_density_cm3=state.electron_density_cm3,
+    log_xi=state.log_xi,
+    ion_fraction=state.ion_fraction,
+    radiation_field=radiation,
+    escape_context=escape,
+)
+
+# xa.context_from_xstar_run(...): start from an XSTAR run directory when available.
+ctx_from_run = xa.context_from_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    target_electron_density=1e8,
+    nearest_density=True,
+)
+\end{lstlisting}
+
+\subsubsection{Rate, triplet, solver, and matrix helpers}
+
+\begin{lstlisting}[style=ctpython]
+# xa.calc_rate(...): dispatch to an implemented provenance-rich rate evaluator.
+rate = xa.calc_rate(
+    "type50",
+    ion="O VII",
+    lower_level=1,
+    upper_level=7,
+    aij_s_inv=3.0e12,
+    oscillator_strength=0.7,
+    wavelength_A=21.602,
+    vtherm_cm_s=1.0e7,
+    bremsa_nb1=2.5e4,
+    plasma_state=state,
+    radiation_field=radiation,
+    escape_context=escape,
+)
+assert isinstance(rate, xa.RateEvaluation)
+print(rate.to_dict())
+
+# xa.calc_triplet(...): summarize existing f/i/r rows from XSTAR outputs or CSV rows.
+triplet = xa.calc_triplet(
+    "O VII",
+    rows=[
+        {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+        {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.5},
+        {"upper_level": "1s1.2p1.1P_1", "emit_outward": 2.0},
+    ],
+)
+print(triplet.to_dict())
+
+# xa.solve_populations(...): prototype wrapper around the current diagnostic solver.
+solution = xa.solve_populations("O VII", db=db, context=ctx)
+
+# xa.build_matrix(...): prototype helper returning available matrix-related products.
+matrix_products = xa.build_matrix("O VII", db=db, context=ctx)
+\end{lstlisting}
+
+\subsubsection{Expert object namespace examples}
+
+\begin{lstlisting}[style=ctpython]
+# db.context.* mirrors the module-level context helpers.
+ctx = db.context.from_values(
+    ion="O VII",
+    temperature_K=7.66552e4,
+    electron_density_cm3=1.20466e8,
+    log_xi=1.5,
+)
+ctx = db.context.from_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+
+# db.rates.type50(...): object-oriented access to the audit-only type-50 evaluator.
+rate = db.rates.type50(
+    "O VII",
+    aij_s_inv=3.0e12,
+    oscillator_strength=0.7,
+    wavelength_A=21.602,
+    vtherm_cm_s=1.0e7,
+    bremsa_nb1=2.5e4,
+    ptmp1=0.2,
+    ptmp2=0.3,
+    flinabs_ptmp1=0.8,
+    cfrac=0.0,
+)
+
+# db.audit.type50_line_pumping(...): reusable Python API behind example 55.
+audit = db.audit.type50_line_pumping(
+    "helike_local_state_validation_v03131/helike_local_state_cases.csv",
+    solver_root=".",
+    xstar_source_root="../xstar",
+    out_dir="helike_type50_line_pumping_audit_v03131",
+)
+
+# db.validate.compare_xstar_run(...): lightweight same-run triplet/context comparison.
+comparison = db.validate.compare_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    wavelength=(21.4, 22.2),
+)
+
+# db.solve.ion(...) and db.matrix.build_ion(...): prototype object wrappers.
+solution = db.solve.ion("O VII", context=ctx)
+matrix_products = db.matrix.build_ion("O VII", context=ctx)
+\end{lstlisting}
 
 \subsection{Open and summarize an XSTAR database object}
 
@@ -390,7 +594,7 @@ print(rate.source_formula)
 print(rate.terms)
 \end{lstlisting}
 
-In v0.3.128 through v0.3.132 this evaluator remains audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and branch swap but does not modify the level-population solver.
+In v0.3.128 through v0.3.133 this evaluator remains audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and branch swap but does not modify the level-population solver.
 
 \subsection{Expert \texttt{XSTARAtomic} namespace API}
 
@@ -790,20 +994,24 @@ Development policy:
 
 The package contains many examples because the XSTAR-alignment work is still exploratory. As workflows stabilize, reusable logic should move into \texttt{src/xstar\_atomic/}, leaving examples as short wrappers.
 
-\begin{longtable}{p{0.42\linewidth}p{0.48\linewidth}}
+\begingroup
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{p{0.34\linewidth}p{0.58\linewidth}}
 \toprule
 Example(s) & Candidate source module/API \\
 \midrule
-\texttt{51\_run\_helike\_local\_state\_validation.py} & \texttt{xstar\_atomic.runs.select\_local\_states(...)} \\
-\texttt{52\_summarize\_helike\_local\_state\_comparison.py} & \texttt{xstar\_atomic.validate.summarize\_local\_state\_comparison(...)} \\
-\texttt{53\_audit\_helike\_resonance\_deficit.py} & \texttt{xstar\_atomic.audit.resonance\_deficit(...)} \\
-\texttt{54\_audit\_helike\_resonance\_population\_flux.py} & \texttt{xstar\_atomic.audit.resonance\_population\_flux(...)} \\
-\texttt{55\_audit\_helike\_type50\_line\_pumping.py} & \texttt{xstar\_atomic.audit.type50\_line\_pumping(...)} \\
-\texttt{43\_compare\_xstar\_detail\_populations.py} & \texttt{xstar\_atomic.validate.compare\_detail\_populations(...)} \\
-\texttt{42\_xstar\_like\_element\_solver\_demo.py} & \texttt{xstar\_atomic.solve.element(...)} \\
-\texttt{47\_prepare\_mg\_ca\_xstar\_triplet\_targets.py} & \texttt{xstar\_atomic.xout.convert\_triplet\_targets(...)} \\
+\path|51_run_helike_local_state_validation.py| & \path|xstar_atomic.runs.select_local_states(...)| \\
+\path|52_summarize_helike_local_state_comparison.py| & \path|xstar_atomic.validate.summarize_local_state_comparison(...)| \\
+\path|53_audit_helike_resonance_deficit.py| & \path|xstar_atomic.audit.resonance_deficit(...)| \\
+\path|54_audit_helike_resonance_population_flux.py| & \path|xstar_atomic.audit.resonance_population_flux(...)| \\
+\path|55_audit_helike_type50_line_pumping.py| & \path|xstar_atomic.audit.type50_line_pumping(...)| \\
+\path|43_compare_xstar_detail_populations.py| & \path|xstar_atomic.validate.compare_detail_populations(...)| \\
+\path|42_xstar_like_element_solver_demo.py| & \path|xstar_atomic.solve.element(...)| and CLI wrapper \\
+\path|47_prepare_mg_ca_xstar_triplet_targets.py| & \path|xstar_atomic.xout.convert_triplet_targets(...)| \\
 \bottomrule
 \end{longtable}
+\endgroup
 
 See \texttt{examples/README.md} for grouped example usage and \texttt{docs/example\_to\_source\_api\_map.md} for a broader migration plan.
 
@@ -834,6 +1042,7 @@ v0.3.129: examples README, expanded API cookbook, and LaTeX table of contents/do
 v0.3.130: examples README command-completeness update with one bash block for every example script.
 v0.3.131: workflow-first public API, expert namespaces, and context-based helper functions.
 v0.3.132: documentation consistency across Markdown, LaTeX, and Sphinx for the public API.
+v0.3.133: add function-by-function API examples to Markdown/LaTeX/Sphinx docs and fix the LaTeX migration table layout.
 v0.3.133: XSTAR radiation-field reader and exact line-energy bin mapping.
 v0.3.134: type-50 matrix-injection preview, still audit-only.
 v0.3.135: optional solver mode for xstar-line-escape-and-pumping.

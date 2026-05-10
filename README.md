@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.132** is a documentation-consistency release for the public API.  It makes the workflow-first API, expert namespaces, and audit-only type-50 API visible and consistent across:
+Latest package note: **v0.3.133** is a documentation/examples release for the public API. It adds function-by-function examples for the workflow-first API in Markdown, LaTeX, and Sphinx docs, and fixes the LaTeX layout of the example-to-source migration table.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -32,7 +32,7 @@ comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", 
 
 Public namespace modules are available for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
 
-No solver physics changed in v0.3.132. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
+No solver physics changed in v0.3.133. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
 
 ## Earlier v0.3.128 API infrastructure
 
