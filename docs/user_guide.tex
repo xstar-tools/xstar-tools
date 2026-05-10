@@ -192,7 +192,7 @@ In v0.3.128 through v0.3.133 this evaluator is audit-only. It records the XSTAR 
 
 \section{Public API cookbook: workflow-first and expert APIs}
 
-This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.134. The design follows the useful \texttt{chianti-tools} pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
+This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.135. The design follows the useful \texttt{chianti-tools} pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
 
 There are three supported public layers:
 
@@ -206,7 +206,7 @@ Expert namespace API & Source-code-first contexts, rate evaluators, audits, vali
 \bottomrule
 \end{longtable}
 
-The current API intentionally separates implemented stable helpers from future namespace placeholders. In v0.3.132--v0.3.134, \texttt{db.rates.type50(...)}, \texttt{db.audit.type50\_line\_pumping(...)}, \texttt{db.context.*}, and \texttt{db.validate.compare\_xstar\_run(...)} are callable. Some planned functions, such as full \texttt{db.audit.resonance\_deficit(...)} and full type-50 solver injection, are still intentionally not active as public solver physics.
+The current API intentionally separates implemented stable helpers from future namespace placeholders. In v0.3.132--v0.3.135, \texttt{db.rates.type50(...)}, \texttt{db.audit.type50\_line\_pumping(...)}, \texttt{db.context.*}, and \texttt{db.validate.compare\_xstar\_run(...)} are callable. Some planned functions, such as full \texttt{db.audit.resonance\_deficit(...)} and full type-50 solver injection, are still intentionally not active as public solver physics.
 
 \subsection{Module-level workflow API}
 
@@ -1083,11 +1083,11 @@ v0.3.130: examples README command-completeness update with one bash block for ev
 v0.3.131: workflow-first public API, expert namespaces, and context-based helper functions.
 v0.3.132: documentation consistency across Markdown, LaTeX, and Sphinx for the public API.
 v0.3.133: add function-by-function API examples to Markdown/LaTeX/Sphinx docs and fix the LaTeX migration table layout.
-v0.3.133: function-by-function API examples and LaTeX migration-table fix.
 v0.3.134: exact same-run XSTAR local-output reproduction targets.
-v0.3.135: XSTAR radiation-field reader and exact line-energy bin mapping.
-v0.3.136: type-50 matrix-injection preview, still audit-only.
-v0.3.137: optional solver mode for xstar-line-escape-and-pumping.
+v0.3.135: one-command standard C V / O VII / Mg XI / Ca XIX benchmark suite.
+v0.3.136: XSTAR radiation-field reader and exact line-energy bin mapping.
+v0.3.137: type-50 matrix-injection preview, still audit-only.
+v0.3.138: optional solver mode for xstar-line-escape-and-pumping.
 \end{lstlisting}
 
 Longer-term:

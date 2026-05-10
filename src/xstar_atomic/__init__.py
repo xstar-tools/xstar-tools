@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.134"
+__version__ = "0.3.135"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -10,6 +10,8 @@ from .audit import type50_line_pumping
 from .benchmark import (
     XSTARLocalTarget,
     XSTARBenchmarkComparison,
+    default_helike_benchmark_cases,
+    write_default_helike_cases_csv,
     build_xstar_local_target,
     compare_solver_to_xstar_target,
     reproduce_xstar_run,
@@ -79,6 +81,8 @@ __all__ = [
     "type50_line_pumping",
     "XSTARLocalTarget",
     "XSTARBenchmarkComparison",
+    "default_helike_benchmark_cases",
+    "write_default_helike_cases_csv",
     "build_xstar_local_target",
     "compare_solver_to_xstar_target",
     "reproduce_xstar_run",

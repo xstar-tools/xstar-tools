@@ -4,7 +4,10 @@ import xstar_atomic as xa
 from xstar_atomic.benchmark import (
     XSTARLocalTarget,
     compare_solver_to_xstar_target,
+    default_helike_benchmark_cases,
     default_helike_wavelength_window,
+    read_cases_csv,
+    write_default_helike_cases_csv,
     write_xstar_benchmark_outputs,
 )
 
@@ -60,3 +63,26 @@ def test_public_benchmark_symbols_are_exported():
     assert callable(xa.reproduce_xstar_run)
     assert callable(xa.build_xstar_local_target)
     assert hasattr(xa, "XSTARBenchmarkComparison")
+
+
+def test_default_helike_standard_suite_cases(tmp_path):
+    cases = default_helike_benchmark_cases("xstar_runs")
+    assert [c["ion"] for c in cases] == ["C V", "O VII", "Mg XI", "Ca XIX"]
+    assert cases[0]["run_dir"] == "xstar_runs/helike_type69/c5_ne1e8"
+    assert cases[-1]["run_dir"] == "xstar_runs/helike_type69/ca19_xi3_ne1e8"
+
+    csv_path = write_default_helike_cases_csv(tmp_path / "helike_reproduction_cases.csv", xstar_runs_root="xstar_runs")
+    rows = read_cases_csv(csv_path)
+    assert rows == cases
+
+
+def test_missing_cases_csv_error_has_standard_suite_hint(tmp_path):
+    missing = tmp_path / "missing_cases.csv"
+    try:
+        read_cases_csv(missing)
+    except FileNotFoundError as exc:
+        text = str(exc)
+        assert "--standard-helike-suite" in text
+        assert "helike_reproduction_cases.csv" in text
+    else:  # pragma: no cover
+        raise AssertionError("read_cases_csv should fail for a missing file")

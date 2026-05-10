@@ -14,9 +14,11 @@ import csv
 from pathlib import Path
 
 from xstar_atomic.benchmark import (
+    default_helike_benchmark_cases,
     read_cases_csv,
     reproduce_xstar_run,
     run_xstar_benchmark_suite,
+    write_default_helike_cases_csv,
     write_xstar_benchmark_outputs,
     write_xstar_benchmark_suite,
 )
@@ -36,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run-dir", help="One XSTAR run directory containing xout_abund1.fits and xout_lines1.fits")
     p.add_argument("--ion", help="Ion label, e.g. 'O VII'")
     p.add_argument("--cases-csv", help="CSV with columns ion,run_dir and optional zone_index,selection,wavelength_window_A")
+    p.add_argument("--standard-helike-suite", action="store_true", help="Run the built-in C V / O VII / Mg XI / Ca XIX benchmark suite")
+    p.add_argument("--xstar-runs-root", default="xstar_runs", help="Root directory used by --standard-helike-suite")
+    p.add_argument("--write-standard-cases-csv", help="Write the built-in four-ion case table to this CSV and exit")
     p.add_argument("--zone-index", type=int, help="Explicit XSTAR zone index to select from xout_abund1.fits")
     p.add_argument("--selection", default="max_fraction", help="Zone selection policy when zone-index is not given")
     p.add_argument("--wavelength", type=_parse_window, help="Two-number wavelength window in Angstrom, e.g. '21 23'")
@@ -50,8 +55,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     out_dir = Path(args.out_dir)
-    if args.cases_csv:
-        cases = read_cases_csv(args.cases_csv)
+    if args.write_standard_cases_csv:
+        path = write_default_helike_cases_csv(args.write_standard_cases_csv, xstar_runs_root=args.xstar_runs_root)
+        if args.print_summary:
+            print(f"Wrote standard C/O/Mg/Ca cases CSV: {path}")
+        return
+    if args.cases_csv or args.standard_helike_suite:
+        if args.standard_helike_suite:
+            cases = default_helike_benchmark_cases(args.xstar_runs_root)
+        else:
+            cases = read_cases_csv(args.cases_csv)
         comparisons = run_xstar_benchmark_suite(
             cases,
             value_column=args.value_column,
@@ -63,12 +76,21 @@ def main() -> None:
             print("XSTAR local-output reproduction benchmark suite")
             print("------------------------------------------------")
             print(f"n_cases={len(comparisons)}")
+            for comparison in comparisons:
+                row = comparison.comparison_row()
+                print(
+                    f"ion={row.get('ion')} T={row.get('temperature_K')} K "
+                    f"ne={row.get('electron_density_cm^-3')} cm^-3 "
+                    f"logxi={row.get('log_xi')} "
+                    f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')} "
+                    f"status={comparison.status}"
+                )
             for key, path in paths.items():
                 print(f"{key}: {path}")
         return
 
     if not args.run_dir or not args.ion:
-        raise SystemExit("Either --cases-csv or both --run-dir and --ion are required")
+        raise SystemExit("Either --standard-helike-suite, --cases-csv, or both --run-dir and --ion are required")
     comparison = reproduce_xstar_run(
         args.run_dir,
         ion=args.ion,

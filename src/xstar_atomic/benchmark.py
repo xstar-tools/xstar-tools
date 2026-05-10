@@ -34,6 +34,13 @@ DEFAULT_HELIKE_WINDOWS_A: dict[str, tuple[float, float]] = {
     "Ca XIX": (3.0, 3.35),
 }
 
+DEFAULT_HELIKE_BENCHMARK_RUNS: tuple[tuple[str, str], ...] = (
+    ("C V", "helike_type69/c5_ne1e8"),
+    ("O VII", "helike_type69/o7_ne1e8"),
+    ("Mg XI", "helike_type69/mg11_ne1e8"),
+    ("Ca XIX", "helike_type69/ca19_xi3_ne1e8"),
+)
+
 
 def _ion_label(ion: str | None) -> str | None:
     """Normalize a simple ion label without importing the FITS-backed API."""
@@ -82,6 +89,48 @@ def default_helike_wavelength_window(ion: str | None) -> tuple[float, float] | N
     if label is None:
         return None
     return DEFAULT_HELIKE_WINDOWS_A.get(label)
+
+
+def default_helike_benchmark_cases(
+    xstar_runs_root: str | Path = "xstar_runs",
+) -> list[dict[str, str]]:
+    """Return the canonical C V / O VII / Mg XI / Ca XIX benchmark cases.
+
+    The returned dictionaries can be passed directly to
+    :func:`run_xstar_benchmark_suite` or written to a CSV file.  The directory
+    layout matches the XSTAR run tree used throughout the He-like local-state
+    validation sequence::
+
+        xstar_runs/helike_type69/c5_ne1e8
+        xstar_runs/helike_type69/o7_ne1e8
+        xstar_runs/helike_type69/mg11_ne1e8
+        xstar_runs/helike_type69/ca19_xi3_ne1e8
+    """
+    root = Path(xstar_runs_root)
+    cases: list[dict[str, str]] = []
+    for ion, rel in DEFAULT_HELIKE_BENCHMARK_RUNS:
+        cases.append({"ion": ion, "run_dir": str(root / rel)})
+    return cases
+
+
+def write_default_helike_cases_csv(
+    path: str | Path,
+    *,
+    xstar_runs_root: str | Path = "xstar_runs",
+) -> Path:
+    """Write the canonical four-ion benchmark case table.
+
+    The CSV has the columns expected by ``examples/56_reproduce_xstar_local_outputs.py``:
+    ``ion`` and ``run_dir``.
+    """
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cases = default_helike_benchmark_cases(xstar_runs_root=xstar_runs_root)
+    with out.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["ion", "run_dir"])
+        writer.writeheader()
+        writer.writerows(cases)
+    return out
 
 
 def find_xstar_run_files(
@@ -548,15 +597,32 @@ def run_xstar_benchmark_suite(
 
 def read_cases_csv(path: str | Path) -> list[dict[str, Any]]:
     """Read a simple cases CSV with at least ``ion`` and ``run_dir`` columns."""
-    with Path(path).open(newline="", encoding="utf-8") as handle:
+    p = Path(path)
+    if not p.exists():
+        recipe = (
+            "Create it with:\n"
+            "cat > helike_reproduction_cases.csv <<'EOF'\n"
+            "ion,run_dir\n"
+            "C V,xstar_runs/helike_type69/c5_ne1e8\n"
+            "O VII,xstar_runs/helike_type69/o7_ne1e8\n"
+            "Mg XI,xstar_runs/helike_type69/mg11_ne1e8\n"
+            "Ca XIX,xstar_runs/helike_type69/ca19_xi3_ne1e8\n"
+            "EOF\n"
+            "or use --standard-helike-suite --xstar-runs-root xstar_runs."
+        )
+        raise FileNotFoundError(f"Cases CSV not found: {p}\n{recipe}")
+    with p.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
 
 
 __all__ = [
     "DEFAULT_HELIKE_WINDOWS_A",
+    "DEFAULT_HELIKE_BENCHMARK_RUNS",
     "XSTARLocalTarget",
     "XSTARBenchmarkComparison",
     "default_helike_wavelength_window",
+    "default_helike_benchmark_cases",
+    "write_default_helike_cases_csv",
     "find_xstar_run_files",
     "build_xstar_local_target",
     "compare_solver_to_xstar_target",

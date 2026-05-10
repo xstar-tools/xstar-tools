@@ -485,9 +485,16 @@ Extract exact same-run XSTAR benchmark targets from `xout_abund1.fits` and `xout
 PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --run-dir xstar_runs/helike_type69/o7_ne1e8 --ion "O VII" --out-dir xstar_o7_local_reproduction --print-summary
 ```
 
-For the four-ion suite, create a CSV such as `helike_reproduction_cases.csv` with columns `ion,run_dir`, then run:
+For the four-ion standard suite, use the built-in C V / O VII / Mg XI / Ca XIX case table:
 
 ```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-helike-suite --xstar-runs-root xstar_runs --out-dir helike_local_reproduction_suite --print-summary
+```
+
+If you want an editable case table, write it first and then run it:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --write-standard-cases-csv helike_reproduction_cases.csv --xstar-runs-root xstar_runs --print-summary
 PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --cases-csv helike_reproduction_cases.csv --out-dir helike_local_reproduction_suite --print-summary
 ```
 

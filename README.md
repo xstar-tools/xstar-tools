@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.134** returns to same-run XSTAR benchmark reproduction after the public API cleanup. It adds an `xstar_atomic.benchmark` layer and example 56 to extract the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
+Latest package note: **v0.3.135** adds a one-command standard He-like benchmark suite for C V, O VII, Mg XI, and Ca XIX. It builds on the v0.3.134 `xstar_atomic.benchmark` layer, which extracts the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -45,7 +45,7 @@ comparison = xa.reproduce_xstar_run(
 )
 ```
 
-CLI wrapper:
+Single-ion CLI wrapper:
 
 ```bash
 PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
@@ -55,8 +55,18 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
   --print-summary
 ```
 
+Four-ion standard suite:
 
-No solver physics changed in v0.3.134. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --standard-helike-suite \
+  --xstar-runs-root xstar_runs \
+  --out-dir helike_local_reproduction_suite \
+  --print-summary
+```
+
+
+No solver physics changed in v0.3.135. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
 
 ## Earlier v0.3.128 API infrastructure
 

@@ -76,7 +76,7 @@ Run without installation from a checkout:
 Public API layers
 -----------------
 
-The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.134 make
+The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.135 make
 this layer explicit in Markdown, LaTeX, and Sphinx documentation.
 
 .. list-table:: Public API layers
@@ -97,7 +97,7 @@ this layer explicit in Markdown, LaTeX, and Sphinx documentation.
      - ``db.rates.type50("O VII", ...)``
 
 The API intentionally separates implemented stable helpers from future
-namespace placeholders.  In v0.3.132--v0.3.134, ``db.rates.type50(...)``,
+namespace placeholders.  In v0.3.132--v0.3.135, ``db.rates.type50(...)``,
 ``db.audit.type50_line_pumping(...)``, ``db.context.*``, and
 ``db.validate.compare_xstar_run(...)`` and ``db.validate.reproduce_xstar_run(...)`` are callable.  Full type-50 solver
 injection and some resonance-budget audits remain future work.
@@ -672,4 +672,25 @@ The command-line wrapper is:
      --out-dir xstar_o7_local_reproduction \
      --print-summary
 
-Use a cases CSV with columns ``ion,run_dir`` for the C V / O VII / Mg XI / Ca XIX suite.
+Use the built-in standard case table for the C V / O VII / Mg XI / Ca XIX suite:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+     --standard-helike-suite \
+     --xstar-runs-root xstar_runs \
+     --out-dir helike_local_reproduction_suite \
+     --print-summary
+
+To create an editable CSV first, run:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+     --write-standard-cases-csv helike_reproduction_cases.csv \
+     --xstar-runs-root xstar_runs \
+     --print-summary
+   PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+     --cases-csv helike_reproduction_cases.csv \
+     --out-dir helike_local_reproduction_suite \
+     --print-summary
