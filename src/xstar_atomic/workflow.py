@@ -1,7 +1,7 @@
 """Workflow-first public API helpers for :mod:`xstar_atomic`.
 
 These functions provide the simple, CHIANTI-tools-like entry points discussed in
-v0.3.131.  They are thin wrappers around :class:`xstar_atomic.api.XSTARAtomic`
+v0.3.131 and clarified in v0.3.132.  They are thin wrappers around :class:`xstar_atomic.api.XSTARAtomic`
 and the source-aligned context/audit objects.  The goal is to let users start
 with science tasks such as line lookup, emissivity estimates, triplet summaries,
 or population solves without first navigating the lower-level packed-ATDB

@@ -13,7 +13,7 @@ def select_local_states(*args, **kwargs):
     """Placeholder for the future source-module version of example 51."""
     raise NotImplementedError(
         "Batch local-state discovery is still implemented as examples/51_run_helike_local_state_validation.py; "
-        "use select_local_state(...) for a single XSTAR run directory in v0.3.131."
+        "use select_local_state(...) for a single XSTAR run directory in v0.3.132."
     )
 
 

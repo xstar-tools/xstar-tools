@@ -260,7 +260,7 @@ class XSTARContext:
     """Bundle local plasma, radiation, escape, and run provenance.
 
     This is the public context object used by the workflow API.  It is small on
-    purpose: v0.3.131 uses it to pass local XSTAR state into audit and solver
+    purpose: v0.3.132 uses it to pass local XSTAR state into audit and solver
     wrappers without pretending that a full radiation-transfer state has already
     been reconstructed.
     """

@@ -2,12 +2,79 @@ API reference
 =============
 
 Sphinx builds this section from Python docstrings using ``sphinx.ext.autodoc``.
-Public modules, classes, and functions should include clear docstrings.
+The user-facing workflow is described in :doc:`user_guide`; this page lists the
+modules that provide those APIs.
 
-High-level API
---------------
+Workflow-first public API
+-------------------------
+
+.. automodule:: xstar_atomic.workflow
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+High-level database object
+--------------------------
 
 .. automodule:: xstar_atomic.api
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Local context objects
+---------------------
+
+.. automodule:: xstar_atomic.context
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Rate-evaluator namespaces
+-------------------------
+
+.. automodule:: xstar_atomic.rates
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Type-50 source-code rate evaluator
+----------------------------------
+
+.. automodule:: xstar_atomic.rates_type50
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Matrix and solver namespaces
+----------------------------
+
+.. automodule:: xstar_atomic.matrix
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: xstar_atomic.solve
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Same-run validation and XSTAR-run helpers
+-----------------------------------------
+
+.. automodule:: xstar_atomic.validate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: xstar_atomic.runs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Source-code-first audit workflows
+---------------------------------
+
+.. automodule:: xstar_atomic.audit
    :members:
    :undoc-members:
    :show-inheritance:
@@ -60,23 +127,21 @@ Emissivity tools
    :undoc-members:
    :show-inheritance:
 
-Prototype solver
-----------------
+Prototype solver internals
+--------------------------
 
 .. automodule:: xstar_atomic.solver
    :members:
    :undoc-members:
    :show-inheritance:
 
-
-Validation helpers
-------------------
+Legacy validation helpers
+-------------------------
 
 .. automodule:: xstar_atomic.validation
    :members:
    :undoc-members:
    :show-inheritance:
-
 
 Export tools
 ------------
@@ -86,7 +151,7 @@ Export tools
    :undoc-members:
    :show-inheritance:
 
-XSTAR Output Readers
+XSTAR output readers
 --------------------
 
 .. automodule:: xstar_atomic.xstar_outputs
@@ -98,31 +163,6 @@ Data download and path helpers
 ------------------------------
 
 .. automodule:: xstar_atomic.data
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-
-Local context objects
----------------------
-
-.. automodule:: xstar_atomic.context
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Type-50 source-code rate evaluator
-----------------------------------
-
-.. automodule:: xstar_atomic.rates_type50
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Source-code-first audit workflows
----------------------------------
-
-.. automodule:: xstar_atomic.audit
    :members:
    :undoc-members:
    :show-inheritance:

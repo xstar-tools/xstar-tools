@@ -10,7 +10,7 @@ from .workflow import calc_triplet
 def compare_xstar_run(run_dir, *, ion=None, wavelength=None, value_column="emit_outward", **kwargs: Any) -> dict:
     """Build a lightweight context and triplet comparison from an XSTAR run.
 
-    This v0.3.131 helper summarizes same-run triplet rows from ``xout_lines1``
+    This v0.3.132 helper summarizes same-run triplet rows from ``xout_lines1``
     when available.  More detailed population/matrix comparison workflows still
     live in the validation examples and will be migrated in later releases.
     """

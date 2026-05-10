@@ -58,7 +58,7 @@
 
 \title{\texttt{xstar-atomic} User Guide}
 \author{XSTAR ATDB direct decoder, source-code-aligned rate audits, and prototype solvers}
-\date{Version 0.3.131}
+\date{Version 0.3.132}
 
 \begin{document}
 \maketitle
@@ -186,33 +186,77 @@ print(rate.upper_to_lower_escaped_decay_s_inv)
 print(rate.source_formula)
 \end{lstlisting}
 
-In v0.3.128 this evaluator is audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and returns a \texttt{RateEvaluation} object; it does not inject photoexcitation into the population solver.
+In v0.3.128 through v0.3.132 this evaluator is audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and returns a \texttt{RateEvaluation} object; it does not inject photoexcitation into the population solver.
 
 
-\section{Public API cookbook}
 
-This section summarizes the most useful public API calls. The goal is to make common workflows discoverable without reading the internal example scripts.
+\section{Public API cookbook: workflow-first and expert APIs}
 
-\subsection{Workflow-first module-level API}
+This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132. The design follows the useful \texttt{chianti-tools} pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
 
-The v0.3.131 public API adds CHIANTI-tools-style module-level helpers. They are thin wrappers around \texttt{XSTARAtomic}, but make common tasks easier to discover.
+There are three supported public layers:
+
+\begin{longtable}{p{0.24\linewidth}p{0.43\linewidth}p{0.24\linewidth}}
+\toprule
+Layer & Use when & Example \\
+\midrule
+Module-level workflow API & Quick notebook/script calls without navigating internal modules. & \texttt{xa.get\_lines(...)} \\
+\texttt{XSTARAtomic} object API & Reuse one opened \texttt{atdb.fits} handle and cached indices. & \texttt{db.lines(...)} \\
+Expert namespace API & Source-code-first contexts, rate evaluators, audits, validation, and future matrix/solver workflows. & \texttt{db.rates.type50(...)} \\
+\bottomrule
+\end{longtable}
+
+The current API intentionally separates implemented stable helpers from future namespace placeholders. In v0.3.132, \texttt{db.rates.type50(...)}, \texttt{db.audit.type50\_line\_pumping(...)}, \texttt{db.context.*}, and \texttt{db.validate.compare\_xstar\_run(...)} are callable. Some planned functions, such as full \texttt{db.audit.resonance\_deficit(...)} and full type-50 solver injection, are still intentionally not active as public solver physics.
+
+\subsection{Module-level workflow API}
+
+Use this style for quick analysis, examples, and notebooks. These calls mirror the workflow-first style of \texttt{chianti-tools} while keeping XSTAR-specific provenance available in returned dictionaries or result objects.
 
 \begin{lstlisting}[style=ctpython]
 import xstar_atomic as xa
 
+# Open the database once and reuse it.
 db = xa.open_database("/path/to/xstar/data/atdb.fits")
 
+# Atomic structure and line queries.
 levels = xa.get_levels("O VII", db=db)
 lines = xa.get_lines("O VII", db=db, wavelength=(21.4, 22.2), slim=True)
 wavelengths = xa.get_wavelengths("O VIII", db=db, wavelength=(18.8, 19.1))
 match = xa.match_line("O VIII", db=db, wavelength=18.969, tolerance_A=0.02)
 
+# Atomic process products.
 coll = xa.get_collisions("O VIII", db=db, temperatures=[1e6, 3e6])
 rr = xa.get_recombination("O VII", db=db, temperatures=[1e6])
+pi = xa.get_photoionization("O VII", db=db)
 emiss = xa.calc_emissivity("O VIII", db=db, temperatures=[1e6], wavelength=(18.8, 19.1))
 \end{lstlisting}
 
-The same calls can also receive \texttt{fitsfile="/path/to/atdb.fits"} instead of an opened database object.
+The same calls can receive \texttt{fitsfile="/path/to/atdb.fits"} instead of \texttt{db=db}. Passing an opened \texttt{db} is faster for repeated queries because the hierarchy/index is reused.
+
+\subsection{Top-level API function summary}
+
+\begin{longtable}{p{0.35\linewidth}p{0.43\linewidth}p{0.14\linewidth}}
+\toprule
+Function & Purpose & Status \\
+\midrule
+\texttt{xa.open\_database(...)} & Open \texttt{atdb.fits} as an \texttt{XSTARAtomic} object. & implemented \\
+\texttt{xa.get\_levels(...)} & Return decoded level records for an ion. & implemented \\
+\texttt{xa.get\_lines(...)} & Return decoded radiative line records. & implemented \\
+\texttt{xa.get\_wavelengths(...)} & Return sorted wavelengths from selected lines. & implemented \\
+\texttt{xa.get\_energies(...)} & Return sorted line energies when available. & implemented \\
+\texttt{xa.match\_line(...)} & Match nearest line by wavelength or energy. & implemented \\
+\texttt{xa.get\_collisions(...)} & Return collision summaries and evaluated rows. & implemented \\
+\texttt{xa.get\_photoionization(...)} & Return photoionization summaries/grids. & implemented \\
+\texttt{xa.get\_recombination(...)} & Return recombination and optional source rows. & implemented \\
+\texttt{xa.calc\_emissivity(...)} & Build direct-excitation emissivity products. & implemented \\
+\texttt{xa.context\_from\_values(...)} & Build an \texttt{XSTARContext} from explicit local values. & implemented \\
+\texttt{xa.context\_from\_xstar\_run(...)} & Build an \texttt{XSTARContext} from an XSTAR output directory. & lightweight \\
+\texttt{xa.calc\_rate("type50", ...)} & Dispatch to the audit-only type-50 evaluator. & type 50 \\
+\texttt{xa.calc\_triplet(...)} & Summarize He-like f/i/r line rows. & implemented \\
+\texttt{xa.solve\_populations(...)} & Wrapper around the current diagnostic population solver. & prototype \\
+\texttt{xa.build\_matrix(...)} & Return available matrix-related solver products. & prototype \\
+\bottomrule
+\end{longtable}
 
 \subsection{Open and summarize an XSTAR database object}
 
@@ -221,12 +265,20 @@ import xstar_atomic as xa
 from xstar_atomic import XSTARAtomic
 
 xa.set_data_path("/path/to/xstar/data/atdb.fits")
-db = XSTARAtomic()             # uses the configured datapath
+db = XSTARAtomic(index_cache=True, index_cache_format="npz")
 summary = db.summary()
 print(summary)
 \end{lstlisting}
 
-\subsection{Query levels, lines, and wavelength windows}
+Recommended practice for repeated workflows:
+
+\begin{lstlisting}[style=ctpython]
+with xa.open_database("/path/to/xstar/data/atdb.fits", index_cache=True) as db:
+    o7 = db.lines("O VII", wavelength=(21.4, 22.2), slim=True)
+    o8 = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+\end{lstlisting}
+
+\subsection{Query lines, levels, and wavelength windows}
 
 \begin{lstlisting}[style=ctpython]
 levels = db.levels("O VII")
@@ -239,7 +291,7 @@ for line in triplet_lines:
 
 Use this layer for quick inspection and for building small validation tables. Use lower-level record access only when raw ATDB indices are required.
 
-\subsection{Evaluate collisional and recombination products}
+\subsection{Evaluate collisional, photoionization, recombination, and emissivity products}
 
 \begin{lstlisting}[style=ctpython]
 coll = db.collisions(
@@ -248,6 +300,8 @@ coll = db.collisions(
     wavelength=(18.8, 19.1),
 )
 
+pi = db.photoionization("O VII", include_grid=True)
+
 rr = db.recombination(
     "O VII",
     temperatures=[1.0e6],
@@ -255,14 +309,21 @@ rr = db.recombination(
     source_mode="none",
 )
 
+emiss = db.emissivity(
+    "O VIII",
+    temperatures=[1.0e6, 3.0e6],
+    wavelength=(18.8, 19.1),
+)
+
 print(len(coll["summary"]), len(coll["evaluated"]))
 print(rr["summary"])
+print(emiss["summary"])
 \end{lstlisting}
 
 \subsection{Build a local XSTAR-style context}
 
 \begin{lstlisting}[style=ctpython]
-from xstar_atomic import LocalPlasmaState, RadiationField, EscapeContext
+from xstar_atomic import LocalPlasmaState, RadiationField, EscapeContext, context_from_values
 
 state = LocalPlasmaState(
     temperature_K=7.66552e4,
@@ -277,15 +338,31 @@ rad = RadiationField.from_pairs([
     (1.00, 1.0e4),
 ])
 
-escape = EscapeContext(
-    cfrac=0.0,
-    ptmp1=0.2,
-    ptmp2=0.3,
-    flinabs_ptmp1=0.8,
+escape = EscapeContext(cfrac=0.0, ptmp1=0.2, ptmp2=0.3, flinabs_ptmp1=0.8)
+
+ctx = context_from_values(
+    ion="O VII",
+    temperature_K=state.temperature_K,
+    electron_density_cm3=state.electron_density_cm3,
+    log_xi=state.log_xi,
+    ion_fraction=state.ion_fraction,
+    radiation_field=rad,
+    escape_context=escape,
 )
 \end{lstlisting}
 
 These objects are intentionally explicit. XSTAR rate terms can depend on local temperature, electron density, radiation-field binning, covering factor, and escape probabilities, so those values should not be hidden inside scalar helper functions.
+
+To start from an existing XSTAR run directory:
+
+\begin{lstlisting}[style=ctpython]
+ctx = xa.context_from_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    target_electron_density=1e8,
+    nearest_density=True,
+)
+\end{lstlisting}
 
 \subsection{Evaluate the audit-only type-50 bound-bound branch}
 
@@ -306,31 +383,18 @@ rate = evaluate_type50_bound_bound(
     upper_level=7,
 )
 
+print(rate.value_s_inv)
 print(rate.lower_to_upper_photoexcitation_s_inv)
 print(rate.upper_to_lower_escaped_decay_s_inv)
+print(rate.source_formula)
 print(rate.terms)
 \end{lstlisting}
 
-In v0.3.128 through v0.3.131 this evaluator remains audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and branch swap but does not modify the level-population solver.
+In v0.3.128 through v0.3.132 this evaluator remains audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and branch swap but does not modify the level-population solver.
 
-\subsection{Use high-level convenience methods and namespaces}
+\subsection{Expert \texttt{XSTARAtomic} namespace API}
 
-\begin{lstlisting}[style=ctpython]
-rate = db.type50_rate(
-    aij_s_inv=3.0e12,
-    oscillator_strength=0.7,
-    wavelength_A=21.602,
-    vtherm_cm_s=1.0e7,
-    bremsa_nb1=2.5e4,
-    plasma_state=state,
-    escape_context=escape,
-    ion="O VII",
-)
-\end{lstlisting}
-
-The method delegates to the same source-code-aligned evaluator, so it is convenient for notebooks while preserving provenance.
-
-The object API also exposes namespace-style entry points matching the future public API plan.
+The object API exposes namespace-style entry points matching the future public API plan:
 
 \begin{lstlisting}[style=ctpython]
 ctx = db.context.from_values(
@@ -362,7 +426,47 @@ comparison = db.validate.compare_xstar_run(
 )
 \end{lstlisting}
 
-	exttt{db.matrix.build\_ion(...)} and 	exttt{db.solve.ion(...)} are present as workflow wrappers around the current source-level solver. They do not yet add type-50 photoexcitation to the matrix; that remains a later opt-in physics mode.
+\texttt{db.matrix.build\_ion(...)} and \texttt{db.solve.ion(...)} are present as workflow wrappers around the current source-level solver:
+
+\begin{lstlisting}[style=ctpython]
+solution = db.solve.ion(
+    "O VII",
+    context=ctx,
+    temperature=7.66552e4,
+    electron_density=1.20466e8,
+)
+
+matrix_products = db.matrix.build_ion("O VII", context=ctx)
+\end{lstlisting}
+
+They do not yet add type-50 photoexcitation to the matrix; that remains a later opt-in physics mode after audit validation.
+
+\subsection{Public namespace modules}
+
+The following import locations are available for users who prefer module namespaces. The rate namespace currently provides \texttt{type50\_bound\_bound(...)} as the implemented source-code-aligned evaluator:
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import rates, solve, matrix, validate, runs
+
+rate = rates.type50_bound_bound(
+    ion="O VII",
+    aij_s_inv=3.0e12,
+    oscillator_strength=0.7,
+    wavelength_A=21.602,
+    vtherm_cm_s=1.0e7,
+    bremsa_nb1=2.5e4,
+    ptmp1=0.2,
+    ptmp2=0.3,
+    flinabs_ptmp1=0.8,
+    cfrac=0.0,
+)
+
+triplet_comparison = validate.compare_xstar_run(
+    "xstar_runs/helike_type69/o7_ne1e8",
+    ion="O VII",
+    wavelength=(21.4, 22.2),
+)
+\end{lstlisting}
 
 \subsection{Run a source-code audit from Python}
 
@@ -370,10 +474,10 @@ comparison = db.validate.compare_xstar_run(
 from xstar_atomic.audit import type50_line_pumping
 
 audit = type50_line_pumping(
-    cases_csv="helike_local_state_validation_v03130/helike_local_state_cases.csv",
+    cases_csv="helike_local_state_validation_v03131/helike_local_state_cases.csv",
     solver_root=".",
     xstar_source_root="../xstar",
-    out_dir="helike_type50_line_pumping_audit_v03130",
+    out_dir="helike_type50_line_pumping_audit_v03131",
     print_summary=True,
 )
 
@@ -400,6 +504,19 @@ bundle = export_superwind_bundle(
 \end{lstlisting}
 
 This is the current public export workflow for downstream simulation or spectral-model post-processing.
+
+\subsection{What is not yet implemented as final physics}
+
+The API names reserve space for future source-aligned matrix/solver development. The following are intentionally not final public physics modes yet:
+
+\begin{lstlisting}[style=ctterminal]
+- type-50 photoexcitation injection into the population matrix
+- full XSTAR radiation-field parity for bremsa(nb1) and exact nbinc binning
+- migrated Python APIs for examples 53 and 54 resonance audits
+- a stable production replacement for XSTAR thermal/radiative transfer
+\end{lstlisting}
+
+The policy is: audit-only first, opt-in solver treatment second, default behavior only after same-run XSTAR validation.
 
 \section{Atomic database access}
 
@@ -561,6 +678,47 @@ rate evaluator -> matrix term -> population solution -> emissivity/triplet resul
 
 Each matrix term should carry provenance: XSTAR data type, record id, source-code formula, local context terms, and treatment mode.
 
+\subsection{Solver step profiling}
+
+Use \texttt{examples/12\_profile\_solver\_steps.py} to profile ATDB opening, index building, level/line/collision extraction, collision evaluation, matrix assembly, linear solving, and output writing.
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/12_profile_solver_steps.py \
+  ../xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperature 1e6 --electron-density 1.0 \
+  --linear-solver sparse \
+  --index-cache \
+  --index-cache-format npz \
+  --out-dir solver_profile_npz_arrays_hit
+\end{lstlisting}
+
+\subsection{Prototype O VII recombination/cascade workflow}
+
+Use \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py} for the Stage-6 prototype source/cascade workflow. It evaluates total O VIII $\rightarrow$ O VII recombination, redistributes source terms through an approximate radiative-branching cascade, feeds the source CSV into the sparse solver, and computes prototype \texttt{R=f/i} and \texttt{G=(f+i)/r} diagnostics.
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_recomb_cascade_workflow \
+  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
+  --print-summary
+\end{lstlisting}
+
+This remains a source-interface and sensitivity workflow, not a final level-resolved recombination/cascade model.
+
+\subsection{O VII density-grid source-fit diagnostic}
+
+Use \texttt{examples/21\_o7\_solver\_source\_fit\_density\_grid.py} to run the O VII density-grid source-fit diagnostic.
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
+  ../xstar/data/atdb.fits \
+  --out-dir o7_density_grid_source_fit \
+  --print-summary
+\end{lstlisting}
+
 \section{XSTAR-output readers and same-run validation}
 
 \texttt{xstar\_atomic.xstar\_outputs} reads selected XSTAR output FITS files, including local abundance/state tables and line lists. The local-state validation examples use these readers to select the same local temperature, electron density, and same-run triplet targets before comparing solver output.
@@ -673,10 +831,12 @@ Near-term:
 \begin{lstlisting}[style=ctterminal]
 v0.3.128: API infrastructure and audit-only type-50 evaluator.
 v0.3.129: examples README, expanded API cookbook, and LaTeX table of contents/documentation polish.
-v0.3.131: examples README command-completeness update with one bash block for every example script.
-v0.3.131: XSTAR radiation-field reader and exact line-energy bin mapping.
-v0.3.132: type-50 matrix-injection preview, still audit-only.
-v0.3.133: optional solver mode for xstar-line-escape-and-pumping.
+v0.3.130: examples README command-completeness update with one bash block for every example script.
+v0.3.131: workflow-first public API, expert namespaces, and context-based helper functions.
+v0.3.132: documentation consistency across Markdown, LaTeX, and Sphinx for the public API.
+v0.3.133: XSTAR radiation-field reader and exact line-energy bin mapping.
+v0.3.134: type-50 matrix-injection preview, still audit-only.
+v0.3.135: optional solver mode for xstar-line-escape-and-pumping.
 \end{lstlisting}
 
 Longer-term:

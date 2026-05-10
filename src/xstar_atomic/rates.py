@@ -1,7 +1,7 @@
 """Public rate-evaluator dispatch namespace.
 
 This module is the stable import location for source-code-aligned rate helpers.
-Only type 50 is implemented as a provenance-complete evaluator in v0.3.131.
+Only type 50 is implemented as a provenance-complete evaluator in v0.3.132.
 Additional data types should be added here only after their source-code context
 requirements are explicit.
 """

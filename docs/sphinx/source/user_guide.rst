@@ -1,91 +1,71 @@
 User guide
 ==========
 
-The full user guide is maintained in Markdown and LaTeX in the main ``docs/``
-directory:
+``xstar-atomic`` reads XSTAR's packed ``atdb.fits`` atomic database,
+evaluates selected source-code-aligned rate formulae, builds prototype
+level-population products, and provides validation/audit tools for same-run
+XSTAR outputs.  This Sphinx page mirrors the public-API organization of
+``docs/user_guide.md`` and ``docs/user_guide.tex``.
 
-- ``docs/user_guide.md``
-- ``docs/user_guide.tex``
+The package is not intended to replace XSTAR.  Its purpose is to make local
+atomic-data and rate pieces auditable from Python with explicit provenance for
+XSTAR records, source-code branches, local plasma state, radiation field,
+escape treatment, and future population-matrix terms.
 
+Installation and data setup
+---------------------------
 
-
-Downloading and configuring atdb.fits
-========================================
-
-``xstar-atomic`` does not bundle XSTAR's large ``atdb.fits`` file.  Configure
-or download it interactively with:
-
-.. code-block:: bash
-
-   python -m xstar_atomic.data
-
-After installation, the equivalent command is:
+Install from a source checkout:
 
 .. code-block:: bash
 
-   xstar-atomic-download-data
+   python -m pip install -e .
+   python -m pip install -e .[dev]
 
-The helper reports the remote file size, asks whether to download
-(pressing Enter means yes), asks for a destination directory, downloads with a
-single-line ASCII progress bar, and writes the chosen data directory to
-``datapath``. In a source checkout this file is stored at the project root
-(for example ``datapath``), not under ``src/xstar_atomic/``. The default
-destination is the project-level ``data/`` directory.
-
-Example progress line::
-
-   xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
-
-If ``atdb.fits`` already exists, decline the download and enter the full path to
-the existing file.  The parent directory is saved, so future Python code can omit
-the path:
-
-.. code-block:: python
-
-   from xstar_atomic import XSTARAtomic
-
-   db = XSTARAtomic(index_cache=True, index_cache_format="npz")
-   lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
-
-Non-interactive configuration is also available:
-
-.. code-block:: bash
-
-   python -m xstar_atomic.data --set-path /path/to/atdb.fits
-   python -m xstar_atomic.data --show
-
-Top-level data helpers are available from Python:
-
-.. code-block:: python
-
-   from xstar_atomic import (
-       download_data,
-       resolve_atdb_path,
-       find_atdb_file,
-       get_data_path,
-       set_data_path,
-   )
-
-   path = download_data()
-   set_data_path("/path/to/xstar/data/atdb.fits")
-   path = resolve_atdb_path()
-
-The resolver checks, in order: an explicit path, ``XSTAR_ATDB_FITS``, the
-persistent ``datapath`` file, and ``data/atdb.fits``.
-
-Quick start
------------
-
-Open the database with the high-level API:
+Configure ``atdb.fits`` explicitly:
 
 .. code-block:: python
 
    from xstar_atomic import XSTARAtomic
 
    db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
-   lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
 
-Run without installation:
+or save a persistent data path:
+
+.. code-block:: python
+
+   import xstar_atomic as xa
+
+   xa.set_data_path("/path/to/xstar/data/atdb.fits")
+   db = xa.open_database()
+
+The resolver checks an explicit path, ``XSTAR_ATDB_FITS``, the persistent
+``datapath`` file, and ``data/atdb.fits``.  Interactive configuration is also
+available:
+
+.. code-block:: bash
+
+   python -m xstar_atomic.data
+   xstar-atomic-download-data
+
+Quick start
+-----------
+
+Use the object API when you will make repeated queries against one database:
+
+.. code-block:: python
+
+   from xstar_atomic import XSTARAtomic
+
+   db = XSTARAtomic("/path/to/xstar/data/atdb.fits", index_cache=True)
+   print(db.summary())
+
+   levels = db.levels("O VII")
+   lines = db.lines("O VII", wavelength=(21.4, 22.2), slim=True)
+   coll = db.collisions("O VIII", temperatures=[1e6, 3e6], wavelength=(18.8, 19.1))
+   emiss = db.emissivity("O VIII", temperatures=[1e6], wavelength=(18.8, 19.1))
+
+Run without installation from a checkout:
 
 .. code-block:: bash
 
@@ -93,102 +73,307 @@ Run without installation:
      --element O --ion-stage 8 \
      --line-search --wavelength-min 18.8 --wavelength-max 19.1
 
+Public API layers
+-----------------
 
+The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132 makes
+this layer explicit in Markdown, LaTeX, and Sphinx documentation.
 
-Band-emissivity export
-----------------------
+.. list-table:: Public API layers
+   :header-rows: 1
+   :widths: 25 50 25
 
-Line-based X-ray band products are written with ``--bands-kev``:
+   * - Layer
+     - Use when
+     - Example
+   * - Module-level workflow API
+     - You want quick notebook/script calls without navigating internal modules.
+     - ``xa.get_lines("O VII", db=db)``
+   * - ``XSTARAtomic`` object API
+     - You want to keep one opened ``atdb.fits`` handle and reuse cached indices.
+     - ``db.lines("O VII", wavelength=(21.4, 22.2))``
+   * - Expert namespace API
+     - You need source-code-first contexts, rate evaluators, audits, validation, and future matrix/solver workflows.
+     - ``db.rates.type50("O VII", ...)``
 
-.. code-block:: bash
+The API intentionally separates implemented stable helpers from future
+namespace placeholders.  In v0.3.132, ``db.rates.type50(...)``,
+``db.audit.type50_line_pumping(...)``, ``db.context.*``, and
+``db.validate.compare_xstar_run(...)`` are callable.  Full type-50 solver
+injection and some resonance-budget audits remain future work.
 
-   PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
-     --ions "O VIII,Ne IX" \
-     --temperatures 1e6 3e6 1e7 \
-     --wavelength-min 1.0 --wavelength-max 40.0 \
-     --bands-kev soft:0.5:2.0 osoft:0.3:0.6 med:0.6:1.0 hard:2.0:10.0 \
-     --formats csv,hdf5 \
-     --out-dir atomic_export \
-     --print-summary
+Workflow-first module-level API
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This creates ``*_band_emissivity.csv`` files and a ``/band_emissivity`` group
-inside each per-ion HDF5 file.  A validated Stage-4 real-ATDB test with four
-bands and three temperatures gives 12 band rows per ion and keeps nonblank
-``ion`` and ``methods_used`` fields even for zero-line bands.
+.. code-block:: python
 
-Build the Sphinx documentation:
+   import xstar_atomic as xa
 
-.. code-block:: bash
+   db = xa.open_database("/path/to/xstar/data/atdb.fits")
 
-   python -m pip install -e .[docs]
-   cd docs/sphinx
-   make html
+   levels = xa.get_levels("O VII", db=db)
+   lines = xa.get_lines("O VII", db=db, wavelength=(21.4, 22.2), slim=True)
+   wavelengths = xa.get_wavelengths("O VIII", db=db, wavelength=(18.8, 19.1))
+   match = xa.match_line("O VIII", db=db, wavelength=18.969, tolerance_A=0.02)
 
-Stage-3 sparse solver diagnostics
----------------------------------
+   coll = xa.get_collisions("O VIII", db=db, temperatures=[1e6, 3e6])
+   pi = xa.get_photoionization("O VII", db=db)
+   rr = xa.get_recombination("O VII", db=db, temperatures=[1e6])
+   emiss = xa.calc_emissivity("O VIII", db=db, temperatures=[1e6], wavelength=(18.8, 19.1))
 
-Use ``--linear-solver sparse`` with the XSTAR type-63 same-``n`` l-mixing
-impact-parameter density:
+The same functions can receive ``fitsfile="/path/to/atdb.fits"`` instead of an
+opened database object.  Passing an opened ``db`` is faster for repeated queries.
 
-.. code-block:: bash
+.. list-table:: Workflow API summary
+   :header-rows: 1
+   :widths: 35 50 15
 
-   PYTHONPATH=src python -m xstar_atomic.solver /path/to/atdb.fits \
-     --element O --ion-stage 8 \
-     --wavelength-min 18.8 --wavelength-max 19.1 \
-     --temperatures 1e6 \
-     --electron-densities 1.0 \
-     --electron-density-for-lmixing 1.0 \
-     --component-mode ground \
-     --linear-solver sparse \
-     --summary-json o8_sparse_solver_summary.json \
-     --print-summary
+   * - Function
+     - Purpose
+     - Status
+   * - ``xa.open_database(...)``
+     - Open ``atdb.fits`` as an ``XSTARAtomic`` object.
+     - implemented
+   * - ``xa.get_levels(...)`` / ``xa.get_lines(...)``
+     - Decode level and radiative line records.
+     - implemented
+   * - ``xa.get_wavelengths(...)`` / ``xa.get_energies(...)``
+     - Return sorted line wavelengths or energies.
+     - implemented
+   * - ``xa.match_line(...)`` / ``xa.match_lines(...)``
+     - Match nearest line(s) by wavelength or energy.
+     - implemented
+   * - ``xa.get_collisions(...)``
+     - Return collision summaries and evaluated rows.
+     - implemented
+   * - ``xa.get_photoionization(...)``
+     - Return photoionization summaries/grids.
+     - implemented
+   * - ``xa.get_recombination(...)``
+     - Return recombination and optional source rows.
+     - implemented
+   * - ``xa.calc_emissivity(...)``
+     - Build direct-excitation emissivity products.
+     - implemented
+   * - ``xa.context_from_values(...)``
+     - Build an ``XSTARContext`` from explicit local values.
+     - implemented
+   * - ``xa.context_from_xstar_run(...)``
+     - Build an ``XSTARContext`` from an XSTAR output directory.
+     - lightweight
+   * - ``xa.calc_rate("type50", ...)``
+     - Dispatch to the audit-only type-50 evaluator.
+     - type 50
+   * - ``xa.calc_triplet(...)``
+     - Summarize He-like f/i/r rows.
+     - implemented
+   * - ``xa.solve_populations(...)`` / ``xa.build_matrix(...)``
+     - Wrap the current diagnostic population solver.
+     - prototype
 
-The summary includes matrix nonzero counts, density, singular-value rank,
-condition number, sparse availability/use, and linear residual diagnostics.
-The optional ``--prune-unconnected-levels`` flag removes isolated levels while
-preserving ground, output, and explicit source/sink levels.
-
-For O VII triplet stress tests, ``examples/10_o7_triplet_sparse_solver.py``
-writes prototype ``R=f/i`` and ``G=(f+i)/r`` diagnostic tables.
-Solver timing example
+Local context objects
 ---------------------
 
-Use ``examples/11_solver_timing.py`` to benchmark end-to-end solver execution.
-The timing includes ATDB decoding, record selection, matrix assembly, the
-linear solve, and output writing.
+XSTAR rates can depend on local plasma state, radiation field, optical depth,
+escape probability, and covering factor.  ``xstar-atomic`` therefore exposes
+explicit context objects rather than hiding those quantities in scalar helpers.
+
+.. code-block:: python
+
+   from xstar_atomic import LocalPlasmaState, RadiationField, EscapeContext, context_from_values
+
+   state = LocalPlasmaState(
+       temperature_K=7.66552e4,
+       electron_density_cm3=1.20466e8,
+       log_xi=1.5,
+       ion_fraction=0.255926,
+   )
+
+   rad = RadiationField.from_pairs([
+       (0.50, 1.0e4),
+       (0.574, 2.5e4),
+       (1.00, 1.0e4),
+   ])
+
+   escape = EscapeContext(cfrac=0.0, ptmp1=0.2, ptmp2=0.3, flinabs_ptmp1=0.8)
+
+   ctx = context_from_values(
+       ion="O VII",
+       temperature_K=state.temperature_K,
+       electron_density_cm3=state.electron_density_cm3,
+       log_xi=state.log_xi,
+       ion_fraction=state.ion_fraction,
+       radiation_field=rad,
+       escape_context=escape,
+   )
+
+To start from an XSTAR run directory:
+
+.. code-block:: python
+
+   ctx = xa.context_from_xstar_run(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+       target_electron_density=1e8,
+       nearest_density=True,
+   )
+
+Type-50 rate evaluator
+----------------------
+
+The audit-only type-50 evaluator records XSTAR's ``ucalc.f90`` branch swap and
+returns a structured ``RateEvaluation`` object.  It does not inject
+photoexcitation into the population matrix in v0.3.132.
+
+.. code-block:: python
+
+   from xstar_atomic import evaluate_type50_bound_bound
+
+   rate = evaluate_type50_bound_bound(
+       aij_s_inv=3.0e12,
+       oscillator_strength=0.7,
+       wavelength_A=21.602,
+       vtherm_cm_s=1.0e7,
+       bremsa_nb1=2.5e4,
+       plasma_state=state,
+       radiation_field=rad,
+       escape_context=escape,
+       ion="O VII",
+       lower_level=1,
+       upper_level=7,
+   )
+
+   print(rate.value_s_inv)
+   print(rate.lower_to_upper_photoexcitation_s_inv)
+   print(rate.upper_to_lower_escaped_decay_s_inv)
+   print(rate.source_formula)
+   print(rate.terms)
+
+Expert namespace API
+--------------------
+
+``XSTARAtomic`` exposes namespace-style entry points for advanced workflows:
+
+.. code-block:: python
+
+   ctx = db.context.from_values(
+       ion="O VII",
+       temperature_K=7.66552e4,
+       electron_density_cm3=1.20466e8,
+       log_xi=1.5,
+   )
+
+   rate = db.rates.type50(
+       "O VII",
+       aij_s_inv=3.0e12,
+       oscillator_strength=0.7,
+       wavelength_A=21.602,
+       vtherm_cm_s=1.0e7,
+       bremsa_nb1=2.5e4,
+       ptmp1=0.2,
+       ptmp2=0.3,
+       flinabs_ptmp1=0.8,
+       cfrac=0.0,
+   )
+
+   ctx = db.context.from_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+   comparison = db.validate.compare_xstar_run(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+       wavelength=(21.4, 22.2),
+   )
+
+   solution = db.solve.ion("O VII", context=ctx)
+   matrix_products = db.matrix.build_ion("O VII", context=ctx)
+
+The solver and matrix namespace methods are wrappers around the current
+diagnostic solver.  They do not enable type-50 photoexcitation as solver physics.
+
+Public namespace modules
+------------------------
+
+Users can also import public namespaces directly:
+
+.. code-block:: python
+
+   from xstar_atomic import rates, solve, matrix, validate, runs
+
+   rate = rates.type50_bound_bound(
+       ion="O VII",
+       aij_s_inv=3.0e12,
+       oscillator_strength=0.7,
+       wavelength_A=21.602,
+       vtherm_cm_s=1.0e7,
+       bremsa_nb1=2.5e4,
+       ptmp1=0.2,
+       ptmp2=0.3,
+       flinabs_ptmp1=0.8,
+       cfrac=0.0,
+   )
+
+   triplet_comparison = validate.compare_xstar_run(
+       "xstar_runs/helike_type69/o7_ne1e8",
+       ion="O VII",
+       wavelength=(21.4, 22.2),
+   )
+
+Audit workflows
+---------------
+
+The type-50 line-pumping audit is available as both a Python API and a CLI
+wrapper:
+
+.. code-block:: python
+
+   from xstar_atomic.audit import type50_line_pumping
+
+   audit = type50_line_pumping(
+       cases_csv="helike_local_state_validation_v03131/helike_local_state_cases.csv",
+       solver_root=".",
+       xstar_source_root="../xstar",
+       out_dir="helike_type50_line_pumping_audit_v03131",
+       print_summary=True,
+   )
+
+   print(audit.summary)
 
 .. code-block:: bash
 
-   PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
-     --repeat 3 \
-     --out-dir solver_timing_example
+   PYTHONPATH=src python examples/55_audit_helike_type50_line_pumping.py \
+     --cases-csv helike_local_state_validation_v03131/helike_local_state_cases.csv \
+     --solver-root . \
+     --xstar-source-root ../xstar \
+     --out-dir helike_type50_line_pumping_audit_v03131 \
+     --print-summary
 
-To include the heavier O VII triplet sparse stress test:
+Examples and source-module migration
+------------------------------------
 
-.. code-block:: bash
+The package includes grouped runnable examples in ``examples/README.md``.  The
+same migration plan is summarized in ``docs/example_to_source_api_map.md``.
+High-priority migrations are:
 
-   PYTHONPATH=src python examples/11_solver_timing.py /path/to/atdb.fits \
-     --include-o7 \
-     --repeat 2 \
-     --out-dir solver_timing_example \
-     --out-csv solver_timing.csv
+.. list-table:: Example-to-API migration
+   :header-rows: 1
+   :widths: 45 55
 
-The resulting CSV includes elapsed wall time, solver used, sparse status,
-matrix size, nonzero count, matrix density, condition number, and residual
-metrics.  SciPy already provides a compiled sparse linear solver; a future C++
-backend would be most useful for repeated record filtering, rate evaluation,
-matrix assembly, emissivity aggregation, and direct HDF5 packing.
+   * - Current example
+     - Candidate source API
+   * - ``51_run_helike_local_state_validation.py``
+     - ``xstar_atomic.runs.select_local_states(...)``
+   * - ``52_summarize_helike_local_state_comparison.py``
+     - ``xstar_atomic.validate.summarize_local_state_comparison(...)``
+   * - ``53_audit_helike_resonance_deficit.py``
+     - ``xstar_atomic.audit.resonance_deficit(...)``
+   * - ``54_audit_helike_resonance_population_flux.py``
+     - ``xstar_atomic.audit.resonance_population_flux(...)``
+   * - ``55_audit_helike_type50_line_pumping.py``
+     - ``xstar_atomic.audit.type50_line_pumping(...)``
 
+Solver profiling and Stage-6 workflows
+--------------------------------------
 
-
-Recommended array-backed NPZ index cache
-----------------------------------------
-
-The ATDB hierarchy scan is often the dominant startup cost because it walks more
-than one million packed records.  For repeated targeted workflows, use the
-array-backed NumPy/NPZ cache.  This cache stores the hierarchy as numeric
-arrays, filters by element, ion stage, data type, and rate type, and converts
-only selected rows to ``IndexedRecord`` objects.
+Solver step profiling:
 
 .. code-block:: bash
 
@@ -202,166 +387,41 @@ only selected rows to ``IndexedRecord`` objects.
      --index-cache-format npz \
      --out-dir solver_profile_npz_arrays_hit
 
-For the validated O VIII sparse-solver profile, the uncached run took about
-``5.31 s``, while the NPZ array-backed cache-hit run took about ``0.53 s``.
-The ``build_index`` stage dropped from about ``5.00 s`` to about ``0.058 s``.
-
-The default cache file is ``atdb.fits.xstar_atomic_index.npz``.  Use
-``--rebuild-index-cache`` after changing or replacing ``atdb.fits``.  Legacy
-pickle caching remains available with ``--index-cache-format pickle``, but the
-NPZ array-backed cache is the recommended path for solver, export, high-level
-API, and profiling workflows.
-
-The same cache should be used for repeated export workflows:
+Prototype O VII recombination/cascade workflow:
 
 .. code-block:: bash
 
-   PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
-     --ions "O VIII,Ne IX" \
-     --temperatures 1e6 3e6 1e7 \
-     --wavelength-min 1.0 --wavelength-max 40.0 \
-     --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
-     --formats csv,hdf5 \
-     --index-cache --index-cache-format npz \
-     --out-dir atomic_export_cached \
-     --print-summary
-
-Solver and export summaries report ``index_cache_status`` and
-``index_cache_path``; cache-hit workflows should report statuses such as
-``npz_array_hit`` or ``array_memory``.
-
-Solver profiling and Stage-6 cascade examples are documented in the examples page.
-
-Download progress is shown on one in-place ASCII progress-bar line, for example:
-
-```text
-xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
-```
-
-Stage-6 O VII cascade tuning scan
----------------------------------
-
-The equal-target ``selected-cascade-yield`` map remains the recommended Stage-6
-baseline because it preserves the good XSTAR agreement in ``G=(f+i)/r``::
-
-  --source-mode selected-cascade-yield \
-  --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
-
-For controlled experiments, the preferred presets now shift target weight from
-forbidden into intercombination levels while preserving the resonance target and
-the total triplet-target weight. This is intended to reduce ``R=f/i`` without
-strongly moving ``G=(f+i)/r`` away from the equal-target baseline::
-
-  o7-triplet-f2i010-rkeep -> 2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0
-  o7-triplet-f2i015-rkeep -> 2:0.85,3:1.05,4:1.05,5:1.05,7:1.0
-  o7-triplet-f2i025-rkeep -> 2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0
-  o7-triplet-f2i050-rkeep -> 2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0
-
-The older simple ``fdown`` presets remain available for reproducibility, but
-they reduced ``G`` too much in the first tuning scan.
-
-Use the tuning scan helper to run the equal baseline plus the experimental
-presets and summarize ``R=f/i`` and ``G=(f+i)/r`` relative to the saved XSTAR O
-VII reference::
-
-  PYTHONPATH=src python examples/15_o7_cascade_tuning_scan.py \
-    ../xstar/data/atdb.fits \
-    --out-dir o7_cascade_tuning_scan \
-    --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-    --print-summary
-
-The scan writes ``o7_cascade_tuning_scan.csv`` and a JSON summary. The aim is to
-reduce ``R`` while keeping ``G`` close to the equal-target/XSTAR value; the equal
-map should remain the baseline unless an experimental preset improves both.
-
-
-
-Stage-6 O VII metastable/intercombination coupling diagnostic
---------------------------------------------------------------
-
-The O VII triplet ratio ``R=f/i`` is sensitive to transfer from the
-forbidden-line upper level into the intercombination manifold.  Use
-``examples/16_o7_metastable_coupling_diagnostics.py`` to inspect level 2 ->
-levels 3, 4, and 5 and compare ``C_2j = n_e q_2j`` against decoded radiative
-rates.
-
-.. code-block:: bash
-
-   PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
+   PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
      ../xstar/data/atdb.fits \
-     --temperature 1e6 \
-     --electron-densities 1 1e4 1e8 1e10 1e12 \
-     --index-cache --index-cache-format npz \
-     --out-dir o7_metastable_coupling \
+     --out-dir o7_recomb_cascade_workflow \
+     --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
      --print-summary
 
-The CSV output reports ``q_2_to_j_cm3_s``, ``C_2_to_j_s^-1``, decoded
-radiative A-values, and density estimates where collisional transfer becomes
-comparable to radiative decay.
-
-He-like collisional coupling diagnostics
-=======================================
-
-Version 0.2.47 adds XSTAR He-like collision decoders for data types 67, 68, and 69. These are used to test whether O VII metastable/intercombination coupling is stored in ATDB outside the type-63 records. The diagnostic example writes both rate summaries and a full collision inventory for levels 2, 3, 4, and 5.
+O VII density-grid source-fit diagnostic:
 
 .. code-block:: bash
 
-   PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
+   PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
      ../xstar/data/atdb.fits \
-     --temperature 1e6 \
-     --electron-densities 1 1e4 1e8 1e10 1e12 \
-     --index-cache --index-cache-format npz \
-     --out-dir o7_metastable_coupling \
+     --out-dir o7_density_grid_source_fit \
      --print-summary
 
-Outputs include ``o7_metastable_coupling_rates.csv``, ``o7_metastable_coupling_collision_inventory.csv``, and ``o7_metastable_coupling_summary.json``.
+Build documentation
+-------------------
 
+.. code-block:: bash
 
-Type-68-aware O VII cascade tuning scan
----------------------------------------
+   python -m pip install -e .[docs]
+   cd docs/sphinx
+   make html
 
-After He-like collision data types 67/68/69 are enabled, O VII includes the
-metastable-to-intercombination coupling from level 2 into levels 3, 4, and 5.
-This gives the expected density-sensitive behavior in ``R=f/i``, but it can make
-the low-density ``G=(f+i)/r`` too small for the previous cascade-source map.
-The type-68-aware scan keeps the equal triplet weights fixed and progressively
-downweights the resonance target level 7::
+Development policy
+------------------
 
-  o7-triplet-type68-r095 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.95
-  o7-triplet-type68-r090 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.90
-  o7-triplet-type68-r085 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.85
-  o7-triplet-type68-r080 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.80
-  o7-triplet-type68-r075 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.75
-  o7-triplet-type68-r070 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.70
-  o7-triplet-type68-r060 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.60
-  o7-triplet-type68-r050 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.50
-
-Run the scan with::
-
-  PYTHONPATH=src python examples/17_o7_type68_cascade_tuning_scan.py \
-    ../xstar/data/atdb.fits \
-    --out-dir o7_type68_cascade_tuning_scan \
-    --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-    --print-summary
-
-The scan writes ``o7_type68_cascade_tuning_scan.csv``,
-``o7_type68_cascade_tuning_scan_all_densities.csv``, and a JSON summary. Use this
-scan after the type-67/68/69 He-like collision decoders are active. The equal
-target map remains the reference baseline; the type-68-aware presets are
-experiments for restoring ``G`` while preserving the density-sensitive ``R``
-physics.
-
-
-v0.3.128 API infrastructure
----------------------------
-
-The main user guide has been reorganized in ``docs/user_guide.md`` and
-``docs/user_guide.tex`` around workflows: installation, quick start, atomic
-database access, context objects, source-code-aligned rate evaluators, solver
-workflows, XSTAR validation, and audits.
-
-New public infrastructure includes ``LocalPlasmaState``, ``RadiationField``,
-``EscapeContext``, ``RateEvaluation``, and the audit-only type-50 evaluator
-``evaluate_type50_bound_bound``.  The former example-55 line-pumping audit is
-available as ``xstar_atomic.audit.type50_line_pumping`` and remains accessible
-through the example CLI wrapper.
+- No empirical triplet scale factors as final physics.
+- New physics starts as audit-only.
+- Solver-changing modes must be opt-in until validated.
+- Every solver-changing rate must have source-code and record provenance.
+- Radiation-dependent rates must expose the radiation context.
+- Escape-dependent rates must expose ``cfrac``, ``tau``/``ptmp``, and escape treatment.
+- Same-run XSTAR outputs are preferred over generic target CSVs.

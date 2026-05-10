@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.132 - 2026-05-10
+
+- Expanded and clarified the public API documentation in `docs/user_guide.md` with a canonical workflow-first API section, a top-level function summary table, expert namespace examples, public namespace-module examples, and explicit notes about prototype/not-yet-final physics APIs.
+- Rewrote `docs/sphinx/source/user_guide.rst` so the Sphinx user guide now mirrors the Markdown/LaTeX organization instead of remaining an older CLI-focused page.
+- Expanded `docs/sphinx/source/api.rst` to include the workflow-first API (`xstar_atomic.workflow`), public namespaces (`rates`, `matrix`, `solve`, `validate`, `runs`), context objects, type-50 evaluator, and audit module.
+- Expanded `docs/user_guide.tex` with the same workflow-first and expert API material and retained the LaTeX table of contents.
+- Added documentation regression tests requiring the new public API names to appear in Markdown, LaTeX, and Sphinx docs.
+- No solver physics changed; type-50 photoexcitation remains audit-only and is not injected into the population matrix.
+
 ## v0.3.131 - 2026-05-10
 
 - Added the first workflow-first module-level public API layer inspired by the earlier `chianti-tools` review:

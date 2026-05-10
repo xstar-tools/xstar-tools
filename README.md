@@ -1,8 +1,13 @@
 # xstar-atomic
 
-Latest package note: **v0.3.131** implements the first workflow-first public API layer requested from the chianti-tools review.
+Latest package note: **v0.3.132** is a documentation-consistency release for the public API.  It makes the workflow-first API, expert namespaces, and audit-only type-50 API visible and consistent across:
 
-The simple API now includes:
+- `docs/user_guide.md`
+- `docs/user_guide.tex`
+- `docs/sphinx/source/user_guide.rst`
+- `docs/sphinx/source/api.rst`
+
+The simple workflow API includes:
 
 ```python
 import xstar_atomic as xa
@@ -14,7 +19,7 @@ rate = xa.calc_rate("type50", aij_s_inv=..., oscillator_strength=..., wavelength
 triplet = xa.calc_triplet("O VII", rows=xstar_line_rows)
 ```
 
-The expert object API now exposes namespace-style entry points:
+The expert object API exposes namespace-style entry points:
 
 ```python
 from xstar_atomic import XSTARAtomic
@@ -25,9 +30,9 @@ rate = db.rates.type50("O VII", aij_s_inv=..., oscillator_strength=..., waveleng
 comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
 ```
 
-Public namespace modules were also added for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
+Public namespace modules are available for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
 
-No solver physics changed in v0.3.131. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
+No solver physics changed in v0.3.132. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix.
 
 ## Earlier v0.3.128 API infrastructure
 
