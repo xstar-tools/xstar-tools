@@ -250,7 +250,7 @@ print(rate.upper_to_lower_escaped_decay_s_inv)
 print(rate.terms)
 ```
 
-In v0.3.128 and v0.3.129 this evaluator remains audit-only. It records the XSTAR `ucalc.f90` type-50 branch and branch swap but does not modify the level-population solver.
+In v0.3.128 through v0.3.130 this evaluator remains audit-only. It records the XSTAR `ucalc.f90` type-50 branch and branch swap but does not modify the level-population solver.
 
 ### 3.6 Use the high-level `XSTARAtomic` convenience methods
 
@@ -275,10 +275,10 @@ The method delegates to the same source-code-aligned evaluator, so it is conveni
 from xstar_atomic.audit import type50_line_pumping
 
 audit = type50_line_pumping(
-    cases_csv="helike_local_state_validation_v03129/helike_local_state_cases.csv",
+    cases_csv="helike_local_state_validation_v03130/helike_local_state_cases.csv",
     solver_root=".",
     xstar_source_root="../xstar",
-    out_dir="helike_type50_line_pumping_audit_v03129",
+    out_dir="helike_type50_line_pumping_audit_v03130",
     print_summary=True,
 )
 
@@ -493,7 +493,7 @@ PYTHONPATH=src python examples/51_run_helike_local_state_validation.py \
   --selection-mode max \
   --target-electron-density 1e8 \
   --nearest-density \
-  --out-dir helike_local_state_validation_v03129_ne1e8_allions \
+  --out-dir helike_local_state_validation_v03130_ne1e8_allions \
   --print-summary
 ```
 
@@ -507,10 +507,10 @@ In v0.3.128 the previous example-55 logic is available as a Python API:
 from xstar_atomic.audit import type50_line_pumping
 
 audit = type50_line_pumping(
-    "helike_local_state_validation_v03129_ne1e8_allions/helike_local_state_cases.csv",
+    "helike_local_state_validation_v03130_ne1e8_allions/helike_local_state_cases.csv",
     solver_root=".",
     xstar_source_root="../xstar",
-    out_dir="helike_type50_line_pumping_audit_v03129",
+    out_dir="helike_type50_line_pumping_audit_v03130",
     print_summary=True,
 )
 ```
@@ -519,10 +519,10 @@ The CLI wrapper remains:
 
 ```bash
 PYTHONPATH=src python examples/55_audit_helike_type50_line_pumping.py \
-  --cases-csv helike_local_state_validation_v03129_ne1e8_allions/helike_local_state_cases.csv \
+  --cases-csv helike_local_state_validation_v03130_ne1e8_allions/helike_local_state_cases.csv \
   --solver-root . \
   --xstar-source-root ../xstar \
-  --out-dir helike_type50_line_pumping_audit_v03129 \
+  --out-dir helike_type50_line_pumping_audit_v03130 \
   --print-summary
 ```
 
@@ -591,9 +591,10 @@ Near-term:
 ```text
 v0.3.128: API infrastructure and audit-only type-50 evaluator.
 v0.3.129: examples README, expanded API cookbook, and LaTeX table of contents/documentation polish.
-v0.3.130: XSTAR radiation-field reader and exact line-energy bin mapping.
-v0.3.131: type-50 matrix-injection preview, still audit-only.
-v0.3.132: optional solver mode for xstar-line-escape-and-pumping.
+v0.3.130: examples README command-completeness update with one bash block for every example script.
+v0.3.131: XSTAR radiation-field reader and exact line-energy bin mapping.
+v0.3.132: type-50 matrix-injection preview, still audit-only.
+v0.3.133: optional solver mode for xstar-line-escape-and-pumping.
 ```
 
 Longer-term:

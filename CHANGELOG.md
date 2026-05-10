@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.130 - 2026-05-10
+
+- Expanded `examples/README.md` so every example script has its own section with a copy-pasteable `bash` command block.
+- Preserved the relevance-based example organization while replacing compact inline table commands with more readable per-example command blocks.
+- Added documentation tests that verify all `examples/*.py` files are listed in `examples/README.md` and have a corresponding `bash` command block.
+- No solver physics changed; type-50 photoexcitation remains audit-only.
+
 ## v0.3.129 - 2026-05-10
 
 - Added `examples/README.md`, organizing all example scripts by workflow/relevance and giving a minimal command for each example. The README also adds recommended learning paths for new users, decoder development, emissivity/export work, O VII triplet development, full-global XSTAR validation, and Mg/Ca validation.
