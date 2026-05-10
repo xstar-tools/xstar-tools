@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.123 - 2026-05-09
+
+- Fixed generated He-like local-state validation shell scripts from `examples/51_run_helike_local_state_validation.py`.
+- Commands are now written with shell-quoted tokens, so ion names containing spaces, especially `C V` and `O VII`, are passed correctly to `python -m xstar_atomic.xstar_outputs --ion ...`.
+- This fixes failures like `xstar_outputs.py: error: unrecognized arguments: V` in `compare_helike_local_state_solvers.sh`.
+- No solver physics changed; no empirical triplet scale fitting was added.
+
 ## v0.3.122 - 2026-05-09
 
 - Fixed `examples/51_run_helike_local_state_validation.py` density selection in `--selection-mode max` runs. When `--target-electron-density` and `--nearest-density` are supplied, the script now constrains to the closest available local XSTAR electron density before choosing the maximum He-like fraction. This prevents mixed-density trees from selecting ne≈1 cm^-3 C V/O VII/Ca XIX states when the requested validation target is ne≈1e8 cm^-3.

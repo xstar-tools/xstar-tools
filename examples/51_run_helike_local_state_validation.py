@@ -162,6 +162,17 @@ def _quote_cmd(parts: Sequence[str | Path | float | int]) -> str:
     return " ".join(shlex.quote(str(p)) for p in parts)
 
 
+
+
+def _script_cmd(parts: Sequence[str | Path | float | int]) -> str:
+    """Return a shell-safe command line for generated validation scripts.
+
+    Ion labels such as ``C V`` and ``O VII`` contain spaces, so every token
+    must be shell-quoted before joining.  This keeps generated scripts safe
+    even when an argument contains whitespace.
+    """
+    return _quote_cmd(parts)
+
 def _read_xout(path: Path) -> dict[str, list[dict[str, Any]]]:
     from xstar_atomic.xstar_outputs import read_xout_abundances
 
@@ -644,16 +655,16 @@ def build(
             cmp_cmd = _make_compare_command(tag, out_name, target_csv, python_exe=python_exe)
             row["solver_command"] = _quote_cmd(solver_cmd)
             row["compare_command"] = _quote_cmd(cmp_cmd) if cmp_cmd else ""
-            solver_script_lines.append(" \\\n  ".join(solver_cmd))
+            solver_script_lines.append(_script_cmd(solver_cmd))
             solver_script_lines.append("")
             if cmp_cmd:
                 if row.get("target_csv_generated_from_xout_lines1") and xout_lines is not None and target_csv is not None:
                     convert_cmd = _make_xout_lines_convert_command(tag, xout_lines, Path(target_csv), python_exe=python_exe)
                     compare_script_lines.append(f"mkdir -p {shlex.quote(str(Path(target_csv).parent))}")
-                    compare_script_lines.append(" \\\n  ".join(convert_cmd))
+                    compare_script_lines.append(_script_cmd(convert_cmd))
                     compare_script_lines.append("")
                     row["target_csv_conversion_command"] = _quote_cmd(convert_cmd)
-                compare_script_lines.append(" \\\n  ".join(cmp_cmd))
+                compare_script_lines.append(_script_cmd(cmp_cmd))
                 compare_script_lines.append("")
             if run_solver:
                 env = os.environ.copy()
