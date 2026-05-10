@@ -536,3 +536,25 @@ class XSTARAtomic:
             # Backward-compatible alias used by examples and early API tests.
             "rows": emiss_rows,
         }
+
+    def type50_rate(self, **kwargs):
+        """Evaluate an audit-only XSTAR type-50 bound-bound radiative rate.
+
+        This is a convenience wrapper around
+        :func:`xstar_atomic.rates_type50.evaluate_type50_bound_bound`.  It does
+        not alter the population solver.
+        """
+        from .rates_type50 import evaluate_type50_bound_bound
+
+        return evaluate_type50_bound_bound(**kwargs)
+
+    def audit_type50_line_pumping(self, cases_csv: Union[str, Path], **kwargs):
+        """Run the reusable He-like type-50 line-pumping audit workflow.
+
+        This wraps :func:`xstar_atomic.audit.type50_line_pumping` so users who
+        start from an :class:`XSTARAtomic` object can access the audit API
+        without importing the audit module separately.
+        """
+        from .audit import type50_line_pumping
+
+        return type50_line_pumping(cases_csv, **kwargs)

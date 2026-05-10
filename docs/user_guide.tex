@@ -11,12 +11,7 @@
 \usepackage{booktabs}
 \usepackage{textcomp}
 
-\hypersetup{
-  colorlinks=true,
-  linkcolor=blue,
-  urlcolor=blue,
-  citecolor=blue
-}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
 
 \definecolor{ctcodebackground}{RGB}{248,248,248}
 \definecolor{ctcodekeyword}{RGB}{0,92,175}
@@ -58,99 +53,32 @@
   tabsize=4,
   upquote=true
 }
+
 \lstset{style=ctpython}
 
 \title{\texttt{xstar-atomic} User Guide}
-\author{XSTAR ATDB direct decoder, rate evaluator, emissivity tools, and prototype solvers}
-\date{Version 0.2.63}
+\author{XSTAR ATDB direct decoder, source-code-aligned rate audits, and prototype solvers}
+\date{Version 0.3.128}
 
 \begin{document}
 \maketitle
 
 \section{Overview}
 
-\texttt{xstar-atomic} is a Python package for reading, decoding, and evaluating atomic data from XSTAR's packed atomic database file, usually named \texttt{atdb.fits} and distributed under \texttt{xstar/data/atdb.fits}.
+\texttt{xstar-atomic} reads XSTAR's packed \texttt{atdb.fits} atomic database, evaluates selected XSTAR rate formulae, builds prototype level-population products, and provides source-code-first validation tools for comparing against same-run XSTAR outputs.
 
-The package is intended for research workflows that need direct access to XSTAR atomic records, line lists, rate coefficients, emissivity tables, and prototype level-population calculations. It is separate from \texttt{PyXSTARdb}/\texttt{PyXstar}: \texttt{xstar-atomic} focuses on direct decoding and physics evaluation of the released packed FITS database.
+The package is not intended to replace XSTAR. Its purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, and population-matrix term.
 
-\section{Database structure}
-
-The public XSTAR \texttt{atdb.fits} file is not a normal multi-table atomic database. It contains four packed arrays:
-
-\begin{lstlisting}[style=ctterminal]
-POINTERS
-REALS
-INTEGERS
-CHARS
+\begin{lstlisting}[style=ctpython]
+import xstar_atomic as xa
+from xstar_atomic import XSTARAtomic
 \end{lstlisting}
 
-Each physical database record is reconstructed from these arrays. The package rebuilds the XSTAR hierarchy:
+\section{Installation and data setup}
 
-\begin{lstlisting}[style=ctterminal]
-element -> ion -> levels -> radiative/collisional/photoionization/recombination records
-\end{lstlisting}
+\subsection{Install the package}
 
-The low-level reader is \texttt{ATDB}. The high-level user interface is \texttt{XSTARAtomic}.
-
-\section{Current capabilities}
-
-The package currently includes:
-
-\begin{itemize}
-\item Packed FITS decoding of \texttt{POINTERS}, \texttt{REALS}, \texttt{INTEGERS}, and \texttt{CHARS}.
-\item Element, ion, and record indexing.
-\item Level extraction for \texttt{data\_type=6}.
-\item Radiative-line extraction for \texttt{data\_type=50}.
-\item Photoionization extraction for \texttt{data\_type=53} and inventory support for related bound-free records.
-\item Collisional excitation extraction/evaluation for \texttt{data\_type=51}, \texttt{56}, \texttt{63}, and \texttt{98}, including the implemented same-\(n\) \(l\)-mixing branch of the Bautista/XSTAR algorithm for \texttt{data\_type=63}.
-\item Recombination and charge-exchange inventory/evaluation for \texttt{data\_type=1}, \texttt{30}, \texttt{38}, \texttt{39}, and charge exchange \texttt{data\_type=2} when explicitly requested.
-\item Direct-excitation line-emissivity table generation.
-\item CSV/HDF5 export bundles for plasma post-processing workflows.
-\item Line-based X-ray band emissivity exports via \texttt{--bands-kev}.
-\item Prototype level-population solver with connected-component diagnostics and source/sink hooks.
-\item Prototype radiative-branching cascade redistribution for source-injection experiments.
-\end{itemize}
-
-
-\section{Scientific validation status}
-
-The table below summarizes the current scientific status of the main decoder paths. ``Validated'' means covered by real-\texttt{atdb.fits} tests and internal consistency checks; it does not replace comparison against full XSTAR model outputs for publication-quality work.
-
-\begin{longtable}{p{0.25\linewidth}p{0.15\linewidth}p{0.25\linewidth}p{0.25\linewidth}}
-\toprule
-Component & Data type(s) & Current status & Validation examples \\
-\midrule
-Packed FITS reader / hierarchy & arrays & Validated & 1,216,792 records; 30 elements; 465 ions \\
-Levels & 6 & Validated & O VIII and O VII level indexing \\
-Radiative lines & 50 & Validated & O VIII Ly-alpha, O VII triplet, Ne X, Fe XXVI \\
-Photoionization grids & 53 & Validated for OP-style grids & O VIII and O VII ground thresholds \\
-Collisions, tabulated $\Upsilon$ & 56 & Validated & O VIII Ly-alpha rates and emissivity rows \\
-Collisions, Bautista $n,l$ & 63 & Validated internally & O VII/O VIII direct-excitation and same-$n$ diagnostics \\
-Collisions, Burgess--Tully & 51 & Implemented and API-tested & Representative real-ATDB targets \\
-Collisions, CHIANTI 2016 BT & 98 & Implemented and API-tested & Ne IX representative target \\
-Electron recombination totals & 1, 30, 38, 39 & Implemented for total rates & Oxygen RR/DR inventory \\
-Charge exchange with H$^0$ & 2 & Implemented when requested & Low-ion oxygen CX inventory \\
-Level-resolved recombination/cascade & unknown & Not yet identified & Prototype source/cascade hooks only \\
-Level-population solver & combined & Prototype & Connected-component and source/sink diagnostics \\
-\bottomrule
-\end{longtable}
-
-\section{Important limitations}
-
-This is an alpha-stage research package. Important limitations include:
-
-\begin{itemize}
-\item Not all XSTAR data types are decoded.
-\item The \texttt{data\_type=63} same-\(n\) \(l\)-mixing / XSTAR \texttt{amcrs} branch is implemented in the collision decoder, but should still be compared against XSTAR outputs for final science.
-\item True level-resolved recombination/cascade records have not been identified in the currently decoded oxygen records.
-\item Recombination source redistribution modes are prototypes unless true level-resolved recombination data are available.
-\item The level-population solver is a diagnostic prototype, not a full replacement for XSTAR.
-\item Results should be validated against XSTAR outputs, published atomic values, or other atomic databases before scientific publication.
-\end{itemize}
-
-\section{Installation}
-
-From the package directory:
+From the source tree:
 
 \begin{lstlisting}[style=ctterminal]
 python -m pip install -e .
@@ -160,1338 +88,388 @@ For development and tests:
 
 \begin{lstlisting}[style=ctterminal]
 python -m pip install -e .[dev]
+PYTHONPATH=src pytest -q
 \end{lstlisting}
 
-For Sphinx documentation:
+Optional extras:
 
 \begin{lstlisting}[style=ctterminal]
 python -m pip install -e .[docs]
+python -m pip install -e .[hdf5]
+python -m pip install -e .[sparse]
 \end{lstlisting}
 
-You can run the package without installing it:
+\subsection{Configure \texttt{atdb.fits}}
+
+The main database is XSTAR's packed atomic database, usually located at:
 
 \begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python -m xstar_atomic.lines /path/to/atdb.fits \
-  --element O --ion-stage 8 \
-  --line-search --wavelength-min 18.8 --wavelength-max 19.1
+xstar/data/atdb.fits
 \end{lstlisting}
 
-\section{Python API}
-
-\subsection{Open the database}
+You can provide it explicitly:
 
 \begin{lstlisting}[style=ctpython]
-from xstar_atomic import XSTARAtomic, ATDB
-
 db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
 \end{lstlisting}
 
-\subsection{Low-level database index}
+or configure a data path:
 
 \begin{lstlisting}[style=ctpython]
-from xstar_atomic import ATDB
+import xstar_atomic as xa
 
-atdb = ATDB("/path/to/xstar/data/atdb.fits")
-records, elements, ions = atdb.build_index()
-print(len(records), len(elements), len(ions))
+xa.set_data_path("/path/to/xstar/data/atdb.fits")
+print(xa.get_data_path())
 \end{lstlisting}
 
-For the tested XSTAR database this returns approximately:
+\section{Quick start}
 
-\begin{lstlisting}[style=ctterminal]
-1216792 30 465
-\end{lstlisting}
-
-\subsection{Extract O VIII Ly-alpha lines}
+\subsection{Open the database and inspect the hierarchy}
 
 \begin{lstlisting}[style=ctpython]
 from xstar_atomic import XSTARAtomic
 
 db = XSTARAtomic("/path/to/xstar/data/atdb.fits")
-lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
-
-for line in lines:
-    print(line["wavelength_A"], line["lower_label"], "->", line["upper_label"])
+print(db.summary())
 \end{lstlisting}
 
-The following ion names are accepted as equivalent:
+\subsection{Extract levels and lines}
 
 \begin{lstlisting}[style=ctpython]
-db.lines("O VIII")
-db.lines("o viii")
-db.lines("o_viii")
-db.lines("O-VIII")
-db.lines("OVIII")
-db.lines("o8")
+levels = db.levels("O VII")
+lines = db.lines("O VII", wavelength=(21.4, 22.2), slim=True)
 \end{lstlisting}
 
-\subsection{Evaluate collisional excitation rates}
+\subsection{Evaluate collision and emissivity products}
 
 \begin{lstlisting}[style=ctpython]
-coll = db.collisions(
-    "O VIII",
-    lower_level=1,
-    wavelength=(18.8, 19.1),
-    temperatures=[1e6, 3e6, 1e7],
+coll = db.collisions("O VIII", temperatures=[1e6, 3e6], wavelength=(18.8, 19.1))
+emiss = db.emissivity("O VIII", temperatures=[1e6, 3e6], wavelength=(18.8, 19.1))
+\end{lstlisting}
+
+\subsection{Build an audit context and evaluate a type-50 rate}
+
+The v0.3.128 API infrastructure adds explicit context objects. These are required because XSTAR rates can depend on the local state and radiation/escape terms, not only on the atomic record.
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import LocalPlasmaState, EscapeContext, evaluate_type50_bound_bound
+
+state = LocalPlasmaState(
+    temperature_K=7.66552e4,
+    electron_density_cm3=1.20466e8,
+    log_xi=1.5,
 )
 
-print(coll.keys())
-print(len(coll["summary"]), len(coll["evaluated"]))
-\end{lstlisting}
-
-The evaluated rows include \texttt{upsilon}, \texttt{q\_excitation\_cm3\_s}, \texttt{q\_deexcitation\_cm3\_s}, and \texttt{eval\_method}.
-
-\subsection{Recombination inventory}
-
-\begin{lstlisting}[style=ctpython]
-recomb = db.recombination(element="O", temperatures=[1e6])
-print(len(recomb["records"]))
-print(len(recomb["evaluated"]))
-\end{lstlisting}
-
-Electron recombination and charge exchange are separated by \texttt{source\_kind}.
-
-\subsection{Build an O VIII Ly-alpha emissivity table}
-
-\begin{lstlisting}[style=ctpython]
-emiss = db.emissivity(
-    "O VIII",
-    wavelength=(18.8, 19.1),
-    temperatures=[1e6, 3e6, 1e7],
+escape = EscapeContext(
+    cfrac=0.0,
+    ptmp1=0.2,
+    ptmp2=0.3,
+    flinabs_ptmp1=0.8,
 )
 
-print(emiss["summary"])
-print(emiss["emissivity"][0])
-\end{lstlisting}
-
-The direct-excitation emissivity coefficients are approximately:
-
-\begin{align}
-\epsilon_{\rm ph}(T) &= q_{ij}(T) B_{ul}, \\
-\epsilon_{\rm E}(T) &= q_{ij}(T) B_{ul} h\nu,
-\end{align}
-
-where \(B_{ul}\) is the radiative branching ratio. These coefficients are per \(n_e n_{\rm ion}\).
-
-\section{Command-line interface}
-
-After installation, the package provides:
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-inspect
-xstar-atomic-hierarchy
-xstar-atomic-lines
-xstar-atomic-photoionization
-xstar-atomic-collisions
-xstar-atomic-recombination
-xstar-atomic-emissivity
-xstar-atomic-solver
-\end{lstlisting}
-
-\subsection{Inspect the database}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-inspect /path/to/atdb.fits --summary
-\end{lstlisting}
-
-\subsection{Search for O VIII Ly-alpha lines}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-lines /path/to/atdb.fits \
-  --element O --ion-stage 8 \
-  --line-search --wavelength-min 18.8 --wavelength-max 19.1
-\end{lstlisting}
-
-\subsection{Evaluate collisions}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-collisions /path/to/atdb.fits \
-  --element O --ion-stage 8 \
-  --search --lower-level 1 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperatures 1e6 3e6 1e7
-\end{lstlisting}
-
-\subsection{Build an emissivity CSV}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-emissivity /path/to/atdb.fits \
-  --element O --ion-stage 8 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperatures 1e6 3e6 1e7 \
-  --out-csv o8_lya_emissivity.csv \
-  --print-summary
-\end{lstlisting}
-
-\subsection{Recombination inventory}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-recombination /path/to/atdb.fits \
-  --element O \
-  --temperatures 1e6 \
-  --summary
-\end{lstlisting}
-
-\subsection{Prototype solver}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-solver /path/to/atdb.fits \
-  --element O --ion-stage 8 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperatures 1e6 3e6 1e7 \
-  --electron-densities 1.0 \
-  --electron-density-for-lmixing 1.0 \
-  --component-mode ground \
-  --linear-solver sparse \
-  --out-lines-csv o8_lya_pop_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-Use \texttt{--linear-solver dense}, \texttt{--linear-solver sparse}, or \texttt{--linear-solver auto}. The sparse solver uses \texttt{scipy.sparse.linalg.spsolve} when SciPy is available and falls back to dense least-squares if needed.
-
-
-\subsection{Plasma export bundles}
-
-\begin{lstlisting}[style=ctterminal]
-xstar-atomic-export /path/to/atdb.fits \
-  --ions "O VIII,Ne IX" \
-  --temperatures 1e6 3e6 1e7 \
-  --wavelength-min 1.0 --wavelength-max 40.0 \
-  --formats csv,hdf5 \
-  --out-dir atomic_export \
-  --print-summary
-\end{lstlisting}
-
-This writes per-ion CSV products, optional HDF5 tables, and JSON manifests. The export is intended for superwind, AGN outflow, and other plasma post-processing workflows.
-
-\subsection{X-ray band emissivity exports}
-
-Line-by-line emissivity tables are useful for detailed diagnostics, but post-processing of simulated outflows often needs integrated X-ray bands. The export command supports line-based band sums with \texttt{--bands-kev}, using band specifications of the form \texttt{name:emin:emax} in keV.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python -m xstar_atomic.export /path/to/atdb.fits \
-  --ions "O VIII,Ne IX" \
-  --temperatures 1e6 3e6 1e7 \
-  --wavelength-min 1.0 \
-  --wavelength-max 40.0 \
-  --bands-kev soft:0.5:2.0 osoft:0.3:0.6 med:0.6:1.0 hard:2.0:10.0 \
-  --formats csv,hdf5 \
-  --out-dir atomic_export \
-  --print-summary
-\end{lstlisting}
-
-For each ion this writes:
-
-\begin{lstlisting}[style=ctterminal]
-<ion>_band_emissivity.csv
-<ion>_atomic.h5:/band_emissivity
-\end{lstlisting}
-
-The band-emissivity table contains:
-
-\begin{lstlisting}[style=ctterminal]
-ion
-band_name
-energy_min_keV
-energy_max_keV
-temperature_K
-n_lines_in_band
-energy_emissivity_coeff_erg_cm3_s
-photon_emissivity_coeff_cm3_s
-methods_used
-\end{lstlisting}
-
-The coefficients are local line-emissivity coefficients per \(n_e n_{\rm ion}\), summed over the selected lines in each band. They are not full plasma cooling functions unless combined with ion fractions and abundances. Zero-line bands are retained with \texttt{n\_lines\_in\_band=0}, \texttt{methods\_used="none"}, and the ion label filled.
-
-A validated Stage-4 test used four bands and three temperatures for O VIII and Ne IX, giving
-\[
-4\ {\rm bands}\times 3\ {\rm temperatures}=12
-\]
-band-emissivity rows per ion. The real-ATDB validation confirmed that CSV and HDF5 products contain \texttt{/band\_emissivity}, that all zero-line bands keep the ion label, and that no \texttt{methods\_used} entries are blank.
-
-\section{Testing}
-
-The test suite contains lightweight package tests and optional real-database smoke tests. To run tests that require the real XSTAR database:
-
-\begin{lstlisting}[style=ctterminal]
-XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits PYTHONPATH=src pytest -q
-\end{lstlisting}
-
-Without \texttt{XSTAR\_ATDB\_FITS}, tests requiring \texttt{atdb.fits} are skipped. The v0.2.17 Stage-4 validation run passed 34 real-ATDB tests:
-
-\begin{lstlisting}[style=ctterminal]
-34 passed in 113.49s
-\end{lstlisting}
-
-\section{Examples}
-
-The \texttt{examples/} directory contains runnable scripts:
-
-\begin{lstlisting}[style=ctterminal]
-01_o8_lya_lines.py
-02_o8_lya_collisions.py
-03_o8_lya_emissivity.py
-04_oxygen_recombination_inventory.py
-05_low_level_atdb_index.py
-06_high_level_api_quickstart.py
-07_collision_decoder_validation.py
-08_compare_xstar_outputs.py
-09_export_band_emissivity.py
-\end{lstlisting}
-
-Run examples without installing by setting \texttt{PYTHONPATH}:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/atdb.fits
-\end{lstlisting}
-
-\section{Sphinx documentation}
-
-The package includes a Sphinx documentation scaffold under:
-
-\begin{lstlisting}[style=ctterminal]
-docs/sphinx/
-\end{lstlisting}
-
-Build HTML documentation with:
-
-\begin{lstlisting}[style=ctterminal]
-python -m pip install -e .[docs]
-cd docs/sphinx
-make html
-\end{lstlisting}
-
-The generated HTML will be under:
-
-\begin{lstlisting}[style=ctterminal]
-docs/sphinx/build/html/
-\end{lstlisting}
-
-The Sphinx API pages use \texttt{sphinx.ext.autodoc}, which reads Python docstrings from modules, classes, and functions. New public functions should therefore include docstrings, not only inline comments.
-
-\section{Development priorities}
-
-Recommended near-term development priorities are:
-
-\begin{enumerate}
-\item Complete missing rate decoders, especially collision \texttt{data\_type=51}, \texttt{98}, and the same-\(n\) branch of \texttt{data\_type=63}.
-\item Continue searching for true level-resolved recombination/cascade records or implement an external cascade model.
-\item Add sparse-matrix support to the level-population solver.
-\item Validate line rates and emissivities against XSTAR output, AtomDB/APEC where applicable, and published benchmarks.
-\item Add more tests for Fe K, Fe UTA, Ne X, Mg XII, and Si XIV workflows.
-\end{enumerate}
-
-
-\section{Collision Decoder Coverage}
-
-The collision module evaluates the following XSTAR ATDB collision paths:
-
-\begin{center}
-\begin{tabular}{rll}
-\hline
-Data type & Meaning & Status\\
-\hline
-51 & Burgess--Tully scaled OP/CHIANTI collision strengths & evaluated\\
-56 & Tabulated effective collision strengths & evaluated\\
-63 & Bautista algorithmic $n,l$ collisions & evaluated\\
-98 & CHIANTI-2016-style Burgess--Tully collision strengths & evaluated\\
-\hline
-\end{tabular}
-\end{center}
-
-For data type 63, both the $n_f \neq n_i$, $|\Delta l|=1$ branch and the same-$n$ $l$-mixing branch are evaluated. The same-$n$ branch follows the XSTAR \texttt{amcrs}/\texttt{velimp} ecm=0 logic and depends weakly on electron density through the impact-parameter cutoff.
-
-
-\section{Collision-Decoder Validation}
-
-The package includes validation helpers for the collision-rate decoders that are
-most important for the next development stage: data types 51, 98, and the
-same-$n$ branch of data type 63.  The validation command can inventory ions,
-find representative records with positive evaluated rate coefficients, and run
-an O~VIII type-63 same-$n$ l-mixing regression diagnostic.
-
-\begin{verbatim}
-PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
-  --inventory --find-targets --data-types 51 98
-
-PYTHONPATH=src python -m xstar_atomic.validation atdb.fits \
-  --type63-same-n --element O --ion-stage 8 \
-  --temperatures 1e6 --electron-density 1.0
-\end{verbatim}
-
-The type-63 same-$n$ diagnostic checks the Python port of the XSTAR
-\texttt{amcrs/velimp} branch.  It is a regression diagnostic, not a substitute
-for comparison against XSTAR model outputs.
-
-
-
-\section{XSTAR-output comparison validation examples}
-
-Saved XSTAR-vs-\texttt{xstar-atomic} comparison outputs are included under:
-
-\begin{lstlisting}[style=ctterminal]
-docs/validation/xstar_outputs/
-examples/reference_outputs/
-\end{lstlisting}
-
-These files document wavelength comparisons produced from XSTAR \texttt{xout\_lines1.fits} output converted with \texttt{xstar\_atomic.xstar\_outputs} and compared with \texttt{examples/08\_compare\_xstar\_outputs.py}.
-
-\begin{center}
-\begin{tabular}{ll}
-\hline
-File & Purpose\\
-\hline
-\texttt{compare\_o8\_lya\_wavelength.csv/json} & O~VIII Ly-alpha wavelength validation\\
-\texttt{compare\_o8\_lya\_both.csv/json} & O~VIII wavelength plus emissivity-ratio diagnostics\\
-\texttt{compare\_o7\_triplet\_wavelength.csv/json} & O~VII triplet wavelength validation\\
-\hline
-\end{tabular}
-\end{center}
-
-The O~VIII Ly-alpha wavelengths agree with XSTAR to approximately $10^{-5}$~\AA. The O~VII triplet and near-triplet wavelengths agree with XSTAR to approximately $10^{-7}$--$8\times10^{-7}$~\AA.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python -m xstar_atomic.xstar_outputs \
-  xout_lines1.fits \
-  --out-csv xstar_lines.csv \
-  --print-summary
-
-PYTHONPATH=src python examples/08_compare_xstar_outputs.py \
-  /path/to/atdb.fits \
-  xstar_lines.csv \
-  --ion "O VIII" \
-  --wavelength-column wavelength \
-  --reference-column emit_outward \
-  --mode wavelength \
-  --temperature 1e6 \
-  --wavelength-tolerance 0.02 \
-  --out-csv compare_lines.csv \
-  --out-json compare_lines.json
-\end{lstlisting}
-
-Use wavelength mode for database and line-identification validation. Absolute comparison of \texttt{xstar-atomic} local emissivity coefficients against XSTAR \texttt{emit\_outward} requires a model-dependent normalization involving ion fractions, density, column, geometry, and radiative transfer.
-
-
-\section{Stage-3 sparse level-population solver diagnostics}
-
-The level-population solver supports the XSTAR type-63 same-\(n\) \(l\)-mixing
-collision decoder and can solve the statistical-equilibrium matrix with either a
-dense or sparse backend.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python -m xstar_atomic.solver ../xstar/data/atdb.fits \
-  --element O \
-  --ion-stage 8 \
-  --wavelength-min 18.8 \
-  --wavelength-max 19.1 \
-  --temperatures 1e6 \
-  --electron-densities 1.0 \
-  --electron-density-for-lmixing 1.0 \
-  --component-mode ground \
-  --linear-solver sparse \
-  --summary-json o8_sparse_solver_summary.json \
-  --print-summary
-\end{lstlisting}
-
-The solver summary reports matrix nonzero counts, matrix density, singular-value
-rank estimates, condition numbers, residual norms, sparse availability, and
-whether sparse solving was actually used.  The optional
-\texttt{--prune-unconnected-levels} flag removes isolated levels before the
-solve while preserving the ground level, output-line levels, and explicit
-source/sink levels.
-
-For an O VII triplet stress test, run:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/10_o7_triplet_sparse_solver.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_triplet_solver_example
-\end{lstlisting}
-
-The O VII diagnostic table includes prototype \(R=f/i\) and
-\(G=(f+i)/r\) ratios.  These ratios are useful for solver debugging, but they
-are not final physical predictions unless the recombination/cascade source model
-is physically complete.
-
-\section{Solver execution-time benchmarking}
-
-Use \texttt{examples/11\_solver\_timing.py} to compare end-to-end
-level-population solver execution times.  The timing includes ATDB decoding,
-line/collision selection, matrix assembly, the linear solve, and CSV/JSON
-output writing.
-
-Basic O~VIII dense/sparse comparison:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/11_solver_timing.py \
-  ../xstar/data/atdb.fits \
-  --repeat 3 \
-  --out-dir solver_timing_example
-\end{lstlisting}
-
-Include the heavier O~VII triplet sparse stress test:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/11_solver_timing.py \
-  ../xstar/data/atdb.fits \
-  --include-o7 \
-  --repeat 2 \
-  --out-dir solver_timing_example \
-  --out-csv solver_timing.csv
-\end{lstlisting}
-
-The output CSV contains columns such as \texttt{case}, \texttt{elapsed\_s},
-\texttt{solver\_used}, \texttt{sparse\_used}, \texttt{matrix\_size},
-\texttt{matrix\_nnz}, \texttt{matrix\_density}, \texttt{condition\_number},
-and residual diagnostics.
-
-\subsection{Notes on a future C++ backend}
-
-The current sparse solve uses SciPy's compiled sparse linear-algebra routines,
-so the linear solve itself is already handled by optimized native code when
-\texttt{--linear-solver sparse} is available.  A C++ backend could still improve
-performance for repeated production workflows by moving repeated ATDB filtering,
-rate-evaluation loops, sparse matrix assembly, emissivity aggregation, and HDF5
-packing out of pure Python.  The recommended design is an optional backend, for
-example through \texttt{pybind11} or a small C ABI extension, while keeping the
-pure Python/SciPy implementation as the portable reference path.
-
-
-
-\section{Solver Step Profiling and Stage-6 Cascade Workflow}
-
-The solver profiler separates the wall-clock time spent in the main execution
-stages:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/12_profile_solver_steps.py \
-  ../xstar/data/atdb.fits \
-  --element O --ion-stage 8 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperature 1e6 --electron-density 1.0 \
-  --linear-solver sparse \
-  --out-dir solver_profile_example
-\end{lstlisting}
-
-The timing output reports \texttt{open\_read\_atdb}, \texttt{build\_index},
-\texttt{extract\_levels}, \texttt{extract\_lines},
-\texttt{extract\_collisions}, \texttt{evaluate\_collisions},
-\texttt{build\_matrix}, \texttt{solve\_matrix}, \texttt{write\_outputs}, and
-\texttt{total}.  These timings are intended to identify whether future
-optimization should target record filtering, rate evaluation, matrix assembly,
-or output generation.
-
-A future C++ accelerator backend can be implemented as an optional shared-object
-library (\texttt{.so} on Linux) loaded from Python through \texttt{pybind11},
-\texttt{cffi}, or \texttt{ctypes}.  The Python/SciPy backend remains the
-reference path.  The most useful first C++ targets are ATDB record filtering,
-record payload unpacking, collision-rate loops, sparse matrix assembly,
-emissivity aggregation, and HDF5 packing.  The sparse linear solve itself is
-already handled by compiled SciPy backends when SciPy is available.
-
-The prototype Stage-6 O~VII recombination/cascade workflow can be run with:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_recomb_cascade_workflow \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-This workflow evaluates total O~VIII $\rightarrow$ O~VII recombination,
-distributes the source over selected O~VII levels, applies an approximate
-radiative-branching cascade redistribution, feeds the resulting source CSV into
-the sparse solver, and writes prototype triplet diagnostics
-$R=f/i$ and $G=(f+i)/r$.  It is useful for source-interface and sensitivity
-tests, but it is not yet a final level-resolved recombination/cascade model.
-
-
-
-\section{Recommended Array-backed NPZ Index Cache}
-
-The ATDB hierarchy scan is often the dominant startup cost because it walks
-more than one million packed records.  For repeated targeted workflows, use the
-array-backed NumPy/NPZ cache.  This cache stores the hierarchy as numeric arrays,
-filters by element, ion stage, data type, and rate type, and converts only the
-selected rows to \texttt{IndexedRecord} objects.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/12_profile_solver_steps.py \
-  ../xstar/data/atdb.fits \
-  --element O --ion-stage 8 \
-  --wavelength-min 18.8 --wavelength-max 19.1 \
-  --temperature 1e6 --electron-density 1.0 \
-  --linear-solver sparse \
-  --index-cache \
-  --index-cache-format npz \
-  --out-dir solver_profile_npz_arrays_hit
-\end{lstlisting}
-
-For the validated O~VIII sparse-solver profile, the uncached run took about
-\texttt{5.31 s}, while the NPZ array-backed cache-hit run took about
-\texttt{0.53 s}.  The \texttt{build\_index} stage dropped from about
-\texttt{5.00 s} to about \texttt{0.058 s}.
-
-The default cache file is
-\texttt{atdb.fits.xstar\_atomic\_index.npz}.  Use
-\texttt{--rebuild-index-cache} after changing or replacing \texttt{atdb.fits}.
-Legacy pickle caching remains available with
-\texttt{--index-cache-format pickle}, but the NPZ array-backed cache is the
-recommended path for solver, export, high-level API, and profiling workflows.
-
-The same cache should be used for repeated export workflows:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python -m xstar_atomic.export ../xstar/data/atdb.fits \
-  --ions "O VIII,Ne IX" \
-  --temperatures 1e6 3e6 1e7 \
-  --wavelength-min 1.0 --wavelength-max 40.0 \
-  --bands-kev soft:0.5:2.0 med:0.6:1.0 hard:2.0:10.0 \
-  --formats csv,hdf5 \
-  --index-cache --index-cache-format npz \
-  --out-dir atomic_export_cached \
-  --print-summary
-\end{lstlisting}
-
-Solver and export summaries report \texttt{index\_cache\_status} and
-\texttt{index\_cache\_path}; cache-hit workflows should report statuses such
-as \texttt{npz\_array\_hit} or \texttt{array\_memory}.
-
-
-\subsection{Stage 6 cascade-yield source allocation}
-
-The O VII recombination/cascade workflow supports a prototype
-\texttt{selected-cascade-yield} source distribution for total O VIII $\rightarrow$
-O VII recombination.  Candidate source levels are weighted by their
-radiative-cascade probability of feeding selected target levels, such as the
-O VII triplet upper levels.  This is still approximate because the decoded
-oxygen recombination records are total rates, not true level-resolved
-recombination feeds.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --source-mode selected-cascade-yield \
-  --cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0 \
-  --cascade-weight-floor 0.02 \
-  --out-dir o7_recomb_cascade_workflow \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-
-
-
-\subsection{Stage-6 O VII triplet target maps}
-
-The recommended Stage-6 baseline is the equal-target map:
-
-\begin{lstlisting}[style=ctterminal]
---source-mode selected-cascade-yield \
---cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
-\end{lstlisting}
-
-This preserves the good \(G=(f+i)/r\) agreement with the XSTAR O VII reference. The experimental preset
-
-\begin{lstlisting}[style=ctterminal]
---cascade-target-preset o7-triplet-f2i025-rkeep
-\end{lstlisting}
-
-expands to \texttt{2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0}. It shifts weight from the forbidden target into the intercombination targets while preserving the resonance target and approximately preserving the total triplet-target weight. Manual \texttt{--cascade-target-levels} overrides any preset.
-
-\section{Data download and path configuration}
-
-\texttt{xstar-atomic} does not bundle the large XSTAR \texttt{atdb.fits} file. Use the interactive helper to download it or to save the path to an existing local copy:
-
-\begin{lstlisting}[style=ctterminal]
-python -m xstar_atomic.data
-# or, after installation
-xstar-atomic-download-data
-\end{lstlisting}
-
-The helper reports the remote file size, asks whether to download, asks for a destination directory, downloads with a single-line ASCII progress bar, and stores the selected data directory in \texttt{datapath}. In a source checkout, the default destination is the project-level \texttt{data/} directory and the persistent path file is the project-level \texttt{datapath}.
-
-\begin{lstlisting}[style=ctterminal]
-xstar data: downloading atdb.fits [#####-----------------------]  20% (166.5 MB/830.7 MB)
-\end{lstlisting}
-
-The default public source is:
-
-\begin{lstlisting}[style=ctterminal]
-https://heasarc.gsfc.nasa.gov/FTP/software/lheasoft/lheasoft6.36/heasoft-6.36/ftools/xstar/data/atdb.fits
-\end{lstlisting}
-
-Configure an existing file non-interactively:
-
-\begin{lstlisting}[style=ctterminal]
-python -m xstar_atomic.data --set-path /path/to/atdb.fits
-python -m xstar_atomic.data --show
-\end{lstlisting}
-
-Top-level Python helpers are available:
-
-\begin{lstlisting}[style=ctpython]
-from xstar_atomic import (
-    download_data,
-    resolve_atdb_path,
-    find_atdb_file,
-    get_data_path,
-    set_data_path,
+rate = evaluate_type50_bound_bound(
+    aij_s_inv=1.0e12,
+    oscillator_strength=0.7,
+    wavelength_A=21.602,
+    vtherm_cm_s=1.0e7,
+    bremsa_nb1=1.0e5,
+    plasma_state=state,
+    escape_context=escape,
+    ion="O VII",
 )
 
-path = download_data()
-set_data_path("/path/to/xstar/data/atdb.fits")
-path = resolve_atdb_path()
+print(rate.status)
+print(rate.lower_to_upper_photoexcitation_s_inv)
+print(rate.upper_to_lower_escaped_decay_s_inv)
+print(rate.source_formula)
 \end{lstlisting}
 
-After configuration, the high-level API can omit the FITS path:
+In v0.3.128 this evaluator is audit-only. It records the XSTAR \texttt{ucalc.f90} type-50 branch and returns a \texttt{RateEvaluation} object; it does not inject photoexcitation into the population solver.
+
+\section{Atomic database access}
+
+\subsection{Packed XSTAR database structure}
+
+The public XSTAR \texttt{atdb.fits} file contains packed arrays rather than one simple table:
+
+\begin{lstlisting}[style=ctterminal]
+POINTERS
+REALS
+INTEGERS
+CHARS
+\end{lstlisting}
+
+\texttt{xstar-atomic} rebuilds the hierarchy:
+
+\begin{lstlisting}[style=ctterminal]
+element -> ion -> levels -> radiative/collisional/photoionization/recombination records
+\end{lstlisting}
+
+The low-level reader is \texttt{ATDB}; the higher-level convenience class is \texttt{XSTARAtomic}.
+
+\subsection{Public database functions}
+
+Common functions and methods include:
 
 \begin{lstlisting}[style=ctpython]
-from xstar_atomic import XSTARAtomic
+xa.find_atdb_file(...)
+xa.resolve_atdb_path(...)
+xa.set_data_path(...)
+xa.get_data_path()
 
-db = XSTARAtomic(index_cache=True, index_cache_format="npz")
-lines = db.lines("O VIII", wavelength=(18.8, 19.1), slim=True)
+XSTARAtomic(...).summary()
+XSTARAtomic(...).levels("O VII")
+XSTARAtomic(...).lines("O VII")
+XSTARAtomic(...).photoionization("O VII")
+XSTARAtomic(...).collisions("O VII")
+XSTARAtomic(...).recombination("O VII")
+XSTARAtomic(...).emissivity("O VII")
 \end{lstlisting}
 
-Path resolution order is explicit path, \texttt{XSTAR\_ATDB\_FITS}, \texttt{datapath}, \texttt{data/atdb.fits}, then interactive download/configuration.
+\subsection{Current decoder status}
 
-
-\subsection{Stage-6 O VII cascade tuning scan}
-
-The equal-target \texttt{selected-cascade-yield} map remains the recommended Stage-6 baseline because it preserves the good XSTAR agreement in \(G=(f+i)/r\):
-
-\begin{lstlisting}[style=ctterminal]
---source-mode selected-cascade-yield \
---cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
-\end{lstlisting}
-
-For controlled experiments, the preferred presets shift target weight from the forbidden upper level into the intercombination upper levels while preserving the resonance target and the total triplet-target weight. This is intended to reduce \(R=f/i\) without strongly moving \(G=(f+i)/r\) away from the equal-target baseline:
-
-\begin{lstlisting}[style=ctterminal]
-o7-triplet-f2i010-rkeep -> 2:0.90,3:1.0333333333,4:1.0333333333,5:1.0333333333,7:1.0
-o7-triplet-f2i015-rkeep -> 2:0.85,3:1.05,4:1.05,5:1.05,7:1.0
-o7-triplet-f2i025-rkeep -> 2:0.75,3:1.0833333333,4:1.0833333333,5:1.0833333333,7:1.0
-o7-triplet-f2i050-rkeep -> 2:0.50,3:1.1666666667,4:1.1666666667,5:1.1666666667,7:1.0
-\end{lstlisting}
-
-The older simple \texttt{fdown} presets remain available for reproducibility, but they reduced \(G\) too much in the first tuning scan.
-
-Use the tuning scan helper to run the equal baseline plus the experimental presets and summarize \(R=f/i\) and \(G=(f+i)/r\) relative to the saved XSTAR O VII reference:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/15_o7_cascade_tuning_scan.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_cascade_tuning_scan \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-The scan writes \texttt{o7\_cascade\_tuning\_scan.csv} and a JSON summary. The aim is to reduce \(R\) while keeping \(G\) close to the equal-target/XSTAR value; the equal map remains the baseline unless an experimental preset improves both.
-
-
-
-\subsection{Type-68-aware O VII cascade tuning scan}
-
-After He-like collision data types 67, 68, and 69 are enabled, O VII includes metastable-to-intercombination coupling from level 2 into levels 3, 4, and 5.  This gives the expected density-sensitive behavior in \(R=f/i\), but it can make the low-density \(G=(f+i)/r\) too small for the previous cascade-source map.  The type-68-aware scan keeps the equal triplet weights fixed and progressively downweights the resonance target level 7:
-
-\begin{lstlisting}[style=ctterminal]
-o7-triplet-type68-r095 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.95
-o7-triplet-type68-r090 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.90
-o7-triplet-type68-r085 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.85
-o7-triplet-type68-r080 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.80
-o7-triplet-type68-r075 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.75
-o7-triplet-type68-r070 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.70
-o7-triplet-type68-r060 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.60
-o7-triplet-type68-r050 -> 2:1.0,3:1.0,4:1.0,5:1.0,7:0.50
-\end{lstlisting}
-
-Run the scan with:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/17_o7_type68_cascade_tuning_scan.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_type68_cascade_tuning_scan \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-The scan writes \texttt{o7\_type68\_cascade\_tuning\_scan.csv}, \texttt{o7\_type68\_cascade\_tuning\_scan\_all\_densities.csv}, and a JSON summary. Use this scan after the type-67/68/69 He-like collision decoders are active. The equal target map remains the reference baseline; the type-68-aware presets are experiments for restoring \(G\) while preserving the density-sensitive \(R\) physics.
-
-
-\section{Stage-6 O VII metastable/intercombination coupling diagnostic}
-
-The O VII triplet ratio \(R=f/i\) is sensitive to transfer from the
-forbidden-line upper level into the intercombination manifold.  The example
-\texttt{examples/16\_o7\_metastable\_coupling\_diagnostics.py} inspects level
-2 to levels 3, 4, and 5 and compares \(C_{2j}=n_e q_{2j}\) against decoded
-radiative rates.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
-  ../xstar/data/atdb.fits \
-  --temperature 1e6 \
-  --electron-densities 1 1e4 1e8 1e10 1e12 \
-  --index-cache --index-cache-format npz \
-  --out-dir o7_metastable_coupling \
-  --print-summary
-\end{lstlisting}
-
-The CSV output reports \texttt{q\_2\_to\_j\_cm3\_s},
-\texttt{C\_2\_to\_j\_s\textasciicircum{}-1}, decoded radiative A-values, and density estimates
-where collisional transfer becomes comparable to radiative decay.
-
-
-\section{He-like collisional coupling diagnostics}
-
-Version 0.2.47 adds XSTAR He-like collision decoders for data types 67, 68, and 69. These are used to test whether O VII metastable/intercombination coupling is stored in ATDB outside the type-63 records. The diagnostic example writes both rate summaries and a full collision inventory for levels 2, 3, 4, and 5.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/16_o7_metastable_coupling_diagnostics.py \
-  ../xstar/data/atdb.fits \
-  --temperature 1e6 \
-  --electron-densities 1 1e4 1e8 1e10 1e12 \
-  --index-cache --index-cache-format npz \
-  --out-dir o7_metastable_coupling \
-  --print-summary
-\end{lstlisting}
-
-Outputs include \texttt{o7\_metastable\_coupling\_rates.csv}, \texttt{o7\_metastable\_coupling\_collision\_inventory.csv}, and \texttt{o7\_metastable\_coupling\_summary.json}.
-
-
-\section{Stage-6 two-parameter O VII type-68 cascade scan}
-
-The equal-target \texttt{selected-cascade-yield} map remains the recommended Stage-6 baseline:
-
-\begin{lstlisting}[style=ctterminal]
---source-mode selected-cascade-yield \
---cascade-target-levels 2:1.0,3:1.0,4:1.0,5:1.0,7:1.0
-\end{lstlisting}
-
-After enabling the He-like type 67/68/69 collision decoders, use the broader two-parameter scan to vary both forbidden/intercombination redistribution and resonance suppression:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/18_o7_type68_2d_cascade_tuning_scan.py \
-  ../xstar/data/atdb.fits \
-  --out-dir o7_type68_2d_cascade_tuning_scan \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-For a forbidden-to-intercombination shift \texttt{d} and resonance weight \texttt{r}, the scan uses target maps of the form:
-
-\begin{lstlisting}[style=ctterminal]
-2:(1-d),3:(1+d/3),4:(1+d/3),5:(1+d/3),7:r
-\end{lstlisting}
-
-It writes compact, ranked, and all-density CSV tables plus a JSON summary. The ranked table uses a simple relative squared-error score in \texttt{R=f/i} and \texttt{G=(f+i)/r} relative to the saved XSTAR O VII reference.
-
-
-\section{Stage-6 cascade source-fit diagnostic}
-
-The example \texttt{examples/19\_o7\_cascade\_source\_fit.py} builds a radiative cascade yield matrix,
-\begin{lstlisting}[style=ctterminal]
-Y(source level -> forbidden, intercombination, resonance)
-\end{lstlisting}
-and compares simple statistical source weights with a fitted nonnegative source-weight vector that best reproduces the saved XSTAR O VII triplet ratios \texttt{R=f/i} and \texttt{G=(f+i)/r}.
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/19_o7_cascade_source_fit.py \
-  ../xstar/data/atdb.fits \
-  --index-cache --index-cache-format npz \
-  --out-dir o7_cascade_source_fit \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-The outputs are:
-
-\begin{lstlisting}[style=ctterminal]
-o7_cascade_yield_matrix.csv
-o7_source_fit_weights.csv
-o7_source_fit_summary.json
-\end{lstlisting}
-
-This is a diagnostic tool, not a final physical recombination model. It identifies which source levels would need enhanced or suppressed recombination feeding if the current radiative cascade network is forced to reproduce XSTAR-like O VII triplet ratios.
-
-
-\section{Stage-6 empirical source-fit mode}
-
-The O VII cascade source-fit diagnostic writes \texttt{o7\_source\_fit\_weights.csv}.
-These weights can be reused as an empirical diagnostic source allocation with
-\texttt{selected-fit-weights}:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --source-mode selected-fit-weights \
-  --source-fit-weights-csv xstar_test_run/o7_source_fit_weights.csv \
-  --out-dir o7_recomb_cascade_workflow_fit_weights \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
-\end{lstlisting}
-
-The convenience mode \texttt{o7-xstar-fit} uses the reference file
-\texttt{xstar\_test\_run/o7\_source\_fit\_weights.csv} when no explicit CSV is
-provided.  This mode is empirical and diagnostic; it is not a true
-level-resolved recombination model.
-\newpage
-\section{Stage-6 full-solver source-fit diagnostic}
-
-The cascade-yield fit in \texttt{examples/19\_o7\_cascade\_source\_fit.py} is useful for testing the radiative branching network, but its fitted weights are not guaranteed to reproduce the same \(R/G\) ratios when injected into the full statistical-equilibrium solver.  For the stricter full-solver diagnostic, use the rank-aware SVD treatment validated against the saved XSTAR O VII triplet reference:
-
-\begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
-  ../xstar/data/atdb.fits \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_solver_source_fit \
-  --print-summary
-\end{lstlisting}
-
-The recommended diagnostic solver settings are \texttt{linear\_solver=svd}, \texttt{rank\_deficient\_action=svd}, \texttt{negative\_population\_action=keep}, and \texttt{prune\_null\_rate\_levels=true}.  These settings matter because the O VII statistical-equilibrium matrix is rank deficient and highly ill conditioned.  In the validated combined-source run, the solver used \texttt{numpy.linalg.svd\_lstsq}, the matrix rank was 231/238, the condition number was approximately \(3.1\times10^{18}\), the linear residuals were approximately \(3.2\times10^{-3}\), and one raw negative population was retained for diagnostic linearity.  Null-rate pruning removed levels 44, 45, and 241.
-
-\begin{longtable}{p{0.28\linewidth}p{0.64\linewidth}}
+\begin{longtable}{p{0.35\linewidth}p{0.18\linewidth}p{0.37\linewidth}}
 \toprule
-Quantity & Validated O VII full-solver source-fit setting/result \\
+Component & XSTAR data type(s) & Current status \\
 \midrule
-Solver path & \texttt{linear\_solver = svd}, \texttt{rank\_deficient\_action = svd} \\
-Population handling & \texttt{negative\_population\_action = keep}; this preserves diagnostic linearity instead of silently clipping negative populations. \\
-Pruning & \texttt{prune\_null\_rate\_levels = true}; the validation removed levels 44, 45, and 241 while preserving ground, source, and triplet-output levels. \\
-Source amplitude & The fitted source weights are amplitude dependent.  The validated workflow used \texttt{source\_total\_rate = 1.0 s\textasciicircum -1}. \\
-Matrix diagnostics & The combined validation used \texttt{numpy.linalg.svd\_lstsq}; matrix rank was 231/238, condition number was approximately \(3.1\times10^{18}\), and linear residuals were approximately \(3.2\times10^{-3}\). \\
-Validated R/G match & XSTAR: \(R=3.20837\), \(G=10.5622\); fitted linear-response: \(R=3.20838\), \(G=10.5622\); combined simultaneous solver: \(R=3.20838\), \(G=10.5622\). \\
+Packed FITS reader / hierarchy & arrays & validated on released \texttt{atdb.fits} \\
+Levels & 6 & implemented \\
+Radiative lines & 50 & implemented; v0.3.128 adds an audit-only source-code rate object for line pumping \\
+Photoionization grids & 53 & implemented for ordinary OP-style grids \\
+Collisions, tabulated upsilon & 56 & implemented \\
+Collisions, Bautista hydrogenic/l-mixing branches & 63 & implemented for validated branches \\
+Collisions, Burgess--Tully & 51, 98 & implemented for representative branches \\
+Recombination totals & 1, 30, 38, 39 & implemented for total rates \\
+Charge exchange & 2 & implemented when explicitly requested \\
+Full local radiation-field parity & several & in development \\
+Production replacement for XSTAR transfer/thermal balance & combined & not a package goal \\
 \bottomrule
 \end{longtable}
 
-The script automatically performs a combined-source validation solve after fitting the weights.  The top-level summary reports the XSTAR \(R/G\) target, the fitted linear-response \(R/G\) prediction, and the actual simultaneous-solver \(R/G\) result, together with matrix rank, condition number, residuals, null-rate pruning diagnostics, source/sink summaries, and negative-population diagnostics.  Use \texttt{--skip-combined-validation} only when the older response-matrix-only behavior is desired.
+\section{Local context objects}
 
-A validated v0.2.62 run gave:
+\subsection{\texttt{LocalPlasmaState}}
+
+\texttt{LocalPlasmaState} stores local gas quantities:
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import LocalPlasmaState
+
+state = LocalPlasmaState(
+    temperature_K=1.0e6,
+    electron_density_cm3=1.0e8,
+    log_xi=3.0,
+    ion_fraction=0.25,
+)
+\end{lstlisting}
+
+A state can also be built from a row dictionary, including rows from local-state validation CSV files:
+
+\begin{lstlisting}[style=ctpython]
+state = LocalPlasmaState.from_mapping(row)
+\end{lstlisting}
+
+\subsection{\texttt{RadiationField}}
+
+\texttt{RadiationField} stores an XSTAR-like local radiation field and energy grid:
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import RadiationField
+
+rad = RadiationField.from_pairs([(0.5, 1.0e4), (1.0, 2.0e4)])
+print(rad.value_at(0.9))
+\end{lstlisting}
+
+The current nearest-bin helper is only an audit convenience. Exact XSTAR \texttt{nbinc} parity is a future development target.
+
+\subsection{\texttt{EscapeContext}}
+
+\texttt{EscapeContext} stores line escape and covering-factor terms:
+
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import EscapeContext
+
+escape = EscapeContext(cfrac=0.0, ptmp1=0.1, ptmp2=0.2, flinabs_ptmp1=0.7)
+\end{lstlisting}
+
+For type-50 line pumping, the upward photoexcitation branch is multiplied by \texttt{max(0, 1-cfrac)}.
+
+\section{Source-code-aligned rate evaluators}
+
+\subsection{\texttt{RateEvaluation}}
+
+\texttt{RateEvaluation} is a structured result object. It records process, data type, status, value, source formula, record id, ion, lower and upper levels, terms, warnings, and metadata. This is intentionally more verbose than a simple scalar rate. It supports source-code-first audits and future matrix-term provenance.
+
+\subsection{Type-50 bound-bound radiative branch}
+
+XSTAR's type-50 branch forms two local quantities before a final branch swap:
 
 \begin{lstlisting}[style=ctterminal]
-XSTAR R=3.20837 G=10.5622
-Fitted linear-response R=3.20838 G=10.5622
-Combined simultaneous-solver R=3.20838 G=10.5622
-R/R_XSTAR = 1.00000146
-G/G_XSTAR = 0.99999836
+ans1 = aij * (ptmp1 + ptmp2)
+sigma = 0.02655 * flin * elin * 1.d-8 / vtherm
+ans2 = sigma * bremsa(nb1) * vtherm / 3.e10 * flinabs(ptmp1)
+ans2 = ans2 * max(0., 1.d0-cfrac)
 \end{lstlisting}
 
-The compatible output weights can then be used with the recombination/cascade workflow.  Use the same SVD/rank-aware treatment and scale the solver source CSV to the same total source rate used by the fit:
+After the swap:
 
 \begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --source-mode selected-fit-weights \
-  --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
-  --solver-source-csv-mode initial \
-  --solver-source-total-rate 1.0 \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --out-dir o7_recomb_cascade_workflow_solver_fit \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
+ans1 -> lower-to-upper photoexcitation
+ans2 -> upper-to-lower escaped decay
 \end{lstlisting}
 
-These weights are empirical diagnostics, not physical level-resolved recombination rates.  The SVD path is the validated path for this O VII/XSTAR-fit diagnostic; direct dense or sparse solves should not be trusted for this rank-deficient matrix unless their residual and combined-source validation diagnostics are checked.
+The v0.3.128 function is:
 
-For package regression tests, the validated v0.2.62 O VII source-fit summary is saved as \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_summary\_reference.json}.  The lightweight CI tests in \texttt{tests/test\_o7\_solver\_source\_fit\_reference.py} verify the saved XSTAR R/G match, the agreement between fitted linear-response and combined simultaneous-solver validation, and the recommended SVD/null-rate-pruning solver treatment without requiring the full \texttt{atdb.fits} file.  When using \texttt{examples/13\_o7\_recombination\_cascade\_workflow.py} with \texttt{selected-fit-weights} or \texttt{o7-xstar-fit}, v0.2.64 emits a warning unless \texttt{--solver-source-total-rate} is supplied, because the empirical weights are amplitude-dependent.
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic import evaluate_type50_bound_bound
 
-\subsection{Validated O VII diagnostic commands}
-
-The validated O VII empirical solver-source-fit path is:
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/20_o7_solver_source_fit.py \
-  ../xstar/data/atdb.fits \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_solver_source_fit \
-  --print-summary
+rate = evaluate_type50_bound_bound(...)
 \end{lstlisting}
 
-The matching cascade-workflow validation should use the same total source amplitude:
+This function is audit-only and should be used to inspect the missing line-pumping term before any future solver-injection mode is enabled.
 
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/13_o7_recombination_cascade_workflow.py \
-  ../xstar/data/atdb.fits \
-  --source-mode selected-fit-weights \
-  --source-fit-weights-csv o7_solver_source_fit/o7_source_fit_weights.csv \
-  --solver-source-csv-mode initial \
-  --solver-source-total-rate 1.0 \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --out-dir o7_recomb_cascade_workflow_solver_fit \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --print-summary
+\section{Matrix, solver, and emissivity workflows}
+
+The existing solver remains prototype/diagnostic. Current public methods include:
+
+\begin{lstlisting}[style=ctpython]
+db.emissivity(...)
+db.type50_rate(...)
+db.audit_type50_line_pumping(...)
 \end{lstlisting}
 
-Reference snapshots for the density-grid diagnostic are saved in \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_density\_grid.csv} and \texttt{examples/reference\_outputs/o7\_solver\_source\_fit\_density\_grid\_summary.json}.
-
-\subsection{Known limitation of empirical O VII weights}
-
-The O VII fitted source weights in these examples are empirical diagnostics.  They are fitted to reproduce XSTAR triplet ratios for a specified solver setup, density, source-level set, and total source amplitude.  They are not physical level-resolved recombination rates and should not be used as a substitute for a recombination/cascade source model derived from atomic data.
-
-\subsection{O VII density-grid source-fit diagnostic}
-
-After validating the empirical O VII full-solver source fit at \(n_e=1~\mathrm{cm^{-3}}\), use \texttt{examples/21\_o7\_solver\_source\_fit\_density\_grid.py} to test whether the fitted source distribution is stable with density.  The default grid is \(n_e=1,10^4,10^8,10^{10},10^{12}~\mathrm{cm^{-3}}\).
+Future stable APIs should separate:
 
 \begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/21_o7_solver_source_fit_density_grid.py \
-  ../xstar/data/atdb.fits \
-  --xstar-lines-csv xstar_test_run/xstar_o7_triplet_lines.csv \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_solver_source_fit_density_grid \
-  --print-summary
+rate evaluator -> matrix term -> population solution -> emissivity/triplet result
 \end{lstlisting}
 
-This script runs the validated \texttt{examples/20\_o7\_solver\_source\_fit.py} workflow at each density, then also validates the fixed \(n_e=1~\mathrm{cm^{-3}}\) source weights at every density.  It writes \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid.csv} and \texttt{o7\_solver\_source\_fit\_density\_grid/o7\_solver\_source\_fit\_density\_grid\_summary.json}.
+Each matrix term should carry provenance: XSTAR data type, record id, source-code formula, local context terms, and treatment mode.
 
-The density-grid CSV reports the reused low-density XSTAR \(R/G\) reference, fixed-\(n_e=1\) \(R/G\), refitted linear-response \(R/G\), refitted combined simultaneous-solver \(R/G\), matrix rank, condition number, residuals, negative-population diagnostics, and source-weight changes relative to the reference density.  In v0.2.66 it also adds \texttt{fit\_success\_vs\_xstar} and \texttt{target\_reachable} feasibility flags; \texttt{refitted\_R\_over\_xstar}, \texttt{refitted\_G\_over\_xstar}, \texttt{fixed\_R\_over\_refitted}, and \texttt{fixed\_G\_over\_refitted} ratio columns; and per-density warnings when the fit objective is large or the refitted combined \(R/G\) ratios remain outside tolerance.  The XSTAR target label is written explicitly as a low-density reference reused at all densities unless a later density-dependent XSTAR reference-table option is added.  This is a diagnostic for density dependence of the empirical source distribution after type-68 metastable/intercombination coupling; the fitted weights remain empirical and should not be interpreted as physical level-resolved recombination rates.
+\section{XSTAR-output readers and same-run validation}
 
-
-For density-dependent XSTAR reference products, use \texttt{examples/22\_o7\_solver\_source\_fit\_density\_xstar\_grid.py}.  This front end calls the same density-grid machinery but requires one XSTAR line CSV per density, so each density is compared against its own XSTAR target rather than against the reused low-density reference.
-
-A mapping CSV can be written as:
-
-\begin{lstlisting}[language=bash]
-electron_density_cm^-3,xstar_lines_csv,xstar_value_column,xstar_target_label
-1,xstar_o7_ne1_lines.csv,emit_outward,O VII XSTAR ne=1
-1e10,xstar_o7_ne1e10_lines.csv,emit_outward,O VII XSTAR ne=1e10
-1e12,xstar_o7_ne1e12_lines.csv,emit_outward,O VII XSTAR ne=1e12
-\end{lstlisting}
-
-Before running the density-specific grid, create a starter mapping CSV and replace each placeholder \texttt{xstar\_lines\_csv} value with the converted XSTAR line CSV for that density:
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
-  --write-template-grid-csv xstar_test_run/xstar_o7_density_grid_references.template.csv
-\end{lstlisting}
-
-Then run the grid with the edited mapping file:
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/22_o7_solver_source_fit_density_xstar_grid.py \
-  ../xstar/data/atdb.fits \
-  --auto-xstar-test-run-grid \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_solver_source_fit_density_xstar_grid \
-  --print-summary
-\end{lstlisting}
-
-Alternatively, supply repeated \texttt{--xstar-lines-csv-by-density DENSITY:CSV} arguments.  The output CSV keeps \texttt{xstar\_target\_is\_reused\_low\_density\_reference=false} and records the XSTAR CSV path and target label used for each density.
-
-
-
-\subsection{O VII high-density rate-sensitivity diagnostic}
-
-The script 	exttt{examples/26\_o7\_high\_density\_rate\_sensitivity.py}
-scans temporary diagnostic scale factors for selected collision-rate families
-after the expanded source-level scan has shown that source expansion alone does
-not recover the high-density O VII XSTAR target.  The built-in families include
-the symmetric level-2-to-3/4/5 metastable coupling and the XSTAR type-68/type-69
-decoded collision blocks.  These scale factors are diagnostic only and do not
-modify the atomic database.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/26_o7_high_density_rate_sensitivity.py \
-  ../xstar/data/atdb.fits \
-  --auto-xstar-test-run-grid \
-  --density 1e12 \
-  --families metastable,type68,type69 \
-  --scales 0.1,0.2,0.5,1,2,5,10 \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_high_density_rate_sensitivity \
-  --print-summary
-\end{lstlisting}
-
-
-
-\subsubsection*{O VII type-69 mode comparison (v0.2.81)}
-
-The script \texttt{examples/30\_o7\_density\_grid\_type69\_mode\_compare.py}
-runs the density-dependent O VII source-fit grid twice: once with the original
-\texttt{include} type-69 network and once with the diagnostic/experimental
-\texttt{suppress-resonance} mode.  The merged output
-\texttt{o7\_density\_grid\_type69\_mode\_compare.csv} reports density,
-XSTAR R/G targets, include-mode R/G and reachability, suppress-resonance R/G
-and reachability, mismatch-improvement factors, source-weight L1 changes, and
-top fitted source levels.
-
-The \texttt{suppress-resonance} mode suppresses type-69 excitation from the
-ground level into the He-like resonance upper level while preserving
-de-excitation.  For the O VII benchmark this corresponds to record 22490
-(\texttt{1s2.1S\_0 -> 1s.2p 1P\_1}).  This option is diagnostic/experimental:
-it is validated for the O VII high-density benchmark, but it is not a general
-physical default.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/30_o7_density_grid_type69_mode_compare.py \
-  ../xstar/data/atdb.fits \
-  --auto-xstar-test-run-grid \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_density_grid_type69_mode_compare \
-  --print-summary
-\end{lstlisting}
-
-\subsubsection*{O VII high-density benchmark result snapshot (v0.2.82)}
-
-The v0.2.81 comparison output is packaged as reference validation snapshots under \texttt{examples/reference\_outputs/} and \texttt{docs/validation/xstar\_outputs/}: \texttt{o7\_density\_grid\_type69\_mode\_compare.csv} and \texttt{o7\_density\_grid\_type69\_mode\_compare\_summary.json}.
-
-The snapshot records that the default \texttt{include} network remains reachable through \(n_e=10^{10}\,\mathrm{cm}^{-3}\) but fails at \(n_e=10^{12}\,\mathrm{cm}^{-3}\).  The diagnostic/experimental \texttt{suppress-resonance} mode reaches the \(n_e=10^{12}\,\mathrm{cm}^{-3}\) density-specific XSTAR target with approximately \(R/G = 0.08307 / 4.5197\).  This is an O VII benchmark result only and should not be treated as a general physical default.
-
-
-
-
-\subsection{Preparing real O VII XSTAR density-grid references}
-
-The density-dependent O VII comparison in \texttt{examples/22\_o7\_solver\_source\_fit\_density\_xstar\_grid.py} requires one converted XSTAR O VII triplet CSV file per density.  If those XSTAR runs do not exist yet, generate the run plan with:
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/23_prepare_o7_xstar_density_grid.py \
-  --root . \
-  --mapping-csv xstar_test_run/xstar_o7_density_grid_references.csv \
-  --print-summary
-\end{lstlisting}
-
-The helper writes \texttt{xstar\_runs/o7\_ne*/run\_xstar.sh} scripts containing the full XSTAR commands, \texttt{convert\_o7\_triplet.sh} conversion scripts, the mapping file \texttt{xstar\_o7\_density\_grid\_references.csv}, and \texttt{xstar\_runs/README\_o7\_density\_grid.md} with the complete workflow.  Run XSTAR externally, convert each \texttt{xout\_lines1.fits}, then run example 22 with the generated mapping CSV.  The empirical O VII fitted source weights remain diagnostic rather than physical level-resolved recombination rates.
-
-\subsection{O VII high-density mismatch diagnostic}
-
-After running the density-dependent XSTAR-grid comparison, use \texttt{examples/24\_o7\_high\_density\_mismatch\_diagnostics.py} to focus on the high-density failure case, usually \(n_e=10^{12}\,\mathrm{cm^{-3}}\):
+\texttt{xstar\_atomic.xstar\_outputs} reads selected XSTAR output FITS files, including local abundance/state tables and line lists. The local-state validation examples use these readers to select the same local temperature, electron density, and same-run triplet targets before comparing solver output.
 
 \begin{lstlisting}[style=ctterminal]
-PYTHONPATH=src python examples/24_o7_high_density_mismatch_diagnostics.py \
-  ../xstar/data/atdb.fits \
-  --auto-xstar-test-run-grid \
-  --density 1e12 \
-  --reference-density 1 \
-  --index-cache \
-  --out-dir o7_high_density_mismatch \
+PYTHONPATH=src python examples/51_run_helike_local_state_validation.py \
+  --xstar-runs-root xstar_runs \
+  --target-root xstar_atomic_v0.3.111_results \
+  --atdb ../xstar/data/atdb.fits \
+  --selection-mode max \
+  --target-electron-density 1e8 \
+  --nearest-density \
+  --out-dir helike_local_state_validation_v03128_ne1e8_allions \
   --print-summary
 \end{lstlisting}
 
-The diagnostic reads the outputs from examples 21/22 and writes \texttt{o7\_high\_density\_component\_mismatch.csv}, \texttt{o7\_high\_density\_source\_weight\_changes.csv}, optional \texttt{o7\_high\_density\_collision\_rates.csv}, and \texttt{o7\_high\_density\_mismatch\_summary.json}.  It reports the normalized forbidden/intercombination/resonance component mismatch, source-weight collapse relative to the reference density, solver rank/residual/negative-population diagnostics, and type-68/69 level-2 to level-3/4/5 collisional rates when \texttt{atdb.fits} is supplied.  This remains an empirical diagnostic and should not be interpreted as physical level-resolved recombination modeling.
+\section{Audit workflows}
 
-\subsection{O VII high-density expanded source-level scan}
+\subsection{Type-50 line-pumping audit}
 
-Version 0.2.72 adds \texttt{examples/25\_o7\_high\_density\_expanded\_source\_scan.py}.  This diagnostic reruns the empirical O VII solver-response fit at high density with progressively larger source-level sets, including the validated baseline, \texttt{n<=5}, \texttt{n<=6}, \texttt{n<=8}, and an all-level source proxy.  It reports whether any expanded empirical basis can reach the density-specific XSTAR triplet target and writes \texttt{o7\_high\_density\_expanded\_source\_scan.csv}.  The fitted weights remain diagnostic source proxies, not physical level-resolved recombination rates.
+In v0.3.128 the previous example-55 logic is available as a Python API:
 
-\subsection{O VII type-69 transition-sensitivity diagnostic}
+\begin{lstlisting}[style=ctpython]
+from xstar_atomic.audit import type50_line_pumping
 
-Version 0.2.74 adds \texttt{examples/27\_o7\_type69\_transition\_sensitivity.py} to isolate which type-69 collision records or level pairs drive the high-density O VII mismatch. It should be run after the density-dependent XSTAR-grid and rate-family diagnostics have identified a high-density mismatch that is sensitive to type-69 scaling.
+audit = type50_line_pumping(
+    "helike_local_state_validation_v03128_ne1e8_allions/helike_local_state_cases.csv",
+    solver_root=".",
+    xstar_source_root="../xstar",
+    out_dir="helike_type50_line_pumping_audit_v03128",
+    print_summary=True,
+)
+\end{lstlisting}
 
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/27_o7_type69_transition_sensitivity.py \
-  ../xstar/data/atdb.fits \
-  --auto-xstar-test-run-grid \
-  --density 1e12 \
-  --scan-mode record \
-  --scales 0.1,0.2,0.5,2,5,10 \
-  --linear-solver svd \
-  --rank-deficient-action svd \
-  --negative-population-action keep \
-  --prune-null-rate-levels \
-  --combined-source-total-rate 1.0 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_type69_transition_sensitivity \
+The CLI wrapper remains:
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python examples/55_audit_helike_type50_line_pumping.py \
+  --cases-csv helike_local_state_validation_v03128_ne1e8_allions/helike_local_state_cases.csv \
+  --solver-root . \
+  --xstar-source-root ../xstar \
+  --out-dir helike_type50_line_pumping_audit_v03128 \
   --print-summary
 \end{lstlisting}
 
-The record- and pair-specific collision scaling is diagnostic only and does not alter the packaged atomic data.
+The audit writes:
 
-\subsection{O VII type-69 record audit}
-
-Version 0.2.75 adds \texttt{examples/28\_o7\_type69\_record\_audit.py} to inspect the raw XSTAR type-69 records that control the high-density O VII mismatch.  The default records are \texttt{22490--22495}, including the record \texttt{22490} level \texttt{1 -> 7} channel identified by the transition-sensitivity diagnostic.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/28_o7_type69_record_audit.py \
-  ../xstar/data/atdb.fits \
-  --records 22490,22491,22492,22493,22494,22495 \
-  --density 1e12 \
-  --audit-temperature 1e6 \
-  --temperature-grid 1e5,3e5,1e6,3e6,1e7 \
-  --transition-sensitivity o7_type69_transition_sensitivity \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_o7_index.npz \
-  --out-dir o7_type69_record_audit \
-  --print-summary
+\begin{lstlisting}[style=ctterminal]
+helike_type50_line_pumping_audit.csv
+helike_type50_line_pumping_audit.md
+helike_type50_line_pumping_audit.json
 \end{lstlisting}
 
-The audit writes raw-record, one-row summary, and temperature-grid CSV files, plus a JSON summary.  It reports raw \texttt{idat}/\texttt{rdat}, decoded level metadata, Kato--Nakazaki \texttt{calt69} rates, detailed-balance checks, and optional annotations from the v0.2.74 transition-sensitivity scan.  It is diagnostic only and does not modify the atomic data.
+\subsection{Audit policy}
 
-\subsection{v0.2.77 ground-coupling diagnostic hotfix}
+Development policy:
 
-Version 0.2.77 fixes the ground-coupling diagnostic introduced in v0.2.76. Some example-20 summaries do not include a usable fitted-weights CSV path; the diagnostic now treats empty or directory paths as missing and falls back to the standard per-case outputs, \texttt{o7\_source\_fit\_weights.csv} and \texttt{o7\_solver\_source\_fit\_weights.csv}.
+\begin{enumerate}
+\item No empirical triplet scale factors as final physics.
+\item New physics starts as audit-only.
+\item Solver-changing modes must be opt-in until validated.
+\item Every solver-changing rate must have source-code and record provenance.
+\item Radiation-dependent rates must expose the radiation context.
+\item Escape-dependent rates must expose \texttt{cfrac}, \texttt{tau/ptmp}, and escape treatment.
+\item Same-run XSTAR outputs are preferred over generic target CSVs.
+\end{enumerate}
 
-\subsection{v0.2.76 O VII type-69 ground-coupling diagnostic}
+\section{Examples and source-module migration}
 
-Version 0.2.76 adds \texttt{examples/29\_o7\_type69\_ground\_coupling\_diagnostic.py}.
-This example focuses on type-69 record 22490, the O VII ground--resonance
-channel identified by the transition-sensitivity scan.  It compares baseline,
-record-scaled, all-type-69-scaled, record-removed, excitation-only,
-de-excitation-only, and direction-specific cases.  The diagnostic solver option
-\texttt{--collision-record-direction-scale RECORD:DIRECTION:SCALE} is intended
-only for interpretation, because it can deliberately break detailed balance in
-order to isolate excitation and de-excitation effects.
+The package contains many examples because the XSTAR-alignment work is still exploratory. As workflows stabilize, reusable logic should move into \texttt{src/xstar\_atomic/}, leaving examples as short wrappers.
 
-\subsection{v0.2.78 diagnostic type-69 ground-excitation suppression switch}
+\begin{longtable}{p{0.42\linewidth}p{0.48\linewidth}}
+\toprule
+Example(s) & Candidate source module/API \\
+\midrule
+\texttt{51\_run\_helike\_local\_state\_validation.py} & \texttt{xstar\_atomic.runs.select\_local\_states(...)} \\
+\texttt{52\_summarize\_helike\_local\_state\_comparison.py} & \texttt{xstar\_atomic.validate.summarize\_local\_state\_comparison(...)} \\
+\texttt{53\_audit\_helike\_resonance\_deficit.py} & \texttt{xstar\_atomic.audit.resonance\_deficit(...)} \\
+\texttt{54\_audit\_helike\_resonance\_population\_flux.py} & \texttt{xstar\_atomic.audit.resonance\_population\_flux(...)} \\
+\texttt{55\_audit\_helike\_type50\_line\_pumping.py} & \texttt{xstar\_atomic.audit.type50\_line\_pumping(...)} \\
+\texttt{43\_compare\_xstar\_detail\_populations.py} & \texttt{xstar\_atomic.validate.compare\_detail\_populations(...)} \\
+\texttt{42\_xstar\_like\_element\_solver\_demo.py} & \texttt{xstar\_atomic.solve.element(...)} \\
+\texttt{47\_prepare\_mg\_ca\_xstar\_triplet\_targets.py} & \texttt{xstar\_atomic.xout.convert\_triplet\_targets(...)} \\
+\bottomrule
+\end{longtable}
 
-Version 0.2.78 adds a controlled diagnostic/experimental solver option for the high-density O VII investigation:
+See \texttt{docs/example\_to\_source\_api\_map.md} for a broader migration plan.
 
-\begin{lstlisting}[language=bash]
---collision-type69-ground-excitation-mode include|suppress-resonance|suppress-all
+\section{Validation and tests}
+
+Recommended local checks:
+
+\begin{lstlisting}[style=ctterminal]
+PYTHONPATH=src python -m compileall -q src examples tests
+PYTHONPATH=src pytest -q tests/test_api_infrastructure_v03128.py
+PYTHONPATH=src pytest -q \
+  tests/test_type50_line_escape.py \
+  tests/test_helike_triplet_balance_diagnostics.py \
+  tests/test_xstar_detail_population_compare_example.py \
+  tests/test_package_metadata.py \
+  tests/test_cli_smoke.py
 \end{lstlisting}
 
-The default, \texttt{include}, preserves the original v0.2.77 behavior.  \texttt{suppress-resonance} suppresses only type-69 excitation from the ground level into the He-like resonance upper level while preserving the reverse/de-excitation rate.  For the validated O VII high-density case this is record 22490, level \texttt{1 -> 7}.  \texttt{suppress-all} suppresses all type-69 excitation out of the ground level and is broader.  This switch is diagnostic and should not yet be treated as a final physical correction.
+Some tests are skipped unless \texttt{XSTAR\_ATDB\_FITS} points to a local \texttt{atdb.fits}.
 
+\section{Roadmap}
 
-\subsubsection*{v0.2.83 density-grid input layout}
+Near-term:
 
-The density-dependent O VII examples no longer require a root-level \texttt{xstar\_o7\_density\_grid\_references.csv} or a pre-existing \texttt{o7\_solver\_source\_fit\_density\_xstar\_grid/} directory.  The compact packaged inputs are the converted XSTAR triplet CSVs under \texttt{xstar\_test\_run/o7\_ne*/xstar\_o7\_triplet\_lines.csv}.  Use \texttt{--auto-xstar-test-run-grid} to discover those inputs.  Density-grid solver directories remain generated outputs.  Example 26 validates the selected \(n_e=10^{12}\,\mathrm{cm}^{-3}\) XSTAR target when reading a generated density-grid directory, so stale placeholder outputs fail clearly instead of silently using the wrong target.
-
-
-
-\subsection{He-like type-69 ground-resonance validation audit}
-
-Example 31 broadens the O VII type-69 investigation to other He-like ions.  It audits candidate type-69 ground-to-resonance excitation records for ions such as C V, N VI, O VII, Ne IX, Mg XI, Si XIII, S XV, Ar XVII, Ca XIX, and Fe XXV, and writes candidate and validation-status tables.  The script does not mark non-O VII ions as validated unless density-specific XSTAR triplet grids are supplied; without those external references they remain \texttt{pending\_xstar\_density\_grid}.  O VII is the currently validated benchmark because the package includes compact converted density-specific XSTAR references under \texttt{xstar\_test\_run/o7\_ne*/}.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/31_helike_type69_ground_resonance_validation.py \
-  ../xstar/data/atdb.fits \
-  --ions "C V,N VI,O VII,Ne IX,Mg XI,Si XIII,S XV,Ar XVII,Ca XIX,Fe XXV" \
-  --temperature-grid 1e6 \
-  --density 1e12 \
-  --index-cache \
-  --index-cache-path .xstar_atomic_cache/atdb_helike_index.npz \
-  --out-dir helike_type69_ground_resonance_validation \
-  --print-summary
+\begin{lstlisting}[style=ctterminal]
+v0.3.128: API infrastructure and audit-only type-50 evaluator.
+v0.3.129: XSTAR radiation-field reader and exact line-energy bin mapping.
+v0.3.130: type-50 matrix-injection preview, still audit-only.
+v0.3.131: optional solver mode for xstar-line-escape-and-pumping.
 \end{lstlisting}
 
-This keeps \texttt{suppress-resonance} as a diagnostic/experimental O VII benchmark mode until similar density-grid XSTAR validation exists for other He-like ions.
+Longer-term:
 
-
-
-Version 0.2.88 note: the density-grid wrappers now use an ion-generic He-like triplet reader for converted XSTAR line CSVs.  The reader classifies the forbidden, intercombination, and resonance components from 	exttt{lower\_level}/	exttt{upper\_level} labels such as 	exttt{1s1.2s1.3S\_1}, 	exttt{1s1.2p1.3P\_J}, and 	exttt{1s1.2p1.1P\_1}, so C V, Mg XI, Ca XIX, and similar He-like grids can be fitted with the same workflow used for O VII.
-
-\subsection{Preparing non-O VII He-like XSTAR density grids}
-
-Example 32 prepares the external XSTAR density-grid runs needed to test whether the O VII \texttt{suppress-resonance} behavior also appears for other candidate He-like ions.  By default it prepares C V, Mg XI, and Ca XIX, the non-O VII ions with candidate type-69 ground-to-resonance records in the audit.  The helper writes run scripts and conversion scripts only; it does not run XSTAR and does not validate those ions by itself.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/32_prepare_helike_xstar_density_grids.py \
-  --ions "C V,Mg XI,Ca XIX" \
-  --densities 1 1e4 1e8 1e10 1e12 \
-  --root . \
-  --print-summary
-\end{lstlisting}
-
-After running XSTAR externally and converting \texttt{xout\_lines1.fits}, the generated per-ion mappings, such as \texttt{xstar\_test\_run/xstar\_c5\_density\_grid\_references.csv}, \texttt{xstar\_test\_run/xstar\_mg11\_density\_grid\_references.csv}, and \texttt{xstar\_test\_run/xstar\_ca19\_density\_grid\_references.csv}, can be used for ion-specific density-grid comparisons.  Until those converted XSTAR triplet grids are supplied and compared, only O VII should be treated as validated.
-
-
-
-Version 0.2.89 note: the He-like density-grid front end now detects stale non-O~VII mapping CSVs that still point to the O~VII placeholder file and repairs them when the correct converted per-density files exist under 	exttt{xstar\_test\_run/<ion>\_ne*/}.  For example, a C~V mapping is repaired to use 	exttt{xstar\_test\_run/c5\_ne*/xstar\_c5\_triplet\_lines.csv}, with the original mapping saved as a 	exttt{.bak} file.
-
-
-
-\subsection*{He-like density-grid mapping preflight checks}
-
-Starting in v0.2.91, the density-grid front end validates non-O VII mapping CSVs before launching the solver-fit subprocess chain.  For candidate ions such as C V, Mg XI, and Ca XIX, the mapping must point to converted triplet files in the current working tree, for example \texttt{xstar\_test\_run/c5\_ne1/xstar\_c5\_triplet\_lines.csv}.  If the files were generated in an older package directory, copy the corresponding \texttt{c5\_ne*}, \texttt{mg11\_ne*}, or \texttt{ca19\_ne*} folders into the current \texttt{xstar\_test\_run/} directory before rerunning the density-grid fit.
-
-
-\subsection*{v0.2.94 He-like density-grid workflow note}
-The non-O VII He-like density-grid front end now validates converted XSTAR triplet CSV files before launching the solver-fit subprocess chain.  Each mapped CSV must contain usable forbidden, intercombination, and resonance rows with positive emissivity.  Empty converted files, such as a Ca XIX extraction that finds zero matching triplet rows, are rejected early with an actionable message.  Diagnostic outputs preserve the historical \texttt{o7\_*} filenames for compatibility and also write ion-specific aliases for candidate He-like ions such as C V and Mg XI.
-
-
-
-\subsubsection{v0.2.95 auditing empty He-like XSTAR line conversions}
-
-When a prepared non-O VII He-like XSTAR run completes but the converter reports \texttt{n\_lines=0}/\texttt{n\_rows=0}, use \texttt{examples/33\_audit\_helike\_xstar\_lines.py} to inspect the raw \texttt{xout\_lines1.fits} line table before attempting the solver chain.  The audit reports XSTAR ion labels, nearby wavelength-window rows, expected-ion rows at any wavelength, and rows whose level labels look like He-like ground-to-$n=2$ forbidden/intercombination/resonance transitions.  If no complete triplet target is found, the ion remains not testable for density-grid validation.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/33_audit_helike_xstar_lines.py \
-  xstar_runs/helike_type69/ca19_ne1/xout_lines1.fits \
-  --expected-ion "Ca XIX" \
-  --wavelength-min 3.0 \
-  --wavelength-max 3.4 \
-  --out-dir ca19_line_audit_ne1 \
-  --print-rows
-\end{lstlisting}
-
-
-
-\subsection*{He-like XSTAR ionization-parameter scans (v0.2.96)}
-The helper 	exttt{examples/32\_prepare\_helike\_xstar\_density\_grids.py} supports 	exttt{--rlogxi-grid} for ions whose default XSTAR run does not produce the expected He-like triplet rows. This is especially useful for Ca XIX: the default 	exttt{log xi=1.5} run can finish successfully while 	exttt{xout\_lines1.fits} contains no 	exttt{ca\_xix} rows. A scan such as 	exttt{--rlogxi-grid 1.5 2 2.5 3 3.5 4} writes xi-tagged run directories and mapping CSVs so each ionization condition can be audited independently before a density-grid solver comparison is attempted.
-
-
-\subsection*{Ion-specific He-like source-basis discovery (v0.3.4)}
-Version 0.3.4 adds \texttt{examples/38\_discover\_helike\_source\_basis.py}, an exploratory diagnostic that reads existing source-response matrices and classifies each sampled source level by its raw forbidden/intercombination/resonance response. It writes per-level, per-density, and per-run CSV/JSON/Markdown summaries, including discovered positive nonzero source-level lists that can be reused with \texttt{--source-levels} in follow-up runs.
-
-
-\subsection*{v0.3.8 signed/absolute triplet-response audit}
-The script \texttt{examples/40\_audit\_signed\_triplet\_response.py} compares baseline, source-injected, absolute, and delta He-like triplet emissivities for each requested source level.  It reports component-wise f/i/r increases and decreases, signed normalized delta response vectors, and whether negative responses are caused by baseline subtraction.  This diagnostic is intended to distinguish destructive population redistribution from response-matrix construction or normalization artifacts in non-O VII He-like tests.
-
-
-\subsection*{v0.3.13 target-aware absolute-response constraints}
-
-The absolute-response diagnostics now support target-aware source-column constraints via \texttt{--absolute-fit-constraint-mode target-aware}.  In this mode the maximum allowed intercombination fraction is derived from the XSTAR target triplet fractions at each density.  Low-density cases with tiny target intercombination fractions reject intercombination-rich source columns, while high-density cases can retain such columns when the target is itself intercombination-rich.  Explicit paths such as \texttt{../xstar/data/atdb.fits} remain normal run-time inputs and do not rewrite the persistent \texttt{datapath}.
-
-\begin{lstlisting}[language=bash]
-PYTHONPATH=src python examples/41_fit_absolute_response_density_grid.py \
-  ../xstar/data/atdb.fits \
-  --element C --ion-stage 5 \
-  --temperature 1000000 \
-  --electron-densities 1,1e4,1e8,1e10,1e12 \
-  --wavelength-min 40 --wavelength-max 42 \
-  --source-levels 2:80 \
-  --xstar-lines-csv-template 'xstar_test_run/c5_ne{ne_tag}/xstar_c5_triplet_lines.csv' \
-  --absolute-fit-component-weights auto \
-  --absolute-fit-constraint-mode target-aware \
-  --absolute-fit-target-i-factor 3 \
-  --absolute-fit-target-i-floor 0.05 \
-  --index-cache \
-  --index-cache-path-template '.xstar_atomic_cache/atdb_c5_{ne_tag}.npz' \
-  --out-dir c5_absolute_response_density_grid_target_aware \
-  --print-summary
+\begin{lstlisting}[style=ctterminal]
+- stable context/rate/matrix/solve/emissivity APIs
+- broader data-type evaluator parity
+- stronger same-run XSTAR validation suite
+- source-code provenance for every matrix term
+- documentation organized by workflow rather than version history
 \end{lstlisting}
 
 \end{document}

@@ -101,3 +101,28 @@ Data download and path helpers
    :members:
    :undoc-members:
    :show-inheritance:
+
+
+Local context objects
+---------------------
+
+.. automodule:: xstar_atomic.context
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Type-50 source-code rate evaluator
+----------------------------------
+
+.. automodule:: xstar_atomic.rates_type50
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Source-code-first audit workflows
+---------------------------------
+
+.. automodule:: xstar_atomic.audit
+   :members:
+   :undoc-members:
+   :show-inheritance:

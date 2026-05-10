@@ -12,8 +12,8 @@ sys.path.insert(0, str(SRC))
 
 project = "xstar-atomic"
 author = "Ashkbiz Danehkar"
-release = "0.2.18"
-version = "0.2.18"
+release = "0.3.128"
+version = "0.3.128"
 
 extensions = [
     "sphinx.ext.autodoc",

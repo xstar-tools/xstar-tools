@@ -350,3 +350,18 @@ scan after the type-67/68/69 He-like collision decoders are active. The equal
 target map remains the reference baseline; the type-68-aware presets are
 experiments for restoring ``G`` while preserving the density-sensitive ``R``
 physics.
+
+
+v0.3.128 API infrastructure
+---------------------------
+
+The main user guide has been reorganized in ``docs/user_guide.md`` and
+``docs/user_guide.tex`` around workflows: installation, quick start, atomic
+database access, context objects, source-code-aligned rate evaluators, solver
+workflows, XSTAR validation, and audits.
+
+New public infrastructure includes ``LocalPlasmaState``, ``RadiationField``,
+``EscapeContext``, ``RateEvaluation``, and the audit-only type-50 evaluator
+``evaluate_type50_bound_bound``.  The former example-55 line-pumping audit is
+available as ``xstar_atomic.audit.type50_line_pumping`` and remains accessible
+through the example CLI wrapper.

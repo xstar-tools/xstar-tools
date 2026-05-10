@@ -1,6 +1,12 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.127"
+__version__ = "0.3.128"
+
+# Pure-Python public API infrastructure.  These remain importable even on
+# systems where astropy is not available yet.
+from .context import LocalPlasmaState, RadiationField, EscapeContext
+from .rates_type50 import RateEvaluation, evaluate_type50_bound_bound
+from .audit import type50_line_pumping
 
 try:
     from .hierarchy import ATDB
@@ -34,4 +40,10 @@ __all__ = [
     "resolve_atdb_path",
     "set_data_path",
     "solve_element_reference",
+    "LocalPlasmaState",
+    "RadiationField",
+    "EscapeContext",
+    "RateEvaluation",
+    "evaluate_type50_bound_bound",
+    "type50_line_pumping",
 ]
