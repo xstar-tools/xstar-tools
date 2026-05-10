@@ -35,3 +35,8 @@ ans2 = ans2 * max(0., 1.d0-cfrac)
 ```
 
 No solver physics changed in v0.3.128. The type-50 photoexcitation/line-pumping path remains **audit-only**; no empirical triplet scale fitting was added.
+
+
+## Examples
+
+See `examples/README.md` for grouped runnable examples and recommended learning paths. The most advanced validation examples remain diagnostic/source-code-first workflows and may require same-run XSTAR outputs.

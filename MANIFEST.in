@@ -2,6 +2,7 @@ include README.md
 include CHANGELOG.md
 recursive-include docs *
 recursive-include examples *.py
+include examples/README.md
 recursive-include tests *.py
 recursive-include tests/data *.csv
 recursive-include examples/reference_outputs *.csv *.json
