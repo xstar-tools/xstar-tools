@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.147** corrects the type-50 line-pumping benchmark to use the same-run XSTAR `cfrac` parameter from the FITS `PARAMETERS` table.  XSTAR multiplies the line-pumping branch by `max(0,1-cfrac)`, so the `xstar-local-state` preset no longer assumes `cfrac=0`; when `cfrac` cannot be read it falls back to `cfrac=1` to avoid unphysical maximum pumping.
+Latest package note: **v0.3.148** restores the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`

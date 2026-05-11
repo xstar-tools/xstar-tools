@@ -13296,7 +13296,12 @@ def solve_element_reference(
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
     type50_bound_bound_treatment_norm = _normalise_type50_bound_bound_treatment(type50_bound_bound_treatment)
     type50_escape_source_norm = str(type50_escape_source or "matrix-row").strip().lower().replace("_", "-")
-    reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(xstar_reference_lines_csv) if type50_escape_source_norm in {"xstar-reference-lines", "same-run-xout-lines", "xout-lines", "reference-lines"} else []
+    # XSTAR population-matrix rates use the live zone-local tau0(:,:) array
+    # passed to calc_hmc_ion.f90.  The depths printed in xout_lines1.fits are
+    # post-transfer output diagnostics and are not a safe substitute for that
+    # internal matrix tau0 state.  Only enable this old experimental path with
+    # an explicitly unsafe source name.
+    reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(xstar_reference_lines_csv) if type50_escape_source_norm in {"unsafe-xout-lines-depths", "unsafe-reference-lines-for-matrix"} else []
     matrix_transitions = _annotate_type50_transition_depths_from_reference(transitions, reference_depth_rows_for_matrix) if reference_depth_rows_for_matrix else transitions
     xstar_radiation_rows_for_matrix = _read_xstar_radiation_spectrum_csv(xstar_radiation_spectrum_csv)
     xstar_radiation_epi_grid, xstar_radiation_bremsa_grid, xstar_radiation_grid_status = _build_xstar_output_bremsa_grid(

@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wavelength", type=_parse_window, help="Two-number wavelength window in Angstrom, e.g. '21 23'")
     p.add_argument("--value-column", default="emit_outward", help="XSTAR xout_lines1 value column to use")
     p.add_argument("--run-solver", action="store_true", help="Also run the current population solver and compare residuals")
-    p.add_argument("--solver-preset", default="workflow-default", choices=["workflow-default", "xstar-local-state"], help="Solver settings for --run-solver. workflow-default uses the lightweight public wrapper; xstar-local-state mirrors examples/51 local-state validation flags.")
+    p.add_argument("--solver-preset", default="workflow-default", choices=["workflow-default", "xstar-local-state", "xstar-local-state-experimental-pumping"], help="Solver settings for --run-solver. workflow-default uses the lightweight public wrapper; xstar-local-state mirrors examples/51 local-state validation flags; xstar-local-state-experimental-pumping tests the unsafe output-table pumping approximation.")
     p.add_argument("--atdb", help="Path to XSTAR atdb.fits if --run-solver is used")
     p.add_argument("--out-dir", default="xstar_local_reproduction_benchmark", help="Output directory")
     p.add_argument("--print-summary", action="store_true")

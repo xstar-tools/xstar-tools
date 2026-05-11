@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.148 - 2026-05-11
+
+- Restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global validation branch.
+- Stopped treating post-transfer `xout_lines1.fits` line depths as the live `tau0(:,:)` array used by `calc_hmc_ion.f90` in the population matrix.
+- Stopped treating final `xout_cont1.fits`/`xout_spect1.fits` spectra as the live local `bremsa(:)` array for the default source-code-parity preset.
+- Added `xstar-local-state-experimental-pumping` for explicitly unsafe output-table pumping experiments.
+- Added `docs/helike_fortran_python_gap_audit.md` documenting the relevant XSTAR Fortran source path and the remaining exact-parity requirement.
+- No empirical triplet scaling was added.
+
 ## v0.3.147 - 2026-05-11
 
 - Corrects the first type-50 pumping benchmark path to use the same-run XSTAR `cfrac` parameter from the FITS `PARAMETERS` table when available.

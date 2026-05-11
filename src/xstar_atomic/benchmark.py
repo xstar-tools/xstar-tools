@@ -859,8 +859,13 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "type57_energy_convention": "abs-rlev4",
         "triplet_source_mode": "type74-direct-diagnostic",
         "type99_proxy_scale": "0,1e-8,1e-6,1e-4,1e-2,1,1e2",
-        "radiation_field_mode": "xstar-output" if (target is not None and target.xout_cont_path) else "none",
-        "radiation_bremsa_scale": 1.0,
+        # Historical local-state validation preset.  This intentionally mirrors
+        # examples/51--52 and does not force post-processed xout_lines1 depths
+        # or xout_cont1 spectra into the population matrix.  XSTAR's calc_hmc_ion
+        # uses the live zone-local tau0(:,:) and bremsa(:) arrays, not the final
+        # line/spectrum tables written after transfer.
+        "radiation_field_mode": "xstar-powerlaw",
+        "radiation_bremsa_scale": 1.0e18,
         "radiation_powerlaw_index": 1.0,
         "radiation_n_energy_grid": 512,
         "type53_flat_proxy_scale": 1.0,
@@ -869,12 +874,9 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "ion_fraction_closure": "xstar-calc-ion-rates",
         "full_global_linear_solver": "xstar-lucy",
         "full_global_topology": "xstar-continuum-alias-superlevels",
-        "type50_bound_bound_treatment": "xstar-line-escape-and-pumping",
+        "type50_bound_bound_treatment": "xstar-line-escape",
         "type50_escape_factor": 0.35,
-        "type50_escape_source": "xstar-reference-lines",
-        # Source-code match: XSTAR multiplies line pumping by max(0,1-cfrac).
-        # Do not assume cfrac=0 when the run parameter is absent; that forced
-        # maximum pumping in v0.3.144--0.3.146 and drove the triplets to r~1.
+        "type50_escape_source": "matrix-row",
         "type50_cfrac": target.xstar_cfrac if (target is not None and target.xstar_cfrac is not None) else 1.0,
     }
     if window:
@@ -883,6 +885,25 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
     if target is not None and target.xout_lines_path:
         out["xstar_reference_lines_csv"] = target.xout_lines_path
         out["xstar_reference_value_column"] = target.value_column
+    return out
+
+
+def xstar_local_state_experimental_pumping_solver_kwargs(target: XSTARLocalTarget | None = None) -> dict[str, Any]:
+    """Return the experimental v0.3.144--0.3.147 type-50 pumping preset.
+
+    This preset is intentionally separate from ``xstar-local-state`` because
+    XSTAR's live ``bremsa(nb1)`` and ``tau0`` arrays are not available in the
+    standard output FITS tables.  It can be used for audits, but it is not the
+    source-code-parity benchmark.
+    """
+    out = xstar_local_state_solver_kwargs(target)
+    out.update({
+        "radiation_field_mode": "xstar-output" if (target is not None and target.xout_cont_path) else "none",
+        "radiation_bremsa_scale": 1.0,
+        "type50_bound_bound_treatment": "xstar-line-escape-and-pumping",
+        "type50_escape_source": "unsafe-xout-lines-depths",
+        "type50_cfrac": target.xstar_cfrac if (target is not None and target.xstar_cfrac is not None) else 1.0,
+    })
     if target is not None and target.xout_cont_path:
         out["xstar_radiation_spectrum_csv"] = target.xout_cont_path
         out["xstar_radiation_column"] = "transmitted"
@@ -897,7 +918,9 @@ def solver_kwargs_from_preset(preset: str | None, target: XSTARLocalTarget | Non
         return {}
     if key in {"xstar-local-state", "local-state", "validation", "v03124", "v03123", "source-code-first"}:
         return xstar_local_state_solver_kwargs(target)
-    raise ValueError(f"Unknown solver preset {preset!r}; use workflow-default or xstar-local-state")
+    if key in {"xstar-local-state-experimental-pumping", "experimental-pumping", "xstar-output-pumping"}:
+        return xstar_local_state_experimental_pumping_solver_kwargs(target)
+    raise ValueError(f"Unknown solver preset {preset!r}; use workflow-default, xstar-local-state, or xstar-local-state-experimental-pumping")
 
 def compare_solver_to_xstar_target(
     target: XSTARLocalTarget,

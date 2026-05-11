@@ -401,19 +401,27 @@ def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
     compare_solver_to_xstar_target(target, run_solver=True, solver_preset="xstar-local-state")
     assert seen["full_global_linear_solver"] == "xstar-lucy"
     assert seen["full_global_topology"] == "xstar-continuum-alias-superlevels"
-    assert seen["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
+    assert seen["type50_bound_bound_treatment"] == "xstar-line-escape"
     assert seen["type50_escape_factor"] == 0.35
     assert seen["reference_suffix"] == ".csv"
     assert "emit_outward" in seen["reference_text"]
     assert not str(seen["xstar_reference_lines_csv"]).endswith(".fits")
 
 
-def test_xstar_local_state_preset_uses_same_run_reference_depths():
+def test_xstar_local_state_preset_does_not_use_output_depths_as_matrix_tau0():
     from xstar_atomic.benchmark import xstar_local_state_solver_kwargs
 
     kwargs = xstar_local_state_solver_kwargs(None)
+    assert kwargs["type50_bound_bound_treatment"] == "xstar-line-escape"
+    assert kwargs["type50_escape_source"] == "matrix-row"
+
+
+def test_experimental_pumping_preset_is_explicitly_unsafe():
+    from xstar_atomic.benchmark import solver_kwargs_from_preset
+
+    kwargs = solver_kwargs_from_preset("xstar-local-state-experimental-pumping", None)
     assert kwargs["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
-    assert kwargs["type50_escape_source"] == "xstar-reference-lines"
+    assert kwargs["type50_escape_source"] == "unsafe-xout-lines-depths"
 
 
 def test_type50_reference_depth_annotation_matches_reversed_levels():
@@ -471,7 +479,7 @@ def test_xstar_local_state_solver_kwargs_uses_target_cfrac():
         xstar_cfrac_source="xstar_parameters:xout_abund1.fits",
     )
     kw = benchmark.xstar_local_state_solver_kwargs(target)
-    assert kw["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
+    assert kw["type50_bound_bound_treatment"] == "xstar-line-escape"
     assert kw["type50_cfrac"] == 0.75
     assert "type50_cfrac_source" not in kw  # diagnostic only; not a solver kwarg
 
