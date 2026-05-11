@@ -26,7 +26,7 @@ import tempfile
 
 from .context import XSTARContext, context_from_xstar_run
 from .workflow import TripletResult, calc_triplet, solve_populations
-from .xstar_outputs import load_xstar_lines, read_xout_spectra, write_csv
+from .xstar_outputs import load_xstar_lines, read_xout_parameters, read_xout_spectra, write_csv
 
 DEFAULT_HELIKE_WINDOWS_A: dict[str, tuple[float, float]] = {
     "C V": (40.0, 42.0),
@@ -174,6 +174,53 @@ def _as_float(value: Any) -> float | None:
     except Exception:
         return None
     return out if math.isfinite(out) else None
+
+
+def _parameter_value_from_xout(path: str | Path | None, *names: str) -> float | None:
+    """Return a numeric XSTAR run parameter from a FITS PARAMETERS table.
+
+    XSTAR writes input parameters via ``fparmlist.f90`` to a ``PARAMETERS``
+    extension with columns ``parameter`` and ``value``.  This helper is used
+    for source-code matched quantities such as ``cfrac``.  It is deliberately
+    tolerant of capitalization, spaces, underscores and hyphens.
+    """
+    if not path:
+        return None
+    wanted = {str(n).strip().lower().replace("_", "").replace("-", "").replace(" ", "") for n in names if str(n).strip()}
+    if not wanted:
+        return None
+    try:
+        rows = read_xout_parameters(path)
+    except Exception:
+        return None
+    for row in rows or []:
+        key = str(row.get("parameter") or row.get("name") or row.get("parname") or "").strip()
+        key_norm = key.lower().replace("_", "").replace("-", "").replace(" ", "")
+        if key_norm in wanted:
+            val = _as_float(row.get("value") or row.get("parval") or row.get("val"))
+            if val is not None:
+                return val
+    return None
+
+
+def _xstar_cfrac_from_target(target: "XSTARLocalTarget" | None) -> tuple[float | None, str]:
+    """Return ``(cfrac, provenance)`` from same-run XSTAR output.
+
+    ``ucalc.f90`` multiplies type-50 line pumping by ``max(0,1-cfrac)``.
+    The previous v0.3.144--v0.3.146 benchmark preset hard-coded ``cfrac=0``
+    and therefore forced maximum pumping even for runs whose XSTAR input used
+    another value.  Source matching requires using the run parameter when it is
+    available.
+    """
+    if target is None:
+        return None, "no_target"
+    for path in (target.xout_abund_path, target.xout_lines_path, target.xout_cont_path):
+        val = _parameter_value_from_xout(path, "cfrac", "covering fraction", "covering_fraction", "coveringfrac")
+        if val is not None:
+            # Clamp only to the physically meaningful range used by max(0,1-cfrac).
+            val = max(0.0, min(1.0, float(val)))
+            return val, f"xstar_parameters:{Path(path).name}"
+    return None, "not_found_in_xstar_parameters"
 
 
 def _difference(a: float | None, b: float | None) -> float | None:
@@ -357,6 +404,8 @@ class XSTARLocalTarget:
     xout_abund_path: str | None = None
     xout_lines_path: str | None = None
     xout_cont_path: str | None = None
+    xstar_cfrac: float | None = None
+    xstar_cfrac_source: str = ""
     wavelength_window_A: tuple[float, float] | None = None
     value_column: str = "emit_outward"
     status: str = "ok"
@@ -379,6 +428,8 @@ class XSTARLocalTarget:
             "ion_fraction_column": self.context.metadata.get("ion_fraction_column"),
             "radius_cm": p.radius_cm,
             "thickness_cm": p.thickness_cm,
+            "xstar_cfrac": self.xstar_cfrac,
+            "xstar_cfrac_source": self.xstar_cfrac_source,
             "status": self.status,
             "warnings": "; ".join(self.warnings),
         }
@@ -415,6 +466,8 @@ class XSTARLocalTarget:
             "xout_abund_path": self.xout_abund_path,
             "xout_lines_path": self.xout_lines_path,
             "xout_cont_path": self.xout_cont_path,
+            "xstar_cfrac": self.xstar_cfrac,
+            "xstar_cfrac_source": self.xstar_cfrac_source,
             "wavelength_window_A": list(self.wavelength_window_A) if self.wavelength_window_A else None,
             "value_column": self.value_column,
             "local_state": self.local_state_row(),
@@ -535,7 +588,11 @@ def _source_code_gap_diagnosis(
     if pattern.startswith('solver_f_high') and 'r_low' in pattern:
         issues.append('common residual is high forbidden fraction and low resonance fraction')
     if treatment == 'xstar-line-escape-and-pumping':
-        issues.append('type-50 lower-to-upper photoexcitation is enabled in the population matrix')
+        cf = _as_float(summ.get('type50_cfrac'))
+        if cf is not None and cf >= 1.0:
+            issues.append('type-50 photoexcitation branch is enabled but XSTAR cfrac suppresses pumping via max(0,1-cfrac)')
+        else:
+            issues.append('type-50 lower-to-upper photoexcitation is enabled in the population matrix')
     elif str(pumping_scale) in {'0', '0.0', ''}:
         issues.append('type-50 lower-to-upper photoexcitation is not injected into the population matrix')
     if 'larger_than_scalar_0p35' in escape_diag and escape_source not in {'xstar-reference-lines', 'same-run-xout-lines', 'xout-lines', 'reference-lines'}:
@@ -553,6 +610,8 @@ def _source_code_gap_diagnosis(
         'solver_type50_escape_factor': escape_factor,
         'solver_type50_escape_source': summ.get('type50_escape_source'),
         'solver_type50_photoexcitation_scale': pumping_scale,
+        'solver_type50_cfrac': summ.get('type50_cfrac'),
+        'solver_type50_cfrac_source': summ.get('type50_cfrac_source'),
         'solver_radiation_field_mode': radiation_mode,
         'solver_radiation_bremsa_scale': bremsa_scale,
         'solver_xstar_radiation_spectrum_csv': summ.get('xstar_radiation_spectrum_csv'),
@@ -687,6 +746,22 @@ def build_xstar_local_target(
     warnings: list[str] = []
     if triplet.status != "ok":
         warnings.extend(triplet.warnings)
+    cfrac_val, cfrac_source = _xstar_cfrac_from_target(XSTARLocalTarget(
+        ion=_ion_label(ion) or ion,
+        run_dir=str(run_path),
+        context=ctx,
+        triplet=triplet,
+        line_rows=tuple(dict(r) for r in triplet.lines),
+        xout_abund_path=str(abund_path),
+        xout_lines_path=str(lines_path),
+        xout_cont_path=str(cont_path) if cont_path is not None else None,
+        wavelength_window_A=window,
+        value_column=value_column,
+        status="ok" if triplet.status == "ok" else "target_incomplete",
+        warnings=tuple(warnings),
+    ))
+    if cfrac_val is None:
+        warnings.append("xstar_cfrac_not_found_in_PARAMETERS; source-matched type-50 pumping should not assume cfrac=0")
     return XSTARLocalTarget(
         ion=_ion_label(ion) or ion,
         run_dir=str(run_path),
@@ -696,6 +771,8 @@ def build_xstar_local_target(
         xout_abund_path=str(abund_path),
         xout_lines_path=str(lines_path),
         xout_cont_path=str(cont_path) if cont_path is not None else None,
+        xstar_cfrac=cfrac_val,
+        xstar_cfrac_source=cfrac_source,
         wavelength_window_A=window,
         value_column=value_column,
         status="ok" if triplet.status == "ok" else "target_incomplete",
@@ -795,7 +872,10 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "type50_bound_bound_treatment": "xstar-line-escape-and-pumping",
         "type50_escape_factor": 0.35,
         "type50_escape_source": "xstar-reference-lines",
-        "type50_cfrac": 0.0,
+        # Source-code match: XSTAR multiplies line pumping by max(0,1-cfrac).
+        # Do not assume cfrac=0 when the run parameter is absent; that forced
+        # maximum pumping in v0.3.144--0.3.146 and drove the triplets to r~1.
+        "type50_cfrac": target.xstar_cfrac if (target is not None and target.xstar_cfrac is not None) else 1.0,
     }
     if window:
         out["wavelength_min"] = float(window[0])
@@ -893,6 +973,10 @@ def compare_solver_to_xstar_target(
                     except FileNotFoundError:
                         pass
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)
+            if isinstance(summary, Mapping):
+                summary = dict(summary)
+                summary.setdefault("type50_cfrac", merged_kwargs.get("type50_cfrac"))
+                summary.setdefault("type50_cfrac_source", target.xstar_cfrac_source or "fallback_1p0_when_unavailable")
             warnings.extend(extract_warnings)
             status = "solver_compared" if _has_triplet_fractions(triplet) else "solver_no_triplet_values"
         except Exception as exc:  # pragma: no cover - exercised with real ATDB runs

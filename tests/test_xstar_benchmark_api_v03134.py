@@ -447,3 +447,37 @@ def test_type50_reference_depth_annotation_matches_reversed_levels():
     assert out[0]["depth_inward"] == 6.89
     assert out[0]["xstar_reference_depth_source"] == "same_run_xout_lines1"
     assert out[0]["xstar_reference_depth_match_mode"] == "reversed_level_indices"
+
+
+def test_xstar_local_state_solver_kwargs_uses_target_cfrac():
+    import xstar_atomic.benchmark as benchmark
+
+    ctx = xa.context_from_values(ion="O VII", temperature_K=1.0e5, electron_density_cm3=1.0e8)
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.0},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 1.0},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xstar_cfrac=0.75,
+        xstar_cfrac_source="xstar_parameters:xout_abund1.fits",
+    )
+    kw = benchmark.xstar_local_state_solver_kwargs(target)
+    assert kw["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
+    assert kw["type50_cfrac"] == 0.75
+    assert "type50_cfrac_source" not in kw  # diagnostic only; not a solver kwarg
+
+
+def test_xstar_local_state_solver_kwargs_falls_back_to_cfrac_one():
+    import xstar_atomic.benchmark as benchmark
+
+    kw = benchmark.xstar_local_state_solver_kwargs(None)
+    assert kw["type50_cfrac"] == 1.0

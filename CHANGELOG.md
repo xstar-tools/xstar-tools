@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.147 - 2026-05-11
+
+- Corrects the first type-50 pumping benchmark path to use the same-run XSTAR `cfrac` parameter from the FITS `PARAMETERS` table when available.
+- The `xstar-local-state` preset no longer assumes `cfrac=0`; if `cfrac` cannot be read, it falls back to `cfrac=1` to avoid unphysical maximum pumping.
+- Adds `xstar_cfrac` / `xstar_cfrac_source` target metadata and comparison columns, plus `solver_type50_cfrac` diagnostics.
+- Keeps type-50 line pumping opt-in through `xstar-line-escape-and-pumping`; no empirical scale factors are added.
+
 ## v0.3.146 - 2026-05-11
 
 - Corrects the first type-50 line-pumping benchmark implementation after the v0.3.145 four-ion run showed severe over-pumping from the diagnostic `xstar-powerlaw` continuum.

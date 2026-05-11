@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.146** corrects the first type-50 line-pumping benchmark implementation so the `xstar-local-state` preset uses same-run `xout_cont1.fits` / `xout_spect1.fits` radiation output when available, converted to an XSTAR `bremsa`-like grid using the `trnfrc.f90` geometry.  v0.3.144 introduced the opt-in `xstar-line-escape-and-pumping` branch and v0.3.145 fixed the first non-type-50 crash; v0.3.146 prevents arbitrary proxy continuum over-pumping by requiring an explicit same-run XSTAR output spectrum for source-code-matched pumping.
+Latest package note: **v0.3.147** corrects the type-50 line-pumping benchmark to use the same-run XSTAR `cfrac` parameter from the FITS `PARAMETERS` table.  XSTAR multiplies the line-pumping branch by `max(0,1-cfrac)`, so the `xstar-local-state` preset no longer assumes `cfrac=0`; when `cfrac` cannot be read it falls back to `cfrac=1` to avoid unphysical maximum pumping.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
