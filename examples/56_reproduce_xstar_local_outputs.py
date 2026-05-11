@@ -55,6 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     out_dir = Path(args.out_dir)
+    solver_atdb = None
+    if args.run_solver:
+        from xstar_atomic.data import resolve_atdb_path
+
+        # Resolve once here so --run-solver works from explicit --atdb,
+        # XSTAR_ATDB_FITS, XSTAR_ATDB, or the configured datapath file.
+        solver_atdb = resolve_atdb_path(args.atdb or None, prompt=False)
     if args.write_standard_cases_csv:
         path = write_default_helike_cases_csv(args.write_standard_cases_csv, xstar_runs_root=args.xstar_runs_root)
         if args.print_summary:
@@ -69,13 +76,15 @@ def main() -> None:
             cases,
             value_column=args.value_column,
             run_solver=args.run_solver,
-            fitsfile=args.atdb or None,
+            fitsfile=solver_atdb,
         )
         paths = write_xstar_benchmark_suite(comparisons, out_dir)
         if args.print_summary:
             print("XSTAR local-output reproduction benchmark suite")
             print("------------------------------------------------")
             print(f"n_cases={len(comparisons)}")
+            if solver_atdb is not None:
+                print(f"solver_atdb={solver_atdb}")
             for comparison in comparisons:
                 row = comparison.comparison_row()
                 print(
@@ -102,7 +111,7 @@ def main() -> None:
         wavelength=args.wavelength,
         value_column=args.value_column,
         run_solver=args.run_solver,
-        fitsfile=args.atdb or None,
+        fitsfile=solver_atdb,
     )
     paths = write_xstar_benchmark_outputs(comparison, out_dir)
     if args.print_summary:
@@ -117,6 +126,8 @@ def main() -> None:
         print(f"logxi={row.get('log_xi')}")
         print(f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')}")
         print(f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')}")
+        if solver_atdb is not None:
+            print(f"solver_atdb={solver_atdb}")
         print(f"status={comparison.status}")
         if row.get("comparison_warnings"):
             print(f"warnings={row.get('comparison_warnings')}")

@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.137"
+__version__ = "0.3.138"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -41,7 +41,7 @@ from .workflow import (
 try:
     from .hierarchy import ATDB
     from .api import XSTARAtomic, parse_ion
-    from .data import download_data, find_atdb_file, get_data_path, resolve_atdb_path, set_data_path
+    from .data import download_data, find_atdb_file, get_data_path, get_data_paths, resolve_atdb_path, set_data_path
     from .xstar_element_solver import solve_element_reference
 except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency guard
     if exc.name != "astropy":
@@ -56,6 +56,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency gua
     download_data = _missing_astropy  # type: ignore
     find_atdb_file = _missing_astropy  # type: ignore
     get_data_path = _missing_astropy  # type: ignore
+    get_data_paths = _missing_astropy  # type: ignore
     resolve_atdb_path = _missing_astropy  # type: ignore
     set_data_path = _missing_astropy  # type: ignore
     solve_element_reference = _missing_astropy  # type: ignore
@@ -67,6 +68,7 @@ __all__ = [
     "download_data",
     "find_atdb_file",
     "get_data_path",
+    "get_data_paths",
     "resolve_atdb_path",
     "set_data_path",
     "solve_element_reference",

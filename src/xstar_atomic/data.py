@@ -87,14 +87,79 @@ def set_data_path(path: Union[str, Path]) -> Path:
     return data_dir
 
 
-def get_data_path() -> Optional[Path]:
-    """Return the configured data directory, or ``None`` if not configured."""
-    if not DATAPATH_FILE.exists():
+def _candidate_datapath_files() -> list[Path]:
+    """Return datapath files to consult, in precedence order.
+
+    The source-tree/project ``datapath`` file remains the canonical location.
+    We also check ``datapath`` in the current working directory and its parents
+    so command-line tools launched from a copied run directory or an installed
+    environment can still honor the user's local ``datapath`` file when no
+    ``XSTAR_ATDB``/``XSTAR_ATDB_FITS`` environment variable is defined.
+    Duplicate paths are removed while preserving order.
+    """
+    candidates: list[Path] = [DATAPATH_FILE]
+    try:
+        cwd = Path.cwd().resolve()
+        for base in (cwd, *cwd.parents):
+            candidates.append(base / "datapath")
+    except Exception:  # pragma: no cover - extremely defensive
+        pass
+    if PROJECT_ROOT is None:
+        candidates.append(PACKAGE_DIR / "datapath")
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            key = candidate.resolve()
+        except Exception:
+            key = candidate
+        if key not in seen:
+            seen.add(key)
+            unique.append(candidate)
+    return unique
+
+
+def _read_datapath_file(path: Path) -> Optional[Path]:
+    """Read one datapath file and return its configured directory, if any."""
+    try:
+        if not path.exists():
+            return None
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
         return None
-    text = DATAPATH_FILE.read_text(encoding="utf-8").strip()
     if not text:
         return None
     return Path(text).expanduser().resolve()
+
+
+def get_data_paths() -> list[Path]:
+    """Return all configured data directories from available ``datapath`` files.
+
+    The first entry is the highest-priority configuration.  Invalid directories
+    are not filtered here because callers may want to report them;
+    :func:`find_atdb_file` validates the actual ``atdb.fits`` candidate.
+    """
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for dp_file in _candidate_datapath_files():
+        dp = _read_datapath_file(dp_file)
+        if dp is None:
+            continue
+        if dp not in seen:
+            seen.add(dp)
+            paths.append(dp)
+    return paths
+
+
+def get_data_path() -> Optional[Path]:
+    """Return the highest-priority configured data directory, or ``None``.
+
+    This preserves the original single-path API while :func:`find_atdb_file`
+    can consult all configured datapath files.
+    """
+    paths = get_data_paths()
+    return paths[0] if paths else None
 
 
 def _atdb_file_problem(path: Path) -> Optional[str]:
@@ -144,8 +209,7 @@ def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = 
         if env_path and env_path.strip():
             p = Path(env_path).expanduser()
             candidates.append((p / ATDB_FILENAME if p.is_dir() else p, remember))
-    dp = get_data_path()
-    if dp is not None:
+    for dp in get_data_paths():
         candidates.append((dp / ATDB_FILENAME, False))
     candidates.append((DEFAULT_DATA_DIR / ATDB_FILENAME, False))
 
@@ -350,9 +414,13 @@ def main(argv: Optional[list[str]] = None) -> None:
         print(path)
         return
     if args.show:
-        data_dir = get_data_path()
+        data_dirs = get_data_paths()
         found = find_atdb_file(remember=False)
-        print(f"datapath: {data_dir}")
+        print(f"datapath: {data_dirs[0] if data_dirs else None}")
+        if len(data_dirs) > 1:
+            print("datapath_candidates:")
+            for item in data_dirs:
+                print(f"  {item}")
         print(f"atdb.fits: {found}")
         return
     path = download_data(url=args.url, destination=args.destination, prompt=not args.yes)

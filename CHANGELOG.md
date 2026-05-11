@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.138 - 2026-05-11
+
+- Strengthened XSTAR ATDB path resolution for solver benchmarks and workflow APIs.
+- If `XSTAR_ATDB` and `XSTAR_ATDB_FITS` are unset, the resolver now explicitly uses configured `datapath` files and can consult a `datapath` file in the current working tree.
+- Added `get_data_paths()` so diagnostics can show all configured datapath candidates.
+- Skips stale datapath entries and falls through to the next valid candidate before reporting that no `atdb.fits` was found.
+- Source distributions no longer include a machine-specific `datapath` file; users configure it locally with `python -m xstar_atomic.data --set-path /path/to/atdb.fits`.
+- No solver physics changed. The C V/O VII/Mg XI/Ca XIX benchmark residuals are unchanged and remain the next physics target.
+
 ## v0.3.137 - 2026-05-10
 
 - Fixed the four-ion local-output benchmark solver mode so it accepts the common `XSTAR_ATDB` environment variable in addition to `XSTAR_ATDB_FITS`.

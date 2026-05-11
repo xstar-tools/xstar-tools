@@ -526,4 +526,4 @@ export XSTAR_ATDB=/path/to/xstar/data/atdb.fits
 export XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits
 ```
 
-If `--atdb "$XSTAR_ATDB"` expands to an empty string, v0.3.137 treats it as not provided and falls back to the resolver instead of trying `./atdb.fits`.
+If `--atdb "$XSTAR_ATDB"` expands to an empty string, v0.3.138 treats it as not provided and falls back to the resolver. If neither `XSTAR_ATDB` nor `XSTAR_ATDB_FITS` is set, the resolver uses the configured `datapath` file, then package data.
