@@ -406,3 +406,44 @@ def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
     assert seen["reference_suffix"] == ".csv"
     assert "emit_outward" in seen["reference_text"]
     assert not str(seen["xstar_reference_lines_csv"]).endswith(".fits")
+
+
+def test_xstar_local_state_preset_uses_same_run_reference_depths():
+    from xstar_atomic.benchmark import xstar_local_state_solver_kwargs
+
+    kwargs = xstar_local_state_solver_kwargs(None)
+    assert kwargs["type50_bound_bound_treatment"] == "xstar-line-escape"
+    assert kwargs["type50_escape_source"] == "xstar-reference-lines"
+
+
+def test_type50_reference_depth_annotation_matches_reversed_levels():
+    import pytest
+    pytest.importorskip("astropy")
+    from xstar_atomic.xstar_element_solver import _annotate_type50_transition_depths_from_reference
+
+    transitions = [
+        {
+            "kind": "radiative_decay",
+            "data_type": 50,
+            "ion_stage": 7,
+            "from_level": 7,
+            "to_level": 1,
+            "wavelength_A": 21.602,
+            "rate_s^-1": 1.0,
+        }
+    ]
+    refs = [
+        {
+            "ion_stage": 7,
+            "lower_level": 1,
+            "upper_level": 7,
+            "wavelength_A": 21.602,
+            "depth_inward": 6.89,
+            "depth_outward": 0.0,
+            "record": 123,
+        }
+    ]
+    out = _annotate_type50_transition_depths_from_reference(transitions, refs)
+    assert out[0]["depth_inward"] == 6.89
+    assert out[0]["xstar_reference_depth_source"] == "same_run_xout_lines1"
+    assert out[0]["xstar_reference_depth_match_mode"] == "reversed_level_indices"

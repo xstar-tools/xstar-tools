@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.142** fixes the C V / O VII / Mg XI / Ca XIX local-state benchmark source selection.  The benchmark now prefers the historical `full_global_xstar_tau0_calc_emis_ion` branch used by examples 51--52, rather than silently choosing the reference-depth postprocess branch when both are present.  This restores the comparison path used in earlier local-state validation while keeping reference-depth diagnostics available.
+Latest package note: **v0.3.143** adds a controlled same-run line-depth matrix escape mode for the C V / O VII / Mg XI / Ca XIX local-state benchmark.  The `xstar-local-state` preset now uses matching `depth_inward`/`depth_outward` values from the converted same-run `xout_lines1.fits` table for type-50 triplet transitions, reducing reliance on the scalar 0.35 escape fallback.  This is a benchmark/reproduction improvement; real predictive parity still requires source-code-matched type-50 line pumping with the local XSTAR radiation field.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -79,7 +79,7 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
 
 The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
 
-No solver physics changed in v0.3.142. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. This release fixes benchmark triplet-source selection so current runs can be compared to the historical local-state validation branch.
+v0.3.143 changes only the controlled benchmark matrix-escape input for matching same-run line depths. Type-50 photoexcitation/line pumping remains **audit-only** and is not yet injected with the real XSTAR `bremsa(nb1)` radiation field.
 
 ## Earlier v0.3.128 API infrastructure
 

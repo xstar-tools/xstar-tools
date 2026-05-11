@@ -518,6 +518,7 @@ def _source_code_gap_diagnosis(
     summ = solver_summary or {}
     treatment = str(summ.get('type50_bound_bound_treatment') or '')
     escape_factor = summ.get('type50_escape_factor')
+    escape_source = str(summ.get('type50_escape_source') or '')
     pumping_scale = summ.get('type50_photoexcitation_scale')
     radiation_mode = str(summ.get('radiation_field_mode') or '')
     bremsa_scale = summ.get('radiation_bremsa_scale')
@@ -527,8 +528,10 @@ def _source_code_gap_diagnosis(
         issues.append('common residual is high forbidden fraction and low resonance fraction')
     if str(pumping_scale) in {'0', '0.0', ''}:
         issues.append('type-50 lower-to-upper photoexcitation is not injected into the population matrix')
-    if 'larger_than_scalar_0p35' in escape_diag:
+    if 'larger_than_scalar_0p35' in escape_diag and escape_source not in {'xstar-reference-lines', 'same-run-xout-lines', 'xout-lines', 'reference-lines'}:
         issues.append('same-run XSTAR resonance depth implies larger escape probability than scalar 0.35 proxy')
+    if escape_source in {'xstar-reference-lines', 'same-run-xout-lines', 'xout-lines', 'reference-lines'}:
+        issues.append('population matrix uses same-run xout_lines1 depths for matching type-50 lines')
     if radiation_mode and radiation_mode != 'xstar-run-bremsa':
         issues.append('solver radiation field is a proxy rather than the same-run XSTAR bremsa(nb1) field')
     if not issues:
@@ -536,6 +539,7 @@ def _source_code_gap_diagnosis(
     return {
         'solver_type50_bound_bound_treatment': treatment,
         'solver_type50_escape_factor': escape_factor,
+        'solver_type50_escape_source': summ.get('type50_escape_source'),
         'solver_type50_photoexcitation_scale': pumping_scale,
         'solver_radiation_field_mode': radiation_mode,
         'solver_radiation_bremsa_scale': bremsa_scale,
@@ -747,6 +751,7 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "full_global_topology": "xstar-continuum-alias-superlevels",
         "type50_bound_bound_treatment": "xstar-line-escape",
         "type50_escape_factor": 0.35,
+        "type50_escape_source": "xstar-reference-lines",
     }
     if window:
         out["wavelength_min"] = float(window[0])

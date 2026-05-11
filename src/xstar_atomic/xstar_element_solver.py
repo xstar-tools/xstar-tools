@@ -268,6 +268,101 @@ def _match_xstar_reference_line(
     return out
 
 
+
+def _reference_line_matches_transition(
+    transition: Mapping[str, object],
+    reference_rows: Sequence[dict],
+    *,
+    wavelength_tolerance_A: float = 0.035,
+) -> Optional[dict]:
+    """Match a type-50 matrix transition to a same-run XSTAR line row.
+
+    ``xout_lines1`` rows use the spectroscopic direction lower->upper, while
+    the transition log for a radiative decay normally stores upper->lower as
+    ``from_level`` -> ``to_level``.  Matching by reversed level indices is the
+    safest path.  A wavelength-only fallback is retained for older transition
+    logs that lack complete level information.
+    """
+    if not reference_rows:
+        return None
+    stage = maybe_int(transition.get("ion_stage"))
+    from_level = maybe_int(transition.get("from_level"))
+    to_level = maybe_int(transition.get("to_level"))
+    wav = _line_wavelength_value(transition)
+    best: Optional[dict] = None
+    best_score = float("inf")
+    for ref in reference_rows:
+        ref_stage = maybe_int(ref.get("ion_stage"))
+        if stage is not None and ref_stage is not None and int(stage) != int(ref_stage):
+            continue
+        ref_lower = maybe_int(ref.get("lower_level"))
+        ref_upper = maybe_int(ref.get("upper_level"))
+        level_match = False
+        if from_level is not None and to_level is not None and ref_lower is not None and ref_upper is not None:
+            level_match = (int(ref_upper) == int(from_level) and int(ref_lower) == int(to_level))
+        rwav = _line_wavelength_value(ref)
+        if level_match:
+            dw = abs(float(wav) - float(rwav)) if wav is not None and rwav is not None else 0.0
+            score = dw
+        else:
+            # Fallback for older transition rows: use nearest wavelength, but
+            # keep a tight tolerance so unrelated lines in the same window are
+            # not accidentally assigned optical depths.
+            if wav is None or rwav is None:
+                continue
+            dw = abs(float(wav) - float(rwav))
+            if dw > float(wavelength_tolerance_A):
+                continue
+            score = 1000.0 + dw
+        if score < best_score:
+            best = ref
+            best_score = score
+    if best is None:
+        return None
+    out = dict(best)
+    if wav is not None and _line_wavelength_value(best) is not None:
+        out["match_delta_wavelength_A"] = abs(float(wav) - float(_line_wavelength_value(best)))
+    out["match_mode"] = "reversed_level_indices" if best_score < 1000.0 else "wavelength_fallback"
+    return out
+
+
+def _annotate_type50_transition_depths_from_reference(
+    transition_rows: Sequence[dict],
+    reference_rows: Sequence[dict],
+) -> list[dict]:
+    """Attach same-run XSTAR line depths to type-50 transition rows.
+
+    This is a controlled benchmark/reproduction helper.  XSTAR supplies
+    ``ptmp1``/``ptmp2`` to ``ucalc.f90`` from line optical depths before type-50
+    rates enter the population matrix.  The Python matrix previously used a
+    scalar fallback for most type-50 lines.  When same-run ``xout_lines1`` rows
+    are available, using their ``depth_inward``/``depth_outward`` values for the
+    matching transition is closer to the source-code path and makes the
+    remaining discrepancy a line-pumping/radiation-field issue rather than a
+    scalar escape-proxy issue.
+    """
+    out: list[dict] = []
+    for row0 in transition_rows:
+        row = dict(row0)
+        if _is_type50_radiative_transition(row):
+            ref = _reference_line_matches_transition(row, reference_rows)
+            if ref is not None:
+                din = maybe_float(ref.get("depth_inward"))
+                dout = maybe_float(ref.get("depth_outward"))
+                if din is not None:
+                    row["depth_inward"] = float(din)
+                    row["xstar_depth_inward"] = float(din)
+                if dout is not None:
+                    row["depth_outward"] = float(dout)
+                    row["xstar_depth_outward"] = float(dout)
+                row["xstar_reference_depth_source"] = "same_run_xout_lines1"
+                row["xstar_reference_depth_match_mode"] = ref.get("match_mode", "")
+                row["xstar_reference_depth_match_delta_wavelength_A"] = ref.get("match_delta_wavelength_A", "")
+                row["xstar_reference_depth_record"] = ref.get("record", "")
+        out.append(row)
+    return out
+
+
 def _xstar_reference_triplet_summary(reference_rows: Sequence[dict], value_column: object = "emit_outward") -> dict:
     """Return normalized f/i/r target fractions from a converted XSTAR line CSV."""
     col = str(value_column or "emit_outward")
@@ -4726,6 +4821,7 @@ def build_global_bound_bound_matrix_terms(
     *,
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
+    type50_escape_source: object = "matrix-row",
     type50_photoexcitation_scale: object = 0.0,
     resonance_collisional_feed_scale: object = 1.0,
 ) -> List[dict]:
@@ -8365,6 +8461,7 @@ def build_resonance_collisional_feed_scale_scan_rows(
     he_like_stage: int,
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
+    type50_escape_source: object = "matrix-row",
     type50_photoexcitation_scale: object = 0.0,
     resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5,3,3.25,3.5,4",
     triplet_coupling_treatment: str = "normal",
@@ -12583,6 +12680,7 @@ def solve_element_reference(
     triplet_coupling_treatment: str = "normal",
     type50_bound_bound_treatment: str = "raw-A",
     type50_escape_factor: object = 1.0,
+    type50_escape_source: object = "matrix-row",
     type50_photoexcitation_scale: object = 0.0,
     type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
     resonance_collisional_feed_scale: object = 1.0,
@@ -12814,8 +12912,11 @@ def solve_element_reference(
                             r["injected_solve_status"] = first_block.get("solve_status")
                             r["injected_extra_source_sum_s^-1"] = first_block.get("extra_source_sum_s^-1")
     type50_bound_bound_treatment_norm = _normalise_type50_bound_bound_treatment(type50_bound_bound_treatment)
+    type50_escape_source_norm = str(type50_escape_source or "matrix-row").strip().lower().replace("_", "-")
+    reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(xstar_reference_lines_csv) if type50_escape_source_norm in {"xstar-reference-lines", "same-run-xout-lines", "xout-lines", "reference-lines"} else []
+    matrix_transitions = _annotate_type50_transition_depths_from_reference(transitions, reference_depth_rows_for_matrix) if reference_depth_rows_for_matrix else transitions
     global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(
-        transitions,
+        matrix_transitions,
         global_index_rows,
         type50_bound_bound_treatment=type50_bound_bound_treatment_norm,
         type50_escape_factor=type50_escape_factor,
@@ -13286,6 +13387,8 @@ def solve_element_reference(
             "global_bound_bound_matrix_terms_summary": _global_bound_bound_matrix_terms_summary(global_bound_bound_matrix_terms),
             "type50_bound_bound_treatment": type50_bound_bound_treatment_norm,
             "type50_escape_factor": type50_escape_factor,
+            "type50_escape_source": type50_escape_source_norm,
+            "n_type50_reference_depth_rows_for_matrix": len(reference_depth_rows_for_matrix),
             "type50_photoexcitation_scale": type50_photoexcitation_scale,
             "n_type50_ucalc_rate_audit_rows": len(type50_ucalc_rate_audit_rows),
             "type50_ucalc_rate_audit_summary": _type50_ucalc_rate_audit_summary(type50_ucalc_rate_audit_rows),
