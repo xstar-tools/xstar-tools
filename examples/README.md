@@ -491,6 +491,12 @@ For the four-ion standard suite, use the built-in C V / O VII / Mg XI / Ca XIX c
 PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-helike-suite --xstar-runs-root xstar_runs --out-dir helike_local_reproduction_suite --print-summary
 ```
 
+For the physics benchmark, compare against the source-code-first local-state solver preset.  This reports XSTAR and solver `f/i/r`, `R`, `G`, and L2 values:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-helike-suite --xstar-runs-root xstar_runs --run-solver --solver-preset xstar-local-state --out-dir helike_local_reproduction_suite_solver_v03139 --print-summary
+```
+
 If you want an editable case table, write it first and then run it:
 
 ```bash

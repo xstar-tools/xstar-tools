@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.138"
+__version__ = "0.3.139"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -18,6 +18,8 @@ from .benchmark import (
     run_xstar_benchmark_suite,
     write_xstar_benchmark_outputs,
     write_xstar_benchmark_suite,
+    solver_kwargs_from_preset,
+    xstar_local_state_solver_kwargs,
 )
 from .workflow import (
     TripletResult,
@@ -91,6 +93,8 @@ __all__ = [
     "run_xstar_benchmark_suite",
     "write_xstar_benchmark_outputs",
     "write_xstar_benchmark_suite",
+    "solver_kwargs_from_preset",
+    "xstar_local_state_solver_kwargs",
     "TripletResult",
     "open_database",
     "get_levels",

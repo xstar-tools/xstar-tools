@@ -175,42 +175,158 @@ def _difference(a: float | None, b: float | None) -> float | None:
     return float(a) - float(b)
 
 
+def _ratio(num: float | None, den: float | None) -> float | None:
+    if num is None or den in (None, 0.0):
+        return None
+    try:
+        out = float(num) / float(den)
+    except Exception:
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _triplet_metrics_from_fir(f: float | None, i: float | None, r: float | None) -> dict[str, float | None]:
+    """Return R=f/i, G=(f+i)/r and normalized total for f/i/r fractions."""
+    total = None
+    if f is not None and i is not None and r is not None:
+        total = float(f) + float(i) + float(r)
+    return {
+        "R_f_over_i": _ratio(f, i),
+        "G_f_plus_i_over_r": _ratio((float(f) + float(i)) if f is not None and i is not None else None, r),
+        "fraction_sum": total,
+    }
+
+
+def _l2_to_target(sf: float | None, si: float | None, sr: float | None, tf: float | None, ti: float | None, tr: float | None) -> float | None:
+    vals = (sf, si, sr, tf, ti, tr)
+    if any(v is None for v in vals):
+        return None
+    try:
+        out = math.sqrt((float(sf) - float(tf)) ** 2 + (float(si) - float(ti)) ** 2 + (float(sr) - float(tr)) ** 2)
+    except Exception:
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _normalized_triplet_mapping(triplet: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalize f/i/r, R, G and L2-like keys from several solver layouts."""
+    if not triplet:
+        return {}
+    src = dict(triplet)
+    f = _as_float(src.get("f_fraction") or src.get("f") or src.get("solver_f"))
+    i = _as_float(src.get("i_fraction") or src.get("i") or src.get("solver_i"))
+    r = _as_float(src.get("r_fraction") or src.get("r") or src.get("solver_r"))
+    metrics = _triplet_metrics_from_fir(f, i, r)
+    R = _as_float(src.get("R") or src.get("R_f_over_i") or src.get("solver_R_f_over_i"))
+    G = _as_float(src.get("G") or src.get("G_f_plus_i_over_r") or src.get("solver_G_f_plus_i_over_r"))
+    l2 = _as_float(src.get("l2_distance_to_target") or src.get("L2") or src.get("solver_l2_distance_to_target"))
+    out = dict(src)
+    out.update({
+        "f_fraction": f,
+        "i_fraction": i,
+        "r_fraction": r,
+        "R_f_over_i": R if R is not None else metrics["R_f_over_i"],
+        "G_f_plus_i_over_r": G if G is not None else metrics["G_f_plus_i_over_r"],
+        "fraction_sum": metrics["fraction_sum"],
+    })
+    if l2 is not None:
+        out["l2_distance_to_target"] = l2
+    return out
+
+
 def _has_triplet_fractions(triplet: Mapping[str, Any] | None) -> bool:
     """Return True when a mapping contains finite f/i/r triplet fractions."""
-    if not triplet:
-        return False
-    return all(
-        _as_float(triplet.get(f"{comp}_fraction") or triplet.get(comp) or triplet.get(f"solver_{comp}")) is not None
-        for comp in ("f", "i", "r")
-    )
+    norm = _normalized_triplet_mapping(triplet)
+    return all(_as_float(norm.get(f"{comp}_fraction")) is not None for comp in ("f", "i", "r"))
+
+
+def _comparison_row_triplet(row: Mapping[str, Any], *, source_label: str) -> dict[str, Any]:
+    """Normalize a full-global comparison summary row into a triplet mapping."""
+    out = _normalized_triplet_mapping(row)
+    out["solver_triplet_source"] = source_label
+    if row.get("comparison_case"):
+        out["comparison_case"] = row.get("comparison_case")
+    if row.get("solve_status"):
+        out["solve_status"] = row.get("solve_status")
+    return out
+
+
+def _summary_triplet_candidates(result: Mapping[str, Any], summary: Mapping[str, Any]) -> list[tuple[str, Mapping[str, Any]]]:
+    """Return solver triplet candidates in source-code-preference order.
+
+    The first v0.3.134--v0.3.138 benchmark implementation extracted
+    ``summary["he_like_triplet"]``.  That is a quick convenience summary from
+    the current He-like ion line rows, not the source-code-first local-state
+    validation path used in examples 51--52.  Prefer XSTAR-style full-global and
+    ``calc_emis_ion`` postprocess summaries when they are present, and use the
+    convenience summary only as a final fallback.
+    """
+    candidates: list[tuple[str, Mapping[str, Any]]] = []
+    fgn = result.get("full_global_normalized_solve_comparison")
+    if isinstance(fgn, Sequence) and not isinstance(fgn, (str, bytes)):
+        preferred_cases = (
+            "full_global_xstar_reference_depth_emit_outward_calc_emis_ion",
+            "full_global_xstar_tau0_calc_emis_ion",
+            "full_global_xstar_continuum_alias_superlevels",
+            "full_global_type71_type99_type53_phint53",
+        )
+        rows = [r for r in fgn if isinstance(r, Mapping) and str(r.get("row_kind", "")).lower() == "summary"]
+        for case in preferred_cases:
+            for row in rows:
+                if str(row.get("comparison_case", "")) == case and _has_triplet_fractions(row):
+                    candidates.append((f"full_global_normalized_solve_comparison:{case}", _comparison_row_triplet(row, source_label=f"full_global:{case}")))
+        for row in rows:
+            if _has_triplet_fractions(row):
+                case = str(row.get("comparison_case", "summary"))
+                candidates.append((f"full_global_normalized_solve_comparison:{case}", _comparison_row_triplet(row, source_label=f"full_global:{case}")))
+    ce_summary = summary.get("calc_emis_ion_triplet_emergent_summary") if isinstance(summary, Mapping) else None
+    if isinstance(ce_summary, Mapping):
+        for key in (
+            "xstar_reference_depth_emit_outward_calc_emis_ion",
+            "xstar_tau0_calc_emis_ion",
+            "transparent_tau0_calc_emis_ion",
+            "raw_pop_A_E",
+        ):
+            cand = ce_summary.get(key)
+            if isinstance(cand, Mapping) and _has_triplet_fractions(cand):
+                candidates.append((f"calc_emis_ion_triplet_emergent_summary:{key}", _comparison_row_triplet(cand, source_label=f"calc_emis_ion:{key}")))
+    direct = [
+        ("result.triplet", result.get("triplet")),
+        ("result.triplet_summary", result.get("triplet_summary")),
+        ("result.xstar_like_element_solver_triplet", result.get("xstar_like_element_solver_triplet")),
+        ("summary.he_like_triplet", summary.get("he_like_triplet") if isinstance(summary, Mapping) else None),
+        ("summary.calc_emis_ion_triplet_emergent_summary", summary.get("calc_emis_ion_triplet_emergent_summary") if isinstance(summary, Mapping) else None),
+        ("summary.calc_emis_triplet_audit_summary", summary.get("calc_emis_triplet_audit_summary") if isinstance(summary, Mapping) else None),
+        ("summary.triplet_emissivity_branch_audit_summary", summary.get("triplet_emissivity_branch_audit_summary") if isinstance(summary, Mapping) else None),
+    ]
+    for label, cand in direct:
+        if isinstance(cand, Mapping) and _has_triplet_fractions(cand):
+            c = _normalized_triplet_mapping(cand)
+            c.setdefault("solver_triplet_source", label)
+            candidates.append((label, c))
+    return candidates
 
 
 def _extract_solver_triplet_from_result(result: Any) -> tuple[Mapping[str, Any], Mapping[str, Any], tuple[str, ...]]:
-    """Extract a normalized solver triplet from known solver result layouts.
+    """Extract the best available normalized solver triplet.
 
-    The source-level element solver returns the current He-like triplet under
-    ``result["summary"]["he_like_triplet"]``.  Earlier v0.3.134--v0.3.135
-    benchmark code only searched top-level keys such as ``triplet`` and
-    therefore wrote ``status=solver_compared`` while leaving solver columns
-    blank.  This helper keeps the benchmark tolerant of both old and current
-    result dictionaries and records a warning when no finite f/i/r fractions
-    are available.
+    This function now records the provenance of the extracted solver triplet.
+    In particular, it avoids silently using the quick ``summary.he_like_triplet``
+    when an XSTAR-like full-global comparison or calc_emis_ion postprocess
+    triplet is available.
     """
     if not isinstance(result, Mapping):
         return {}, {}, ("solver_returned_non_mapping_result",)
     summary = result.get("summary", result) if isinstance(result.get("summary", result), Mapping) else {}
-    candidates = [
-        result.get("triplet"),
-        result.get("triplet_summary"),
-        result.get("xstar_like_element_solver_triplet"),
-        summary.get("he_like_triplet") if isinstance(summary, Mapping) else None,
-        summary.get("calc_emis_ion_triplet_emergent_summary") if isinstance(summary, Mapping) else None,
-        summary.get("calc_emis_triplet_audit_summary") if isinstance(summary, Mapping) else None,
-        summary.get("triplet_emissivity_branch_audit_summary") if isinstance(summary, Mapping) else None,
-    ]
-    for cand in candidates:
-        if isinstance(cand, Mapping) and _has_triplet_fractions(cand):
-            return dict(cand), dict(summary), ()
+    candidates = _summary_triplet_candidates(result, summary)
+    if candidates:
+        label, cand = candidates[0]
+        out = dict(cand)
+        out.setdefault("solver_triplet_source", label)
+        warnings = []
+        if label == "summary.he_like_triplet":
+            warnings.append("solver_triplet_from_quick_summary_not_full_xstar_validation_path")
+        return out, dict(summary), tuple(warnings)
     return {}, dict(summary), ("solver_returned_no_finite_triplet_fractions",)
 
 
@@ -307,17 +423,30 @@ class XSTARBenchmarkComparison:
         """Return one flat row with target and solver residuals when available."""
         row = self.target.triplet_row()
         row.update(self.target.local_state_row())
-        solver = dict(self.solver_triplet or {})
-        sf = _as_float(solver.get("f_fraction") or solver.get("f") or solver.get("solver_f"))
-        si = _as_float(solver.get("i_fraction") or solver.get("i") or solver.get("solver_i"))
-        sr = _as_float(solver.get("r_fraction") or solver.get("r") or solver.get("solver_r"))
+        solver = _normalized_triplet_mapping(self.solver_triplet)
+        sf = _as_float(solver.get("f_fraction"))
+        si = _as_float(solver.get("i_fraction"))
+        sr = _as_float(solver.get("r_fraction"))
+        sR = _as_float(solver.get("R_f_over_i"))
+        sG = _as_float(solver.get("G_f_plus_i_over_r"))
+        xl2 = 0.0 if all(_as_float(getattr(self.target.triplet, comp)) is not None for comp in ("f", "i", "r")) else None
+        sl2 = _l2_to_target(sf, si, sr, self.target.triplet.f, self.target.triplet.i, self.target.triplet.r)
         row.update({
+            "xstar_L2_to_xstar": xl2,
             "solver_f_fraction": sf,
             "solver_i_fraction": si,
             "solver_r_fraction": sr,
+            "solver_R_f_over_i": sR,
+            "solver_G_f_plus_i_over_r": sG,
+            "solver_fraction_sum": _as_float(solver.get("fraction_sum")),
+            "solver_l2_distance_to_target_reported": _as_float(solver.get("l2_distance_to_target")),
+            "solver_L2_to_xstar": sl2,
+            "solver_triplet_source": solver.get("solver_triplet_source") or solver.get("comparison_case") or "",
             "delta_f_solver_minus_xstar": _difference(sf, self.target.triplet.f),
             "delta_i_solver_minus_xstar": _difference(si, self.target.triplet.i),
             "delta_r_solver_minus_xstar": _difference(sr, self.target.triplet.r),
+            "delta_R_solver_minus_xstar": _difference(sR, self.target.triplet.R_f_over_i),
+            "delta_G_solver_minus_xstar": _difference(sG, self.target.triplet.G_f_plus_i_over_r),
             "comparison_status": self.status,
             "comparison_warnings": "; ".join(self.warnings),
         })
@@ -395,6 +524,57 @@ def build_xstar_local_target(
     )
 
 
+
+
+def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> dict[str, Any]:
+    """Return the source-code-first local-state validation solver settings.
+
+    These settings mirror the generated commands from
+    ``examples/51_run_helike_local_state_validation.py``.  They are not a new
+    physics correction; they make the benchmark use the same mature diagnostic
+    path that previously produced the all-ion local-state comparisons, instead
+    of the much lighter convenience defaults used by ``solve_populations``.
+    """
+    window = target.wavelength_window_A if target is not None else None
+    out: dict[str, Any] = {
+        "max_level": 80,
+        "adjacent_coupling_mode": "recombination-source",
+        "adjacent_coupling_source_mode": "record-destination",
+        "index_cache": True,
+        "type57_energy_convention": "abs-rlev4",
+        "triplet_source_mode": "type74-direct-diagnostic",
+        "type99_proxy_scale": "0,1e-8,1e-6,1e-4,1e-2,1,1e2",
+        "radiation_field_mode": "xstar-powerlaw",
+        "radiation_bremsa_scale": 1.0e18,
+        "radiation_powerlaw_index": 1.0,
+        "radiation_n_energy_grid": 512,
+        "type53_flat_proxy_scale": 1.0,
+        "type53_phint53_scale": "1,1e5,1e10,1e15,1e18,1e20",
+        "inverse_recombination_mode": "xstar-ucalc",
+        "ion_fraction_closure": "xstar-calc-ion-rates",
+        "full_global_linear_solver": "xstar-lucy",
+        "full_global_topology": "xstar-continuum-alias-superlevels",
+        "type50_bound_bound_treatment": "xstar-line-escape",
+        "type50_escape_factor": 0.35,
+    }
+    if window:
+        out["wavelength_min"] = float(window[0])
+        out["wavelength_max"] = float(window[1])
+    if target is not None and target.xout_lines_path:
+        out["xstar_reference_lines_csv"] = target.xout_lines_path
+        out["xstar_reference_value_column"] = target.value_column
+    return out
+
+
+def solver_kwargs_from_preset(preset: str | None, target: XSTARLocalTarget | None = None) -> dict[str, Any]:
+    """Resolve named benchmark solver presets."""
+    key = str(preset or "workflow-default").strip().lower().replace("_", "-")
+    if key in {"", "none", "workflow", "workflow-default", "quick", "current"}:
+        return {}
+    if key in {"xstar-local-state", "local-state", "validation", "v03124", "v03123", "source-code-first"}:
+        return xstar_local_state_solver_kwargs(target)
+    raise ValueError(f"Unknown solver preset {preset!r}; use workflow-default or xstar-local-state")
+
 def compare_solver_to_xstar_target(
     target: XSTARLocalTarget,
     *,
@@ -403,6 +583,7 @@ def compare_solver_to_xstar_target(
     run_solver: bool = False,
     solver_triplet: Mapping[str, Any] | None = None,
     solver_kwargs: Mapping[str, Any] | None = None,
+    solver_preset: str | None = None,
 ) -> XSTARBenchmarkComparison:
     """Compare a solver/product triplet with an exact XSTAR local target.
 
@@ -425,7 +606,9 @@ def compare_solver_to_xstar_target(
             # ./atdb.fits.  The database resolver inside solve_populations then
             # handles environment/datapath lookup.
             solver_fitsfile = fitsfile if str(fitsfile or "").strip() else None
-            result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **dict(solver_kwargs or {}))
+            preset_kwargs = solver_kwargs_from_preset(solver_preset, target)
+            merged_kwargs = {**preset_kwargs, **dict(solver_kwargs or {})}
+            result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)
             warnings.extend(extract_warnings)
             status = "solver_compared" if _has_triplet_fractions(triplet) else "solver_no_triplet_values"
@@ -451,6 +634,7 @@ def reproduce_xstar_run(
     db: Any = None,
     fitsfile: str | Path | None = None,
     solver_kwargs: Mapping[str, Any] | None = None,
+    solver_preset: str | None = None,
 ) -> XSTARBenchmarkComparison:
     """Extract exact XSTAR targets and optionally compare a solver run."""
     target = build_xstar_local_target(
@@ -467,6 +651,7 @@ def reproduce_xstar_run(
         fitsfile=fitsfile,
         run_solver=run_solver,
         solver_kwargs=solver_kwargs,
+        solver_preset=solver_preset,
     )
 
 
@@ -537,9 +722,9 @@ def _write_benchmark_md(comparison: XSTARBenchmarkComparison, path: Path) -> Non
         "",
         "## Solver comparison",
         "",
-        "| status | solver f | solver i | solver r | Δf | Δi | Δr |",
-        "|---|---:|---:|---:|---:|---:|---:|",
-        f"| {comparison.status} | {_fmt(comp.get('solver_f_fraction'))} | {_fmt(comp.get('solver_i_fraction'))} | {_fmt(comp.get('solver_r_fraction'))} | {_fmt(comp.get('delta_f_solver_minus_xstar'))} | {_fmt(comp.get('delta_i_solver_minus_xstar'))} | {_fmt(comp.get('delta_r_solver_minus_xstar'))} |",
+        "| status | source | solver f/i/r | solver R | solver G | solver L2 | Δf/Δi/Δr | ΔR | ΔG |",
+        "|---|---|---|---:|---:|---:|---|---:|---:|",
+        f"| {comparison.status} | {comp.get('solver_triplet_source','')} | {_fmt(comp.get('solver_f_fraction'))}/{_fmt(comp.get('solver_i_fraction'))}/{_fmt(comp.get('solver_r_fraction'))} | {_fmt(comp.get('solver_R_f_over_i'))} | {_fmt(comp.get('solver_G_f_plus_i_over_r'))} | {_fmt(comp.get('solver_L2_to_xstar'))} | {_fmt(comp.get('delta_f_solver_minus_xstar'))}/{_fmt(comp.get('delta_i_solver_minus_xstar'))}/{_fmt(comp.get('delta_r_solver_minus_xstar'))} | {_fmt(comp.get('delta_R_solver_minus_xstar'))} | {_fmt(comp.get('delta_G_solver_minus_xstar'))} |",
         "",
         "## Source files",
         "",
@@ -586,16 +771,19 @@ def _write_suite_md(comparisons: Sequence[XSTARBenchmarkComparison], path: Path)
         "",
         "The XSTAR columns below are copied from same-run `xout_abund1.fits` and `xout_lines1.fits` targets.  Solver columns are present only when a solver comparison was requested or supplied.",
         "",
-        "| Ion | T (K) | ne (cm^-3) | log xi | ion fraction | XSTAR f/i/r | solver f/i/r | Δf/Δi/Δr | status |",
-        "|---|---:|---:|---:|---:|---|---|---|---|",
+        "| Ion | T (K) | ne (cm^-3) | log xi | ion fraction | XSTAR f/i/r | XSTAR R/G/L2 | solver f/i/r | solver R/G/L2 | Δf/Δi/Δr | ΔR/ΔG | source | status |",
+        "|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|",
     ]
     for c in comparisons:
         row = c.comparison_row()
         target = f"{_fmt(row.get('xstar_f_fraction'))}/{_fmt(row.get('xstar_i_fraction'))}/{_fmt(row.get('xstar_r_fraction'))}"
+        target_diag = f"{_fmt(row.get('xstar_R_f_over_i'))}/{_fmt(row.get('xstar_G_f_plus_i_over_r'))}/{_fmt(row.get('xstar_L2_to_xstar'))}"
         solver = f"{_fmt(row.get('solver_f_fraction'))}/{_fmt(row.get('solver_i_fraction'))}/{_fmt(row.get('solver_r_fraction'))}"
+        solver_diag = f"{_fmt(row.get('solver_R_f_over_i'))}/{_fmt(row.get('solver_G_f_plus_i_over_r'))}/{_fmt(row.get('solver_L2_to_xstar'))}"
         delta = f"{_fmt(row.get('delta_f_solver_minus_xstar'))}/{_fmt(row.get('delta_i_solver_minus_xstar'))}/{_fmt(row.get('delta_r_solver_minus_xstar'))}"
+        delta_diag = f"{_fmt(row.get('delta_R_solver_minus_xstar'))}/{_fmt(row.get('delta_G_solver_minus_xstar'))}"
         lines.append(
-            f"| {row.get('ion','')} | {_fmt(row.get('temperature_K'))} | {_fmt(row.get('electron_density_cm^-3'))} | {_fmt(row.get('log_xi'))} | {_fmt(row.get('ion_fraction'))} | {target} | {solver} | {delta} | {c.status} |"
+            f"| {row.get('ion','')} | {_fmt(row.get('temperature_K'))} | {_fmt(row.get('electron_density_cm^-3'))} | {_fmt(row.get('log_xi'))} | {_fmt(row.get('ion_fraction'))} | {target} | {target_diag} | {solver} | {solver_diag} | {delta} | {delta_diag} | {row.get('solver_triplet_source','')} | {c.status} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -607,6 +795,8 @@ def run_xstar_benchmark_suite(
     run_solver: bool = False,
     db: Any = None,
     fitsfile: str | Path | None = None,
+    solver_kwargs: Mapping[str, Any] | None = None,
+    solver_preset: str | None = None,
 ) -> list[XSTARBenchmarkComparison]:
     """Run :func:`reproduce_xstar_run` for a list of case dictionaries."""
     out: list[XSTARBenchmarkComparison] = []
@@ -629,6 +819,8 @@ def run_xstar_benchmark_suite(
             run_solver=run_solver,
             db=db,
             fitsfile=fitsfile,
+            solver_kwargs=solver_kwargs,
+            solver_preset=solver_preset,
         ))
     return out
 
@@ -669,4 +861,6 @@ __all__ = [
     "read_cases_csv",
     "write_xstar_benchmark_outputs",
     "write_xstar_benchmark_suite",
+    "solver_kwargs_from_preset",
+    "xstar_local_state_solver_kwargs",
 ]

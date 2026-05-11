@@ -76,7 +76,7 @@ Run without installation from a checkout:
 Public API layers
 -----------------
 
-The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.138 make
+The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.139 make
 this layer explicit in Markdown, LaTeX, and Sphinx documentation.
 
 .. list-table:: Public API layers
@@ -97,7 +97,7 @@ this layer explicit in Markdown, LaTeX, and Sphinx documentation.
      - ``db.rates.type50("O VII", ...)``
 
 The API intentionally separates implemented stable helpers from future
-namespace placeholders.  In v0.3.132--v0.3.138, ``db.rates.type50(...)``,
+namespace placeholders.  In v0.3.132--v0.3.139, ``db.rates.type50(...)``,
 ``db.audit.type50_line_pumping(...)``, ``db.context.*``, and
 ``db.validate.compare_xstar_run(...)`` and ``db.validate.reproduce_xstar_run(...)`` are callable.  Full type-50 solver
 injection and some resonance-budget audits remain future work.
@@ -681,6 +681,20 @@ Use the built-in standard case table for the C V / O VII / Mg XI / Ca XIX suite:
      --xstar-runs-root xstar_runs \
      --out-dir helike_local_reproduction_suite \
      --print-summary
+
+For a solver comparison, use the source-code-first local-state preset rather than the lightweight workflow-default solver:
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+     --standard-helike-suite \
+     --xstar-runs-root xstar_runs \
+     --run-solver \
+     --solver-preset xstar-local-state \
+     --out-dir helike_local_reproduction_suite_solver_v03139 \
+     --print-summary
+
+The comparison outputs include XSTAR and solver ``f/i/r``, ``R=f/i``, ``G=(f+i)/r``, L2, residuals, and the solver-triplet source.
 
 To create an editable CSV first, run:
 

@@ -134,7 +134,7 @@ def test_solver_result_summary_he_like_triplet_is_extracted(tmp_path, monkeypatc
     comparison = compare_solver_to_xstar_target(target, run_solver=True)
     row = comparison.comparison_row()
     assert row["comparison_status"] == "solver_compared"
-    assert row["comparison_warnings"] == ""
+    assert "quick_summary_not_full_xstar_validation_path" in row["comparison_warnings"]
     assert row["solver_f_fraction"] == 0.70
     assert row["solver_i_fraction"] == 0.10
     assert row["solver_r_fraction"] == 0.20
@@ -223,3 +223,122 @@ def test_run_solver_resolves_blank_fitsfile_from_environment(monkeypatch, tmp_pa
     comparison = compare_solver_to_xstar_target(target, run_solver=True, fitsfile="")
     assert comparison.status == "solver_compared"
     assert seen["fitsfile"] is None
+
+
+def test_benchmark_comparison_includes_R_G_L2_metrics():
+    ctx = xa.context_from_values(ion="O VII", temperature_K=1.0e5, electron_density_cm3=1.0e8)
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.0},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 1.0},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xout_abund_path="run/xout_abund1.fits",
+        xout_lines_path="run/xout_lines1.fits",
+        wavelength_window_A=(21.0, 23.0),
+    )
+    comparison = compare_solver_to_xstar_target(
+        target,
+        solver_triplet={"f_fraction": 0.7, "i_fraction": 0.2, "r_fraction": 0.1},
+    )
+    row = comparison.comparison_row()
+    assert row["xstar_R_f_over_i"] == 8.0
+    assert row["xstar_G_f_plus_i_over_r"] == 9.0
+    assert row["xstar_L2_to_xstar"] == 0.0
+    assert abs(row["solver_R_f_over_i"] - 3.5) < 1e-12
+    assert abs(row["solver_G_f_plus_i_over_r"] - 9.0) < 1e-12
+    assert row["solver_L2_to_xstar"] is not None
+    assert row["delta_R_solver_minus_xstar"] == -4.5
+
+
+def test_full_global_triplet_is_preferred_over_quick_summary(monkeypatch):
+    ctx = xa.context_from_values(ion="O VII", temperature_K=7.66552e4, electron_density_cm3=1.20466e8)
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.5},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 2.5},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xout_abund_path="run/xout_abund1.fits",
+        xout_lines_path="run/xout_lines1.fits",
+        wavelength_window_A=(21.0, 23.0),
+    )
+
+    import xstar_atomic.benchmark as benchmark
+
+    def fake_solve_populations(*args, **kwargs):
+        return {
+            "summary": {"he_like_triplet": {"f_fraction": 0.01, "i_fraction": 0.01, "r_fraction": 0.98}},
+            "full_global_normalized_solve_comparison": [
+                {
+                    "row_kind": "summary",
+                    "comparison_case": "full_global_xstar_tau0_calc_emis_ion",
+                    "f_fraction": 0.70,
+                    "i_fraction": 0.10,
+                    "r_fraction": 0.20,
+                    "R": 7.0,
+                    "G": 4.0,
+                    "l2_distance_to_target": 0.123,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(benchmark, "solve_populations", fake_solve_populations)
+    comparison = compare_solver_to_xstar_target(target, run_solver=True)
+    row = comparison.comparison_row()
+    assert row["solver_f_fraction"] == 0.70
+    assert row["solver_triplet_source"] == "full_global:full_global_xstar_tau0_calc_emis_ion"
+    assert row["solver_l2_distance_to_target_reported"] == 0.123
+
+
+def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
+    ctx = xa.context_from_values(ion="O VII", temperature_K=7.66552e4, electron_density_cm3=1.20466e8)
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.5},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 2.5},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xout_abund_path="run/xout_abund1.fits",
+        xout_lines_path="run/xout_lines1.fits",
+        wavelength_window_A=(21.0, 23.0),
+    )
+
+    import xstar_atomic.benchmark as benchmark
+
+    seen = {}
+
+    def fake_solve_populations(*args, **kwargs):
+        seen.update(kwargs)
+        return {"summary": {"he_like_triplet": {"f_fraction": 0.70, "i_fraction": 0.10, "r_fraction": 0.20}}}
+
+    monkeypatch.setattr(benchmark, "solve_populations", fake_solve_populations)
+    compare_solver_to_xstar_target(target, run_solver=True, solver_preset="xstar-local-state")
+    assert seen["full_global_linear_solver"] == "xstar-lucy"
+    assert seen["full_global_topology"] == "xstar-continuum-alias-superlevels"
+    assert seen["type50_bound_bound_treatment"] == "xstar-line-escape"
+    assert seen["type50_escape_factor"] == 0.35

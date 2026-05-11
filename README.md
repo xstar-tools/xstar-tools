@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.138** strengthens ATDB path resolution for the C V / O VII / Mg XI / Ca XIX solver benchmark suite.  The benchmark now accepts both `XSTAR_ATDB` and `XSTAR_ATDB_FITS`; when those are unset, it falls back to the configured `datapath` file and then the package data directory.  It builds on the v0.3.134 `xstar_atomic.benchmark` layer, which extracts the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
+Latest package note: **v0.3.139** strengthens the C V / O VII / Mg XI / Ca XIX benchmark comparison.  The benchmark now reports solver and XSTAR `f/i/r`, `R=f/i`, `G=(f+i)/r`, and L2 residuals in the CSV/Markdown outputs.  It also adds `--solver-preset xstar-local-state`, which mirrors the mature source-code-first settings from `examples/51_run_helike_local_state_validation.py` instead of using only the lightweight workflow defaults.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -65,8 +65,21 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
   --print-summary
 ```
 
+Four-ion solver comparison using the local-state validation preset:
 
-No solver physics changed in v0.3.138. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --standard-helike-suite \
+  --xstar-runs-root xstar_runs \
+  --run-solver \
+  --solver-preset xstar-local-state \
+  --out-dir helike_local_reproduction_suite_solver_v03139 \
+  --print-summary
+```
+
+The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
+
+No solver physics changed in v0.3.139. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
 
 ## Earlier v0.3.128 API infrastructure
 

@@ -46,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wavelength", type=_parse_window, help="Two-number wavelength window in Angstrom, e.g. '21 23'")
     p.add_argument("--value-column", default="emit_outward", help="XSTAR xout_lines1 value column to use")
     p.add_argument("--run-solver", action="store_true", help="Also run the current population solver and compare residuals")
+    p.add_argument("--solver-preset", default="workflow-default", choices=["workflow-default", "xstar-local-state"], help="Solver settings for --run-solver. workflow-default uses the lightweight public wrapper; xstar-local-state mirrors examples/51 local-state validation flags.")
     p.add_argument("--atdb", help="Path to XSTAR atdb.fits if --run-solver is used")
     p.add_argument("--out-dir", default="xstar_local_reproduction_benchmark", help="Output directory")
     p.add_argument("--print-summary", action="store_true")
@@ -77,6 +78,7 @@ def main() -> None:
             value_column=args.value_column,
             run_solver=args.run_solver,
             fitsfile=solver_atdb,
+            solver_preset=args.solver_preset,
         )
         paths = write_xstar_benchmark_suite(comparisons, out_dir)
         if args.print_summary:
@@ -92,7 +94,10 @@ def main() -> None:
                     f"ne={row.get('electron_density_cm^-3')} cm^-3 "
                     f"logxi={row.get('log_xi')} "
                     f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')} "
+                    f"xstar_R/G/L2={row.get('xstar_R_f_over_i')}/{row.get('xstar_G_f_plus_i_over_r')}/{row.get('xstar_L2_to_xstar')} "
                     f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')} "
+                    f"solver_R/G/L2={row.get('solver_R_f_over_i')}/{row.get('solver_G_f_plus_i_over_r')}/{row.get('solver_L2_to_xstar')} "
+                    f"source={row.get('solver_triplet_source')} "
                     f"status={comparison.status}"
                 )
                 if row.get("comparison_warnings"):
@@ -112,6 +117,7 @@ def main() -> None:
         value_column=args.value_column,
         run_solver=args.run_solver,
         fitsfile=solver_atdb,
+        solver_preset=args.solver_preset,
     )
     paths = write_xstar_benchmark_outputs(comparison, out_dir)
     if args.print_summary:
@@ -125,7 +131,10 @@ def main() -> None:
         print(f"ne={row.get('electron_density_cm^-3')} cm^-3")
         print(f"logxi={row.get('log_xi')}")
         print(f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')}")
+        print(f"xstar_R/G/L2={row.get('xstar_R_f_over_i')}/{row.get('xstar_G_f_plus_i_over_r')}/{row.get('xstar_L2_to_xstar')}")
         print(f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')}")
+        print(f"solver_R/G/L2={row.get('solver_R_f_over_i')}/{row.get('solver_G_f_plus_i_over_r')}/{row.get('solver_L2_to_xstar')}")
+        print(f"solver_triplet_source={row.get('solver_triplet_source')}")
         if solver_atdb is not None:
             print(f"solver_atdb={solver_atdb}")
         print(f"status={comparison.status}")
