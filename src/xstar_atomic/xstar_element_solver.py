@@ -4982,6 +4982,7 @@ def _type50_effective_rates(
     xstar_tau2 = None
     xstar_cfrac = None
     line_escape_fallback_used = False
+    pumping_terms = {"type50_photoexcitation_status": "not_requested"}
     intra_triplet_3p_to_3s = _is_helike_triplet_3p_to_3s_drain(row, from_state=from_state, to_state=to_state)
     if treatment_norm == "raw-A" or not _is_type50_radiative_transition(row):
         decay = raw_a
@@ -4989,7 +4990,12 @@ def _type50_effective_rates(
         ptmp2 = 0.5
         ptmp_sum = 1.0
         pumping = 0.0
-        context_status = "raw_A_default"
+        if not _is_type50_radiative_transition(row):
+            context_status = "not_type50_radiative_transition_raw_rate"
+            pumping_terms = {"type50_photoexcitation_status": "not_type50_radiative_transition"}
+        else:
+            context_status = "raw_A_default"
+            pumping_terms = {"type50_photoexcitation_status": "raw_A_default_no_pumping"}
     else:
         if treatment_norm in {"xstar-line-escape", "xstar-line-escape-and-pumping"}:
             esc = _xstar_line_escape_from_row(
@@ -5010,7 +5016,6 @@ def _type50_effective_rates(
             context_status = "diagnostic_escape_proxy_no_real_tau_or_bremsa_line_integral"
         decay = raw_a * ptmp_sum
         pumping_scale = _bounded_nonnegative_float(photoexcitation_scale, 0.0)
-        pumping_terms = {}
         if treatment_norm == "xstar-escape-photoexcitation":
             pumping = raw_a * pumping_scale
             pumping_terms = {"type50_photoexcitation_status": "legacy_scaled_A_proxy"}

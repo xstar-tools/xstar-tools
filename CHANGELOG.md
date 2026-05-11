@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.145 - 2026-05-11
+
+- Fixes the first `xstar-line-escape-and-pumping` benchmark run, which failed on non-type-50 transitions with `cannot access local variable 'pumping_terms' where it is not associated with a value`.
+- Initializes the type-50 pumping diagnostic payload for all bound-bound rows, including raw-A and non-type-50 transitions.
+- Keeps type-50 photoexcitation injection opt-in through `xstar-line-escape-and-pumping`; no additional empirical scaling is added.
+
 ## v0.3.144 - 2026-05-11
 
 - Added the first source-code-matched type-50 lower-to-upper photoexcitation / line-pumping matrix mode.

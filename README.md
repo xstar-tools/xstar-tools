@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.144** adds the first opt-in source-code-matched XSTAR type-50 line-pumping matrix mode.  The `xstar-local-state` preset now uses `type50_bound_bound_treatment="xstar-line-escape-and-pumping"`: downward type-50 decay uses same-run line-depth escape probabilities, while the lower-to-upper photoexcitation branch follows the `ucalc.f90` formula using the explicit solver `epi`/`bremsa` radiation grid, `nbinc` binning, `vtherm`, `flinabs=1`, and `cfrac`.  This is the first physics implementation of type-50 pumping and should be validated against the C V / O VII / Mg XI / Ca XIX same-run XSTAR benchmark before it is treated as a final default.
+Latest package note: **v0.3.145** fixes the first opt-in `xstar-line-escape-and-pumping` benchmark run.  v0.3.144 introduced the source-code-matched type-50 lower-to-upper photoexcitation branch; v0.3.145 initializes the pumping diagnostics for all bound-bound rows so non-type-50 collisional rows no longer crash the full-global benchmark.  Type-50 pumping remains opt-in and should be validated against the C V / O VII / Mg XI / Ca XIX same-run XSTAR benchmark before it is treated as a final default.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -79,7 +79,7 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
 
 The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
 
-v0.3.144 adds the first opt-in matrix injection of XSTAR type-50 photoexcitation / line pumping through `xstar-line-escape-and-pumping`.  The implementation follows the `ucalc.f90` type-50 algebra on the explicit solver `epi`/`bremsa` grid and remains a validation mode until the same-run C/O/Mg/Ca benchmark is inspected.
+v0.3.145 adds the first opt-in matrix injection of XSTAR type-50 photoexcitation / line pumping through `xstar-line-escape-and-pumping`.  The implementation follows the `ucalc.f90` type-50 algebra on the explicit solver `epi`/`bremsa` grid and remains a validation mode until the same-run C/O/Mg/Ca benchmark is inspected.
 
 ## Earlier v0.3.128 API infrastructure
 
