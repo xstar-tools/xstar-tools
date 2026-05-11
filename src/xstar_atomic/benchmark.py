@@ -22,6 +22,7 @@ from typing import Any, Mapping, Sequence
 import csv
 import json
 import math
+import tempfile
 
 from .context import XSTARContext, context_from_xstar_run
 from .workflow import TripletResult, calc_triplet, solve_populations
@@ -526,6 +527,41 @@ def build_xstar_local_target(
 
 
 
+
+
+def _is_fits_path(path: object) -> bool:
+    """Return True when *path* looks like a FITS file rather than CSV."""
+    if path is None:
+        return False
+    text = str(path).strip().lower()
+    return text.endswith((".fits", ".fit", ".fts", ".fits.gz", ".fit.gz", ".fts.gz"))
+
+
+def _write_solver_reference_lines_csv(target: "XSTARLocalTarget") -> Path | None:
+    """Write the target's selected XSTAR line rows to a temporary CSV.
+
+    ``solve_element_reference`` expects ``xstar_reference_lines_csv`` to be a
+    converted CSV table, not the binary/ascii FITS table itself.  The benchmark
+    target is built from ``xout_lines1.fits`` via :func:`load_xstar_lines`, so
+    we already have the needed rows in memory.  This helper writes those rows to
+    a temporary CSV and returns the path for the duration of the solver call.
+    """
+    rows = [dict(r) for r in (target.line_rows or ())]
+    if not rows:
+        return None
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix="_xstar_reference_lines.csv",
+        prefix="xstar_atomic_",
+        delete=False,
+        newline="",
+        encoding="utf-8",
+    )
+    path = Path(handle.name)
+    handle.close()
+    write_csv(rows, path)
+    return path
+
 def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> dict[str, Any]:
     """Return the source-code-first local-state validation solver settings.
 
@@ -608,7 +644,30 @@ def compare_solver_to_xstar_target(
             solver_fitsfile = fitsfile if str(fitsfile or "").strip() else None
             preset_kwargs = solver_kwargs_from_preset(solver_preset, target)
             merged_kwargs = {**preset_kwargs, **dict(solver_kwargs or {})}
-            result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
+            temporary_reference_csv: Path | None = None
+            try:
+                # The xstar-local-state preset mirrors examples/51, where
+                # xout_lines1.fits is first converted to CSV before it is used
+                # by the full-global solver.  Passing the FITS file directly to
+                # solve_element_reference causes a UnicodeDecodeError because
+                # that lower-level reader intentionally expects CSV.  Keep the
+                # benchmark self-contained by writing the already-loaded target
+                # line rows to a temporary CSV when needed.
+                if _is_fits_path(merged_kwargs.get("xstar_reference_lines_csv")):
+                    temporary_reference_csv = _write_solver_reference_lines_csv(target)
+                    if temporary_reference_csv is not None:
+                        merged_kwargs["xstar_reference_lines_csv"] = str(temporary_reference_csv)
+                        warnings.append("converted_xout_lines_fits_to_temporary_solver_reference_csv")
+                    else:
+                        merged_kwargs.pop("xstar_reference_lines_csv", None)
+                        warnings.append("xout_lines_fits_not_passed_to_solver_no_reference_rows")
+                result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
+            finally:
+                if temporary_reference_csv is not None:
+                    try:
+                        temporary_reference_csv.unlink()
+                    except FileNotFoundError:
+                        pass
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)
             warnings.extend(extract_warnings)
             status = "solver_compared" if _has_triplet_fractions(triplet) else "solver_no_triplet_values"

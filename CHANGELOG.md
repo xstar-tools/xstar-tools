@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.140 - 2026-05-11
+
+- Fixed `--solver-preset xstar-local-state` in the He-like C/O/Mg/Ca benchmark suite.
+- The benchmark no longer passes the binary/ascii FITS table `xout_lines1.fits` directly to the lower-level solver option `xstar_reference_lines_csv`, which expects a converted CSV file.
+- When the local-state preset needs same-run XSTAR reference lines, the benchmark now writes the already-loaded selected XSTAR line rows to a temporary UTF-8 CSV and passes that CSV to `solve_element_reference`.
+- This removes the `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 ...` failure seen when the solver tried to read `xout_lines1.fits` as CSV.
+- Added a regression test that verifies the local-state preset passes a `.csv` reference table, not a `.fits` file.
+- No solver physics changed; this fixes benchmark plumbing so the real solver-vs-XSTAR residuals can be inspected.
+
 ## v0.3.139 - 2026-05-11
 
 - Strengthen the He-like C/O/Mg/Ca same-run benchmark comparison after the API reorganization.

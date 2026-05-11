@@ -334,6 +334,11 @@ def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
 
     def fake_solve_populations(*args, **kwargs):
         seen.update(kwargs)
+        ref = kwargs.get("xstar_reference_lines_csv")
+        if ref:
+            ref_path = Path(ref)
+            seen["reference_suffix"] = ref_path.suffix
+            seen["reference_text"] = ref_path.read_text(encoding="utf-8")
         return {"summary": {"he_like_triplet": {"f_fraction": 0.70, "i_fraction": 0.10, "r_fraction": 0.20}}}
 
     monkeypatch.setattr(benchmark, "solve_populations", fake_solve_populations)
@@ -342,3 +347,6 @@ def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
     assert seen["full_global_topology"] == "xstar-continuum-alias-superlevels"
     assert seen["type50_bound_bound_treatment"] == "xstar-line-escape"
     assert seen["type50_escape_factor"] == 0.35
+    assert seen["reference_suffix"] == ".csv"
+    assert "emit_outward" in seen["reference_text"]
+    assert not str(seen["xstar_reference_lines_csv"]).endswith(".fits")

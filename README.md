@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.139** strengthens the C V / O VII / Mg XI / Ca XIX benchmark comparison.  The benchmark now reports solver and XSTAR `f/i/r`, `R=f/i`, `G=(f+i)/r`, and L2 residuals in the CSV/Markdown outputs.  It also adds `--solver-preset xstar-local-state`, which mirrors the mature source-code-first settings from `examples/51_run_helike_local_state_validation.py` instead of using only the lightweight workflow defaults.
+Latest package note: **v0.3.140** fixes the C V / O VII / Mg XI / Ca XIX local-state benchmark plumbing for `--solver-preset xstar-local-state`.  The benchmark now converts the selected same-run `xout_lines1.fits` line rows to a temporary CSV before passing them to the lower-level solver reference-line option, which expects CSV.  This removes the `UnicodeDecodeError` caused by trying to read the FITS line table as UTF-8 text and lets the benchmark reach the real solver-vs-XSTAR residual comparison.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -79,7 +79,7 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
 
 The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
 
-No solver physics changed in v0.3.139. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
+No solver physics changed in v0.3.140. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. This release fixes benchmark reference-file handling only.
 
 ## Earlier v0.3.128 API infrastructure
 
