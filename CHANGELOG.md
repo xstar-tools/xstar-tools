@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.142 - 2026-05-11
+
+- Fixed the local-state benchmark triplet-source preference used by `examples/56_reproduce_xstar_local_outputs.py`.
+- The `xstar-local-state` solver benchmark now prefers `full_global_xstar_tau0_calc_emis_ion`, matching the historical examples 51--52 validation workflow.
+- Kept `full_global_xstar_reference_depth_emit_outward_calc_emis_ion` available as a secondary diagnostic instead of using it as the default benchmark source when both branches are present.
+- Added a regression test that fails if the benchmark again silently prefers the reference-depth postprocess branch over the historical tau0 branch.
+- No solver physics changed; type-50 photoexcitation remains audit-only.
+
 ## v0.3.141 - 2026-05-11
 
 - Added source-code-gap diagnostics to the He-like local-output reproduction benchmark.
