@@ -175,6 +175,45 @@ def _difference(a: float | None, b: float | None) -> float | None:
     return float(a) - float(b)
 
 
+def _has_triplet_fractions(triplet: Mapping[str, Any] | None) -> bool:
+    """Return True when a mapping contains finite f/i/r triplet fractions."""
+    if not triplet:
+        return False
+    return all(
+        _as_float(triplet.get(f"{comp}_fraction") or triplet.get(comp) or triplet.get(f"solver_{comp}")) is not None
+        for comp in ("f", "i", "r")
+    )
+
+
+def _extract_solver_triplet_from_result(result: Any) -> tuple[Mapping[str, Any], Mapping[str, Any], tuple[str, ...]]:
+    """Extract a normalized solver triplet from known solver result layouts.
+
+    The source-level element solver returns the current He-like triplet under
+    ``result["summary"]["he_like_triplet"]``.  Earlier v0.3.134--v0.3.135
+    benchmark code only searched top-level keys such as ``triplet`` and
+    therefore wrote ``status=solver_compared`` while leaving solver columns
+    blank.  This helper keeps the benchmark tolerant of both old and current
+    result dictionaries and records a warning when no finite f/i/r fractions
+    are available.
+    """
+    if not isinstance(result, Mapping):
+        return {}, {}, ("solver_returned_non_mapping_result",)
+    summary = result.get("summary", result) if isinstance(result.get("summary", result), Mapping) else {}
+    candidates = [
+        result.get("triplet"),
+        result.get("triplet_summary"),
+        result.get("xstar_like_element_solver_triplet"),
+        summary.get("he_like_triplet") if isinstance(summary, Mapping) else None,
+        summary.get("calc_emis_ion_triplet_emergent_summary") if isinstance(summary, Mapping) else None,
+        summary.get("calc_emis_triplet_audit_summary") if isinstance(summary, Mapping) else None,
+        summary.get("triplet_emissivity_branch_audit_summary") if isinstance(summary, Mapping) else None,
+    ]
+    for cand in candidates:
+        if isinstance(cand, Mapping) and _has_triplet_fractions(cand):
+            return dict(cand), dict(summary), ()
+    return {}, dict(summary), ("solver_returned_no_finite_triplet_fractions",)
+
+
 @dataclass(frozen=True)
 class XSTARLocalTarget:
     """Exact same-run target extracted from XSTAR local output files."""
@@ -381,23 +420,16 @@ def compare_solver_to_xstar_target(
             raise ValueError("run_solver=True requires target.ion")
         try:
             result = solve_populations(target.ion, context=target.context, db=db, fitsfile=fitsfile, **dict(solver_kwargs or {}))
-            summary = result.get("summary", result) if isinstance(result, Mapping) else {}
-            if isinstance(result, Mapping):
-                # Several solver products store triplet values under different
-                # keys.  Keep this defensive so the comparison API can consume
-                # old result dictionaries.
-                triplet = (
-                    result.get("triplet")
-                    or result.get("triplet_summary")
-                    or result.get("xstar_like_element_solver_triplet")
-                    or {}
-                )
-            status = "solver_compared"
+            triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)
+            warnings.extend(extract_warnings)
+            status = "solver_compared" if _has_triplet_fractions(triplet) else "solver_no_triplet_values"
         except Exception as exc:  # pragma: no cover - exercised with real ATDB runs
             warnings.append(f"solver_failed: {exc}")
             status = "solver_failed"
     elif solver_triplet is not None:
-        status = "solver_compared"
+        status = "solver_compared" if _has_triplet_fractions(solver_triplet) else "solver_no_triplet_values"
+        if status != "solver_compared":
+            warnings.append("solver_triplet_has_no_finite_triplet_fractions")
     return XSTARBenchmarkComparison(target=target, solver_triplet=triplet, solver_summary=summary, status=status, warnings=tuple(warnings))
 
 

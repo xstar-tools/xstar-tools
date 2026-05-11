@@ -86,3 +86,95 @@ def test_missing_cases_csv_error_has_standard_suite_hint(tmp_path):
         assert "helike_reproduction_cases.csv" in text
     else:  # pragma: no cover
         raise AssertionError("read_cases_csv should fail for a missing file")
+
+
+def test_solver_result_summary_he_like_triplet_is_extracted(tmp_path, monkeypatch):
+    ctx = xa.context_from_values(
+        ion="O VII",
+        temperature_K=7.66552e4,
+        electron_density_cm3=1.20466e8,
+        log_xi=1.5,
+        ion_fraction=0.255926,
+    )
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.5},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 2.5},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xout_abund_path="run/xout_abund1.fits",
+        xout_lines_path="run/xout_lines1.fits",
+        wavelength_window_A=(21.0, 23.0),
+    )
+
+    import xstar_atomic.benchmark as benchmark
+
+    def fake_solve_populations(*args, **kwargs):
+        return {
+            "summary": {
+                "he_like_triplet": {
+                    "f_fraction": 0.70,
+                    "i_fraction": 0.10,
+                    "r_fraction": 0.20,
+                    "R": 7.0,
+                    "G": 4.0,
+                }
+            }
+        }
+
+    monkeypatch.setattr(benchmark, "solve_populations", fake_solve_populations)
+    comparison = compare_solver_to_xstar_target(target, run_solver=True)
+    row = comparison.comparison_row()
+    assert row["comparison_status"] == "solver_compared"
+    assert row["comparison_warnings"] == ""
+    assert row["solver_f_fraction"] == 0.70
+    assert row["solver_i_fraction"] == 0.10
+    assert row["solver_r_fraction"] == 0.20
+
+
+def test_solver_result_without_triplet_is_not_marked_compared(monkeypatch):
+    ctx = xa.context_from_values(
+        ion="O VII",
+        temperature_K=7.66552e4,
+        electron_density_cm3=1.20466e8,
+        log_xi=1.5,
+        ion_fraction=0.255926,
+    )
+    triplet = xa.calc_triplet(
+        "O VII",
+        rows=[
+            {"upper_level": "1s1.2s1.3S_1", "emit_outward": 8.0},
+            {"upper_level": "1s1.2p1.3P_1", "emit_outward": 1.5},
+            {"upper_level": "1s1.2p1.1P_1", "emit_outward": 2.5},
+        ],
+    )
+    target = XSTARLocalTarget(
+        ion="O VII",
+        run_dir="run",
+        context=ctx,
+        triplet=triplet,
+        line_rows=triplet.lines,
+        xout_abund_path="run/xout_abund1.fits",
+        xout_lines_path="run/xout_lines1.fits",
+        wavelength_window_A=(21.0, 23.0),
+    )
+
+    import xstar_atomic.benchmark as benchmark
+
+    def fake_solve_populations(*args, **kwargs):
+        return {"summary": {"some_other_summary": {"ok": True}}}
+
+    monkeypatch.setattr(benchmark, "solve_populations", fake_solve_populations)
+    comparison = compare_solver_to_xstar_target(target, run_solver=True)
+    row = comparison.comparison_row()
+    assert row["comparison_status"] == "solver_no_triplet_values"
+    assert "solver_returned_no_finite_triplet_fractions" in row["comparison_warnings"]
+    assert row["solver_f_fraction"] is None

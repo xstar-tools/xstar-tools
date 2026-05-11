@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.136 - 2026-05-10
+
+- Fixed the C V / O VII / Mg XI / Ca XIX XSTAR reproduction benchmark solver-comparison extraction.
+- `examples/56_reproduce_xstar_local_outputs.py --run-solver` now reads the current solver's `summary["he_like_triplet"]` result and fills `solver_f_fraction`, `solver_i_fraction`, and `solver_r_fraction` when available.
+- The benchmark no longer reports `solver_compared` when solver triplet fractions are missing; it reports `solver_no_triplet_values` with an explicit warning instead.
+- Added regression tests for solver-summary triplet extraction and missing-triplet status handling.
+- No solver physics changed; this release only fixes benchmark reporting/extraction.
+
 ## v0.3.135 - 2026-05-10
 
 - Added a built-in standard C V / O VII / Mg XI / Ca XIX benchmark suite for `examples/56_reproduce_xstar_local_outputs.py` via `--standard-helike-suite --xstar-runs-root xstar_runs`.
