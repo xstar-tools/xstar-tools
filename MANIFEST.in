@@ -11,3 +11,4 @@ recursive-include xstar_test_run *
 include datapath
 
 recursive-include data *
+include docs/helike_reproduction_source_code_diagnosis.md

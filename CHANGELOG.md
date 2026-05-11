@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.141 - 2026-05-11
+
+- Added source-code-gap diagnostics to the He-like local-output reproduction benchmark.
+- The comparison table now includes solver-to-XSTAR ratios for f/i/r/R/G, a residual-pattern label, same-run resonance-line depth/escape diagnostics, and solver type-50/radiation settings.
+- Added `docs/helike_reproduction_source_code_diagnosis.md`, summarizing the XSTAR source-code path (`calc_hmc_ion.f90`, `ucalc.f90` type 50, `calc_emis_ion.f90`, `pescl.f90`) and the current likely gaps: audit-only type-50 photoexcitation, scalar matrix escape fallback, and proxy radiation-field normalization.
+- No solver physics changed.  This release improves diagnosis/reporting only.
+
+# Changelog
+
 ## v0.3.140 - 2026-05-11
 
 - Fixed `--solver-preset xstar-local-state` in the He-like C/O/Mg/Ca benchmark suite.

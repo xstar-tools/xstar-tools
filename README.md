@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.140** fixes the C V / O VII / Mg XI / Ca XIX local-state benchmark plumbing for `--solver-preset xstar-local-state`.  The benchmark now converts the selected same-run `xout_lines1.fits` line rows to a temporary CSV before passing them to the lower-level solver reference-line option, which expects CSV.  This removes the `UnicodeDecodeError` caused by trying to read the FITS line table as UTF-8 text and lets the benchmark reach the real solver-vs-XSTAR residual comparison.
+Latest package note: **v0.3.141** adds source-code-gap diagnostics to the C V / O VII / Mg XI / Ca XIX local-state benchmark.  The comparison CSV/Markdown now reports solver-to-XSTAR ratios, residual-pattern labels, same-run resonance-depth escape diagnostics, solver type-50/radiation settings, and a source-code-first diagnosis.  It also adds `docs/helike_reproduction_source_code_diagnosis.md` to explain why the current residual is a physics/assembly gap rather than an API-documentation change.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -79,7 +79,7 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
 
 The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
 
-No solver physics changed in v0.3.140. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. This release fixes benchmark reference-file handling only.
+No solver physics changed in v0.3.141. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. This release adds benchmark diagnosis/reporting only.
 
 ## Earlier v0.3.128 API infrastructure
 

@@ -410,6 +410,133 @@ class XSTARLocalTarget:
         }
 
 
+def _xstar_pescl_escape_probability(tau: object) -> float | None:
+    """Return XSTAR ``pescl`` for a line optical depth.
+
+    This mirrors ``xstarlib/src/pescl.f90`` sufficiently for benchmark
+    diagnosis: the function returns the directional escape probability, i.e.
+    it includes the final division by two used by XSTAR.
+    """
+    val = _as_float(tau)
+    if val is None:
+        return None
+    tau_f = max(0.0, float(val))
+    if tau_f < 1.0e-5:
+        return 0.5
+    if tau_f < 1.0:
+        aa = 2.0 * tau_f
+        return ((1.0 - math.exp(-aa)) / aa) / 2.0
+    tauw = 1.0e5
+    bb = 0.5 * math.sqrt(max(math.log(tau_f), 0.0)) / (1.0 + tau_f / tauw)
+    return (1.0 / (tau_f * math.sqrt(math.pi) * (1.2 + bb))) / 2.0
+
+
+def _xstar_reference_resonance_escape_diagnostics(target: XSTARLocalTarget) -> dict[str, Any]:
+    """Return same-run XSTAR resonance-line depth and escape diagnostics."""
+    r_rows = [dict(r) for r in target.line_rows if str(r.get('triplet_component') or '').lower() == 'r']
+    if not r_rows:
+        return {
+            'xstar_reference_resonance_depth_inward': None,
+            'xstar_reference_resonance_depth_outward': None,
+            'xstar_reference_resonance_ptmp1_cfrac0': None,
+            'xstar_reference_resonance_ptmp2_cfrac0': None,
+            'xstar_reference_resonance_ptmp_sum_cfrac0': None,
+            'xstar_reference_resonance_escape_vs_scalar_0p35': None,
+            'xstar_reference_resonance_escape_diagnosis': 'no_resonance_reference_line_row',
+        }
+    r_rows.sort(key=lambda r: _as_float(r.get(str(target.value_column))) or 0.0, reverse=True)
+    row = r_rows[0]
+    tau1 = max(0.0, float(_as_float(row.get('depth_inward')) or 0.0))
+    tau2 = max(0.0, float(_as_float(row.get('depth_outward')) or 0.0))
+    p1 = _xstar_pescl_escape_probability(tau1)
+    p2 = _xstar_pescl_escape_probability(tau2)
+    psum = (p1 or 0.0) + (p2 or 0.0)
+    ratio = psum / 0.35 if psum is not None and 0.35 > 0.0 else None
+    if ratio is None:
+        diag = 'missing_reference_escape'
+    elif ratio > 1.5:
+        diag = 'same_run_depth_escape_much_larger_than_scalar_0p35_proxy'
+    elif ratio < 0.67:
+        diag = 'same_run_depth_escape_smaller_than_scalar_0p35_proxy'
+    else:
+        diag = 'same_run_depth_escape_comparable_to_scalar_0p35_proxy'
+    return {
+        'xstar_reference_resonance_depth_inward': tau1,
+        'xstar_reference_resonance_depth_outward': tau2,
+        'xstar_reference_resonance_ptmp1_cfrac0': p1,
+        'xstar_reference_resonance_ptmp2_cfrac0': p2,
+        'xstar_reference_resonance_ptmp_sum_cfrac0': psum,
+        'xstar_reference_resonance_escape_vs_scalar_0p35': ratio,
+        'xstar_reference_resonance_escape_diagnosis': diag,
+        'xstar_reference_resonance_escape_formula': 'pescl(depth_inward)+pescl(depth_outward), assuming cfrac=0 for diagnosis',
+    }
+
+
+def _safe_ratio(num: object, den: object) -> float | None:
+    n = _as_float(num)
+    d = _as_float(den)
+    if n is None or d is None or abs(d) <= 0.0:
+        return None
+    return n / d
+
+
+def _triplet_residual_pattern(df: object, di: object, dr: object) -> str:
+    f = _as_float(df)
+    i = _as_float(di)
+    r = _as_float(dr)
+    if f is None or i is None or r is None:
+        return 'target_only_or_missing_solver_triplet'
+    tol = 1.0e-6
+    if f > tol and r < -tol:
+        if i < -tol:
+            return 'solver_f_high_i_low_r_low'
+        if i > tol:
+            return 'solver_f_high_i_high_r_low'
+        return 'solver_f_high_r_low'
+    if r > tol and f < -tol:
+        return 'solver_r_high_f_low'
+    if abs(f) <= tol and abs(i) <= tol and abs(r) <= tol:
+        return 'solver_matches_triplet_fractions_within_tolerance'
+    return 'mixed_triplet_residuals'
+
+
+def _source_code_gap_diagnosis(
+    *,
+    pattern: str,
+    solver_summary: Mapping[str, Any] | None,
+    resonance_escape_diag: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return source-code-first diagnosis for the current He-like residuals."""
+    summ = solver_summary or {}
+    treatment = str(summ.get('type50_bound_bound_treatment') or '')
+    escape_factor = summ.get('type50_escape_factor')
+    pumping_scale = summ.get('type50_photoexcitation_scale')
+    radiation_mode = str(summ.get('radiation_field_mode') or '')
+    bremsa_scale = summ.get('radiation_bremsa_scale')
+    escape_diag = str(resonance_escape_diag.get('xstar_reference_resonance_escape_diagnosis') or '')
+    issues: list[str] = []
+    if pattern.startswith('solver_f_high') and 'r_low' in pattern:
+        issues.append('common residual is high forbidden fraction and low resonance fraction')
+    if str(pumping_scale) in {'0', '0.0', ''}:
+        issues.append('type-50 lower-to-upper photoexcitation is not injected into the population matrix')
+    if 'larger_than_scalar_0p35' in escape_diag:
+        issues.append('same-run XSTAR resonance depth implies larger escape probability than scalar 0.35 proxy')
+    if radiation_mode and radiation_mode != 'xstar-run-bremsa':
+        issues.append('solver radiation field is a proxy rather than the same-run XSTAR bremsa(nb1) field')
+    if not issues:
+        issues.append('no single source-code gap identified by lightweight benchmark diagnosis')
+    return {
+        'solver_type50_bound_bound_treatment': treatment,
+        'solver_type50_escape_factor': escape_factor,
+        'solver_type50_photoexcitation_scale': pumping_scale,
+        'solver_radiation_field_mode': radiation_mode,
+        'solver_radiation_bremsa_scale': bremsa_scale,
+        'source_code_gap_diagnosis': '; '.join(issues),
+        'source_code_next_action': 'port real XSTAR type-50 matrix rates: tau0->pescl escape, bremsa(nb1), flinabs(ptmp1), cfrac, and same-run radiation normalization',
+        'source_code_paths_to_check': 'calc_hmc_ion.f90 rate assembly; ucalc.f90 type-50; calc_emis_ion.f90 line output; pescl.f90 escape probability',
+    }
+
+
 @dataclass(frozen=True)
 class XSTARBenchmarkComparison:
     """Comparison between an ``xstar-atomic`` result and an XSTAR target."""
@@ -432,6 +559,18 @@ class XSTARBenchmarkComparison:
         sG = _as_float(solver.get("G_f_plus_i_over_r"))
         xl2 = 0.0 if all(_as_float(getattr(self.target.triplet, comp)) is not None for comp in ("f", "i", "r")) else None
         sl2 = _l2_to_target(sf, si, sr, self.target.triplet.f, self.target.triplet.i, self.target.triplet.r)
+        df = _difference(sf, self.target.triplet.f)
+        di = _difference(si, self.target.triplet.i)
+        dr = _difference(sr, self.target.triplet.r)
+        dR = _difference(sR, self.target.triplet.R_f_over_i)
+        dG = _difference(sG, self.target.triplet.G_f_plus_i_over_r)
+        pattern = _triplet_residual_pattern(df, di, dr)
+        escape_diag = _xstar_reference_resonance_escape_diagnostics(self.target)
+        source_diag = _source_code_gap_diagnosis(
+            pattern=pattern,
+            solver_summary=self.solver_summary,
+            resonance_escape_diag=escape_diag,
+        )
         row.update({
             "xstar_L2_to_xstar": xl2,
             "solver_f_fraction": sf,
@@ -443,14 +582,22 @@ class XSTARBenchmarkComparison:
             "solver_l2_distance_to_target_reported": _as_float(solver.get("l2_distance_to_target")),
             "solver_L2_to_xstar": sl2,
             "solver_triplet_source": solver.get("solver_triplet_source") or solver.get("comparison_case") or "",
-            "delta_f_solver_minus_xstar": _difference(sf, self.target.triplet.f),
-            "delta_i_solver_minus_xstar": _difference(si, self.target.triplet.i),
-            "delta_r_solver_minus_xstar": _difference(sr, self.target.triplet.r),
-            "delta_R_solver_minus_xstar": _difference(sR, self.target.triplet.R_f_over_i),
-            "delta_G_solver_minus_xstar": _difference(sG, self.target.triplet.G_f_plus_i_over_r),
+            "solver_to_xstar_f_ratio": _safe_ratio(sf, self.target.triplet.f),
+            "solver_to_xstar_i_ratio": _safe_ratio(si, self.target.triplet.i),
+            "solver_to_xstar_r_ratio": _safe_ratio(sr, self.target.triplet.r),
+            "solver_to_xstar_R_ratio": _safe_ratio(sR, self.target.triplet.R_f_over_i),
+            "solver_to_xstar_G_ratio": _safe_ratio(sG, self.target.triplet.G_f_plus_i_over_r),
+            "delta_f_solver_minus_xstar": df,
+            "delta_i_solver_minus_xstar": di,
+            "delta_r_solver_minus_xstar": dr,
+            "delta_R_solver_minus_xstar": dR,
+            "delta_G_solver_minus_xstar": dG,
+            "triplet_residual_pattern": pattern,
             "comparison_status": self.status,
             "comparison_warnings": "; ".join(self.warnings),
         })
+        row.update(escape_diag)
+        row.update(source_diag)
         return row
 
     def to_dict(self) -> dict[str, Any]:
@@ -830,8 +977,8 @@ def _write_suite_md(comparisons: Sequence[XSTARBenchmarkComparison], path: Path)
         "",
         "The XSTAR columns below are copied from same-run `xout_abund1.fits` and `xout_lines1.fits` targets.  Solver columns are present only when a solver comparison was requested or supplied.",
         "",
-        "| Ion | T (K) | ne (cm^-3) | log xi | ion fraction | XSTAR f/i/r | XSTAR R/G/L2 | solver f/i/r | solver R/G/L2 | Δf/Δi/Δr | ΔR/ΔG | source | status |",
-        "|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|",
+        "| Ion | T (K) | ne (cm^-3) | log xi | ion fraction | XSTAR f/i/r | XSTAR R/G/L2 | solver f/i/r | solver R/G/L2 | Δf/Δi/Δr | ΔR/ΔG | residual pattern | source-code diagnosis | source | status |",
+        "|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|",
     ]
     for c in comparisons:
         row = c.comparison_row()
@@ -842,7 +989,7 @@ def _write_suite_md(comparisons: Sequence[XSTARBenchmarkComparison], path: Path)
         delta = f"{_fmt(row.get('delta_f_solver_minus_xstar'))}/{_fmt(row.get('delta_i_solver_minus_xstar'))}/{_fmt(row.get('delta_r_solver_minus_xstar'))}"
         delta_diag = f"{_fmt(row.get('delta_R_solver_minus_xstar'))}/{_fmt(row.get('delta_G_solver_minus_xstar'))}"
         lines.append(
-            f"| {row.get('ion','')} | {_fmt(row.get('temperature_K'))} | {_fmt(row.get('electron_density_cm^-3'))} | {_fmt(row.get('log_xi'))} | {_fmt(row.get('ion_fraction'))} | {target} | {target_diag} | {solver} | {solver_diag} | {delta} | {delta_diag} | {row.get('solver_triplet_source','')} | {c.status} |"
+            f"| {row.get('ion','')} | {_fmt(row.get('temperature_K'))} | {_fmt(row.get('electron_density_cm^-3'))} | {_fmt(row.get('log_xi'))} | {_fmt(row.get('ion_fraction'))} | {target} | {target_diag} | {solver} | {solver_diag} | {delta} | {delta_diag} | {row.get('triplet_residual_pattern','')} | {row.get('source_code_gap_diagnosis','')} | {row.get('solver_triplet_source','')} | {c.status} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
