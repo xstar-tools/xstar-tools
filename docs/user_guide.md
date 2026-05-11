@@ -1105,3 +1105,40 @@ Longer-term:
 - source-code provenance for every matrix term
 - documentation organized by workflow rather than version history
 ```
+
+## Python XSTAR-output recreation planning
+
+`xstar-atomic` is not yet a full replacement for the XSTAR thermal/ionization/radiative-transfer driver.  However, the package now includes a planning API for building that replacement in a source-code-parity way.  The first step is to parse the exact XSTAR command and identify which live arrays are needed to recreate each standard FITS product.
+
+```python
+import xstar_atomic as xa
+
+params = xa.parse_xstar_command(
+    "xstar spectrum='pow' nsteps=10 density=1 rlogxi=1.5 cfrac=1.0 vturbi=100"
+)
+plan = xa.xstar_recreation_plan(params)
+paths = xa.write_xstar_recreation_plan(params, "xstar_python_recreation_plan")
+```
+
+The same workflow can parse a run script:
+
+```bash
+PYTHONPATH=src python examples/58_plan_xstar_output_recreation.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_python_recreation_plan_o7 \
+  --print-summary
+```
+
+The plan explicitly covers the standard products:
+
+- `xo01_detail.fits`
+- `xo01_detal2.fits`
+- `xo01_detal3.fits`
+- `xo01_detal4.fits`
+- `xout_abund1.fits`
+- `xout_lines1.fits`
+- `xout_rrc1.fits`
+- `xout_cont1.fits`
+- `xout_spect1.fits`
+
+Exact recreation from input parameters alone requires the same live internal state used by XSTAR, including `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, ion fractions, and level populations.  The current implementation writes a recreation plan and source-code-parity checklist; the full solver/transfer loop and FITS writers are future work.

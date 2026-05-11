@@ -157,6 +157,15 @@ Export tools
    :undoc-members:
    :show-inheritance:
 
+
+XSTAR command and output-recreation planning
+-------------------------------------------
+
+.. automodule:: xstar_atomic.xstar_run
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 XSTAR output readers
 --------------------
 

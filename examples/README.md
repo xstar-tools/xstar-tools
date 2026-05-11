@@ -533,3 +533,14 @@ export XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits
 ```
 
 If `--atdb "$XSTAR_ATDB"` expands to an empty string, v0.3.138 treats it as not provided and falls back to the resolver. If neither `XSTAR_ATDB` nor `XSTAR_ATDB_FITS` is set, the resolver uses the configured `datapath` file, then package data.
+
+### `58_plan_xstar_output_recreation.py`
+
+Plan the source-code-parity work needed to recreate standard XSTAR FITS output products from an XSTAR command or `run_xstar.sh` file.  This is a planning/audit example, not yet a full XSTAR replacement.
+
+```bash
+PYTHONPATH=src python examples/58_plan_xstar_output_recreation.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_python_recreation_plan_o7 \
+  --print-summary
+```

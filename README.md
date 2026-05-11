@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.148** restores the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
+Latest package note: **v0.3.149** adds the first Python XSTAR-output recreation planning layer. It parses shell-style `xstar` commands and maps standard XSTAR FITS products to the live internal arrays needed for exact source-code parity. v0.3.148 restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -28,6 +28,26 @@ db = XSTARAtomic("/path/to/atdb.fits")
 ctx = db.context.from_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
 rate = db.rates.type50("O VII", aij_s_inv=..., oscillator_strength=..., wavelength_A=...)
 comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+```
+
+
+Python XSTAR-output recreation planning is available for future full-emulation work:
+
+```python
+import xstar_atomic as xa
+
+params = xa.parse_xstar_command("xstar spectrum='pow' nsteps=10 density=1 rlogxi=1.5 cfrac=1.0")
+plan = xa.xstar_recreation_plan(params)
+paths = xa.write_xstar_recreation_plan(params, "xstar_python_recreation_plan")
+```
+
+CLI wrapper:
+
+```bash
+PYTHONPATH=src python examples/58_plan_xstar_output_recreation.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_python_recreation_plan_o7 \
+  --print-summary
 ```
 
 Public namespace modules are available for future API growth: `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs`.
