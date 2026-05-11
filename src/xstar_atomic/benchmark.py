@@ -26,7 +26,7 @@ import tempfile
 
 from .context import XSTARContext, context_from_xstar_run
 from .workflow import TripletResult, calc_triplet, solve_populations
-from .xstar_outputs import load_xstar_lines, write_csv
+from .xstar_outputs import load_xstar_lines, read_xout_spectra, write_csv
 
 DEFAULT_HELIKE_WINDOWS_A: dict[str, tuple[float, float]] = {
     "C V": (40.0, 42.0),
@@ -139,6 +139,7 @@ def find_xstar_run_files(
     *,
     xout_abund_filename: str | None = None,
     xout_lines_filename: str | None = None,
+    xout_cont_filename: str | None = None,
 ) -> dict[str, Path | None]:
     """Locate the local-state and line-output files for one XSTAR run.
 
@@ -155,9 +156,14 @@ def find_xstar_run_files(
     if xout_lines_filename:
         line_candidates.append(run_path / xout_lines_filename)
     line_candidates.append(run_path / "xout_lines1.fits")
+    cont_candidates = []
+    if xout_cont_filename:
+        cont_candidates.append(run_path / xout_cont_filename)
+    cont_candidates.extend([run_path / "xout_cont1.fits", run_path / "xout_spect1.fits"])
     abund = next((p for p in abund_candidates if p.exists()), None)
     lines = next((p for p in line_candidates if p.exists()), None)
-    return {"xout_abund": abund, "xout_lines": lines}
+    cont = next((p for p in cont_candidates if p.exists()), None)
+    return {"xout_abund": abund, "xout_lines": lines, "xout_cont": cont}
 
 
 def _as_float(value: Any) -> float | None:
@@ -350,6 +356,7 @@ class XSTARLocalTarget:
     line_rows: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     xout_abund_path: str | None = None
     xout_lines_path: str | None = None
+    xout_cont_path: str | None = None
     wavelength_window_A: tuple[float, float] | None = None
     value_column: str = "emit_outward"
     status: str = "ok"
@@ -407,6 +414,7 @@ class XSTARLocalTarget:
             "run_dir": self.run_dir,
             "xout_abund_path": self.xout_abund_path,
             "xout_lines_path": self.xout_lines_path,
+            "xout_cont_path": self.xout_cont_path,
             "wavelength_window_A": list(self.wavelength_window_A) if self.wavelength_window_A else None,
             "value_column": self.value_column,
             "local_state": self.local_state_row(),
@@ -526,13 +534,17 @@ def _source_code_gap_diagnosis(
     issues: list[str] = []
     if pattern.startswith('solver_f_high') and 'r_low' in pattern:
         issues.append('common residual is high forbidden fraction and low resonance fraction')
-    if str(pumping_scale) in {'0', '0.0', ''}:
+    if treatment == 'xstar-line-escape-and-pumping':
+        issues.append('type-50 lower-to-upper photoexcitation is enabled in the population matrix')
+    elif str(pumping_scale) in {'0', '0.0', ''}:
         issues.append('type-50 lower-to-upper photoexcitation is not injected into the population matrix')
     if 'larger_than_scalar_0p35' in escape_diag and escape_source not in {'xstar-reference-lines', 'same-run-xout-lines', 'xout-lines', 'reference-lines'}:
         issues.append('same-run XSTAR resonance depth implies larger escape probability than scalar 0.35 proxy')
     if escape_source in {'xstar-reference-lines', 'same-run-xout-lines', 'xout-lines', 'reference-lines'}:
         issues.append('population matrix uses same-run xout_lines1 depths for matching type-50 lines')
-    if radiation_mode and radiation_mode != 'xstar-run-bremsa':
+    if radiation_mode == 'xstar-output':
+        issues.append('solver radiation field uses same-run xout_cont1/xout_spect1 spectrum converted to bremsa-like grid')
+    elif radiation_mode and radiation_mode != 'xstar-run-bremsa':
         issues.append('solver radiation field is a proxy rather than the same-run XSTAR bremsa(nb1) field')
     if not issues:
         issues.append('no single source-code gap identified by lightweight benchmark diagnosis')
@@ -543,8 +555,12 @@ def _source_code_gap_diagnosis(
         'solver_type50_photoexcitation_scale': pumping_scale,
         'solver_radiation_field_mode': radiation_mode,
         'solver_radiation_bremsa_scale': bremsa_scale,
+        'solver_xstar_radiation_spectrum_csv': summ.get('xstar_radiation_spectrum_csv'),
+        'solver_xstar_radiation_column': summ.get('xstar_radiation_column'),
+        'solver_xstar_radiation_grid_status': summ.get('xstar_radiation_grid_status'),
+        'solver_n_xstar_radiation_grid_points': summ.get('n_xstar_radiation_grid_points'),
         'source_code_gap_diagnosis': '; '.join(issues),
-        'source_code_next_action': 'port real XSTAR type-50 matrix rates: tau0->pescl escape, bremsa(nb1), flinabs(ptmp1), cfrac, and same-run radiation normalization',
+        'source_code_next_action': 'verify same-run local bremsa normalization and cfrac against XSTAR prints; compare injected type-50 pumping matrix terms against ucalc.f90 term-by-term',
         'source_code_paths_to_check': 'calc_hmc_ion.f90 rate assembly; ucalc.f90 type-50; calc_emis_ion.f90 line output; pescl.f90 escape probability',
     }
 
@@ -634,6 +650,7 @@ def build_xstar_local_target(
     value_column: str = "emit_outward",
     xout_abund_filename: str | None = None,
     xout_lines_filename: str | None = None,
+    xout_cont_filename: str | None = None,
 ) -> XSTARLocalTarget:
     """Extract the exact local-state and triplet target from one XSTAR run.
 
@@ -644,9 +661,10 @@ def build_xstar_local_target(
     must be compared.
     """
     run_path = Path(run_dir)
-    files = find_xstar_run_files(run_path, xout_abund_filename=xout_abund_filename, xout_lines_filename=xout_lines_filename)
+    files = find_xstar_run_files(run_path, xout_abund_filename=xout_abund_filename, xout_lines_filename=xout_lines_filename, xout_cont_filename=xout_cont_filename)
     abund_path = files["xout_abund"]
     lines_path = files["xout_lines"]
+    cont_path = files.get("xout_cont")
     if abund_path is None:
         raise FileNotFoundError(f"Could not find xout_abund1.fits in {run_path}")
     if lines_path is None:
@@ -677,6 +695,7 @@ def build_xstar_local_target(
         line_rows=tuple(dict(r) for r in triplet.lines),
         xout_abund_path=str(abund_path),
         xout_lines_path=str(lines_path),
+        xout_cont_path=str(cont_path) if cont_path is not None else None,
         wavelength_window_A=window,
         value_column=value_column,
         status="ok" if triplet.status == "ok" else "target_incomplete",
@@ -721,6 +740,30 @@ def _write_solver_reference_lines_csv(target: "XSTARLocalTarget") -> Path | None
     write_csv(rows, path)
     return path
 
+
+def _write_solver_radiation_spectrum_csv(target: "XSTARLocalTarget") -> Path | None:
+    """Write the same-run XSTAR continuum spectrum to a temporary CSV."""
+    if not target.xout_cont_path:
+        return None
+    try:
+        rows = read_xout_spectra(target.xout_cont_path)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix="_xstar_radiation_spectrum.csv",
+        prefix="xstar_atomic_",
+        delete=False,
+        newline="",
+        encoding="utf-8",
+    )
+    path = Path(handle.name)
+    handle.close()
+    write_csv(rows, path)
+    return path
+
 def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> dict[str, Any]:
     """Return the source-code-first local-state validation solver settings.
 
@@ -739,8 +782,8 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "type57_energy_convention": "abs-rlev4",
         "triplet_source_mode": "type74-direct-diagnostic",
         "type99_proxy_scale": "0,1e-8,1e-6,1e-4,1e-2,1,1e2",
-        "radiation_field_mode": "xstar-powerlaw",
-        "radiation_bremsa_scale": 1.0e18,
+        "radiation_field_mode": "xstar-output" if (target is not None and target.xout_cont_path) else "none",
+        "radiation_bremsa_scale": 1.0,
         "radiation_powerlaw_index": 1.0,
         "radiation_n_energy_grid": 512,
         "type53_flat_proxy_scale": 1.0,
@@ -760,6 +803,10 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
     if target is not None and target.xout_lines_path:
         out["xstar_reference_lines_csv"] = target.xout_lines_path
         out["xstar_reference_value_column"] = target.value_column
+    if target is not None and target.xout_cont_path:
+        out["xstar_radiation_spectrum_csv"] = target.xout_cont_path
+        out["xstar_radiation_column"] = "transmitted"
+        out["xstar_radiation_radius_cm"] = target.context.plasma.radius_cm
     return out
 
 
@@ -806,6 +853,7 @@ def compare_solver_to_xstar_target(
             preset_kwargs = solver_kwargs_from_preset(solver_preset, target)
             merged_kwargs = {**preset_kwargs, **dict(solver_kwargs or {})}
             temporary_reference_csv: Path | None = None
+            temporary_radiation_csv: Path | None = None
             try:
                 # The xstar-local-state preset mirrors examples/51, where
                 # xout_lines1.fits is first converted to CSV before it is used
@@ -822,11 +870,26 @@ def compare_solver_to_xstar_target(
                     else:
                         merged_kwargs.pop("xstar_reference_lines_csv", None)
                         warnings.append("xout_lines_fits_not_passed_to_solver_no_reference_rows")
+
+                if _is_fits_path(merged_kwargs.get("xstar_radiation_spectrum_csv")):
+                    temporary_radiation_csv = _write_solver_radiation_spectrum_csv(target)
+                    if temporary_radiation_csv is not None:
+                        merged_kwargs["xstar_radiation_spectrum_csv"] = str(temporary_radiation_csv)
+                        warnings.append("converted_xout_cont_fits_to_temporary_solver_radiation_csv")
+                    else:
+                        merged_kwargs.pop("xstar_radiation_spectrum_csv", None)
+                        merged_kwargs["radiation_field_mode"] = "none"
+                        warnings.append("xout_cont_fits_not_passed_to_solver_no_radiation_rows")
                 result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
             finally:
                 if temporary_reference_csv is not None:
                     try:
                         temporary_reference_csv.unlink()
+                    except FileNotFoundError:
+                        pass
+                if temporary_radiation_csv is not None:
+                    try:
+                        temporary_radiation_csv.unlink()
                     except FileNotFoundError:
                         pass
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)

@@ -308,6 +308,54 @@ def read_xout_lines(path: str | Path, hdu_name: str = "XSTAR_LINES") -> List[Dic
         return table_hdu_to_rows(hdu)
 
 
+def read_xout_spectra(path: str | Path, hdu_name: str = "XSTAR_SPECTRA") -> List[Dict[str, Any]]:
+    """Read an XSTAR continuum/spectrum table such as ``xout_cont1.fits``.
+
+    The XSTAR writer ``writespectra3.f90`` stores an ASCII table named
+    ``XSTAR_SPECTRA`` with columns normally called ``energy``, ``incident``,
+    ``transmitted``, ``emit_inward`` and ``emit_outward``.  This lightweight
+    reader returns normalized lower-case column names and works with the
+    built-in ASCII-table fallback when ``astropy`` is unavailable.
+    """
+    path = Path(path)
+    if fits is None:
+        rows = _read_fits_table_fallback(path, hdu_name)
+        if rows:
+            return rows
+        raise ImportError("astropy is required to read this FITS table; the built-in fallback only supports XSTAR ASCII TABLE HDUs")
+    with fits.open(path) as hdul:
+        if hdu_name in hdul:
+            hdu = hdul[hdu_name]
+        else:
+            hdu = None
+            for candidate in hdul[1:]:
+                cols = [c.lower() for c in getattr(getattr(candidate, "columns", None), "names", []) or []]
+                if "energy" in cols and ("incident" in cols or "transmitted" in cols):
+                    hdu = candidate
+                    break
+            if hdu is None:
+                raise ValueError(f"No {hdu_name!r} or continuum spectrum table found in {path}")
+        return table_hdu_to_rows(hdu)
+
+
+def write_xout_spectra_csv(rows: Sequence[Mapping[str, Any]], path: str | Path) -> Path:
+    """Write XSTAR spectrum rows to CSV for lower-level solver routines."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["energy", "incident", "transmitted", "emit_inward", "emit_outward"]
+    extra = []
+    for row in rows:
+        for key in row.keys():
+            if key not in fieldnames and key not in extra:
+                extra.append(str(key))
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames + extra)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k) for k in fieldnames + extra})
+    return path
+
+
 def read_xout_parameters(path: str | Path, hdu_name: str = "PARAMETERS") -> List[Dict[str, Any]]:
     """Read the ``PARAMETERS`` table from an XSTAR output FITS file if present."""
     path = Path(path)

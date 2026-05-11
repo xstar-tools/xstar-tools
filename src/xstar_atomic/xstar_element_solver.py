@@ -4809,6 +4809,90 @@ def _xstar_nbinc_index(energy_eV: float, epi_grid: Sequence[float]) -> tuple[Opt
     return best, best + 1
 
 
+def _read_xstar_radiation_spectrum_csv(path: object) -> list[dict]:
+    """Read a CSV copy of an XSTAR ``XSTAR_SPECTRA`` table."""
+    if path is None or not str(path).strip():
+        return []
+    p = Path(str(path))
+    if not p.exists():
+        return []
+    rows: list[dict] = []
+    try:
+        with p.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                rows.append(dict(row))
+    except Exception:
+        return []
+    return rows
+
+
+def _build_xstar_output_bremsa_grid(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    column: object = "transmitted",
+    radius_cm: object = None,
+) -> tuple[list[float], list[float], str]:
+    """Convert an XSTAR output spectrum table into an internal ``bremsa`` grid.
+
+    XSTAR ``trnfrc.f90`` computes the local outward continuum as
+    ``bremsa(j)=zremsz(j)*exp(-dpthc(1,j))/(12.56*(r/1e19)**2)``.
+    ``writespectra3.f90`` writes ``incident`` and ``transmitted`` spectrum
+    columns.  For benchmark work we use the requested output-spectrum column
+    and apply the same geometric dilution when a local radius is available.
+    This is still an approximation to the exact zone-local transfer state when
+    only end-of-run spectra are available, but it is orders of magnitude safer
+    than using an arbitrary power-law normalization.
+    """
+    col = str(column or "transmitted").strip().lower().replace("-", "_")
+    if col not in {"incident", "transmitted", "emit_inward", "emit_outward"}:
+        col = "transmitted"
+    r = maybe_float(radius_cm)
+    dilution = 1.0
+    status = f"xstar_output_column_{col}_no_radius_dilution"
+    if r is not None and math.isfinite(float(r)) and float(r) > 0.0:
+        dilution = 12.56 * (float(r) * 1.0e-19) ** 2
+        if dilution <= 0.0 or not math.isfinite(dilution):
+            dilution = 1.0
+        status = f"xstar_output_column_{col}_diluted_by_12p56_r19_squared"
+    grid: list[float] = []
+    bremsa: list[float] = []
+    for row in rows:
+        e = maybe_float(row.get("energy") or row.get("energy_ev") or row.get("e"))
+        val = maybe_float(row.get(col))
+        if e is None or val is None:
+            continue
+        if not (math.isfinite(float(e)) and math.isfinite(float(val))):
+            continue
+        if float(e) <= 0.0:
+            continue
+        grid.append(float(e))
+        bremsa.append(max(float(val) / max(dilution, 1.0e-300), 0.0))
+    pairs = sorted(zip(grid, bremsa), key=lambda x: x[0])
+    if not pairs:
+        return [], [], "xstar_output_spectrum_empty_or_unreadable"
+    return [p[0] for p in pairs], [p[1] for p in pairs], status
+
+
+def _xstar_output_bremsa_at_energy(
+    energy_eV: float,
+    *,
+    epi_grid: Sequence[float],
+    bremsa_grid: Sequence[float],
+) -> tuple[Optional[int], Optional[int], Optional[float]]:
+    """Return ``(python_index, xstar_nb1, bremsa(nb1))`` for an output grid."""
+    if not epi_grid or not bremsa_grid:
+        return None, None, None
+    idx, nb1 = _xstar_nbinc_index(float(energy_eV), epi_grid)
+    if idx is None:
+        return None, None, None
+    idx = max(0, min(int(idx), len(bremsa_grid) - 1))
+    val = maybe_float(bremsa_grid[idx])
+    if val is None or not math.isfinite(float(val)):
+        return idx, nb1, None
+    return idx, nb1, float(val)
+
+
 def _type50_line_energy_wavelength(
     row: Mapping[str, object],
     *,
@@ -4846,6 +4930,9 @@ def _type50_source_code_photoexcitation_terms(
     radiation_n_energy_grid: int,
     radiation_powerlaw_index: float,
     cfrac: object,
+    xstar_radiation_epi_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_bremsa_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_grid_status: str = "",
 ) -> dict:
     """Evaluate the source-code type-50 lower-to-upper pumping branch.
 
@@ -4899,21 +4986,32 @@ def _type50_source_code_photoexcitation_terms(
     if vtherm is None or vtherm <= 0.0:
         out["type50_photoexcitation_status"] = "not_evaluated_missing_vtherm"
         return out
-    emin = float(radiation_energy_min_eV) if radiation_energy_min_eV is not None else 1.0
-    emax = float(radiation_energy_max_eV) if radiation_energy_max_eV is not None else 1.0e5
-    ngrid = max(int(radiation_n_energy_grid or 256), 8)
-    grid = _log_energy_grid(emin, emax, ngrid)
-    bscale = maybe_float(radiation_bremsa_scale)
-    if bscale is None or not math.isfinite(float(bscale)):
-        bscale = 1.0
-    alpha = maybe_float(radiation_powerlaw_index)
-    if alpha is None or not math.isfinite(float(alpha)):
-        alpha = 1.0
-    idx, nb1 = _xstar_nbinc_index(float(energy), grid)
-    if idx is None:
-        out["type50_photoexcitation_status"] = "not_evaluated_nbinc_failed"
-        return out
-    bremsa_nb1 = _placeholder_bremsa_value(float(grid[idx]), mode=mode, temperature_K=float(temperature_K or 1.0), bremsa_scale=float(bscale), powerlaw_index=float(alpha))
+    if mode == "xstar-output":
+        idx, nb1, bremsa_nb1 = _xstar_output_bremsa_at_energy(
+            float(energy),
+            epi_grid=xstar_radiation_epi_grid or [],
+            bremsa_grid=xstar_radiation_bremsa_grid or [],
+        )
+        if idx is None or bremsa_nb1 is None:
+            out["type50_photoexcitation_status"] = "not_evaluated_missing_xstar_output_bremsa_grid"
+            out["type50_photoexcitation_warning"] = str(xstar_radiation_grid_status or "xstar output radiation grid unavailable")
+            return out
+    else:
+        emin = float(radiation_energy_min_eV) if radiation_energy_min_eV is not None else 1.0
+        emax = float(radiation_energy_max_eV) if radiation_energy_max_eV is not None else 1.0e5
+        ngrid = max(int(radiation_n_energy_grid or 256), 8)
+        grid = _log_energy_grid(emin, emax, ngrid)
+        bscale = maybe_float(radiation_bremsa_scale)
+        if bscale is None or not math.isfinite(float(bscale)):
+            bscale = 1.0
+        alpha = maybe_float(radiation_powerlaw_index)
+        if alpha is None or not math.isfinite(float(alpha)):
+            alpha = 1.0
+        idx, nb1 = _xstar_nbinc_index(float(energy), grid)
+        if idx is None:
+            out["type50_photoexcitation_status"] = "not_evaluated_nbinc_failed"
+            return out
+        bremsa_nb1 = _placeholder_bremsa_value(float(grid[idx]), mode=mode, temperature_K=float(temperature_K or 1.0), bremsa_scale=float(bscale), powerlaw_index=float(alpha))
     cf = maybe_float(cfrac)
     if cf is None or not math.isfinite(float(cf)):
         cf = maybe_float(row.get("cfrac") or row.get("xstar_cfrac") or row.get("covering_fraction"))
@@ -4933,6 +5031,7 @@ def _type50_source_code_photoexcitation_terms(
         "type50_photoexcitation_sigma_cm2": float(sigma),
         "type50_photoexcitation_nb1": int(nb1),
         "type50_photoexcitation_bremsa_nb1": float(bremsa_nb1),
+        "type50_photoexcitation_radiation_grid_status": str(xstar_radiation_grid_status or ("diagnostic_grid" if mode != "xstar-output" else "xstar_output_grid")),
         "type50_photoexcitation_cfrac": float(cf),
         "type50_photoexcitation_covering_multiplier": float(cover),
         "type50_photoexcitation_rate_s^-1": max(float(rate), 0.0),
@@ -4957,6 +5056,9 @@ def _type50_effective_rates(
     radiation_n_energy_grid: int = 256,
     radiation_powerlaw_index: float = 1.0,
     type50_cfrac: object = 0.0,
+    xstar_radiation_epi_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_bremsa_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_grid_status: str = "",
 ) -> dict:
     """Return controlled XSTAR-ucalc-style type-50 population rates.
 
@@ -5035,6 +5137,9 @@ def _type50_effective_rates(
                 radiation_n_energy_grid=radiation_n_energy_grid,
                 radiation_powerlaw_index=radiation_powerlaw_index,
                 cfrac=type50_cfrac,
+                xstar_radiation_epi_grid=xstar_radiation_epi_grid,
+                xstar_radiation_bremsa_grid=xstar_radiation_bremsa_grid,
+                xstar_radiation_grid_status=xstar_radiation_grid_status,
             )
             pumping = float(pumping_terms.get("type50_photoexcitation_rate_s^-1") or 0.0)
             context_status = str(context_status) + ";" + str(pumping_terms.get("type50_photoexcitation_status"))
@@ -5079,6 +5184,9 @@ def build_global_bound_bound_matrix_terms(
     radiation_energy_max_eV: Optional[float] = None,
     radiation_n_energy_grid: int = 256,
     radiation_powerlaw_index: float = 1.0,
+    xstar_radiation_epi_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_bremsa_grid: Optional[Sequence[float]] = None,
+    xstar_radiation_grid_status: str = "",
     temperature_K: Optional[float] = None,
     resonance_collisional_feed_scale: object = 1.0,
 ) -> List[dict]:
@@ -5136,6 +5244,9 @@ def build_global_bound_bound_matrix_terms(
             radiation_n_energy_grid=radiation_n_energy_grid,
             radiation_powerlaw_index=radiation_powerlaw_index,
             type50_cfrac=type50_cfrac,
+            xstar_radiation_epi_grid=xstar_radiation_epi_grid,
+            xstar_radiation_bremsa_grid=xstar_radiation_bremsa_grid,
+            xstar_radiation_grid_status=xstar_radiation_grid_status,
         )
         resonance_feed_scale = max(0.0, _bounded_nonnegative_float(resonance_collisional_feed_scale, 1.0))
         is_resonance_collisional_feed = _is_direct_collisional_feed_to_resonance_upper(tr, to_state=to_row)
@@ -12960,6 +13071,9 @@ def solve_element_reference(
     radiation_energy_max_eV: Optional[float] = None,
     radiation_n_energy_grid: int = 256,
     radiation_powerlaw_index: float = 1.0,
+    xstar_radiation_spectrum_csv: object = None,
+    xstar_radiation_column: object = "transmitted",
+    xstar_radiation_radius_cm: object = None,
     full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
@@ -13184,6 +13298,12 @@ def solve_element_reference(
     type50_escape_source_norm = str(type50_escape_source or "matrix-row").strip().lower().replace("_", "-")
     reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(xstar_reference_lines_csv) if type50_escape_source_norm in {"xstar-reference-lines", "same-run-xout-lines", "xout-lines", "reference-lines"} else []
     matrix_transitions = _annotate_type50_transition_depths_from_reference(transitions, reference_depth_rows_for_matrix) if reference_depth_rows_for_matrix else transitions
+    xstar_radiation_rows_for_matrix = _read_xstar_radiation_spectrum_csv(xstar_radiation_spectrum_csv)
+    xstar_radiation_epi_grid, xstar_radiation_bremsa_grid, xstar_radiation_grid_status = _build_xstar_output_bremsa_grid(
+        xstar_radiation_rows_for_matrix,
+        column=xstar_radiation_column,
+        radius_cm=xstar_radiation_radius_cm,
+    ) if xstar_radiation_rows_for_matrix else ([], [], "xstar_output_spectrum_not_supplied")
     global_bound_bound_matrix_terms = build_global_bound_bound_matrix_terms(
         matrix_transitions,
         global_index_rows,
@@ -13198,6 +13318,9 @@ def solve_element_reference(
         radiation_energy_max_eV=radiation_energy_max_eV,
         radiation_n_energy_grid=radiation_n_energy_grid,
         radiation_powerlaw_index=radiation_powerlaw_index,
+        xstar_radiation_epi_grid=xstar_radiation_epi_grid,
+        xstar_radiation_bremsa_grid=xstar_radiation_bremsa_grid,
+        xstar_radiation_grid_status=xstar_radiation_grid_status,
         temperature_K=temperature,
         resonance_collisional_feed_scale=resonance_collisional_feed_scale,
     )
@@ -13691,6 +13814,10 @@ def solve_element_reference(
             "n_type99_proxy_scale_scan_rows": len(type99_proxy_scale_scan_rows),
             "type99_proxy_scale_scan_summary": _type99_proxy_scale_scan_summary(type99_proxy_scale_scan_rows),
             "radiation_field_mode": radiation_field_mode,
+            "xstar_radiation_spectrum_csv": str(xstar_radiation_spectrum_csv) if xstar_radiation_spectrum_csv is not None else None,
+            "xstar_radiation_column": xstar_radiation_column,
+            "xstar_radiation_grid_status": xstar_radiation_grid_status if 'xstar_radiation_grid_status' in locals() else None,
+            "n_xstar_radiation_grid_points": len(xstar_radiation_epi_grid) if 'xstar_radiation_epi_grid' in locals() else 0,
             "n_radiation_context_rows": len(radiation_context_rows),
             "radiation_context_summary": radiation_context_rows[0] if radiation_context_rows else {},
             "n_bremsa_context_rows": len(bremsa_context_rows),

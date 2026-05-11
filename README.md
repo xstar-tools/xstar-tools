@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.145** fixes the first opt-in `xstar-line-escape-and-pumping` benchmark run.  v0.3.144 introduced the source-code-matched type-50 lower-to-upper photoexcitation branch; v0.3.145 initializes the pumping diagnostics for all bound-bound rows so non-type-50 collisional rows no longer crash the full-global benchmark.  Type-50 pumping remains opt-in and should be validated against the C V / O VII / Mg XI / Ca XIX same-run XSTAR benchmark before it is treated as a final default.
+Latest package note: **v0.3.146** corrects the first type-50 line-pumping benchmark implementation so the `xstar-local-state` preset uses same-run `xout_cont1.fits` / `xout_spect1.fits` radiation output when available, converted to an XSTAR `bremsa`-like grid using the `trnfrc.f90` geometry.  v0.3.144 introduced the opt-in `xstar-line-escape-and-pumping` branch and v0.3.145 fixed the first non-type-50 crash; v0.3.146 prevents arbitrary proxy continuum over-pumping by requiring an explicit same-run XSTAR output spectrum for source-code-matched pumping.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
