@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.136** adds a one-command standard He-like benchmark suite for C V, O VII, Mg XI, and Ca XIX. It builds on the v0.3.134 `xstar_atomic.benchmark` layer, which extracts the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
+Latest package note: **v0.3.137** fixes ATDB path resolution for the C V / O VII / Mg XI / Ca XIX solver benchmark suite.  The benchmark now accepts both `XSTAR_ATDB` and `XSTAR_ATDB_FITS`, and a blank `--atdb "$XSTAR_ATDB"` argument falls back to the normal resolver instead of trying `./atdb.fits`.  It builds on the v0.3.134 `xstar_atomic.benchmark` layer, which extracts the exact local state from `xout_abund1.fits` and the exact He-like triplet target from `xout_lines1.fits` before comparing any solver result.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -66,7 +66,7 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
 ```
 
 
-No solver physics changed in v0.3.136. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
+No solver physics changed in v0.3.137. Type-50 photoexcitation/line pumping remains **audit-only** and is not injected into the population matrix. The new benchmark layer is target extraction plus optional residual reporting, not a physics correction.
 
 ## Earlier v0.3.128 API infrastructure
 

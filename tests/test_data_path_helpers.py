@@ -73,3 +73,32 @@ def test_download_data_decline_and_set_existing_path(tmp_path, monkeypatch):
     resolved = data.download_data(prompt=True)
     assert resolved == atdb.resolve()
     assert data.get_data_path() == atdb.parent.resolve()
+
+
+def test_find_atdb_file_honors_short_xstar_atdb_env(tmp_path, monkeypatch):
+    pytest.importorskip("astropy")
+    import xstar_atomic.data as data
+
+    monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+    dp_file = tmp_path / "datapath"
+    monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
+    atdb = tmp_path / "atdb.fits"
+    _write_minimal_fits_like_file(atdb)
+    monkeypatch.setenv("XSTAR_ATDB", str(atdb))
+
+    assert data.find_atdb_file(remember=False) == atdb.resolve()
+    assert data.resolve_atdb_path(None, prompt=False) == atdb.resolve()
+
+
+def test_resolve_atdb_path_blank_explicit_falls_back_to_env(tmp_path, monkeypatch):
+    pytest.importorskip("astropy")
+    import xstar_atomic.data as data
+
+    monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+    dp_file = tmp_path / "datapath"
+    monkeypatch.setattr(data, "DATAPATH_FILE", dp_file)
+    atdb = tmp_path / "atdb.fits"
+    _write_minimal_fits_like_file(atdb)
+    monkeypatch.setenv("XSTAR_ATDB", str(atdb))
+
+    assert data.resolve_atdb_path("", prompt=False) == atdb.resolve()

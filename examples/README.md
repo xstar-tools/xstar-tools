@@ -514,3 +514,16 @@ As workflows stabilize, reusable logic should move from `examples/` into `src/xs
 ## Development policy
 
 These examples follow the source-code-first rule: no empirical triplet scale factors should be used as final physics, new physics starts as audit-only, solver-changing modes must be opt-in until same-run XSTAR validation is complete, and every solver-changing rate must carry source-code and local-context provenance.
+
+
+## ATDB path environment variables
+
+Examples that need the full XSTAR atomic database accept an explicit `/path/to/atdb.fits`.  Solver benchmark examples also use the resolver, so either environment variable works:
+
+```bash
+export XSTAR_ATDB=/path/to/xstar/data/atdb.fits
+# or
+export XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits
+```
+
+If `--atdb "$XSTAR_ATDB"` expands to an empty string, v0.3.137 treats it as not provided and falls back to the resolver instead of trying `./atdb.fits`.

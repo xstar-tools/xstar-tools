@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.137 - 2026-05-10
+
+- Fixed the four-ion local-output benchmark solver mode so it accepts the common `XSTAR_ATDB` environment variable in addition to `XSTAR_ATDB_FITS`.
+- Treats a blank `--atdb` value, such as `--atdb "$XSTAR_ATDB"` when the shell variable is unset, as not provided and falls back to the configured resolver instead of trying `./atdb.fits`.
+- Lets the normal ATDB resolver handle `--atdb`, `XSTAR_ATDB_FITS`, `XSTAR_ATDB`, and saved `datapath` consistently during solver comparisons.
+- The example summary now prints solver f/i/r values and comparison warnings, making failed solver setup visible immediately at the terminal.
+
 ## v0.3.136 - 2026-05-10
 
 - Fixed the C V / O VII / Mg XI / Ca XIX XSTAR reproduction benchmark solver-comparison extraction.

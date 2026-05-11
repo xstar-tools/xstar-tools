@@ -39,7 +39,7 @@ or save a persistent data path:
    xa.set_data_path("/path/to/xstar/data/atdb.fits")
    db = xa.open_database()
 
-The resolver checks an explicit path, ``XSTAR_ATDB_FITS``, the persistent
+The resolver checks an explicit path, ``XSTAR_ATDB_FITS`` or ``XSTAR_ATDB``, the persistent
 ``datapath`` file, and ``data/atdb.fits``.  Interactive configuration is also
 available:
 
@@ -76,7 +76,7 @@ Run without installation from a checkout:
 Public API layers
 -----------------
 
-The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.136 make
+The v0.3.131 API adds a CHIANTI-tools-style workflow layer, and v0.3.132--v0.3.137 make
 this layer explicit in Markdown, LaTeX, and Sphinx documentation.
 
 .. list-table:: Public API layers
@@ -97,7 +97,7 @@ this layer explicit in Markdown, LaTeX, and Sphinx documentation.
      - ``db.rates.type50("O VII", ...)``
 
 The API intentionally separates implemented stable helpers from future
-namespace placeholders.  In v0.3.132--v0.3.136, ``db.rates.type50(...)``,
+namespace placeholders.  In v0.3.132--v0.3.137, ``db.rates.type50(...)``,
 ``db.audit.type50_line_pumping(...)``, ``db.context.*``, and
 ``db.validate.compare_xstar_run(...)`` and ``db.validate.reproduce_xstar_run(...)`` are callable.  Full type-50 solver
 injection and some resonance-budget audits remain future work.

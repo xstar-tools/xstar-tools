@@ -69,7 +69,7 @@ def main() -> None:
             cases,
             value_column=args.value_column,
             run_solver=args.run_solver,
-            fitsfile=args.atdb,
+            fitsfile=args.atdb or None,
         )
         paths = write_xstar_benchmark_suite(comparisons, out_dir)
         if args.print_summary:
@@ -83,8 +83,11 @@ def main() -> None:
                     f"ne={row.get('electron_density_cm^-3')} cm^-3 "
                     f"logxi={row.get('log_xi')} "
                     f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')} "
+                    f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')} "
                     f"status={comparison.status}"
                 )
+                if row.get("comparison_warnings"):
+                    print(f"  warnings={row.get('comparison_warnings')}")
             for key, path in paths.items():
                 print(f"{key}: {path}")
         return
@@ -99,7 +102,7 @@ def main() -> None:
         wavelength=args.wavelength,
         value_column=args.value_column,
         run_solver=args.run_solver,
-        fitsfile=args.atdb,
+        fitsfile=args.atdb or None,
     )
     paths = write_xstar_benchmark_outputs(comparison, out_dir)
     if args.print_summary:
@@ -113,7 +116,10 @@ def main() -> None:
         print(f"ne={row.get('electron_density_cm^-3')} cm^-3")
         print(f"logxi={row.get('log_xi')}")
         print(f"xstar_f/i/r={row.get('xstar_f_fraction')}/{row.get('xstar_i_fraction')}/{row.get('xstar_r_fraction')}")
+        print(f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')}")
         print(f"status={comparison.status}")
+        if row.get("comparison_warnings"):
+            print(f"warnings={row.get('comparison_warnings')}")
 
 
 if __name__ == "__main__":

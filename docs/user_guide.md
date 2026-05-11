@@ -151,7 +151,7 @@ In v0.3.128 through v0.3.133 this evaluator is **audit-only**. It records the XS
 
 ## 3. Public API cookbook: workflow-first and expert APIs
 
-This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.136.  The design follows the useful `chianti-tools` pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
+This section is the canonical user-facing description of the public API added in v0.3.131 and clarified in v0.3.132--v0.3.137.  The design follows the useful `chianti-tools` pattern: common science tasks have short workflow-first functions, while advanced XSTAR-alignment work remains available through explicit context, rate, audit, and validation objects.
 
 There are three supported public layers:
 
@@ -161,7 +161,7 @@ There are three supported public layers:
 | `XSTARAtomic` object API | You want to keep one opened `atdb.fits` handle and reuse cached indices. | `db.lines("O VII", wavelength=(21.4, 22.2))` |
 | Expert namespace API | You want source-code-first contexts, rate evaluators, audits, validation, and future matrix/solver workflows. | `db.rates.type50("O VII", ...)` |
 
-The current API intentionally separates **implemented stable helpers** from **future namespace placeholders**.  In v0.3.132--v0.3.136, `db.rates.type50(...)`, `db.audit.type50_line_pumping(...)`, `db.context.*`, and `db.validate.compare_xstar_run(...)` and `db.validate.reproduce_xstar_run(...)` are callable.  Some planned functions, such as full `db.audit.resonance_deficit(...)` and full type-50 solver injection, are still intentionally not active as public solver physics.
+The current API intentionally separates **implemented stable helpers** from **future namespace placeholders**.  In v0.3.132--v0.3.137, `db.rates.type50(...)`, `db.audit.type50_line_pumping(...)`, `db.context.*`, and `db.validate.compare_xstar_run(...)` and `db.validate.reproduce_xstar_run(...)` are callable.  Some planned functions, such as full `db.audit.resonance_deficit(...)` and full type-50 solver injection, are still intentionally not active as public solver physics.
 
 ### 3.1 Module-level workflow API
 
@@ -1058,7 +1058,7 @@ PYTHONPATH=src pytest -q \
   tests/test_cli_smoke.py
 ```
 
-Some tests are skipped unless `XSTAR_ATDB_FITS` points to a local `atdb.fits`.
+Some tests are skipped unless `XSTAR_ATDB_FITS` or `XSTAR_ATDB` points to a local `atdb.fits`.
 
 ## 12. Roadmap
 
@@ -1072,10 +1072,12 @@ v0.3.131: workflow-first public API, expert namespaces, and context-based helper
 v0.3.132: documentation consistency across Markdown, LaTeX, and Sphinx for the public API.
 v0.3.133: add function-by-function API examples to Markdown/LaTeX/Sphinx docs and fix the LaTeX migration table layout.
 v0.3.134: exact same-run XSTAR local-output reproduction targets.
-v0.3.136: one-command standard C V / O VII / Mg XI / Ca XIX benchmark suite.
-v0.3.136: XSTAR radiation-field reader and exact line-energy bin mapping.
-v0.3.137: type-50 matrix-injection preview, still audit-only.
-v0.3.138: optional solver mode for xstar-line-escape-and-pumping.
+v0.3.135: one-command standard C V / O VII / Mg XI / Ca XIX benchmark suite.
+v0.3.136: stricter solver-triplet extraction and benchmark status reporting.
+v0.3.137: benchmark ATDB path-resolution fix for `XSTAR_ATDB`, `XSTAR_ATDB_FITS`, blank `--atdb`, and saved `datapath`.
+Future: XSTAR radiation-field reader and exact line-energy bin mapping.
+Future: type-50 matrix-injection preview, still audit-only.
+Future: optional solver mode for xstar-line-escape-and-pumping.
 ```
 
 Longer-term:

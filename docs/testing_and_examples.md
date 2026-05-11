@@ -12,10 +12,12 @@ pytest -q
 
 ## Real `atdb.fits` smoke tests
 
-These tests require the XSTAR atomic database file and are skipped unless `XSTAR_ATDB_FITS` is set:
+These tests require the XSTAR atomic database file and are skipped unless `XSTAR_ATDB_FITS` or `XSTAR_ATDB` is set:
 
 ```bash
 XSTAR_ATDB_FITS=/path/to/xstar/data/atdb.fits pytest -q
+# or
+XSTAR_ATDB=/path/to/xstar/data/atdb.fits pytest -q
 ```
 
 The smoke tests validate:

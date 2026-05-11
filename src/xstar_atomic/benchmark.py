@@ -419,7 +419,13 @@ def compare_solver_to_xstar_target(
         if target.ion is None:
             raise ValueError("run_solver=True requires target.ion")
         try:
-            result = solve_populations(target.ion, context=target.context, db=db, fitsfile=fitsfile, **dict(solver_kwargs or {}))
+            # Accept --atdb, XSTAR_ATDB_FITS, XSTAR_ATDB, or configured datapath.
+            # A blank shell expansion such as --atdb "$XSTAR_ATDB" with an
+            # unset variable is treated as not provided, instead of becoming
+            # ./atdb.fits.  The database resolver inside solve_populations then
+            # handles environment/datapath lookup.
+            solver_fitsfile = fitsfile if str(fitsfile or "").strip() else None
+            result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **dict(solver_kwargs or {}))
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)
             warnings.extend(extract_warnings)
             status = "solver_compared" if _has_triplet_fractions(triplet) else "solver_no_triplet_values"

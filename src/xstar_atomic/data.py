@@ -127,20 +127,23 @@ def _atdb_file_problem(path: Path) -> Optional[str]:
 def find_atdb_file(path: Optional[Union[str, Path]] = None, *, remember: bool = True) -> Optional[Path]:
     """Find ``atdb.fits`` from an explicit path, environment, datapath, or default.
 
-    The environment variable ``XSTAR_ATDB_FITS`` is honored as a convenience.
-    If an explicit path or environment path is valid and ``remember`` is true,
+    The environment variables ``XSTAR_ATDB_FITS`` and ``XSTAR_ATDB`` are honored
+    as conveniences. ``XSTAR_ATDB`` is accepted because many benchmark scripts
+    and user shell sessions naturally use that shorter name. If an explicit path
+    or environment path is valid and ``remember`` is true,
     its parent directory is written to the persistent datapath file.  General
     command-line examples now call :func:`resolve_atdb_path` with the default
     ``remember_explicit=False`` so normal runs do not overwrite ``datapath``.
     """
     candidates: list[tuple[Path, bool]] = []
-    if path is not None:
+    if path is not None and str(path).strip():
         p = Path(path).expanduser()
         candidates.append((p / ATDB_FILENAME if p.is_dir() else p, remember))
-    env_path = os.environ.get("XSTAR_ATDB_FITS")
-    if env_path:
-        p = Path(env_path).expanduser()
-        candidates.append((p / ATDB_FILENAME if p.is_dir() else p, remember))
+    for env_name in ("XSTAR_ATDB_FITS", "XSTAR_ATDB"):
+        env_path = os.environ.get(env_name)
+        if env_path and env_path.strip():
+            p = Path(env_path).expanduser()
+            candidates.append((p / ATDB_FILENAME if p.is_dir() else p, remember))
     dp = get_data_path()
     if dp is not None:
         candidates.append((dp / ATDB_FILENAME, False))
@@ -297,7 +300,7 @@ def resolve_atdb_path(
     examples from changing ``datapath`` simply because a command line included
     ``../xstar/data/atdb.fits``.
     """
-    if path is not None:
+    if path is not None and str(path).strip():
         p = Path(path).expanduser()
         candidate = p / ATDB_FILENAME if p.is_dir() else p
         try:
@@ -311,7 +314,7 @@ def resolve_atdb_path(
             return candidate
         raise FileNotFoundError(
             f"atdb.fits not found or invalid: {candidate} ({problem}). "
-            "Check the relative path, set XSTAR_ATDB_FITS to the real 830 MB atdb.fits, "
+            "Check the relative path, set XSTAR_ATDB_FITS or XSTAR_ATDB to the real 830 MB atdb.fits, "
             "or run: python -m xstar_atomic.data --set-path /path/to/atdb.fits"
         )
 
@@ -320,7 +323,7 @@ def resolve_atdb_path(
         return found
     if not prompt:
         raise FileNotFoundError(
-            "No valid atdb.fits was found from XSTAR_ATDB_FITS, datapath, or the default data directory. "
+            "No valid atdb.fits was found from XSTAR_ATDB_FITS, XSTAR_ATDB, datapath, or the default data directory. "
             "Configure it once with: python -m xstar_atomic.data --set-path /path/to/atdb.fits"
         )
     return download_data(prompt=prompt)
