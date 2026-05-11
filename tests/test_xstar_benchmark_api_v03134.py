@@ -401,7 +401,7 @@ def test_solver_preset_local_state_passes_validation_kwargs(monkeypatch):
     compare_solver_to_xstar_target(target, run_solver=True, solver_preset="xstar-local-state")
     assert seen["full_global_linear_solver"] == "xstar-lucy"
     assert seen["full_global_topology"] == "xstar-continuum-alias-superlevels"
-    assert seen["type50_bound_bound_treatment"] == "xstar-line-escape"
+    assert seen["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
     assert seen["type50_escape_factor"] == 0.35
     assert seen["reference_suffix"] == ".csv"
     assert "emit_outward" in seen["reference_text"]
@@ -412,7 +412,7 @@ def test_xstar_local_state_preset_uses_same_run_reference_depths():
     from xstar_atomic.benchmark import xstar_local_state_solver_kwargs
 
     kwargs = xstar_local_state_solver_kwargs(None)
-    assert kwargs["type50_bound_bound_treatment"] == "xstar-line-escape"
+    assert kwargs["type50_bound_bound_treatment"] == "xstar-line-escape-and-pumping"
     assert kwargs["type50_escape_source"] == "xstar-reference-lines"
 
 

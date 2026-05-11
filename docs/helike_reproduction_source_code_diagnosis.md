@@ -65,7 +65,7 @@ The benchmark exposes three likely source-code gaps.
    The population matrix does not yet inject the real XSTAR lower-to-upper type-50 photoexcitation term based on `bremsa(nb1)`, `flinabs(ptmp1)`, and `cfrac`.
 
 2. **The matrix still uses a scalar type-50 escape fallback for many transitions.**
-   The `xstar-local-state` preset uses `type50_bound_bound_treatment=xstar-line-escape` with `type50_escape_factor=0.35` when a true per-line tau context is not available in the matrix transition row.  The same-run `xout_lines1.fits` resonance depths imply very different escape probabilities for C V, Mg XI, and Ca XIX, so one scalar cannot reproduce all ions or all physical conditions.
+   The `xstar-local-state` preset uses `type50_bound_bound_treatment=xstar-line-escape-and-pumping` with `type50_escape_factor=0.35` when a true per-line tau context is not available in the matrix transition row.  The same-run `xout_lines1.fits` resonance depths imply very different escape probabilities for C V, Mg XI, and Ca XIX, so one scalar cannot reproduce all ions or all physical conditions.
 
 3. **The local radiation field is still a proxy.**
    The preset uses an `xstar-powerlaw` proxy radiation field.  XSTAR `ucalc.f90` uses the local `epi` grid and `bremsa(nb1)` array.  To reproduce arbitrary `Te`, `ne`, and `xi`, the API must ingest or reconstruct the same-run local radiation field, not only an approximate power-law proxy.

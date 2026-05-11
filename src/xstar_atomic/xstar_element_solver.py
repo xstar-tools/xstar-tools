@@ -4549,6 +4549,10 @@ def _normalise_type50_bound_bound_treatment(value: object) -> str:
         "xstar-escape-photoexcitation": "xstar-escape-photoexcitation",
         "escape-photoexcitation": "xstar-escape-photoexcitation",
         "photoexcitation": "xstar-escape-photoexcitation",
+        "xstar-line-escape-and-pumping": "xstar-line-escape-and-pumping",
+        "line-escape-and-pumping": "xstar-line-escape-and-pumping",
+        "xstar-pumping": "xstar-line-escape-and-pumping",
+        "pumping": "xstar-line-escape-and-pumping",
     }
     if text not in aliases:
         raise ValueError(f"Unsupported type-50 bound-bound treatment {value!r}")
@@ -4733,6 +4737,209 @@ def _xstar_line_escape_from_row(
     }
 
 
+
+_ATOMIC_MASS_FOR_SYMBOL = {
+    "H": 1.0, "HE": 4.0, "LI": 7.0, "BE": 9.0, "B": 11.0,
+    "C": 12.0, "N": 14.0, "O": 16.0, "NE": 20.0, "NA": 23.0,
+    "MG": 24.0, "AL": 27.0, "SI": 28.0, "S": 32.0, "AR": 40.0,
+    "CA": 40.0, "FE": 56.0,
+}
+
+
+def _atomic_mass_for_type50(row: Mapping[str, object], from_state: Optional[Mapping[str, object]] = None) -> float:
+    """Return the ion-mass number used in XSTAR's type-50 thermal velocity.
+
+    XSTAR obtains this from the line's parent element record before evaluating
+    ``vtherm=((vturb*1.e5)**2+(1.29e6/sqrt(A/t))**2)**0.5``.  The transition
+    log does not always carry that parent record, so use explicit mass fields
+    when available and otherwise fall back to common astrophysical mass numbers.
+    """
+    for key in ("atomic_mass", "atomic_mass_number", "mass_number", "A", "ion_mass_number"):
+        val = maybe_float(row.get(key))
+        if val is not None and math.isfinite(float(val)) and float(val) > 0.0:
+            return float(val)
+    symbol = str(row.get("element") or (from_state or {}).get("element") or "").strip().upper()
+    if symbol in _ATOMIC_MASS_FOR_SYMBOL:
+        return float(_ATOMIC_MASS_FOR_SYMBOL[symbol])
+    z = maybe_int(row.get("element_z") or (from_state or {}).get("element_z"))
+    if z is not None:
+        # Conservative fallback: roughly twice Z for light elements, still
+        # finite for diagnostics outside the built-in table.
+        return max(1.0, 2.0 * float(z))
+    return 1.0
+
+
+def _type50_vtherm_cm_s(*, temperature_K: Optional[float], vturb_km_s: object, atomic_mass_number: float) -> Optional[float]:
+    """Port the XSTAR type-50 thermal+turbulent line width velocity."""
+    temp = maybe_float(temperature_K)
+    if temp is None or not math.isfinite(float(temp)) or float(temp) <= 0.0:
+        return None
+    vturb = maybe_float(vturb_km_s)
+    if vturb is None or not math.isfinite(float(vturb)):
+        vturb = 0.0
+    # ucalc's ``t`` argument is documented as temperature in units of 10^4 K.
+    t_1e4 = max(float(temp) / 1.0e4, 1.0e-300)
+    a = max(float(atomic_mass_number), 1.0e-300)
+    return float(((float(vturb) * 1.0e5) ** 2 + (1.29e6 / math.sqrt(a / t_1e4)) ** 2) ** 0.5)
+
+
+def _xstar_nbinc_index(energy_eV: float, epi_grid: Sequence[float]) -> tuple[Optional[int], Optional[int]]:
+    """Return ``(python_index, fortran_nb1)`` using the XSTAR ``nbinc`` convention.
+
+    XSTAR puts a line with energy between ``epi(i)`` and ``epi(i+1)`` into bin
+    ``i`` (Fortran 1-based).  The last ``ncn/50`` guard bins are not searched
+    by the source routine; mirror that behavior for diagnostic parity.
+    """
+    if not epi_grid:
+        return None, None
+    e = float(energy_eV)
+    n = len(epi_grid)
+    n_guard = max(2, n // 50)
+    n_search = max(1, n - n_guard)
+    if e <= float(epi_grid[0]):
+        return 0, 1
+    best = 0
+    for i in range(0, n_search - 1):
+        if float(epi_grid[i]) <= e < float(epi_grid[i + 1]):
+            best = i
+            return best, best + 1
+        if float(epi_grid[i]) <= e:
+            best = i
+    best = min(best, n - 1)
+    return best, best + 1
+
+
+def _type50_line_energy_wavelength(
+    row: Mapping[str, object],
+    *,
+    from_state: Optional[Mapping[str, object]],
+    to_state: Optional[Mapping[str, object]],
+) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+    """Return ``(energy_eV, wavelength_A, ggup, gglo)`` for a type-50 line."""
+    wav = _line_wavelength_value(row)
+    e_up = maybe_float((from_state or {}).get("energy_eV"))
+    e_lo = maybe_float((to_state or {}).get("energy_eV"))
+    g_up = maybe_float((from_state or {}).get("statistical_weight_g") or (from_state or {}).get("stat_weight"))
+    g_lo = maybe_float((to_state or {}).get("statistical_weight_g") or (to_state or {}).get("stat_weight"))
+    if e_up is not None and e_lo is not None and float(e_up) < float(e_lo):
+        e_up, e_lo = e_lo, e_up
+        g_up, g_lo = g_lo, g_up
+    energy = abs(float(e_up) - float(e_lo)) if e_up is not None and e_lo is not None else None
+    if wav is None and energy is not None and energy > 0.0:
+        wav = 12398.4016 / energy
+    if energy is None and wav is not None and wav > 0.0:
+        energy = 12398.4016 / float(wav)
+    return energy, wav, g_up, g_lo
+
+
+def _type50_source_code_photoexcitation_terms(
+    row: Mapping[str, object],
+    *,
+    from_state: Optional[Mapping[str, object]],
+    to_state: Optional[Mapping[str, object]],
+    temperature_K: Optional[float],
+    vturb_km_s: object,
+    radiation_field_mode: str,
+    radiation_bremsa_scale: object,
+    radiation_energy_min_eV: Optional[float],
+    radiation_energy_max_eV: Optional[float],
+    radiation_n_energy_grid: int,
+    radiation_powerlaw_index: float,
+    cfrac: object,
+) -> dict:
+    """Evaluate the source-code type-50 lower-to-upper pumping branch.
+
+    This implements the algebra in ``ucalc.f90`` type 50 using the same
+    explicit diagnostic ``epi``/``bremsa`` grid already used by the type-53 and
+    type-74 audit kernels.  It is a real matrix term when enabled, but the row
+    records whether the continuum came from the current diagnostic grid rather
+    than a full XSTAR transfer dump.
+    """
+    raw_a = _bounded_nonnegative_float(row.get("rate_s^-1"), 0.0)
+    energy, wav_A, ggup, gglo = _type50_line_energy_wavelength(row, from_state=from_state, to_state=to_state)
+    out = {
+        "type50_photoexcitation_status": "not_evaluated",
+        "type50_photoexcitation_source_formula": "ucalc.f90 type50: sigma=0.02655*flin*lambda_cm/vtherm; ans1_postswap=sigma*bremsa(nb1)*vtherm/3e10*flinabs(ptmp1)*(1-cfrac)",
+        "type50_photoexcitation_energy_eV": energy,
+        "type50_photoexcitation_wavelength_A": wav_A,
+        "type50_photoexcitation_ggup": ggup,
+        "type50_photoexcitation_gglo": gglo,
+        "type50_photoexcitation_flin": None,
+        "type50_photoexcitation_atomic_mass_number": None,
+        "type50_photoexcitation_vtherm_cm_s": None,
+        "type50_photoexcitation_sigma_cm2": None,
+        "type50_photoexcitation_nb1": None,
+        "type50_photoexcitation_bremsa_nb1": None,
+        "type50_photoexcitation_flinabs_ptmp1": 1.0,
+        "type50_photoexcitation_cfrac": None,
+        "type50_photoexcitation_covering_multiplier": None,
+        "type50_photoexcitation_rate_s^-1": 0.0,
+        "type50_photoexcitation_warning": "",
+    }
+    missing = []
+    if raw_a <= 0.0:
+        missing.append("aij")
+    if energy is None or energy <= 0.0:
+        missing.append("line_energy")
+    if wav_A is None or wav_A <= 0.0:
+        missing.append("wavelength")
+    if ggup is None or float(ggup) <= 0.0:
+        missing.append("ggup")
+    if gglo is None or float(gglo) <= 0.0:
+        missing.append("gglo")
+    mode = str(radiation_field_mode or "none").strip().lower()
+    if mode in {"", "none"}:
+        missing.append("radiation_field")
+    if missing:
+        out["type50_photoexcitation_status"] = "not_evaluated_missing_" + ";".join(missing)
+        return out
+    flin = 1.0e-16 * raw_a * float(ggup) * float(wav_A) * float(wav_A) / ((0.667274) * max(float(gglo), 1.0e-300))
+    mass = _atomic_mass_for_type50(row, from_state=from_state)
+    vtherm = _type50_vtherm_cm_s(temperature_K=temperature_K, vturb_km_s=vturb_km_s, atomic_mass_number=mass)
+    if vtherm is None or vtherm <= 0.0:
+        out["type50_photoexcitation_status"] = "not_evaluated_missing_vtherm"
+        return out
+    emin = float(radiation_energy_min_eV) if radiation_energy_min_eV is not None else 1.0
+    emax = float(radiation_energy_max_eV) if radiation_energy_max_eV is not None else 1.0e5
+    ngrid = max(int(radiation_n_energy_grid or 256), 8)
+    grid = _log_energy_grid(emin, emax, ngrid)
+    bscale = maybe_float(radiation_bremsa_scale)
+    if bscale is None or not math.isfinite(float(bscale)):
+        bscale = 1.0
+    alpha = maybe_float(radiation_powerlaw_index)
+    if alpha is None or not math.isfinite(float(alpha)):
+        alpha = 1.0
+    idx, nb1 = _xstar_nbinc_index(float(energy), grid)
+    if idx is None:
+        out["type50_photoexcitation_status"] = "not_evaluated_nbinc_failed"
+        return out
+    bremsa_nb1 = _placeholder_bremsa_value(float(grid[idx]), mode=mode, temperature_K=float(temperature_K or 1.0), bremsa_scale=float(bscale), powerlaw_index=float(alpha))
+    cf = maybe_float(cfrac)
+    if cf is None or not math.isfinite(float(cf)):
+        cf = maybe_float(row.get("cfrac") or row.get("xstar_cfrac") or row.get("covering_fraction"))
+    if cf is None or not math.isfinite(float(cf)):
+        cf = 0.0
+    cover = max(0.0, 1.0 - float(cf))
+    sigma = 0.02655 * float(flin) * float(wav_A) * 1.0e-8 / float(vtherm)
+    flinabs = 1.0  # XSTAR flinabs.f90 currently returns 1.
+    rate = sigma * float(bremsa_nb1) * float(vtherm) / 3.0e10 * flinabs * cover
+    if energy is not None and float(energy) > 0.99e9:
+        rate = 0.0
+    out.update({
+        "type50_photoexcitation_status": "evaluated_xstar_ucalc_type50_with_explicit_epi_bremsa_grid",
+        "type50_photoexcitation_flin": float(flin),
+        "type50_photoexcitation_atomic_mass_number": float(mass),
+        "type50_photoexcitation_vtherm_cm_s": float(vtherm),
+        "type50_photoexcitation_sigma_cm2": float(sigma),
+        "type50_photoexcitation_nb1": int(nb1),
+        "type50_photoexcitation_bremsa_nb1": float(bremsa_nb1),
+        "type50_photoexcitation_cfrac": float(cf),
+        "type50_photoexcitation_covering_multiplier": float(cover),
+        "type50_photoexcitation_rate_s^-1": max(float(rate), 0.0),
+        "type50_photoexcitation_warning": "uses solver diagnostic epi/bremsa grid; replace with same-run local bremsa dump when available" if mode != "xstar-output" else "",
+    })
+    return out
+
 def _type50_effective_rates(
     row: Mapping[str, object],
     *,
@@ -4741,6 +4948,15 @@ def _type50_effective_rates(
     photoexcitation_scale: object = 0.0,
     from_state: Optional[Mapping[str, object]] = None,
     to_state: Optional[Mapping[str, object]] = None,
+    temperature_K: Optional[float] = None,
+    vturb_km_s: object = 0.0,
+    radiation_field_mode: str = "none",
+    radiation_bremsa_scale: object = 1.0,
+    radiation_energy_min_eV: Optional[float] = None,
+    radiation_energy_max_eV: Optional[float] = None,
+    radiation_n_energy_grid: int = 256,
+    radiation_powerlaw_index: float = 1.0,
+    type50_cfrac: object = 0.0,
 ) -> dict:
     """Return controlled XSTAR-ucalc-style type-50 population rates.
 
@@ -4775,7 +4991,7 @@ def _type50_effective_rates(
         pumping = 0.0
         context_status = "raw_A_default"
     else:
-        if treatment_norm == "xstar-line-escape":
+        if treatment_norm in {"xstar-line-escape", "xstar-line-escape-and-pumping"}:
             esc = _xstar_line_escape_from_row(
                 row,
                 from_state=from_state,
@@ -4794,8 +5010,33 @@ def _type50_effective_rates(
             context_status = "diagnostic_escape_proxy_no_real_tau_or_bremsa_line_integral"
         decay = raw_a * ptmp_sum
         pumping_scale = _bounded_nonnegative_float(photoexcitation_scale, 0.0)
-        pumping = raw_a * pumping_scale if treatment_norm == "xstar-escape-photoexcitation" else 0.0
-    return {
+        pumping_terms = {}
+        if treatment_norm == "xstar-escape-photoexcitation":
+            pumping = raw_a * pumping_scale
+            pumping_terms = {"type50_photoexcitation_status": "legacy_scaled_A_proxy"}
+        elif treatment_norm == "xstar-line-escape-and-pumping":
+            # Source-code-matched lower->upper branch from ucalc.f90 type 50.
+            # Keep the escaped downward rate from the line-escape path above.
+            pumping_terms = _type50_source_code_photoexcitation_terms(
+                row,
+                from_state=from_state,
+                to_state=to_state,
+                temperature_K=temperature_K,
+                vturb_km_s=vturb_km_s,
+                radiation_field_mode=radiation_field_mode,
+                radiation_bremsa_scale=radiation_bremsa_scale,
+                radiation_energy_min_eV=radiation_energy_min_eV,
+                radiation_energy_max_eV=radiation_energy_max_eV,
+                radiation_n_energy_grid=radiation_n_energy_grid,
+                radiation_powerlaw_index=radiation_powerlaw_index,
+                cfrac=type50_cfrac,
+            )
+            pumping = float(pumping_terms.get("type50_photoexcitation_rate_s^-1") or 0.0)
+            context_status = str(context_status) + ";" + str(pumping_terms.get("type50_photoexcitation_status"))
+        else:
+            pumping = 0.0
+            pumping_terms = {"type50_photoexcitation_status": "not_requested"}
+    out = {
         "type50_bound_bound_treatment": treatment_norm,
         "raw_A_s^-1": raw_a,
         "ptmp1_proxy": ptmp1,
@@ -4814,6 +5055,8 @@ def _type50_effective_rates(
         "ucalc_ans2_matrix_upper_to_lower_proxy_s^-1": decay,
         "ucalc_context_status": context_status,
     }
+    out.update(pumping_terms)
+    return out
 
 def build_global_bound_bound_matrix_terms(
     transition_rows: Sequence[dict],
@@ -4823,6 +5066,15 @@ def build_global_bound_bound_matrix_terms(
     type50_escape_factor: object = 1.0,
     type50_escape_source: object = "matrix-row",
     type50_photoexcitation_scale: object = 0.0,
+    type50_cfrac: object = 0.0,
+    type50_vturb_km_s: object = 0.0,
+    radiation_field_mode: str = "none",
+    radiation_bremsa_scale: object = 1.0,
+    radiation_energy_min_eV: Optional[float] = None,
+    radiation_energy_max_eV: Optional[float] = None,
+    radiation_n_energy_grid: int = 256,
+    radiation_powerlaw_index: float = 1.0,
+    temperature_K: Optional[float] = None,
     resonance_collisional_feed_scale: object = 1.0,
 ) -> List[dict]:
     """Map existing intra-ion bound-bound transition logs onto global indices.
@@ -4870,6 +5122,15 @@ def build_global_bound_bound_matrix_terms(
             photoexcitation_scale=type50_photoexcitation_scale,
             from_state=from_row,
             to_state=to_row,
+            temperature_K=temperature_K if temperature_K is not None else maybe_float(tr.get("temperature_K")),
+            vturb_km_s=type50_vturb_km_s,
+            radiation_field_mode=radiation_field_mode,
+            radiation_bremsa_scale=radiation_bremsa_scale,
+            radiation_energy_min_eV=radiation_energy_min_eV,
+            radiation_energy_max_eV=radiation_energy_max_eV,
+            radiation_n_energy_grid=radiation_n_energy_grid,
+            radiation_powerlaw_index=radiation_powerlaw_index,
+            type50_cfrac=type50_cfrac,
         )
         resonance_feed_scale = max(0.0, _bounded_nonnegative_float(resonance_collisional_feed_scale, 1.0))
         is_resonance_collisional_feed = _is_direct_collisional_feed_to_resonance_upper(tr, to_state=to_row)
@@ -5012,10 +5273,11 @@ def build_global_bound_bound_matrix_terms(
             **common,
         })
         term_id += 1
-        if _is_type50_radiative_transition(tr) and str(type50_rates.get("type50_bound_bound_treatment")) == "xstar-escape-photoexcitation":
+        if _is_type50_radiative_transition(tr) and str(type50_rates.get("type50_bound_bound_treatment")) in {"xstar-escape-photoexcitation", "xstar-line-escape-and-pumping"}:
             pump_rate = float(type50_rates.get("photoexcitation_rate_s^-1") or 0.0)
             if pump_rate > 0.0:
                 pump_common = dict(common)
+                is_source_matched_pumping = str(type50_rates.get("type50_bound_bound_treatment")) == "xstar-line-escape-and-pumping"
                 pump_common.update({
                     "transition_kind": "radiative_photoexcitation",
                     "from_level": int(to_level),
@@ -5027,8 +5289,9 @@ def build_global_bound_bound_matrix_terms(
                     "from_level_kind": to_row.get("level_kind"),
                     "to_level_kind": from_row.get("level_kind"),
                     "rate_s^-1": pump_rate,
-                    "matrix_safe_to_solve_physically": False,
-                    "unsafe_reason": "diagnostic type-50 photoexcitation proxy; real XSTAR bremsa/flinabs line integral not yet ported",
+                    "matrix_safe_to_solve_physically": bool(is_source_matched_pumping),
+                    "unsafe_reason": "" if is_source_matched_pumping else "diagnostic type-50 photoexcitation proxy; real XSTAR bremsa/flinabs line integral not yet ported",
+                    "type50_photoexcitation_matrix_status": "source_code_matched_ucalc_type50_lower_to_upper_injected" if is_source_matched_pumping else "legacy_scaled_A_proxy_injected",
                 })
                 out.append({
                     "global_term_id": term_id,
@@ -12682,6 +12945,7 @@ def solve_element_reference(
     type50_escape_factor: object = 1.0,
     type50_escape_source: object = "matrix-row",
     type50_photoexcitation_scale: object = 0.0,
+    type50_cfrac: object = 0.0,
     type50_escape_factor_scan: object = "0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.75,1",
     resonance_collisional_feed_scale: object = 1.0,
     resonance_collisional_feed_scale_scan: object = "1,1.5,2,2.5,3,3.25,3.5,4",
@@ -12921,6 +13185,15 @@ def solve_element_reference(
         type50_bound_bound_treatment=type50_bound_bound_treatment_norm,
         type50_escape_factor=type50_escape_factor,
         type50_photoexcitation_scale=type50_photoexcitation_scale,
+        type50_cfrac=type50_cfrac,
+        type50_vturb_km_s=xstar_line_vturb_km_s,
+        radiation_field_mode=radiation_field_mode,
+        radiation_bremsa_scale=radiation_bremsa_scale,
+        radiation_energy_min_eV=radiation_energy_min_eV,
+        radiation_energy_max_eV=radiation_energy_max_eV,
+        radiation_n_energy_grid=radiation_n_energy_grid,
+        radiation_powerlaw_index=radiation_powerlaw_index,
+        temperature_K=temperature,
         resonance_collisional_feed_scale=resonance_collisional_feed_scale,
     )
     resonance_collisional_feed_audit_rows = build_resonance_collisional_feed_audit_rows(

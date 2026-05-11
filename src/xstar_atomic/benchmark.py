@@ -749,9 +749,10 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "ion_fraction_closure": "xstar-calc-ion-rates",
         "full_global_linear_solver": "xstar-lucy",
         "full_global_topology": "xstar-continuum-alias-superlevels",
-        "type50_bound_bound_treatment": "xstar-line-escape",
+        "type50_bound_bound_treatment": "xstar-line-escape-and-pumping",
         "type50_escape_factor": 0.35,
         "type50_escape_source": "xstar-reference-lines",
+        "type50_cfrac": 0.0,
     }
     if window:
         out["wavelength_min"] = float(window[0])

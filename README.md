@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.143** adds a controlled same-run line-depth matrix escape mode for the C V / O VII / Mg XI / Ca XIX local-state benchmark.  The `xstar-local-state` preset now uses matching `depth_inward`/`depth_outward` values from the converted same-run `xout_lines1.fits` table for type-50 triplet transitions, reducing reliance on the scalar 0.35 escape fallback.  This is a benchmark/reproduction improvement; real predictive parity still requires source-code-matched type-50 line pumping with the local XSTAR radiation field.
+Latest package note: **v0.3.144** adds the first opt-in source-code-matched XSTAR type-50 line-pumping matrix mode.  The `xstar-local-state` preset now uses `type50_bound_bound_treatment="xstar-line-escape-and-pumping"`: downward type-50 decay uses same-run line-depth escape probabilities, while the lower-to-upper photoexcitation branch follows the `ucalc.f90` formula using the explicit solver `epi`/`bremsa` radiation grid, `nbinc` binning, `vtherm`, `flinabs=1`, and `cfrac`.  This is the first physics implementation of type-50 pumping and should be validated against the C V / O VII / Mg XI / Ca XIX same-run XSTAR benchmark before it is treated as a final default.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -73,13 +73,13 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
   --xstar-runs-root xstar_runs \
   --run-solver \
   --solver-preset xstar-local-state \
-  --out-dir helike_local_reproduction_suite_solver_v03139 \
+  --out-dir helike_local_reproduction_suite_solver_v03144 \
   --print-summary
 ```
 
 The quick workflow solver remains available with `--solver-preset workflow-default`, but it is not the same path used in the earlier source-code-first local-state validations.
 
-v0.3.143 changes only the controlled benchmark matrix-escape input for matching same-run line depths. Type-50 photoexcitation/line pumping remains **audit-only** and is not yet injected with the real XSTAR `bremsa(nb1)` radiation field.
+v0.3.144 adds the first opt-in matrix injection of XSTAR type-50 photoexcitation / line pumping through `xstar-line-escape-and-pumping`.  The implementation follows the `ucalc.f90` type-50 algebra on the explicit solver `epi`/`bremsa` grid and remains a validation mode until the same-run C/O/Mg/Ca benchmark is inspected.
 
 ## Earlier v0.3.128 API infrastructure
 

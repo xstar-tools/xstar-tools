@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.144 - 2026-05-11
+
+- Added the first source-code-matched type-50 lower-to-upper photoexcitation / line-pumping matrix mode.
+- New treatment alias: `xstar-line-escape-and-pumping`.  It keeps the XSTAR line-escape downward branch and injects the upward pumping branch from `ucalc.f90` type 50.
+- The pumping rate uses the XSTAR algebra `sigma=0.02655*flin*lambda_cm/vtherm` and `ans1_postswap=sigma*bremsa(nb1)*vtherm/3e10*flinabs(ptmp1)*(1-cfrac)`, with `flinabs=1` as in `flinabs.f90`.
+- Added XSTAR-style helpers for type-50 thermal velocity, oscillator-strength recovery from A-values/statistical weights, and `nbinc`-style bin selection on the explicit solver `epi`/`bremsa` grid.
+- The `xstar-local-state` benchmark preset now uses `type50_bound_bound_treatment="xstar-line-escape-and-pumping"` with same-run line depths and the explicit diagnostic `xstar-powerlaw` `epi`/`bremsa` grid.
+- Added regression tests for injected type-50 pumping matrix terms and the `cfrac=1` suppression path.
+- This is the first opt-in physics implementation of type-50 pumping; comparison to the C V/O VII/Mg XI/Ca XIX same-run XSTAR benchmark should be inspected before making it a default predictive mode.
+
 ## v0.3.143 - 2026-05-11
 
 - Added a controlled same-run line-depth matrix escape mode for local XSTAR reproduction benchmarks.
