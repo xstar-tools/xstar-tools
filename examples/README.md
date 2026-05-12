@@ -616,3 +616,26 @@ PYTHONPATH=src python examples/62_audit_xstar_local_matrix_parity.py \
   --out-dir xstar_local_matrix_parity_o7_v03157 \
   --print-summary
 ```
+
+### `63_audit_xstar_triplet_rate_terms.py`
+
+Rank individual full-global matrix terms in the He-like triplet population rows. This is a row-level companion to example 62: it identifies concrete records and matrix placements to use as the next source-code-equivalent detail-rate parity targets.
+
+```bash
+PYTHONPATH=src python examples/63_audit_xstar_triplet_rate_terms.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --out-dir xstar_triplet_rate_term_audit_o7_v03158 \
+  --print-summary
+```
+
+To focus on one non-type-50 family, use a data-type filter:
+
+```bash
+PYTHONPATH=src python examples/63_audit_xstar_triplet_rate_terms.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --data-types 63 \
+  --out-dir xstar_triplet_rate_term_audit_o7_type63_v03158 \
+  --print-summary
+```

@@ -387,7 +387,7 @@ def audit_local_matrix_parity(
                     fam[key] += 1
         if row_g in component_by_global:
             comp = component_by_global[row_g]
-            flow_key = (comp, fkey)
+            flow_key = (comp, str(row_g), fkey)
             fl = flows.setdefault(flow_key, {
                 "ion": ion or "",
                 "triplet_component": comp,
@@ -422,7 +422,7 @@ def audit_local_matrix_parity(
     family_rows.sort(key=lambda r: (-(int(r.get("n_terms_touching_triplet_levels") or 0)), str(r.get("data_type")), str(r.get("family_key"))))
 
     triplet_flow_rows = list(flows.values())
-    triplet_flow_rows.sort(key=lambda r: (str(r.get("triplet_component")), -float(r.get("row_gain_sum_s^-1") or 0.0) - float(r.get("row_loss_sum_s^-1") or 0.0)))
+    triplet_flow_rows.sort(key=lambda r: (str(r.get("triplet_component")), int(r.get("triplet_global_index") or -1), -float(r.get("row_gain_sum_s^-1") or 0.0) - float(r.get("row_loss_sum_s^-1") or 0.0)))
 
     overall: Dict[str, Any] = {
         "ion": ion or "",
@@ -523,8 +523,281 @@ def write_local_matrix_parity_audit(result: Mapping[str, Any], out_dir: str | Pa
     return {"family_csv": str(family_csv), "triplet_flow_csv": str(flow_csv), "json": str(json_path), "markdown": str(md_path)}
 
 
+def _label_for_global_index(index: Optional[int], triplet: Mapping[int, Mapping[str, Any]], row: Mapping[str, Any]) -> str:
+    """Return a readable label for a global matrix index."""
+    if index is None:
+        return ""
+    if index in triplet:
+        label = triplet[index].get("level_label")
+        comp = triplet[index].get("component")
+        return f"{label} [{comp}]" if label else f"global {index} [{comp}]"
+    for key, gi_key, label_key in [
+        ("from", "from_global_index", "from_level_label"),
+        ("to", "to_global_index", "to_level_label"),
+        ("spectroscopic", "spectroscopic_global_index", "spectroscopic_level_label"),
+        ("superlevel", "superlevel_global_index", "superlevel_level_label"),
+        ("destination", "destination_global_index", "destination_level_label"),
+        ("bound", "bound_global_index", "bound_level"),
+        ("parent", "parent_continuum_global_index", "parent_continuum_level_label"),
+    ]:
+        gi = _as_int(row.get(gi_key))
+        if gi == index:
+            lab = str(row.get(label_key) or "").strip()
+            if lab:
+                return lab
+    return f"global {index}"
+
+
+def _make_term_lookup(rows: Sequence[Mapping[str, Any]]) -> Dict[Tuple[str, str, int, int], List[Mapping[str, Any]]]:
+    """Index matrix rows for lightweight gain/loss partner checks."""
+    out: Dict[Tuple[str, str, int, int], List[Mapping[str, Any]]] = {}
+    for row in rows:
+        fkey, _dt, _src = _rate_family(row)
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        r = _as_int(row.get("matrix_row_global_index"))
+        c = _as_int(row.get("matrix_col_global_index"))
+        if r is None or c is None:
+            continue
+        out.setdefault((fkey, rec, r, c), []).append(row)
+    return out
+
+
+def _partner_status(row: Mapping[str, Any], lookup: Mapping[Tuple[str, str, int, int], Sequence[Mapping[str, Any]]]) -> Dict[str, Any]:
+    """Classify whether a matrix term has the expected gain/loss partner.
+
+    The check is intentionally conservative and matrix-local.  It does not
+    prove source-code parity; it only catches obvious placement mistakes such
+    as an off-diagonal term without its matching diagonal loss or vice versa.
+    """
+    fkey, _dt, _src = _rate_family(row)
+    rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+    r = _as_int(row.get("matrix_row_global_index"))
+    c = _as_int(row.get("matrix_col_global_index"))
+    signed = _signed_value(row)
+    rate = abs(float(signed)) if signed is not None else _rate_value(row)
+    if r is None or c is None or signed is None:
+        return {"partner_status": "not_checked_missing_matrix_indices_or_signed_rate", "partner_count": 0, "partner_residual_s^-1": ""}
+    tol = max(1.0e-30, 1.0e-8 * abs(float(rate or 0.0)))
+    if r != c and signed > 0.0:
+        candidates = list(lookup.get((fkey, rec, c, c), []))
+        residuals = []
+        for cand in candidates:
+            cs = _signed_value(cand)
+            if cs is None:
+                continue
+            residuals.append(abs(float(cs) + float(signed)))
+        if not residuals:
+            return {"partner_status": "missing_diagonal_loss_partner", "partner_count": 0, "partner_residual_s^-1": ""}
+        best = min(residuals)
+        return {
+            "partner_status": "matrix_gain_loss_partner_matches" if best <= tol else "matrix_gain_loss_partner_rate_mismatch",
+            "partner_count": len(residuals),
+            "partner_residual_s^-1": best,
+        }
+    if r == c and signed < 0.0:
+        # The matching gain can go to any row with this diagonal level as the
+        # source column for the same family/record.  Some source/superlevel
+        # rows intentionally do not have a simple one-to-one partner.
+        candidates: List[Mapping[str, Any]] = []
+        for (kf, kr, rr, cc), vals in lookup.items():
+            if kf == fkey and kr == rec and cc == r and rr != r:
+                candidates.extend(vals)
+        residuals = []
+        for cand in candidates:
+            cs = _signed_value(cand)
+            if cs is None or cs <= 0.0:
+                continue
+            residuals.append(abs(float(cs) + float(signed)))
+        if not residuals:
+            return {"partner_status": "missing_offdiag_gain_partner_or_many_to_one_source", "partner_count": 0, "partner_residual_s^-1": ""}
+        best = min(residuals)
+        return {
+            "partner_status": "matrix_gain_loss_partner_matches" if best <= tol else "matrix_gain_loss_partner_rate_mismatch",
+            "partner_count": len(residuals),
+            "partner_residual_s^-1": best,
+        }
+    return {"partner_status": "not_simple_gain_loss_pair", "partner_count": 0, "partner_residual_s^-1": ""}
+
+
+def audit_triplet_rate_terms(
+    *,
+    matrix_terms_csv: str | Path,
+    normalized_solve_csv: str | Path | None = None,
+    ion: str | None = None,
+    data_types: Sequence[str | int] | None = None,
+    max_rows: int | None = 200,
+) -> Dict[str, Any]:
+    """Rank individual matrix terms in He-like triplet rows.
+
+    This is the row-level companion to :func:`audit_local_matrix_parity`.  It
+    lists the largest gain/loss terms for the actual triplet population rows,
+    attaches Fortran source-path labels, and performs a conservative local
+    check for matching off-diagonal/diagonal partners.  It is meant to select
+    the next source-code-equivalent detail-rate audit targets.
+    """
+    matrix_path = Path(matrix_terms_csv)
+    matrix_rows = _read_csv_rows(matrix_path)
+    solve_rows = _read_csv_rows(normalized_solve_csv)
+    triplet = _triplet_levels_from_solve_rows(solve_rows)
+    type_filter = {str(x) for x in data_types} if data_types else None
+    lookup = _make_term_lookup(matrix_rows)
+    out_rows: List[Dict[str, Any]] = []
+    for row in matrix_rows:
+        row_g = _as_int(row.get("matrix_row_global_index"))
+        if row_g not in triplet:
+            continue
+        fkey, data_type, source_label = _rate_family(row)
+        if type_filter is not None and data_type not in type_filter:
+            continue
+        col_g = _as_int(row.get("matrix_col_global_index"))
+        signed = _signed_value(row)
+        rate = _rate_value(row)
+        comp = str(triplet[row_g].get("component") or "")
+        direction = "row_gain" if signed is not None and signed > 0 else "row_loss" if signed is not None and signed < 0 else "row_source_or_unknown"
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        partner = _partner_status(row, lookup)
+        out = {
+            "ion": ion or "",
+            "triplet_component": comp,
+            "triplet_global_index": row_g,
+            "triplet_level_label": triplet[row_g].get("level_label"),
+            "matrix_col_global_index": col_g if col_g is not None else "",
+            "matrix_col_label": _label_for_global_index(col_g, triplet, row),
+            "direction": direction,
+            "matrix_term_kind": row.get("matrix_term_kind") or row.get("matrix_term_kind") or "",
+            "matrix_role": row.get("matrix_role") or "",
+            "data_type": data_type,
+            "source_label": source_label,
+            "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+            "record": rec,
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "rate_s^-1": rate if rate is not None else "",
+            "abs_signed_rate_s^-1": abs(float(signed)) if signed is not None else abs(float(rate)) if rate is not None else 0.0,
+            "temperature_K": row.get("temperature_K") or "",
+            "electron_density_cm^-3": row.get("electron_density_cm^-3") or "",
+            "from_global_index": row.get("from_global_index") or row.get("spectroscopic_global_index") or row.get("bound_global_index") or "",
+            "to_global_index": row.get("to_global_index") or row.get("destination_global_index") or row.get("superlevel_global_index") or "",
+            "from_level_label": row.get("from_level_label") or row.get("spectroscopic_level_label") or row.get("bound_level") or "",
+            "to_level_label": row.get("to_level_label") or row.get("destination_level_label") or row.get("superlevel_level_label") or "",
+            "eval_status": row.get("ucalc_context_status") or row.get("eval_method") or row.get("type71_calt71_status") or row.get("type77_calt77_status") or row.get("phint53_status") or row.get("assembly_status") or "",
+            "next_detail_audit_hint": "recompute this record from same-zone detail/live state and compare evaluator rate plus matrix partner placement",
+        }
+        out.update(partner)
+        out_rows.append(out)
+    out_rows.sort(key=lambda r: (-float(r.get("abs_signed_rate_s^-1") or 0.0), str(r.get("triplet_component")), int(r.get("triplet_global_index") or -1)))
+    if max_rows is not None and max_rows > 0:
+        selected_rows = out_rows[: int(max_rows)]
+    else:
+        selected_rows = out_rows
+    family_counts: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for r in out_rows:
+        key = (str(r.get("data_type")), str(r.get("source_label")))
+        item = family_counts.setdefault(key, {
+            "ion": ion or "",
+            "data_type": key[0],
+            "source_label": key[1],
+            "source_code_path": r.get("source_code_path"),
+            "n_triplet_row_terms": 0,
+            "n_row_gain_terms": 0,
+            "n_row_loss_terms": 0,
+            "abs_signed_sum_s^-1": 0.0,
+            "largest_abs_signed_rate_s^-1": 0.0,
+            "n_partner_matches": 0,
+            "n_partner_mismatches_or_missing": 0,
+        })
+        item["n_triplet_row_terms"] += 1
+        if r.get("direction") == "row_gain":
+            item["n_row_gain_terms"] += 1
+        elif r.get("direction") == "row_loss":
+            item["n_row_loss_terms"] += 1
+        val = float(r.get("abs_signed_rate_s^-1") or 0.0)
+        item["abs_signed_sum_s^-1"] += val
+        item["largest_abs_signed_rate_s^-1"] = max(float(item["largest_abs_signed_rate_s^-1"]), val)
+        ps = str(r.get("partner_status") or "")
+        if ps == "matrix_gain_loss_partner_matches":
+            item["n_partner_matches"] += 1
+        elif ps and not ps.startswith("not_"):
+            item["n_partner_mismatches_or_missing"] += 1
+    family_rows = list(family_counts.values())
+    family_rows.sort(key=lambda r: -float(r.get("abs_signed_sum_s^-1") or 0.0))
+    overall = {
+        "ion": ion or "",
+        "matrix_terms_csv": str(matrix_path),
+        "normalized_solve_csv": str(normalized_solve_csv or ""),
+        "n_triplet_upper_levels": len(triplet),
+        "n_triplet_row_terms_total": len(out_rows),
+        "n_triplet_row_terms_written": len(selected_rows),
+        "data_type_filter": ";".join(sorted(type_filter)) if type_filter else "",
+        "audit_scope": "individual triplet-row matrix terms ranked by absolute signed contribution; local partner check is diagnostic only",
+        "recommended_next_step": "select the largest unverified non-type50 row terms and build a same-zone detail-state rate evaluator audit for that data type",
+        "triplet_levels": list(triplet.values()),
+    }
+    return {"overall": overall, "family_rows": family_rows, "term_rows": selected_rows}
+
+
+def write_triplet_rate_term_audit(result: Mapping[str, Any], out_dir: str | Path, *, prefix: str = "xstar_triplet_rate_term_audit") -> Dict[str, str]:
+    """Write row-level triplet matrix-term audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    family_rows = list(result.get("family_rows") or [])
+    term_rows = list(result.get("term_rows") or [])
+    overall = dict(result.get("overall") or {})
+    family_csv = out / f"{prefix}_family_summary.csv"
+    term_csv = out / f"{prefix}_ranked_terms.csv"
+    json_path = out / f"{prefix}.json"
+    md_path = out / f"{prefix}.md"
+    _write_csv(family_csv, family_rows)
+    _write_csv(term_csv, term_rows)
+    json_path.write_text(json.dumps({"overall": overall, "family_rows": family_rows, "term_rows": term_rows}, indent=2, sort_keys=True), encoding="utf-8")
+    lines = [
+        "# XSTAR triplet row rate-term audit",
+        "",
+        f"Ion: `{overall.get('ion','')}`",
+        "",
+        f"Triplet upper levels: `{overall.get('n_triplet_upper_levels')}`",
+        f"Triplet row terms total: `{overall.get('n_triplet_row_terms_total')}`",
+        f"Triplet row terms written: `{overall.get('n_triplet_row_terms_written')}`",
+        "",
+        "This audit ranks individual matrix terms in the He-like triplet population rows. It is a target selector for source-code-equivalent local rate and matrix parity work, not a triplet-ratio tuning step.",
+        "",
+        "## Family totals in triplet rows",
+        "",
+        "| data type | source label | n terms | gains | losses | abs signed sum | largest term | partner matches | partner issues |",
+        "|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in family_rows:
+        lines.append(
+            f"| {r.get('data_type')} | {r.get('source_label')} | {r.get('n_triplet_row_terms')} | {r.get('n_row_gain_terms')} | {r.get('n_row_loss_terms')} | "
+            f"{r.get('abs_signed_sum_s^-1')} | {r.get('largest_abs_signed_rate_s^-1')} | {r.get('n_partner_matches')} | {r.get('n_partner_mismatches_or_missing')} |"
+        )
+    lines += [
+        "",
+        "## Largest individual triplet-row terms",
+        "",
+        "| component | level | direction | data type | source label | signed rate | partner status | record | role | column label |",
+        "|---|---|---|---:|---|---:|---|---:|---|---|",
+    ]
+    for r in term_rows[:100]:
+        lines.append(
+            f"| {r.get('triplet_component')} | {r.get('triplet_level_label')} | {r.get('direction')} | {r.get('data_type')} | {r.get('source_label')} | "
+            f"{r.get('signed_rate_s^-1')} | {r.get('partner_status')} | {r.get('record')} | {r.get('matrix_role')} | {r.get('matrix_col_label')} |"
+        )
+    lines += [
+        "",
+        "## Recommended parity sequence",
+        "",
+        "1. Use the top non-type-50 terms as concrete records for source-code re-evaluation from the same XSTAR detail/live state.",
+        "2. For each selected data type, compare the Python evaluator rate, the off-diagonal gain term, and the diagonal loss partner.",
+        "3. Only after dominant row-level terms pass should the solved populations be compared directly to `xo01_detail.fits`.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"family_csv": str(family_csv), "ranked_terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
+
+
 __all__ = [
     "find_solver_product_paths",
     "audit_local_matrix_parity",
     "write_local_matrix_parity_audit",
+    "audit_triplet_rate_terms",
+    "write_triplet_rate_term_audit",
 ]
