@@ -603,3 +603,16 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
   --out-dir xstar_detail_type50_rate_audit_o7_with_matrix \
   --print-summary
 ```
+
+### `62_audit_xstar_local_matrix_parity.py`
+
+Rank preserved full-global matrix terms by source-code rate family and show which families touch the He-like forbidden/intercombination/resonance upper levels. This is the next audit step after detail-state type-50 parity.
+
+```bash
+PYTHONPATH=src python examples/62_audit_xstar_local_matrix_parity.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --type50-audit-csv xstar_detail_type50_rate_audit_o7_with_matrix_v03156/xstar_detail_type50_rate_audit.csv \
+  --out-dir xstar_local_matrix_parity_o7_v03157 \
+  --print-summary
+```

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.157 - 2026-05-12
+
+- Added `xstar_atomic.xstar_matrix_parity`, a source-code-parity audit layer that reads preserved full-global solver matrix terms and normalized-solve products from example 56.
+- Added `examples/62_audit_xstar_local_matrix_parity.py` to rank matrix rate families by data type/source path and report which families feed or drain He-like f/i/r upper levels.
+- The audit can ingest the example-61 type-50 detail audit CSV and mark audited type-50 rows as `detail_rate_and_matrix_parity_verified_for_audited_type50_lines` when all matrix rows match.
+- This is an audit/triage release only: no empirical triplet tuning and no intentional solver-physics changes.
+
 ## v0.3.156 - 2026-05-12
 
 - Propagate same-run detail-output covering fraction (`cfrac`) from `xo01_detal2.fits` depth rows into type-50 matrix assembly.

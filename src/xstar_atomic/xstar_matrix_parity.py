@@ -1,0 +1,530 @@
+"""Local matrix-parity audits for XSTAR detail-state reproduction.
+
+The functions in this module do not tune He-like triplet ratios.  They inspect
+preserved solver matrix products and rank the rate families that feed or drain
+specific local levels, especially the He-like forbidden/intercombination/
+resonance upper levels.  This is the next bridge between row-level type-50
+parity and full source-code-equivalent local rate/matrix parity.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import math
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+
+_RATE_FAMILY_SOURCE_PATHS = {
+    "1": "ucalc.f90 type 1 radiative recombination / recombination source closure",
+    "50": "calc_hmc_ion.f90 ptmp1/ptmp2 -> ucalc.f90 type 50 bound-bound radiative rate",
+    "53": "ucalc.f90 type 53 photoionization / recombination through phint53-style continuum integrals",
+    "56": "ucalc.f90 type 56 tabulated collision-strength excitation/de-excitation",
+    "63": "ucalc.f90 type 63 Bautista hydrogenic collision evaluator",
+    "67": "ucalc.f90/calt67-style collisional process evaluator",
+    "68": "ucalc.f90/calt68-style collisional process evaluator",
+    "69": "ucalc.f90/calt69-style collisional process evaluator",
+    "71": "calt71.f90 superlevel cascade / spectroscopic redistribution",
+    "74": "ucalc.f90 type 74 inverse recombination / photoionization closure",
+    "77": "calt77.f90 superlevel collisional coupling",
+    "99": "ucalc.f90 type 99 continuum-parent / superlevel source coupling",
+}
+
+
+def _as_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    try:
+        if value is None:
+            return default
+        if isinstance(value, str) and not value.strip():
+            return default
+        val = float(value)
+        if not math.isfinite(val):
+            return default
+        return val
+    except Exception:
+        return default
+
+
+def _as_int(value: Any) -> Optional[int]:
+    val = _as_float(value)
+    if val is None:
+        return None
+    try:
+        return int(round(float(val)))
+    except Exception:
+        return None
+
+
+def _read_csv_rows(path: str | Path | None) -> List[Dict[str, Any]]:
+    if path is None or not str(path).strip():
+        return []
+    p = Path(path)
+    if not p.exists():
+        return []
+    with p.open(newline="", encoding="utf-8") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def _write_csv(path: str | Path, rows: Sequence[Mapping[str, Any]], fields: Optional[Sequence[str]] = None) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if fields is None:
+        ordered: List[str] = []
+        for row in rows:
+            for key in row.keys():
+                if key not in ordered:
+                    ordered.append(key)
+        fields = ordered or ["status"]
+    with p.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(fields), extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(dict(row))
+
+
+def _normalise_ion_key(text: Any) -> str:
+    return str(text or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _safe_path(root: Path, text: Any) -> Optional[Path]:
+    if text is None:
+        return None
+    raw = str(text).strip()
+    if not raw:
+        return None
+    p = Path(raw)
+    if p.exists():
+        return p
+    # Example-56 comparison rows are often written relative to the command
+    # working directory and include the benchmark directory name itself.  Try
+    # both root/path and root.parent/path so archived outputs remain portable.
+    for base in (root, root.parent):
+        candidate = base / p
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def find_solver_product_paths(
+    benchmark_dir: str | Path,
+    *,
+    ion: str | None = None,
+    comparisons_csv: str | Path | None = None,
+) -> Dict[str, Optional[Path]]:
+    """Locate preserved solver products for one ion from an example-56 run."""
+    root = Path(benchmark_dir)
+    out: Dict[str, Optional[Path]] = {
+        "comparisons_csv": None,
+        "matrix_terms_csv": None,
+        "normalized_solve_csv": None,
+        "solver_summary_json": None,
+        "solver_product_dir": None,
+    }
+    candidates: List[Path] = []
+    if comparisons_csv is not None:
+        candidates.append(Path(comparisons_csv))
+    candidates.extend([
+        root / "xstar_local_reproduction_suite_comparisons.csv",
+        root / "xstar_local_reproduction_comparison.csv",
+    ])
+    ion_norm = _normalise_ion_key(ion) if ion else ""
+    for csv_path in candidates:
+        if not csv_path.exists():
+            continue
+        out["comparisons_csv"] = csv_path
+        for row in _read_csv_rows(csv_path):
+            if ion_norm and _normalise_ion_key(row.get("ion")) != ion_norm:
+                continue
+            for key, col in [
+                ("matrix_terms_csv", "solver_full_global_matrix_terms_csv"),
+                ("normalized_solve_csv", "solver_full_global_normalized_solve_comparison_csv"),
+                ("solver_summary_json", "solver_summary_json"),
+            ]:
+                p = _safe_path(root, row.get(col))
+                if p is not None:
+                    out[key] = p
+            if out["matrix_terms_csv"] is not None:
+                out["solver_product_dir"] = out["matrix_terms_csv"].parent
+            return out
+    matches = sorted(root.rglob("xstar_like_element_solver_full_global_matrix_terms.csv"))
+    if ion_norm:
+        slug = ion_norm.replace("_", "")
+        matches = [p for p in matches if slug in str(p).lower().replace("_", "")] or matches
+    if matches:
+        m = matches[0]
+        out["matrix_terms_csv"] = m
+        out["solver_product_dir"] = m.parent
+        n = m.parent / "xstar_like_element_solver_full_global_normalized_solve_comparison.csv"
+        s = m.parent / "xstar_like_element_solver_summary.json"
+        out["normalized_solve_csv"] = n if n.exists() else None
+        out["solver_summary_json"] = s if s.exists() else None
+    return out
+
+
+def _rate_family(row: Mapping[str, Any]) -> Tuple[str, str, str]:
+    """Return ``(family_key, data_type, source_label)`` for a matrix term."""
+    dt = _as_int(row.get("data_type"))
+    if dt is None:
+        method = str(row.get("source_method") or "")
+        if "data_type_" in method:
+            try:
+                dt = int(method.split("data_type_", 1)[1].split("_", 1)[0])
+            except Exception:
+                dt = None
+    if dt is None:
+        # Source terms and older diagnostic rows often lack data_type but carry
+        # a distinctive source/rate column.  Keep them grouped explicitly.
+        for key, label in [
+            ("type99_rate_source", "99"),
+            ("type71_rate_source", "71"),
+            ("type77_rate_source", "77"),
+            ("inverse_recombination_mode", "74"),
+            ("source_code_milne_f90_rate_alpha_ne_s^-1", "53"),
+            ("source_rate_s^-1", "1"),
+        ]:
+            if str(row.get(key) or "").strip():
+                dt = int(label)
+                break
+    data_type = str(dt) if dt is not None else "none"
+    source_bits = []
+    for key in [
+        "source_method",
+        "source_format",
+        "rate_source",
+        "type71_rate_source",
+        "type77_rate_source",
+        "type99_rate_source",
+        "inverse_recombination_mode",
+        "radiation_field_mode",
+    ]:
+        val = str(row.get(key) or "").strip()
+        if val and val.lower() != "nan" and val not in source_bits:
+            source_bits.append(val)
+    source_label = ";".join(source_bits) if source_bits else "unspecified"
+    key = f"dt{data_type}:{source_label}"
+    return key, data_type, source_label
+
+
+def _rate_value(row: Mapping[str, Any]) -> Optional[float]:
+    for key in [
+        "rate_s^-1",
+        "full_global_rate_s^-1",
+        "raw_rate_s^-1",
+        "source_rate_s^-1",
+        "escaped_decay_rate_s^-1",
+        "q_excitation_cm3_s",
+        "q_deexcitation_cm3_s",
+    ]:
+        val = _as_float(row.get(key))
+        if val is not None:
+            return val
+    return None
+
+
+def _signed_value(row: Mapping[str, Any]) -> Optional[float]:
+    for key in ["full_global_signed_rate_s^-1", "signed_rate_s^-1", "matrix_signed_rate_s^-1"]:
+        val = _as_float(row.get(key))
+        if val is not None:
+            return val
+    return None
+
+
+def _source_status_nonempty(row: Mapping[str, Any]) -> bool:
+    for key in [
+        "ucalc_context_status",
+        "eval_method",
+        "eval_diagnostic",
+        "phint53_status",
+        "phint53_milne_ans2_status",
+        "type63_case",
+        "type63_reason",
+        "type71_calt71_status",
+        "type77_calt77_status",
+        "type99_phint53hunt_statuses",
+        "assembly_status",
+    ]:
+        val = str(row.get(key) or "").strip()
+        if val and val.lower() != "nan":
+            return True
+    return False
+
+
+def _triplet_levels_from_solve_rows(rows: Sequence[Mapping[str, Any]]) -> Dict[int, Dict[str, Any]]:
+    out: Dict[int, Dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("row_kind") or "").strip() != "population":
+            continue
+        comp = str(row.get("triplet_component") or "").strip().lower()
+        is_upper = str(row.get("is_triplet_upper") or "").strip().lower() in {"true", "1", "yes"}
+        if comp not in {"f", "i", "r"} and not is_upper:
+            continue
+        gi = _as_int(row.get("global_index"))
+        if gi is None:
+            continue
+        out[gi] = {
+            "global_index": gi,
+            "component": comp if comp in {"f", "i", "r"} else "triplet",
+            "ion_stage": _as_int(row.get("ion_stage")),
+            "level_index": _as_int(row.get("level_index")),
+            "level_label": row.get("level_label"),
+            "population_fraction": _as_float(row.get("population_fraction")),
+        }
+    return out
+
+
+def _comparison_case_summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    summary_rows = [r for r in rows if str(r.get("row_kind") or "").strip() == "summary"]
+    if not summary_rows:
+        return out
+    preferred = None
+    for row in summary_rows:
+        case = str(row.get("comparison_case") or "")
+        if case == "full_global_xstar_tau0_calc_emis_ion":
+            preferred = row
+            break
+    if preferred is None:
+        non_baseline = [r for r in summary_rows if str(r.get("comparison_case") or "") != "per_ion_baseline"]
+        preferred = non_baseline[-1] if non_baseline else summary_rows[-1]
+    out["solver_comparison_case"] = preferred.get("comparison_case")
+    for key in ["f_fraction", "i_fraction", "r_fraction", "R", "G", "l2_distance_to_target", "solve_status"]:
+        out[f"solver_{key}"] = preferred.get(key)
+    return out
+
+
+def _load_type50_audit_status(type50_audit_csv: str | Path | None) -> Dict[str, Any]:
+    rows = _read_csv_rows(type50_audit_csv)
+    if not rows:
+        return {"type50_audit_rows": 0, "type50_audit_all_matrix_match": None}
+    classifications = [str(r.get("matrix_residual_classification") or "") for r in rows]
+    n_match = sum(1 for c in classifications if c == "matrix_matches_ucalc_rate")
+    return {
+        "type50_audit_rows": len(rows),
+        "type50_audit_matrix_matches": n_match,
+        "type50_audit_all_matrix_match": bool(n_match == len(rows)),
+        "type50_audit_classifications": ";".join(sorted(set(c for c in classifications if c))),
+    }
+
+
+def audit_local_matrix_parity(
+    *,
+    matrix_terms_csv: str | Path,
+    normalized_solve_csv: str | Path | None = None,
+    ion: str | None = None,
+    type50_audit_csv: str | Path | None = None,
+) -> Dict[str, Any]:
+    """Summarize local rate-family and triplet matrix parity coverage.
+
+    Parameters are paths to preserved products from
+    ``examples/56_reproduce_xstar_local_outputs.py --write-solver-products``.
+    The returned dictionary contains CSV-friendly ``family_rows`` and
+    ``triplet_flow_rows`` plus an ``overall`` summary.  This is a ranking and
+    coverage audit, not a replacement for individual Fortran-rate ports.
+    """
+    matrix_path = Path(matrix_terms_csv)
+    matrix_rows = _read_csv_rows(matrix_path)
+    solve_rows = _read_csv_rows(normalized_solve_csv)
+    triplet = _triplet_levels_from_solve_rows(solve_rows)
+    component_by_global = {int(k): str(v.get("component") or "") for k, v in triplet.items()}
+    type50_status = _load_type50_audit_status(type50_audit_csv)
+
+    families: Dict[str, Dict[str, Any]] = {}
+    flows: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for row in matrix_rows:
+        fkey, data_type, source_label = _rate_family(row)
+        fam = families.setdefault(fkey, {
+            "ion": ion or "",
+            "family_key": fkey,
+            "data_type": data_type,
+            "source_label": source_label,
+            "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+            "n_matrix_terms": 0,
+            "n_unique_records": 0,
+            "n_source_code_status_rows": 0,
+            "n_gain_like_terms": 0,
+            "n_loss_like_terms": 0,
+            "n_terms_touching_triplet_levels": 0,
+            "n_terms_touching_f": 0,
+            "n_terms_touching_i": 0,
+            "n_terms_touching_r": 0,
+            "rate_abs_sum_s^-1": 0.0,
+            "signed_abs_sum_s^-1": 0.0,
+            "rate_min_s^-1": None,
+            "rate_max_s^-1": None,
+            "parity_status": "source_code_evaluator_or_matrix_terms_present_but_not_detail_verified",
+            "next_audit_target": "compare evaluator rate, matrix placement, and diagonal partner against same-zone XSTAR detail/local state",
+            "_records": set(),
+        })
+        fam["n_matrix_terms"] += 1
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        if rec:
+            fam["_records"].add(rec)
+        if _source_status_nonempty(row):
+            fam["n_source_code_status_rows"] += 1
+        role = str(row.get("matrix_role") or row.get("matrix_term_kind") or row.get("row_kind") or "").lower()
+        signed = _signed_value(row)
+        if "gain" in role or (signed is not None and signed > 0):
+            fam["n_gain_like_terms"] += 1
+        if "loss" in role or (signed is not None and signed < 0):
+            fam["n_loss_like_terms"] += 1
+        rate = _rate_value(row)
+        if rate is not None:
+            fam["rate_abs_sum_s^-1"] += abs(float(rate))
+            fam["rate_min_s^-1"] = float(rate) if fam["rate_min_s^-1"] is None else min(float(fam["rate_min_s^-1"]), float(rate))
+            fam["rate_max_s^-1"] = float(rate) if fam["rate_max_s^-1"] is None else max(float(fam["rate_max_s^-1"]), float(rate))
+        if signed is not None:
+            fam["signed_abs_sum_s^-1"] += abs(float(signed))
+        row_g = _as_int(row.get("matrix_row_global_index"))
+        col_g = _as_int(row.get("matrix_col_global_index"))
+        touched = sorted(set(g for g in [row_g, col_g] if g in component_by_global))
+        if touched:
+            fam["n_terms_touching_triplet_levels"] += 1
+            comps = sorted(set(component_by_global[g] for g in touched))
+            for comp in comps:
+                key = f"n_terms_touching_{comp}"
+                if key in fam:
+                    fam[key] += 1
+        if row_g in component_by_global:
+            comp = component_by_global[row_g]
+            flow_key = (comp, fkey)
+            fl = flows.setdefault(flow_key, {
+                "ion": ion or "",
+                "triplet_component": comp,
+                "triplet_global_index": row_g,
+                "triplet_level_label": triplet[row_g].get("level_label"),
+                "family_key": fkey,
+                "data_type": data_type,
+                "source_label": source_label,
+                "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+                "n_row_terms": 0,
+                "row_gain_sum_s^-1": 0.0,
+                "row_loss_sum_s^-1": 0.0,
+                "row_signed_sum_s^-1": 0.0,
+            })
+            fl["n_row_terms"] += 1
+            if signed is not None:
+                fl["row_signed_sum_s^-1"] += float(signed)
+                if signed >= 0.0:
+                    fl["row_gain_sum_s^-1"] += float(signed)
+                else:
+                    fl["row_loss_sum_s^-1"] += abs(float(signed))
+
+    family_rows: List[Dict[str, Any]] = []
+    for fam in families.values():
+        fam["n_unique_records"] = len(fam.pop("_records", set()))
+        if fam["data_type"] == "50" and type50_status.get("type50_audit_all_matrix_match") is True:
+            fam["parity_status"] = "detail_rate_and_matrix_parity_verified_for_audited_type50_lines"
+            fam["next_audit_target"] = "expand type50 audit beyond selected triplet lines or move to non-type50 families"
+        elif fam["data_type"] == "50" and type50_status.get("type50_audit_all_matrix_match") is False:
+            fam["parity_status"] = "type50_detail_audit_has_remaining_mismatches"
+        family_rows.append(fam)
+    family_rows.sort(key=lambda r: (-(int(r.get("n_terms_touching_triplet_levels") or 0)), str(r.get("data_type")), str(r.get("family_key"))))
+
+    triplet_flow_rows = list(flows.values())
+    triplet_flow_rows.sort(key=lambda r: (str(r.get("triplet_component")), -float(r.get("row_gain_sum_s^-1") or 0.0) - float(r.get("row_loss_sum_s^-1") or 0.0)))
+
+    overall: Dict[str, Any] = {
+        "ion": ion or "",
+        "matrix_terms_csv": str(matrix_path),
+        "normalized_solve_csv": str(normalized_solve_csv or ""),
+        "n_matrix_terms": len(matrix_rows),
+        "n_rate_families": len(family_rows),
+        "n_triplet_upper_levels": len(triplet),
+        "triplet_levels": list(triplet.values()),
+        "audit_scope": "rate-family ranking and triplet-row matrix-flow coverage; use per-family detail audits for final parity claims",
+        "recommended_next_step": "port/check one non-type50 rate family at a time against XSTAR source code and same-zone detail/live state, then verify both off-diagonal and diagonal matrix placement",
+    }
+    overall.update(_comparison_case_summary(solve_rows))
+    overall.update(type50_status)
+    return {"overall": overall, "family_rows": family_rows, "triplet_flow_rows": triplet_flow_rows}
+
+
+def write_local_matrix_parity_audit(result: Mapping[str, Any], out_dir: str | Path, *, prefix: str = "xstar_local_matrix_parity_audit") -> Dict[str, str]:
+    """Write local matrix-parity audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    family_rows = list(result.get("family_rows") or [])
+    flow_rows = list(result.get("triplet_flow_rows") or [])
+    overall = dict(result.get("overall") or {})
+
+    family_csv = out / f"{prefix}_family_summary.csv"
+    flow_csv = out / f"{prefix}_triplet_flow_summary.csv"
+    json_path = out / f"{prefix}.json"
+    md_path = out / f"{prefix}.md"
+    _write_csv(family_csv, family_rows)
+    _write_csv(flow_csv, flow_rows)
+    json_path.write_text(json.dumps({"overall": overall, "family_rows": family_rows, "triplet_flow_rows": flow_rows}, indent=2, sort_keys=True), encoding="utf-8")
+
+    lines = [
+        "# XSTAR local matrix parity audit",
+        "",
+        f"Ion: `{overall.get('ion','')}`",
+        "",
+        f"Matrix terms: `{overall.get('n_matrix_terms')}`",
+        f"Rate families: `{overall.get('n_rate_families')}`",
+        f"Triplet upper levels: `{overall.get('n_triplet_upper_levels')}`",
+        "",
+        "This audit ranks the local matrix rate families that touch the He-like triplet upper levels. It is intended to guide source-code-equivalent parity work after the type-50 line-escape audit, not to tune f/i/r ratios empirically.",
+        "",
+    ]
+    if overall.get("type50_audit_rows"):
+        lines += [
+            "## Type-50 detail audit handoff",
+            "",
+            f"Audited type-50 rows: `{overall.get('type50_audit_rows')}`",
+            f"Rows matching matrix rate: `{overall.get('type50_audit_matrix_matches')}`",
+            f"Classifications: `{overall.get('type50_audit_classifications')}`",
+            "",
+        ]
+    if any(k in overall for k in ["solver_f_fraction", "solver_i_fraction", "solver_r_fraction"]):
+        lines += [
+            "## Solver summary",
+            "",
+            f"Solver f/i/r: `{overall.get('solver_f_fraction')}` / `{overall.get('solver_i_fraction')}` / `{overall.get('solver_r_fraction')}`",
+            f"Solver R/G/L2: `{overall.get('solver_R')}` / `{overall.get('solver_G')}` / `{overall.get('solver_l2_distance_to_target')}`",
+            "",
+        ]
+    lines += [
+        "## Rate families touching triplet levels",
+        "",
+        "| data type | source label | n terms | n touching triplet | f | i | r | parity status | next audit target |",
+        "|---:|---|---:|---:|---:|---:|---:|---|---|",
+    ]
+    for row in family_rows:
+        if int(row.get("n_terms_touching_triplet_levels") or 0) <= 0:
+            continue
+        lines.append(
+            f"| {row.get('data_type')} | {row.get('source_label')} | {row.get('n_matrix_terms')} | "
+            f"{row.get('n_terms_touching_triplet_levels')} | {row.get('n_terms_touching_f')} | {row.get('n_terms_touching_i')} | {row.get('n_terms_touching_r')} | "
+            f"{row.get('parity_status')} | {row.get('next_audit_target')} |"
+        )
+    lines += [
+        "",
+        "## Triplet row flow summary",
+        "",
+        "| component | level | data type | source label | row gain sum | row loss sum | signed sum | n row terms |",
+        "|---|---|---:|---|---:|---:|---:|---:|",
+    ]
+    for row in flow_rows[:80]:
+        lines.append(
+            f"| {row.get('triplet_component')} | {row.get('triplet_level_label')} | {row.get('data_type')} | {row.get('source_label')} | "
+            f"{row.get('row_gain_sum_s^-1')} | {row.get('row_loss_sum_s^-1')} | {row.get('row_signed_sum_s^-1')} | {row.get('n_row_terms')} |"
+        )
+    lines += [
+        "",
+        "## Recommended parity sequence",
+        "",
+        "1. Keep type-50 as the verified template: detail-state input -> source-code evaluator -> matrix gain/loss placement.",
+        "2. Apply the same pattern to the largest non-type-50 families touching the triplet rows, starting with the families with the largest row gain/loss sums.",
+        "3. Compare solved Python level populations directly to `xo01_detail.fits` once the dominant local matrix families have row-level parity.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"family_csv": str(family_csv), "triplet_flow_csv": str(flow_csv), "json": str(json_path), "markdown": str(md_path)}
+
+
+__all__ = [
+    "find_solver_product_paths",
+    "audit_local_matrix_parity",
+    "write_local_matrix_parity_audit",
+]
