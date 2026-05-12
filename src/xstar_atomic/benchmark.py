@@ -631,6 +631,7 @@ class XSTARBenchmarkComparison:
     target: XSTARLocalTarget
     solver_triplet: Mapping[str, Any] | None = None
     solver_summary: Mapping[str, Any] | None = None
+    solver_products: Mapping[str, str] = field(default_factory=dict)
     status: str = "target_only"
     warnings: tuple[str, ...] = ()
 
@@ -682,6 +683,11 @@ class XSTARBenchmarkComparison:
             "triplet_residual_pattern": pattern,
             "comparison_status": self.status,
             "comparison_warnings": "; ".join(self.warnings),
+            "solver_products_manifest_csv": self.solver_products.get("manifest", ""),
+            "solver_full_global_matrix_terms_csv": self.solver_products.get("full_global_matrix_terms", ""),
+            "solver_global_bound_bound_matrix_terms_csv": self.solver_products.get("global_bound_bound_matrix_terms", ""),
+            "solver_full_global_normalized_solve_comparison_csv": self.solver_products.get("full_global_normalized_solve_comparison", ""),
+            "solver_summary_json": self.solver_products.get("summary", ""),
         })
         row.update(escape_diag)
         row.update(source_diag)
@@ -693,6 +699,7 @@ class XSTARBenchmarkComparison:
             "target": self.target.to_dict(),
             "solver_triplet": dict(self.solver_triplet or {}),
             "solver_summary": dict(self.solver_summary or {}),
+            "solver_products": dict(self.solver_products or {}),
             "comparison": self.comparison_row(),
             "status": self.status,
             "warnings": list(self.warnings),
@@ -841,6 +848,105 @@ def _write_solver_radiation_spectrum_csv(target: "XSTARLocalTarget") -> Path | N
     write_csv(rows, path)
     return path
 
+
+
+
+def _safe_slug(text: object, fallback: str = "case") -> str:
+    """Return a filesystem-safe lowercase slug."""
+    import re
+    s = str(text or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return s or fallback
+
+
+def _csv_safe_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return rows with a stable union of fields and JSON-encoded nested values."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        flat: dict[str, Any] = {}
+        for key, value in dict(row).items():
+            if isinstance(value, (list, tuple, dict)):
+                flat[key] = json.dumps(value, default=str, sort_keys=True)
+            else:
+                flat[key] = value
+        out.append(flat)
+    return out
+
+
+def _write_csv_union(rows: Sequence[Mapping[str, Any]], path: str | Path) -> Path:
+    """Write rows using the union of keys so sparse diagnostic rows survive."""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    flat_rows = _csv_safe_rows(rows)
+    fields: list[str] = []
+    seen: set[str] = set()
+    for row in flat_rows:
+        for key in row.keys():
+            if key not in seen:
+                fields.append(key)
+                seen.add(key)
+    if not fields:
+        fields = ["status"]
+        flat_rows = [{"status": "empty"}]
+    with p.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(flat_rows)
+    return p
+
+
+def write_solver_products_from_result(
+    result: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_like_element_solver",
+) -> dict[str, str]:
+    """Write solver products from an in-memory ``solve_populations`` result.
+
+    The historical examples wrote many CSV products directly from the solver
+    working directory.  The benchmark API receives the same products as an
+    in-memory mapping, so this helper preserves them into a user-selected
+    output directory.  Matrix terms are written with the same filenames expected
+    by the detail-state audits, especially
+    ``xstar_like_element_solver_full_global_matrix_terms.csv``.
+    """
+    root = Path(out_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, str] = {}
+    if not isinstance(result, Mapping):
+        return paths
+    # Write every list-of-mapping diagnostic table, preserving the solver key
+    # in the filename.  This includes full_global_matrix_terms and the
+    # full_global_normalized_solve_comparison summary used by the triplet
+    # benchmark.
+    for key, value in result.items():
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            if all(isinstance(item, Mapping) for item in value):
+                path = root / f"{prefix}_{key}.csv"
+                _write_csv_union(value, path)
+                paths[key] = str(path)
+    summary = result.get("summary")
+    if isinstance(summary, Mapping):
+        path = root / f"{prefix}_summary.json"
+        path.write_text(json.dumps(dict(summary), indent=2, default=str, sort_keys=True) + "\n", encoding="utf-8")
+        paths["summary"] = str(path)
+        md_path = root / f"{prefix}_summary.md"
+        lines = ["# Solver summary", "", f"Source prefix: `{prefix}`", "", "| key | value |", "|---|---|"]
+        for key, value in dict(summary).items():
+            if isinstance(value, (dict, list, tuple)):
+                value = json.dumps(value, default=str, sort_keys=True)
+            lines.append(f"| {key} | {value} |")
+        md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        paths["summary_md"] = str(md_path)
+    manifest = root / f"{prefix}_products_manifest.csv"
+    with manifest.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["product_key", "path"])
+        writer.writeheader()
+        for key, path in sorted(paths.items()):
+            writer.writerow({"product_key": key, "path": path})
+    paths["manifest"] = str(manifest)
+    return paths
+
 def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> dict[str, Any]:
     """Return the source-code-first local-state validation solver settings.
 
@@ -931,6 +1037,8 @@ def compare_solver_to_xstar_target(
     solver_triplet: Mapping[str, Any] | None = None,
     solver_kwargs: Mapping[str, Any] | None = None,
     solver_preset: str | None = None,
+    write_solver_products: bool = False,
+    solver_output_dir: str | Path | None = None,
 ) -> XSTARBenchmarkComparison:
     """Compare a solver/product triplet with an exact XSTAR local target.
 
@@ -942,6 +1050,7 @@ def compare_solver_to_xstar_target(
     warnings: list[str] = []
     summary: Mapping[str, Any] | None = None
     triplet = solver_triplet
+    product_paths: dict[str, str] = {}
     status = "target_only"
     if run_solver:
         if target.ion is None:
@@ -984,6 +1093,13 @@ def compare_solver_to_xstar_target(
                         merged_kwargs["radiation_field_mode"] = "none"
                         warnings.append("xout_cont_fits_not_passed_to_solver_no_radiation_rows")
                 result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
+                if write_solver_products:
+                    product_root = Path(solver_output_dir) if solver_output_dir is not None else Path("xstar_atomic_solver_products")
+                    product_paths = write_solver_products_from_result(result, product_root)
+                    if product_paths.get("full_global_matrix_terms"):
+                        warnings.append("solver_full_global_matrix_terms_preserved")
+                    else:
+                        warnings.append("solver_products_written_without_full_global_matrix_terms")
             finally:
                 if temporary_reference_csv is not None:
                     try:
@@ -1009,7 +1125,7 @@ def compare_solver_to_xstar_target(
         status = "solver_compared" if _has_triplet_fractions(solver_triplet) else "solver_no_triplet_values"
         if status != "solver_compared":
             warnings.append("solver_triplet_has_no_finite_triplet_fractions")
-    return XSTARBenchmarkComparison(target=target, solver_triplet=triplet, solver_summary=summary, status=status, warnings=tuple(warnings))
+    return XSTARBenchmarkComparison(target=target, solver_triplet=triplet, solver_summary=summary, solver_products=product_paths, status=status, warnings=tuple(warnings))
 
 
 def reproduce_xstar_run(
@@ -1025,6 +1141,8 @@ def reproduce_xstar_run(
     fitsfile: str | Path | None = None,
     solver_kwargs: Mapping[str, Any] | None = None,
     solver_preset: str | None = None,
+    write_solver_products: bool = False,
+    solver_output_dir: str | Path | None = None,
 ) -> XSTARBenchmarkComparison:
     """Extract exact XSTAR targets and optionally compare a solver run."""
     target = build_xstar_local_target(
@@ -1042,6 +1160,8 @@ def reproduce_xstar_run(
         run_solver=run_solver,
         solver_kwargs=solver_kwargs,
         solver_preset=solver_preset,
+        write_solver_products=write_solver_products,
+        solver_output_dir=solver_output_dir,
     )
 
 
@@ -1187,6 +1307,8 @@ def run_xstar_benchmark_suite(
     fitsfile: str | Path | None = None,
     solver_kwargs: Mapping[str, Any] | None = None,
     solver_preset: str | None = None,
+    write_solver_products: bool = False,
+    solver_output_root: str | Path | None = None,
 ) -> list[XSTARBenchmarkComparison]:
     """Run :func:`reproduce_xstar_run` for a list of case dictionaries."""
     out: list[XSTARBenchmarkComparison] = []
@@ -1199,6 +1321,11 @@ def run_xstar_benchmark_suite(
             window = (float(window[0]), float(window[1]))
         else:
             window = None
+        per_solver_dir = None
+        if write_solver_products:
+            root = Path(solver_output_root) if solver_output_root is not None else Path("xstar_atomic_solver_products")
+            slug = _safe_slug(case.get("ion") or case.get("run_dir") or len(out), fallback=f"case_{len(out)+1}")
+            per_solver_dir = root / slug
         out.append(reproduce_xstar_run(
             case.get("run_dir") or case.get("xstar_run_dir"),
             ion=case.get("ion"),
@@ -1211,6 +1338,8 @@ def run_xstar_benchmark_suite(
             fitsfile=fitsfile,
             solver_kwargs=solver_kwargs,
             solver_preset=solver_preset,
+            write_solver_products=write_solver_products,
+            solver_output_dir=per_solver_dir,
         ))
     return out
 
@@ -1251,6 +1380,7 @@ __all__ = [
     "read_cases_csv",
     "write_xstar_benchmark_outputs",
     "write_xstar_benchmark_suite",
+    "write_solver_products_from_result",
     "solver_kwargs_from_preset",
     "xstar_local_state_solver_kwargs",
 ]

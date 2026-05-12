@@ -26,7 +26,7 @@ def _bootstrap_src_path() -> None:
 _bootstrap_src_path()
 
 from xstar_atomic.data import resolve_atdb_path
-from xstar_atomic.xstar_detail import audit_xstar_detail_type50_rates, write_xstar_detail_type50_rate_audit
+from xstar_atomic.xstar_detail import audit_xstar_detail_type50_rates, find_matrix_terms_csv_from_benchmark, write_xstar_detail_type50_rate_audit
 
 
 def _default_window(ion: str) -> tuple[float | None, float | None]:
@@ -52,6 +52,8 @@ def main(argv=None) -> int:
     parser.add_argument("--wavelength-max", type=float, help="Maximum wavelength in Angstrom; default uses common He-like triplet window")
     parser.add_argument("--tolerance-A", type=float, default=0.03, help="ATDB/matrix wavelength matching tolerance in Angstrom")
     parser.add_argument("--matrix-terms-csv", help="Optional solver matrix-terms CSV for residual columns")
+    parser.add_argument("--benchmark-dir", help="Output directory from example 56; used to auto-locate preserved matrix terms")
+    parser.add_argument("--benchmark-comparisons-csv", help="Specific example-56 comparisons CSV for matrix-term handoff")
     parser.add_argument("--out-dir", default="xstar_detail_type50_rate_audit", help="Output directory")
     parser.add_argument("--print-summary", action="store_true", help="Print a compact summary")
     args = parser.parse_args(argv)
@@ -68,6 +70,16 @@ def main(argv=None) -> int:
         except Exception:
             atdb = None
 
+    matrix_terms_csv = args.matrix_terms_csv
+    if not matrix_terms_csv and args.benchmark_dir:
+        found = find_matrix_terms_csv_from_benchmark(
+            args.benchmark_dir,
+            ion=args.ion,
+            comparisons_csv=args.benchmark_comparisons_csv,
+        )
+        if found is not None:
+            matrix_terms_csv = str(found)
+
     rows = audit_xstar_detail_type50_rates(
         args.run_dir,
         ion=args.ion,
@@ -76,7 +88,7 @@ def main(argv=None) -> int:
         wavelength_min=wmin,
         wavelength_max=wmax,
         tolerance_A=args.tolerance_A,
-        matrix_terms_csv=args.matrix_terms_csv,
+        matrix_terms_csv=matrix_terms_csv,
     )
     paths = write_xstar_detail_type50_rate_audit(rows, args.out_dir)
     if args.print_summary:
@@ -88,6 +100,7 @@ def main(argv=None) -> int:
         print(f"atdb={atdb}")
         print(f"wavelength_window={wmin},{wmax}")
         print(f"n_rows={len(rows)}")
+        print(f"matrix_terms_csv={matrix_terms_csv or ''}")
         for row in rows:
             print(
                 "kind={kind} wav={wav} tau={tin}/{tout} ptmp_sum={psum} "
@@ -100,7 +113,7 @@ def main(argv=None) -> int:
                     A=row.get("atdb_A_s^-1"),
                     esc=row.get("ucalc_pre_swap_ans1_escaped_decay_s^-1"),
                     photo=row.get("ucalc_pre_swap_ans2_photoexcitation_s^-1"),
-                    mstat=row.get("matrix_match_status"),
+                    mstat=row.get("matrix_residual_classification") or row.get("matrix_match_status"),
                 )
             )
         for key, path in paths.items():

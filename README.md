@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.150** adds explicit Python live-state containers for future XSTAR-output recreation. v0.3.149 added the first Python XSTAR-output recreation planning layer. It parses shell-style `xstar` commands and maps standard XSTAR FITS products to the live internal arrays needed for exact source-code parity. v0.3.148 restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
+Latest package note: **v0.3.154** adds solver-product preservation and automatic matrix-term handoff between the four-ion XSTAR reproduction benchmark and the detail-state type-50 rate audit. Use `examples/56_reproduce_xstar_local_outputs.py --write-solver-products` to preserve `xstar_like_element_solver_full_global_matrix_terms.csv`, then use `examples/61_audit_xstar_detail_type50_rates.py --benchmark-dir ...` to compare `ucalc.f90` detail-state rates against those matrix terms. v0.3.153 added row-by-row detail-state type-50 rate audits; v0.3.152 fixed trailing all-zero abundance sentinel handling. No solver physics changed in v0.3.154.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -28,6 +28,24 @@ db = XSTARAtomic("/path/to/atdb.fits")
 ctx = db.context.from_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
 rate = db.rates.type50("O VII", aij_s_inv=..., oscillator_strength=..., wavelength_A=...)
 comparison = db.validate.compare_xstar_run("xstar_runs/helike_type69/o7_ne1e8", ion="O VII")
+```
+
+Benchmark solver products can be preserved and handed to the detail-state rate audit:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --standard-helike-suite \
+  --xstar-runs-root xstar_runs \
+  --run-solver \
+  --solver-preset xstar-local-state \
+  --write-solver-products \
+  --out-dir helike_local_reproduction_suite_solver
+
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --benchmark-dir helike_local_reproduction_suite_solver \
+  --out-dir xstar_detail_type50_rate_audit_o7_with_matrix
 ```
 
 

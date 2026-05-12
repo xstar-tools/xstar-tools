@@ -527,29 +527,162 @@ def _read_csv_rows(path: str | Path | None) -> List[Dict[str, Any]]:
         return [dict(row) for row in csv.DictReader(handle)]
 
 
-def _match_matrix_row(detail_row: Mapping[str, Any], atdb_row: Mapping[str, Any] | None, matrix_rows: Sequence[Mapping[str, Any]], tolerance_A: float) -> Optional[Mapping[str, Any]]:
-    if not matrix_rows:
+
+
+def find_matrix_terms_csv_from_benchmark(
+    benchmark_dir: str | Path,
+    *,
+    ion: str | None = None,
+    comparisons_csv: str | Path | None = None,
+) -> Optional[Path]:
+    """Locate a preserved solver full-global matrix-terms CSV from example 56.
+
+    ``examples/56_reproduce_xstar_local_outputs.py --write-solver-products``
+    writes the path into the aggregate comparisons CSV.  This helper implements
+    the automatic handoff used by the detail-state type-50 audit.
+    """
+    root = Path(benchmark_dir)
+    candidates: list[Path] = []
+    if comparisons_csv is not None:
+        candidates.append(Path(comparisons_csv))
+    candidates.extend([
+        root / "xstar_local_reproduction_suite_comparisons.csv",
+        root / "xstar_local_reproduction_comparison.csv",
+    ])
+    ion_norm = _normalise_ion_key(ion) if ion else ""
+    for csv_path in candidates:
+        if not csv_path.exists():
+            continue
+        for row in _read_csv_rows(csv_path):
+            if ion_norm and _normalise_ion_key(row.get("ion")) != ion_norm:
+                continue
+            path_text = str(row.get("solver_full_global_matrix_terms_csv") or "").strip()
+            if path_text:
+                p = Path(path_text)
+                if not p.is_absolute():
+                    # Paths in the comparison table are normally relative to the
+                    # command working directory, but also try relative to the
+                    # benchmark directory for moved archives.
+                    p1 = p
+                    p2 = root / p
+                    if p1.exists():
+                        return p1
+                    if p2.exists():
+                        return p2
+                elif p.exists():
+                    return p
+    # Fallback: search the benchmark directory for the conventional filename.
+    matches = sorted(root.rglob("xstar_like_element_solver_full_global_matrix_terms.csv"))
+    if not matches:
         return None
+    if ion_norm:
+        slug = ion_norm.replace("_", "")
+        for m in matches:
+            mtext = str(m).lower().replace("_", "")
+            if slug in mtext:
+                return m
+    return matches[0]
+
+def _matrix_candidate_rows(detail_row: Mapping[str, Any], atdb_row: Mapping[str, Any] | None, matrix_rows: Sequence[Mapping[str, Any]], tolerance_A: float) -> List[Mapping[str, Any]]:
+    """Return candidate matrix rows for one detail/ATDB type-50 line."""
+    if not matrix_rows:
+        return []
+    candidates: list[Mapping[str, Any]] = []
     rec = str((atdb_row or {}).get("record") or (atdb_row or {}).get("record_id") or "").strip()
     if rec:
         for row in matrix_rows:
             if str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip() == rec:
-                return row
+                candidates.append(row)
+        if candidates:
+            return candidates
     wav = _as_float(detail_row.get("wavelength"))
     if wav is None:
-        return None
-    best = None
-    best_dw = None
+        return []
+    scored: list[tuple[float, Mapping[str, Any]]] = []
     for row in matrix_rows:
         mw = _first_existing_numeric(row, ["wavelength_A", "wavelength", "lambda_A", "line_wavelength_A"])
         if mw is None:
             continue
         dw = abs(float(mw) - float(wav))
-        if dw <= tolerance_A and (best is None or dw < float(best_dw)):
-            best = row
-            best_dw = dw
-    return best
+        if dw <= tolerance_A:
+            scored.append((dw, row))
+    if not scored:
+        return []
+    best_dw = min(dw for dw, _ in scored)
+    # Return all rows for the closest wavelength, including offdiag/diagonal
+    # partners; do not discard the sign/placement evidence.
+    return [row for dw, row in scored if abs(dw - best_dw) <= max(1e-8, tolerance_A * 1e-3)]
 
+
+def _match_matrix_row(detail_row: Mapping[str, Any], atdb_row: Mapping[str, Any] | None, matrix_rows: Sequence[Mapping[str, Any]], tolerance_A: float) -> Optional[Mapping[str, Any]]:
+    """Backward-compatible first-row matrix matcher."""
+    rows = _matrix_candidate_rows(detail_row, atdb_row, matrix_rows, tolerance_A)
+    return rows[0] if rows else None
+
+
+def _matrix_rows_summary(matrix_rows: Sequence[Mapping[str, Any]], escaped_decay: Optional[float]) -> Dict[str, Any]:
+    """Classify matrix rows against a detail-state ucalc type-50 rate."""
+    out: Dict[str, Any] = {
+        "n_matrix_matches": len(matrix_rows),
+        "matrix_match_ids": "",
+        "matrix_roles": "",
+        "matrix_rate_min_s^-1": None,
+        "matrix_rate_max_s^-1": None,
+        "matrix_signed_rate_min_s^-1": None,
+        "matrix_signed_rate_max_s^-1": None,
+        "matrix_minus_ucalc_escaped_decay_s^-1": None,
+        "matrix_vs_ucalc_relative_error": None,
+        "matrix_residual_classification": "matrix_not_supplied" if not matrix_rows else "no_matching_matrix_rate",
+    }
+    if not matrix_rows:
+        return out
+    ids = []
+    roles = []
+    rates: list[float] = []
+    signed: list[float] = []
+    for row in matrix_rows:
+        ids.append(str(row.get("global_term_id") or row.get("full_global_term_id") or row.get("matrix_term_id") or row.get("record") or ""))
+        role = str(row.get("matrix_role") or row.get("matrix_term_kind") or row.get("row_kind") or "")
+        if role:
+            roles.append(role)
+        rate = _matrix_rate_from_row(row)
+        if rate is not None:
+            rates.append(float(rate))
+        sval = _first_existing_numeric(row, ["full_global_signed_rate_s^-1", "signed_rate_s^-1", "matrix_signed_rate_s^-1"])
+        if sval is not None:
+            signed.append(float(sval))
+    out["matrix_match_ids"] = ";".join(x for x in ids if x)
+    out["matrix_roles"] = ";".join(sorted(set(roles)))
+    if rates:
+        out["matrix_rate_min_s^-1"] = min(rates)
+        out["matrix_rate_max_s^-1"] = max(rates)
+    if signed:
+        out["matrix_signed_rate_min_s^-1"] = min(signed)
+        out["matrix_signed_rate_max_s^-1"] = max(signed)
+    if not rates or escaped_decay is None:
+        out["matrix_residual_classification"] = "no_matching_matrix_rate"
+        return out
+    # For one physical transition, offdiag and diagonal terms should carry the
+    # same absolute rate.  Compare the median-like first/min rate because all
+    # partners should be identical within roundoff.
+    matrix_rate = rates[0]
+    delta = matrix_rate - float(escaped_decay)
+    denom = max(abs(float(escaped_decay)), 1.0)
+    rel = abs(delta) / denom
+    out["matrix_minus_ucalc_escaped_decay_s^-1"] = delta
+    out["matrix_vs_ucalc_relative_error"] = rel
+    has_gain = any(("gain" in r.lower() or "offdiag" in r.lower()) for r in roles)
+    has_loss = any(("loss" in r.lower() or "diagonal" in r.lower()) for r in roles)
+    has_pos = any(v > 0 for v in signed) if signed else False
+    has_neg = any(v < 0 for v in signed) if signed else False
+    if rel <= 1e-5:
+        if (len(matrix_rows) >= 2 and has_gain and has_loss and (not signed or (has_pos and has_neg))):
+            out["matrix_residual_classification"] = "matrix_matches_ucalc_rate"
+        else:
+            out["matrix_residual_classification"] = "matrix_placement_mismatch"
+    else:
+        out["matrix_residual_classification"] = "rate_evaluator_mismatch"
+    return out
 
 def _matrix_rate_from_row(row: Mapping[str, Any] | None) -> Optional[float]:
     if not row:
@@ -629,7 +762,8 @@ def audit_xstar_detail_type50_rates(
         wav = _as_float(row.get("wavelength"))
         energy_eV = 12398.4016 / float(wav) if wav and wav > 0.0 else None
         atdb_row = _match_atdb_line(row, atdb_lines, tolerance_A) if atdb_lines else None
-        matrix_row = _match_matrix_row(row, atdb_row, matrix_rows, tolerance_A)
+        matrix_matches = _matrix_candidate_rows(row, atdb_row, matrix_rows, tolerance_A)
+        matrix_row = matrix_matches[0] if matrix_matches else None
         tau_in = _as_float(row.get("tau_in"), 0.0) or 0.0
         tau_out = _as_float(row.get("tau_out"), 0.0) or 0.0
         ptmp1, ptmp2 = ptmp_from_tau_xstar(tau_in, tau_out, zone.cfrac)
@@ -661,7 +795,9 @@ def audit_xstar_detail_type50_rates(
             sigma = 0.02655 * float(flin) * float(wav) * 1.0e-8 / float(vtherm)
             photo = sigma * float(bremsa_nb1) * float(vtherm) / 3.0e10 * 1.0 * max(0.0, 1.0 - float(zone.cfrac or 0.0))
         matrix_rate = _matrix_rate_from_row(matrix_row)
-        out_rows.append({
+        matrix_summary = _matrix_rows_summary(matrix_matches, escaped_decay)
+        matrix_match_status = "matched" if matrix_matches else ("matrix_not_supplied" if not matrix_rows else "no_matching_matrix_term")
+        audit_row = {
             "zone_index": zone.zone_index,
             "ion": ion,
             "line_kind": _line_kind_from_detail_row(row),
@@ -703,11 +839,17 @@ def audit_xstar_detail_type50_rates(
             "ucalc_post_swap_ans1_photoexcitation_s^-1": photo,
             "ucalc_post_swap_ans2_escaped_decay_s^-1": escaped_decay,
             "photoexcitation_expected_zero_from_cfrac": bool(float(zone.cfrac or 0.0) >= 1.0),
-            "matrix_match_status": "matched" if matrix_row else "not_supplied_or_not_matched",
+            "matrix_match_status": matrix_match_status,
             "matrix_rate_s^-1": matrix_rate,
             "matrix_minus_ucalc_escaped_decay_s^-1": (float(matrix_rate) - float(escaped_decay)) if matrix_rate is not None and escaped_decay is not None else None,
             "source_code_formula": "calc_hmc_ion.f90 ptmp1/ptmp2 + ucalc.f90 type50 ans1=A*(ptmp1+ptmp2), ans2=sigma*bremsa(nb1)*vtherm/3e10*flinabs(ptmp1)*(1-cfrac), final swap",
-        })
+        }
+        audit_row.update(matrix_summary)
+        # Refine classification so a supplied matrix file with no candidates is
+        # distinguished from no matrix file at all.
+        if matrix_rows and not matrix_matches:
+            audit_row["matrix_residual_classification"] = "no_matching_matrix_term"
+        out_rows.append(audit_row)
     return out_rows
 
 
@@ -732,14 +874,14 @@ def write_xstar_detail_type50_rate_audit(rows: Sequence[Mapping[str, Any]], out_
         "",
         "This audit evaluates the XSTAR source-code type-50 terms from detail-state `tau0`, `epi`, and reconstructed `bremsa` arrays.",
         "",
-        "| kind | wavelength (A) | tau_in | tau_out | ptmp sum | A (s^-1) | escaped decay (s^-1) | photoexcitation (s^-1) | matrix status |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| kind | wavelength (A) | tau_in | tau_out | ptmp sum | A (s^-1) | escaped decay (s^-1) | photoexcitation (s^-1) | matrix status | classification |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for row in rows:
         lines.append(
             f"| {row.get('line_kind')} | {row.get('detail_wavelength_A')} | {row.get('tau_in')} | {row.get('tau_out')} | "
             f"{row.get('ptmp_sum')} | {row.get('atdb_A_s^-1')} | {row.get('ucalc_pre_swap_ans1_escaped_decay_s^-1')} | "
-            f"{row.get('ucalc_pre_swap_ans2_photoexcitation_s^-1')} | {row.get('matrix_match_status')} |"
+            f"{row.get('ucalc_pre_swap_ans2_photoexcitation_s^-1')} | {row.get('matrix_match_status')} | {row.get('matrix_residual_classification')} |"
         )
     lines += [
         "",

@@ -1198,3 +1198,25 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
 ```
 
 If a solver matrix-term CSV is available, pass it with `--matrix-terms-csv` to add residual columns between the matrix term and the detail-state `ucalc` rate.
+
+The v0.3.154 benchmark can preserve solver products and hand the matrix terms to this audit automatically:
+
+```bash
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py \
+  --standard-helike-suite \
+  --xstar-runs-root xstar_runs \
+  --run-solver \
+  --solver-preset xstar-local-state \
+  --write-solver-products \
+  --out-dir helike_local_reproduction_suite_solver_v03154 \
+  --print-summary
+
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03154 \
+  --out-dir xstar_detail_type50_rate_audit_o7_with_matrix \
+  --print-summary
+```
+
+The type-50 detail audit classifies matrix/rate residuals as `matrix_matches_ucalc_rate`, `rate_evaluator_mismatch`, `matrix_placement_mismatch`, or `no_matching_matrix_term`.

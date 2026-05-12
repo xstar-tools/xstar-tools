@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--solver-preset", default="workflow-default", choices=["workflow-default", "xstar-local-state", "xstar-local-state-experimental-pumping"], help="Solver settings for --run-solver. workflow-default uses the lightweight public wrapper; xstar-local-state mirrors examples/51 local-state validation flags; xstar-local-state-experimental-pumping tests the unsafe output-table pumping approximation.")
     p.add_argument("--atdb", help="Path to XSTAR atdb.fits if --run-solver is used")
     p.add_argument("--out-dir", default="xstar_local_reproduction_benchmark", help="Output directory")
+    p.add_argument("--write-solver-products", action="store_true", help="Preserve in-memory solver products such as xstar_like_element_solver_full_global_matrix_terms.csv")
+    p.add_argument("--solver-output-root", help="Directory for preserved solver products. Defaults to OUT_DIR/solver_products when --write-solver-products is used.")
     p.add_argument("--print-summary", action="store_true")
     return p
 
@@ -73,12 +75,17 @@ def main() -> None:
             cases = default_helike_benchmark_cases(args.xstar_runs_root)
         else:
             cases = read_cases_csv(args.cases_csv)
+        solver_output_root = args.solver_output_root
+        if args.write_solver_products and solver_output_root is None:
+            solver_output_root = str(out_dir / "solver_products")
         comparisons = run_xstar_benchmark_suite(
             cases,
             value_column=args.value_column,
             run_solver=args.run_solver,
             fitsfile=solver_atdb,
             solver_preset=args.solver_preset,
+            write_solver_products=args.write_solver_products,
+            solver_output_root=solver_output_root,
         )
         paths = write_xstar_benchmark_suite(comparisons, out_dir)
         if args.print_summary:
@@ -100,6 +107,8 @@ def main() -> None:
                     f"source={row.get('solver_triplet_source')} "
                     f"status={comparison.status}"
                 )
+                if row.get("solver_full_global_matrix_terms_csv"):
+                    print(f"  matrix_terms={row.get('solver_full_global_matrix_terms_csv')}")
                 if row.get("comparison_warnings"):
                     print(f"  warnings={row.get('comparison_warnings')}")
             for key, path in paths.items():
@@ -108,6 +117,9 @@ def main() -> None:
 
     if not args.run_dir or not args.ion:
         raise SystemExit("Either --standard-helike-suite, --cases-csv, or both --run-dir and --ion are required")
+    solver_output_dir = args.solver_output_root
+    if args.write_solver_products and solver_output_dir is None:
+        solver_output_dir = str(out_dir / "solver_products")
     comparison = reproduce_xstar_run(
         args.run_dir,
         ion=args.ion,
@@ -118,6 +130,8 @@ def main() -> None:
         run_solver=args.run_solver,
         fitsfile=solver_atdb,
         solver_preset=args.solver_preset,
+        write_solver_products=args.write_solver_products,
+        solver_output_dir=solver_output_dir,
     )
     paths = write_xstar_benchmark_outputs(comparison, out_dir)
     if args.print_summary:
@@ -135,6 +149,8 @@ def main() -> None:
         print(f"solver_f/i/r={row.get('solver_f_fraction')}/{row.get('solver_i_fraction')}/{row.get('solver_r_fraction')}")
         print(f"solver_R/G/L2={row.get('solver_R_f_over_i')}/{row.get('solver_G_f_plus_i_over_r')}/{row.get('solver_L2_to_xstar')}")
         print(f"solver_triplet_source={row.get('solver_triplet_source')}")
+        if row.get("solver_full_global_matrix_terms_csv"):
+            print(f"solver_full_global_matrix_terms_csv={row.get('solver_full_global_matrix_terms_csv')}")
         if solver_atdb is not None:
             print(f"solver_atdb={solver_atdb}")
         print(f"status={comparison.status}")

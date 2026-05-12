@@ -494,8 +494,10 @@ PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-he
 For the physics benchmark, compare against the source-code-first local-state solver preset.  This reports XSTAR and solver `f/i/r`, `R`, `G`, and L2 values:
 
 ```bash
-PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-helike-suite --xstar-runs-root xstar_runs --run-solver --solver-preset xstar-local-state --out-dir helike_local_reproduction_suite_solver_v03139 --print-summary
+PYTHONPATH=src python examples/56_reproduce_xstar_local_outputs.py --standard-helike-suite --xstar-runs-root xstar_runs --run-solver --solver-preset xstar-local-state --write-solver-products --out-dir helike_local_reproduction_suite_solver_v03154 --print-summary
 ```
+
+The `--write-solver-products` flag preserves matrix products such as `xstar_like_element_solver_full_global_matrix_terms.csv` under `OUT_DIR/solver_products/`, so they can be handed directly to example 61.
 
 If you want an editable case table, write it first and then run it:
 
@@ -588,5 +590,16 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
   --atdb "$XSTAR_ATDB" \
   --matrix-terms-csv xstar_like_element_solver_full_global_matrix_terms.csv \
   --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+```
+
+To use the automatic handoff from example 56, point `--benchmark-dir` at a benchmark run created with `--write-solver-products`:
+
+```bash
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03154 \
+  --out-dir xstar_detail_type50_rate_audit_o7_with_matrix \
   --print-summary
 ```
