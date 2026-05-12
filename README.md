@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.149** adds the first Python XSTAR-output recreation planning layer. It parses shell-style `xstar` commands and maps standard XSTAR FITS products to the live internal arrays needed for exact source-code parity. v0.3.148 restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
+Latest package note: **v0.3.150** adds explicit Python live-state containers for future XSTAR-output recreation. v0.3.149 added the first Python XSTAR-output recreation planning layer. It parses shell-style `xstar` commands and maps standard XSTAR FITS products to the live internal arrays needed for exact source-code parity. v0.3.148 restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global branch and separates the unsafe output-table type-50 pumping experiment into `xstar-local-state-experimental-pumping`.  XSTAR source parity requires the live local `tau0(:,:)` and `bremsa(:)` arrays passed to `calc_hmc_ion.f90`/`ucalc.f90`; post-transfer `xout_lines1.fits` and `xout_cont1.fits` are not substituted into the population matrix by default.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
@@ -120,3 +120,25 @@ from xstar_atomic import (
 ## Examples
 
 See `examples/README.md` for grouped runnable examples and recommended learning paths. The most advanced validation examples remain diagnostic/source-code-first workflows and may require same-run XSTAR outputs.
+
+
+## XSTAR live-state model
+
+v0.3.150 introduces explicit Python containers for the live arrays required to recreate XSTAR outputs from input parameters.  The state model includes `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, zone-local temperature/electron density, ion fractions, and level populations.  These containers are schema/state infrastructure, not a complete XSTAR replacement yet.
+
+```python
+import xstar_atomic as xa
+
+params = xa.parse_xstar_command("xstar nsteps=10 density=1 rlogxi=1.5 cfrac=1.0 vturbi=100")
+state = xa.create_initial_xstar_run_state_from_input(params)
+print(state.zones[0].missing_core_fields())
+```
+
+Command-line skeleton writer:
+
+```bash
+PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_live_state_skeleton_o7 \
+  --print-summary
+```

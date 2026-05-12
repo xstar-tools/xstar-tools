@@ -158,6 +158,15 @@ Export tools
    :show-inheritance:
 
 
+
+XSTAR live-state schema
+-----------------------
+
+.. automodule:: xstar_atomic.xstar_state
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 XSTAR command and output-recreation planning
 -------------------------------------------
 

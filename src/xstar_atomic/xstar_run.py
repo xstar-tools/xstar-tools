@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 
-_BOOL_TRUE = {"yes", "true", "t", "1"}
-_BOOL_FALSE = {"no", "false", "f", "0"}
+_BOOL_TRUE = {"yes", "true", "t"}
+_BOOL_FALSE = {"no", "false", "f"}
 
 
 def _coerce_xstar_value(text: str) -> Any:
@@ -263,6 +263,8 @@ def xstar_recreation_plan(params: XSTARInputParameters | Mapping[str, Any]) -> D
         "ion fractions per zone",
         "level populations per zone",
     ]
+    from .xstar_state import required_live_state_fields
+
     return {
         "status": "planning_only_not_full_xstar_recreation",
         "source": source,
@@ -271,6 +273,7 @@ def xstar_recreation_plan(params: XSTARInputParameters | Mapping[str, Any]) -> D
         "parameters": pmap,
         "key_inputs": key_inputs,
         "live_arrays_needed_for_source_code_parity": live_arrays_needed,
+        "live_state_schema": required_live_state_fields(),
         "output_products": standard_xstar_output_products(),
         "recommended_implementation_phases": [
             "1. Parse XSTAR inputs and build zone/radiation geometry exactly as XSTAR does.",

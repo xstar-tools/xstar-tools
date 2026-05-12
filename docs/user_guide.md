@@ -1142,3 +1142,38 @@ The plan explicitly covers the standard products:
 - `xout_spect1.fits`
 
 Exact recreation from input parameters alone requires the same live internal state used by XSTAR, including `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, ion fractions, and level populations.  The current implementation writes a recreation plan and source-code-parity checklist; the full solver/transfer loop and FITS writers are future work.
+
+## Python XSTAR live-state skeleton
+
+The recreation plan identifies the products and phases.  The live-state skeleton creates the Python containers that later source-code-parity loops must populate.  These objects are the future single source of truth for writing `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal3.fits`, `xo01_detal4.fits`, `xout_abund1.fits`, `xout_lines1.fits`, `xout_rrc1.fits`, `xout_cont1.fits`, and `xout_spect1.fits`.
+
+```python
+import xstar_atomic as xa
+
+params = xa.parse_xstar_command(
+    "xstar spectrum='pow' nsteps=10 density=1 rlogxi=1.5 cfrac=1.0 vturbi=100"
+)
+state = xa.create_initial_xstar_run_state_from_input(params)
+
+zone = state.zones[0]
+print(zone.cfrac, zone.vturbi, zone.temperature, zone.electron_density)
+print(zone.missing_core_fields())
+```
+
+The required live fields are available programmatically:
+
+```python
+for field in xa.required_live_state_fields():
+    print(field["name"], "->", field["python_field"])
+```
+
+Command-line skeleton writer:
+
+```bash
+PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_live_state_skeleton_o7 \
+  --print-summary
+```
+
+The current skeleton is input-seeded, not a full XSTAR calculation.  It explicitly carries `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, local `T/ne`, ion fractions, and level populations so that future Python and C++ backends can populate the same arrays used by the XSTAR Fortran path.

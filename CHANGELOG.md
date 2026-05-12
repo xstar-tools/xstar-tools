@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.3.150 - 2026-05-12
+
+- Added `xstar_atomic.xstar_state`, which defines explicit Python live-state containers needed for future XSTAR-output recreation:
+  - `XSTARContinuumState` for `epi(:)`, `bremsa(:)`, `bremsint(:)`, and continuum optical depths.
+  - `XSTARLineTransferState` for `tau0(1:2,line)`, optional `ptmp1/ptmp2`, and line emissivity/opacity arrays.
+  - `XSTARZoneState` for zone-local `T`, `ne`, `cfrac`, `vturbi`, ion fractions, level populations, and heating/cooling maps.
+  - `XSTARRunState` for the full run state across radial zones.
+- Added `required_live_state_fields()`, `create_initial_xstar_run_state_from_input(...)`, and `write_xstar_state_skeleton(...)`.
+- Added `examples/59_create_xstar_live_state_skeleton.py` to write JSON/Markdown/CSV state-schema products from an XSTAR command or `run_xstar.sh`.
+- Extended the XSTAR recreation plan JSON with a `live_state_schema` section.
+- No full XSTAR recreation or solver physics change yet; this release makes the required internal state explicit and reusable.
+
 ## v0.3.149 - 2026-05-11
 
 - Adds the first Python XSTAR-output recreation planning layer.

@@ -544,3 +544,14 @@ PYTHONPATH=src python examples/58_plan_xstar_output_recreation.py \
   --out-dir xstar_python_recreation_plan_o7 \
   --print-summary
 ```
+
+### `59_create_xstar_live_state_skeleton.py`
+
+Create the Python live-state skeleton that future source-code-parity loops must populate before writing XSTAR-like FITS products.  The skeleton explicitly carries `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, zone-local `T/ne`, ion fractions, and level populations.
+
+```bash
+PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
+  --command-file xstar_runs/helike_type69/o7_ne1e8/run_xstar.sh \
+  --out-dir xstar_live_state_skeleton_o7 \
+  --print-summary
+```

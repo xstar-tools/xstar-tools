@@ -42,3 +42,12 @@ def test_write_xstar_recreation_plan(tmp_path: Path):
 def test_top_level_imports_for_xstar_run_planning():
     assert xa.parse_xstar_command("xstar nsteps=1").get("nsteps") == 1
     assert any(row["filename"] == "xout_abund1.fits" for row in xa.standard_xstar_output_products())
+
+
+def test_parse_xstar_numeric_one_stays_numeric():
+    params = parse_xstar_command("xstar density=1 lwrite=1 cfrac=1.0")
+    assert params.get("density") == 1
+    assert not isinstance(params.get("density"), bool)
+    assert params.get("lwrite") == 1
+    assert not isinstance(params.get("lwrite"), bool)
+
