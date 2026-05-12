@@ -1034,6 +1034,244 @@ def write_type71_cascade_rate_audit(result: Mapping[str, Any], out_dir: str | Pa
     return {"record_csv": str(record_csv), "terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
 
 
+def audit_type68_collision_rates(
+    *,
+    matrix_terms_csv: str | Path,
+    normalized_solve_csv: str | Path | None = None,
+    ion: str | None = None,
+    triplet_only: bool = False,
+    max_rows: int | None = 500,
+) -> Dict[str, Any]:
+    """Audit local matrix parity for XSTAR data type 68 collision terms.
+
+    Type 68 is the He-like Zhang-Sampson collision path in the current
+    full-global solver products.  The preserved rows already contain the
+    effective collision strength/collision-rate handoff used by the evaluator:
+
+    ``q_excitation_cm3_s`` or ``q_deexcitation_cm3_s`` -> ``q * ne`` -> matrix gain/loss term.
+
+    This audit checks that local handoff and the off-diagonal/diagonal partner
+    placement for each record/direction.  It is intentionally a matrix/local
+    parity audit; it does not change solver physics and does not claim that the
+    type-68 evaluator itself is a complete independent re-port of ``calt68``.
+    """
+    matrix_path = Path(matrix_terms_csv)
+    matrix_rows = _read_csv_rows(matrix_path)
+    solve_rows = _read_csv_rows(normalized_solve_csv)
+    triplet = _triplet_levels_from_solve_rows(solve_rows)
+    lookup = _make_term_lookup(matrix_rows)
+
+    out_rows: List[Dict[str, Any]] = []
+    record_pairs: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for row in matrix_rows:
+        _fkey, data_type, source_label = _rate_family(row)
+        if data_type != "68":
+            continue
+        row_g = _as_int(row.get("matrix_row_global_index"))
+        col_g = _as_int(row.get("matrix_col_global_index"))
+        from_g = _as_int(row.get("from_global_index"))
+        to_g = _as_int(row.get("to_global_index"))
+        is_triplet_touch = any(g in triplet for g in [row_g, col_g, from_g, to_g] if g is not None)
+        if triplet_only and not is_triplet_touch:
+            continue
+
+        signed = _signed_value(row)
+        matrix_rate = _rate_value(row)
+        ne = _as_float(row.get("electron_density_cm^-3"))
+        transition_kind = str(row.get("transition_kind") or "").strip()
+        q_exc = _as_float(row.get("q_excitation_cm3_s"))
+        q_de = _as_float(row.get("q_deexcitation_cm3_s"))
+        directional_q = _as_float(row.get("directional_q_cm3_s"))
+        scale = _as_float(row.get("collision_rate_scale_applied"), 1.0) or 1.0
+        if directional_q is None:
+            if "deexc" in transition_kind.lower():
+                directional_q = q_de
+            else:
+                directional_q = q_exc
+        expected = None
+        if directional_q is not None and ne is not None:
+            expected = float(directional_q) * float(ne) * float(scale)
+        residual = ""
+        rel = ""
+        classification = "missing_directional_q_or_ne_or_matrix_rate"
+        if expected is not None and matrix_rate is not None:
+            residual_val = float(matrix_rate) - float(expected)
+            rel_val = residual_val / max(abs(float(expected)), 1.0e-300)
+            residual = residual_val
+            rel = rel_val
+            tol = max(1.0e-25, 1.0e-10 * abs(float(expected)))
+            classification = "matrix_matches_q_ne_rate" if abs(residual_val) <= tol else "matrix_rate_mismatch_vs_q_ne_rate"
+
+        direction = "row_gain" if signed is not None and signed > 0 else "row_loss" if signed is not None and signed < 0 else "row_source_or_unknown"
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        partner = _partner_status(row, lookup)
+        row_triplet_component = str(triplet.get(row_g or -999, {}).get("component") or "")
+        touched_components = sorted(set(str(triplet[g].get("component") or "") for g in [row_g, col_g, from_g, to_g] if g in triplet))
+        pair_key = (rec, transition_kind or "unknown_transition")
+        pair = record_pairs.setdefault(pair_key, {
+            "record": rec,
+            "transition_kind": transition_kind,
+            "n_terms": 0,
+            "n_gain_terms": 0,
+            "n_loss_terms": 0,
+            "n_matrix_matches_q_ne_rate": 0,
+            "n_partner_matches": 0,
+            "abs_gain_sum_s^-1": 0.0,
+            "abs_loss_sum_s^-1": 0.0,
+            "largest_abs_rate_s^-1": 0.0,
+            "from_global_index": from_g if from_g is not None else "",
+            "to_global_index": to_g if to_g is not None else "",
+            "from_level_label": row.get("from_level_label") or "",
+            "to_level_label": row.get("to_level_label") or "",
+            "touched_triplet_components": ";".join(touched_components),
+            "is_triplet_touching": bool(touched_components),
+        })
+        pair["n_terms"] += 1
+        if direction == "row_gain":
+            pair["n_gain_terms"] += 1
+            pair["abs_gain_sum_s^-1"] += abs(float(signed if signed is not None else matrix_rate or 0.0))
+        elif direction == "row_loss":
+            pair["n_loss_terms"] += 1
+            pair["abs_loss_sum_s^-1"] += abs(float(signed if signed is not None else matrix_rate or 0.0))
+        if classification == "matrix_matches_q_ne_rate":
+            pair["n_matrix_matches_q_ne_rate"] += 1
+        if partner.get("partner_status") == "matrix_gain_loss_partner_matches":
+            pair["n_partner_matches"] += 1
+        pair["largest_abs_rate_s^-1"] = max(float(pair["largest_abs_rate_s^-1"]), abs(float(signed if signed is not None else matrix_rate or 0.0)))
+
+        out = {
+            "ion": ion or "",
+            "record": rec,
+            "data_type": data_type,
+            "source_label": source_label,
+            "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+            "fortran_ucalc_branch": "ucalc/calt68-style He-like Zhang-Sampson collision evaluator; matrix rate uses directional q * ne",
+            "matrix_row_global_index": row_g if row_g is not None else "",
+            "matrix_col_global_index": col_g if col_g is not None else "",
+            "direction": direction,
+            "matrix_role": row.get("matrix_role") or "",
+            "transition_kind": transition_kind,
+            "from_global_index": from_g if from_g is not None else "",
+            "to_global_index": to_g if to_g is not None else "",
+            "from_level_label": row.get("from_level_label") or "",
+            "to_level_label": row.get("to_level_label") or "",
+            "row_triplet_component": row_triplet_component,
+            "touched_triplet_components": ";".join(touched_components),
+            "is_triplet_touching": bool(touched_components),
+            "electron_density_cm^-3": ne if ne is not None else "",
+            "temperature_K": row.get("temperature_K") or "",
+            "effective_temperature_K": row.get("xstar_calt67_68_effective_temperature_K") or "",
+            "temperature_floor_applied": row.get("xstar_calt67_68_temperature_floor_applied") or "",
+            "upsilon": row.get("upsilon") or "",
+            "q_excitation_cm3_s": q_exc if q_exc is not None else "",
+            "q_deexcitation_cm3_s": q_de if q_de is not None else "",
+            "directional_q_cm3_s": directional_q if directional_q is not None else "",
+            "collision_rate_scale_applied": scale,
+            "expected_rate_q_ne_s^-1": expected if expected is not None else "",
+            "matrix_rate_s^-1": matrix_rate if matrix_rate is not None else "",
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "matrix_minus_expected_s^-1": residual,
+            "relative_residual": rel,
+            "rate_classification": classification,
+            "partner_status": partner.get("partner_status"),
+            "partner_count": partner.get("partner_count"),
+            "partner_residual_s^-1": partner.get("partner_residual_s^-1"),
+            "eval_method": row.get("eval_method") or "",
+            "eval_diagnostic": row.get("eval_diagnostic") or "",
+            "next_detail_audit_hint": "independently re-port calt68/ucalc from ATDB record inputs, then compare q, q*ne rate, off-diagonal gain, and diagonal loss",
+        }
+        out_rows.append(out)
+
+    for pair in record_pairs.values():
+        pair["gain_loss_abs_residual_s^-1"] = abs(float(pair.get("abs_gain_sum_s^-1") or 0.0) - float(pair.get("abs_loss_sum_s^-1") or 0.0))
+        tol = max(1.0e-25, 1.0e-10 * max(float(pair.get("abs_gain_sum_s^-1") or 0.0), float(pair.get("abs_loss_sum_s^-1") or 0.0), 1.0))
+        pair["record_pair_classification"] = "gain_loss_pair_matches" if float(pair["gain_loss_abs_residual_s^-1"]) <= tol else "gain_loss_pair_mismatch"
+    record_rows = list(record_pairs.values())
+    record_rows.sort(key=lambda r: -float(r.get("largest_abs_rate_s^-1") or 0.0))
+    out_rows.sort(key=lambda r: -abs(float(r.get("signed_rate_s^-1") or r.get("matrix_rate_s^-1") or 0.0)))
+    selected_rows = out_rows if max_rows is None or max_rows <= 0 else out_rows[: int(max_rows)]
+    overall = {
+        "ion": ion or "",
+        "matrix_terms_csv": str(matrix_path),
+        "normalized_solve_csv": str(normalized_solve_csv or ""),
+        "n_type68_matrix_terms": len(out_rows),
+        "n_type68_records_or_directions": len(record_rows),
+        "n_type68_matrix_matches_q_ne_rate": sum(1 for r in out_rows if r.get("rate_classification") == "matrix_matches_q_ne_rate"),
+        "n_type68_partner_matches": sum(1 for r in out_rows if r.get("partner_status") == "matrix_gain_loss_partner_matches"),
+        "n_type68_gain_loss_record_pairs_matching": sum(1 for r in record_rows if r.get("record_pair_classification") == "gain_loss_pair_matches"),
+        "n_type68_triplet_touching_terms": sum(1 for r in out_rows if r.get("is_triplet_touching")),
+        "n_type68_triplet_population_row_terms": sum(1 for r in out_rows if str(r.get("row_triplet_component") or "") in {"f", "i", "r"}),
+        "triplet_only": bool(triplet_only),
+        "audit_scope": "type-68 local evaluator handoff q*ne -> full-global matrix plus gain/loss partner placement; no solver physics changed",
+        "source_code_reference": "type-68 He-like Zhang-Sampson collision path; preserved products expose upsilon, q_excitation/q_deexcitation, directional_q, ne, and matrix terms",
+        "recommended_next_step": "if type 68 passes q*ne/matrix placement, port/check type 53 photoionization/recombination source-sink closure next",
+    }
+    return {"overall": overall, "record_rows": record_rows, "term_rows": selected_rows}
+
+
+def write_type68_collision_rate_audit(result: Mapping[str, Any], out_dir: str | Path, *, prefix: str = "xstar_type68_collision_rate_audit") -> Dict[str, str]:
+    """Write type-68 collision matrix parity audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    record_rows = list(result.get("record_rows") or [])
+    term_rows = list(result.get("term_rows") or [])
+    overall = dict(result.get("overall") or {})
+    record_csv = out / f"{prefix}_record_summary.csv"
+    term_csv = out / f"{prefix}_terms.csv"
+    json_path = out / f"{prefix}.json"
+    md_path = out / f"{prefix}.md"
+    _write_csv(record_csv, record_rows)
+    _write_csv(term_csv, term_rows)
+    json_path.write_text(json.dumps({"overall": overall, "record_rows": record_rows, "term_rows": term_rows}, indent=2, sort_keys=True), encoding="utf-8")
+    lines = [
+        "# XSTAR type-68 collision rate audit",
+        "",
+        f"Ion: `{overall.get('ion','')}`",
+        "",
+        f"Type-68 matrix terms: `{overall.get('n_type68_matrix_terms')}`",
+        f"Type-68 record/direction groups: `{overall.get('n_type68_records_or_directions')}`",
+        f"Terms matching `q * ne`: `{overall.get('n_type68_matrix_matches_q_ne_rate')}`",
+        f"Partner matches: `{overall.get('n_type68_partner_matches')}`",
+        f"Gain/loss record-direction pairs matching: `{overall.get('n_type68_gain_loss_record_pairs_matching')}`",
+        f"Triplet-touching terms: `{overall.get('n_type68_triplet_touching_terms')}`",
+        f"Triplet population-row terms: `{overall.get('n_type68_triplet_population_row_terms')}`",
+        "",
+        "This audit checks the local handoff for XSTAR data type 68 collision terms: the preserved type-68 evaluator provides a directional collisional rate coefficient, which is multiplied by the local electron density and inserted as paired gain/loss matrix terms. It is a parity audit, not an empirical triplet-ratio adjustment.",
+        "",
+        "## Record/direction gain-loss summary",
+        "",
+        "| record | transition | from | to | triplet components | gain terms | loss terms | largest rate | gain-loss residual | classification |",
+        "|---:|---|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    for r in record_rows[:120]:
+        lines.append(
+            f"| {r.get('record')} | {r.get('transition_kind')} | {r.get('from_level_label')} | {r.get('to_level_label')} | {r.get('touched_triplet_components')} | "
+            f"{r.get('n_gain_terms')} | {r.get('n_loss_terms')} | {r.get('largest_abs_rate_s^-1')} | {r.get('gain_loss_abs_residual_s^-1')} | {r.get('record_pair_classification')} |"
+        )
+    lines += [
+        "",
+        "## Largest type-68 matrix terms",
+        "",
+        "| record | direction | transition | from | to | q | ne | matrix rate | expected q*ne | residual | partner status |",
+        "|---:|---|---|---|---|---:|---:|---:|---:|---:|---|",
+    ]
+    for r in term_rows[:120]:
+        lines.append(
+            f"| {r.get('record')} | {r.get('direction')} | {r.get('transition_kind')} | {r.get('from_level_label')} | {r.get('to_level_label')} | "
+            f"{r.get('directional_q_cm3_s')} | {r.get('electron_density_cm^-3')} | {r.get('matrix_rate_s^-1')} | {r.get('expected_rate_q_ne_s^-1')} | {r.get('matrix_minus_expected_s^-1')} | {r.get('partner_status')} |"
+        )
+    lines += [
+        "",
+        "## Recommended next parity sequence",
+        "",
+        "1. Treat type 68 matrix placement as verified when all rows match `directional_q * ne` and all gain/loss partners close.",
+        "2. Independently re-port the Fortran `calt68`/`ucalc` evaluator if the next mismatch points to the collision-strength calculation rather than matrix placement.",
+        "3. Move to type 53 photoionization/recombination source-sink closure after type 68 matrix parity passes.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"record_csv": str(record_csv), "terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
+
+
 __all__ = [
     "find_solver_product_paths",
     "audit_local_matrix_parity",
@@ -1042,4 +1280,6 @@ __all__ = [
     "write_triplet_rate_term_audit",
     "audit_type71_cascade_rates",
     "write_type71_cascade_rate_audit",
+    "audit_type68_collision_rates",
+    "write_type68_collision_rate_audit",
 ]

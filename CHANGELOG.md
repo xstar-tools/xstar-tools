@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.160 - 2026-05-12
+
+- Added source-code/local handoff parity auditing for XSTAR data type 68 He-like collision terms.
+- New `audit_type68_collision_rates(...)` and `write_type68_collision_rate_audit(...)` helpers in `xstar_atomic.xstar_matrix_parity`.
+- New `examples/65_audit_xstar_type68_collision_rates.py` command-line audit.
+- The audit checks `directional_q_cm3_s * electron_density_cm^-3` against full-global matrix rates, verifies off-diagonal gain / diagonal loss partner placement, and reports triplet-touching coverage.
+- No solver physics or empirical triplet tuning changed.
+
 ## v0.3.159 - 2026-05-12
 
 - Added a source-code-equivalent type-71 superlevel cascade parity audit.
