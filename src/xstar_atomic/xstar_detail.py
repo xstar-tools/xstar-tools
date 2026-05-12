@@ -620,7 +620,7 @@ def _match_matrix_row(detail_row: Mapping[str, Any], atdb_row: Mapping[str, Any]
     return rows[0] if rows else None
 
 
-def _matrix_rows_summary(matrix_rows: Sequence[Mapping[str, Any]], escaped_decay: Optional[float]) -> Dict[str, Any]:
+def _matrix_rows_summary(matrix_rows: Sequence[Mapping[str, Any]], escaped_decay: Optional[float], *, expected_cfrac: object = None) -> Dict[str, Any]:
     """Classify matrix rows against a detail-state ucalc type-50 rate."""
     out: Dict[str, Any] = {
         "n_matrix_matches": len(matrix_rows),
@@ -680,13 +680,31 @@ def _matrix_rows_summary(matrix_rows: Sequence[Mapping[str, Any]], escaped_decay
         or str(r.get("type50_line_escape_fallback_used") or "").strip().lower() in {"true", "1", "yes"}
         for r in matrix_rows
     )
+    expected_cf = _as_float(expected_cfrac)
+    matrix_cfracs = [
+        _first_existing_numeric(r, ["xstar_cfrac_for_type50_escape", "cfrac", "xstar_cfrac"])
+        for r in matrix_rows
+    ]
+    matrix_cfracs = [float(v) for v in matrix_cfracs if v is not None and math.isfinite(float(v))]
+    cfrac_mismatch = bool(
+        expected_cf is not None
+        and matrix_cfracs
+        and any(abs(float(v) - float(expected_cf)) > 1e-8 for v in matrix_cfracs)
+    )
+    if cfrac_mismatch:
+        out["matrix_cfrac_min"] = min(matrix_cfracs)
+        out["matrix_cfrac_max"] = max(matrix_cfracs)
+        out["expected_cfrac"] = float(expected_cf)
     if rel <= 1e-5:
         if (len(matrix_rows) >= 2 and has_gain and has_loss and (not signed or (has_pos and has_neg))):
             out["matrix_residual_classification"] = "matrix_matches_ucalc_rate"
         else:
             out["matrix_residual_classification"] = "matrix_placement_mismatch"
     else:
-        out["matrix_residual_classification"] = "matrix_tau0_missing_scalar_escape_proxy" if uses_scalar_fallback else "rate_evaluator_mismatch"
+        if cfrac_mismatch:
+            out["matrix_residual_classification"] = "matrix_cfrac_mismatch"
+        else:
+            out["matrix_residual_classification"] = "matrix_tau0_missing_scalar_escape_proxy" if uses_scalar_fallback else "rate_evaluator_mismatch"
     return out
 
 def _matrix_rate_from_row(row: Mapping[str, Any] | None) -> Optional[float]:
@@ -800,7 +818,7 @@ def audit_xstar_detail_type50_rates(
             sigma = 0.02655 * float(flin) * float(wav) * 1.0e-8 / float(vtherm)
             photo = sigma * float(bremsa_nb1) * float(vtherm) / 3.0e10 * 1.0 * max(0.0, 1.0 - float(zone.cfrac or 0.0))
         matrix_rate = _matrix_rate_from_row(matrix_row)
-        matrix_summary = _matrix_rows_summary(matrix_matches, escaped_decay)
+        matrix_summary = _matrix_rows_summary(matrix_matches, escaped_decay, expected_cfrac=zone.cfrac)
         matrix_match_status = "matched" if matrix_matches else ("matrix_not_supplied" if not matrix_rows else "no_matching_matrix_term")
         audit_row = {
             "zone_index": zone.zone_index,

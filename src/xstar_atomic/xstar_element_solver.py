@@ -359,6 +359,11 @@ def _annotate_type50_transition_depths_from_reference(
                 row["xstar_reference_depth_match_mode"] = ref.get("match_mode", "")
                 row["xstar_reference_depth_match_delta_wavelength_A"] = ref.get("match_delta_wavelength_A", "")
                 row["xstar_reference_depth_record"] = ref.get("record", "")
+                cfrac = maybe_float(ref.get("cfrac") or ref.get("xstar_cfrac") or ref.get("covering_fraction"))
+                if cfrac is not None and math.isfinite(float(cfrac)):
+                    row["cfrac"] = float(cfrac)
+                    row["xstar_cfrac"] = float(cfrac)
+                    row["xstar_reference_cfrac_source"] = ref.get("source", "same_run_xout_lines1")
         out.append(row)
     return out
 
@@ -4676,6 +4681,7 @@ def _xstar_line_escape_from_row(
     from_state: Optional[Mapping[str, object]] = None,
     to_state: Optional[Mapping[str, object]] = None,
     fallback_escape_factor: object = 1.0,
+    fallback_cfrac: object = None,
 ) -> dict:
     """Evaluate XSTAR-style type-50 line escape or an audited fallback.
 
@@ -4696,8 +4702,10 @@ def _xstar_line_escape_from_row(
         "depth_outward", "line_depth_outward", "xstar_depth_outward",
         "tau2_xstar", "tau0_2_xstar",
     ))
-    cfrac = _first_finite_float(row, ("cfrac", "covering_fraction", "xstar_cfrac"))
+    cfrac = _first_finite_float(row, ("cfrac", "covering_fraction", "xstar_cfrac", "type50_cfrac"))
     if cfrac is None:
+        cfrac = maybe_float(fallback_cfrac)
+    if cfrac is None or not math.isfinite(float(cfrac)):
         cfrac = 0.0
     if tau1 is not None or tau2 is not None:
         ptmp1, ptmp2 = _xstar_calc_emis_ptmp_from_tau(float(tau1 or 0.0), float(tau2 or 0.0), float(cfrac))
@@ -5105,6 +5113,7 @@ def _type50_effective_rates(
                 from_state=from_state,
                 to_state=to_state,
                 fallback_escape_factor=user_escape,
+                fallback_cfrac=type50_cfrac,
             )
             ptmp1 = float(esc["ptmp1"])
             ptmp2 = float(esc["ptmp2"])

@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.155** adds a detail-state `tau0` handoff from `xo01_detal2.fits` into the `xstar-local-state` solver preset. When same-run detail outputs and an ATDB are available, `examples/56_reproduce_xstar_local_outputs.py --solver-preset xstar-local-state` writes a temporary type-50 depth CSV from `xo01_detal2.fits` and the matrix can use `type50_escape_source=xstar-detail-lines` instead of the scalar 0.35 escape fallback. The detail-state type-50 audit now labels old scalar-fallback mismatches as `matrix_tau0_missing_scalar_escape_proxy`. No type-50 photoexcitation is forced; for `cfrac=1` the XSTAR `ucalc.f90` pumping branch remains zero.
+Latest package note: **v0.3.156** adds a detail-state `tau0` handoff from `xo01_detal2.fits` into the `xstar-local-state` solver preset. When same-run detail outputs and an ATDB are available, `examples/56_reproduce_xstar_local_outputs.py --solver-preset xstar-local-state` writes a temporary type-50 depth CSV from `xo01_detal2.fits` and the matrix can use `type50_escape_source=xstar-detail-lines` instead of the scalar 0.35 escape fallback. The detail-state type-50 audit now labels old scalar-fallback mismatches as `matrix_tau0_missing_scalar_escape_proxy`. No type-50 photoexcitation is forced; for `cfrac=1` the XSTAR `ucalc.f90` pumping branch remains zero.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`

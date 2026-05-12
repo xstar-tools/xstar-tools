@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.156 - 2026-05-12
+
+- Propagate same-run detail-output covering fraction (`cfrac`) from `xo01_detal2.fits` depth rows into type-50 matrix assembly.
+- Add a fallback `type50_cfrac` path for XSTAR line-escape evaluation when a transition row carries tau0 but not cfrac.
+- Refine the detail-state type-50 audit to classify `matrix_cfrac_mismatch` separately from generic rate-evaluator mismatches.
+- No intentional change to source terms or non-type-50 solver physics.
+
 ## v0.3.155 - 2026-05-12
 
 - Added detail-state type-50 tau handoff from `xo01_detal2.fits` into the `xstar-local-state` solver preset when same-run detail outputs and an ATDB are available.
