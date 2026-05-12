@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.152"
+__version__ = "0.3.153"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -49,6 +49,12 @@ from .xstar_detail import (
     read_xstar_detail_run_state,
     summarize_xstar_detail_state,
     write_xstar_detail_state,
+    pescl_xstar,
+    ptmp_from_tau_xstar,
+    xstar_nbinc_index,
+    type50_vtherm_xstar,
+    audit_xstar_detail_type50_rates,
+    write_xstar_detail_type50_rate_audit,
 )
 from .workflow import (
     TripletResult,

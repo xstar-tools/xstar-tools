@@ -1177,3 +1177,24 @@ PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
 ```
 
 The current skeleton is input-seeded, not a full XSTAR calculation.  It explicitly carries `epi(:)`, `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc(1:2,continuum)`, `cfrac`, `vturbi`, local `T/ne`, ion fractions, and level populations so that future Python and C++ backends can populate the same arrays used by the XSTAR Fortran path.
+
+## XSTAR detail-state type-50 rate audit
+
+For source-code-parity debugging, `examples/61_audit_xstar_detail_type50_rates.py` evaluates type-50 line rates from the XSTAR detail state rather than from final `xout_*` summary products. It reads `xo01_detal2.fits` for line `tau0`, `xo01_detal4.fits` for `epi(:)` and reconstructed `bremsa(:)`, matches selected He-like f/i/r lines to ATDB type-50 records when available, and computes the XSTAR `calc_hmc_ion.f90`/`ucalc.f90` terms:
+
+```text
+ptmp1 = pescl(tau_in) * (1 - cfrac)
+ptmp2 = pescl(tau_out) * (1 - cfrac) + 2 * pescl(tau_in + tau_out) * cfrac
+escaped_decay = A * (ptmp1 + ptmp2)
+photoexcitation = sigma * bremsa(nb1) * vtherm / 3e10 * flinabs(ptmp1) * (1 - cfrac)
+```
+
+```bash
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+```
+
+If a solver matrix-term CSV is available, pass it with `--matrix-terms-csv` to add residual columns between the matrix term and the detail-state `ucalc` rate.

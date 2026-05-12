@@ -190,3 +190,11 @@ Data download and path helpers
    :members:
    :undoc-members:
    :show-inheritance:
+
+XSTAR detail-state readers and type-50 audits
+---------------------------------------------
+
+.. automodule:: xstar_atomic.xstar_detail
+   :members:
+   :undoc-members:
+   :show-inheritance:

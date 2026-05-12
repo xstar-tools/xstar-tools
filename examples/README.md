@@ -566,3 +566,27 @@ PYTHONPATH=src python examples/60_populate_xstar_live_state_from_detail.py \
   --out-dir xstar_detail_live_state_o7 \
   --print-summary
 ```
+
+### `61_audit_xstar_detail_type50_rates.py`
+
+Audit XSTAR detail-state type-50 rates directly from `xo01_detal2.fits` and `xo01_detal4.fits`.  This matches O VII He-like f/i/r line rows to ATDB type-50 records when `atdb.fits` is available, computes `ptmp1`, `ptmp2`, escaped decay, and photoexcitation with the XSTAR `calc_hmc_ion.f90`/`ucalc.f90` formulas, and writes CSV/JSON/Markdown rate diagnostics.
+
+```bash
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+```
+
+With an explicit ATDB and optional matrix-term CSV:
+
+```bash
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --atdb "$XSTAR_ATDB" \
+  --matrix-terms-csv xstar_like_element_solver_full_global_matrix_terms.csv \
+  --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+```

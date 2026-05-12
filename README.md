@@ -155,3 +155,17 @@ paths = xa.write_xstar_detail_state(state, "xstar_detail_live_state_o7")
 ```
 
 This maps `epi(:)`, reconstructed `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc`, `cfrac`, `vturbi`, local `T/ne`, ion fractions, and level populations into one Python state object.
+
+### XSTAR detail-state type-50 rate audit
+
+For source-code parity work, use example 61 to audit type-50 rates directly from XSTAR detail outputs:
+
+```bash
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+```
+
+This reads `xo01_detal2.fits` and `xo01_detal4.fits`, computes `ptmp1`, `ptmp2`, escaped decay, and photoexcitation using the XSTAR `calc_hmc_ion.f90`/`ucalc.f90` type-50 formula, and writes CSV/JSON/Markdown audit products.

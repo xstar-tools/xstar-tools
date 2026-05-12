@@ -1191,4 +1191,26 @@ PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
 The current skeleton is input-seeded, not a full XSTAR calculation.  It explicitly carries \path|epi(:)|, \path|bremsa(:)|, \path|bremsint(:)|, \path|tau0(1:2,line)|, \path|tauc/dpthc(1:2,continuum)|, \path|cfrac|, \path|vturbi|, local \path|T/ne|, ion fractions, and level populations so that future Python and C++ backends can populate the same arrays used by the XSTAR Fortran path.
 
 
+
+\section{XSTAR detail-state type-50 rate audit}
+
+For source-code-parity debugging, \path|examples/61_audit_xstar_detail_type50_rates.py| evaluates type-50 line rates from the XSTAR detail state rather than from final \path|xout_*| summary products. It reads \path|xo01_detal2.fits| for line \path|tau0|, \path|xo01_detal4.fits| for \path|epi(:)| and reconstructed \path|bremsa(:)|, matches selected He-like f/i/r lines to ATDB type-50 records when available, and computes the XSTAR \path|calc_hmc_ion.f90|/\path|ucalc.f90| terms.
+
+\begin{lstlisting}[language=bash]
+ptmp1 = pescl(tau_in) * (1 - cfrac)
+ptmp2 = pescl(tau_out) * (1 - cfrac) + 2 * pescl(tau_in + tau_out) * cfrac
+escaped_decay = A * (ptmp1 + ptmp2)
+photoexcitation = sigma * bremsa(nb1) * vtherm / 3e10 * flinabs(ptmp1) * (1 - cfrac)
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash]
+PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_detail_type50_rate_audit_o7 \
+  --print-summary
+\end{lstlisting}
+
+If a solver matrix-term CSV is available, pass it with \path|--matrix-terms-csv| to add residual columns between the matrix term and the detail-state \path|ucalc| rate.
+
 \end{document}

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.153 - 2026-05-12
+
+- Added `examples/61_audit_xstar_detail_type50_rates.py`, a row-by-row XSTAR detail-state type-50 audit for He-like triplet lines.
+- Added public detail-audit helpers in `xstar_atomic.xstar_detail` for `pescl`, `ptmp1/ptmp2`, XSTAR-style `nbinc`, type-50 `vtherm`, and source-code type-50 rate rows.
+- The audit reads `xo01_detal2.fits`/`xo01_detal4.fits`, matches selected O VII f/i/r line rows to ATDB type-50 records when available, computes escaped decay and photoexcitation using `calc_hmc_ion.f90` + `ucalc.f90` formulas, and writes CSV/JSON/Markdown products.
+- Optional matrix-term CSV matching adds residual columns without changing solver physics.
+
 ## v0.3.152 - 2026-05-12
 
 - Fixed XSTAR detail-state population when `xout_abund1.fits` contains a trailing all-zero sentinel ABUNDANCES row.
