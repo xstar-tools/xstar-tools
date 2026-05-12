@@ -794,10 +794,252 @@ def write_triplet_rate_term_audit(result: Mapping[str, Any], out_dir: str | Path
     return {"family_csv": str(family_csv), "ranked_terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
 
 
+
+def audit_type71_cascade_rates(
+    *,
+    matrix_terms_csv: str | Path,
+    normalized_solve_csv: str | Path | None = None,
+    ion: str | None = None,
+    triplet_only: bool = False,
+    max_rows: int | None = 500,
+) -> Dict[str, Any]:
+    """Audit source-code and matrix parity for type-71 superlevel cascades.
+
+    XSTAR's ``ucalc.f90`` type-71 branch calls ``calt71.f90`` to interpolate
+    the superlevel-to-spectroscopic radiative probability ``aij``.  The branch
+    then uses that value as the escaped cascade rate (``ans2`` after the final
+    assignment used by matrix assembly).  Preserved solver matrix terms already
+    contain the interpolated ``type71_calt71_log10_aij`` value, so this audit
+    checks the concrete handoff:
+
+    ``calt71 log10(aij) -> evaluator rate -> off-diagonal gain and diagonal loss``.
+
+    This is a parity audit only.  It does not change the solver and does not
+    claim population parity against XSTAR by itself.
+    """
+    matrix_path = Path(matrix_terms_csv)
+    matrix_rows = _read_csv_rows(matrix_path)
+    solve_rows = _read_csv_rows(normalized_solve_csv)
+    triplet = _triplet_levels_from_solve_rows(solve_rows)
+    lookup = _make_term_lookup(matrix_rows)
+
+    out_rows: List[Dict[str, Any]] = []
+    record_pairs: Dict[str, Dict[str, Any]] = {}
+    for row in matrix_rows:
+        fkey, data_type, source_label = _rate_family(row)
+        if data_type != "71":
+            continue
+        row_g = _as_int(row.get("matrix_row_global_index"))
+        col_g = _as_int(row.get("matrix_col_global_index"))
+        signed = _signed_value(row)
+        matrix_rate = _rate_value(row)
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        spectro_g = _as_int(row.get("spectroscopic_global_index"))
+        super_g = _as_int(row.get("superlevel_global_index"))
+        destination_triplet_component = str(row.get("destination_triplet_component") or "").strip().lower()
+        row_triplet_component = str(triplet.get(row_g or -999, {}).get("component") or "")
+        is_triplet_destination = bool(destination_triplet_component in {"f", "i", "r"} or spectro_g in triplet)
+        is_triplet_row = bool(row_g in triplet)
+        if triplet_only and not (is_triplet_destination or is_triplet_row):
+            continue
+
+        log_aij = _as_float(row.get("type71_calt71_log10_aij"))
+        expected = 10.0 ** log_aij if log_aij is not None else None
+        residual = ""
+        rel = ""
+        classification = "missing_calt71_log10_aij_or_matrix_rate"
+        if expected is not None and matrix_rate is not None:
+            residual_val = float(matrix_rate) - float(expected)
+            rel_val = residual_val / max(abs(float(expected)), 1.0e-300)
+            residual = residual_val
+            rel = rel_val
+            tol = max(1.0e-25, 1.0e-10 * abs(float(expected)))
+            classification = "matrix_matches_calt71_aij" if abs(residual_val) <= tol else "matrix_rate_mismatch_vs_calt71_aij"
+
+        direction = "row_gain" if signed is not None and signed > 0 else "row_loss" if signed is not None and signed < 0 else "row_source_or_unknown"
+        partner = _partner_status(row, lookup)
+        role = str(row.get("matrix_role") or "")
+        pair = record_pairs.setdefault(rec, {
+            "record": rec,
+            "n_terms": 0,
+            "n_gain_terms": 0,
+            "n_loss_terms": 0,
+            "n_matrix_matches_calt71_aij": 0,
+            "n_partner_matches": 0,
+            "abs_gain_sum_s^-1": 0.0,
+            "abs_loss_sum_s^-1": 0.0,
+            "largest_abs_rate_s^-1": 0.0,
+            "spectroscopic_global_index": spectro_g if spectro_g is not None else "",
+            "superlevel_global_index": super_g if super_g is not None else "",
+            "spectroscopic_level_label": row.get("spectroscopic_level_label") or "",
+            "superlevel_level_label": row.get("superlevel_level_label") or "",
+            "destination_triplet_component": destination_triplet_component,
+            "is_triplet_destination": is_triplet_destination,
+        })
+        pair["n_terms"] += 1
+        if direction == "row_gain":
+            pair["n_gain_terms"] += 1
+            pair["abs_gain_sum_s^-1"] += abs(float(signed or matrix_rate or 0.0))
+        elif direction == "row_loss":
+            pair["n_loss_terms"] += 1
+            pair["abs_loss_sum_s^-1"] += abs(float(signed or matrix_rate or 0.0))
+        if classification == "matrix_matches_calt71_aij":
+            pair["n_matrix_matches_calt71_aij"] += 1
+        if partner.get("partner_status") == "matrix_gain_loss_partner_matches":
+            pair["n_partner_matches"] += 1
+        pair["largest_abs_rate_s^-1"] = max(float(pair["largest_abs_rate_s^-1"]), abs(float(signed if signed is not None else matrix_rate or 0.0)))
+
+        out = {
+            "ion": ion or "",
+            "record": rec,
+            "data_type": data_type,
+            "source_label": source_label,
+            "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+            "fortran_ucalc_branch": "ucalc.f90 type 71: call calt71; ans2=aij*(ptmp1+ptmp2); ans1=0 after final assignment",
+            "fortran_calt71_formula": "aij=10**interpolated_log10_rate over log10(ne),log10(T); constant records use rdat(3) directly/log10 converted when >30",
+            "matrix_row_global_index": row_g if row_g is not None else "",
+            "matrix_col_global_index": col_g if col_g is not None else "",
+            "matrix_role": role,
+            "direction": direction,
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "matrix_rate_s^-1": matrix_rate if matrix_rate is not None else "",
+            "calt71_log10_aij": log_aij if log_aij is not None else "",
+            "calt71_aij_from_log10_s^-1": expected if expected is not None else "",
+            "matrix_minus_calt71_aij_s^-1": residual,
+            "relative_residual_vs_calt71_aij": rel,
+            "rate_classification": classification,
+            "partner_status": partner.get("partner_status"),
+            "partner_count": partner.get("partner_count"),
+            "partner_residual_s^-1": partner.get("partner_residual_s^-1"),
+            "type71_calt71_status": row.get("type71_calt71_status") or "",
+            "type71_calt71_wavelength_A": row.get("type71_calt71_wavelength_A") or "",
+            "type71_calt71_nden": row.get("type71_calt71_nden") or "",
+            "type71_calt71_ntem": row.get("type71_calt71_ntem") or "",
+            "spectroscopic_global_index": spectro_g if spectro_g is not None else "",
+            "superlevel_global_index": super_g if super_g is not None else "",
+            "spectroscopic_level_label": row.get("spectroscopic_level_label") or "",
+            "superlevel_level_label": row.get("superlevel_level_label") or "",
+            "destination_triplet_component": destination_triplet_component,
+            "is_triplet_destination": is_triplet_destination,
+            "is_triplet_population_row": is_triplet_row,
+            "feeds_forbidden_upper": row.get("feeds_forbidden_upper") or "",
+            "feeds_intercombination_upper": row.get("feeds_intercombination_upper") or "",
+            "feeds_resonance_upper": row.get("feeds_resonance_upper") or "",
+            "notes": row.get("notes") or "",
+        }
+        out_rows.append(out)
+
+    out_rows.sort(key=lambda r: (-abs(float(r.get("signed_rate_s^-1") or r.get("matrix_rate_s^-1") or 0.0)), str(r.get("record"))))
+    if max_rows is not None and max_rows > 0:
+        selected_rows = out_rows[: int(max_rows)]
+    else:
+        selected_rows = out_rows
+
+    record_rows = list(record_pairs.values())
+    for pair in record_rows:
+        gain = float(pair.get("abs_gain_sum_s^-1") or 0.0)
+        loss = float(pair.get("abs_loss_sum_s^-1") or 0.0)
+        pair["gain_loss_abs_residual_s^-1"] = gain - loss
+        pair["record_pair_classification"] = (
+            "gain_loss_pair_matches"
+            if int(pair.get("n_gain_terms") or 0) >= 1
+            and int(pair.get("n_loss_terms") or 0) >= 1
+            and abs(gain - loss) <= max(1.0e-25, 1.0e-10 * max(gain, loss, 1.0))
+            else "gain_loss_pair_missing_or_mismatch"
+        )
+    record_rows.sort(key=lambda r: -float(r.get("largest_abs_rate_s^-1") or 0.0))
+
+    n_match = sum(1 for r in out_rows if r.get("rate_classification") == "matrix_matches_calt71_aij")
+    n_partner_match = sum(1 for r in out_rows if r.get("partner_status") == "matrix_gain_loss_partner_matches")
+    n_pair_match = sum(1 for r in record_rows if r.get("record_pair_classification") == "gain_loss_pair_matches")
+    overall = {
+        "ion": ion or "",
+        "matrix_terms_csv": str(matrix_path),
+        "normalized_solve_csv": str(normalized_solve_csv or ""),
+        "n_type71_matrix_terms": len(out_rows),
+        "n_type71_matrix_terms_written": len(selected_rows),
+        "n_type71_records": len(record_rows),
+        "n_type71_matrix_matches_calt71_aij": n_match,
+        "n_type71_partner_matches": n_partner_match,
+        "n_type71_gain_loss_record_pairs_matching": n_pair_match,
+        "n_type71_triplet_destination_terms": sum(1 for r in out_rows if r.get("is_triplet_destination")),
+        "n_type71_triplet_population_row_terms": sum(1 for r in out_rows if r.get("is_triplet_population_row")),
+        "triplet_only": bool(triplet_only),
+        "audit_scope": "source-code-equivalent calt71 -> ucalc type-71 -> full-global matrix handoff; no solver physics changed",
+        "source_code_reference": "calt71.f90 interpolates log10(aij); ucalc.f90 type 71 sets ans2 to the escaped superlevel cascade rate and ans1=0 for universal matrix assignment",
+        "recommended_next_step": "if type-71 passes, move the same row-level parity pattern to type-68 and type-53 families that touch the triplet rows",
+    }
+    return {"overall": overall, "record_rows": record_rows, "term_rows": selected_rows}
+
+
+def write_type71_cascade_rate_audit(result: Mapping[str, Any], out_dir: str | Path, *, prefix: str = "xstar_type71_cascade_rate_audit") -> Dict[str, str]:
+    """Write type-71 superlevel cascade parity audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    record_rows = list(result.get("record_rows") or [])
+    term_rows = list(result.get("term_rows") or [])
+    overall = dict(result.get("overall") or {})
+    record_csv = out / f"{prefix}_record_summary.csv"
+    term_csv = out / f"{prefix}_terms.csv"
+    json_path = out / f"{prefix}.json"
+    md_path = out / f"{prefix}.md"
+    _write_csv(record_csv, record_rows)
+    _write_csv(term_csv, term_rows)
+    json_path.write_text(json.dumps({"overall": overall, "record_rows": record_rows, "term_rows": term_rows}, indent=2, sort_keys=True), encoding="utf-8")
+    lines = [
+        "# XSTAR type-71 superlevel cascade rate audit",
+        "",
+        f"Ion: `{overall.get('ion','')}`",
+        "",
+        f"Type-71 matrix terms: `{overall.get('n_type71_matrix_terms')}`",
+        f"Type-71 records: `{overall.get('n_type71_records')}`",
+        f"Terms matching `calt71` Aij: `{overall.get('n_type71_matrix_matches_calt71_aij')}`",
+        f"Gain/loss record pairs matching: `{overall.get('n_type71_gain_loss_record_pairs_matching')}`",
+        f"Triplet-destination terms: `{overall.get('n_type71_triplet_destination_terms')}`",
+        f"Triplet population-row terms: `{overall.get('n_type71_triplet_population_row_terms')}`",
+        "",
+        "This audit checks the source-code handoff for XSTAR data type 71: `calt71.f90` interpolates the superlevel-to-spectroscopic radiative probability, then `ucalc.f90` type 71 supplies that rate to matrix assembly. It is a local parity audit, not an empirical triplet-ratio adjustment.",
+        "",
+        "## Record-level gain/loss summary",
+        "",
+        "| record | destination | superlevel | component | gain terms | loss terms | largest rate | gain-loss residual | classification |",
+        "|---:|---|---|---|---:|---:|---:|---:|---|",
+    ]
+    for r in record_rows[:100]:
+        lines.append(
+            f"| {r.get('record')} | {r.get('spectroscopic_level_label')} | {r.get('superlevel_level_label')} | {r.get('destination_triplet_component')} | "
+            f"{r.get('n_gain_terms')} | {r.get('n_loss_terms')} | {r.get('largest_abs_rate_s^-1')} | {r.get('gain_loss_abs_residual_s^-1')} | {r.get('record_pair_classification')} |"
+        )
+    lines += [
+        "",
+        "## Largest type-71 matrix terms",
+        "",
+        "| record | direction | role | destination | superlevel | matrix rate | calt71 Aij | residual | partner status |",
+        "|---:|---|---|---|---|---:|---:|---:|---|",
+    ]
+    for r in term_rows[:120]:
+        lines.append(
+            f"| {r.get('record')} | {r.get('direction')} | {r.get('matrix_role')} | {r.get('spectroscopic_level_label')} | {r.get('superlevel_level_label')} | "
+            f"{r.get('matrix_rate_s^-1')} | {r.get('calt71_aij_from_log10_s^-1')} | {r.get('matrix_minus_calt71_aij_s^-1')} | {r.get('partner_status')} |"
+        )
+    lines += [
+        "",
+        "## Recommended next parity sequence",
+        "",
+        "1. Treat type 71 as verified when all rows match `calt71` Aij and all record-level gain/loss pairs close.",
+        "2. Apply the same source-code handoff audit to type 68 collision redistribution and type 53 photoionization/recombination terms.",
+        "3. After dominant non-type-50 local terms pass, compare solved level populations directly against `xo01_detail.fits`.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"record_csv": str(record_csv), "terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
+
+
 __all__ = [
     "find_solver_product_paths",
     "audit_local_matrix_parity",
     "write_local_matrix_parity_audit",
     "audit_triplet_rate_terms",
     "write_triplet_rate_term_audit",
+    "audit_type71_cascade_rates",
+    "write_type71_cascade_rate_audit",
 ]
