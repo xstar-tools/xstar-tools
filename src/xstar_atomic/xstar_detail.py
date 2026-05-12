@@ -675,13 +675,18 @@ def _matrix_rows_summary(matrix_rows: Sequence[Mapping[str, Any]], escaped_decay
     has_loss = any(("loss" in r.lower() or "diagonal" in r.lower()) for r in roles)
     has_pos = any(v > 0 for v in signed) if signed else False
     has_neg = any(v < 0 for v in signed) if signed else False
+    uses_scalar_fallback = any(
+        "scalar_proxy_fallback" in str(r.get("ucalc_context_status") or "")
+        or str(r.get("type50_line_escape_fallback_used") or "").strip().lower() in {"true", "1", "yes"}
+        for r in matrix_rows
+    )
     if rel <= 1e-5:
         if (len(matrix_rows) >= 2 and has_gain and has_loss and (not signed or (has_pos and has_neg))):
             out["matrix_residual_classification"] = "matrix_matches_ucalc_rate"
         else:
             out["matrix_residual_classification"] = "matrix_placement_mismatch"
     else:
-        out["matrix_residual_classification"] = "rate_evaluator_mismatch"
+        out["matrix_residual_classification"] = "matrix_tau0_missing_scalar_escape_proxy" if uses_scalar_fallback else "rate_evaluator_mismatch"
     return out
 
 def _matrix_rate_from_row(row: Mapping[str, Any] | None) -> Optional[float]:
@@ -989,3 +994,101 @@ def write_xstar_detail_state(
         json_path.write_text(json.dumps(state.as_dict(), indent=2, sort_keys=True), encoding="utf-8")
         paths["json"] = str(json_path)
     return paths
+
+
+
+def build_detail_type50_depth_rows_for_solver(
+    run_dir: str | Path,
+    *,
+    ion: str = "O VII",
+    atdb: str | Path | None = None,
+    zone_index: int | str = "last",
+    tolerance_A: float = 0.03,
+) -> List[Dict[str, Any]]:
+    """Return detail-state line-depth rows usable by the matrix solver.
+
+    XSTAR's population matrix uses the live ``tau0(1:2,line)`` arrays that are
+    printed, for ``lprint=1`` runs, in ``xo01_detal2.fits``.  This helper maps
+    those detail rows onto ATDB type-50 lower/upper level indices so
+    ``solve_element_reference`` can annotate type-50 transition rows with
+    source-code-equivalent ``tau_in``/``tau_out`` values instead of falling back
+    to a scalar escape factor.
+
+    The returned rows intentionally mimic the converted ``xout_lines1`` CSV
+    fields consumed by ``_annotate_type50_transition_depths_from_reference``:
+    ``ion_stage``, ``lower_level``, ``upper_level``, ``wavelength_A``,
+    ``depth_inward`` and ``depth_outward``.  Extra detail provenance columns are
+    included for auditing.
+    """
+    state = read_xstar_detail_run_state(run_dir)
+    if not state.zones:
+        return []
+    if isinstance(zone_index, str) and zone_index.lower() == "last":
+        zone = state.zones[-1]
+    else:
+        zi = int(zone_index)
+        if zi < 1 or zi > len(state.zones):
+            raise ValueError(f"zone_index must be 1..{len(state.zones)} or 'last'")
+        zone = state.zones[zi - 1]
+
+    ion_key = _normalise_ion_key(ion)
+    detail_rows = [
+        r for r in (getattr(zone.lines, "line_records", []) or [])
+        if _normalise_ion_key(r.get("ion")) == ion_key and _as_float(r.get("wavelength")) is not None
+    ]
+    if not detail_rows:
+        return []
+
+    atdb_lines: List[Mapping[str, Any]] = []
+    if atdb is not None and str(atdb).strip():
+        try:
+            from .api import XSTARAtomic
+            db = XSTARAtomic(str(atdb))
+            waves = [float(_as_float(r.get("wavelength"))) for r in detail_rows if _as_float(r.get("wavelength")) is not None]
+            if waves:
+                atdb_lines = db.lines(ion, wavelength=(min(waves) - tolerance_A, max(waves) + tolerance_A), data_type=50)
+            else:
+                atdb_lines = db.lines(ion, data_type=50)
+        except Exception:
+            atdb_lines = []
+
+    out: List[Dict[str, Any]] = []
+    for detail in detail_rows:
+        wav = _as_float(detail.get("wavelength"))
+        atdb_row = _match_atdb_line(detail, atdb_lines, tolerance_A) if atdb_lines else None
+        lower = atdb_row.get("lower_level") if atdb_row else None
+        upper = atdb_row.get("upper_level") if atdb_row else None
+        # Without ATDB indices the matrix-level matcher cannot safely map the
+        # detail row to a decay transition.  Keep unmatched rows out of the
+        # solver-depth CSV; they remain visible in the standalone audit.
+        if lower is None or upper is None:
+            continue
+        record = atdb_row.get("record") or atdb_row.get("record_id") if atdb_row else None
+        row = {
+            "record": record,
+            "ion": ion,
+            "ion_stage": atdb_row.get("ion_stage") if atdb_row else None,
+            "ion_roman": atdb_row.get("ion_roman") if atdb_row else None,
+            "lower_level": lower,
+            "upper_level": upper,
+            "lower_label": atdb_row.get("lower_label") if atdb_row else detail.get("lower_level"),
+            "upper_label": atdb_row.get("upper_label") if atdb_row else detail.get("upper_level"),
+            "wavelength_A": wav,
+            "depth_inward": detail.get("tau_in"),
+            "depth_outward": detail.get("tau_out"),
+            "tau_in": detail.get("tau_in"),
+            "tau_out": detail.get("tau_out"),
+            "cfrac": zone.cfrac,
+            "temperature_K": zone.temperature,
+            "electron_density_cm^-3": zone.electron_density,
+            "detail_index": detail.get("index"),
+            "detail_lower_level_label": detail.get("lower_level"),
+            "detail_upper_level_label": detail.get("upper_level"),
+            "detail_opacity": detail.get("opacity"),
+            "detail_emis_inward": detail.get("emis_inward"),
+            "detail_emis_outward": detail.get("emis_outward"),
+            "source": "xo01_detal2.fits:last_zone_live_tau0",
+            "match_mode": "detail_state_atdb_wavelength_label",
+        }
+        out.append(row)
+    return out

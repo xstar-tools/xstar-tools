@@ -355,7 +355,7 @@ def _annotate_type50_transition_depths_from_reference(
                 if dout is not None:
                     row["depth_outward"] = float(dout)
                     row["xstar_depth_outward"] = float(dout)
-                row["xstar_reference_depth_source"] = "same_run_xout_lines1"
+                row["xstar_reference_depth_source"] = ref.get("source", "same_run_xout_lines1")
                 row["xstar_reference_depth_match_mode"] = ref.get("match_mode", "")
                 row["xstar_reference_depth_match_delta_wavelength_A"] = ref.get("match_delta_wavelength_A", "")
                 row["xstar_reference_depth_record"] = ref.get("record", "")
@@ -13074,6 +13074,7 @@ def solve_element_reference(
     xstar_radiation_spectrum_csv: object = None,
     xstar_radiation_column: object = "transmitted",
     xstar_radiation_radius_cm: object = None,
+    xstar_type50_depth_lines_csv: object = None,
     full_global_linear_solver: str = "xstar-lucy",
     full_global_rank_deficient_action: str = "svd",
     full_global_negative_population_action: str = "keep",
@@ -13301,7 +13302,12 @@ def solve_element_reference(
     # post-transfer output diagnostics and are not a safe substitute for that
     # internal matrix tau0 state.  Only enable this old experimental path with
     # an explicitly unsafe source name.
-    reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(xstar_reference_lines_csv) if type50_escape_source_norm in {"unsafe-xout-lines-depths", "unsafe-reference-lines-for-matrix"} else []
+    reference_depth_csv_for_matrix = None
+    if type50_escape_source_norm in {"xstar-detail-lines", "detail-lines", "xo01-detal2", "xo01-detail-tau0"}:
+        reference_depth_csv_for_matrix = xstar_type50_depth_lines_csv
+    elif type50_escape_source_norm in {"unsafe-xout-lines-depths", "unsafe-reference-lines-for-matrix"}:
+        reference_depth_csv_for_matrix = xstar_reference_lines_csv
+    reference_depth_rows_for_matrix = _read_xstar_reference_line_csv(reference_depth_csv_for_matrix) if reference_depth_csv_for_matrix else []
     matrix_transitions = _annotate_type50_transition_depths_from_reference(transitions, reference_depth_rows_for_matrix) if reference_depth_rows_for_matrix else transitions
     xstar_radiation_rows_for_matrix = _read_xstar_radiation_spectrum_csv(xstar_radiation_spectrum_csv)
     xstar_radiation_epi_grid, xstar_radiation_bremsa_grid, xstar_radiation_grid_status = _build_xstar_output_bremsa_grid(
@@ -13794,6 +13800,8 @@ def solve_element_reference(
             "type50_bound_bound_treatment": type50_bound_bound_treatment_norm,
             "type50_escape_factor": type50_escape_factor,
             "type50_escape_source": type50_escape_source_norm,
+            "xstar_type50_depth_lines_csv": str(xstar_type50_depth_lines_csv or ""),
+            "n_xstar_type50_depth_rows_for_matrix": len(reference_depth_rows_for_matrix),
             "n_type50_reference_depth_rows_for_matrix": len(reference_depth_rows_for_matrix),
             "type50_photoexcitation_scale": type50_photoexcitation_scale,
             "n_type50_ucalc_rate_audit_rows": len(type50_ucalc_rate_audit_rows),

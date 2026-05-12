@@ -27,6 +27,7 @@ import tempfile
 from .context import XSTARContext, context_from_xstar_run
 from .workflow import TripletResult, calc_triplet, solve_populations
 from .xstar_outputs import load_xstar_lines, read_xout_parameters, read_xout_spectra, write_csv
+from .data import resolve_atdb_path
 
 DEFAULT_HELIKE_WINDOWS_A: dict[str, tuple[float, float]] = {
     "C V": (40.0, 42.0),
@@ -160,10 +161,14 @@ def find_xstar_run_files(
     if xout_cont_filename:
         cont_candidates.append(run_path / xout_cont_filename)
     cont_candidates.extend([run_path / "xout_cont1.fits", run_path / "xout_spect1.fits"])
+    detal2_candidates = [run_path / "xo01_detal2.fits"]
+    detal4_candidates = [run_path / "xo01_detal4.fits"]
     abund = next((p for p in abund_candidates if p.exists()), None)
     lines = next((p for p in line_candidates if p.exists()), None)
     cont = next((p for p in cont_candidates if p.exists()), None)
-    return {"xout_abund": abund, "xout_lines": lines, "xout_cont": cont}
+    detal2 = next((p for p in detal2_candidates if p.exists()), None)
+    detal4 = next((p for p in detal4_candidates if p.exists()), None)
+    return {"xout_abund": abund, "xout_lines": lines, "xout_cont": cont, "xo01_detal2": detal2, "xo01_detal4": detal4}
 
 
 def _as_float(value: Any) -> float | None:
@@ -404,6 +409,8 @@ class XSTARLocalTarget:
     xout_abund_path: str | None = None
     xout_lines_path: str | None = None
     xout_cont_path: str | None = None
+    xo01_detal2_path: str | None = None
+    xo01_detal4_path: str | None = None
     xstar_cfrac: float | None = None
     xstar_cfrac_source: str = ""
     wavelength_window_A: tuple[float, float] | None = None
@@ -418,6 +425,8 @@ class XSTARLocalTarget:
             "ion": self.ion,
             "run_dir": self.run_dir,
             "xout_abund_path": self.xout_abund_path,
+            "xo01_detal2_path": self.xo01_detal2_path,
+            "xo01_detal4_path": self.xo01_detal4_path,
             "selection": self.context.metadata.get("selection"),
             "zone_index": p.zone_index,
             "temperature_K": p.temperature_K,
@@ -466,6 +475,8 @@ class XSTARLocalTarget:
             "xout_abund_path": self.xout_abund_path,
             "xout_lines_path": self.xout_lines_path,
             "xout_cont_path": self.xout_cont_path,
+            "xo01_detal2_path": self.xo01_detal2_path,
+            "xo01_detal4_path": self.xo01_detal4_path,
             "xstar_cfrac": self.xstar_cfrac,
             "xstar_cfrac_source": self.xstar_cfrac_source,
             "wavelength_window_A": list(self.wavelength_window_A) if self.wavelength_window_A else None,
@@ -731,6 +742,8 @@ def build_xstar_local_target(
     abund_path = files["xout_abund"]
     lines_path = files["xout_lines"]
     cont_path = files.get("xout_cont")
+    detal2_path = files.get("xo01_detal2")
+    detal4_path = files.get("xo01_detal4")
     if abund_path is None:
         raise FileNotFoundError(f"Could not find xout_abund1.fits in {run_path}")
     if lines_path is None:
@@ -762,6 +775,8 @@ def build_xstar_local_target(
         xout_abund_path=str(abund_path),
         xout_lines_path=str(lines_path),
         xout_cont_path=str(cont_path) if cont_path is not None else None,
+        xo01_detal2_path=str(detal2_path) if detal2_path is not None else None,
+        xo01_detal4_path=str(detal4_path) if detal4_path is not None else None,
         wavelength_window_A=window,
         value_column=value_column,
         status="ok" if triplet.status == "ok" else "target_incomplete",
@@ -778,6 +793,8 @@ def build_xstar_local_target(
         xout_abund_path=str(abund_path),
         xout_lines_path=str(lines_path),
         xout_cont_path=str(cont_path) if cont_path is not None else None,
+        xo01_detal2_path=str(detal2_path) if detal2_path is not None else None,
+        xo01_detal4_path=str(detal4_path) if detal4_path is not None else None,
         xstar_cfrac=cfrac_val,
         xstar_cfrac_source=cfrac_source,
         wavelength_window_A=window,
@@ -824,6 +841,43 @@ def _write_solver_reference_lines_csv(target: "XSTARLocalTarget") -> Path | None
     write_csv(rows, path)
     return path
 
+
+
+
+def _write_solver_detail_type50_depth_csv(target: "XSTARLocalTarget", atdb_path: str | Path | None) -> Path | None:
+    """Write same-run ``xo01_detal2`` type-50 tau rows to a temporary CSV.
+
+    The full-global solver can use this CSV to annotate type-50 matrix rows with
+    XSTAR detail-state ``tau0(1:2,line)`` values.  This is safer than using
+    final ``xout_lines1`` depths and avoids the scalar 0.35 escape fallback for
+    matched detail-state transitions.
+    """
+    if not target.xo01_detal2_path:
+        return None
+    try:
+        from .xstar_detail import build_detail_type50_depth_rows_for_solver
+        rows = build_detail_type50_depth_rows_for_solver(
+            target.run_dir,
+            ion=target.ion or "",
+            atdb=atdb_path,
+            zone_index="last",
+        )
+    except Exception:
+        rows = []
+    if not rows:
+        return None
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix="_xstar_detail_type50_depths.csv",
+        prefix="xstar_atomic_",
+        delete=False,
+        newline="",
+        encoding="utf-8",
+    )
+    path = Path(handle.name)
+    handle.close()
+    write_csv(rows, path)
+    return path
 
 def _write_solver_radiation_spectrum_csv(target: "XSTARLocalTarget") -> Path | None:
     """Write the same-run XSTAR continuum spectrum to a temporary CSV."""
@@ -982,7 +1036,8 @@ def xstar_local_state_solver_kwargs(target: XSTARLocalTarget | None = None) -> d
         "full_global_topology": "xstar-continuum-alias-superlevels",
         "type50_bound_bound_treatment": "xstar-line-escape",
         "type50_escape_factor": 0.35,
-        "type50_escape_source": "matrix-row",
+        "type50_escape_source": "xstar-detail-lines" if (target is not None and target.xo01_detal2_path) else "matrix-row",
+        "xstar_type50_depth_lines_csv": target.xo01_detal2_path if (target is not None and target.xo01_detal2_path) else None,
         "type50_cfrac": target.xstar_cfrac if (target is not None and target.xstar_cfrac is not None) else 1.0,
     }
     if window:
@@ -1066,6 +1121,7 @@ def compare_solver_to_xstar_target(
             merged_kwargs = {**preset_kwargs, **dict(solver_kwargs or {})}
             temporary_reference_csv: Path | None = None
             temporary_radiation_csv: Path | None = None
+            temporary_detail_depth_csv: Path | None = None
             try:
                 # The xstar-local-state preset mirrors examples/51, where
                 # xout_lines1.fits is first converted to CSV before it is used
@@ -1092,6 +1148,19 @@ def compare_solver_to_xstar_target(
                         merged_kwargs.pop("xstar_radiation_spectrum_csv", None)
                         merged_kwargs["radiation_field_mode"] = "none"
                         warnings.append("xout_cont_fits_not_passed_to_solver_no_radiation_rows")
+                if _is_fits_path(merged_kwargs.get("xstar_type50_depth_lines_csv")):
+                    try:
+                        resolved_atdb = resolve_atdb_path(solver_fitsfile, prompt=False)
+                    except Exception:
+                        resolved_atdb = solver_fitsfile
+                    temporary_detail_depth_csv = _write_solver_detail_type50_depth_csv(target, resolved_atdb)
+                    if temporary_detail_depth_csv is not None:
+                        merged_kwargs["xstar_type50_depth_lines_csv"] = str(temporary_detail_depth_csv)
+                        warnings.append("converted_xo01_detal2_fits_to_temporary_type50_depth_csv")
+                    else:
+                        merged_kwargs.pop("xstar_type50_depth_lines_csv", None)
+                        merged_kwargs["type50_escape_source"] = "matrix-row"
+                        warnings.append("xo01_detal2_fits_not_passed_to_solver_no_matched_detail_depth_rows")
                 result = solve_populations(target.ion, context=target.context, db=db, fitsfile=solver_fitsfile, **merged_kwargs)
                 if write_solver_products:
                     product_root = Path(solver_output_dir) if solver_output_dir is not None else Path("xstar_atomic_solver_products")
@@ -1109,6 +1178,11 @@ def compare_solver_to_xstar_target(
                 if temporary_radiation_csv is not None:
                     try:
                         temporary_radiation_csv.unlink()
+                    except FileNotFoundError:
+                        pass
+                if temporary_detail_depth_csv is not None:
+                    try:
+                        temporary_detail_depth_csv.unlink()
                     except FileNotFoundError:
                         pass
             triplet, summary, extract_warnings = _extract_solver_triplet_from_result(result)

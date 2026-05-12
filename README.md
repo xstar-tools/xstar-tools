@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.154** adds solver-product preservation and automatic matrix-term handoff between the four-ion XSTAR reproduction benchmark and the detail-state type-50 rate audit. Use `examples/56_reproduce_xstar_local_outputs.py --write-solver-products` to preserve `xstar_like_element_solver_full_global_matrix_terms.csv`, then use `examples/61_audit_xstar_detail_type50_rates.py --benchmark-dir ...` to compare `ucalc.f90` detail-state rates against those matrix terms. v0.3.153 added row-by-row detail-state type-50 rate audits; v0.3.152 fixed trailing all-zero abundance sentinel handling. No solver physics changed in v0.3.154.
+Latest package note: **v0.3.155** adds a detail-state `tau0` handoff from `xo01_detal2.fits` into the `xstar-local-state` solver preset. When same-run detail outputs and an ATDB are available, `examples/56_reproduce_xstar_local_outputs.py --solver-preset xstar-local-state` writes a temporary type-50 depth CSV from `xo01_detal2.fits` and the matrix can use `type50_escape_source=xstar-detail-lines` instead of the scalar 0.35 escape fallback. The detail-state type-50 audit now labels old scalar-fallback mismatches as `matrix_tau0_missing_scalar_escape_proxy`. No type-50 photoexcitation is forced; for `cfrac=1` the XSTAR `ucalc.f90` pumping branch remains zero.
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
