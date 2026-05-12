@@ -41,6 +41,19 @@ def test_read_o7_detail_state_if_available(tmp_path: Path):
     assert Path(paths["fields_csv"]).exists()
 
 
+def test_zero_abundance_sentinel_carries_previous_state_if_available():
+    run_dir = Path("/mnt/data/o7_ne1_inspect/o7_ne1")
+    if not run_dir.exists():
+        pytest.skip("local o7_ne1 detail-output fixture not available")
+    state = xa.read_xstar_detail_run_state(run_dir)
+    last = state.zones[-1]
+    assert last.temperature not in (None, 0.0)
+    assert last.electron_density not in (None, 0.0)
+    assert last.ionization_parameter not in (None, 0.0)
+    assert getattr(last, "abundance_row_source", "")
+    assert "carried_forward" in last.status or "abundance_row" in getattr(last, "abundance_row_source", "")
+
+
 def test_builtin_fits_reader_reads_xstar_bintable_if_available():
     run_dir = Path("/mnt/data/o7_ne1_inspect/o7_ne1")
     path = run_dir / "xo01_detal4.fits"

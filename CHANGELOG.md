@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.152 - 2026-05-12
+
+- Fixed XSTAR detail-state population when `xout_abund1.fits` contains a trailing all-zero sentinel ABUNDANCES row.
+- The detail-state reader now carries forward the most recent valid plasma state for final/cumulative detail HDUs whose matching abundance row is a zero sentinel, avoiding misleading `T=0`, `ne=0`, and `logxi=0` summaries.
+- Added `abundance_row_source` provenance to zone summaries and field-status outputs.
+- Added regression coverage for O VII detail outputs with a zero abundance sentinel row.
+
 ## v0.3.151 - 2026-05-12
 
 - Added `xstar_atomic.xstar_detail`, a detail-output reader that populates the Python live-state schema from XSTAR `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal4.fits`, and `xout_abund1.fits`.

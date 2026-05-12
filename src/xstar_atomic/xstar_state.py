@@ -186,6 +186,7 @@ class XSTARZoneState:
             "heating_rates": dict(self.heating_rates),
             "cooling_rates": dict(self.cooling_rates),
             "status": self.status,
+            "abundance_row_source": getattr(self, "abundance_row_source", ""),
             "missing_core_fields": self.missing_core_fields(),
         }
 

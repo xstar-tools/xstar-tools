@@ -124,6 +124,42 @@ def _ion_fractions_from_abundance_row(row: Mapping[str, Any]) -> Dict[str, float
     return out
 
 
+def _is_zero_abundance_sentinel(row: Mapping[str, Any]) -> bool:
+    """Return True for the all-zero sentinel row written by some XSTAR outputs.
+
+    XSTAR detail files can contain one additional final radial HDU whose line and
+    continuum arrays are meaningful final/cumulative output-state products, while
+    ``xout_abund1.fits`` can contain a trailing all-zero ABUNDANCES row.  Treating
+    that row as a real physical zone makes the Python state report
+    ``T=ne=logxi=0`` even though the associated detail HDU still has populated
+    arrays.  For such sentinel rows, the reader carries forward the most recent
+    valid local plasma state.
+    """
+    if not row:
+        return False
+    scalar_keys = [
+        "radius",
+        "delta_r",
+        "ion_parameter",
+        "x_e",
+        "n_p",
+        "pressure",
+        "temperature",
+    ]
+    scalar_sum = sum(abs(float(_as_float(row.get(key), 0.0) or 0.0)) for key in scalar_keys)
+    if scalar_sum > 0.0:
+        return False
+    ion_sum = 0.0
+    for key, value in row.items():
+        key_s = str(key).strip().lower()
+        if key_s in _BASIC_ABUNDANCE_COLUMNS:
+            continue
+        ion_sum += abs(float(_as_float(value, 0.0) or 0.0))
+        if ion_sum > 0.0:
+            return False
+    return True
+
+
 def _zrems_total(row: Mapping[str, Any]) -> float:
     total = 0.0
     for idx in range(1, 6):
@@ -241,8 +277,20 @@ def read_xstar_detail_run_state(
     cfrac = _as_float(params.get("cfrac"))
     vturbi = _as_float(params.get("vturbi"))
     zones: List[XSTARZoneState] = []
+    last_valid_arow: Mapping[str, Any] = {}
+    last_valid_index: Optional[int] = None
     for zi in range(n_zones):
-        arow = abund_rows[zi] if zi < len(abund_rows) else {}
+        raw_arow = abund_rows[zi] if zi < len(abund_rows) else {}
+        used_carried_abundance = False
+        if raw_arow and not _is_zero_abundance_sentinel(raw_arow):
+            arow: Mapping[str, Any] = raw_arow
+            last_valid_arow = raw_arow
+            last_valid_index = zi + 1
+        elif last_valid_arow:
+            arow = last_valid_arow
+            used_carried_abundance = True
+        else:
+            arow = raw_arow
         radius = _as_float(arow.get("radius"))
         delta_r = _as_float(arow.get("delta_r"))
         logxi = _as_float(arow.get("ion_parameter"))
@@ -258,6 +306,11 @@ def read_xstar_detail_run_state(
             ion_fractions=_ion_fractions_from_abundance_row(arow) if arow else {},
             status="populated_from_xstar_detail_outputs",
         )
+        if used_carried_abundance:
+            zone.status = "populated_from_xstar_detail_outputs_with_carried_abundance_state"
+            setattr(zone, "abundance_row_source", f"carried_forward_from_abundance_row_{last_valid_index}")
+        else:
+            setattr(zone, "abundance_row_source", f"abundance_row_{zi + 1}" if raw_arow else "missing_abundance_row")
         if include_level_populations and zi < len(detail_hdus):
             pops_by_ion: Dict[str, List[float]] = {}
             records_by_ion: Dict[str, List[Dict[str, Any]]] = {}
@@ -333,6 +386,7 @@ def summarize_xstar_detail_state(state: XSTARRunState) -> List[Dict[str, Any]]:
             "continuum_missing_fields": ";".join(zone.continuum.missing_fields()),
             "line_missing_fields": ";".join(zone.lines.missing_fields()),
             "missing_core_fields": ";".join(zone.missing_core_fields()),
+            "abundance_row_source": getattr(zone, "abundance_row_source", ""),
             "status": zone.status,
         })
     return rows
@@ -369,8 +423,8 @@ def write_xstar_detail_state(
                 ("tauc/dpthc(1:2,continuum)", bool(zone.continuum.tauc_in and zone.continuum.tauc_out), len(zone.continuum.tauc_in), zone.continuum.source),
                 ("cfrac", zone.cfrac is not None, zone.cfrac, "PARAMETERS/run_xstar.sh"),
                 ("vturbi", zone.vturbi is not None, zone.vturbi, "PARAMETERS/run_xstar.sh"),
-                ("temperature/electron density per zone", zone.temperature is not None and zone.electron_density is not None, f"{zone.temperature}/{zone.electron_density}", "xout_abund1.fits:ABUNDANCES"),
-                ("ion fractions per zone", bool(zone.ion_fractions), len(zone.ion_fractions), "xout_abund1.fits:ABUNDANCES"),
+                ("temperature/electron density per zone", zone.temperature is not None and zone.electron_density is not None, f"{zone.temperature}/{zone.electron_density}", f"xout_abund1.fits:ABUNDANCES:{getattr(zone, 'abundance_row_source', '')}"),
+                ("ion fractions per zone", bool(zone.ion_fractions), len(zone.ion_fractions), f"xout_abund1.fits:ABUNDANCES:{getattr(zone, 'abundance_row_source', '')}"),
                 ("level populations per zone", bool(zone.level_populations), sum(len(v) for v in zone.level_populations.values()), "xo01_detail.fits:XSTAR_RADIAL"),
             ]
             for field, present, count, source in rows:
