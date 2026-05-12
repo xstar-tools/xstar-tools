@@ -44,6 +44,7 @@ class XSTARContinuumState:
     dpthc_backward: List[float] = field(default_factory=list)
     continuum_opacity: List[float] = field(default_factory=list)
     continuum_emissivity: List[float] = field(default_factory=list)
+    continuum_records: List[Dict[str, Any]] = field(default_factory=list)
     source: str = "not_computed"
 
     def n_energy(self) -> int:
@@ -69,6 +70,7 @@ class XSTARContinuumState:
             "dpthc_backward": list(self.dpthc_backward),
             "continuum_opacity": list(self.continuum_opacity),
             "continuum_emissivity": list(self.continuum_emissivity),
+            "continuum_records": [dict(row) for row in self.continuum_records],
             "source": self.source,
             "n_energy": self.n_energy(),
             "missing_fields": self.missing_fields(),
@@ -93,6 +95,7 @@ class XSTARLineTransferState:
     ptmp2: List[float] = field(default_factory=list)
     line_opacity: List[float] = field(default_factory=list)
     line_emissivity: List[float] = field(default_factory=list)
+    line_records: List[Dict[str, Any]] = field(default_factory=list)
     source: str = "not_computed"
 
     def n_lines(self) -> int:
@@ -117,6 +120,7 @@ class XSTARLineTransferState:
             "ptmp2": list(self.ptmp2),
             "line_opacity": list(self.line_opacity),
             "line_emissivity": list(self.line_emissivity),
+            "line_records": [dict(row) for row in self.line_records],
             "source": self.source,
             "n_lines": self.n_lines(),
             "missing_fields": self.missing_fields(),
@@ -139,6 +143,7 @@ class XSTARZoneState:
     lines: XSTARLineTransferState = field(default_factory=XSTARLineTransferState)
     ion_fractions: Dict[str, float] = field(default_factory=dict)
     level_populations: Dict[str, List[float]] = field(default_factory=dict)
+    level_population_records: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     heating_rates: Dict[str, float] = field(default_factory=dict)
     cooling_rates: Dict[str, float] = field(default_factory=dict)
     status: str = "input_seed_only"
@@ -177,6 +182,7 @@ class XSTARZoneState:
             "lines": self.lines.as_dict(),
             "ion_fractions": dict(self.ion_fractions),
             "level_populations": {key: list(value) for key, value in self.level_populations.items()},
+            "level_population_records": {key: [dict(row) for row in value] for key, value in self.level_population_records.items()},
             "heating_rates": dict(self.heating_rates),
             "cooling_rates": dict(self.cooling_rates),
             "status": self.status,

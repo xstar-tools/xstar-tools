@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.151 - 2026-05-12
+
+- Added `xstar_atomic.xstar_detail`, a detail-output reader that populates the Python live-state schema from XSTAR `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal4.fits`, and `xout_abund1.fits`.
+- Added lightweight BINTABLE parsing to the built-in FITS fallback so XSTAR detail products can be read even when `astropy` is unavailable.
+- Added `examples/60_populate_xstar_live_state_from_detail.py` to write per-zone live-state summaries and field-status tables.
+- No solver physics changed.
+
 ## v0.3.150 - 2026-05-12
 
 - Added `xstar_atomic.xstar_state`, which defines explicit Python live-state containers needed for future XSTAR-output recreation:

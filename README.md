@@ -142,3 +142,16 @@ PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
   --out-dir xstar_live_state_skeleton_o7 \
   --print-summary
 ```
+
+
+### XSTAR detail live-state population
+
+The package can populate the Python live-state containers from XSTAR detail outputs written with `lwrite=1`/`lprint=1`:
+
+```python
+import xstar_atomic as xa
+state = xa.read_xstar_detail_run_state("xstar_runs/helike_type69/o7_ne1e8")
+paths = xa.write_xstar_detail_state(state, "xstar_detail_live_state_o7")
+```
+
+This maps `epi(:)`, reconstructed `bremsa(:)`, `bremsint(:)`, `tau0(1:2,line)`, `tauc/dpthc`, `cfrac`, `vturbi`, local `T/ne`, ion fractions, and level populations into one Python state object.

@@ -235,14 +235,127 @@ def _parse_ascii_table_hdu(hdu: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
+def _bintable_form_size(form: str) -> tuple[int, str, int]:
+    """Return (repeat, FITS code, byte-size per item) for a simple BINTABLE TFORM."""
+    import re
+    text = str(form or "").strip().upper()
+    m = re.match(r"(\d*)([A-Z])", text)
+    if not m:
+        return 1, "A", 0
+    repeat = int(m.group(1) or "1")
+    code = m.group(2)
+    item_size = {
+        "L": 1,  # logical
+        "X": 1,  # bit array, treated as raw bytes here
+        "B": 1,
+        "I": 2,
+        "J": 4,
+        "K": 8,
+        "A": 1,
+        "E": 4,
+        "D": 8,
+    }.get(code, 0)
+    return repeat, code, item_size
+
+
+def _decode_bintable_cell(raw: bytes, repeat: int, code: str) -> Any:
+    """Decode one simple fixed-width FITS BINTABLE cell.
+
+    This fallback intentionally supports the scalar/vector forms used by XSTAR
+    detail products (``1J``, ``1I``, ``1E``, ``8A``, ``20A``, ...).  It is not
+    a complete FITS parser, but it lets xstar-atomic read XSTAR BINTABLE detail
+    products on systems where astropy is unavailable.
+    """
+    import struct
+    if code == "A":
+        return raw.decode("ascii", errors="replace").strip()
+    if code == "L":
+        vals = [chr(b) in {"T", "t", "1"} for b in raw[:repeat]]
+        return vals[0] if repeat == 1 else vals
+    fmt_map = {
+        "B": "B",
+        "I": "h",
+        "J": "i",
+        "K": "q",
+        "E": "f",
+        "D": "d",
+    }
+    fmt = fmt_map.get(code)
+    if fmt is None:
+        return raw
+    try:
+        vals = struct.unpack(">" + fmt * repeat, raw)
+    except Exception:
+        return raw
+    vals = tuple(_decode_value(v) for v in vals)
+    return vals[0] if repeat == 1 else list(vals)
+
+
+def _parse_bintable_hdu(hdu: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Parse a simple FITS BINTABLE HDU into normalized row dictionaries."""
+    header = hdu["header"]
+    if str(header.get("XTENSION", "")).strip().upper() != "BINTABLE":
+        return []
+    rowlen = int(header.get("NAXIS1", 0) or 0)
+    nrows = int(header.get("NAXIS2", 0) or 0)
+    nfields = int(header.get("TFIELDS", 0) or 0)
+    cols: List[Dict[str, Any]] = []
+    for idx in range(1, nfields + 1):
+        name = str(header.get(f"TTYPE{idx}", f"col{idx}")).strip()
+        form = str(header.get(f"TFORM{idx}", "")).strip()
+        repeat, code, item_size = _bintable_form_size(form)
+        width = repeat * item_size
+        cols.append({"name": _normalize_column_name(name), "repeat": repeat, "code": code, "width": width})
+    rows: List[Dict[str, Any]] = []
+    data = hdu["data"]
+    for ridx in range(nrows):
+        row_start = ridx * rowlen
+        off = row_start
+        row: Dict[str, Any] = {}
+        for col in cols:
+            width = int(col["width"])
+            raw = data[off: off + width]
+            off += width
+            row[str(col["name"])] = _decode_bintable_cell(raw, int(col["repeat"]), str(col["code"]))
+        rows.append(row)
+    return rows
+
+
+def _parse_table_hdu_fallback(hdu: Dict[str, Any]) -> List[Dict[str, Any]]:
+    xtension = str(hdu["header"].get("XTENSION", "")).strip().upper()
+    if xtension == "TABLE":
+        return _parse_ascii_table_hdu(hdu)
+    if xtension == "BINTABLE":
+        return _parse_bintable_hdu(hdu)
+    return []
+
+
 def _read_fits_table_fallback(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
     wanted = hdu_name.strip().lower()
     for hdu in _raw_fits_hdus(path):
         header = hdu["header"]
         name = str(header.get("EXTNAME", "")).strip().lower()
         if name == wanted:
-            return _parse_ascii_table_hdu(hdu)
+            return _parse_table_hdu_fallback(hdu)
     return []
+
+
+def _read_fits_table_hdus_fallback(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
+    """Return all matching table HDUs with their rows using the built-in parser."""
+    wanted = hdu_name.strip().lower()
+    matches: List[Dict[str, Any]] = []
+    for hdu in _raw_fits_hdus(path):
+        header = hdu["header"]
+        name = str(header.get("EXTNAME", "")).strip().lower()
+        if name == wanted:
+            rows = _parse_table_hdu_fallback(hdu)
+            matches.append({
+                "hdu_index": hdu["index"],
+                "hdu_name": str(header.get("EXTNAME", "")),
+                "n_rows": len(rows),
+                "rows": rows,
+            })
+    return matches
 
 def table_hdu_to_rows(hdu: Any) -> List[Dict[str, Any]]:
     """Convert a FITS table HDU to a list of dictionaries.
@@ -418,8 +531,8 @@ def read_fits_table(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
 
     Unlike :func:`read_xout_lines`, this routine is deliberately generic and is
     used by diagnostics for ``xout_abund1.fits`` and related local-state files.
-    If astropy is unavailable, XSTAR ASCII TABLE extensions are parsed by a
-    lightweight built-in reader.
+    If astropy is unavailable, XSTAR ASCII TABLE and BINTABLE extensions are
+    parsed by a lightweight built-in reader.
     """
     path = Path(path)
     if fits is None:
@@ -428,6 +541,26 @@ def read_fits_table(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
         if hdu_name not in hdul:
             return []
         return table_hdu_to_rows(hdul[hdu_name])
+
+
+def read_fits_table_hdus(path: str | Path, hdu_name: str) -> List[Dict[str, Any]]:
+    """Read all HDUs with a given name and return per-HDU row lists.
+
+    XSTAR detail products often contain several ``XSTAR_RADIAL`` extensions,
+    one per printed radial zone.  This helper preserves the HDU index so callers
+    can map zone state back to the original detail files.
+    """
+    path = Path(path)
+    if fits is None:
+        return _read_fits_table_hdus_fallback(path, hdu_name)
+    matches: List[Dict[str, Any]] = []
+    with fits.open(path) as hdul:
+        for idx, hdu in enumerate(hdul):
+            if str(getattr(hdu, "name", "")).strip().lower() != hdu_name.strip().lower():
+                continue
+            rows = table_hdu_to_rows(hdu)
+            matches.append({"hdu_index": idx, "hdu_name": str(getattr(hdu, "name", "")), "n_rows": len(rows), "rows": rows})
+    return matches
 
 
 def read_xout_abundances(path: str | Path) -> Dict[str, List[Dict[str, Any]]]:

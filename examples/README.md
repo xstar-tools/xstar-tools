@@ -555,3 +555,14 @@ PYTHONPATH=src python examples/59_create_xstar_live_state_skeleton.py \
   --out-dir xstar_live_state_skeleton_o7 \
   --print-summary
 ```
+
+### `60_populate_xstar_live_state_from_detail.py`
+
+Populate the Python live-state containers from an existing XSTAR detail-output directory.  This maps `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal4.fits`, and `xout_abund1.fits` into the Python fields `epi`, `bremsa`, `bremsint`, `tau0`, `tauc/dpthc`, `cfrac`, `vturbi`, local `T/ne`, ion fractions, and level populations.
+
+```bash
+PYTHONPATH=src python examples/60_populate_xstar_live_state_from_detail.py \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --out-dir xstar_detail_live_state_o7 \
+  --print-summary
+```

@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.150"
+__version__ = "0.3.151"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -40,6 +40,15 @@ from .xstar_state import (
     create_initial_xstar_run_state,
     create_initial_xstar_run_state_from_input,
     write_xstar_state_skeleton,
+)
+
+from .xstar_detail import (
+    read_xstar_parameters_from_run_dir,
+    reconstruct_bremsa_from_detal4_rows,
+    reconstruct_bremsint,
+    read_xstar_detail_run_state,
+    summarize_xstar_detail_state,
+    write_xstar_detail_state,
 )
 from .workflow import (
     TripletResult,
@@ -146,4 +155,10 @@ __all__ = [
     "create_initial_xstar_run_state",
     "create_initial_xstar_run_state_from_input",
     "write_xstar_state_skeleton",
+    "read_xstar_parameters_from_run_dir",
+    "reconstruct_bremsa_from_detal4_rows",
+    "reconstruct_bremsint",
+    "read_xstar_detail_run_state",
+    "summarize_xstar_detail_state",
+    "write_xstar_detail_state",
 ]
