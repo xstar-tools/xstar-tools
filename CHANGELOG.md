@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.168 - 2026-05-13
+
+- Bugfix/diagnostic cleanup only; no solver physics, rate formulas, or empirical triplet tuning changed.
+- Improves `examples/70_audit_xstar_live_bremsa_source_path.py` so `--variant-summary-csv` can be a CSV file, an audit output directory, or an audit `.tar.gz`.
+- Reports missing or mis-pointed variant-summary paths explicitly instead of silently printing `best_variant=None`.
+- Keeps the source-code conclusion from v0.3.167: XSTAR live `trnfrc.f90` `bremsa(:)` uses `zremsz(:)` and is not written directly to `xo01_detal4.fits`; detail `zrems(1:5)` variants do not recover the live field.
+
 ## v0.3.167 - 2026-05-13
 
 - Added a lightweight source-code provenance audit for the XSTAR live `bremsa(:)` radiation field; no solver physics changed.

@@ -43,7 +43,7 @@ def test_live_bremsa_source_path_audit_with_synthetic_source(tmp_path: Path):
         )
     ]
     audit = audit_xstar_live_bremsa_source_path(xstar_source_root=tmp_path, snippets=specs)
-    assert audit["summary"]["audit_version"] == "v0.3.167"
+    assert audit["summary"]["audit_version"] == "v0.3.168"
     assert audit["summary"]["n_source_snippets_matched"] == 1
     paths = write_xstar_live_bremsa_source_path_audit(audit, tmp_path / "out")
     assert Path(paths["snippets_csv"]).exists()

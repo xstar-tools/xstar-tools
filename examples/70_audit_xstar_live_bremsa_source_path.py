@@ -19,7 +19,7 @@ def main() -> None:
         default=None,
         help="Optional example-69 xstar_type53_detail_phint53_bremsa_variants_audit_variant_summary.csv",
     )
-    parser.add_argument("--out-dir", default="xstar_live_bremsa_source_path_audit_v03167")
+    parser.add_argument("--out-dir", default="xstar_live_bremsa_source_path_audit_v03168")
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
 
@@ -36,6 +36,8 @@ def main() -> None:
         print(f"status={summary.get('status')}")
         print(f"xstar_source_root={summary.get('xstar_source_root')}")
         print(f"n_source_snippets_matched={summary.get('n_source_snippets_matched')}/{summary.get('n_source_snippet_specs')}")
+        print(f"variant_summary_status={summary.get('variant_summary_status')}")
+        print(f"variant_summary_source={summary.get('variant_summary_source')}")
         print(f"best_variant={summary.get('best_variant')}")
         print(f"best_median_matrix_over_detail={summary.get('best_median_matrix_over_detail')}")
         print(f"best_within10_without_scale={summary.get('best_within10_without_scale')}")

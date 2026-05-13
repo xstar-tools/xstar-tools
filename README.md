@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.167** adds a lightweight source-code provenance audit for the XSTAR live `bremsa(:)` radiation field. The new `examples/70_audit_xstar_live_bremsa_source_path.py` scans the XSTAR Fortran source and records the distinction between the live `trnfrc.f90` field used by `ucalc/phint53` and the `savd.f90 -> fstepr4.f90` detail continuum output columns. No solver physics changed. This confirms that the v0.3.162--v0.3.166 type-53 ≈44x normalization gap should be chased through live `zremsz(:)/bremsa(:)` reconstruction, not by choosing another `xo01_detal4` `zrems(1:5)` variant.
+Latest package note: **v0.3.168** is a source-provenance audit cleanup. It keeps the v0.3.167 live `bremsa(:)` conclusion, but makes `examples/70_audit_xstar_live_bremsa_source_path.py` robust to `--variant-summary-csv` being a CSV file, an audit output directory, or an audit `.tar.gz`, and reports missing paths explicitly. No solver physics changed.
 
 
 - `docs/user_guide.md`

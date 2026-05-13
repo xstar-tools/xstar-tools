@@ -8,7 +8,9 @@ inputs and which arrays are written to the detail FITS products.
 from __future__ import annotations
 
 import csv
+import io
 import json
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -174,55 +176,140 @@ DEFAULT_LIVE_BREMSA_SNIPPETS: List[SourceSnippetSpec] = [
 ]
 
 
+def _read_variant_summary_rows(path: str | Path) -> tuple[str, List[Dict[str, str]], str]:
+    """Read an example-69 variant summary from a CSV, directory, or tarball.
+
+    Returns
+    -------
+    status, rows, resolved_source
+        ``status`` is one of ``loaded``, ``missing``, ``directory_no_summary_csv``,
+        ``tar_no_summary_csv``, or an error status.  ``resolved_source`` records
+        the actual CSV source when one was found.
+    """
+
+    p = Path(path)
+    if not p.exists():
+        return "missing", [], str(p)
+    if p.is_dir():
+        matches = sorted(p.rglob("xstar_type53_detail_phint53_bremsa_variants_audit_variant_summary.csv"))
+        if not matches:
+            matches = sorted(p.rglob("*bremsa_variants*_variant_summary.csv"))
+        if not matches:
+            return "directory_no_summary_csv", [], str(p)
+        csv_path = matches[0]
+        return "loaded", _read_csv(csv_path), str(csv_path)
+    if p.suffix.lower() == ".csv":
+        return "loaded", _read_csv(p), str(p)
+    name = p.name.lower()
+    if name.endswith(".tar.gz") or name.endswith(".tgz") or name.endswith(".tar"):
+        try:
+            with tarfile.open(p, "r:*") as tf:
+                members = [
+                    m for m in tf.getmembers()
+                    if m.isfile() and (
+                        m.name.endswith("xstar_type53_detail_phint53_bremsa_variants_audit_variant_summary.csv")
+                        or "bremsa_variants" in Path(m.name).name and Path(m.name).name.endswith("variant_summary.csv")
+                    )
+                ]
+                if not members:
+                    return "tar_no_summary_csv", [], str(p)
+                member = sorted(members, key=lambda m: m.name)[0]
+                fh = tf.extractfile(member)
+                if fh is None:
+                    return "tar_summary_csv_unreadable", [], f"{p}:{member.name}"
+                text = fh.read().decode("utf-8", errors="replace")
+                rows = [dict(row) for row in csv.DictReader(io.StringIO(text))]
+                return "loaded", rows, f"{p}:{member.name}"
+        except (tarfile.TarError, OSError, UnicodeDecodeError) as exc:
+            return f"tar_read_error:{exc.__class__.__name__}", [], str(p)
+    return "unsupported_path_type", [], str(p)
+
+
 def summarize_bremsa_variant_gap(variant_summary_csv: str | Path | None = None) -> Dict[str, Any]:
-    """Summarize an example-69 variant-summary CSV, if supplied."""
+    """Summarize an example-69 variant-summary CSV, directory, or tarball.
+
+    v0.3.168 makes missing or mis-pointed variant-summary paths explicit.  This
+    matters because the source-path audit can still confirm the Fortran live
+    ``bremsa(:)`` path even when the optional example-69 CSV is not found.
+    """
 
     if not variant_summary_csv:
         return {
             "variant_summary_status": "not_supplied",
+            "variant_summary_source": "",
+            "variant_summary_path_exists": False,
             "best_variant": None,
             "best_median_matrix_over_detail": None,
             "best_within10_without_scale": None,
             "best_within10_after_scale": None,
             "n_variants": 0,
+            "n_numeric_variants": 0,
+            "interpretation": "No example-69 variant summary was supplied; only source-code provenance was audited.",
         }
-    rows = _read_csv(variant_summary_csv)
+
+    status, rows, source = _read_variant_summary_rows(variant_summary_csv)
+    if status != "loaded":
+        return {
+            "variant_summary_status": status,
+            "variant_summary_source": source,
+            "variant_summary_path_exists": Path(variant_summary_csv).exists(),
+            "best_variant": None,
+            "best_median_matrix_over_detail": None,
+            "best_within10_without_scale": None,
+            "best_within10_after_scale": None,
+            "n_variants": 0,
+            "n_numeric_variants": 0,
+            "interpretation": (
+                "The optional example-69 variant summary was not loaded.  "
+                "Pass the actual variant-summary CSV, the audit output directory, or the audit tar.gz "
+                "to combine source provenance with the observed matrix/detail normalization gap."
+            ),
+        }
+
     parsed = []
     for row in rows:
         try:
-            median = float(row.get("median_matrix_over_variant_detail") or "nan")
+            median = float(row.get("median_matrix_over_variant_detail") or row.get("median_matrix_over_detail") or "nan")
         except ValueError:
             continue
         if median != median:
             continue
         try:
-            within_no = int(float(row.get("n_within_10pct_without_free_scale") or 0))
+            within_no = int(float(row.get("n_within_10pct_without_free_scale") or row.get("within10_no_scale") or 0))
         except ValueError:
             within_no = 0
         try:
-            within_scaled = int(float(row.get("n_within_10pct_after_variant_scale") or 0))
+            within_scaled = int(float(row.get("n_within_10pct_after_variant_scale") or row.get("within10_scaled") or 0))
         except ValueError:
             within_scaled = 0
-        parsed.append((median, within_no, within_scaled, row))
+        variant_name = row.get("bremsa_variant") or row.get("variant") or row.get("name") or ""
+        parsed.append((median, within_no, within_scaled, variant_name, row))
     if not parsed:
         return {
             "variant_summary_status": "loaded_no_numeric_rows",
+            "variant_summary_source": source,
+            "variant_summary_path_exists": True,
             "best_variant": None,
             "best_median_matrix_over_detail": None,
             "best_within10_without_scale": None,
             "best_within10_after_scale": None,
             "n_variants": len(rows),
+            "n_numeric_variants": 0,
+            "interpretation": "The variant summary was found, but no numeric median matrix/detail rows were readable.",
         }
     # Prefer small absolute log scale, then more unscaled matches.
     parsed.sort(key=lambda item: (abs(item[0] - 1.0), -item[1]))
-    best_median, best_no, best_scaled, best_row = parsed[0]
+    best_median, best_no, best_scaled, best_variant, best_row = parsed[0]
     return {
         "variant_summary_status": "loaded",
-        "best_variant": best_row.get("bremsa_variant"),
+        "variant_summary_source": source,
+        "variant_summary_path_exists": True,
+        "best_variant": best_variant or best_row.get("bremsa_variant") or best_row.get("variant"),
         "best_median_matrix_over_detail": best_median,
         "best_within10_without_scale": best_no,
         "best_within10_after_scale": best_scaled,
         "n_variants": len(rows),
+        "n_numeric_variants": len(parsed),
         "interpretation": (
             "No available xo01_detal4 bremsa variant removed the normalization gap without a free scale. "
             "The next parity target is the live zremsz/bremsa call-site state, not another detail-column choice."
@@ -294,7 +381,7 @@ def audit_xstar_live_bremsa_source_path(
     if gap.get("best_within10_without_scale") == 0:
         status = "source_path_confirmed_detail_variants_do_not_recover_live_bremsa" if matched == len(rows) else status
     summary: Dict[str, Any] = {
-        "audit_version": "v0.3.167",
+        "audit_version": "v0.3.168",
         "xstar_source_root": str(root),
         "variant_summary_csv": str(variant_summary_csv) if variant_summary_csv else "",
         "n_source_snippet_specs": len(rows),
@@ -338,6 +425,9 @@ def write_xstar_live_bremsa_source_path_audit(
         "## Type-53 detail-continuum gap context",
         "",
         f"variant_summary_status: `{summary.get('variant_summary_status')}`",
+        f"variant_summary_source: `{summary.get('variant_summary_source')}`",
+        f"variant_summary_path_exists: `{summary.get('variant_summary_path_exists')}`",
+        f"n_numeric_variants: `{summary.get('n_numeric_variants')}`",
         f"best_variant: `{summary.get('best_variant')}`",
         f"best_median_matrix_over_detail: `{summary.get('best_median_matrix_over_detail')}`",
         f"best_within10_without_scale: `{summary.get('best_within10_without_scale')}`",
