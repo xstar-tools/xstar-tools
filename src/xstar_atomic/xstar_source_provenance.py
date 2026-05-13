@@ -465,3 +465,354 @@ def write_xstar_live_bremsa_source_path_audit(
     lines.extend([f"snippets_csv: `{snippets_csv.name}`", f"json: `{json_path.name}`"])
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"snippets_csv": str(snippets_csv), "json": str(json_path), "markdown": str(md_path)}
+
+# -----------------------------------------------------------------------------
+# v0.3.169: live rate-grid bremsa provenance and instrumentation plan
+# -----------------------------------------------------------------------------
+
+DEFAULT_RATE_GRID_BREMSA_SNIPPETS: List[SourceSnippetSpec] = [
+    SourceSnippetSpec(
+        key="trnfrc_live_highres_bremsa_outward",
+        file="trnfrc.f90",
+        pattern="bremsa(jk)=zremsz(jk)*exp(-dpthc(1,jk))/fpr2",
+        role="construct_high_resolution_live_bremsa",
+        interpretation=(
+            "trnfrc constructs the high-resolution live continuum field from zremsz, forward continuum depth, "
+            "and geometric dilution.  This is not written directly to xo01_detal4."
+        ),
+        context=6,
+    ),
+    SourceSnippetSpec(
+        key="xstarcalc_calls_bremsmap_before_hmc",
+        file="xstarcalc.f90",
+        pattern="call bremsmap(bremsa,bremsam,bremsint,epi,epim,ncn2,ncn2m",
+        role="map_high_resolution_bremsa_to_rate_grid",
+        interpretation=(
+            "xstarcalc maps the trnfrc high-resolution bremsa(:) onto the reduced rate grid bremsam(:) before "
+            "calc_hmc_all/calc_hmc_ion evaluate level-population rates.  Type-53 HMC rates therefore see bremsam on epim, "
+            "not the raw high-resolution detail continuum."
+        ),
+        context=8,
+    ),
+    SourceSnippetSpec(
+        key="bremsmap_samples_bremsa_at_epim",
+        file="bremsmap.f90",
+        pattern="bremsam(mmm)=bremsa(mm)",
+        role="rate_grid_sampling_rule",
+        interpretation=(
+            "bremsmap samples the high-resolution bremsa at the high-resolution bin corresponding to each epim grid point. "
+            "It does not integrate/average over bins.  Reproducing phint53 matrix rates requires this same rate-grid field."
+        ),
+        context=8,
+    ),
+    SourceSnippetSpec(
+        key="xstarcalc_calc_hmc_all_uses_bremsam",
+        file="xstarcalc.f90",
+        pattern="epim,ncn2m,bremsam,bremsint",
+        role="calc_hmc_all_rate_grid_input",
+        interpretation=(
+            "The HMC/level-population solve receives epim, ncn2m, and bremsam after bremsmap.  This is the call-site state to expose."
+        ),
+        context=6,
+    ),
+    SourceSnippetSpec(
+        key="calc_hmc_ion_passes_rate_grid_to_ucalc",
+        file="calc_hmc_ion.f90",
+        pattern="epi,ncn2,bremsa,bremsint",
+        role="ucalc_rate_grid_input",
+        interpretation=(
+            "calc_hmc_ion forwards its local epi/bremsa arrays to ucalc.  In the HMC call path these names correspond to epim/bremsam."
+        ),
+        context=5,
+    ),
+    SourceSnippetSpec(
+        key="phint53_uses_rate_grid_bremsa",
+        file="phint53.f90",
+        pattern="bremtmp=bremsa(kl)/(12.56)",
+        role="phint53_consumes_rate_grid_bremsa",
+        interpretation=(
+            "phint53 consumes the bremsa array supplied by calc_hmc_ion and divides by 12.56 inside the integral.  "
+            "The exact array to compare against is the live rate-grid bremsam(:), not an xo01_detal4 column."
+        ),
+        context=6,
+    ),
+]
+
+
+def audit_xstar_live_rate_grid_bremsa_path(
+    *,
+    xstar_source_root: str | Path,
+    variant_summary_csv: str | Path | None = None,
+    snippets: Sequence[SourceSnippetSpec] | None = None,
+) -> Dict[str, Any]:
+    """Audit the full live continuum path used by type-53 HMC rates.
+
+    This is the v0.3.169 follow-up to the live-bremsa source-path audit.  The
+    earlier audit established that ``xo01_detal4`` does not contain live
+    ``bremsa(:)``/``zremsz(:)``.  This audit adds the important rate-grid
+    handoff: XSTAR maps high-resolution ``bremsa(:)`` onto ``bremsam(:)`` using
+    ``bremsmap`` before calling ``calc_hmc_all`` and ``calc_hmc_ion``.  Therefore
+    the array needed for exact type-53 parity is the live ``epim(:), bremsam(:)``
+    pair at the ``calc_hmc_all``/``calc_hmc_ion`` call site.
+    """
+
+    root = Path(xstar_source_root)
+    specs = list(snippets or DEFAULT_RATE_GRID_BREMSA_SNIPPETS)
+    rows: List[Dict[str, Any]] = []
+    missing: List[str] = []
+    for spec in specs:
+        path = _find_file(root, spec.file)
+        if path is None:
+            missing.append(spec.file)
+            rows.append(
+                {
+                    "key": spec.key,
+                    "role": spec.role,
+                    "file": spec.file,
+                    "resolved_path": "",
+                    "pattern": spec.pattern,
+                    "matched": False,
+                    "line_start": "",
+                    "line_end": "",
+                    "matched_line": "",
+                    "interpretation": spec.interpretation,
+                    "snippet": "",
+                }
+            )
+            continue
+        extracted = _extract_snippet(path, spec.pattern, spec.context)
+        rows.append(
+            {
+                "key": spec.key,
+                "role": spec.role,
+                "file": spec.file,
+                "resolved_path": str(path),
+                "pattern": spec.pattern,
+                **extracted,
+                "interpretation": spec.interpretation,
+            }
+        )
+
+    gap = summarize_bremsa_variant_gap(variant_summary_csv)
+    matched = sum(1 for row in rows if row.get("matched") is True)
+    status = "rate_grid_source_path_confirmed" if matched == len(rows) else "rate_grid_source_path_partially_confirmed"
+    if gap.get("best_within10_without_scale") == 0 and matched == len(rows):
+        status = "rate_grid_source_path_confirmed_detail_variants_do_not_recover_live_bremsam"
+
+    capture_columns = [
+        {
+            "column": "zone_index",
+            "source": "xstar zone loop / caller",
+            "why_needed": "align live-rate-grid dump with xo01_detail/xo01_detal* depth zone",
+        },
+        {
+            "column": "ldir",
+            "source": "trnfrc/xstar radial pass",
+            "why_needed": "distinguish outward zremsz*exp(-dpthc)/fpr2 from inward zrems(1)/fpr2 branch",
+        },
+        {"column": "r", "source": "trnfrc/xstarcalc", "why_needed": "geometric dilution fpr2=12.56*(r/1e19)^2"},
+        {"column": "fpr2", "source": "trnfrc", "why_needed": "direct check of geometric normalization"},
+        {"column": "ncn2m", "source": "xstarcalc", "why_needed": "rate-grid length actually used by calc_hmc_all"},
+        {"column": "epim", "source": "xstarcalc/bremsmap", "why_needed": "rate-grid energy axis supplied to calc_hmc_ion/ucalc/phint53"},
+        {"column": "bremsam", "source": "bremsmap output", "why_needed": "live rate-grid radiation field used in type-53 phint53"},
+        {"column": "bremsint", "source": "trnfrc/bremsmap", "why_needed": "upper-tail integral supplied alongside bremsam"},
+        {"column": "epi", "source": "trnfrc high-resolution grid", "why_needed": "optional provenance check for bremsmap sampling"},
+        {"column": "bremsa", "source": "trnfrc output before bremsmap", "why_needed": "optional high-resolution live field provenance"},
+        {"column": "zremsz", "source": "trnfrc input", "why_needed": "outward incident/live spectrum before attenuation"},
+        {"column": "dpthc(1)", "source": "trnfrc input/detail depth", "why_needed": "outward attenuation used for high-resolution bremsa"},
+    ]
+
+    instrumentation_steps = [
+        {
+            "step": 1,
+            "location": "xstarcalc.f90 immediately after call bremsmap(...) and before call calc_hmc_all(...) / dsec(...) HMC calls",
+            "action": "dump epim(:), bremsam(:), bremsint(:), r, t, xee, xpx, cfrac, and zone/pass identifiers",
+            "rationale": "this is the exact reduced-grid radiation state seen by calc_hmc_all and calc_hmc_ion in the level-population solve",
+        },
+        {
+            "step": 2,
+            "location": "trnfrc.f90 after constructing high-resolution bremsa(:)",
+            "action": "optionally dump high-resolution epi(:), bremsa(:), zremsz(:), zrems(1,:), dpthc(1:2,:), opakc(:), r, fpr2, and ldir",
+            "rationale": "proves how bremsam was derived and separates live high-resolution state from detail-output zrems columns",
+        },
+        {
+            "step": 3,
+            "location": "calc_hmc_ion.f90 around the type-53 ucalc/phint53 call for selected ion/records",
+            "action": "optionally dump record id, idest1/idest2, threshold, ptmp1/ptmp2, ans1/ans2, and the local ncn2/epi/bremsa identity",
+            "rationale": "ties live rate-grid continuum directly to the matrix rate for targeted O VII type-53 rows",
+        },
+        {
+            "step": 4,
+            "location": "new debug writer module or guarded ASCII/FITS dump",
+            "action": "guard with a compile/runtime debug flag and selected element/ion/zone to avoid enormous output",
+            "rationale": "full RT-coupled dumps are large; Python audits should read compact probe products, while production kernels later move to C++",
+        },
+    ]
+
+    summary: Dict[str, Any] = {
+        "audit_version": "v0.3.169",
+        "xstar_source_root": str(root),
+        "variant_summary_csv": str(variant_summary_csv) if variant_summary_csv else "",
+        "n_source_snippet_specs": len(rows),
+        "n_source_snippets_matched": matched,
+        "missing_source_files": sorted(set(missing)),
+        "status": status,
+        **gap,
+        "correct_live_rate_field": "xstarcalc/bremsmap output: epim(:), bremsam(:), bremsint(:) passed to calc_hmc_all -> calc_hmc_ion -> ucalc/phint53",
+        "high_resolution_provenance": "trnfrc outward high-resolution bremsa(:)=zremsz(:)*exp(-dpthc(1,:))/(12.56*r19*r19)",
+        "detail4_limitation": "xo01_detal4 writes zrems(1:5), opacities/emissivities, and depths; it does not write live bremsam(:) or live zremsz(:)",
+        "recommended_next_step": "Instrument or reconstruct the live epim/bremsam rate-grid state immediately after bremsmap and before calc_hmc_all; then rerun the type-53 phint53 ans1 comparison against bremsam, not xo01_detal4 zrems variants.",
+        "performance_note": "Keep Python as the audit/orchestration layer.  Once parity is established, move phint53/radiative-transfer/matrix hot loops to the planned C++ backend.",
+    }
+    return {
+        "summary": summary,
+        "source_snippets": rows,
+        "capture_columns": capture_columns,
+        "instrumentation_steps": instrumentation_steps,
+    }
+
+
+def write_xstar_live_rate_grid_bremsa_path_audit(
+    audit: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_live_rate_grid_bremsa_path_audit",
+) -> Dict[str, str]:
+    """Write v0.3.169 live rate-grid bremsa provenance products."""
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = dict(audit.get("summary", {}) or {})
+    snippets = list(audit.get("source_snippets", []) or [])
+    capture_columns = list(audit.get("capture_columns", []) or [])
+    instrumentation_steps = list(audit.get("instrumentation_steps", []) or [])
+
+    snippets_csv = out / f"{prefix}_snippets.csv"
+    capture_csv = out / f"{prefix}_capture_columns.csv"
+    steps_csv = out / f"{prefix}_instrumentation_steps.csv"
+    _write_csv(snippets_csv, snippets)
+    _write_csv(capture_csv, capture_columns)
+    _write_csv(steps_csv, instrumentation_steps)
+
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(
+        json.dumps(
+            {
+                "summary": summary,
+                "source_snippets": snippets,
+                "capture_columns": capture_columns,
+                "instrumentation_steps": instrumentation_steps,
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+
+    probe_path = out / f"{prefix}_fortran_probe_notes.f90"
+    probe_path.write_text(
+        "\n".join(
+            [
+                "! XSTAR live rate-grid bremsa probe notes (generated by xstar-atomic v0.3.169)",
+                "! This is not an automatic patch.  It marks the minimal call-site state to expose.",
+                "! Preferred insertion point: xstarcalc.f90 immediately after:",
+                "!   call bremsmap(bremsa,bremsam,bremsint,epi,epim,ncn2,ncn2m,...)",
+                "! and before calc_hmc_all/dsec calls that pass epim,ncn2m,bremsam,bremsint.",
+                "!",
+                "! Minimal arrays/scalars to dump for parity:",
+                "!   zone/pass id, ldir, r, fpr2, t, xee, xpx, cfrac, ncn2m",
+                "!   epim(1:ncn2m), bremsam(1:ncn2m), bremsint(1:ncn2m)",
+                "! Optional provenance arrays from trnfrc:",
+                "!   epi(1:ncn2), bremsa(1:ncn2), zremsz(1:ncn2), zrems(1,1:ncn2), dpthc(1:2,1:ncn2)",
+                "!",
+                "! Keep the dump guarded by a runtime debug flag and selected ion/zone/records; otherwise output can be huge.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    md_path = out / f"{prefix}.md"
+    lines = [
+        "# XSTAR live rate-grid bremsa path audit",
+        "",
+        f"audit_version: `{summary.get('audit_version')}`",
+        f"status: `{summary.get('status')}`",
+        f"xstar_source_root: `{summary.get('xstar_source_root')}`",
+        f"n_source_snippets_matched: `{summary.get('n_source_snippets_matched')}` / `{summary.get('n_source_snippet_specs')}`",
+        "",
+        "## Variant-gap context",
+        "",
+        f"variant_summary_status: `{summary.get('variant_summary_status')}`",
+        f"variant_summary_source: `{summary.get('variant_summary_source')}`",
+        f"best_variant: `{summary.get('best_variant')}`",
+        f"best_median_matrix_over_detail: `{summary.get('best_median_matrix_over_detail')}`",
+        f"best_within10_without_scale: `{summary.get('best_within10_without_scale')}`",
+        "",
+        str(summary.get("interpretation") or ""),
+        "",
+        "## Correct live rate-field conclusion",
+        "",
+        f"- correct live rate field: `{summary.get('correct_live_rate_field')}`",
+        f"- high-resolution provenance: `{summary.get('high_resolution_provenance')}`",
+        f"- detail-product limitation: `{summary.get('detail4_limitation')}`",
+        f"- recommended next step: `{summary.get('recommended_next_step')}`",
+        "",
+        "## Minimal capture columns",
+        "",
+        "| column | source | why needed |",
+        "|---|---|---|",
+    ]
+    for row in capture_columns:
+        lines.append(f"| `{row.get('column')}` | {row.get('source')} | {row.get('why_needed')} |")
+    lines.extend(["", "## Instrumentation steps", ""])
+    for row in instrumentation_steps:
+        lines.extend(
+            [
+                f"### Step {row.get('step')}",
+                "",
+                f"location: `{row.get('location')}`",
+                "",
+                f"action: {row.get('action')}",
+                "",
+                f"rationale: {row.get('rationale')}",
+                "",
+            ]
+        )
+    lines.extend(["## Matched source snippets", ""])
+    for row in snippets:
+        lines.extend(
+            [
+                f"### {row.get('key')}",
+                "",
+                f"role: `{row.get('role')}`",
+                f"file: `{row.get('file')}`",
+                f"matched: `{row.get('matched')}`",
+                f"line range: `{row.get('line_start')}-{row.get('line_end')}`",
+                "",
+                str(row.get("interpretation") or ""),
+                "",
+                "```fortran",
+                str(row.get("snippet") or ""),
+                "```",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            f"snippets_csv: `{snippets_csv.name}`",
+            f"capture_columns_csv: `{capture_csv.name}`",
+            f"instrumentation_steps_csv: `{steps_csv.name}`",
+            f"probe_notes: `{probe_path.name}`",
+            f"json: `{json_path.name}`",
+        ]
+    )
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {
+        "snippets_csv": str(snippets_csv),
+        "capture_columns_csv": str(capture_csv),
+        "instrumentation_steps_csv": str(steps_csv),
+        "probe_notes": str(probe_path),
+        "json": str(json_path),
+        "markdown": str(md_path),
+    }

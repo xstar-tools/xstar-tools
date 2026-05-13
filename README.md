@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.168** is a source-provenance audit cleanup. It keeps the v0.3.167 live `bremsa(:)` conclusion, but makes `examples/70_audit_xstar_live_bremsa_source_path.py` robust to `--variant-summary-csv` being a CSV file, an audit output directory, or an audit `.tar.gz`, and reports missing paths explicitly. No solver physics changed.
+Latest package note: **v0.3.169** is a source-provenance/instrumentation-planning cleanup. It extends the live `bremsa(:)` audit through the XSTAR rate-grid handoff: `trnfrc` high-resolution `bremsa(:)` is mapped by `bremsmap` to `epim(:)/bremsam(:)`, which is what `calc_hmc_all/calc_hmc_ion -> ucalc/phint53` receives. Exact type-53 parity therefore requires exposing or reconstructing the live rate-grid `bremsam(:)`, not another `xo01_detal4` detail-continuum variant. No solver physics changed.
 
 
 - `docs/user_guide.md`

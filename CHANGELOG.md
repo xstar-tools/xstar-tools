@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.169 - 2026-05-13
+
+- Source-provenance/instrumentation planning cleanup only; no solver physics, rate formulas, or empirical triplet tuning changed.
+- Adds `audit_xstar_live_rate_grid_bremsa_path(...)` and `write_xstar_live_rate_grid_bremsa_path_audit(...)` to `xstar_atomic.xstar_source_provenance`.
+- Adds `examples/71_audit_xstar_live_rate_grid_bremsa_path.py`, which extends the v0.3.167/v0.3.168 live-bremsa source audit through the XSTAR rate-grid handoff: `trnfrc.f90` high-resolution `bremsa(:)` -> `xstarcalc.f90` `bremsmap(...)` -> reduced-grid `epim(:)/bremsam(:)` -> `calc_hmc_all/calc_hmc_ion` -> `ucalc/phint53`.
+- Records that exact type-53 photoionization parity requires exposing or reconstructing the live rate-grid `epim(:), bremsam(:), bremsint(:)` state immediately after `bremsmap`, not another `xo01_detal4` `zrems(1:5)` variant.
+- Writes capture-column and instrumentation-step CSV files plus Fortran probe notes for a guarded XSTAR debug dump.
+- Keeps Python as the transparent audit/orchestration layer while documenting that production RT-coupled rate/matrix kernels should move to the planned C++ backend after physics parity is complete.
+
 ## v0.3.168 - 2026-05-13
 
 - Bugfix/diagnostic cleanup only; no solver physics, rate formulas, or empirical triplet tuning changed.
