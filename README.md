@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.169** is a source-provenance/instrumentation-planning cleanup. It extends the live `bremsa(:)` audit through the XSTAR rate-grid handoff: `trnfrc` high-resolution `bremsa(:)` is mapped by `bremsmap` to `epim(:)/bremsam(:)`, which is what `calc_hmc_all/calc_hmc_ion -> ucalc/phint53` receives. Exact type-53 parity therefore requires exposing or reconstructing the live rate-grid `bremsam(:)`, not another `xo01_detal4` detail-continuum variant. No solver physics changed.
+Latest package note: **v0.3.171** is a live-rate-grid probe instrumentation-helper release. It writes a standalone Fortran helper and `xstarcalc.f90` insertion block so a local/debug XSTAR build can dump the live `epim(:)`, `bremsam(:)`, and `bremsint(:)` arrays immediately after `bremsmap` and before `calc_hmc_all/calc_hmc_ion`. This is required for exact type-53 `phint53` photoionization parity. No solver physics changed.
 
 
 - `docs/user_guide.md`

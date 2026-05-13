@@ -162,7 +162,7 @@ def live_rate_grid_probe_fortran_template() -> str:
 
     cols = LIVE_RATE_GRID_REQUIRED_COLUMNS + LIVE_RATE_GRID_RECOMMENDED_COLUMNS
     header = ",".join(cols)
-    return f"""! xstar-atomic v0.3.170 live rate-grid probe template
+    return f"""! xstar-atomic v0.3.171 live rate-grid probe template
 ! Insert immediately after the xstarcalc.f90 call to bremsmap(...) and before
 ! calc_hmc_all/calc_hmc_ion receive epim,ncn2m,bremsam,bremsint.
 ! Guard this block with your local debug flag and selected zone/ion conditions.
@@ -288,7 +288,7 @@ def prepare_live_rate_grid_probe_products(
     out.mkdir(parents=True, exist_ok=True)
     schema_rows = live_rate_grid_probe_schema_rows()
     summary = {
-        "audit_version": "v0.3.170",
+        "audit_version": "v0.3.171",
         "purpose": "standardize the live epim/bremsam/bremsint capture needed for type-53 phint53 parity",
         "correct_capture_site": "xstarcalc.f90 immediately after bremsmap and before calc_hmc_all/calc_hmc_ion",
         "correct_live_rate_field": "epim(:), bremsam(:), bremsint(:)",
@@ -349,6 +349,216 @@ def prepare_live_rate_grid_probe_products(
         "markdown": str(md_path),
     }
 
+# ---------------------------------------------------------------------------
+# v0.3.171 local XSTAR instrumentation helper
+# ---------------------------------------------------------------------------
+
+def live_rate_grid_probe_fortran_helper() -> str:
+    """Return a standalone Fortran helper for writing the live rate-grid CSV.
+
+    This helper is intentionally external to XSTAR's physics routines.  A local
+    XSTAR checkout can compile this small file and insert a single guarded call
+    immediately after ``bremsmap`` in ``xstarcalc.f90``.  The helper writes the
+    CSV header once and appends one row per rate-grid point.  It avoids very
+    long Fortran source lines by using non-advancing writes.
+    """
+
+    return """! xstar-atomic v0.3.171 live rate-grid probe helper
+! Compile this file into a local/debug XSTAR build only.  It writes the live
+! rate-grid arrays epim(:), bremsam(:), and bremsint(:) immediately after
+! xstarcalc.f90 calls bremsmap and before calc_hmc_all/calc_hmc_ion.
+!
+      subroutine xstar_atomic_write_live_rate_grid_probe(filename,          &
+     &     zone_index,pass_index,ldir,ncn2m,epim,bremsam,bremsint,          &
+     &     radius_cm,temperature_k,electron_density,xpx,cfrac)
+      implicit none
+      character(len=*), intent(in) :: filename
+      integer, intent(in) :: zone_index,pass_index,ldir,ncn2m
+      real(8), intent(in) :: epim(*),bremsam(*),bremsint(*)
+      real(8), intent(in) :: radius_cm,temperature_k,electron_density
+      real(8), intent(in) :: xpx,cfrac
+      integer :: jk
+      logical :: file_exists
+      real(8) :: r19,fpr2
+!
+      inquire(file=filename, exist=file_exists)
+      open(unit=9876,file=filename,status='unknown',position='append',      &
+     &     action='write')
+      if (.not. file_exists) then
+        write(9876,'(A)',advance='no') 'zone_index,pass_index,ldir,'
+        write(9876,'(A)',advance='no') 'grid_index,ncn2m,epim_eV,'
+        write(9876,'(A)',advance='no') 'bremsam,bremsint,radius_cm,'
+        write(9876,'(A)',advance='no') 'r19,fpr2,temperature_K,'
+        write(9876,'(A)',advance='no') 'electron_density_cm^-3,xpx,'
+        write(9876,'(A)') 'cfrac,source_file,source_line'
+      endif
+      r19=radius_cm/1.d19
+      fpr2=12.56d0*r19*r19
+      do jk=1,ncn2m
+        write(9876,'(I0,A)',advance='no') zone_index,','
+        write(9876,'(I0,A)',advance='no') pass_index,','
+        write(9876,'(I0,A)',advance='no') ldir,','
+        write(9876,'(I0,A)',advance='no') jk,','
+        write(9876,'(I0,A)',advance='no') ncn2m,','
+        write(9876,'(ES24.16,A)',advance='no') epim(jk),','
+        write(9876,'(ES24.16,A)',advance='no') bremsam(jk),','
+        write(9876,'(ES24.16,A)',advance='no') bremsint(jk),','
+        write(9876,'(ES24.16,A)',advance='no') radius_cm,','
+        write(9876,'(ES24.16,A)',advance='no') r19,','
+        write(9876,'(ES24.16,A)',advance='no') fpr2,','
+        write(9876,'(ES24.16,A)',advance='no') temperature_k,','
+        write(9876,'(ES24.16,A)',advance='no') electron_density,','
+        write(9876,'(ES24.16,A)',advance='no') xpx,','
+        write(9876,'(ES24.16,A)',advance='no') cfrac,','
+        write(9876,'(A,A,I0)') 'xstarcalc.f90:after_bremsmap',',',0
+      enddo
+      close(9876)
+      return
+      end
+"""
+
+
+def live_rate_grid_probe_xstarcalc_insertion_block(
+    *,
+    filename: str = "xstar_live_rate_grid_probe.csv",
+    zone_expression: str = "-1",
+    pass_expression: str = "1",
+    ldir_expression: str = "0",
+    only_when_lpri2_negative: bool = False,
+) -> str:
+    """Return the call block to insert after ``call bremsmap``.
+
+    ``xstarcalc.f90`` often does not have the radial zone counter in scope, so
+    the default ``zone_expression`` is ``-1``.  Users who can pass or expose the
+    XSTAR shell index should replace it with the real zone variable.  The rate
+    comparison only needs the final captured state if the probe is used for a
+    single run/zone, but an explicit zone id is better for multi-zone workflows.
+    """
+
+    call = (
+        "      call xstar_atomic_write_live_rate_grid_probe(                         &\n"
+        f"     &     '{filename}',{zone_expression},{pass_expression},{ldir_expression},ncn2m,epim,bremsam,bremsint, &\n"
+        "     &     r,t*1.d4,xee*xpx,xpx,cfrac)"
+    )
+    if only_when_lpri2_negative:
+        return (
+            "! xstar-atomic live-rate-grid probe: insert immediately after bremsmap.\n"
+            "! This optional guard lets you activate the probe by setting lpri2<0 locally.\n"
+            "      if (lpri2.lt.0) then\n" + call + "\n      endif\n"
+        )
+    return "! xstar-atomic live-rate-grid probe: insert immediately after bremsmap.\n" + call + "\n"
+
+
+def locate_xstarcalc_bremsmap_site(xstar_source_root: str | Path) -> Dict[str, Any]:
+    """Locate the first ``call bremsmap`` site in an XSTAR source tree."""
+
+    root = Path(xstar_source_root)
+    candidates = list(root.rglob("xstarcalc.f90"))
+    if not candidates and root.name.lower() == "xstarcalc.f90":
+        candidates = [root]
+    if not candidates:
+        return {"status": "xstarcalc_not_found", "xstar_source_root": str(root)}
+    path = candidates[0]
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    idx = None
+    for i, line in enumerate(lines):
+        if "call bremsmap" in line.lower():
+            idx = i
+            break
+    if idx is None:
+        return {"status": "bremsmap_call_not_found", "xstarcalc_path": str(path)}
+    lo = max(0, idx - 6)
+    hi = min(len(lines), idx + 8)
+    return {
+        "status": "bremsmap_call_found",
+        "xstarcalc_path": str(path),
+        "bremsmap_line_number": idx + 1,
+        "context": "\n".join(f"{j+1}: {lines[j]}" for j in range(lo, hi)),
+    }
+
+
+def prepare_live_rate_grid_probe_patch_products(
+    out_dir: str | Path,
+    *,
+    xstar_source_root: str | Path | None = None,
+    filename: str = "xstar_live_rate_grid_probe.csv",
+    zone_expression: str = "-1",
+    pass_expression: str = "1",
+    ldir_expression: str = "0",
+    guarded: bool = False,
+    prefix: str = "xstar_live_rate_grid_probe_patch",
+) -> Dict[str, str]:
+    """Write helper/insertion files for local XSTAR instrumentation."""
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    helper = out / "xstar_atomic_live_rate_grid_probe.f90"
+    helper.write_text(live_rate_grid_probe_fortran_helper(), encoding="utf-8")
+    insertion = out / "xstarcalc_after_bremsmap_insertion.f90"
+    insertion.write_text(
+        live_rate_grid_probe_xstarcalc_insertion_block(
+            filename=filename,
+            zone_expression=zone_expression,
+            pass_expression=pass_expression,
+            ldir_expression=ldir_expression,
+            only_when_lpri2_negative=guarded,
+        ),
+        encoding="utf-8",
+    )
+    site = locate_xstarcalc_bremsmap_site(xstar_source_root) if xstar_source_root else {"status": "xstar_source_root_not_supplied"}
+    summary = {
+        "audit_version": "v0.3.171",
+        "purpose": "prepare a compileable local XSTAR live-rate-grid probe helper and xstarcalc insertion block",
+        "probe_output_csv": filename,
+        "zone_expression": zone_expression,
+        "pass_expression": pass_expression,
+        "ldir_expression": ldir_expression,
+        "guarded_by_lpri2_negative": guarded,
+        "capture_site_status": site.get("status"),
+        "xstarcalc_path": site.get("xstarcalc_path"),
+        "bremsmap_line_number": site.get("bremsmap_line_number"),
+        "next": "compile the helper into a local/debug XSTAR build, insert the call block immediately after bremsmap, rerun O VII, then validate the produced probe CSV with example 72",
+    }
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(json.dumps({"summary": summary, "site": site}, indent=2), encoding="utf-8")
+    md_path = out / f"{prefix}.md"
+    md = [
+        "# XSTAR live rate-grid probe patch preparation",
+        "",
+        f"audit_version: `{summary['audit_version']}`",
+        f"capture_site_status: `{summary.get('capture_site_status')}`",
+        f"xstarcalc_path: `{summary.get('xstarcalc_path') or ''}`",
+        f"bremsmap_line_number: `{summary.get('bremsmap_line_number') or ''}`",
+        "",
+        "## Files written",
+        "",
+        f"- `{helper.name}`: standalone helper subroutine to add to the local/debug XSTAR build.",
+        f"- `{insertion.name}`: call block to insert immediately after `call bremsmap(...)`.",
+        "",
+        "## Build notes",
+        "",
+        "1. Copy `xstar_atomic_live_rate_grid_probe.f90` into the XSTAR source tree, for example `xstarlib/src/`.",
+        "2. Add it to the local XSTAR build object list or compile it with the other library sources.",
+        "3. Insert the call block from `xstarcalc_after_bremsmap_insertion.f90` immediately after `call bremsmap(...)` in `xstarcalc.f90`.",
+        "4. Rerun the same O VII XSTAR case. It should create `xstar_live_rate_grid_probe.csv` in the run directory/current working directory.",
+        "5. Validate with `examples/72_prepare_xstar_live_rate_grid_probe.py --probe-csv xstar_live_rate_grid_probe.csv`.",
+        "",
+        "## Important notes",
+        "",
+        "- This is a local instrumentation probe, not a production XSTAR patch.",
+        "- The default `zone_expression=-1` is a placeholder because `xstarcalc.f90` may not have the radial shell index in scope. Replace it with the real zone variable if available.",
+        "- The probe writes `temperature_K=t*1.d4` and `electron_density_cm^-3=xee*xpx`, matching XSTAR's documented units in `xstarcalc.f90`.",
+        "",
+        "## Located bremsmap context",
+        "",
+        "```fortran",
+        str(site.get("context") or ""),
+        "```",
+        "",
+    ]
+    md_path.write_text("\n".join(md), encoding="utf-8")
+    return {"helper_fortran": str(helper), "insertion_block": str(insertion), "json": str(json_path), "markdown": str(md_path)}
+
 
 __all__ = [
     "LIVE_RATE_GRID_REQUIRED_COLUMNS",
@@ -360,4 +570,8 @@ __all__ = [
     "read_live_rate_grid_probe_csv",
     "summarize_live_rate_grid_probe_csv",
     "prepare_live_rate_grid_probe_products",
+    "live_rate_grid_probe_fortran_helper",
+    "live_rate_grid_probe_xstarcalc_insertion_block",
+    "locate_xstarcalc_bremsmap_site",
+    "prepare_live_rate_grid_probe_patch_products",
 ]
