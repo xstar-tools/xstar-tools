@@ -1272,6 +1272,261 @@ def write_type68_collision_rate_audit(result: Mapping[str, Any], out_dir: str | 
     return {"record_csv": str(record_csv), "terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
 
 
+
+def audit_type53_source_sink_rates(
+    *,
+    matrix_terms_csv: str | Path,
+    normalized_solve_csv: str | Path | None = None,
+    ion: str | None = None,
+    triplet_only: bool = False,
+    max_rows: int | None = 500,
+) -> Dict[str, Any]:
+    """Audit XSTAR type-53 photoionization/recombination matrix closure.
+
+    Type 53 is the largest remaining triplet-touching source/sink family after
+    the type-50 line escape and type-71/type-68 local handoff checks.  The
+    preserved full-global matrix terms contain two distinct type-53 branches:
+
+    * photoionization loss from a bound level plus gain into the continuum/
+      parent row, produced by the phint53 photoionization kernel; and
+    * inverse-recombination/Milne gain from the continuum/parent row into a
+      bound level plus the corresponding continuum diagonal loss.
+
+    This audit is deliberately matrix-local.  It verifies gain/loss placement
+    and, for the Milne branch, checks that the matrix uses the preserved
+    source-code ``phint53``/``ucalc`` ans2 value.  The photoionization branch
+    currently has no separate same-zone ans1 column in the preserved matrix
+    product, so it is classified as a source/sink closure check rather than an
+    independent Fortran integral re-evaluation.
+    """
+    matrix_path = Path(matrix_terms_csv)
+    matrix_rows = _read_csv_rows(matrix_path)
+    solve_rows = _read_csv_rows(normalized_solve_csv)
+    triplet = _triplet_levels_from_solve_rows(solve_rows)
+    lookup = _make_term_lookup(matrix_rows)
+
+    out_rows: List[Dict[str, Any]] = []
+    record_pairs: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for row in matrix_rows:
+        _fkey, data_type, source_label = _rate_family(row)
+        if data_type != "53":
+            continue
+        row_g = _as_int(row.get("matrix_row_global_index"))
+        col_g = _as_int(row.get("matrix_col_global_index"))
+        bound_g = _as_int(row.get("bound_global_index"))
+        continuum_g = _as_int(row.get("continuum_or_parent_global_index"))
+        touched_components = sorted(set(str(triplet[g].get("component") or "") for g in [row_g, col_g, bound_g] if g in triplet))
+        is_triplet_touch = bool(touched_components)
+        row_triplet_component = str(triplet.get(row_g or -999, {}).get("component") or "")
+        if triplet_only and not is_triplet_touch:
+            continue
+
+        kind = str(row.get("matrix_term_kind") or "")
+        role = str(row.get("matrix_role") or "")
+        if "milne" in kind.lower() or str(row.get("inverse_recombination_mode") or "").strip():
+            branch = "inverse_recombination_milne"
+        else:
+            branch = "photoionization"
+
+        signed = _signed_value(row)
+        matrix_rate = _rate_value(row)
+        rec = str(row.get("record") or row.get("record_id") or row.get("atdb_record") or "").strip()
+        partner = _partner_status(row, lookup)
+        direction = "row_gain" if signed is not None and signed > 0 else "row_loss" if signed is not None and signed < 0 else "row_source_or_unknown"
+
+        phint53_ans2 = _as_float(row.get("source_code_phint53_milne_ans2_rrrt_s^-1"))
+        milne_alpha_ne = _as_float(row.get("source_code_milne_f90_rate_alpha_ne_s^-1"))
+        expected = None
+        expected_source = ""
+        classification = "photoionization_kernel_matrix_rate_no_independent_ans1_column"
+        residual = ""
+        rel = ""
+        if branch == "inverse_recombination_milne":
+            expected = phint53_ans2
+            expected_source = "source_code_phint53_milne_ans2_rrrt_s^-1"
+            classification = "missing_phint53_milne_ans2_or_matrix_rate"
+            if expected is not None and matrix_rate is not None:
+                residual_val = float(matrix_rate) - float(expected)
+                rel_val = residual_val / max(abs(float(expected)), 1.0e-300)
+                residual = residual_val
+                rel = rel_val
+                tol = max(1.0e-30, 1.0e-10 * abs(float(expected)))
+                classification = "matrix_matches_phint53_milne_ans2" if abs(residual_val) <= tol else "matrix_rate_mismatch_vs_phint53_milne_ans2"
+
+        pair_key = (rec, branch)
+        pair = record_pairs.setdefault(pair_key, {
+            "record": rec,
+            "branch": branch,
+            "n_terms": 0,
+            "n_gain_terms": 0,
+            "n_loss_terms": 0,
+            "n_partner_matches": 0,
+            "n_matrix_matches_expected_rate": 0,
+            "abs_gain_sum_s^-1": 0.0,
+            "abs_loss_sum_s^-1": 0.0,
+            "largest_abs_rate_s^-1": 0.0,
+            "bound_global_index": bound_g if bound_g is not None else "",
+            "continuum_or_parent_global_index": continuum_g if continuum_g is not None else "",
+            "bound_level": row.get("bound_level") or "",
+            "target_ion_stage": row.get("target_ion_stage") or "",
+            "parent_ion_stage": row.get("parent_ion_stage") or "",
+            "touched_triplet_components": ";".join(touched_components),
+            "is_triplet_touching": bool(touched_components),
+        })
+        pair["n_terms"] += 1
+        if direction == "row_gain":
+            pair["n_gain_terms"] += 1
+            pair["abs_gain_sum_s^-1"] += abs(float(signed if signed is not None else matrix_rate or 0.0))
+        elif direction == "row_loss":
+            pair["n_loss_terms"] += 1
+            pair["abs_loss_sum_s^-1"] += abs(float(signed if signed is not None else matrix_rate or 0.0))
+        if partner.get("partner_status") == "matrix_gain_loss_partner_matches":
+            pair["n_partner_matches"] += 1
+        if classification in {"matrix_matches_phint53_milne_ans2", "photoionization_kernel_matrix_rate_no_independent_ans1_column"}:
+            pair["n_matrix_matches_expected_rate"] += 1
+        pair["largest_abs_rate_s^-1"] = max(float(pair["largest_abs_rate_s^-1"]), abs(float(signed if signed is not None else matrix_rate or 0.0)))
+
+        out = {
+            "ion": ion or "",
+            "record": rec,
+            "data_type": data_type,
+            "branch": branch,
+            "source_label": source_label,
+            "source_code_path": _RATE_FAMILY_SOURCE_PATHS.get(data_type, "not_yet_mapped_to_specific_fortran_path"),
+            "fortran_ucalc_branch": "ucalc.f90 type 53: phint53 photoionization ans1 and recombination/Milne ans2; matrix inserts paired bound<->continuum source/sink terms",
+            "matrix_row_global_index": row_g if row_g is not None else "",
+            "matrix_col_global_index": col_g if col_g is not None else "",
+            "direction": direction,
+            "matrix_term_kind": kind,
+            "matrix_role": role,
+            "signed_rate_s^-1": signed if signed is not None else "",
+            "matrix_rate_s^-1": matrix_rate if matrix_rate is not None else "",
+            "expected_rate_s^-1": expected if expected is not None else "",
+            "expected_rate_source": expected_source,
+            "matrix_minus_expected_s^-1": residual,
+            "relative_residual": rel,
+            "rate_classification": classification,
+            "partner_status": partner.get("partner_status"),
+            "partner_count": partner.get("partner_count"),
+            "partner_residual_s^-1": partner.get("partner_residual_s^-1"),
+            "bound_global_index": bound_g if bound_g is not None else "",
+            "continuum_or_parent_global_index": continuum_g if continuum_g is not None else "",
+            "bound_level": row.get("bound_level") or "",
+            "record_ion_stage": row.get("record_ion_stage") or "",
+            "target_ion_stage": row.get("target_ion_stage") or "",
+            "parent_ion_stage": row.get("parent_ion_stage") or "",
+            "triplet_component": row.get("triplet_component") or "",
+            "row_triplet_component": row_triplet_component,
+            "touched_triplet_components": ";".join(touched_components),
+            "is_triplet_touching": bool(touched_components),
+            "radiation_field_mode": row.get("radiation_field_mode") or "",
+            "type53_phint53_scale": row.get("type53_phint53_scale") or "",
+            "phint53_status": row.get("phint53_status") or "",
+            "inverse_recombination_mode": row.get("inverse_recombination_mode") or "",
+            "phint53_milne_ans2_status": row.get("phint53_milne_ans2_status") or "",
+            "source_code_phint53_milne_ans2_rrrt_s^-1": phint53_ans2 if phint53_ans2 is not None else "",
+            "source_code_milne_f90_rate_alpha_ne_s^-1": milne_alpha_ne if milne_alpha_ne is not None else "",
+            "milne_alpha_ne_over_phint53_ans2": (milne_alpha_ne / phint53_ans2) if (milne_alpha_ne is not None and phint53_ans2 not in (None, 0.0)) else "",
+            "warning": row.get("warning") or "",
+            "next_detail_audit_hint": "replace placeholder radiation with reconstructed same-zone bremsa/epi and compare phint53 ans1/ans2 directly against XSTAR detail/live state",
+        }
+        out_rows.append(out)
+
+    for pair in record_pairs.values():
+        pair["gain_loss_abs_residual_s^-1"] = abs(float(pair.get("abs_gain_sum_s^-1") or 0.0) - float(pair.get("abs_loss_sum_s^-1") or 0.0))
+        tol = max(1.0e-30, 1.0e-10 * max(float(pair.get("abs_gain_sum_s^-1") or 0.0), float(pair.get("abs_loss_sum_s^-1") or 0.0), 1.0))
+        pair["record_pair_classification"] = "gain_loss_pair_matches" if float(pair["gain_loss_abs_residual_s^-1"]) <= tol else "gain_loss_pair_mismatch"
+    record_rows = list(record_pairs.values())
+    record_rows.sort(key=lambda r: -float(r.get("largest_abs_rate_s^-1") or 0.0))
+    out_rows.sort(key=lambda r: -abs(float(r.get("signed_rate_s^-1") or r.get("matrix_rate_s^-1") or 0.0)))
+    selected_rows = out_rows if max_rows is None or max_rows <= 0 else out_rows[: int(max_rows)]
+    overall = {
+        "ion": ion or "",
+        "matrix_terms_csv": str(matrix_path),
+        "normalized_solve_csv": str(normalized_solve_csv or ""),
+        "n_type53_matrix_terms": len(out_rows),
+        "n_type53_record_branches": len(record_rows),
+        "n_type53_photoionization_terms": sum(1 for r in out_rows if r.get("branch") == "photoionization"),
+        "n_type53_milne_terms": sum(1 for r in out_rows if r.get("branch") == "inverse_recombination_milne"),
+        "n_type53_partner_matches": sum(1 for r in out_rows if r.get("partner_status") == "matrix_gain_loss_partner_matches"),
+        "n_type53_gain_loss_record_pairs_matching": sum(1 for r in record_rows if r.get("record_pair_classification") == "gain_loss_pair_matches"),
+        "n_type53_milne_matrix_matches_phint53_ans2": sum(1 for r in out_rows if r.get("rate_classification") == "matrix_matches_phint53_milne_ans2"),
+        "n_type53_triplet_touching_terms": sum(1 for r in out_rows if r.get("is_triplet_touching")),
+        "n_type53_triplet_population_row_terms": sum(1 for r in out_rows if str(r.get("row_triplet_component") or "") in {"f", "i", "r"}),
+        "triplet_only": bool(triplet_only),
+        "audit_scope": "type-53 photoionization and inverse-recombination/Milne source-sink matrix closure; no solver physics changed",
+        "source_code_reference": "ucalc.f90 type 53 / phint53-style continuum integrals; current matrix products expose placeholder-radiation photoionization rates and source-code phint53 Milne ans2 values",
+        "recommended_next_step": "replace placeholder type-53 radiation context with reconstructed same-zone detail bremsa/epi and compare phint53 ans1/ans2 against XSTAR local state; then audit type 63/69/77 and level populations",
+    }
+    return {"overall": overall, "record_rows": record_rows, "term_rows": selected_rows}
+
+
+def write_type53_source_sink_rate_audit(result: Mapping[str, Any], out_dir: str | Path, *, prefix: str = "xstar_type53_source_sink_rate_audit") -> Dict[str, str]:
+    """Write type-53 source/sink closure audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    record_rows = list(result.get("record_rows") or [])
+    term_rows = list(result.get("term_rows") or [])
+    overall = dict(result.get("overall") or {})
+    record_csv = out / f"{prefix}_record_summary.csv"
+    term_csv = out / f"{prefix}_terms.csv"
+    json_path = out / f"{prefix}.json"
+    md_path = out / f"{prefix}.md"
+    _write_csv(record_csv, record_rows)
+    _write_csv(term_csv, term_rows)
+    json_path.write_text(json.dumps({"overall": overall, "record_rows": record_rows, "term_rows": term_rows}, indent=2, sort_keys=True), encoding="utf-8")
+    lines = [
+        "# XSTAR type-53 source/sink rate audit",
+        "",
+        f"Ion: `{overall.get('ion','')}`",
+        "",
+        f"Type-53 matrix terms: `{overall.get('n_type53_matrix_terms')}`",
+        f"Type-53 record branches: `{overall.get('n_type53_record_branches')}`",
+        f"Photoionization terms: `{overall.get('n_type53_photoionization_terms')}`",
+        f"Milne/inverse-recombination terms: `{overall.get('n_type53_milne_terms')}`",
+        f"Partner matches: `{overall.get('n_type53_partner_matches')}`",
+        f"Gain/loss record-branch pairs matching: `{overall.get('n_type53_gain_loss_record_pairs_matching')}`",
+        f"Milne terms matching preserved `phint53` ans2: `{overall.get('n_type53_milne_matrix_matches_phint53_ans2')}`",
+        f"Triplet-touching terms: `{overall.get('n_type53_triplet_touching_terms')}`",
+        f"Triplet population-row terms: `{overall.get('n_type53_triplet_population_row_terms')}`",
+        "",
+        "This audit checks XSTAR data type 53 as a local source/sink closure problem. It verifies that photoionization and inverse-recombination/Milne rates appear as paired off-diagonal gain and diagonal loss terms. For the Milne branch, it also checks that the matrix rate equals the preserved source-code `phint53` ans2 value. It does not yet independently re-evaluate the photoionization integral from the same-zone live radiation field.",
+        "",
+        "## Record-branch gain-loss summary",
+        "",
+        "| record | branch | bound global | continuum/global parent | triplet components | gain terms | loss terms | largest rate | gain-loss residual | classification |",
+        "|---:|---|---:|---:|---|---:|---:|---:|---:|---|",
+    ]
+    for r in record_rows[:160]:
+        lines.append(
+            f"| {r.get('record')} | {r.get('branch')} | {r.get('bound_global_index')} | {r.get('continuum_or_parent_global_index')} | {r.get('touched_triplet_components')} | "
+            f"{r.get('n_gain_terms')} | {r.get('n_loss_terms')} | {r.get('largest_abs_rate_s^-1')} | {r.get('gain_loss_abs_residual_s^-1')} | {r.get('record_pair_classification')} |"
+        )
+    lines += [
+        "",
+        "## Largest type-53 matrix terms",
+        "",
+        "| record | branch | direction | bound global | continuum/global parent | matrix rate | expected rate | classification | partner status | radiation/source mode |",
+        "|---:|---|---|---:|---:|---:|---:|---|---|---|",
+    ]
+    for r in term_rows[:160]:
+        mode = r.get("radiation_field_mode") or r.get("inverse_recombination_mode") or ""
+        lines.append(
+            f"| {r.get('record')} | {r.get('branch')} | {r.get('direction')} | {r.get('bound_global_index')} | {r.get('continuum_or_parent_global_index')} | "
+            f"{r.get('matrix_rate_s^-1')} | {r.get('expected_rate_s^-1')} | {r.get('rate_classification')} | {r.get('partner_status')} | {mode} |"
+        )
+    lines += [
+        "",
+        "## Recommended next parity sequence",
+        "",
+        "1. Treat current type-53 matrix insertion as locally closed if all gain/loss partners close and all Milne matrix rows match preserved `phint53` ans2.",
+        "2. The remaining type-53 physics gap is not matrix placement; it is reconstructing XSTAR's same-zone `epi`, `bremsa`, `bremsint`, continuum depths, and parent populations closely enough to re-evaluate `phint53` ans1/ans2 without placeholder radiation.",
+        "3. After this closure check, audit type 63/69/77 placement and then compare Python populations directly with `xo01_detail.fits`.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"record_csv": str(record_csv), "terms_csv": str(term_csv), "json": str(json_path), "markdown": str(md_path)}
+
+
 __all__ = [
     "find_solver_product_paths",
     "audit_local_matrix_parity",
@@ -1282,4 +1537,6 @@ __all__ = [
     "write_type71_cascade_rate_audit",
     "audit_type68_collision_rates",
     "write_type68_collision_rate_audit",
+    "audit_type53_source_sink_rates",
+    "write_type53_source_sink_rate_audit",
 ]
