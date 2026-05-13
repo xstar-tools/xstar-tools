@@ -1540,3 +1540,454 @@ __all__ = [
     "audit_type53_source_sink_rates",
     "write_type53_source_sink_rate_audit",
 ]
+
+# -----------------------------------------------------------------------------
+# v0.3.162: detail-continuum phint53 photoionization audit
+
+
+def _parse_number_list(value: Any) -> List[float]:
+    """Parse a Python-list-like numeric field from preserved CSV products."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        out = []
+        for item in value:
+            val = _as_float(item)
+            if val is not None:
+                out.append(float(val))
+        return out
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        import ast
+        parsed = ast.literal_eval(text)
+        if isinstance(parsed, (list, tuple)):
+            return [float(x) for x in parsed if _as_float(x) is not None]
+    except Exception:
+        pass
+    import re
+    vals: List[float] = []
+    for token in re.findall(r"[-+]?\d*\.?\d+(?:[EeDd][-+]?\d+)?", text):
+        val = _as_float(token.replace("D", "E").replace("d", "e"))
+        if val is not None:
+            vals.append(float(val))
+    return vals
+
+
+def _type53_cross_section_pairs_cm2(value: Any) -> Tuple[List[float], List[float]]:
+    """Decode type-53 rdat pairs as energy-above-threshold [Ry], sigma [cm^2]."""
+    vals = _parse_number_list(value)
+    e_ry: List[float] = []
+    sigma_cm2: List[float] = []
+    for i in range(0, len(vals) - 1, 2):
+        e = _as_float(vals[i])
+        sig_mb = _as_float(vals[i + 1])
+        if e is None or sig_mb is None:
+            continue
+        e_ry.append(float(e))
+        sigma_cm2.append(max(float(sig_mb), 0.0) * 1.0e-18)
+    return e_ry, sigma_cm2
+
+
+def _interp_linear_zero_outside(x: float, xs: Sequence[float], ys: Sequence[float]) -> float:
+    if not xs or not ys or len(xs) != len(ys):
+        return 0.0
+    xx = float(x)
+    if xx < float(xs[0]) or xx > float(xs[-1]):
+        return 0.0
+    if xx == float(xs[-1]):
+        return float(ys[-1])
+    # Cross-section grids are short compared with XSTAR continuum grids.  A
+    # direct scan keeps this helper dependency-free and transparent.
+    for i in range(len(xs) - 1):
+        x0 = float(xs[i]); x1 = float(xs[i + 1])
+        if x0 <= xx <= x1:
+            if x1 <= x0:
+                return float(ys[i])
+            y0 = float(ys[i]); y1 = float(ys[i + 1])
+            return y0 + (y1 - y0) * (xx - x0) / (x1 - x0)
+    return 0.0
+
+
+def _evaluate_phint53_photoionization_ans1_detail_continuum(
+    *,
+    e_ry: Sequence[float],
+    sigma_cm2: Sequence[float],
+    threshold_eV: float,
+    epi_eV: Sequence[float],
+    bremsa: Sequence[float],
+) -> Dict[str, Any]:
+    """Evaluate the photoionization side of XSTAR ``phint53.f90`` on a detail grid.
+
+    This ports the source-code integrand for ``pirt``:
+
+    ``pirt += integral sigma(E) * bremsa(E) / E dE``
+
+    using the reconstructed ``xo01_detal4`` output-state continuum.  XSTAR's
+    Fortran maps the cross section onto continuum bins through an averaged
+    ``sgbar`` array before doing a trapezoidal integral.  This audit uses the
+    same source-code integrand on the same detail ``epi(:)``/``bremsa(:)`` grid,
+    with explicit reporting that exact in-loop parity still requires the live
+    transfer-array dump at the call site.
+    """
+    eth = _as_float(threshold_eV)
+    if eth is None or eth <= 0.0:
+        return {"detail_phint53_photo_status": "not_evaluated_missing_threshold_eV"}
+    if not e_ry or not sigma_cm2 or len(e_ry) != len(sigma_cm2):
+        return {"detail_phint53_photo_status": "not_evaluated_missing_cross_section_pairs"}
+    n = min(len(epi_eV), len(bremsa))
+    if n < 2:
+        return {"detail_phint53_photo_status": "not_evaluated_missing_detail_continuum_grid"}
+    pairs = sorted(
+        (float(eth) + max(float(er), 0.0) * 13.605692, max(float(sig), 0.0))
+        for er, sig in zip(e_ry, sigma_cm2)
+        if math.isfinite(float(er)) and math.isfinite(float(sig))
+    )
+    if len(pairs) < 2:
+        return {"detail_phint53_photo_status": "not_evaluated_too_few_cross_section_pairs"}
+    xs = [p[0] for p in pairs]
+    ys = [p[1] for p in pairs]
+    emin = max(float(eth), xs[0], float(epi_eV[0]))
+    emax = min(xs[-1], float(epi_eV[n - 1]))
+    if emax <= emin:
+        return {
+            "detail_phint53_photo_status": "not_evaluated_cross_section_outside_detail_continuum_grid",
+            "detail_phint53_threshold_eV": float(eth),
+            "detail_phint53_cross_section_energy_min_eV": xs[0],
+            "detail_phint53_cross_section_energy_max_eV": xs[-1],
+            "detail_phint53_epi_min_eV": float(epi_eV[0]),
+            "detail_phint53_epi_max_eV": float(epi_eV[n - 1]),
+        }
+    # Select native detail grid points spanning the cross-section interval and
+    # force both integration boundaries into the grid.
+    grid: List[float] = [emin]
+    for ee in epi_eV[:n]:
+        e = float(ee)
+        if emin < e < emax:
+            grid.append(e)
+    grid.append(emax)
+    grid = sorted(set(grid))
+    if len(grid) < 2:
+        return {"detail_phint53_photo_status": "not_evaluated_too_few_detail_bins_in_cross_section_range"}
+    # Interpolate bremsa on the native detail grid.
+    epi = [float(x) for x in epi_eV[:n]]
+    brem = [float(x) for x in bremsa[:n]]
+    def b_at(e: float) -> float:
+        return _interp_linear_zero_outside(e, epi, brem)
+    total = 0.0
+    sigma_weighted = 0.0
+    used = 0
+    prev_e = grid[0]
+    prev_sig = _interp_linear_zero_outside(prev_e, xs, ys)
+    prev_b = b_at(prev_e)
+    prev_y = prev_sig * prev_b / max(prev_e, 1.0e-300)
+    for e in grid[1:]:
+        sig = _interp_linear_zero_outside(e, xs, ys)
+        b = b_at(e)
+        y = sig * b / max(e, 1.0e-300)
+        de = e - prev_e
+        if de > 0.0:
+            total += 0.5 * (prev_y + y) * de
+            sigma_weighted += 0.5 * (prev_sig + sig) * de
+            used += 1
+        prev_e, prev_sig, prev_y = e, sig, y
+    return {
+        "detail_phint53_photo_status": "evaluated_detail_continuum_photoionization_ans1_integrand",
+        "detail_phint53_photo_ans1_s^-1": max(float(total), 0.0),
+        "detail_phint53_threshold_eV": float(eth),
+        "detail_phint53_cross_section_pairs": len(xs),
+        "detail_phint53_cross_section_energy_min_eV": xs[0],
+        "detail_phint53_cross_section_energy_max_eV": xs[-1],
+        "detail_phint53_epi_min_eV": float(epi[0]),
+        "detail_phint53_epi_max_eV": float(epi[-1]),
+        "detail_phint53_integral_energy_min_eV": float(emin),
+        "detail_phint53_integral_energy_max_eV": float(emax),
+        "detail_phint53_n_detail_grid_points": len(grid),
+        "detail_phint53_n_intervals_used": used,
+        "detail_phint53_sigma_integral_cm2_eV": max(float(sigma_weighted), 0.0),
+        "detail_phint53_source_file": "xstarlib/src/phint53.f90",
+        "detail_phint53_detail_source": "xo01_detal4.fits reconstructed bremsa output-state continuum",
+        "detail_phint53_warning": "Uses phint53 pirt integrand on reconstructed detail-output bremsa; exact call-site parity still requires XSTAR live bremsa(:), epi(:), opacities, and escape context at ucalc type 53.",
+    }
+
+
+def _level_by_global_index(global_rows: Sequence[Mapping[str, Any]]) -> Dict[int, Mapping[str, Any]]:
+    out: Dict[int, Mapping[str, Any]] = {}
+    for row in global_rows:
+        gi = _as_int(row.get("global_index"))
+        if gi is not None:
+            out[int(gi)] = row
+    return out
+
+
+def _first_existing_path(candidates: Sequence[Path]) -> Optional[Path]:
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def _infer_run_dir_from_benchmark(benchmark_dir: Path, ion: str | None) -> Optional[Path]:
+    ion_norm = _normalise_ion_key(ion) if ion else ""
+    for name in ["xstar_local_reproduction_suite_local_states.csv", "xstar_local_reproduction_suite_comparisons.csv"]:
+        p = benchmark_dir / name
+        if not p.exists():
+            continue
+        for row in _read_csv_rows(p):
+            if ion_norm and _normalise_ion_key(row.get("ion")) != ion_norm:
+                continue
+            raw = str(row.get("run_dir") or "").strip()
+            if not raw:
+                continue
+            rp = Path(raw)
+            for base in [Path.cwd(), benchmark_dir, benchmark_dir.parent]:
+                cand = rp if rp.is_absolute() else base / rp
+                if cand.exists():
+                    return cand
+            return rp
+    return None
+
+
+def audit_type53_detail_phint53_radiation(
+    *,
+    benchmark_dir: str | Path | None = None,
+    ion: str = "O VII",
+    run_dir: str | Path | None = None,
+    matrix_terms_csv: str | Path | None = None,
+    adjacent_coupling_csv: str | Path | None = None,
+    global_index_csv: str | Path | None = None,
+    comparisons_csv: str | Path | None = None,
+    zone_index: int | str = "last",
+    triplet_only: bool = False,
+    max_records: int | None = None,
+) -> Dict[str, Any]:
+    """Audit type-53 photoionization rates against reconstructed detail continuum.
+
+    The v0.3.161 audit verified type-53 source/sink closure in the matrix.  This
+    audit is the next narrower test: it recomputes the photoionization ``ans1``
+    side of ``phint53.f90`` from the same-run ``xo01_detal4.fits`` continuum
+    reconstruction and compares it with the matrix photoionization kernel rate.
+    """
+    root = Path(benchmark_dir) if benchmark_dir is not None else Path(".")
+    paths = find_solver_product_paths(root, ion=ion, comparisons_csv=comparisons_csv) if benchmark_dir is not None else {}
+    matrix_path = Path(matrix_terms_csv) if matrix_terms_csv is not None else paths.get("matrix_terms_csv")
+    if matrix_path is None or not matrix_path.exists():
+        raise ValueError("provide --matrix-terms-csv or --benchmark-dir with preserved solver products")
+    product_dir = matrix_path.parent
+    adjacent_path = Path(adjacent_coupling_csv) if adjacent_coupling_csv is not None else _first_existing_path([
+        product_dir / "xstar_like_element_solver_adjacent_coupling_terms.csv",
+    ])
+    global_path = Path(global_index_csv) if global_index_csv is not None else _first_existing_path([
+        product_dir / "xstar_like_element_solver_global_index.csv",
+    ])
+    if adjacent_path is None or not adjacent_path.exists():
+        raise ValueError("adjacent coupling CSV not found; provide --adjacent-coupling-csv")
+    if global_path is None or not global_path.exists():
+        raise ValueError("global index CSV not found; provide --global-index-csv")
+
+    matrix_rows = _read_csv_rows(matrix_path)
+    adjacent_rows = _read_csv_rows(adjacent_path)
+    global_rows = _read_csv_rows(global_path)
+    level_by_g = _level_by_global_index(global_rows)
+    adjacent_by_record = {str(r.get("record") or "").strip(): r for r in adjacent_rows if str(r.get("data_type") or "").strip() == "53"}
+
+    # Optional same-run detail continuum.
+    inferred_run_dir = Path(run_dir) if run_dir is not None else (_infer_run_dir_from_benchmark(root, ion) if benchmark_dir is not None else None)
+    detail_status = "not_loaded"
+    detail_source = ""
+    epi: List[float] = []
+    bremsa: List[float] = []
+    detail_zone_index: Any = zone_index
+    if inferred_run_dir is not None:
+        try:
+            from .xstar_detail import read_xstar_detail_run_state
+            state = read_xstar_detail_run_state(inferred_run_dir, include_level_populations=False, include_line_transfer=False, include_continuum=True)
+            if state.zones:
+                if isinstance(zone_index, str) and str(zone_index).lower() == "last":
+                    zone = state.zones[-1]
+                else:
+                    zi = int(zone_index)
+                    zone = state.zones[zi - 1]
+                if zone.continuum is not None and zone.continuum.epi and zone.continuum.bremsa:
+                    epi = list(zone.continuum.epi)
+                    bremsa = list(zone.continuum.bremsa)
+                    detail_status = "loaded_detail_continuum"
+                    detail_source = str(inferred_run_dir)
+                    detail_zone_index = zone.zone_index
+                else:
+                    detail_status = "detail_state_loaded_but_continuum_missing"
+                    detail_source = str(inferred_run_dir)
+            else:
+                detail_status = "detail_state_has_no_zones"
+                detail_source = str(inferred_run_dir)
+        except Exception as exc:
+            detail_status = f"detail_continuum_load_failed:{type(exc).__name__}:{exc}"
+            detail_source = str(inferred_run_dir)
+    else:
+        detail_status = "run_dir_not_supplied_or_inferable"
+
+    candidates: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
+    for row in matrix_rows:
+        if str(row.get("data_type") or "").strip() != "53":
+            continue
+        component = str(row.get("full_global_component") or "")
+        role = str(row.get("matrix_role") or "")
+        kind = str(row.get("matrix_term_kind") or "")
+        if "photoionization" not in component and "photoionization" not in role and "phint53" not in kind:
+            continue
+        if "milne" in component.lower() or "xstar_ucalc" in str(row.get("global_type53_xstar_ucalc_term_id") or ""):
+            continue
+        if triplet_only:
+            comp = str(row.get("triplet_component") or "").strip().lower()
+            bg = _as_int(row.get("bound_global_index"))
+            lev = level_by_g.get(int(bg)) if bg is not None else None
+            is_trip = comp in {"f", "i", "r"} or str(lev.get("is_triplet_upper") if lev else "").lower() in {"true", "1", "yes"}
+            if not is_trip:
+                continue
+        record = str(row.get("record") or "").strip()
+        bg = _as_int(row.get("bound_global_index")) or -1
+        cg = _as_int(row.get("continuum_or_parent_global_index")) or -1
+        key = (record, int(bg), int(cg))
+        # Keep one positive-rate representative per record/branch.  The gain
+        # and loss partner rows were already checked by v0.3.161.
+        rate = _as_float(row.get("full_global_rate_s^-1") or row.get("rate_s^-1"), 0.0) or 0.0
+        prev = candidates.get(key)
+        if prev is None or rate > float(prev.get("matrix_photoionization_rate_s^-1") or 0.0):
+            candidates[key] = dict(row, matrix_photoionization_rate_s__1=rate)
+
+    rows: List[Dict[str, Any]] = []
+    for idx, ((record, bg, cg), mrow) in enumerate(candidates.items(), start=1):
+        if max_records is not None and idx > int(max_records):
+            break
+        adj = adjacent_by_record.get(record, {})
+        lev = level_by_g.get(int(bg), {}) if bg is not None else {}
+        cont = level_by_g.get(int(cg), {}) if cg is not None else {}
+        e_ry, sigma_cm2 = _type53_cross_section_pairs_cm2(adj.get("type53_raw_reals_full") or adj.get("raw_reals_preview"))
+        threshold = _as_float(lev.get("binding_from_continuum_eV"))
+        if threshold is None or threshold <= 0.0:
+            ip = _as_float(lev.get("ionization_potential_eV"))
+            ee = _as_float(lev.get("energy_eV"), 0.0) or 0.0
+            threshold = (ip - ee) if ip is not None else None
+        matrix_rate = _as_float(mrow.get("full_global_rate_s^-1") or mrow.get("rate_s^-1"), 0.0) or 0.0
+        eval_result: Dict[str, Any]
+        if detail_status != "loaded_detail_continuum":
+            eval_result = {"detail_phint53_photo_status": detail_status}
+        else:
+            eval_result = _evaluate_phint53_photoionization_ans1_detail_continuum(
+                e_ry=e_ry,
+                sigma_cm2=sigma_cm2,
+                threshold_eV=float(threshold or 0.0),
+                epi_eV=epi,
+                bremsa=bremsa,
+            )
+        detail_rate = _as_float(eval_result.get("detail_phint53_photo_ans1_s^-1"))
+        if detail_rate is None:
+            cls = "detail_phint53_not_evaluated"
+            diff = None
+            rel = None
+            ratio = None
+        else:
+            diff = float(matrix_rate) - float(detail_rate)
+            rel = abs(diff) / max(abs(float(detail_rate)), 1.0e-300)
+            ratio = float(matrix_rate) / max(float(detail_rate), 1.0e-300)
+            cls = "matrix_matches_detail_phint53_ans1" if rel <= 1.0e-6 else "matrix_differs_from_detail_phint53_ans1"
+        rows.append({
+            "row_kind": "type53_detail_phint53_photo_audit",
+            "audit_version": "v0.3.162",
+            "ion": ion,
+            "record": record,
+            "bound_global_index": bg,
+            "bound_level": mrow.get("bound_level") or adj.get("idest1_guess"),
+            "bound_level_label": lev.get("level_label"),
+            "triplet_component": mrow.get("triplet_component") or lev.get("triplet_component"),
+            "continuum_or_parent_global_index": cg,
+            "continuum_level_label": cont.get("level_label"),
+            "matrix_photoionization_rate_s^-1": matrix_rate,
+            "detail_phint53_photo_ans1_s^-1": detail_rate,
+            "matrix_minus_detail_phint53_ans1_s^-1": diff,
+            "matrix_over_detail_phint53_ans1": ratio,
+            "relative_error_vs_detail_phint53_ans1": rel,
+            "classification": cls,
+            "detail_continuum_status": detail_status,
+            "detail_continuum_source": detail_source,
+            "detail_zone_index": detail_zone_index,
+            "n_detail_epi": len(epi),
+            "n_type53_cross_section_pairs": len(e_ry),
+            "threshold_eV_source": "global_index.binding_from_continuum_eV",
+            **eval_result,
+        })
+
+    evaluated = [r for r in rows if r.get("classification") != "detail_phint53_not_evaluated"]
+    matching = [r for r in evaluated if r.get("classification") == "matrix_matches_detail_phint53_ans1"]
+    differing = [r for r in evaluated if r.get("classification") == "matrix_differs_from_detail_phint53_ans1"]
+    top = sorted(rows, key=lambda r: abs(_as_float(r.get("matrix_minus_detail_phint53_ans1_s^-1"), 0.0) or 0.0), reverse=True)[:12]
+    summary = {
+        "audit_version": "v0.3.162",
+        "ion": ion,
+        "matrix_terms_csv": str(matrix_path),
+        "adjacent_coupling_csv": str(adjacent_path),
+        "global_index_csv": str(global_path),
+        "run_dir": str(inferred_run_dir) if inferred_run_dir is not None else "",
+        "detail_continuum_status": detail_status,
+        "detail_zone_index": detail_zone_index,
+        "triplet_only": bool(triplet_only),
+        "n_type53_photoionization_records": len(rows),
+        "n_detail_phint53_evaluated": len(evaluated),
+        "n_detail_phint53_matches": len(matching),
+        "n_detail_phint53_differs": len(differing),
+        "n_detail_epi": len(epi),
+        "top_records_by_abs_matrix_minus_detail": top,
+        "status": "detail_phint53_photoionization_audit_completed",
+        "warning": "Detail bremsa is reconstructed from xo01_detal4 output-state rows; use this audit to expose radiation-field differences before claiming exact phint53 call-site parity.",
+    }
+    return {"summary": summary, "rows": rows}
+
+
+def write_type53_detail_phint53_radiation_audit(
+    audit: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_type53_detail_phint53_radiation_audit",
+) -> Dict[str, str]:
+    """Write v0.3.162 detail-continuum phint53 audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = list(audit.get("rows", []) or [])
+    summary = dict(audit.get("summary", {}) or {})
+    csv_path = out / f"{prefix}_records.csv"
+    _write_csv(csv_path, rows)
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, default=str), encoding="utf-8")
+    md_path = out / f"{prefix}.md"
+    lines = [
+        "# XSTAR type-53 detail-continuum phint53 radiation audit",
+        "",
+        f"ion: `{summary.get('ion')}`",
+        f"detail_continuum_status: `{summary.get('detail_continuum_status')}`",
+        f"triplet_only: `{summary.get('triplet_only')}`",
+        f"n_type53_photoionization_records: `{summary.get('n_type53_photoionization_records')}`",
+        f"n_detail_phint53_evaluated: `{summary.get('n_detail_phint53_evaluated')}`",
+        f"n_detail_phint53_matches: `{summary.get('n_detail_phint53_matches')}`",
+        f"n_detail_phint53_differs: `{summary.get('n_detail_phint53_differs')}`",
+        "",
+        "This audit recomputes the photoionization `ans1` side of `phint53.f90` from the reconstructed `xo01_detal4.fits` continuum and compares it with the preserved type-53 matrix photoionization rate.",
+        "",
+        "## Largest records by |matrix - detail phint53 ans1|",
+        "",
+    ]
+    top = summary.get("top_records_by_abs_matrix_minus_detail") or []
+    if top:
+        lines.append("| record | bound | comp | matrix | detail ans1 | ratio | class |")
+        lines.append("|---:|---|---|---:|---:|---:|---|")
+        for row in top:
+            lines.append(
+                f"| {row.get('record')} | {row.get('bound_level_label')} | {row.get('triplet_component')} | "
+                f"{row.get('matrix_photoionization_rate_s^-1')} | {row.get('detail_phint53_photo_ans1_s^-1')} | "
+                f"{row.get('matrix_over_detail_phint53_ans1')} | {row.get('classification')} |"
+            )
+    else:
+        lines.append("No evaluated records were available.")
+    lines.extend(["", f"records_csv: `{csv_path.name}`", f"json: `{json_path.name}`"])
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"records_csv": str(csv_path), "json": str(json_path), "markdown": str(md_path)}
