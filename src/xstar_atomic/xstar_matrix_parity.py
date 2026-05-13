@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -1718,6 +1719,137 @@ def _evaluate_phint53_photoionization_ans1_detail_continuum(
     }
 
 
+def _evaluate_phint53_photoionization_ans1_detail_continuum_variants_fast(
+    *,
+    e_ry: Sequence[float],
+    sigma_cm2: Sequence[float],
+    threshold_eV: float,
+    epi_eV: Sequence[float],
+    bremsa_variants: Mapping[str, Sequence[float]],
+) -> Dict[str, Dict[str, Any]]:
+    """Vectorized v0.3.165 helper for one type-53 record and many continua.
+
+    The v0.3.164 bremsa-variant audit evaluated each record/variant pair with
+    repeated Python interpolation loops.  This helper keeps the same trapezoidal
+    ``sigma(E) * bremsa(E) / E`` diagnostic integrand, but precomputes the
+    cross-section values on the integration grid once per record and evaluates
+    every requested bremsa variant with NumPy vector operations.
+
+    It is still a Python audit prototype, not the production XSTAR backend.  The
+    production target for these hot loops is a C++ kernel once the physics parity
+    path is fixed.
+    """
+    names = [str(name) for name in bremsa_variants.keys()]
+    if not names:
+        return {}
+    eth = _as_float(threshold_eV)
+    if eth is None or eth <= 0.0:
+        return {name: {"detail_phint53_photo_status": "not_evaluated_missing_threshold_eV"} for name in names}
+    if not e_ry or not sigma_cm2 or len(e_ry) != len(sigma_cm2):
+        return {name: {"detail_phint53_photo_status": "not_evaluated_missing_cross_section_pairs"} for name in names}
+    n_epi = len(epi_eV)
+    if n_epi < 2:
+        return {name: {"detail_phint53_photo_status": "not_evaluated_missing_detail_continuum_grid"} for name in names}
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        # Safe fallback keeps the public function usable in minimal
+        # environments, though the normal package depends on NumPy elsewhere.
+        return {
+            name: _evaluate_phint53_photoionization_ans1_detail_continuum(
+                e_ry=e_ry,
+                sigma_cm2=sigma_cm2,
+                threshold_eV=float(eth),
+                epi_eV=epi_eV,
+                bremsa=bremsa_variants[name],
+            )
+            for name in names
+        }
+
+    pairs = sorted(
+        (float(eth) + max(float(er), 0.0) * 13.605692, max(float(sig), 0.0))
+        for er, sig in zip(e_ry, sigma_cm2)
+        if math.isfinite(float(er)) and math.isfinite(float(sig))
+    )
+    if len(pairs) < 2:
+        return {name: {"detail_phint53_photo_status": "not_evaluated_too_few_cross_section_pairs"} for name in names}
+    epi = np.asarray([float(x) for x in epi_eV], dtype=float)
+    finite_epi = np.isfinite(epi)
+    if epi.size < 2 or not bool(np.all(finite_epi)):
+        return {name: {"detail_phint53_photo_status": "not_evaluated_invalid_detail_continuum_grid"} for name in names}
+    # The FITS detail grid is already sorted in normal XSTAR output.  Sorting is
+    # cheap compared with the old nested loops and makes in-memory tests safer.
+    if bool(np.any(np.diff(epi) < 0.0)):
+        order = np.argsort(epi)
+        epi = epi[order]
+    else:
+        order = None
+    xs = np.asarray([p[0] for p in pairs], dtype=float)
+    ys = np.asarray([p[1] for p in pairs], dtype=float)
+    emin = max(float(eth), float(xs[0]), float(epi[0]))
+    emax = min(float(xs[-1]), float(epi[-1]))
+    common_outside = {
+        "detail_phint53_threshold_eV": float(eth),
+        "detail_phint53_cross_section_energy_min_eV": float(xs[0]),
+        "detail_phint53_cross_section_energy_max_eV": float(xs[-1]),
+        "detail_phint53_epi_min_eV": float(epi[0]),
+        "detail_phint53_epi_max_eV": float(epi[-1]),
+    }
+    if emax <= emin:
+        return {
+            name: {
+                "detail_phint53_photo_status": "not_evaluated_cross_section_outside_detail_continuum_grid",
+                **common_outside,
+            }
+            for name in names
+        }
+    inside = epi[(epi > emin) & (epi < emax)]
+    grid = np.unique(np.concatenate(([emin], inside, [emax]))).astype(float)
+    if grid.size < 2:
+        return {name: {"detail_phint53_photo_status": "not_evaluated_too_few_detail_bins_in_cross_section_range"} for name in names}
+    sigma_grid = np.interp(grid, xs, ys, left=0.0, right=0.0)
+    kernel = sigma_grid / np.maximum(grid, 1.0e-300)
+    # sigma integral is independent of bremsa and useful for source-code audits.
+    trapz = getattr(np, "trapezoid", np.trapz)
+    sigma_weighted = float(trapz(sigma_grid, grid)) if grid.size >= 2 else 0.0
+    results: Dict[str, Dict[str, Any]] = {}
+    for name in names:
+        braw = np.asarray([float(x) for x in bremsa_variants[name]], dtype=float)
+        n = min(int(braw.size), int(epi.size))
+        if n < 2:
+            results[name] = {"detail_phint53_photo_status": "not_evaluated_missing_detail_continuum_grid"}
+            continue
+        b = braw[:n]
+        epi_use = epi[:n]
+        if order is not None and len(order) == len(braw):
+            b = braw[order]
+            epi_use = epi
+        if not bool(np.all(np.isfinite(b))):
+            b = np.where(np.isfinite(b), b, 0.0)
+        b_grid = np.interp(grid, epi_use, b, left=0.0, right=0.0)
+        total = float(trapz(kernel * b_grid, grid)) if grid.size >= 2 else 0.0
+        results[name] = {
+            "detail_phint53_photo_status": "evaluated_detail_continuum_photoionization_ans1_integrand_vectorized_v03165",
+            "detail_phint53_photo_ans1_s^-1": max(float(total), 0.0),
+            "detail_phint53_threshold_eV": float(eth),
+            "detail_phint53_cross_section_pairs": int(xs.size),
+            "detail_phint53_cross_section_energy_min_eV": float(xs[0]),
+            "detail_phint53_cross_section_energy_max_eV": float(xs[-1]),
+            "detail_phint53_epi_min_eV": float(epi[0]),
+            "detail_phint53_epi_max_eV": float(epi[-1]),
+            "detail_phint53_integral_energy_min_eV": float(emin),
+            "detail_phint53_integral_energy_max_eV": float(emax),
+            "detail_phint53_n_detail_grid_points": int(grid.size),
+            "detail_phint53_n_intervals_used": int(max(grid.size - 1, 0)),
+            "detail_phint53_sigma_integral_cm2_eV": max(float(sigma_weighted), 0.0),
+            "detail_phint53_source_file": "xstarlib/src/phint53.f90",
+            "detail_phint53_detail_source": "xo01_detal4.fits reconstructed bremsa output-state continuum",
+            "detail_phint53_vectorized_audit": "v0.3.165 precomputed sigma(E) and evaluated all requested bremsa variants by vectorized dot/trapezoid operations",
+            "detail_phint53_warning": "Uses phint53 pirt integrand on reconstructed detail-output bremsa; exact call-site parity still requires XSTAR live bremsa(:), epi(:), opacities, and escape context at ucalc type 53.",
+        }
+    return results
+
+
 def _level_by_global_index(global_rows: Sequence[Mapping[str, Any]]) -> Dict[int, Mapping[str, Any]]:
     out: Dict[int, Mapping[str, Any]] = {}
     for row in global_rows:
@@ -1775,6 +1907,7 @@ def audit_type53_detail_phint53_radiation(
     side of ``phint53.f90`` from the same-run ``xo01_detal4.fits`` continuum
     reconstruction and compares it with the matrix photoionization kernel rate.
     """
+    t_start = time.perf_counter()
     root = Path(benchmark_dir) if benchmark_dir is not None else Path(".")
     paths = find_solver_product_paths(root, ion=ion, comparisons_csv=comparisons_csv) if benchmark_dir is not None else {}
     matrix_path = Path(matrix_terms_csv) if matrix_terms_csv is not None else paths.get("matrix_terms_csv")
@@ -2272,7 +2405,7 @@ def write_type53_detail_phint53_scale_audit(
 
 
 # -----------------------------------------------------------------------------
-# v0.3.164: detail-continuum bremsa reconstruction variant audit
+# v0.3.164/v0.3.165: detail-continuum bremsa reconstruction variant audit
 
 
 def _zrems_value(row: Mapping[str, Any], idx: int) -> float:
@@ -2441,6 +2574,9 @@ def audit_type53_detail_phint53_bremsa_variants(
     zone_index: int | str = "last",
     triplet_only: bool = False,
     max_records: int | None = None,
+    variant_names: Sequence[str] | None = None,
+    fast: bool = False,
+    profile: bool = False,
     # In-memory hooks used by tests and notebooks.
     matrix_rows: Sequence[Mapping[str, Any]] | None = None,
     adjacent_rows: Sequence[Mapping[str, Any]] | None = None,
@@ -2458,6 +2594,7 @@ def audit_type53_detail_phint53_bremsa_variants(
     live incident ``zremsz(:)`` for the outward ``bremsa(:)``, while
     ``fstepr4.f90`` writes only ``zrems(1:5,:)`` to ``xo01_detal4.fits``.
     """
+    t_start = time.perf_counter()
     root = Path(benchmark_dir) if benchmark_dir is not None else Path(".")
     paths = find_solver_product_paths(root, ion=ion, comparisons_csv=comparisons_csv) if benchmark_dir is not None else {}
     matrix_path = Path(matrix_terms_csv) if matrix_terms_csv is not None else paths.get("matrix_terms_csv")
@@ -2530,15 +2667,47 @@ def audit_type53_detail_phint53_bremsa_variants(
         else:
             detail_status = "run_dir_not_supplied_or_inferable"
 
+    # v0.3.165 performance cleanup: choose variants before the expensive
+    # integration loop and evaluate all selected variants together for each
+    # record.  ``fast`` intentionally exercises only the physically useful
+    # candidate continua that diagnosed the v0.3.164 normalization gap.
+    fast_default_variants = [
+        "default_reader_bremsa",
+        "sum_zrems_no_att_over_fpr2",
+        "zrems1_over_fpr2_trnfrc_inward_form",
+        "sum_zrems_exp_fwd_no_geometric_divide",
+    ]
+    requested_variants = [str(v).strip() for v in (variant_names or []) if str(v).strip()]
+    if fast and not requested_variants:
+        requested_variants = fast_default_variants
+    requested_missing: List[str] = []
+    if requested_variants:
+        filtered: Dict[str, Tuple[List[float], List[float]]] = {}
+        for name in requested_variants:
+            if name in variant_map:
+                filtered[name] = variant_map[name]
+            else:
+                requested_missing.append(name)
+        variant_map = filtered
+
     candidates = _type53_photoionization_candidates(matrix_rows, level_by_g, triplet_only=triplet_only)
     candidate_items = list(candidates.items())
     if max_records is not None:
         candidate_items = candidate_items[: int(max_records)]
 
-    variant_rows: List[Dict[str, Any]] = []
+    variant_rows_by_name: Dict[str, List[Dict[str, Any]]] = {name: [] for name in variant_map}
     variant_summaries: List[Dict[str, Any]] = []
-    for variant_name, (epi, bremsa) in variant_map.items():
-        rows: List[Dict[str, Any]] = []
+    integration_t0 = time.perf_counter()
+    n_vectorized_record_batches = 0
+    n_evaluated_variant_record_pairs = 0
+    if variant_map:
+        # In normal detail files all variants share the same epi(:).  In-memory
+        # tests may pass separate grids, so group by grid to keep correctness.
+        variant_groups: Dict[Tuple[float, ...], Dict[str, Tuple[List[float], List[float]]]] = {}
+        for vname, pair in variant_map.items():
+            epi_v, _ = pair
+            key = tuple(float(x) for x in epi_v)
+            variant_groups.setdefault(key, {})[vname] = pair
         for (record, bg, cg), mrow in candidate_items:
             adj = adjacent_by_record.get(record, {})
             lev = level_by_g.get(int(bg), {}) if bg is not None else {}
@@ -2550,35 +2719,48 @@ def audit_type53_detail_phint53_bremsa_variants(
                 ee = _as_float(lev.get("energy_eV"), 0.0) or 0.0
                 threshold = (ip - ee) if ip is not None else None
             matrix_rate = _as_float(mrow.get("matrix_photoionization_rate_s^-1") or mrow.get("full_global_rate_s^-1") or mrow.get("rate_s^-1"), 0.0) or 0.0
-            eval_result = _evaluate_phint53_photoionization_ans1_detail_continuum(
-                e_ry=e_ry,
-                sigma_cm2=sigma_cm2,
-                threshold_eV=float(threshold or 0.0),
-                epi_eV=epi,
-                bremsa=bremsa,
-            )
-            detail_rate = _as_float(eval_result.get("detail_phint53_photo_ans1_s^-1"))
-            ratio = (float(matrix_rate) / detail_rate) if detail_rate is not None and detail_rate > 0.0 else None
-            rows.append({
-                "row_kind": "type53_detail_phint53_bremsa_variant_audit",
-                "audit_version": "v0.3.164",
-                "ion": ion,
-                "bremsa_variant": variant_name,
-                "record": record,
-                "bound_global_index": bg,
-                "bound_level_label": lev.get("level_label"),
-                "triplet_component": mrow.get("triplet_component") or lev.get("triplet_component"),
-                "continuum_or_parent_global_index": cg,
-                "continuum_level_label": cont.get("level_label"),
-                "matrix_photoionization_rate_s^-1": matrix_rate,
-                "variant_detail_phint53_photo_ans1_s^-1": detail_rate,
-                "matrix_over_variant_detail_phint53_ans1": ratio,
-                "variant_detail_phint53_status": eval_result.get("detail_phint53_photo_status"),
-                "detail_phint53_threshold_eV": eval_result.get("detail_phint53_threshold_eV"),
-                "detail_phint53_n_intervals_used": eval_result.get("detail_phint53_n_intervals_used"),
-            })
+            for epi_key, grouped in variant_groups.items():
+                epi_values = list(epi_key)
+                brem_by_variant = {name: pair[1] for name, pair in grouped.items()}
+                evals = _evaluate_phint53_photoionization_ans1_detail_continuum_variants_fast(
+                    e_ry=e_ry,
+                    sigma_cm2=sigma_cm2,
+                    threshold_eV=float(threshold or 0.0),
+                    epi_eV=epi_values,
+                    bremsa_variants=brem_by_variant,
+                )
+                n_vectorized_record_batches += 1
+                for variant_name, eval_result in evals.items():
+                    detail_rate = _as_float(eval_result.get("detail_phint53_photo_ans1_s^-1"))
+                    ratio = (float(matrix_rate) / detail_rate) if detail_rate is not None and detail_rate > 0.0 else None
+                    row = {
+                        "row_kind": "type53_detail_phint53_bremsa_variant_audit",
+                        "audit_version": "v0.3.165",
+                        "ion": ion,
+                        "bremsa_variant": variant_name,
+                        "record": record,
+                        "bound_global_index": bg,
+                        "bound_level_label": lev.get("level_label"),
+                        "triplet_component": mrow.get("triplet_component") or lev.get("triplet_component"),
+                        "continuum_or_parent_global_index": cg,
+                        "continuum_level_label": cont.get("level_label"),
+                        "matrix_photoionization_rate_s^-1": matrix_rate,
+                        "variant_detail_phint53_photo_ans1_s^-1": detail_rate,
+                        "matrix_over_variant_detail_phint53_ans1": ratio,
+                        "variant_detail_phint53_status": eval_result.get("detail_phint53_photo_status"),
+                        "detail_phint53_threshold_eV": eval_result.get("detail_phint53_threshold_eV"),
+                        "detail_phint53_n_intervals_used": eval_result.get("detail_phint53_n_intervals_used"),
+                    }
+                    variant_rows_by_name.setdefault(variant_name, []).append(row)
+                    n_evaluated_variant_record_pairs += 1
+    integration_seconds = time.perf_counter() - integration_t0
+
+    variant_rows: List[Dict[str, Any]] = []
+    for variant_name in variant_map:
+        rows = variant_rows_by_name.get(variant_name, [])
         summary = _summarize_variant_ratios(rows, variant=variant_name)
         summary.update({
+            "audit_version": "v0.3.165",
             "ion": ion,
             "triplet_only": bool(triplet_only),
             "detail_continuum_status": detail_status,
@@ -2587,6 +2769,7 @@ def audit_type53_detail_phint53_bremsa_variants(
             "radius_cm": radius_cm,
             "source_code_live_outward_bremsa": "trnfrc.f90: bremsa(j)=zremsz(j)*exp(-dpthc(1,j))/(12.56*r19*r19)",
             "detail_output_continuum_columns": "fstepr4.f90 writes zrems(1:5), opacity, emis out/in, fwd/bck dpth; it does not write zremsz",
+            "integration_engine": "vectorized_numpy_record_precompute_v03165",
         })
         variant_summaries.append(summary)
         variant_rows.extend(rows)
@@ -2608,8 +2791,9 @@ def audit_type53_detail_phint53_bremsa_variants(
     else:
         interpretation = "No detail bremsa variant could be evaluated."
         status = "no_bremsa_variant_evaluated"
+    total_seconds = time.perf_counter() - t_start
     summary = {
-        "audit_version": "v0.3.164",
+        "audit_version": "v0.3.165",
         "ion": ion,
         "triplet_only": bool(triplet_only),
         "detail_continuum_status": detail_status,
@@ -2617,6 +2801,15 @@ def audit_type53_detail_phint53_bremsa_variants(
         "detail_zone_index": detail_zone_index,
         "n_type53_photoionization_records": len(candidate_items),
         "n_bremsa_variants": len(variant_summaries),
+        "requested_bremsa_variants": requested_variants,
+        "requested_bremsa_variants_missing": requested_missing,
+        "fast_mode": bool(fast),
+        "profile_requested": bool(profile),
+        "integration_engine": "vectorized_numpy_record_precompute_v03165",
+        "n_vectorized_record_batches": n_vectorized_record_batches,
+        "n_evaluated_variant_record_pairs": n_evaluated_variant_record_pairs,
+        "integration_seconds": integration_seconds,
+        "total_seconds": total_seconds,
         "best_bremsa_variant_without_free_scale": best.get("bremsa_variant"),
         "best_variant_median_matrix_over_detail": best.get("median_matrix_over_variant_detail"),
         "best_variant_n_within_10pct_without_free_scale": best.get("n_within_10pct_without_free_scale"),
@@ -2626,6 +2819,7 @@ def audit_type53_detail_phint53_bremsa_variants(
         "source_code_live_outward_bremsa": "trnfrc.f90: bremsa(j)=zremsz(j)*exp(-dpthc(1,j))/(12.56*r19*r19)",
         "detail_output_continuum_columns": "fstepr4.f90 writes zrems(1:5), opacity, emis out/in, fwd/bck dpth; it does not write zremsz",
         "top_bremsa_variants": variant_summaries[:12],
+        "performance_note": "v0.3.165 vectorizes the Python audit by precomputing sigma(E) once per record and evaluating requested bremsa variants together. It remains a diagnostic prototype; production RT-coupled kernels should move to the planned C++ backend.",
     }
     return {"summary": summary, "variant_summaries": variant_summaries, "rows": variant_rows}
 
@@ -2635,8 +2829,9 @@ def write_type53_detail_phint53_bremsa_variants_audit(
     out_dir: str | Path,
     *,
     prefix: str = "xstar_type53_detail_phint53_bremsa_variants_audit",
+    write_records_csv: bool = True,
 ) -> Dict[str, str]:
-    """Write v0.3.164 type-53 bremsa-variant audit products."""
+    """Write v0.3.165 type-53 bremsa-variant audit products."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     summary = dict(audit.get("summary", {}) or {})
@@ -2645,9 +2840,14 @@ def write_type53_detail_phint53_bremsa_variants_audit(
     variant_csv = out / f"{prefix}_variant_summary.csv"
     row_csv = out / f"{prefix}_records.csv"
     _write_csv(variant_csv, variants)
-    _write_csv(row_csv, rows)
+    if write_records_csv:
+        _write_csv(row_csv, rows)
     json_path = out / f"{prefix}.json"
-    json_path.write_text(json.dumps({"summary": summary, "variant_summaries": variants, "rows": rows}, indent=2, default=str), encoding="utf-8")
+    json_payload = {"summary": summary, "variant_summaries": variants, "rows": rows if write_records_csv else []}
+    if not write_records_csv:
+        json_payload["rows_omitted"] = True
+        json_payload["n_rows_omitted"] = len(rows)
+    json_path.write_text(json.dumps(json_payload, indent=2, default=str), encoding="utf-8")
     md_path = out / f"{prefix}.md"
     lines = [
         "# XSTAR type-53 detail phint53 bremsa-variant audit",
@@ -2657,6 +2857,10 @@ def write_type53_detail_phint53_bremsa_variants_audit(
         f"detail_continuum_status: `{summary.get('detail_continuum_status')}`",
         f"n_type53_photoionization_records: `{summary.get('n_type53_photoionization_records')}`",
         f"n_bremsa_variants: `{summary.get('n_bremsa_variants')}`",
+        f"fast_mode: `{summary.get('fast_mode')}`",
+        f"integration_engine: `{summary.get('integration_engine')}`",
+        f"integration_seconds: `{summary.get('integration_seconds')}`",
+        f"total_seconds: `{summary.get('total_seconds')}`",
         f"best_bremsa_variant_without_free_scale: `{summary.get('best_bremsa_variant_without_free_scale')}`",
         f"best_variant_median_matrix_over_detail: `{summary.get('best_variant_median_matrix_over_detail')}`",
         f"status: `{summary.get('status')}`",
@@ -2667,6 +2871,10 @@ def write_type53_detail_phint53_bremsa_variants_audit(
         f"- detail columns: `{summary.get('detail_output_continuum_columns')}`",
         "",
         str(summary.get("interpretation") or ""),
+        "",
+        "## Performance note",
+        "",
+        str(summary.get("performance_note") or ""),
         "",
         "## Variant summary",
         "",
@@ -2680,6 +2888,12 @@ def write_type53_detail_phint53_bremsa_variants_audit(
             f"{row.get('n_within_10pct_without_free_scale')} | {row.get('n_within_10pct_after_variant_scale')} | "
             f"{row.get('median_abs_fractional_residual_after_variant_scale')} |"
         )
-    lines.extend(["", f"variant_summary_csv: `{variant_csv.name}`", f"records_csv: `{row_csv.name}`", f"json: `{json_path.name}`"])
+    if write_records_csv:
+        lines.extend(["", f"variant_summary_csv: `{variant_csv.name}`", f"records_csv: `{row_csv.name}`", f"json: `{json_path.name}`"])
+    else:
+        lines.extend(["", f"variant_summary_csv: `{variant_csv.name}`", "records_csv: `omitted_by_request`", f"json: `{json_path.name}`"])
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return {"variant_summary_csv": str(variant_csv), "records_csv": str(row_csv), "json": str(json_path), "markdown": str(md_path)}
+    out_paths = {"variant_summary_csv": str(variant_csv), "json": str(json_path), "markdown": str(md_path)}
+    if write_records_csv:
+        out_paths["records_csv"] = str(row_csv)
+    return out_paths

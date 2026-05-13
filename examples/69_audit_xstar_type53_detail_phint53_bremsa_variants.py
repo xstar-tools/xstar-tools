@@ -7,6 +7,12 @@ a different available detail-continuum column/attenuation/geometric conversion.
 If all available variants still require a large free scale, the likely missing
 quantity is the live outward ``zremsz`` continuum used by ``trnfrc.f90`` rather
 than any ``zrems(1:5)`` column written by ``fstepr4.f90``.
+
+The v0.3.165 implementation is a performance cleanup of the Python audit: it
+precomputes the cross-section interpolation once per record and evaluates all
+selected bremsa variants with vectorized array operations.  It is still an audit
+prototype, not the planned production backend; RT-coupled hot loops should move
+to C++ after the physics parity issues are fixed.
 """
 
 from __future__ import annotations
@@ -31,6 +37,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--zone-index", default="last", help="detail zone index, or 'last'")
     parser.add_argument("--triplet-only", action="store_true", help="restrict to f/i/r triplet-bound type-53 rows")
     parser.add_argument("--max-records", type=int, default=None, help="optional maximum type-53 records for quick smoke tests")
+    parser.add_argument(
+        "--variants",
+        default=None,
+        help="comma-separated bremsa variants to evaluate; default evaluates all available variants",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="evaluate only the main diagnostic variants unless --variants is also supplied",
+    )
+    parser.add_argument("--profile", action="store_true", help="include timing/profile fields in the summary output")
+    parser.add_argument(
+        "--skip-records-csv",
+        action="store_true",
+        help="write only variant summaries/JSON/Markdown and omit the large per-record CSV",
+    )
     parser.add_argument("--out-dir", default="xstar_type53_detail_phint53_bremsa_variants_audit", help="output directory")
     parser.add_argument("--print-summary", action="store_true", help="print a concise summary")
     return parser
@@ -38,6 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    variant_names = None
+    if args.variants:
+        variant_names = [part.strip() for part in str(args.variants).split(",") if part.strip()]
     audit = audit_type53_detail_phint53_bremsa_variants(
         benchmark_dir=args.benchmark_dir,
         ion=args.ion,
@@ -49,8 +74,15 @@ def main() -> None:
         zone_index=args.zone_index,
         triplet_only=args.triplet_only,
         max_records=args.max_records,
+        variant_names=variant_names,
+        fast=args.fast,
+        profile=args.profile,
     )
-    paths = write_type53_detail_phint53_bremsa_variants_audit(audit, args.out_dir)
+    paths = write_type53_detail_phint53_bremsa_variants_audit(
+        audit,
+        args.out_dir,
+        write_records_csv=not args.skip_records_csv,
+    )
     summary = audit["summary"]
     if args.print_summary:
         print("XSTAR type-53 detail phint53 bremsa-variant audit")
@@ -61,6 +93,10 @@ def main() -> None:
         print(f"detail_zone_index={summary.get('detail_zone_index')}")
         print(f"n_type53_photoionization_records={summary.get('n_type53_photoionization_records')}")
         print(f"n_bremsa_variants={summary.get('n_bremsa_variants')}")
+        print(f"fast_mode={summary.get('fast_mode')}")
+        print(f"integration_engine={summary.get('integration_engine')}")
+        print(f"integration_seconds={summary.get('integration_seconds')}")
+        print(f"total_seconds={summary.get('total_seconds')}")
         print(f"best_bremsa_variant_without_free_scale={summary.get('best_bremsa_variant_without_free_scale')}")
         print(f"best_variant_median_matrix_over_detail={summary.get('best_variant_median_matrix_over_detail')}")
         print(f"best_variant_n_within_10pct_without_free_scale={summary.get('best_variant_n_within_10pct_without_free_scale')}")
@@ -81,7 +117,7 @@ def main() -> None:
                 )
             )
         print(f"variant_summary_csv: {paths['variant_summary_csv']}")
-        print(f"records_csv: {paths['records_csv']}")
+        print(f"records_csv: {paths.get('records_csv', 'omitted_by_request')}")
         print(f"json: {paths['json']}")
         print(f"markdown: {paths['markdown']}")
 
