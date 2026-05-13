@@ -1539,6 +1539,10 @@ __all__ = [
     "write_type68_collision_rate_audit",
     "audit_type53_source_sink_rates",
     "write_type53_source_sink_rate_audit",
+    "audit_type53_detail_phint53_radiation",
+    "write_type53_detail_phint53_radiation_audit",
+    "audit_type53_detail_phint53_scale",
+    "write_type53_detail_phint53_scale_audit",
 ]
 
 # -----------------------------------------------------------------------------
@@ -1991,3 +1995,275 @@ def write_type53_detail_phint53_radiation_audit(
     lines.extend(["", f"records_csv: `{csv_path.name}`", f"json: `{json_path.name}`"])
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"records_csv": str(csv_path), "json": str(json_path), "markdown": str(md_path)}
+
+# -----------------------------------------------------------------------------
+# v0.3.163: detail-continuum phint53 radiation scale/shape audit
+
+
+def _median_float(values: Sequence[float]) -> Optional[float]:
+    vals = sorted(float(v) for v in values if math.isfinite(float(v)))
+    if not vals:
+        return None
+    n = len(vals)
+    mid = n // 2
+    if n % 2:
+        return vals[mid]
+    return 0.5 * (vals[mid - 1] + vals[mid])
+
+
+def _percentile_float(values: Sequence[float], pct: float) -> Optional[float]:
+    vals = sorted(float(v) for v in values if math.isfinite(float(v)))
+    if not vals:
+        return None
+    if len(vals) == 1:
+        return vals[0]
+    x = max(0.0, min(100.0, float(pct))) / 100.0 * (len(vals) - 1)
+    lo = int(math.floor(x))
+    hi = int(math.ceil(x))
+    if lo == hi:
+        return vals[lo]
+    return vals[lo] * (hi - x) + vals[hi] * (x - lo)
+
+
+def _scale_factor_summary(records: Sequence[Mapping[str, Any]], *, scale: float) -> Dict[str, Any]:
+    residuals: List[float] = []
+    log_residuals: List[float] = []
+    within_01 = 0
+    within_05 = 0
+    within_10 = 0
+    within_25 = 0
+    within_2x = 0
+    n = 0
+    for r in records:
+        matrix = _as_float(r.get("matrix_photoionization_rate_s^-1"))
+        detail = _as_float(r.get("detail_phint53_photo_ans1_s^-1"))
+        if matrix is None or detail is None or matrix <= 0.0 or detail <= 0.0 or scale <= 0.0:
+            continue
+        scaled = scale * detail
+        frac = (matrix - scaled) / max(abs(matrix), 1.0e-300)
+        residuals.append(frac)
+        ratio = matrix / scaled if scaled > 0.0 else math.nan
+        if ratio > 0.0 and math.isfinite(ratio):
+            log_residuals.append(math.log10(ratio))
+        afrac = abs(frac)
+        n += 1
+        within_01 += int(afrac <= 0.01)
+        within_05 += int(afrac <= 0.05)
+        within_10 += int(afrac <= 0.10)
+        within_25 += int(afrac <= 0.25)
+        within_2x += int(0.5 <= matrix / scaled <= 2.0)
+    return {
+        "scale": scale,
+        "n_scaled_records": n,
+        "n_within_1pct_after_scaling": within_01,
+        "n_within_5pct_after_scaling": within_05,
+        "n_within_10pct_after_scaling": within_10,
+        "n_within_25pct_after_scaling": within_25,
+        "n_within_factor2_after_scaling": within_2x,
+        "median_fractional_residual_after_scaling": _median_float(residuals),
+        "p16_fractional_residual_after_scaling": _percentile_float(residuals, 16.0),
+        "p84_fractional_residual_after_scaling": _percentile_float(residuals, 84.0),
+        "median_abs_fractional_residual_after_scaling": _median_float([abs(v) for v in residuals]),
+        "median_log10_matrix_over_scaled_detail": _median_float(log_residuals),
+        "p16_log10_matrix_over_scaled_detail": _percentile_float(log_residuals, 16.0),
+        "p84_log10_matrix_over_scaled_detail": _percentile_float(log_residuals, 84.0),
+    }
+
+
+def audit_type53_detail_phint53_scale(
+    *,
+    records_csv: str | Path | None = None,
+    phint53_audit: Mapping[str, Any] | None = None,
+    ion: str | None = None,
+    scale_choice: str = "median_ratio",
+) -> Dict[str, Any]:
+    """Diagnose whether v0.3.162 type-53 residuals are scale-like.
+
+    This audit consumes the record CSV or in-memory product written by
+    :func:`audit_type53_detail_phint53_radiation`.  It does not change solver
+    physics.  It measures the matrix/detail ``phint53`` ratio distribution,
+    derives robust and least-squares multiplicative scale factors, and reports
+    how many records would match after applying one global scale to the detail
+    continuum result.  A narrow residual distribution means the mismatch is
+    likely dominated by radiation-field normalization; broad or component-
+    dependent residuals indicate a reconstruction/shape/cross-section problem.
+    """
+    if phint53_audit is not None:
+        rows = [dict(r) for r in (phint53_audit.get("rows", []) or [])]
+        input_source = "in_memory_phint53_audit"
+        if ion is None:
+            ion = str((phint53_audit.get("summary", {}) or {}).get("ion") or "")
+    else:
+        if records_csv is None:
+            raise ValueError("provide --records-csv or phint53_audit")
+        rows = _read_csv_rows(records_csv)
+        input_source = str(records_csv)
+    evaluated: List[Dict[str, Any]] = []
+    ratios: List[float] = []
+    matrices: List[float] = []
+    details: List[float] = []
+    for row in rows:
+        matrix = _as_float(row.get("matrix_photoionization_rate_s^-1"))
+        detail = _as_float(row.get("detail_phint53_photo_ans1_s^-1"))
+        if matrix is None or detail is None or matrix <= 0.0 or detail <= 0.0:
+            continue
+        ratio = matrix / detail
+        if not math.isfinite(ratio) or ratio <= 0.0:
+            continue
+        rr = dict(row)
+        rr["matrix_over_detail_phint53_ans1"] = ratio
+        evaluated.append(rr)
+        ratios.append(ratio)
+        matrices.append(matrix)
+        details.append(detail)
+    median_ratio = _median_float(ratios)
+    mean_ratio = sum(ratios) / len(ratios) if ratios else None
+    p16 = _percentile_float(ratios, 16.0)
+    p84 = _percentile_float(ratios, 84.0)
+    p05 = _percentile_float(ratios, 5.0)
+    p95 = _percentile_float(ratios, 95.0)
+    ls_num = sum(m * d for m, d in zip(matrices, details))
+    ls_den = sum(d * d for d in details)
+    least_squares_scale = (ls_num / ls_den) if ls_den > 0.0 else None
+    log_ratios = [math.log10(r) for r in ratios if r > 0.0]
+    geom_scale = 10.0 ** (_median_float(log_ratios) or 0.0) if log_ratios else None
+    if scale_choice == "least_squares" and least_squares_scale is not None:
+        chosen = least_squares_scale
+    elif scale_choice == "geometric_median" and geom_scale is not None:
+        chosen = geom_scale
+    else:
+        chosen = median_ratio or least_squares_scale or geom_scale or 1.0
+
+    scaled_rows: List[Dict[str, Any]] = []
+    for row in evaluated:
+        matrix = _as_float(row.get("matrix_photoionization_rate_s^-1"))
+        detail = _as_float(row.get("detail_phint53_photo_ans1_s^-1"))
+        ratio = _as_float(row.get("matrix_over_detail_phint53_ans1"))
+        if matrix is None or detail is None or ratio is None:
+            continue
+        scaled = chosen * detail
+        frac = (matrix - scaled) / max(abs(matrix), 1.0e-300)
+        after_ratio = matrix / scaled if scaled > 0.0 else None
+        cls = "scaled_detail_within_10pct" if abs(frac) <= 0.10 else "scaled_detail_still_differs"
+        scaled_rows.append({
+            **row,
+            "audit_version": "v0.3.163",
+            "scale_choice": scale_choice,
+            "chosen_detail_rate_scale": chosen,
+            "scaled_detail_phint53_photo_ans1_s^-1": scaled,
+            "matrix_minus_scaled_detail_phint53_ans1_s^-1": matrix - scaled,
+            "matrix_over_scaled_detail_phint53_ans1": after_ratio,
+            "scaled_relative_error_vs_matrix": frac,
+            "scaled_classification": cls,
+        })
+
+    group_rows: List[Dict[str, Any]] = []
+    groups: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    for row in evaluated:
+        key = (str(row.get("triplet_component") or "non_triplet"), str(row.get("threshold_eV_source") or ""))
+        groups.setdefault(key, []).append(row)
+    for (component, threshold_source), grows in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        gratios = [_as_float(r.get("matrix_over_detail_phint53_ans1")) for r in grows]
+        gratios = [float(v) for v in gratios if v is not None and v > 0.0]
+        group_rows.append({
+            "audit_version": "v0.3.163",
+            "ion": ion or (grows[0].get("ion") if grows else ""),
+            "triplet_component": component,
+            "threshold_eV_source": threshold_source,
+            "n_records": len(grows),
+            "median_matrix_over_detail": _median_float(gratios),
+            "mean_matrix_over_detail": (sum(gratios) / len(gratios)) if gratios else None,
+            "p16_matrix_over_detail": _percentile_float(gratios, 16.0),
+            "p84_matrix_over_detail": _percentile_float(gratios, 84.0),
+            "min_matrix_over_detail": min(gratios) if gratios else None,
+            "max_matrix_over_detail": max(gratios) if gratios else None,
+        })
+
+    scaled_summary = _scale_factor_summary(evaluated, scale=float(chosen)) if evaluated else {}
+    sorted_rows = sorted(scaled_rows, key=lambda r: abs(_as_float(r.get("scaled_relative_error_vs_matrix"), 0.0) or 0.0), reverse=True)
+    summary = {
+        "audit_version": "v0.3.163",
+        "ion": ion or (evaluated[0].get("ion") if evaluated else ""),
+        "input_records_csv": input_source,
+        "scale_choice": scale_choice,
+        "n_input_rows": len(rows),
+        "n_evaluated_rows": len(evaluated),
+        "median_matrix_over_detail": median_ratio,
+        "geometric_median_matrix_over_detail": geom_scale,
+        "mean_matrix_over_detail": mean_ratio,
+        "least_squares_detail_rate_scale": least_squares_scale,
+        "p05_matrix_over_detail": p05,
+        "p16_matrix_over_detail": p16,
+        "p84_matrix_over_detail": p84,
+        "p95_matrix_over_detail": p95,
+        "chosen_detail_rate_scale": chosen,
+        **scaled_summary,
+        "n_group_rows": len(group_rows),
+        "top_scaled_residual_records": sorted_rows[:12],
+        "status": "type53_detail_phint53_scale_audit_completed",
+        "interpretation": "If one global scale brings most rows within tolerance, the v0.3.162 mismatch is dominated by detail/live radiation normalization. Outliers identify records needing phint53 grid, threshold, or live-state treatment checks.",
+    }
+    return {"summary": summary, "rows": scaled_rows, "groups": group_rows}
+
+
+def write_type53_detail_phint53_scale_audit(
+    audit: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_type53_detail_phint53_scale_audit",
+) -> Dict[str, str]:
+    """Write v0.3.163 detail-continuum phint53 scale/shape audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = dict(audit.get("summary", {}) or {})
+    rows = list(audit.get("rows", []) or [])
+    groups = list(audit.get("groups", []) or [])
+    scaled_csv = out / f"{prefix}_scaled_records.csv"
+    group_csv = out / f"{prefix}_group_summary.csv"
+    _write_csv(scaled_csv, rows)
+    _write_csv(group_csv, groups)
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(json.dumps({"summary": summary, "rows": rows, "groups": groups}, indent=2, default=str), encoding="utf-8")
+    md_path = out / f"{prefix}.md"
+    lines = [
+        "# XSTAR type-53 detail phint53 scale/shape audit",
+        "",
+        f"ion: `{summary.get('ion')}`",
+        f"n_evaluated_rows: `{summary.get('n_evaluated_rows')}`",
+        f"median_matrix_over_detail: `{summary.get('median_matrix_over_detail')}`",
+        f"least_squares_detail_rate_scale: `{summary.get('least_squares_detail_rate_scale')}`",
+        f"chosen_detail_rate_scale: `{summary.get('chosen_detail_rate_scale')}`",
+        f"n_within_10pct_after_scaling: `{summary.get('n_within_10pct_after_scaling')}`",
+        f"n_within_factor2_after_scaling: `{summary.get('n_within_factor2_after_scaling')}`",
+        f"median_abs_fractional_residual_after_scaling: `{summary.get('median_abs_fractional_residual_after_scaling')}`",
+        "",
+        "This audit applies one multiplicative scale to the reconstructed-detail `phint53` ans1 rates and reports whether the v0.3.162 matrix/detail discrepancy is mostly a radiation-field normalization difference or a record-dependent shape/reconstruction difference.",
+        "",
+        "## Group summary",
+        "",
+        "| component | n | median ratio | p16 | p84 | min | max |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for g in groups:
+        lines.append(
+            f"| {g.get('triplet_component')} | {g.get('n_records')} | {g.get('median_matrix_over_detail')} | "
+            f"{g.get('p16_matrix_over_detail')} | {g.get('p84_matrix_over_detail')} | "
+            f"{g.get('min_matrix_over_detail')} | {g.get('max_matrix_over_detail')} |"
+        )
+    lines.extend(["", "## Largest residuals after chosen scale", ""])
+    top = summary.get("top_scaled_residual_records") or []
+    if top:
+        lines.append("| record | bound | comp | matrix | detail | scaled detail | matrix/scaled detail | scaled class |")
+        lines.append("|---:|---|---|---:|---:|---:|---:|---|")
+        for row in top:
+            lines.append(
+                f"| {row.get('record')} | {row.get('bound_level_label')} | {row.get('triplet_component')} | "
+                f"{row.get('matrix_photoionization_rate_s^-1')} | {row.get('detail_phint53_photo_ans1_s^-1')} | "
+                f"{row.get('scaled_detail_phint53_photo_ans1_s^-1')} | {row.get('matrix_over_scaled_detail_phint53_ans1')} | "
+                f"{row.get('scaled_classification')} |"
+            )
+    else:
+        lines.append("No scaled rows were available.")
+    lines.extend(["", f"scaled_records_csv: `{scaled_csv.name}`", f"group_summary_csv: `{group_csv.name}`", f"json: `{json_path.name}`"])
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"scaled_records_csv": str(scaled_csv), "group_summary_csv": str(group_csv), "json": str(json_path), "markdown": str(md_path)}
