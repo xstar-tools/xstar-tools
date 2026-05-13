@@ -8,7 +8,7 @@ If all available variants still require a large free scale, the likely missing
 quantity is the live outward ``zremsz`` continuum used by ``trnfrc.f90`` rather
 than any ``zrems(1:5)`` column written by ``fstepr4.f90``.
 
-The v0.3.165 implementation is a performance cleanup of the Python audit: it
+The v0.3.166 implementation keeps the v0.3.165 performance cleanup and fixes NumPy trapezoid compatibility: it
 precomputes the cross-section interpolation once per record and evaluates all
 selected bremsa variants with vectorized array operations.  It is still an audit
 prototype, not the planned production backend; RT-coupled hot loops should move

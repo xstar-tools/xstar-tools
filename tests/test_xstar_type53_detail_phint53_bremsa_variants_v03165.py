@@ -58,11 +58,11 @@ def test_type53_bremsa_variants_v03165_filters_variants_and_profiles(tmp_path: P
         profile=True,
     )
     summary = audit["summary"]
-    assert summary["audit_version"] == "v0.3.165"
+    assert summary["audit_version"] == "v0.3.166"
     assert summary["n_bremsa_variants"] == 1
     assert summary["requested_bremsa_variants_missing"] == ["missing"]
     assert summary["best_bremsa_variant_without_free_scale"] == "matches"
-    assert summary["integration_engine"] == "vectorized_numpy_record_precompute_v03165"
+    assert summary["integration_engine"] == "vectorized_numpy_record_precompute_v03166"
     assert summary["n_vectorized_record_batches"] == 1
     assert summary["n_evaluated_variant_record_pairs"] == 1
     assert summary["integration_seconds"] >= 0.0

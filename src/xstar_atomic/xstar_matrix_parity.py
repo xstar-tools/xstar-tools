@@ -1810,7 +1810,21 @@ def _evaluate_phint53_photoionization_ans1_detail_continuum_variants_fast(
     sigma_grid = np.interp(grid, xs, ys, left=0.0, right=0.0)
     kernel = sigma_grid / np.maximum(grid, 1.0e-300)
     # sigma integral is independent of bremsa and useful for source-code audits.
-    trapz = getattr(np, "trapezoid", np.trapz)
+    # NumPy 2.x keeps ``trapezoid`` but some builds no longer expose ``trapz``.
+    # Do not use ``getattr(np, "trapezoid", np.trapz)`` here: Python evaluates
+    # the default argument eagerly, so it still crashes when ``np.trapz`` is
+    # absent even if ``np.trapezoid`` exists.  Keep a tiny local fallback for
+    # unusual NumPy builds or minimal test environments.
+    if hasattr(np, "trapezoid"):
+        trapz = np.trapezoid
+    else:
+        def trapz(y, x):  # type: ignore[no-redef]
+            yy = np.asarray(y, dtype=float)
+            xx = np.asarray(x, dtype=float)
+            if yy.size < 2 or xx.size < 2:
+                return 0.0
+            return np.sum(0.5 * (yy[1:] + yy[:-1]) * (xx[1:] - xx[:-1]))
+
     sigma_weighted = float(trapz(sigma_grid, grid)) if grid.size >= 2 else 0.0
     results: Dict[str, Dict[str, Any]] = {}
     for name in names:
@@ -1844,7 +1858,7 @@ def _evaluate_phint53_photoionization_ans1_detail_continuum_variants_fast(
             "detail_phint53_sigma_integral_cm2_eV": max(float(sigma_weighted), 0.0),
             "detail_phint53_source_file": "xstarlib/src/phint53.f90",
             "detail_phint53_detail_source": "xo01_detal4.fits reconstructed bremsa output-state continuum",
-            "detail_phint53_vectorized_audit": "v0.3.165 precomputed sigma(E) and evaluated all requested bremsa variants by vectorized dot/trapezoid operations",
+            "detail_phint53_vectorized_audit": "v0.3.166 precomputed sigma(E) and evaluated all requested bremsa variants by vectorized dot/trapezoid operations",
             "detail_phint53_warning": "Uses phint53 pirt integrand on reconstructed detail-output bremsa; exact call-site parity still requires XSTAR live bremsa(:), epi(:), opacities, and escape context at ucalc type 53.",
         }
     return results
@@ -2735,7 +2749,7 @@ def audit_type53_detail_phint53_bremsa_variants(
                     ratio = (float(matrix_rate) / detail_rate) if detail_rate is not None and detail_rate > 0.0 else None
                     row = {
                         "row_kind": "type53_detail_phint53_bremsa_variant_audit",
-                        "audit_version": "v0.3.165",
+                        "audit_version": "v0.3.166",
                         "ion": ion,
                         "bremsa_variant": variant_name,
                         "record": record,
@@ -2760,7 +2774,7 @@ def audit_type53_detail_phint53_bremsa_variants(
         rows = variant_rows_by_name.get(variant_name, [])
         summary = _summarize_variant_ratios(rows, variant=variant_name)
         summary.update({
-            "audit_version": "v0.3.165",
+            "audit_version": "v0.3.166",
             "ion": ion,
             "triplet_only": bool(triplet_only),
             "detail_continuum_status": detail_status,
@@ -2769,7 +2783,7 @@ def audit_type53_detail_phint53_bremsa_variants(
             "radius_cm": radius_cm,
             "source_code_live_outward_bremsa": "trnfrc.f90: bremsa(j)=zremsz(j)*exp(-dpthc(1,j))/(12.56*r19*r19)",
             "detail_output_continuum_columns": "fstepr4.f90 writes zrems(1:5), opacity, emis out/in, fwd/bck dpth; it does not write zremsz",
-            "integration_engine": "vectorized_numpy_record_precompute_v03165",
+            "integration_engine": "vectorized_numpy_record_precompute_v03166",
         })
         variant_summaries.append(summary)
         variant_rows.extend(rows)
@@ -2793,7 +2807,7 @@ def audit_type53_detail_phint53_bremsa_variants(
         status = "no_bremsa_variant_evaluated"
     total_seconds = time.perf_counter() - t_start
     summary = {
-        "audit_version": "v0.3.165",
+        "audit_version": "v0.3.166",
         "ion": ion,
         "triplet_only": bool(triplet_only),
         "detail_continuum_status": detail_status,
@@ -2805,7 +2819,7 @@ def audit_type53_detail_phint53_bremsa_variants(
         "requested_bremsa_variants_missing": requested_missing,
         "fast_mode": bool(fast),
         "profile_requested": bool(profile),
-        "integration_engine": "vectorized_numpy_record_precompute_v03165",
+        "integration_engine": "vectorized_numpy_record_precompute_v03166",
         "n_vectorized_record_batches": n_vectorized_record_batches,
         "n_evaluated_variant_record_pairs": n_evaluated_variant_record_pairs,
         "integration_seconds": integration_seconds,
@@ -2819,7 +2833,7 @@ def audit_type53_detail_phint53_bremsa_variants(
         "source_code_live_outward_bremsa": "trnfrc.f90: bremsa(j)=zremsz(j)*exp(-dpthc(1,j))/(12.56*r19*r19)",
         "detail_output_continuum_columns": "fstepr4.f90 writes zrems(1:5), opacity, emis out/in, fwd/bck dpth; it does not write zremsz",
         "top_bremsa_variants": variant_summaries[:12],
-        "performance_note": "v0.3.165 vectorizes the Python audit by precomputing sigma(E) once per record and evaluating requested bremsa variants together. It remains a diagnostic prototype; production RT-coupled kernels should move to the planned C++ backend.",
+        "performance_note": "v0.3.166 keeps the v0.3.165 vectorized audit and fixes NumPy trapezoid compatibility; it vectorizes the Python audit by precomputing sigma(E) once per record and evaluating requested bremsa variants together. It remains a diagnostic prototype; production RT-coupled kernels should move to the planned C++ backend.",
     }
     return {"summary": summary, "variant_summaries": variant_summaries, "rows": variant_rows}
 
@@ -2831,7 +2845,7 @@ def write_type53_detail_phint53_bremsa_variants_audit(
     prefix: str = "xstar_type53_detail_phint53_bremsa_variants_audit",
     write_records_csv: bool = True,
 ) -> Dict[str, str]:
-    """Write v0.3.165 type-53 bremsa-variant audit products."""
+    """Write v0.3.166 type-53 bremsa-variant audit products."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     summary = dict(audit.get("summary", {}) or {})

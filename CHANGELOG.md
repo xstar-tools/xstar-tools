@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.166 - 2026-05-13
+
+- Bugfix/performance compatibility cleanup for `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py`; no solver physics changed.
+- Fixed the NumPy 2.x compatibility bug caused by `getattr(np, "trapezoid", np.trapz)`, whose default argument is evaluated eagerly and crashes in environments where `np.trapz` has been removed.
+- The vectorized phint53 bremsa-variant audit now uses `np.trapezoid` when available and a small local trapezoidal fallback otherwise.
+- Updated audit metadata to `v0.3.166` and added regression coverage for NumPy builds without `np.trapz`.
+
 ## v0.3.165 - 2026-05-13
 
 - Performance/diagnostic cleanup for `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py`; no solver physics changed.
