@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.164 - 2026-05-13
+
+- Added a type-53 detail-continuum bremsa-variant audit to diagnose the v0.3.162/v0.3.163 photoionization normalization gap.
+- New `audit_type53_detail_phint53_bremsa_variants(...)` and `write_type53_detail_phint53_bremsa_variants_audit(...)` helpers in `xstar_atomic.xstar_matrix_parity`.
+- New `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py` command-line audit.
+- The audit recomputes type-53 `phint53` photoionization rates using multiple `xo01_detal4.fits` `zrems(1:5)`/attenuation/geometric reconstruction variants and scores whether any available detail-column variant matches the matrix without a free scale.
+- It records the source-code distinction that `trnfrc.f90` uses live outward `zremsz(:)` for `bremsa(:)`, while `fstepr4.f90` writes `zrems(1:5,:)` detail columns and not `zremsz`.
+- No solver physics or empirical triplet tuning changed.
+
 ## v0.3.160 - 2026-05-12
 
 - Added source-code/local handoff parity auditing for XSTAR data type 68 He-like collision terms.
