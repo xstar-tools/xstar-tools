@@ -11,7 +11,7 @@ from xstar_atomic.xstar_full_parity_probes import (
 def test_prepare_full_parity_probe_products_without_csvs(tmp_path: Path):
     result = prepare_full_parity_probe_products(out_dir=tmp_path)
     s = result["summary"]
-    assert s["audit_version"] == "v0.3.178"
+    assert s["audit_version"] == "v0.3.179"
     assert s["status"] == "probe_csvs_not_loaded"
     assert s["probe_ready_for_record_level_matrix_parity"] is False
     for key in ["helper_fortran", "after_ucalc_insertion", "matrix_insertion_notes", "ucalc_schema_csv", "matrix_schema_csv"]:
@@ -71,7 +71,7 @@ def test_generated_helper_uses_valid_free_form_fortran(tmp_path: Path):
     text = helper.read_text(encoding="utf-8")
     assert "subroutine xap_ucalc" in text
     assert "subroutine xap_mrow" in text
-    assert "xstar_atomic_probe_ucalc_record" not in text
+    assert "subroutine xstar_atomic_probe_ucalc_record" in text
     if shutil.which("gfortran"):
         subprocess.run(
             ["gfortran", "-c", str(helper), "-o", str(tmp_path / "probe.o")],

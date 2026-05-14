@@ -232,7 +232,7 @@ def summarize_full_parity_probe_csvs(
         and n_not_four == 0
     )
     return {
-        "audit_version": "v0.3.178",
+        "audit_version": "v0.3.179",
         "status": status,
         "ucalc_probe_status": u_status,
         "matrix_probe_status": m_status,
@@ -254,7 +254,7 @@ def summarize_full_parity_probe_csvs(
 
 
 def _fortran_helper_text() -> str:
-    return r'''! xstar-atomic v0.3.178 full local parity probe helper.
+    return r'''! xstar-atomic v0.3.179 full local parity probe helper.
 ! This helper is deliberately written as conservative free-form Fortran.
 ! HEASoft/XSTAR compiles .f90 files as free-form here; every continued
 ! line therefore has a trailing ampersand on the previous line.
@@ -333,10 +333,41 @@ subroutine xap_mrow(fname, ml_data, ltyp, lrtyp, nindbi, kind, &
       1pe24.16,',',1pe24.16,',',i12,',',i12,',', &
       i12,',',i12,',',1pe24.16,',',1pe24.16)
 end subroutine xap_mrow
+
+! Backward-compatible wrappers for v0.3.176/v0.3.177 insertion snippets.
+! These symbols are needed when calc_hmc_ion.f90 still contains the long names.
+subroutine xstar_atomic_probe_ucalc_record(fname, ml_data, ltyp, lrtyp, &
+    jkk_ion, idest1, idest2, idest3, idest4, ans1, ans2, ans3, &
+    ans4, ans5, ans6, ptmp1, ptmp2, xpx, xnx, t, cfrac)
+  implicit none
+  character(len=*), intent(in) :: fname
+  integer, intent(in) :: ml_data, ltyp, lrtyp, jkk_ion
+  integer, intent(in) :: idest1, idest2, idest3, idest4
+  real*8, intent(in) :: ans1, ans2, ans3, ans4, ans5, ans6
+  real*8, intent(in) :: ptmp1, ptmp2, xpx, xnx, t, cfrac
+  call xap_ucalc(fname, ml_data, ltyp, lrtyp, jkk_ion, idest1, &
+      idest2, idest3, idest4, ans1, ans2, ans3, ans4, ans5, &
+      ans6, ptmp1, ptmp2, xpx, xnx, t, cfrac)
+  return
+end subroutine xstar_atomic_probe_ucalc_record
+
+subroutine xstar_atomic_probe_matrix_row(fname, ml_data, ltyp, lrtyp, &
+    nindbi, kind, indbi1, indbi2, ajisi1, ajisi2, cjisi, cjisi2, &
+    idest1, idest2, llo, lup, e1, e2)
+  implicit none
+  character(len=*), intent(in) :: fname, kind
+  integer, intent(in) :: ml_data, ltyp, lrtyp, nindbi
+  integer, intent(in) :: indbi1, indbi2, idest1, idest2, llo, lup
+  real*8, intent(in) :: ajisi1, ajisi2, cjisi, cjisi2, e1, e2
+  call xap_mrow(fname, ml_data, ltyp, lrtyp, nindbi, kind, indbi1, &
+      indbi2, ajisi1, ajisi2, cjisi, cjisi2, idest1, idest2, &
+      llo, lup, e1, e2)
+  return
+end subroutine xstar_atomic_probe_matrix_row
 '''
 
 def _after_ucalc_insertion_text() -> str:
-    return """! xstar-atomic v0.3.178: insert after call ucalc(...).
+    return """! xstar-atomic v0.3.179: insert after call ucalc(...).
 ! Free-form Fortran continuation for calc_hmc_ion.f90.
       call xap_ucalc('xstar_ucalc_record_probe.csv', ml_data, ltyp, &
      &     lrtyp, jkk_ion, idest1, idest2, idest3, idest4, ans1, ans2, &
@@ -344,7 +375,7 @@ def _after_ucalc_insertion_text() -> str:
 """
 
 def _matrix_insertion_notes_text() -> str:
-    return """# xstar-atomic v0.3.178 calc_hmc_ion matrix insertion probes
+    return """# xstar-atomic v0.3.179 calc_hmc_ion matrix insertion probes
 
 These calls are free-form Fortran snippets for `calc_hmc_ion.f90`.  Insert them
 after each of the four `nindbi` insertion blocks following a successful `ucalc`
