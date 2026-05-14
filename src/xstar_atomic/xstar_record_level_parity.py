@@ -139,21 +139,55 @@ def _load_python_records(matrix_terms_csv: str | Path) -> Tuple[List[Dict[str, A
     return rows, by_record
 
 
-def _select_latest_ucalc_rows(ucalc_probe_csv: str | Path, wanted_records: Iterable[int]) -> Tuple[Dict[int, Dict[str, str]], Dict[int, int]]:
+def _load_ucalc_occurrences(
+    ucalc_probe_csv: str | Path,
+    wanted_records: Iterable[int],
+) -> Tuple[Dict[int, List[Dict[str, str]]], Dict[int, int]]:
+    """Load all ucalc captures for wanted records, preserving capture order.
+
+    XSTAR calls ``ucalc`` many times during a run.  A preserved Python matrix
+    corresponds to one local state, so choosing the latest capture for each
+    record is not always physically meaningful.  Keeping all occurrences lets
+    later audits select a common occurrence rank or scan ranks.
+    """
+
     wanted = set(int(r) for r in wanted_records)
-    selected: Dict[int, Dict[str, str]] = {}
-    counts: Dict[int, int] = {r: 0 for r in wanted}
+    by_record: Dict[int, List[Dict[str, str]]] = {r: [] for r in wanted}
     with Path(ucalc_probe_csv).open("r", newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             rec = _as_int(row.get("ml_data"), None)
             if rec not in wanted:
                 continue
-            counts[rec] = counts.get(rec, 0) + 1
-            cap = _as_int(row.get("capture_index"), -1) or -1
-            old_cap = _as_int(selected.get(rec, {}).get("capture_index"), -1) if rec in selected else -1
-            if rec not in selected or cap >= (old_cap or -1):
-                selected[rec] = dict(row)
-    return selected, counts
+            by_record.setdefault(rec, []).append(dict(row))
+    for rows in by_record.values():
+        rows.sort(key=lambda r: _as_int(r.get("capture_index"), -1) or -1)
+    counts = {rec: len(rows) for rec, rows in by_record.items()}
+    return by_record, counts
+
+
+def _select_ucalc_rows(
+    ucalc_by_record: Mapping[int, Sequence[Mapping[str, str]]],
+    *,
+    selection: str,
+    occurrence_rank: int | None = None,
+) -> Dict[int, Dict[str, str]]:
+    selected: Dict[int, Dict[str, str]] = {}
+    for rec, rows0 in ucalc_by_record.items():
+        rows = list(rows0)
+        if not rows:
+            continue
+        if selection == "latest-per-record":
+            selected[rec] = dict(rows[-1])
+        elif selection == "occurrence-rank":
+            rank = occurrence_rank if occurrence_rank is not None else -1
+            if rank == 0:
+                raise ValueError("occurrence_rank is 1-based; use -1 for latest")
+            idx = rank - 1 if rank > 0 else len(rows) + rank
+            if 0 <= idx < len(rows):
+                selected[rec] = dict(rows[idx])
+        else:
+            raise ValueError(f"unsupported selection={selection!r}")
+    return selected
 
 
 def _load_matrix_rows_for_selected(matrix_probe_csv: str | Path, selected_ucalc: Mapping[int, Mapping[str, str]]) -> Dict[int, List[Dict[str, str]]]:
@@ -169,6 +203,24 @@ def _load_matrix_rows_for_selected(matrix_probe_csv: str | Path, selected_ucalc:
             if ml != rec:
                 continue
             out.setdefault(rec, []).append(dict(row))
+    return out
+
+
+def _load_matrix_rows_for_capture_set(
+    matrix_probe_csv: str | Path,
+    capture_to_rec: Mapping[str, int],
+) -> Dict[str, List[Dict[str, str]]]:
+    out: Dict[str, List[Dict[str, str]]] = {cap: [] for cap in capture_to_rec}
+    with Path(matrix_probe_csv).open("r", newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            cap = str(row.get("capture_index") or "").strip()
+            rec = capture_to_rec.get(cap)
+            if rec is None:
+                continue
+            ml = _as_int(row.get("ml_data"), None)
+            if ml != rec:
+                continue
+            out.setdefault(cap, []).append(dict(row))
     return out
 
 
@@ -298,21 +350,19 @@ def _family_summary(record_rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, 
     return out
 
 
-def audit_record_level_matrix_parity(
+def _make_record_rows_for_selection(
     *,
-    benchmark_dir: str | Path,
-    ion: str,
-    ucalc_probe_csv: str | Path,
+    py_by_record: Mapping[int, Sequence[Mapping[str, Any]]],
+    ucalc_by_record: Mapping[int, Sequence[Mapping[str, str]]],
+    ucalc_counts: Mapping[int, int],
     matrix_probe_csv: str | Path,
-    matrix_terms_csv: str | Path | None = None,
-    selection: str = "latest-per-record",
-) -> Dict[str, Any]:
-    if selection != "latest-per-record":
-        raise ValueError("only selection='latest-per-record' is currently supported")
-    matrix_terms_path = Path(matrix_terms_csv) if matrix_terms_csv else _find_python_matrix_terms_csv(benchmark_dir, ion)
-    py_rows, py_by_record = _load_python_records(matrix_terms_path)
+    selection: str,
+    occurrence_rank: int | None,
+) -> Tuple[List[Dict[str, Any]], Dict[int, Dict[str, str]]]:
     wanted = set(py_by_record.keys())
-    selected_ucalc, ucalc_counts = _select_latest_ucalc_rows(ucalc_probe_csv, wanted)
+    selected_ucalc = _select_ucalc_rows(
+        ucalc_by_record, selection=selection, occurrence_rank=occurrence_rank
+    )
     selected_matrix = _load_matrix_rows_for_selected(matrix_probe_csv, selected_ucalc)
     record_rows = [
         _record_summary_row(
@@ -324,39 +374,157 @@ def audit_record_level_matrix_parity(
         )
         for rec in sorted(wanted)
     ]
-    family_rows = _family_summary(record_rows)
+    return record_rows, selected_ucalc
+
+
+def _selection_summary_stats(record_rows: Sequence[Mapping[str, Any]], wanted: set[int], selected_ucalc: Mapping[int, Mapping[str, str]]) -> Dict[str, Any]:
     ready_records = sum(1 for r in record_rows if _as_int(r.get("fortran_n_matrix_rows"), 0) == 4)
     n_self_pass = sum(1 for r in record_rows if r.get("fortran_matrix_self_check_status") == "pass")
     ratios = [_as_float(r.get("python_over_fortran_abs_sum"), None) for r in record_rows]
     ratios_f = [r for r in ratios if r is not None and math.isfinite(r)]
-    summary = {
-        "audit_version": "v0.3.181",
-        "ion": ion,
-        "status": "record_level_matrix_parity_audit_completed",
-        "selection": selection,
-        "python_matrix_terms_csv": str(matrix_terms_path),
-        "ucalc_probe_csv": str(ucalc_probe_csv),
-        "matrix_probe_csv": str(matrix_probe_csv),
-        "n_python_matrix_terms_with_record": len(py_rows),
-        "n_python_records": len(wanted),
+    log_abs = [abs(math.log10(r)) for r in ratios_f if r > 0]
+    n_match_1pct = sum(1 for r in record_rows if r.get("record_parity_status") in (
+        "python_fortran_abs_sum_match_0p1pct", "python_fortran_abs_sum_match_1pct"
+    ))
+    n_diff = sum(1 for r in record_rows if r.get("record_parity_status") == "python_fortran_abs_sum_differs")
+    return {
         "n_python_records_with_fortran_ucalc": len(selected_ucalc),
         "n_python_records_without_fortran_ucalc": len(wanted - set(selected_ucalc.keys())),
         "n_python_records_with_selected_four_fortran_rows": ready_records,
         "n_python_records_without_selected_four_fortran_rows": len(wanted) - ready_records,
         "n_fortran_self_check_pass_records": n_self_pass,
         "n_fortran_self_check_nonpass_records": len(record_rows) - n_self_pass,
-        "n_family_rows": len(family_rows),
         "median_python_over_fortran_abs_sum": _median(ratios_f),
+        "median_abs_log10_python_over_fortran_abs_sum": _median(log_abs),
+        "n_match_1pct_or_better": n_match_1pct,
+        "n_abs_sum_differs": n_diff,
+    }
+
+
+def scan_occurrence_rank_matrix_parity(
+    *,
+    benchmark_dir: str | Path,
+    ion: str,
+    ucalc_probe_csv: str | Path,
+    matrix_probe_csv: str | Path,
+    matrix_terms_csv: str | Path | None = None,
+    max_occurrence_rank: int | None = None,
+) -> List[Dict[str, Any]]:
+    """Scan common ucalc occurrence ranks and rank local-state matches.
+
+    This is meant for full XSTAR probes that contain many zones/passes.  It
+    helps identify which Fortran epoch corresponds to the preserved Python
+    local matrix before interpreting family-level rate differences.
+    """
+
+    matrix_terms_path = Path(matrix_terms_csv) if matrix_terms_csv else _find_python_matrix_terms_csv(benchmark_dir, ion)
+    _py_rows, py_by_record = _load_python_records(matrix_terms_path)
+    wanted = set(py_by_record.keys())
+    ucalc_by_record, ucalc_counts = _load_ucalc_occurrences(ucalc_probe_csv, wanted)
+    positive_counts = [c for c in ucalc_counts.values() if c > 0]
+    if not positive_counts:
+        return []
+    max_rank = min(positive_counts)
+    if max_occurrence_rank is not None and max_occurrence_rank > 0:
+        max_rank = min(max_rank, int(max_occurrence_rank))
+    rows: List[Dict[str, Any]] = []
+    for rank in range(1, max_rank + 1):
+        selected_ucalc = _select_ucalc_rows(ucalc_by_record, selection="occurrence-rank", occurrence_rank=rank)
+        selected_matrix = _load_matrix_rows_for_selected(matrix_probe_csv, selected_ucalc)
+        record_rows = [
+            _record_summary_row(
+                rec, py_by_record.get(rec, []), selected_ucalc.get(rec),
+                selected_matrix.get(rec, []), ucalc_counts.get(rec, 0)
+            )
+            for rec in sorted(wanted)
+        ]
+        stats = _selection_summary_stats(record_rows, wanted, selected_ucalc)
+        rows.append({
+            "occurrence_rank": rank,
+            **stats,
+        })
+    def _scan_sort_key(row: Mapping[str, Any]) -> Tuple[float, int]:
+        metric = _as_float(row.get("median_abs_log10_python_over_fortran_abs_sum"), None)
+        if metric is None:
+            metric = float("inf")
+        return (float(metric), -(_as_int(row.get("n_match_1pct_or_better"), 0) or 0))
+
+    rows.sort(key=_scan_sort_key)
+    for i, row in enumerate(rows, start=1):
+        row["scan_rank_by_median_abs_log10_ratio"] = i
+    rows.sort(key=lambda r: _as_int(r.get("occurrence_rank"), 0) or 0)
+    return rows
+
+
+def audit_record_level_matrix_parity(
+    *,
+    benchmark_dir: str | Path,
+    ion: str,
+    ucalc_probe_csv: str | Path,
+    matrix_probe_csv: str | Path,
+    matrix_terms_csv: str | Path | None = None,
+    selection: str = "latest-per-record",
+    occurrence_rank: int | None = None,
+    scan_occurrence_ranks: bool = False,
+    max_occurrence_rank: int | None = None,
+) -> Dict[str, Any]:
+    if selection not in {"latest-per-record", "occurrence-rank"}:
+        raise ValueError("selection must be 'latest-per-record' or 'occurrence-rank'")
+    matrix_terms_path = Path(matrix_terms_csv) if matrix_terms_csv else _find_python_matrix_terms_csv(benchmark_dir, ion)
+    py_rows, py_by_record = _load_python_records(matrix_terms_path)
+    wanted = set(py_by_record.keys())
+    ucalc_by_record, ucalc_counts = _load_ucalc_occurrences(ucalc_probe_csv, wanted)
+    record_rows, selected_ucalc = _make_record_rows_for_selection(
+        py_by_record=py_by_record,
+        ucalc_by_record=ucalc_by_record,
+        ucalc_counts=ucalc_counts,
+        matrix_probe_csv=matrix_probe_csv,
+        selection=selection,
+        occurrence_rank=occurrence_rank,
+    )
+    family_rows = _family_summary(record_rows)
+    stats = _selection_summary_stats(record_rows, wanted, selected_ucalc)
+    scan_rows: List[Dict[str, Any]] = []
+    if scan_occurrence_ranks:
+        scan_rows = scan_occurrence_rank_matrix_parity(
+            benchmark_dir=benchmark_dir,
+            ion=ion,
+            ucalc_probe_csv=ucalc_probe_csv,
+            matrix_probe_csv=matrix_probe_csv,
+            matrix_terms_csv=matrix_terms_path,
+            max_occurrence_rank=max_occurrence_rank,
+        )
+    best_scan = min(
+        scan_rows,
+        key=lambda r: _as_int(r.get("scan_rank_by_median_abs_log10_ratio"), 10**9) or 10**9,
+        default={},
+    )
+    summary = {
+        "audit_version": "v0.3.182",
+        "ion": ion,
+        "status": "record_level_matrix_parity_audit_completed",
+        "selection": selection,
+        "occurrence_rank": occurrence_rank if occurrence_rank is not None else "",
+        "scan_occurrence_ranks": bool(scan_occurrence_ranks),
+        "best_occurrence_rank_by_scan": best_scan.get("occurrence_rank", ""),
+        "best_scan_median_abs_log10_ratio": best_scan.get("median_abs_log10_python_over_fortran_abs_sum", ""),
+        "python_matrix_terms_csv": str(matrix_terms_path),
+        "ucalc_probe_csv": str(ucalc_probe_csv),
+        "matrix_probe_csv": str(matrix_probe_csv),
+        "n_python_matrix_terms_with_record": len(py_rows),
+        "n_python_records": len(wanted),
+        **stats,
+        "n_family_rows": len(family_rows),
         "n_python_proxy_or_scaffold_records": sum(1 for r in record_rows if str(r.get("python_proxy_or_scaffold")).lower() == "true"),
         "record_level_source_equivalent_ready": (
             len(wanted) > 0
-            and len(wanted - set(selected_ucalc.keys())) == 0
-            and ready_records == len(wanted)
-            and n_self_pass == len(wanted)
+            and stats["n_python_records_without_fortran_ucalc"] == 0
+            and stats["n_python_records_with_selected_four_fortran_rows"] == len(wanted)
+            and stats["n_fortran_self_check_pass_records"] == len(wanted)
             and all(str(r.get("record_parity_status", "")).startswith("python_fortran_abs_sum_match") for r in record_rows)
         ),
     }
-    return {"summary": summary, "record_rows": record_rows, "family_rows": family_rows}
+    return {"summary": summary, "record_rows": record_rows, "family_rows": family_rows, "occurrence_scan_rows": scan_rows}
 
 
 def write_record_level_matrix_parity_audit(
@@ -369,15 +537,18 @@ def write_record_level_matrix_parity_audit(
     paths = {
         "record_summary_csv": out / "xstar_record_level_matrix_parity_audit_records.csv",
         "family_summary_csv": out / "xstar_record_level_matrix_parity_audit_family_summary.csv",
+        "occurrence_scan_csv": out / "xstar_record_level_matrix_parity_audit_occurrence_scan.csv",
         "json": out / "xstar_record_level_matrix_parity_audit.json",
         "markdown": out / "xstar_record_level_matrix_parity_audit.md",
     }
     record_rows = list(audit.get("record_rows", []))
     family_rows = list(audit.get("family_rows", []))
+    occurrence_scan_rows = list(audit.get("occurrence_scan_rows", []))
     summary = dict(audit.get("summary", {}))
     _write_csv(paths["record_summary_csv"], record_rows)
     _write_csv(paths["family_summary_csv"], family_rows)
-    payload = {"summary": summary, "record_rows": record_rows, "family_rows": family_rows}
+    _write_csv(paths["occurrence_scan_csv"], occurrence_scan_rows)
+    payload = {"summary": summary, "record_rows": record_rows, "family_rows": family_rows, "occurrence_scan_rows": occurrence_scan_rows}
     paths["json"].write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     lines = [
         "# XSTAR record-level local matrix parity audit",
@@ -386,6 +557,10 @@ def write_record_level_matrix_parity_audit(
         f"- ion: `{summary.get('ion')}`",
         f"- status: `{summary.get('status')}`",
         f"- selection: `{summary.get('selection')}`",
+        f"- occurrence_rank: `{summary.get('occurrence_rank')}`",
+        f"- scan_occurrence_ranks: `{summary.get('scan_occurrence_ranks')}`",
+        f"- best_occurrence_rank_by_scan: `{summary.get('best_occurrence_rank_by_scan')}`",
+        f"- best_scan_median_abs_log10_ratio: `{summary.get('best_scan_median_abs_log10_ratio')}`",
         f"- Python records: `{summary.get('n_python_records')}`",
         f"- records with selected Fortran ucalc: `{summary.get('n_python_records_with_fortran_ucalc')}`",
         f"- records with four selected Fortran matrix rows: `{summary.get('n_python_records_with_selected_four_fortran_rows')}`",
@@ -393,7 +568,7 @@ def write_record_level_matrix_parity_audit(
         f"- median Python/Fortran abs-sum: `{summary.get('median_python_over_fortran_abs_sum')}`",
         f"- record-level source-equivalent ready: `{summary.get('record_level_source_equivalent_ready')}`",
         "",
-        "This is a diagnostic audit.  It selects the latest instrumented XSTAR `ucalc` capture for each ATDB record present in the preserved Python matrix and compares the corresponding four `calc_hmc_ion` matrix rows against Python matrix rows grouped by record.",
+        "This is a diagnostic audit.  The default selection keeps legacy `latest-per-record` behavior, but v0.3.182 can also select a common `occurrence-rank` and scan occurrence ranks across a full XSTAR run to locate the Fortran local-state epoch that best matches the preserved Python matrix before interpreting family-level mismatches.",
     ]
     paths["markdown"].write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {k: str(v) for k, v in paths.items()}

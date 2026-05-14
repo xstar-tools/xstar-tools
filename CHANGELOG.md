@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.182 - 2026-05-14
+
+- Adds local-state occurrence-rank selection to the record-level XSTAR matrix parity audit.
+- `examples/78_audit_xstar_record_level_matrix_parity.py` now supports `--selection occurrence-rank --occurrence-rank N` and `--scan-occurrence-ranks` to diagnose which repeated XSTAR `ucalc` call epoch best corresponds to a preserved Python local matrix.
+- This prevents over-interpreting the legacy `latest-per-record` comparison when a full XSTAR probe contains many zones/passes.
+- Writes `xstar_record_level_matrix_parity_audit_occurrence_scan.csv` alongside the record and family summaries.
+- Diagnostic selection infrastructure only: no solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
 ## v0.3.181 - 2026-05-14
 
 - Add record-level XSTAR local matrix parity audit.
