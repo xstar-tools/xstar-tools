@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.184 - 2026-05-14
+
+- Add controlled record-level `ucalc` matrix replay diagnostics.
+- New module `xstar_atomic.xstar_record_level_replay` and example `examples/79_audit_xstar_record_level_ucalc_matrix_replay.py`.
+- Consumes a selected record-level parity audit (for example O VII occurrence-rank 73), replaces selected Python matrix-row magnitudes with Fortran `ucalc` `ans1`/`ans2` branch values while preserving Python topology/signs, and writes replay matrix terms plus changed-term/family summaries.
+- Optional `--run-solver` re-solves the original and replay matrices in environments with the full solver dependencies.
+- Diagnostic replay scaffold only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
 ## v0.3.183 - 2026-05-14
 
 - Add branch-aware record-level blocker diagnosis for source-code local matrix parity.
