@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.183 - 2026-05-14
+
+- Add branch-aware record-level blocker diagnosis for source-code local matrix parity.
+- Include type-99 parent/superlevel closure rows using `type99_records` when generic `record` is absent.
+- Add per-record branch-ratio columns and recommended next actions for type-53, type-50, type-77, and type-99 closure blockers.
+
 ## v0.3.182 - 2026-05-14
 
 - Adds local-state occurrence-rank selection to the record-level XSTAR matrix parity audit.

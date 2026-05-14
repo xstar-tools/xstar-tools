@@ -38,7 +38,7 @@ def test_v03181_record_level_parity_synthetic(tmp_path: Path):
         matrix_probe_csv=m,
     )
     s = audit["summary"]
-    assert s["audit_version"] == "v0.3.182"
+    assert s["audit_version"] in {"v0.3.182", "v0.3.183"}
     assert s["n_python_records"] == 1
     assert s["n_python_records_with_selected_four_fortran_rows"] == 1
     assert s["n_fortran_self_check_pass_records"] == 1

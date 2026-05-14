@@ -126,10 +126,21 @@ def _load_python_records(matrix_terms_csv: str | Path) -> Tuple[List[Dict[str, A
     with Path(matrix_terms_csv).open("r", newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             rec = _as_int(row.get("record"), None)
+            record_source = "record"
+            if rec is None or rec <= 0:
+                # Some parent/superlevel closure rows (notably type 99) do not
+                # populate the generic ``record`` column in older preserved
+                # matrix products, but they retain the ATDB record number in
+                # type-specific provenance columns.  Include those rows so the
+                # full source-code-equivalent audit covers parent-ion and
+                # superlevel closure instead of silently dropping it.
+                rec = _as_int(row.get("type99_records"), None)
+                record_source = "type99_records"
             if rec is None or rec <= 0:
                 continue
             out = dict(row)
             out["record_int"] = rec
+            out["record_key_source"] = record_source
             out["python_signed_rate"] = _signed_python_value(row)
             out["python_abs_rate"] = abs(out["python_signed_rate"])
             out["family_key"] = _family_key_from_python(row)
@@ -265,6 +276,78 @@ def _median(values: Sequence[float]) -> float | None:
     return float(statistics.median(vals))
 
 
+
+def _classify_record_blocker(
+    family_key: str,
+    ratio: float | None,
+    py_rows: Sequence[Mapping[str, Any]],
+    ucalc: Mapping[str, Any] | None,
+    matrix_rows: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Classify the likely remaining source-equivalence blocker for a record.
+
+    This is intentionally diagnostic.  It does not change rates.  The goal is
+    to make the record-level audit actionable after a good local-state
+    occurrence has been selected.
+    """
+
+    fam = (family_key or "").lower()
+    ratio_f = float(ratio) if ratio is not None and math.isfinite(float(ratio)) else None
+    ans1 = _as_float(ucalc.get("ans1") if ucalc else None, 0.0) or 0.0
+    ans2 = _as_float(ucalc.get("ans2") if ucalc else None, 0.0) or 0.0
+    py_abs = sum(abs(float(r.get("python_signed_rate") or 0.0)) for r in py_rows)
+    f_abs = sum(abs(_as_float(r.get("ajisi_1"), 0.0) or 0.0) for r in matrix_rows)
+    two_ans1 = 2.0 * abs(ans1)
+    two_ans2 = 2.0 * abs(ans2)
+    two_ans12 = 2.0 * (abs(ans1) + abs(ans2))
+
+    def _safe_ratio(a: float, b: float) -> float | str:
+        if b == 0.0:
+            return ""
+        return a / b
+
+    hypothesis = "source_equivalent_or_small_difference"
+    priority = "ok"
+    recommended_next = "none"
+    if ucalc is None:
+        hypothesis = "missing_fortran_ucalc_record"
+        priority = "blocking"
+        recommended_next = "check record-key mapping and XSTAR probe coverage"
+    elif len(matrix_rows) != 4:
+        hypothesis = "missing_or_incomplete_calc_hmc_ion_matrix_rows"
+        priority = "blocking"
+        recommended_next = "check calc_hmc_ion matrix insertion probe placement"
+    elif "type53" in fam and ratio_f is not None and (ratio_f > 1.1 or ratio_f < 0.9):
+        hypothesis = "type53_python_proxy_radiation_not_source_equivalent_phint53"
+        priority = "blocking"
+        recommended_next = "replace xstar-powerlaw/proxy type-53 rates with source-code phint53 using live XSTAR radiation state"
+    elif "data_type_50" in fam and ratio_f is not None and abs(ratio_f - 0.35) <= 0.02:
+        hypothesis = "type50_nontriplet_escape_factor_proxy_0p35"
+        priority = "high"
+        recommended_next = "generalize source-code type-50 escape/cfrac treatment to all bound-bound records, not only He-like triplet lines"
+    elif "type77" in fam and ratio_f is not None and (ratio_f > 1.1 or ratio_f < 0.9):
+        hypothesis = "type77_superlevel_calt77_scaling_or_parent_population_closure"
+        priority = "high"
+        recommended_next = "audit calt77 ans1/ans2 branch and parent/superlevel population scaling against ucalc/calc_hmc_ion"
+    elif "type99" in fam and ratio_f is not None and (ratio_f > 1.1 or ratio_f < 0.9):
+        hypothesis = "type99_parent_superlevel_closure_not_source_equivalent"
+        priority = "blocking"
+        recommended_next = "implement ucalc type-99 calt99 + phint53hunt scaling and parent-continuum coupling"
+    elif ratio_f is not None and (ratio_f > 1.1 or ratio_f < 0.9):
+        hypothesis = "unclassified_python_fortran_record_difference"
+        priority = "investigate"
+        recommended_next = "inspect record-level Python rows and ucalc ans1/ans2 branch mapping"
+
+    return {
+        "python_over_2ans1": _safe_ratio(py_abs, two_ans1),
+        "python_over_2ans2": _safe_ratio(py_abs, two_ans2),
+        "python_over_2ans1_plus_2ans2": _safe_ratio(py_abs, two_ans12),
+        "fortran_abs_sum_expected_from_ans1_ans2": two_ans12,
+        "blocker_hypothesis": hypothesis,
+        "blocker_priority": priority,
+        "recommended_next_action": recommended_next,
+    }
+
 def _record_summary_row(
     rec: int,
     py_rows: Sequence[Mapping[str, Any]],
@@ -319,6 +402,7 @@ def _record_summary_row(
         "fortran_ajisi1_abs_sum_s^-1": f_abs_sum,
         "python_over_fortran_abs_sum": ratio if ratio is not None else "",
         **self_check,
+        **_classify_record_blocker(family, ratio, py_rows, ucalc, matrix_rows),
         "record_parity_status": status,
     }
 
@@ -345,6 +429,16 @@ def _family_summary(record_rows: Sequence[Mapping[str, Any]]) -> List[Dict[str, 
             "min_python_over_fortran_abs_sum": min(ratios_f) if ratios_f else "",
             "max_python_over_fortran_abs_sum": max(ratios_f) if ratios_f else "",
             "n_abs_sum_differs": sum(1 for r in rows if r.get("record_parity_status") == "python_fortran_abs_sum_differs"),
+            "blocker_hypothesis_counts": json.dumps({
+                h: sum(1 for r in rows if str(r.get("blocker_hypothesis") or "") == h)
+                for h in sorted(set(str(r.get("blocker_hypothesis") or "") for r in rows))
+            }, sort_keys=True),
+            "max_blocker_priority": (
+                "blocking" if any(str(r.get("blocker_priority")) == "blocking" for r in rows)
+                else "high" if any(str(r.get("blocker_priority")) == "high" for r in rows)
+                else "investigate" if any(str(r.get("blocker_priority")) == "investigate" for r in rows)
+                else "ok"
+            ),
             "status_counts": json.dumps(statuses, sort_keys=True),
         })
     return out
@@ -500,7 +594,7 @@ def audit_record_level_matrix_parity(
         default={},
     )
     summary = {
-        "audit_version": "v0.3.182",
+        "audit_version": "v0.3.183",
         "ion": ion,
         "status": "record_level_matrix_parity_audit_completed",
         "selection": selection,
@@ -568,7 +662,7 @@ def write_record_level_matrix_parity_audit(
         f"- median Python/Fortran abs-sum: `{summary.get('median_python_over_fortran_abs_sum')}`",
         f"- record-level source-equivalent ready: `{summary.get('record_level_source_equivalent_ready')}`",
         "",
-        "This is a diagnostic audit.  The default selection keeps legacy `latest-per-record` behavior, but v0.3.182 can also select a common `occurrence-rank` and scan occurrence ranks across a full XSTAR run to locate the Fortran local-state epoch that best matches the preserved Python matrix before interpreting family-level mismatches.",
+        "This is a diagnostic audit.  The default selection keeps legacy `latest-per-record` behavior, but v0.3.183 can also select a common `occurrence-rank` and scan occurrence ranks across a full XSTAR run to locate the Fortran local-state epoch that best matches the preserved Python matrix before interpreting family-level mismatches.",
     ]
     paths["markdown"].write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {k: str(v) for k, v in paths.items()}

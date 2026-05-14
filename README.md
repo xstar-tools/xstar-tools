@@ -1,3 +1,9 @@
+## v0.3.183
+
+- Add branch-aware record-level blocker diagnosis for source-code local matrix parity.
+- Include type-99 parent/superlevel closure rows using `type99_records` when generic `record` is absent.
+- Add per-record branch-ratio columns and recommended next actions for type-53, type-50, type-77, and type-99 closure blockers.
+
 Latest package note: **v0.3.182** adds occurrence-rank/local-state selection diagnostics to the record-level matrix parity audit. Full XSTAR probes contain many repeated `ucalc` calls over zones and passes, while the preserved Python matrix is one local state. `examples/78_audit_xstar_record_level_matrix_parity.py` now supports `--selection occurrence-rank --occurrence-rank N` and `--scan-occurrence-ranks`, writing an occurrence-scan CSV to identify the Fortran epoch that best matches the Python matrix before interpreting family-level mismatches. This is diagnostic infrastructure only; no solver physics or empirical triplet tuning changed.
 
 Latest package note: **v0.3.177** fixes the full local parity probe helper for HEASoft/XSTAR fixed-form Fortran builds. The generated `xstar_atomic_full_parity_probe_helpers.f90`, after-`ucalc` insertion block, and matrix-insertion notes now use fixed-form continuation in column 6 and avoid free-form trailing `&`, so the helper can compile in XSTAR builds that treat `.f90` sources as fixed form. This is an instrumentation compatibility fix only; no solver physics, rate formulas, or empirical triplet tuning changed.
