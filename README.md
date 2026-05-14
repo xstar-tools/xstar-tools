@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.171** is a live-rate-grid probe instrumentation-helper release. It writes a standalone Fortran helper and `xstarcalc.f90` insertion block so a local/debug XSTAR build can dump the live `epim(:)`, `bremsam(:)`, and `bremsint(:)` arrays immediately after `bremsmap` and before `calc_hmc_all/calc_hmc_ion`. This is required for exact type-53 `phint53` photoionization parity. No solver physics changed.
+Latest package note: **v0.3.172** is a live-rate-grid probe instrumentation-helper release. It writes a standalone Fortran helper and `xstarcalc.f90` insertion block so a local/debug XSTAR build can dump the live `epim(:)`, `bremsam(:)`, and `bremsint(:)` arrays immediately after `bremsmap` and before `calc_hmc_all/calc_hmc_ion`. This is required for exact type-53 `phint53` photoionization parity. No solver physics changed.
 
 
 - `docs/user_guide.md`

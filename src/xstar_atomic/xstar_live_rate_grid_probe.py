@@ -162,7 +162,7 @@ def live_rate_grid_probe_fortran_template() -> str:
 
     cols = LIVE_RATE_GRID_REQUIRED_COLUMNS + LIVE_RATE_GRID_RECOMMENDED_COLUMNS
     header = ",".join(cols)
-    return f"""! xstar-atomic v0.3.171 live rate-grid probe template
+    return f"""! xstar-atomic v0.3.172 live rate-grid probe template
 ! Insert immediately after the xstarcalc.f90 call to bremsmap(...) and before
 ! calc_hmc_all/calc_hmc_ion receive epim,ncn2m,bremsam,bremsint.
 ! Guard this block with your local debug flag and selected zone/ion conditions.
@@ -187,8 +187,55 @@ def live_rate_grid_probe_fortran_template() -> str:
 """
 
 
+def _split_probe_rows_into_blocks(rows: Sequence[Dict[str, str]]) -> List[List[Dict[str, str]]]:
+    """Split rows from one nominal probe key into sequential capture blocks.
+
+    The first v0.3.171 Fortran helper can use placeholder zone/pass metadata
+    (for example ``zone_index=-1, pass_index=1, ldir=0``) for every call to
+    ``bremsmap``.  In that common case, grouping only by
+    ``(zone_index, pass_index, ldir)`` incorrectly concatenates multiple
+    reduced grids into one non-monotonic state.  XSTAR writes rows in call-site
+    order, and each capture block resets ``grid_index`` to 1, so use that reset
+    as the primary block delimiter.  Also start a new block if a previous block
+    has already reached its row-local ``ncn2m`` value.
+    """
+
+    blocks: List[List[Dict[str, str]]] = []
+    current: List[Dict[str, str]] = []
+    last_grid: int | None = None
+    expected_n: int | None = None
+    for row in rows:
+        gidx = _as_int(row.get("grid_index"), None)
+        ncn = _as_int(row.get("ncn2m"), None)
+        start_new = False
+        if current:
+            if gidx is not None and last_grid is not None and gidx <= last_grid:
+                start_new = True
+            elif expected_n is not None and len(current) >= expected_n:
+                start_new = True
+        if start_new:
+            blocks.append(current)
+            current = []
+            last_grid = None
+            expected_n = None
+        current.append(row)
+        last_grid = gidx
+        if expected_n is None and ncn is not None:
+            expected_n = ncn
+    if current:
+        blocks.append(current)
+    return blocks
+
+
 def read_live_rate_grid_probe_csv(path: str | Path) -> List[LiveRateGridState]:
-    """Read a long-form live-rate-grid probe CSV into grouped states."""
+    """Read a long-form live-rate-grid probe CSV into grouped states.
+
+    Rows are first partitioned by the nominal probe metadata
+    ``(zone_index, pass_index, ldir)``.  Within each nominal group, sequential
+    capture blocks are split whenever ``grid_index`` resets.  This supports the
+    lightweight v0.3.171 probe helper, where the true radial-zone counter may
+    not be in scope and all captures may therefore share ``zone_index=-1``.
+    """
 
     rows = _read_csv_rows(path)
     groups: MutableMapping[Tuple[int, int, int], List[Dict[str, str]]] = {}
@@ -201,27 +248,31 @@ def read_live_rate_grid_probe_csv(path: str | Path) -> List[LiveRateGridState]:
         groups.setdefault((int(zone), int(pidx), int(ldir)), []).append(row)
 
     states: List[LiveRateGridState] = []
+    capture_index = 0
     for (zone, pidx, ldir), group_rows in sorted(groups.items()):
-        group_rows = sorted(group_rows, key=lambda r: _as_int(r.get("grid_index"), 0) or 0)
-        epim: List[float] = []
-        brem: List[float] = []
-        bint: List[float] = []
-        for row in group_rows:
-            e = _as_float(row.get("epim_eV"))
-            b = _as_float(row.get("bremsam"))
-            bi = _as_float(row.get("bremsint"))
-            if e is None or b is None or bi is None:
-                continue
-            epim.append(float(e)); brem.append(float(b)); bint.append(float(bi))
-        ncn2m = _as_int(group_rows[0].get("ncn2m"), len(epim)) or len(epim)
-        metadata: Dict[str, Any] = {}
-        for key in LIVE_RATE_GRID_RECOMMENDED_COLUMNS:
-            if key in group_rows[0] and group_rows[0].get(key) != "":
-                val = _as_float(group_rows[0].get(key))
-                metadata[key] = val if val is not None else group_rows[0].get(key)
-        states.append(LiveRateGridState(zone, pidx, ldir, int(ncn2m), tuple(epim), tuple(brem), tuple(bint), metadata))
+        # Preserve file order inside each nominal group; do not sort before
+        # splitting, because sorting would destroy the grid-index reset signal.
+        for block_rows in _split_probe_rows_into_blocks(group_rows):
+            capture_index += 1
+            block_rows = sorted(block_rows, key=lambda r: _as_int(r.get("grid_index"), 0) or 0)
+            epim: List[float] = []
+            brem: List[float] = []
+            bint: List[float] = []
+            for row in block_rows:
+                e = _as_float(row.get("epim_eV"))
+                b = _as_float(row.get("bremsam"))
+                bi = _as_float(row.get("bremsint"))
+                if e is None or b is None or bi is None:
+                    continue
+                epim.append(float(e)); brem.append(float(b)); bint.append(float(bi))
+            ncn2m = _as_int(block_rows[0].get("ncn2m"), len(epim)) or len(epim)
+            metadata: Dict[str, Any] = {"capture_index": capture_index}
+            for key in LIVE_RATE_GRID_RECOMMENDED_COLUMNS:
+                if key in block_rows[0] and block_rows[0].get(key) != "":
+                    val = _as_float(block_rows[0].get(key))
+                    metadata[key] = val if val is not None else block_rows[0].get(key)
+            states.append(LiveRateGridState(zone, pidx, ldir, int(ncn2m), tuple(epim), tuple(brem), tuple(bint), metadata))
     return states
-
 
 def summarize_live_rate_grid_probe_csv(path: str | Path | None) -> Dict[str, Any]:
     """Summarize an optional live-rate-grid probe CSV for readiness checks."""
@@ -262,6 +313,7 @@ def summarize_live_rate_grid_probe_csv(path: str | Path | None) -> Dict[str, Any
     status = "probe_csv_loaded" if states else "probe_csv_empty_or_unreadable"
     if states and (non_monotonic or non_positive_bremsam or ncn2m_mismatch):
         status = "probe_csv_loaded_with_warnings"
+    n_placeholder_zone_states = sum(1 for st in states if st.zone_index < 0)
     return {
         "probe_status": status,
         "probe_csv": str(p),
@@ -272,6 +324,8 @@ def summarize_live_rate_grid_probe_csv(path: str | Path | None) -> Dict[str, Any
         "n_probe_states_non_monotonic_energy": non_monotonic,
         "n_probe_states_with_negative_bremsam": non_positive_bremsam,
         "n_probe_states_ncn2m_mismatch": ncn2m_mismatch,
+        "n_probe_states_placeholder_zone_index": n_placeholder_zone_states,
+        "probe_block_split_method": "nominal_key_then_grid_index_reset_v03172",
         "probe_ready_for_type53_phint53_live_bremsam_audit": bool(states and not non_monotonic and not ncn2m_mismatch),
     }
 
@@ -288,7 +342,7 @@ def prepare_live_rate_grid_probe_products(
     out.mkdir(parents=True, exist_ok=True)
     schema_rows = live_rate_grid_probe_schema_rows()
     summary = {
-        "audit_version": "v0.3.171",
+        "audit_version": "v0.3.172",
         "purpose": "standardize the live epim/bremsam/bremsint capture needed for type-53 phint53 parity",
         "correct_capture_site": "xstarcalc.f90 immediately after bremsmap and before calc_hmc_all/calc_hmc_ion",
         "correct_live_rate_field": "epim(:), bremsam(:), bremsint(:)",
@@ -350,7 +404,7 @@ def prepare_live_rate_grid_probe_products(
     }
 
 # ---------------------------------------------------------------------------
-# v0.3.171 local XSTAR instrumentation helper
+# v0.3.172 local XSTAR instrumentation helper
 # ---------------------------------------------------------------------------
 
 def live_rate_grid_probe_fortran_helper() -> str:
@@ -363,7 +417,7 @@ def live_rate_grid_probe_fortran_helper() -> str:
     long Fortran source lines by using non-advancing writes.
     """
 
-    return """! xstar-atomic v0.3.171 live rate-grid probe helper
+    return """! xstar-atomic v0.3.172 live rate-grid probe helper
 ! Compile this file into a local/debug XSTAR build only.  It writes the live
 ! rate-grid arrays epim(:), bremsam(:), and bremsint(:) immediately after
 ! xstarcalc.f90 calls bremsmap and before calc_hmc_all/calc_hmc_ion.
@@ -507,7 +561,7 @@ def prepare_live_rate_grid_probe_patch_products(
     )
     site = locate_xstarcalc_bremsmap_site(xstar_source_root) if xstar_source_root else {"status": "xstar_source_root_not_supplied"}
     summary = {
-        "audit_version": "v0.3.171",
+        "audit_version": "v0.3.172",
         "purpose": "prepare a compileable local XSTAR live-rate-grid probe helper and xstarcalc insertion block",
         "probe_output_csv": filename,
         "zone_expression": zone_expression,

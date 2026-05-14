@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.3.172 - 2026-05-13
+
+- Fix live-rate-grid probe validation for instrumented XSTAR runs that use placeholder zone/pass metadata for every `bremsmap` capture.
+- The probe reader now splits sequential capture blocks when `grid_index` resets, so a CSV with repeated blocks of `grid_index=1..ncn2m` is read as multiple live states rather than one non-monotonic state.
+- Adds readiness metadata `probe_block_split_method=nominal_key_then_grid_index_reset_v03172` and `n_probe_states_placeholder_zone_index`.
+- No solver physics, rate formulas, or empirical triplet tuning changed.
+
 ## v0.3.171 - 2026-05-13
 
 - Live-rate-grid probe instrumentation helper release only; no solver physics, rate formulas, or empirical triplet tuning changed.
