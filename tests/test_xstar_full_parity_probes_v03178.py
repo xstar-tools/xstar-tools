@@ -60,3 +60,20 @@ def test_full_parity_probe_validation_detects_bad_matrix_count(tmp_path: Path):
     s = summarize_full_parity_probe_csvs(ucalc_probe_csv=u, matrix_probe_csv=m)
     assert s["probe_ready_for_record_level_matrix_parity"] is False
     assert s["n_matrix_record_keys_not_four_rows"] == 1
+
+
+def test_generated_helper_uses_valid_free_form_fortran(tmp_path: Path):
+    import shutil
+    import subprocess
+
+    result = prepare_full_parity_probe_products(out_dir=tmp_path)
+    helper = Path(result["paths"]["helper_fortran"])
+    text = helper.read_text(encoding="utf-8")
+    assert "subroutine xap_ucalc" in text
+    assert "subroutine xap_mrow" in text
+    assert "xstar_atomic_probe_ucalc_record" not in text
+    if shutil.which("gfortran"):
+        subprocess.run(
+            ["gfortran", "-c", str(helper), "-o", str(tmp_path / "probe.o")],
+            check=True,
+        )

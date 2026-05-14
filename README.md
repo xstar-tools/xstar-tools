@@ -196,3 +196,7 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
 ```
 
 This reads `xo01_detal2.fits` and `xo01_detal4.fits`, computes `ptmp1`, `ptmp2`, escaped decay, and photoexcitation using the XSTAR `calc_hmc_ion.f90`/`ucalc.f90` type-50 formula, and writes CSV/JSON/Markdown audit products.
+
+### v0.3.178 full-parity probe helper compiler fix
+
+v0.3.178 regenerates the full local parity probe helper as conservative free-form Fortran (`xap_ucalc`, `xap_mrow`) matching the observed HEASoft/XSTAR `.f90` compile path. It is a probe/instrumentation fix only; no solver physics or rate formula is changed.

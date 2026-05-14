@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.178 - 2026-05-14
+
+- Fixes the full-parity XSTAR probe helper generated in v0.3.176/v0.3.177 for the actual HEASoft/XSTAR `.f90` free-form compilation path.
+- Replaces fixed-form continuation snippets with conservative free-form Fortran using trailing `&` continuation.
+- Shortens probe helper routine names to `xap_ucalc` and `xap_mrow` to avoid older compiler/name-length surprises.
+- Updates the `calc_hmc_ion.f90` insertion snippets to call `xap_ucalc` / `xap_mrow`.
+- Adds a generated-helper syntax test using `gfortran` when available.
+- No solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
 ## v0.3.177 - 2026-05-14
 
 - Fixed the full local parity probe Fortran helper for HEASoft/XSTAR fixed-form compilation.
