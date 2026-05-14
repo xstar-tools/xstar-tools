@@ -199,6 +199,25 @@ This reads `xo01_detal2.fits` and `xo01_detal4.fits`, computes `ptmp1`, `ptmp2`,
 
 
 
+
+### v0.3.181 record-level local matrix parity audit
+
+v0.3.181 adds `examples/78_audit_xstar_record_level_matrix_parity.py`, which consumes the validated full-parity XSTAR probes (`xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`) together with a preserved Python full-global matrix.  The audit matches Python matrix records to the latest instrumented XSTAR `ucalc` call for the same ATDB record, joins the four `calc_hmc_ion` `ajisi/indbi` rows, checks that the Fortran matrix rows are self-consistent with `ans1` and `ans2`, and reports Python/Fortran rate agreement by record and rate family.
+
+Example:
+
+```bash
+PYTHONPATH=src python examples/78_audit_xstar_record_level_matrix_parity.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --ucalc-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_ucalc_record_probe.csv \
+  --matrix-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_calc_hmc_ion_matrix_probe.csv \
+  --out-dir xstar_record_level_matrix_parity_audit_o7_v03181 \
+  --print-summary
+```
+
+This audit is diagnostic only.  It does not change solver defaults; it identifies which local matrix families are already source-code-equivalent and which still use proxy/scaffold or incomplete parent/superlevel closure logic.
+
 ### v0.3.180 full-parity probe shared-capture fix
 
 v0.3.180 fixes the full-parity probe CSV association problem found after the first O VII instrumented XSTAR run. Previous helpers wrote an independent matrix-row `capture_index`, so `xstar_calc_hmc_ion_matrix_probe.csv` could not be matched to `xstar_ucalc_record_probe.csv`: every matrix row appeared to be a separate record. The v0.3.180 helper now stores the most recent `ucalc` capture id and writes it as the matrix probe `capture_index`, while the independent matrix-row counter is written as `matrix_capture_index`. The validator detects legacy independent-counter CSVs and reports `matrix_capture_index_status=independent_matrix_capture_index_needs_v03180_rerun`. This is a probe/validation fix only; no solver physics or rate formula changed.
