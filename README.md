@@ -1,3 +1,5 @@
+Latest package note: **v0.3.177** fixes the full local parity probe helper for HEASoft/XSTAR fixed-form Fortran builds. The generated `xstar_atomic_full_parity_probe_helpers.f90`, after-`ucalc` insertion block, and matrix-insertion notes now use fixed-form continuation in column 6 and avoid free-form trailing `&`, so the helper can compile in XSTAR builds that treat `.f90` sources as fixed form. This is an instrumentation compatibility fix only; no solver physics, rate formulas, or empirical triplet tuning changed.
+
 # xstar-atomic
 
 Latest package note: **v0.3.176** adds full local parity probe preparation/validation for the required XSTAR debug products `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`. It writes schemas, an external Fortran helper, a `calc_hmc_ion.f90` after-`ucalc` insertion block, and matrix-insertion probe notes, then validates whether captured probes are ready for record-level `ucalc`/`ajisi` matrix parity. This is instrumentation infrastructure only; no solver physics or empirical triplet tuning changed.

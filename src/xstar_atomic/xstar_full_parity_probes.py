@@ -232,7 +232,7 @@ def summarize_full_parity_probe_csvs(
         and n_not_four == 0
     )
     return {
-        "audit_version": "v0.3.176",
+        "audit_version": "v0.3.177",
         "status": status,
         "ucalc_probe_status": u_status,
         "matrix_probe_status": m_status,
@@ -254,102 +254,143 @@ def summarize_full_parity_probe_csvs(
 
 
 def _fortran_helper_text() -> str:
-    return r'''! xstar-atomic v0.3.176 full local parity probe helper.
-! Copy this file into xstarlib/src and add it to HD_LIBRARY_SRC_f90, or append
-! these external subroutines to a local debug-only source file compiled with
-! xstarlib.  Remove old CSV files before each XSTAR run to avoid duplicate
-! headers.
+    return r'''! xstar-atomic v0.3.177 full local parity probe helper.
+! This helper is deliberately written in fixed-form-compatible Fortran
+! because some HEASoft/XSTAR builds compile .f90 files with fixed-form
+! rules.  Keep continuation marks in column 6 and avoid free-form '&'.
 
-      subroutine xstar_atomic_probe_ucalc_record(fname,ml_data,ltyp,lrtyp,
-     & jkk_ion,idest1,idest2,idest3,idest4,ans1,ans2,ans3,ans4,ans5,ans6,
-     & ptmp1,ptmp2,xpx,xnx,t,cfrac)
+      subroutine xstar_atomic_probe_ucalc_record(fname,ml_data,ltyp,
+     1 lrtyp,jkk_ion,idest1,idest2,idest3,idest4,
+     2 ans1,ans2,ans3,ans4,ans5,ans6,
+     3 ptmp1,ptmp2,xpx,xnx,t,cfrac)
       implicit none
       character*(*) fname
-      integer ml_data,ltyp,lrtyp,jkk_ion,idest1,idest2,idest3,idest4
-      real*8 ans1,ans2,ans3,ans4,ans5,ans6,ptmp1,ptmp2,xpx,xnx,t,cfrac
-      integer, save :: capture_index = 0
-      logical, save :: wrote_header = .false.
-      integer lun
+      integer ml_data,ltyp,lrtyp,jkk_ion
+      integer idest1,idest2,idest3,idest4
+      real*8 ans1,ans2,ans3,ans4,ans5,ans6
+      real*8 ptmp1,ptmp2,xpx,xnx,t,cfrac
+      integer capture_index,lun
+      logical wrote_header
+      save capture_index,wrote_header
+      data capture_index /0/
+      data wrote_header /.false./
       lun = 9376
       capture_index = capture_index + 1
       open(unit=lun,file=fname,status='unknown',position='append')
       if (.not.wrote_header) then
-        write(lun,'(A)') 'capture_index,ml_data,ltyp,lrtyp,jkk_ion,'//
-     & 'idest1,idest2,idest3,idest4,ans1,ans2,ans3,ans4,ans5,ans6,'//
-     & 'ptmp1,ptmp2,xpx,xnx,t_xstar_1e4K,cfrac'
+        write(lun,'(a)')
+     1  'capture_index,ml_data,ltyp,lrtyp,jkk_ion,'//
+     2  'idest1,idest2,idest3,idest4,ans1,ans2,'//
+     3  'ans3,ans4,ans5,ans6,ptmp1,ptmp2,xpx,'//
+     4  'xnx,t_xstar_1e4K,cfrac'
         wrote_header = .true.
       endif
-      write(lun,'(I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16)')
-     & capture_index,ml_data,ltyp,lrtyp,jkk_ion,idest1,idest2,idest3,idest4,
-     & ans1,ans2,ans3,ans4,ans5,ans6,ptmp1,ptmp2,xpx,xnx,t,cfrac
+      write(lun,9001) capture_index,ml_data,ltyp,lrtyp,jkk_ion,
+     1 idest1,idest2,idest3,idest4,ans1,ans2,ans3,ans4,
+     2 ans5,ans6,ptmp1,ptmp2,xpx,xnx,t,cfrac
       close(lun)
       return
+ 9001 format(i12,',',i12,',',i12,',',i12,',',i12,',',
+     1 i12,',',i12,',',i12,',',i12,',',1pe24.16,',',
+     2 1pe24.16,',',1pe24.16,',',1pe24.16,',',
+     3 1pe24.16,',',1pe24.16,',',1pe24.16,',',
+     4 1pe24.16,',',1pe24.16,',',1pe24.16,',',
+     5 1pe24.16,',',1pe24.16)
       end
 
-      subroutine xstar_atomic_probe_matrix_row(fname,ml_data,ltyp,lrtyp,
-     & nindbi,kind,indbi1,indbi2,ajisi1,ajisi2,cjisi,cjisi2,idest1,idest2,
-     & llo,lup,e1,e2)
+      subroutine xstar_atomic_probe_matrix_row(fname,ml_data,ltyp,
+     1 lrtyp,nindbi,kind,indbi1,indbi2,ajisi1,ajisi2,
+     2 cjisi,cjisi2,idest1,idest2,llo,lup,e1,e2)
       implicit none
       character*(*) fname,kind
-      integer ml_data,ltyp,lrtyp,nindbi,indbi1,indbi2,idest1,idest2,llo,lup
+      integer ml_data,ltyp,lrtyp,nindbi,indbi1,indbi2
+      integer idest1,idest2,llo,lup
       real*8 ajisi1,ajisi2,cjisi,cjisi2,e1,e2
-      integer, save :: capture_index = 0
-      logical, save :: wrote_header = .false.
-      integer lun
+      integer capture_index,lun
+      logical wrote_header
+      save capture_index,wrote_header
+      data capture_index /0/
+      data wrote_header /.false./
       lun = 9377
       capture_index = capture_index + 1
       open(unit=lun,file=fname,status='unknown',position='append')
       if (.not.wrote_header) then
-        write(lun,'(A)') 'capture_index,ml_data,ltyp,lrtyp,insertion_index,'//
-     & 'insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2,cjisi,cjisi2,'//
-     & 'idest1,idest2,llo,lup,e1_eV,e2_eV'
+        write(lun,'(a)')
+     1  'capture_index,ml_data,ltyp,lrtyp,insertion_index,'//
+     2  'insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2,'//
+     3  'cjisi,cjisi2,idest1,idest2,llo,lup,e1_eV,e2_eV'
         wrote_header = .true.
       endif
-      write(lun,'(I0,'','',I0,'','',I0,'','',I0,'','',I0,'','',A,'','',I0,'','',I0,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',ES24.16,'','',I0,'','',I0,'','',I0,'','',I0,'','',ES24.16,'','',ES24.16)')
-     & capture_index,ml_data,ltyp,lrtyp,nindbi,trim(kind),indbi1,indbi2,
-     & ajisi1,ajisi2,cjisi,cjisi2,idest1,idest2,llo,lup,e1,e2
+      write(lun,9002) capture_index,ml_data,ltyp,lrtyp,nindbi,
+     1 kind,indbi1,indbi2,ajisi1,ajisi2,cjisi,cjisi2,
+     2 idest1,idest2,llo,lup,e1,e2
       close(lun)
       return
+ 9002 format(i12,',',i12,',',i12,',',i12,',',i12,',',
+     1 a,',',i12,',',i12,',',1pe24.16,',',1pe24.16,',',
+     2 1pe24.16,',',1pe24.16,',',i12,',',i12,',',
+     3 i12,',',i12,',',1pe24.16,',',1pe24.16)
       end
 '''
 
 
 def _after_ucalc_insertion_text() -> str:
-    return """! xstar-atomic v0.3.176: insert immediately after call ucalc(...)
-! and before rates(1,ml_data)=ans1.
-      call xstar_atomic_probe_ucalc_record(                              &
-     & 'xstar_ucalc_record_probe.csv',ml_data,ltyp,lrtyp,jkk_ion,        &
-     & idest1,idest2,idest3,idest4,ans1,ans2,ans3,ans4,ans5,ans6,        &
-     & ptmp1,ptmp2,xpx,xee,t,cfrac)
+    return """! xstar-atomic v0.3.177: insert after call ucalc(...).
+! Fixed-form-compatible continuation; do not use trailing & here.
+      call xstar_atomic_probe_ucalc_record(
+     1 'xstar_ucalc_record_probe.csv',ml_data,ltyp,lrtyp,jkk_ion,
+     2 idest1,idest2,idest3,idest4,ans1,ans2,ans3,ans4,
+     3 ans5,ans6,ptmp1,ptmp2,xpx,xee,t,cfrac)
 """
 
 
 def _matrix_insertion_notes_text() -> str:
-    return """# xstar-atomic v0.3.176 calc_hmc_ion matrix insertion probes
+    return """# xstar-atomic v0.3.177 calc_hmc_ion matrix insertion probes
 
-Insert the following calls in `calc_hmc_ion.f90` after each of the four
-`nindbi` insertion blocks that follows a successful `ucalc` call.  The exact
-location matters because the row values must be captured after `ajisi`, `cjisi`,
-`cjisi2`, `indbi`, and `ltpsv` are assigned.
+These calls are fixed-form-compatible.  Insert them in `calc_hmc_ion.f90` after
+each of the four `nindbi` insertion blocks following a successful `ucalc` call.
+The exact location matters because values must be captured after `ajisi`,
+`cjisi`, `cjisi2`, `indbi`, and `ltpsv` are assigned.
 
 After the first off-diagonal block (`indbi(1)=lup`, `indbi(2)=llo`):
 
 ```fortran
-      call xstar_atomic_probe_matrix_row(                                &
-     & 'xstar_calc_hmc_ion_matrix_probe.csv',ml_data,ltyp,lrtyp,nindbi,  &
-     & 'forward_offdiag',indbi(1,nindbi),indbi(2,nindbi),                &
-     & ajisi(1,nindbi),ajisi(2,nindbi),cjisi(nindbi),cjisi2(nindbi),     &
-     & idest1,idest2,llo,lup,e1,e2)
+      call xstar_atomic_probe_matrix_row(
+     1 'xstar_calc_hmc_ion_matrix_probe.csv',ml_data,ltyp,lrtyp,
+     2 nindbi,'forward_offdiag',indbi(1,nindbi),indbi(2,nindbi),
+     3 ajisi(1,nindbi),ajisi(2,nindbi),cjisi(nindbi),
+     4 cjisi2(nindbi),idest1,idest2,llo,lup,e1,e2)
 ```
 
-After the second off-diagonal block (`indbi(1)=llo`, `indbi(2)=lup`), use
-`'reverse_offdiag'`.
+After the second off-diagonal block (`indbi(1)=llo`, `indbi(2)=lup`):
 
-After the third diagonal-loss block (`indbi(1)=llo`, `indbi(2)=llo`), use
-`'forward_diag_loss'`.
+```fortran
+      call xstar_atomic_probe_matrix_row(
+     1 'xstar_calc_hmc_ion_matrix_probe.csv',ml_data,ltyp,lrtyp,
+     2 nindbi,'reverse_offdiag',indbi(1,nindbi),indbi(2,nindbi),
+     3 ajisi(1,nindbi),ajisi(2,nindbi),cjisi(nindbi),
+     4 cjisi2(nindbi),idest1,idest2,llo,lup,e1,e2)
+```
 
-After the fourth diagonal-loss block (`indbi(1)=lup`, `indbi(2)=lup`), use
-`'reverse_diag_loss'`.
+After the third diagonal-loss block (`indbi(1)=llo`, `indbi(2)=llo`):
+
+```fortran
+      call xstar_atomic_probe_matrix_row(
+     1 'xstar_calc_hmc_ion_matrix_probe.csv',ml_data,ltyp,lrtyp,
+     2 nindbi,'forward_diag_loss',indbi(1,nindbi),indbi(2,nindbi),
+     3 ajisi(1,nindbi),ajisi(2,nindbi),cjisi(nindbi),
+     4 cjisi2(nindbi),idest1,idest2,llo,lup,e1,e2)
+```
+
+After the fourth diagonal-loss block (`indbi(1)=lup`, `indbi(2)=lup`):
+
+```fortran
+      call xstar_atomic_probe_matrix_row(
+     1 'xstar_calc_hmc_ion_matrix_probe.csv',ml_data,ltyp,lrtyp,
+     2 nindbi,'reverse_diag_loss',indbi(1,nindbi),indbi(2,nindbi),
+     3 ajisi(1,nindbi),ajisi(2,nindbi),cjisi(nindbi),
+     4 cjisi2(nindbi),idest1,idest2,llo,lup,e1,e2)
+```
 
 Remove old CSVs before each run:
 

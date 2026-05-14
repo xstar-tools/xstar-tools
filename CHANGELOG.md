@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.177 - 2026-05-14
+
+- Fixed the full local parity probe Fortran helper for HEASoft/XSTAR fixed-form compilation.
+- Rewrote generated helper and insertion snippets with fixed-form continuation marks in column 6 instead of free-form `&`.
+- No solver physics, rate formulas, or empirical triplet tuning changed.
+
+# Changelog
+
 ## v0.3.176 - 2026-05-14
 
 - Added `xstar_atomic.xstar_full_parity_probes` and `examples/77_prepare_xstar_full_parity_probes.py`.
