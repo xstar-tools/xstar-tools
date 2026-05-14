@@ -3215,3 +3215,383 @@ def write_type53_live_bremsam_phint53_audit(
     lines.extend(["", f"records_csv: `{csv_path.name}`", f"json: `{json_path.name}`"])
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"records_csv": str(csv_path), "json": str(json_path), "markdown": str(md_path)}
+
+
+# -----------------------------------------------------------------------------
+# v0.3.174: controlled type-53 live-bremsam matrix replacement solve audit
+
+
+def _is_type53_photoionization_matrix_term(row: Mapping[str, Any]) -> bool:
+    """Return True for the full-global type-53 photoionization gain/loss terms."""
+    if str(row.get("data_type") or "").strip() != "53":
+        return False
+    comp = str(row.get("full_global_component") or "").lower()
+    role = str(row.get("matrix_role") or "").lower()
+    kind = str(row.get("matrix_term_kind") or "").lower()
+    if "milne" in comp or "milne" in role or "milne" in kind:
+        return False
+    text = " ".join([comp, role, kind])
+    return "photoionization" in text and ("phint53" in text or "type53" in text)
+
+
+def _infer_he_like_stage_from_global_index(global_rows: Sequence[Mapping[str, Any]]) -> Optional[int]:
+    stages: List[int] = []
+    for row in global_rows:
+        comp = str(row.get("triplet_component") or "").strip().lower()
+        if comp in {"f", "i", "r"} or str(row.get("is_triplet_upper") or "").strip().lower() in {"true", "1", "yes"}:
+            st = _as_int(row.get("ion_stage"))
+            if st is not None:
+                stages.append(int(st))
+    if not stages:
+        return None
+    counts: Dict[int, int] = {}
+    for st in stages:
+        counts[st] = counts.get(st, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+
+def _summary_row_for_solve(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    for row in rows:
+        if row.get("row_kind") == "summary" and row.get("comparison_case") == "full_global_normalized_proxy_topology_solve":
+            return dict(row)
+    for row in rows:
+        if row.get("row_kind") == "summary":
+            return dict(row)
+    return {}
+
+
+def _live_phint53_replacement_lookup(live_audit_rows: Sequence[Mapping[str, Any]]) -> Dict[Tuple[str, int, int], Dict[str, Any]]:
+    out: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
+    for row in live_audit_rows:
+        rec = str(row.get("record") or "").strip()
+        bg = _as_int(row.get("bound_global_index"))
+        cg = _as_int(row.get("continuum_or_parent_global_index"))
+        live = _as_float(row.get("live_phint53_photo_ans1_s^-1"))
+        if not rec or bg is None or cg is None or live is None or live < 0.0:
+            continue
+        out[(rec, int(bg), int(cg))] = dict(row)
+    return out
+
+
+def apply_live_bremsam_type53_photoionization_replacement(
+    full_global_matrix_terms: Sequence[Mapping[str, Any]],
+    live_audit_rows: Sequence[Mapping[str, Any]],
+    *,
+    replacement_mode: str = "replace-all",
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Return matrix terms with type-53 photoionization rates replaced by live phint53.
+
+    This is a controlled diagnostic transformation: it leaves all non-type-53
+    rows unchanged and replaces only matrix rows whose record/bound/continuum
+    key appears in a v0.3.173 live-bremsam audit.  The sign and matrix topology
+    of each row are preserved; only the absolute rate is replaced.
+    """
+    mode = str(replacement_mode or "replace-all").strip().lower().replace("_", "-")
+    if mode not in {"replace-all", "off", "none"}:
+        mode = "replace-all"
+    lookup = _live_phint53_replacement_lookup(live_audit_rows)
+    out: List[Dict[str, Any]] = []
+    changed: List[Dict[str, Any]] = []
+    for row0 in full_global_matrix_terms:
+        row = dict(row0)
+        if mode in {"off", "none"} or not _is_type53_photoionization_matrix_term(row):
+            out.append(row)
+            continue
+        rec = str(row.get("record") or "").strip()
+        bg = _as_int(row.get("bound_global_index"))
+        cg = _as_int(row.get("continuum_or_parent_global_index"))
+        key = (rec, int(bg) if bg is not None else -1, int(cg) if cg is not None else -1)
+        live_row = lookup.get(key)
+        live = _as_float(live_row.get("live_phint53_photo_ans1_s^-1") if live_row else None)
+        if live is None:
+            row["type53_live_bremsam_replacement_status"] = "not_replaced_no_matching_live_phint53_row"
+            out.append(row)
+            continue
+        old_signed = _as_float(row.get("full_global_signed_rate_s^-1"))
+        if old_signed is None:
+            old_signed = _as_float(row.get("signed_rate_s^-1"))
+        sign = -1.0 if (old_signed is not None and old_signed < 0.0) else 1.0
+        old_rate = _as_float(row.get("full_global_rate_s^-1"))
+        if old_rate is None:
+            old_rate = abs(float(old_signed)) if old_signed is not None else _as_float(row.get("rate_s^-1"), 0.0)
+        new_signed = sign * float(live)
+        ratio = None
+        if live > 0.0 and old_rate is not None:
+            ratio = float(old_rate) / max(float(live), 1.0e-300)
+        for k in ["full_global_signed_rate_s^-1", "signed_rate_s^-1"]:
+            if k in row:
+                row[k] = new_signed
+        for k in ["full_global_rate_s^-1", "rate_s^-1"]:
+            if k in row:
+                row[k] = float(live)
+        row.update({
+            "type53_live_bremsam_replacement_status": "replaced_with_live_bremsam_phint53_ans1_v03174",
+            "type53_original_matrix_rate_s^-1": old_rate,
+            "type53_original_matrix_signed_rate_s^-1": old_signed,
+            "type53_live_bremsam_phint53_ans1_s^-1": float(live),
+            "type53_original_over_live_bremsam": ratio,
+            "type53_replacement_probe_capture_index": live_row.get("probe_capture_index") if live_row else "",
+            "type53_replacement_source_record_classification": live_row.get("classification") if live_row else "",
+            "full_global_component": "type53_live_bremsam_phint53_photoionization_replacement",
+            "full_global_assembly_status": "assembled_full_global_topology_with_live_bremsam_type53_replacement",
+        })
+        changed.append({
+            "row_kind": "type53_live_bremsam_replacement_term",
+            "record": rec,
+            "bound_global_index": bg,
+            "continuum_or_parent_global_index": cg,
+            "full_global_term_id": row.get("full_global_term_id"),
+            "matrix_term_kind": row.get("matrix_term_kind"),
+            "matrix_row_global_index": row.get("matrix_row_global_index"),
+            "matrix_col_global_index": row.get("matrix_col_global_index"),
+            "old_rate_s^-1": old_rate,
+            "old_signed_rate_s^-1": old_signed,
+            "new_rate_s^-1": float(live),
+            "new_signed_rate_s^-1": new_signed,
+            "old_over_new": ratio,
+            "triplet_component": row.get("triplet_component") or (live_row.get("triplet_component") if live_row else ""),
+            "replacement_status": row["type53_live_bremsam_replacement_status"],
+        })
+        out.append(row)
+    return out, changed
+
+
+def audit_type53_live_bremsam_matrix_replacement(
+    *,
+    benchmark_dir: str | Path | None = None,
+    ion: str = "O VII",
+    live_phint53_audit_csv: str | Path | None = None,
+    matrix_terms_csv: str | Path | None = None,
+    global_index_csv: str | Path | None = None,
+    line_rows_csv: str | Path | None = None,
+    calc_ion_rates_csv: str | Path | None = None,
+    comparisons_csv: str | Path | None = None,
+    normalized_solve_csv: str | Path | None = None,
+    linear_solver: str = "xstar-lucy",
+    rank_deficient_action: str = "svd",
+    negative_population_action: str = "keep",
+    prune_null_rate_levels: bool = True,
+    full_global_topology: str = "xstar-continuum-alias-superlevels",
+    ion_fraction_closure: str = "xstar-calc-ion-rates",
+) -> Dict[str, Any]:
+    """Controlled solve audit with type-53 photoionization rates replaced by live phint53.
+
+    This diagnostic does not change the default solver.  It reads a preserved
+    full-global matrix from example 56 and a v0.3.173 live-bremsam phint53 audit,
+    replaces only the type-53 photoionization gain/loss rates with the live
+    phint53 ans1 values, and re-solves the matrix for comparison.
+    """
+    t_start = time.perf_counter()
+    root = Path(benchmark_dir) if benchmark_dir is not None else Path(".")
+    paths = find_solver_product_paths(root, ion=ion, comparisons_csv=comparisons_csv) if benchmark_dir is not None else {}
+    matrix_path = Path(matrix_terms_csv) if matrix_terms_csv is not None else paths.get("matrix_terms_csv")
+    normalized_path = Path(normalized_solve_csv) if normalized_solve_csv is not None else paths.get("normalized_solve_csv")
+    if matrix_path is None or not Path(matrix_path).exists():
+        raise ValueError("provide --matrix-terms-csv or --benchmark-dir with preserved solver products")
+    product_dir = Path(matrix_path).parent
+    global_path = Path(global_index_csv) if global_index_csv is not None else product_dir / "xstar_like_element_solver_global_index.csv"
+    lines_path = Path(line_rows_csv) if line_rows_csv is not None else product_dir / "xstar_like_element_solver_line_rows.csv"
+    calc_path = Path(calc_ion_rates_csv) if calc_ion_rates_csv is not None else product_dir / "xstar_like_element_solver_calc_ion_rates_istruc_audit.csv"
+    if live_phint53_audit_csv is None:
+        raise ValueError("provide --live-phint53-audit-csv from example 74")
+    live_path = Path(live_phint53_audit_csv)
+    if live_path.is_dir():
+        live_path = live_path / "xstar_type53_live_bremsam_phint53_audit_records.csv"
+    if not live_path.exists():
+        raise ValueError(f"live phint53 audit CSV not found: {live_path}")
+    if not global_path.exists():
+        raise ValueError(f"global index CSV not found: {global_path}")
+    if not lines_path.exists():
+        raise ValueError(f"line rows CSV not found: {lines_path}")
+
+    matrix_rows = _read_csv_rows(matrix_path)
+    global_rows = _read_csv_rows(global_path)
+    line_rows = _read_csv_rows(lines_path)
+    calc_rows = _read_csv_rows(calc_path) if calc_path.exists() else []
+    live_rows = _read_csv_rows(live_path)
+    he_stage = _infer_he_like_stage_from_global_index(global_rows)
+    if he_stage is None:
+        raise ValueError("could not infer He-like ion stage from global index triplet rows")
+
+    replaced_terms, replacement_rows = apply_live_bremsam_type53_photoionization_replacement(matrix_rows, live_rows)
+
+    from .xstar_element_solver import build_full_global_normalized_solve_comparison
+
+    original_solve_rows = build_full_global_normalized_solve_comparison(
+        global_index_rows=global_rows,
+        full_global_matrix_terms=matrix_rows,
+        line_rows=line_rows,
+        he_like_stage=int(he_stage),
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        prune_null_rate_levels=prune_null_rate_levels,
+        full_global_topology=full_global_topology,
+        ion_fraction_closure=ion_fraction_closure,
+        calc_ion_rates_istruc_audit_rows=calc_rows,
+    )
+    replacement_solve_rows = build_full_global_normalized_solve_comparison(
+        global_index_rows=global_rows,
+        full_global_matrix_terms=replaced_terms,
+        line_rows=line_rows,
+        he_like_stage=int(he_stage),
+        linear_solver=linear_solver,
+        rank_deficient_action=rank_deficient_action,
+        negative_population_action=negative_population_action,
+        prune_null_rate_levels=prune_null_rate_levels,
+        full_global_topology=full_global_topology,
+        ion_fraction_closure=ion_fraction_closure,
+        calc_ion_rates_istruc_audit_rows=calc_rows,
+    )
+    orig = _summary_row_for_solve(original_solve_rows)
+    repl = _summary_row_for_solve(replacement_solve_rows)
+
+    def _flt(row: Mapping[str, Any], key: str) -> Optional[float]:
+        return _as_float(row.get(key))
+    comparison_rows = []
+    for label, row in [("original_matrix", orig), ("live_bremsam_type53_replacement", repl)]:
+        comparison_rows.append({
+            "row_kind": "type53_live_bremsam_matrix_replacement_solve_summary",
+            "comparison_case": label,
+            "f_fraction": row.get("f_fraction"),
+            "i_fraction": row.get("i_fraction"),
+            "r_fraction": row.get("r_fraction"),
+            "R": row.get("R"),
+            "G": row.get("G"),
+            "l2_distance_to_target": row.get("l2_distance_to_target"),
+            "solve_status": row.get("solve_status"),
+            "solver": row.get("solver"),
+            "n_negative_populations": row.get("n_negative_populations"),
+            "sum_population": row.get("sum_population"),
+        })
+    delta = {
+        "row_kind": "type53_live_bremsam_matrix_replacement_delta",
+        "comparison_case": "replacement_minus_original",
+        "delta_f": (_flt(repl, "f_fraction") or 0.0) - (_flt(orig, "f_fraction") or 0.0),
+        "delta_i": (_flt(repl, "i_fraction") or 0.0) - (_flt(orig, "i_fraction") or 0.0),
+        "delta_r": (_flt(repl, "r_fraction") or 0.0) - (_flt(orig, "r_fraction") or 0.0),
+        "delta_l2": (_flt(repl, "l2_distance_to_target") or 0.0) - (_flt(orig, "l2_distance_to_target") or 0.0),
+    }
+    comparison_rows.append(delta)
+    ratios = [_as_float(r.get("old_over_new")) for r in replacement_rows]
+    ratios = [float(x) for x in ratios if x is not None and x > 0.0]
+    summary = {
+        "audit_version": "v0.3.174",
+        "ion": ion,
+        "status": "type53_live_bremsam_replacement_solve_audit_completed",
+        "matrix_terms_csv": str(matrix_path),
+        "global_index_csv": str(global_path),
+        "line_rows_csv": str(lines_path),
+        "calc_ion_rates_csv": str(calc_path) if calc_path.exists() else None,
+        "live_phint53_audit_csv": str(live_path),
+        "he_like_stage": int(he_stage),
+        "n_original_matrix_terms": len(matrix_rows),
+        "n_replacement_matrix_terms": len(replaced_terms),
+        "n_type53_photoionization_terms_replaced": len(replacement_rows),
+        "median_original_over_live_replacement_rate": _median_float(ratios),
+        "p16_original_over_live_replacement_rate": _percentile_float(ratios, 16.0),
+        "p84_original_over_live_replacement_rate": _percentile_float(ratios, 84.0),
+        "original_f_fraction": orig.get("f_fraction"),
+        "original_i_fraction": orig.get("i_fraction"),
+        "original_r_fraction": orig.get("r_fraction"),
+        "replacement_f_fraction": repl.get("f_fraction"),
+        "replacement_i_fraction": repl.get("i_fraction"),
+        "replacement_r_fraction": repl.get("r_fraction"),
+        "delta_f_replacement_minus_original": delta["delta_f"],
+        "delta_i_replacement_minus_original": delta["delta_i"],
+        "delta_r_replacement_minus_original": delta["delta_r"],
+        "original_l2_distance_to_target": orig.get("l2_distance_to_target"),
+        "replacement_l2_distance_to_target": repl.get("l2_distance_to_target"),
+        "delta_l2_replacement_minus_original": delta["delta_l2"],
+        "solver": linear_solver,
+        "full_global_topology": full_global_topology,
+        "ion_fraction_closure": ion_fraction_closure,
+        "total_seconds": time.perf_counter() - t_start,
+        "interpretation": "Controlled diagnostic only: only type-53 photoionization matrix rates are replaced by live-bremsam phint53 ans1 values; all other matrix/source terms remain as in the preserved solver products.",
+    }
+    return {
+        "summary": summary,
+        "replacement_terms": replaced_terms,
+        "replacement_rows": replacement_rows,
+        "solve_comparison_rows": comparison_rows,
+        "original_solve_rows": original_solve_rows,
+        "replacement_solve_rows": replacement_solve_rows,
+    }
+
+
+def write_type53_live_bremsam_matrix_replacement_audit(
+    audit: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_type53_live_bremsam_matrix_replacement_audit",
+) -> Dict[str, str]:
+    """Write v0.3.174 controlled replacement solve audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    summary = dict(audit.get("summary", {}) or {})
+    replacement_rows = list(audit.get("replacement_rows", []) or [])
+    replacement_terms = list(audit.get("replacement_terms", []) or [])
+    solve_comparison_rows = list(audit.get("solve_comparison_rows", []) or [])
+    replacement_solve_rows = list(audit.get("replacement_solve_rows", []) or [])
+    terms_csv = out / f"{prefix}_matrix_terms.csv"
+    changed_csv = out / f"{prefix}_changed_terms.csv"
+    comp_csv = out / f"{prefix}_solve_comparison.csv"
+    repl_solve_csv = out / f"{prefix}_replacement_normalized_solve_comparison.csv"
+    _write_csv(terms_csv, replacement_terms)
+    _write_csv(changed_csv, replacement_rows)
+    _write_csv(comp_csv, solve_comparison_rows)
+    _write_csv(repl_solve_csv, replacement_solve_rows)
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(json.dumps({
+        "summary": summary,
+        "replacement_rows": replacement_rows,
+        "solve_comparison_rows": solve_comparison_rows,
+    }, indent=2, default=str), encoding="utf-8")
+    md_path = out / f"{prefix}.md"
+    lines = [
+        "# XSTAR type-53 live-bremsam matrix replacement audit",
+        "",
+        f"audit_version: `{summary.get('audit_version')}`",
+        f"ion: `{summary.get('ion')}`",
+        f"status: `{summary.get('status')}`",
+        f"n_type53_photoionization_terms_replaced: `{summary.get('n_type53_photoionization_terms_replaced')}`",
+        f"median_original_over_live_replacement_rate: `{summary.get('median_original_over_live_replacement_rate')}`",
+        "",
+        "## Solve comparison",
+        "",
+        "| case | f | i | r | R | G | L2 | status |",
+        "|---|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for row in solve_comparison_rows:
+        if row.get("row_kind") != "type53_live_bremsam_matrix_replacement_solve_summary":
+            continue
+        lines.append(
+            f"| {row.get('comparison_case')} | {row.get('f_fraction')} | {row.get('i_fraction')} | {row.get('r_fraction')} | "
+            f"{row.get('R')} | {row.get('G')} | {row.get('l2_distance_to_target')} | {row.get('solve_status')} |"
+        )
+    lines.extend([
+        "",
+        "## Delta",
+        "",
+        f"delta_f: `{summary.get('delta_f_replacement_minus_original')}`",
+        f"delta_i: `{summary.get('delta_i_replacement_minus_original')}`",
+        f"delta_r: `{summary.get('delta_r_replacement_minus_original')}`",
+        f"delta_l2: `{summary.get('delta_l2_replacement_minus_original')}`",
+        "",
+        str(summary.get("interpretation") or ""),
+        "",
+        f"changed_terms_csv: `{changed_csv.name}`",
+        f"matrix_terms_csv: `{terms_csv.name}`",
+        f"solve_comparison_csv: `{comp_csv.name}`",
+        f"replacement_normalized_solve_comparison_csv: `{repl_solve_csv.name}`",
+        f"json: `{json_path.name}`",
+    ])
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {
+        "matrix_terms_csv": str(terms_csv),
+        "changed_terms_csv": str(changed_csv),
+        "solve_comparison_csv": str(comp_csv),
+        "replacement_normalized_solve_comparison_csv": str(repl_solve_csv),
+        "json": str(json_path),
+        "markdown": str(md_path),
+    }
