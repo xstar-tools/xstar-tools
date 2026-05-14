@@ -198,6 +198,11 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
 This reads `xo01_detal2.fits` and `xo01_detal4.fits`, computes `ptmp1`, `ptmp2`, escaped decay, and photoexcitation using the XSTAR `calc_hmc_ion.f90`/`ucalc.f90` type-50 formula, and writes CSV/JSON/Markdown audit products.
 
 
+
+### v0.3.180 full-parity probe shared-capture fix
+
+v0.3.180 fixes the full-parity probe CSV association problem found after the first O VII instrumented XSTAR run. Previous helpers wrote an independent matrix-row `capture_index`, so `xstar_calc_hmc_ion_matrix_probe.csv` could not be matched to `xstar_ucalc_record_probe.csv`: every matrix row appeared to be a separate record. The v0.3.180 helper now stores the most recent `ucalc` capture id and writes it as the matrix probe `capture_index`, while the independent matrix-row counter is written as `matrix_capture_index`. The validator detects legacy independent-counter CSVs and reports `matrix_capture_index_status=independent_matrix_capture_index_needs_v03180_rerun`. This is a probe/validation fix only; no solver physics or rate formula changed.
+
 ### v0.3.179 full-parity probe linker compatibility fix
 
 v0.3.179 adds backward-compatible Fortran wrappers for the older long probe routine names (`xstar_atomic_probe_ucalc_record`, `xstar_atomic_probe_matrix_row`) while retaining the v0.3.178 short helper routines (`xap_ucalc`, `xap_mrow`). This fixes HEASoft/XSTAR link errors when `calc_hmc_ion.f90` still contains older insertion snippets. It is a probe/linker compatibility fix only; no solver physics or rate formula is changed.

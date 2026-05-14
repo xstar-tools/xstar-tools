@@ -11,7 +11,7 @@ from xstar_atomic.xstar_full_parity_probes import (
 def test_prepare_full_parity_probe_products_without_csvs(tmp_path: Path):
     result = prepare_full_parity_probe_products(out_dir=tmp_path)
     s = result["summary"]
-    assert s["audit_version"] == "v0.3.179"
+    assert s["audit_version"] == "v0.3.180"
     assert s["status"] == "probe_csvs_not_loaded"
     assert s["probe_ready_for_record_level_matrix_parity"] is False
     for key in ["helper_fortran", "after_ucalc_insertion", "matrix_insertion_notes", "ucalc_schema_csv", "matrix_schema_csv"]:
@@ -29,9 +29,9 @@ def test_full_parity_probe_validation_ready(tmp_path: Path):
     rows = []
     kinds = ["forward_offdiag", "reverse_offdiag", "forward_diag_loss", "reverse_diag_loss"]
     for i, kind in enumerate(kinds, 1):
-        rows.append(f"{1},{21635},{53},{7},{i},{kind},{i},{i+1},{1.0},{2.0}\n")
+        rows.append(f"{1},{i},{21635},{53},{7},{i},{kind},{i},{i+1},{1.0},{2.0}\n")
     m.write_text(
-        "capture_index,ml_data,ltyp,lrtyp,insertion_index,insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2\n" + "".join(rows),
+        "capture_index,matrix_capture_index,ml_data,ltyp,lrtyp,insertion_index,insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2\n" + "".join(rows),
         encoding="utf-8",
     )
     s = summarize_full_parity_probe_csvs(ucalc_probe_csv=u, matrix_probe_csv=m)
@@ -53,8 +53,8 @@ def test_full_parity_probe_validation_detects_bad_matrix_count(tmp_path: Path):
         encoding="utf-8",
     )
     m.write_text(
-        "capture_index,ml_data,ltyp,lrtyp,insertion_index,insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2\n"
-        "1,1,50,4,1,forward_offdiag,2,1,1,2\n",
+        "capture_index,matrix_capture_index,ml_data,ltyp,lrtyp,insertion_index,insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2\n"
+        "1,1,1,50,4,1,forward_offdiag,2,1,1,2\n",
         encoding="utf-8",
     )
     s = summarize_full_parity_probe_csvs(ucalc_probe_csv=u, matrix_probe_csv=m)

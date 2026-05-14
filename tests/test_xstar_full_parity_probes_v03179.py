@@ -9,7 +9,7 @@ def test_full_parity_helper_has_backward_compatible_wrappers(tmp_path: Path):
     result = prepare_full_parity_probe_products(out_dir=tmp_path)
     helper = Path(result["paths"]["helper_fortran"])
     text = helper.read_text(encoding="utf-8")
-    assert result["summary"]["audit_version"] == "v0.3.179"
+    assert result["summary"]["audit_version"] == "v0.3.180"
     assert "subroutine xap_ucalc" in text
     assert "subroutine xap_mrow" in text
     assert "subroutine xstar_atomic_probe_ucalc_record" in text

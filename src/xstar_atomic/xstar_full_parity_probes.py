@@ -155,7 +155,8 @@ def _schema_rows(kind: str) -> List[Dict[str, str]]:
         ]
     elif kind == "matrix":
         cols = [
-            ("capture_index", "yes", "Sequential matrix insertion probe row id."),
+            ("capture_index", "yes", "Shared ucalc capture id; matches xstar_ucalc_record_probe.capture_index."),
+            ("matrix_capture_index", "recommended", "Sequential matrix-row probe id."),
             ("ml_data", "yes", "ATDB record pointer associated with this matrix insertion."),
             ("ltyp", "yes", "XSTAR data type branch."),
             ("lrtyp", "yes", "XSTAR rate subtype."),
@@ -198,6 +199,10 @@ def summarize_full_parity_probe_csvs(
     m_rows, m_status, m_path = _read_csv(matrix_probe_csv)
     u_missing = _missing_columns(u_rows, _UCALC_REQUIRED) if u_status == "csv_loaded" else _UCALC_REQUIRED
     m_missing = _missing_columns(m_rows, _MATRIX_REQUIRED) if m_status == "csv_loaded" else _MATRIX_REQUIRED
+    # v0.3.180: matrix rows must carry the ucalc capture id in
+    # ``capture_index``.  Older v0.3.176--v0.3.179 helpers used an
+    # independent matrix-row counter there, which made every matrix row look
+    # like a distinct record and produced false non-parity diagnostics.
     u_keys = {(str(r.get("capture_index") or ""), str(r.get("ml_data") or "")) for r in u_rows}
     m_groups: Dict[Tuple[str, str], int] = {}
     for r in m_rows:
@@ -206,6 +211,16 @@ def summarize_full_parity_probe_csvs(
     m_keys = set(m_groups.keys())
     n_four = sum(1 for n in m_groups.values() if n == 4)
     n_not_four = sum(1 for n in m_groups.values() if n != 4)
+    n_gt_four = sum(1 for n in m_groups.values() if n > 4)
+    n_lt_four = sum(1 for n in m_groups.values() if n < 4)
+    has_matrix_row_counter = bool(m_rows) and "matrix_capture_index" in set(m_rows[0].keys())
+    independent_matrix_capture_warning = (
+        m_status == "csv_loaded"
+        and len(m_rows) > 0
+        and not has_matrix_row_counter
+        and len(m_keys) == len(m_rows)
+        and n_four == 0
+    )
     family_counts: Dict[str, int] = {}
     for r in u_rows:
         family = str(_as_int(r.get("ltyp"), None) or r.get("ltyp") or "unknown")
@@ -221,6 +236,14 @@ def summarize_full_parity_probe_csvs(
         status = "probe_csvs_partially_loaded"
     if (u_missing or m_missing) and status == "probe_csvs_loaded":
         status = "probe_csvs_loaded_with_schema_warnings"
+    if independent_matrix_capture_warning and status == "probe_csvs_loaded":
+        status = "probe_csvs_loaded_with_independent_matrix_capture_index"
+
+    # Readiness here means the CSVs are suitable for record-level matrix-row
+    # comparison.  Some ucalc calls may legitimately produce fewer than four
+    # matrix insertions, or none, depending on branch/destination handling;
+    # those counts are diagnostics, not a hard blocker.  The hard blocker is
+    # an unmatched matrix row or the old independent matrix counter.
     ready = (
         u_status == "csv_loaded"
         and m_status == "csv_loaded"
@@ -228,11 +251,12 @@ def summarize_full_parity_probe_csvs(
         and not m_missing
         and len(u_rows) > 0
         and len(m_rows) > 0
-        and len(u_keys - m_keys) == 0
+        and len(m_keys - u_keys) == 0
         and n_not_four == 0
+        and not independent_matrix_capture_warning
     )
     return {
-        "audit_version": "v0.3.179",
+        "audit_version": "v0.3.180",
         "status": status,
         "ucalc_probe_status": u_status,
         "matrix_probe_status": m_status,
@@ -246,6 +270,14 @@ def summarize_full_parity_probe_csvs(
         "n_matrix_keys_without_ucalc_rows": len(m_keys - u_keys),
         "n_matrix_record_keys_with_four_rows": n_four,
         "n_matrix_record_keys_not_four_rows": n_not_four,
+        "n_matrix_record_keys_lt_four_rows": n_lt_four,
+        "n_matrix_record_keys_gt_four_rows": n_gt_four,
+        "matrix_has_shared_ucalc_capture_index": has_matrix_row_counter,
+        "matrix_capture_index_status": (
+            "shared_ucalc_capture_index_v03180" if has_matrix_row_counter else
+            "independent_matrix_capture_index_needs_v03180_rerun" if independent_matrix_capture_warning else
+            "legacy_or_unknown"
+        ),
         "ucalc_missing_required_columns": ";".join(u_missing),
         "matrix_missing_required_columns": ";".join(m_missing),
         "probe_ready_for_record_level_matrix_parity": ready,
@@ -254,7 +286,7 @@ def summarize_full_parity_probe_csvs(
 
 
 def _fortran_helper_text() -> str:
-    return r'''! xstar-atomic v0.3.179 full local parity probe helper.
+    return r'''! xstar-atomic v0.3.180 full local parity probe helper.
 ! This helper is deliberately written as conservative free-form Fortran.
 ! HEASoft/XSTAR compiles .f90 files as free-form here; every continued
 ! line therefore has a trailing ampersand on the previous line.
@@ -262,7 +294,7 @@ def _fortran_helper_text() -> str:
 !
 ! Public debug routines:
 !   xap_ucalc  - write one ucalc ans1..ans6 record row
-!   xap_mrow   - write one calc_hmc_ion matrix-insertion row
+!   xap_mrow   - write one calc_hmc_ion matrix-insertion row with the current ucalc capture id
 
 subroutine xap_ucalc(fname, ml_data, ltyp, lrtyp, jkk_ion, &
     idest1, idest2, idest3, idest4, ans1, ans2, ans3, ans4, &
@@ -275,10 +307,13 @@ subroutine xap_ucalc(fname, ml_data, ltyp, lrtyp, jkk_ion, &
   real*8, intent(in) :: ptmp1, ptmp2, xpx, xnx, t, cfrac
   integer :: lun
   integer, save :: capture_index = 0
+  integer :: xap_last_ucalc
+  common /xapstate/ xap_last_ucalc
   logical, save :: wrote_header = .false.
 
   lun = 9376
   capture_index = capture_index + 1
+  xap_last_ucalc = capture_index
   open(unit=lun, file=fname, status='unknown', position='append')
   if (.not. wrote_header) then
     write(lun,'(A,A,A,A)') &
@@ -310,28 +345,32 @@ subroutine xap_mrow(fname, ml_data, ltyp, lrtyp, nindbi, kind, &
   integer, intent(in) :: indbi1, indbi2, idest1, idest2, llo, lup
   real*8, intent(in) :: ajisi1, ajisi2, cjisi, cjisi2, e1, e2
   integer :: lun
-  integer, save :: capture_index = 0
+  integer, save :: matrix_capture_index = 0
+  integer :: xap_last_ucalc
+  common /xapstate/ xap_last_ucalc
   logical, save :: wrote_header = .false.
 
   lun = 9377
-  capture_index = capture_index + 1
+  matrix_capture_index = matrix_capture_index + 1
   open(unit=lun, file=fname, status='unknown', position='append')
   if (.not. wrote_header) then
-    write(lun,'(A,A,A)') &
-      'capture_index,ml_data,ltyp,lrtyp,insertion_index,', &
-      'insertion_kind,indbi_1,indbi_2,ajisi_1,ajisi_2,', &
+    write(lun,'(A,A,A,A)') &
+      'capture_index,matrix_capture_index,ml_data,ltyp,lrtyp,', &
+      'insertion_index,insertion_kind,indbi_1,indbi_2,', &
+      'ajisi_1,ajisi_2,', &
       'cjisi,cjisi2,idest1,idest2,llo,lup,e1_eV,e2_eV'
     wrote_header = .true.
   endif
-  write(lun,9002) capture_index, ml_data, ltyp, lrtyp, nindbi, &
-      kind, indbi1, indbi2, ajisi1, ajisi2, cjisi, cjisi2, &
-      idest1, idest2, llo, lup, e1, e2
+  write(lun,9002) xap_last_ucalc, matrix_capture_index, ml_data, &
+      ltyp, lrtyp, nindbi, kind, indbi1, indbi2, ajisi1, ajisi2, &
+      cjisi, cjisi2, idest1, idest2, llo, lup, e1, e2
   close(lun)
   return
 9002 format(i12,',',i12,',',i12,',',i12,',',i12,',', &
-      A,',',i12,',',i12,',',1pe24.16,',',1pe24.16,',', &
-      1pe24.16,',',1pe24.16,',',i12,',',i12,',', &
-      i12,',',i12,',',1pe24.16,',',1pe24.16)
+      i12,',',A,',',i12,',',i12,',',1pe24.16,',', &
+      1pe24.16,',',1pe24.16,',',1pe24.16,',', &
+      i12,',',i12,',',i12,',',i12,',',1pe24.16,',', &
+      1pe24.16)
 end subroutine xap_mrow
 
 ! Backward-compatible wrappers for v0.3.176/v0.3.177 insertion snippets.
@@ -367,7 +406,7 @@ end subroutine xstar_atomic_probe_matrix_row
 '''
 
 def _after_ucalc_insertion_text() -> str:
-    return """! xstar-atomic v0.3.179: insert after call ucalc(...).
+    return """! xstar-atomic v0.3.180: insert after call ucalc(...).
 ! Free-form Fortran continuation for calc_hmc_ion.f90.
       call xap_ucalc('xstar_ucalc_record_probe.csv', ml_data, ltyp, &
      &     lrtyp, jkk_ion, idest1, idest2, idest3, idest4, ans1, ans2, &
@@ -375,9 +414,9 @@ def _after_ucalc_insertion_text() -> str:
 """
 
 def _matrix_insertion_notes_text() -> str:
-    return """# xstar-atomic v0.3.179 calc_hmc_ion matrix insertion probes
+    return """# xstar-atomic v0.3.180 calc_hmc_ion matrix insertion probes
 
-These calls are free-form Fortran snippets for `calc_hmc_ion.f90`.  Insert them
+These calls are free-form Fortran snippets for `calc_hmc_ion.f90`. The v0.3.180 helper stores the most recent `xap_ucalc` capture id and writes it into the matrix probe `capture_index` column, while `matrix_capture_index` is the independent matrix-row counter. Insert them
 after each of the four `nindbi` insertion blocks following a successful `ucalc`
 call. The exact location matters because values must be captured after `ajisi`,
 `cjisi`, `cjisi2`, `indbi`, and `ltpsv` are assigned.
@@ -472,6 +511,7 @@ def prepare_full_parity_probe_products(
         f"- ucalc rows: `{summary.get('n_ucalc_rows')}`",
         f"- matrix rows: `{summary.get('n_matrix_rows')}`",
         f"- ready for record-level matrix parity: `{summary.get('probe_ready_for_record_level_matrix_parity')}`",
+        f"- matrix capture index status: `{summary.get('matrix_capture_index_status')}`",
         "",
         "## Capture site",
         "",
