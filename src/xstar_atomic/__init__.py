@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.174"
+__version__ = "0.3.175"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -78,6 +78,12 @@ from .xstar_matrix_parity import (
     write_type53_live_bremsam_phint53_audit,
     audit_type53_live_bremsam_matrix_replacement,
     write_type53_live_bremsam_matrix_replacement_audit,
+)
+
+from .xstar_full_parity_closure import (
+    audit_source_code_equivalent_local_closure,
+    write_source_code_equivalent_local_closure_audit,
+    matrix_family_closure_summary,
 )
 
 from .workflow import (
@@ -200,4 +206,7 @@ __all__ = [
     "write_type53_live_bremsam_phint53_audit",
     "audit_type53_live_bremsam_matrix_replacement",
     "write_type53_live_bremsam_matrix_replacement_audit",
+    "audit_source_code_equivalent_local_closure",
+    "write_source_code_equivalent_local_closure_audit",
+    "matrix_family_closure_summary",
 ]

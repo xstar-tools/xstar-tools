@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.175 - 2026-05-14
+
+- Added `xstar_atomic.xstar_full_parity_closure` for a source-code-equivalent local closure audit.
+- Added `examples/76_audit_xstar_source_code_equivalent_local_closure.py`, which inventories preserved full-global matrix terms by source family and classifies rows as source-code kernel present, proxy/scaffold, mixed proxy/source, or incomplete parent/superlevel closure.
+- The audit writes a family summary, required Fortran subroutine inventory, `ucalc` probe schema, `calc_hmc_ion` matrix-insertion probe schema, population probe schema, source snippet audit, Fortran probe notes, JSON, and Markdown.
+- Explicitly identifies the blocking gaps for full local matrix/population parity: universal `ucalc` `ans1..ans6` parity, exact `calc_hmc_ion` `ajisi/indbi` row insertion parity, and source-code type-70/type-74/type-99 parent/superlevel closure.
+- Audit/probe-planning release only: no solver physics, rate formulas, default matrix assembly, or empirical triplet tuning changed.
+
 ## v0.3.174 - 2026-05-14
 
 - Added a controlled type-53 live-bremsam matrix-replacement solve audit: `audit_type53_live_bremsam_matrix_replacement(...)` and `write_type53_live_bremsam_matrix_replacement_audit(...)`.
