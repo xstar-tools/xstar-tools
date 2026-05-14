@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.175"
+__version__ = "0.3.176"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -84,6 +84,13 @@ from .xstar_full_parity_closure import (
     audit_source_code_equivalent_local_closure,
     write_source_code_equivalent_local_closure_audit,
     matrix_family_closure_summary,
+)
+
+from .xstar_full_parity_probes import (
+    prepare_full_parity_probe_products,
+    summarize_full_parity_probe_csvs,
+    read_ucalc_record_probe_csv,
+    read_calc_hmc_ion_matrix_probe_csv,
 )
 
 from .workflow import (

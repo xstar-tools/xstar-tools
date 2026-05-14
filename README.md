@@ -1,5 +1,7 @@
 # xstar-atomic
 
+Latest package note: **v0.3.176** adds full local parity probe preparation/validation for the required XSTAR debug products `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`. It writes schemas, an external Fortran helper, a `calc_hmc_ion.f90` after-`ucalc` insertion block, and matrix-insertion probe notes, then validates whether captured probes are ready for record-level `ucalc`/`ajisi` matrix parity. This is instrumentation infrastructure only; no solver physics or empirical triplet tuning changed.
+
 Latest package note: **v0.3.175** adds a source-code-equivalent local closure audit for full XSTAR matrix/population parity. It inventories each preserved matrix family, flags proxy/scaffold and incomplete parent/superlevel closure rows, records the Fortran subroutines that must be matched (`ucalc`, `calc_hmc_ion`, `levwkelement`, `msolvelucy`, type-70/74/99 closure), and writes ucalc/matrix/population probe schemas plus a staged implementation plan. This is an audit/probe-planning release only; no solver physics or empirical triplet tuning changed.
 
 Latest package note: **v0.3.174** adds a controlled type-53 live-bremsam matrix-replacement solve audit. It consumes the example-74 live `phint53` records, replaces only type-53 photoionization gain/loss rows in a preserved full-global matrix with live `epim(:)/bremsam(:)` `phint53` ans1 rates, and re-solves the matrix to show how f/i/r changes. This is diagnostic only; default solver physics is unchanged.

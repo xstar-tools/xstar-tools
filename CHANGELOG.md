@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.176 - 2026-05-14
+
+- Added `xstar_atomic.xstar_full_parity_probes` and `examples/77_prepare_xstar_full_parity_probes.py`.
+- Added schemas/readers/validators for the two minimum XSTAR debug products needed for source-code-equivalent local matrix parity: `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`.
+- Added a debug-only Fortran helper plus insertion templates for `calc_hmc_ion.f90` immediately after `ucalc` and after each `ajisi/indbi` matrix insertion row.
+- Reports whether the probes are ready for record-level `ucalc ans1..ans6` and matrix insertion parity, including missing columns and four-row insertion checks.
+- No default solver physics, rate formulas, or empirical triplet tuning changed.
+
 ## v0.3.175 - 2026-05-14
 
 - Added `xstar_atomic.xstar_full_parity_closure` for a source-code-equivalent local closure audit.
