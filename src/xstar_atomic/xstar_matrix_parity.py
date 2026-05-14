@@ -2911,3 +2911,307 @@ def write_type53_detail_phint53_bremsa_variants_audit(
     if write_records_csv:
         out_paths["records_csv"] = str(row_csv)
     return out_paths
+
+# -----------------------------------------------------------------------------
+# v0.3.173: type-53 phint53 audit against live XSTAR rate-grid bremsam(:)
+
+
+def _select_live_rate_grid_state(states: Sequence[Any], selector: str | int = "last") -> Tuple[Optional[Any], str]:
+    """Select one live-rate-grid state from a probe CSV reader result."""
+    if not states:
+        return None, "no_probe_states_available"
+    text = str(selector).strip().lower()
+    if text in {"last", "final", "-1"}:
+        return states[-1], "last"
+    if text in {"first", "0"}:
+        return states[0], "first"
+    try:
+        idx = int(text)
+    except Exception:
+        return states[-1], "last_fallback_invalid_selector"
+    # Human-facing selectors are 1-based unless explicitly 0 was requested.
+    if idx <= 0:
+        pos = 0
+    else:
+        pos = idx - 1
+    if pos < 0 or pos >= len(states):
+        return states[-1], "last_fallback_selector_out_of_range"
+    return states[pos], f"index_{idx}"
+
+
+def audit_type53_live_bremsam_phint53(
+    *,
+    benchmark_dir: str | Path | None = None,
+    ion: str = "O VII",
+    probe_csv: str | Path | None = None,
+    probe_state: str | int = "last",
+    matrix_terms_csv: str | Path | None = None,
+    adjacent_coupling_csv: str | Path | None = None,
+    global_index_csv: str | Path | None = None,
+    comparisons_csv: str | Path | None = None,
+    triplet_only: bool = False,
+    max_records: int | None = None,
+) -> Dict[str, Any]:
+    """Compare type-53 photoionization matrix rows with live XSTAR bremsam(:).
+
+    This is the first audit that uses the instrumented XSTAR rate grid captured
+    immediately after ``xstarcalc.f90`` calls ``bremsmap``.  It therefore
+    evaluates the photoionization ``ans1`` integrand on ``epim(:)`` and
+    ``bremsam(:)``, rather than on ``xo01_detal4`` output continuum variants.
+
+    The audit still compares against the preserved Python solver matrix terms;
+    it does not tune the matrix.  It answers whether the current type-53 matrix
+    photoionization rates are consistent with the live XSTAR rate-grid radiation
+    field at the ``calc_hmc_all/calc_hmc_ion`` call site.
+    """
+    t_start = time.perf_counter()
+    root = Path(benchmark_dir) if benchmark_dir is not None else Path(".")
+    paths = find_solver_product_paths(root, ion=ion, comparisons_csv=comparisons_csv) if benchmark_dir is not None else {}
+    matrix_path = Path(matrix_terms_csv) if matrix_terms_csv is not None else paths.get("matrix_terms_csv")
+    if matrix_path is None or not matrix_path.exists():
+        raise ValueError("provide --matrix-terms-csv or --benchmark-dir with preserved solver products")
+    product_dir = matrix_path.parent
+    adjacent_path = Path(adjacent_coupling_csv) if adjacent_coupling_csv is not None else _first_existing_path([
+        product_dir / "xstar_like_element_solver_adjacent_coupling_terms.csv",
+    ])
+    global_path = Path(global_index_csv) if global_index_csv is not None else _first_existing_path([
+        product_dir / "xstar_like_element_solver_global_index.csv",
+    ])
+    if adjacent_path is None or not adjacent_path.exists():
+        raise ValueError("adjacent coupling CSV not found; provide --adjacent-coupling-csv")
+    if global_path is None or not global_path.exists():
+        raise ValueError("global index CSV not found; provide --global-index-csv")
+    if probe_csv is None:
+        raise ValueError("provide --probe-csv from the instrumented XSTAR live-rate-grid probe")
+    probe_path = Path(probe_csv)
+    if not probe_path.exists():
+        raise ValueError(f"probe CSV not found: {probe_path}")
+
+    from .xstar_live_rate_grid_probe import read_live_rate_grid_probe_csv, summarize_live_rate_grid_probe_csv
+
+    probe_summary = summarize_live_rate_grid_probe_csv(probe_path)
+    states = read_live_rate_grid_probe_csv(probe_path)
+    state, state_status = _select_live_rate_grid_state(states, probe_state)
+    if state is None:
+        epim: Sequence[float] = []
+        bremsam: Sequence[float] = []
+        bremsint: Sequence[float] = []
+    else:
+        epim = list(state.epim_eV)
+        bremsam = list(state.bremsam)
+        bremsint = list(state.bremsint)
+
+    matrix_rows = _read_csv_rows(matrix_path)
+    adjacent_rows = _read_csv_rows(adjacent_path)
+    global_rows = _read_csv_rows(global_path)
+    level_by_g = _level_by_global_index(global_rows)
+    adjacent_by_record = {str(r.get("record") or "").strip(): r for r in adjacent_rows if str(r.get("data_type") or "").strip() == "53"}
+
+    candidates: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
+    for row in matrix_rows:
+        if str(row.get("data_type") or "").strip() != "53":
+            continue
+        component = str(row.get("full_global_component") or "")
+        role = str(row.get("matrix_role") or "")
+        kind = str(row.get("matrix_term_kind") or "")
+        if "photoionization" not in component and "photoionization" not in role and "phint53" not in kind:
+            continue
+        if "milne" in component.lower() or "xstar_ucalc" in str(row.get("global_type53_xstar_ucalc_term_id") or ""):
+            continue
+        if triplet_only:
+            comp = str(row.get("triplet_component") or "").strip().lower()
+            bg0 = _as_int(row.get("bound_global_index"))
+            lev0 = level_by_g.get(int(bg0)) if bg0 is not None else None
+            is_trip = comp in {"f", "i", "r"} or str(lev0.get("is_triplet_upper") if lev0 else "").lower() in {"true", "1", "yes"}
+            if not is_trip:
+                continue
+        record = str(row.get("record") or "").strip()
+        bg = _as_int(row.get("bound_global_index")) or -1
+        cg = _as_int(row.get("continuum_or_parent_global_index")) or -1
+        key = (record, int(bg), int(cg))
+        rate = _as_float(row.get("full_global_rate_s^-1") or row.get("rate_s^-1"), 0.0) or 0.0
+        prev = candidates.get(key)
+        if prev is None or rate > float(prev.get("matrix_photoionization_rate_s^-1") or 0.0):
+            m = dict(row)
+            m["matrix_photoionization_rate_s^-1"] = rate
+            candidates[key] = m
+
+    probe_loaded = bool(state is not None and len(epim) >= 2 and len(bremsam) >= 2)
+    live_status = "loaded_live_rate_grid_bremsam" if probe_loaded else "live_rate_grid_probe_not_loaded_or_empty"
+    rows: List[Dict[str, Any]] = []
+    for idx, ((record, bg, cg), mrow) in enumerate(candidates.items(), start=1):
+        if max_records is not None and idx > int(max_records):
+            break
+        adj = adjacent_by_record.get(record, {})
+        lev = level_by_g.get(int(bg), {}) if bg is not None else {}
+        cont = level_by_g.get(int(cg), {}) if cg is not None else {}
+        e_ry, sigma_cm2 = _type53_cross_section_pairs_cm2(adj.get("type53_raw_reals_full") or adj.get("raw_reals_preview"))
+        threshold = _as_float(lev.get("binding_from_continuum_eV"))
+        if threshold is None or threshold <= 0.0:
+            ip = _as_float(lev.get("ionization_potential_eV"))
+            ee = _as_float(lev.get("energy_eV"), 0.0) or 0.0
+            threshold = (ip - ee) if ip is not None else None
+        matrix_rate = _as_float(mrow.get("matrix_photoionization_rate_s^-1") or mrow.get("full_global_rate_s^-1") or mrow.get("rate_s^-1"), 0.0) or 0.0
+        if not probe_loaded:
+            eval_result: Dict[str, Any] = {"live_phint53_photo_status": live_status}
+        else:
+            eval_result0 = _evaluate_phint53_photoionization_ans1_detail_continuum_variants_fast(
+                e_ry=e_ry,
+                sigma_cm2=sigma_cm2,
+                threshold_eV=float(threshold or 0.0),
+                epi_eV=epim,
+                bremsa_variants={"live_bremsam": bremsam},
+            ).get("live_bremsam", {})
+            # Rename detail-oriented keys to live-rate-grid names while keeping
+            # the numeric values identical and easy to compare to older audits.
+            eval_result = {}
+            for k, v in eval_result0.items():
+                nk = str(k).replace("detail_phint53", "live_phint53").replace("detail_continuum", "live_rate_grid")
+                eval_result[nk] = v
+            if "live_phint53_photo_status" in eval_result:
+                eval_result["live_phint53_photo_status"] = "evaluated_live_bremsam_photoionization_ans1_integrand_v03173"
+            if "live_phint53_photo_ans1_s^-1" not in eval_result and "detail_phint53_photo_ans1_s^-1" in eval_result0:
+                eval_result["live_phint53_photo_ans1_s^-1"] = eval_result0.get("detail_phint53_photo_ans1_s^-1")
+            eval_result["live_phint53_source_file"] = "xstarlib/src/phint53.f90"
+            eval_result["live_phint53_detail_source"] = "instrumented xstarcalc.f90 after bremsmap: epim(:), bremsam(:), bremsint(:)"
+            eval_result["live_phint53_warning"] = "Uses live XSTAR rate-grid epim/bremsam captured after bremsmap; remaining differences indicate matrix radiation-kernel/source mismatch rather than xo01_detal4 column selection."
+        live_rate = _as_float(eval_result.get("live_phint53_photo_ans1_s^-1"))
+        if live_rate is None:
+            cls = "live_phint53_not_evaluated"
+            diff = None
+            rel = None
+            ratio = None
+        else:
+            diff = float(matrix_rate) - float(live_rate)
+            rel = abs(diff) / max(abs(float(live_rate)), 1.0e-300)
+            ratio = float(matrix_rate) / max(float(live_rate), 1.0e-300)
+            cls = "matrix_matches_live_bremsam_phint53_ans1" if rel <= 1.0e-6 else "matrix_differs_from_live_bremsam_phint53_ans1"
+        rows.append({
+            "row_kind": "type53_live_bremsam_phint53_photo_audit",
+            "audit_version": "v0.3.173",
+            "ion": ion,
+            "record": record,
+            "bound_global_index": bg,
+            "bound_level": mrow.get("bound_level") or adj.get("idest1_guess"),
+            "bound_level_label": lev.get("level_label"),
+            "triplet_component": mrow.get("triplet_component") or lev.get("triplet_component"),
+            "continuum_or_parent_global_index": cg,
+            "continuum_level_label": cont.get("level_label"),
+            "matrix_photoionization_rate_s^-1": matrix_rate,
+            "live_phint53_photo_ans1_s^-1": live_rate,
+            "matrix_minus_live_phint53_ans1_s^-1": diff,
+            "matrix_over_live_phint53_ans1": ratio,
+            "relative_error_vs_live_phint53_ans1": rel,
+            "classification": cls,
+            "probe_csv": str(probe_path),
+            "probe_state_selector": str(probe_state),
+            "probe_state_selection_status": state_status,
+            "probe_capture_index": state.metadata.get("capture_index") if state is not None else None,
+            "probe_zone_index": state.zone_index if state is not None else None,
+            "probe_pass_index": state.pass_index if state is not None else None,
+            "probe_ldir": state.ldir if state is not None else None,
+            "n_live_epim": len(epim),
+            "n_live_bremsam": len(bremsam),
+            "n_live_bremsint": len(bremsint),
+            "n_type53_cross_section_pairs": len(e_ry),
+            "threshold_eV_source": "global_index.binding_from_continuum_eV",
+            **eval_result,
+        })
+
+    evaluated = [r for r in rows if r.get("classification") != "live_phint53_not_evaluated"]
+    matching = [r for r in evaluated if r.get("classification") == "matrix_matches_live_bremsam_phint53_ans1"]
+    differing = [r for r in evaluated if r.get("classification") == "matrix_differs_from_live_bremsam_phint53_ans1"]
+    ratios = [float(r["matrix_over_live_phint53_ans1"]) for r in evaluated if _as_float(r.get("matrix_over_live_phint53_ans1")) is not None and float(r.get("matrix_over_live_phint53_ans1")) > 0.0]
+    top = sorted(rows, key=lambda r: abs(_as_float(r.get("matrix_minus_live_phint53_ans1_s^-1"), 0.0) or 0.0), reverse=True)[:12]
+    status = "live_bremsam_phint53_photoionization_audit_completed"
+    if evaluated and len(matching) == len(evaluated):
+        status = "live_bremsam_phint53_matches_matrix_for_all_evaluated_rows"
+    elif evaluated:
+        status = "live_bremsam_phint53_differs_from_matrix_for_some_rows"
+    summary = {
+        "audit_version": "v0.3.173",
+        "ion": ion,
+        "matrix_terms_csv": str(matrix_path),
+        "adjacent_coupling_csv": str(adjacent_path),
+        "global_index_csv": str(global_path),
+        "probe_csv": str(probe_path),
+        "probe_status": probe_summary.get("probe_status"),
+        "n_probe_states": probe_summary.get("n_probe_states"),
+        "n_probe_grid_points_total": probe_summary.get("n_probe_grid_points_total"),
+        "probe_state_selector": str(probe_state),
+        "probe_state_selection_status": state_status,
+        "probe_capture_index": state.metadata.get("capture_index") if state is not None else None,
+        "probe_zone_index": state.zone_index if state is not None else None,
+        "probe_pass_index": state.pass_index if state is not None else None,
+        "probe_ldir": state.ldir if state is not None else None,
+        "triplet_only": bool(triplet_only),
+        "n_type53_photoionization_records": len(rows),
+        "n_live_phint53_evaluated": len(evaluated),
+        "n_live_phint53_matches": len(matching),
+        "n_live_phint53_differs": len(differing),
+        "median_matrix_over_live_phint53_ans1": _median_float(ratios),
+        "p16_matrix_over_live_phint53_ans1": _percentile_float(ratios, 16.0),
+        "p84_matrix_over_live_phint53_ans1": _percentile_float(ratios, 84.0),
+        "n_live_epim": len(epim),
+        "live_epim_min_eV": min(epim) if epim else None,
+        "live_epim_max_eV": max(epim) if epim else None,
+        "top_records_by_abs_matrix_minus_live": top,
+        "status": status,
+        "total_seconds": time.perf_counter() - t_start,
+        "source_path_note": "Uses instrumented XSTAR rate-grid epim(:), bremsam(:), bremsint(:) captured immediately after bremsmap and before calc_hmc_all/calc_hmc_ion.",
+        "performance_note": "The Python audit precomputes/interpolates each type-53 record for transparency. Production RT-coupled phint53/rate kernels should move to the planned C++ backend after parity is established.",
+    }
+    return {"summary": summary, "rows": rows}
+
+
+def write_type53_live_bremsam_phint53_audit(
+    audit: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    prefix: str = "xstar_type53_live_bremsam_phint53_audit",
+) -> Dict[str, str]:
+    """Write v0.3.173 live-bremsam phint53 audit products."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = list(audit.get("rows", []) or [])
+    summary = dict(audit.get("summary", {}) or {})
+    csv_path = out / f"{prefix}_records.csv"
+    _write_csv(csv_path, rows)
+    json_path = out / f"{prefix}.json"
+    json_path.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, default=str), encoding="utf-8")
+    md_path = out / f"{prefix}.md"
+    lines = [
+        "# XSTAR type-53 live-bremsam phint53 audit",
+        "",
+        f"ion: `{summary.get('ion')}`",
+        f"probe_status: `{summary.get('probe_status')}`",
+        f"probe_state_selection_status: `{summary.get('probe_state_selection_status')}`",
+        f"probe_capture_index: `{summary.get('probe_capture_index')}`",
+        f"triplet_only: `{summary.get('triplet_only')}`",
+        f"n_type53_photoionization_records: `{summary.get('n_type53_photoionization_records')}`",
+        f"n_live_phint53_evaluated: `{summary.get('n_live_phint53_evaluated')}`",
+        f"n_live_phint53_matches: `{summary.get('n_live_phint53_matches')}`",
+        f"n_live_phint53_differs: `{summary.get('n_live_phint53_differs')}`",
+        f"median_matrix_over_live_phint53_ans1: `{summary.get('median_matrix_over_live_phint53_ans1')}`",
+        f"status: `{summary.get('status')}`",
+        "",
+        "This audit recomputes the photoionization `ans1` side of `phint53.f90` using the live XSTAR rate-grid `epim(:)` and `bremsam(:)` captured immediately after `bremsmap` and compares it with the preserved type-53 matrix photoionization rows.",
+        "",
+        "## Largest records by |matrix - live phint53 ans1|",
+        "",
+    ]
+    top = summary.get("top_records_by_abs_matrix_minus_live") or []
+    if top:
+        lines.append("| record | bound | comp | matrix | live ans1 | ratio | class |")
+        lines.append("|---:|---|---|---:|---:|---:|---|")
+        for row in top:
+            lines.append(
+                f"| {row.get('record')} | {row.get('bound_level_label')} | {row.get('triplet_component')} | "
+                f"{row.get('matrix_photoionization_rate_s^-1')} | {row.get('live_phint53_photo_ans1_s^-1')} | "
+                f"{row.get('matrix_over_live_phint53_ans1')} | {row.get('classification')} |"
+            )
+    else:
+        lines.append("No evaluated records were available.")
+    lines.extend(["", f"records_csv: `{csv_path.name}`", f"json: `{json_path.name}`"])
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"records_csv": str(csv_path), "json": str(json_path), "markdown": str(md_path)}

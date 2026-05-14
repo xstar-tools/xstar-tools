@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest package note: **v0.3.172** is a live-rate-grid probe instrumentation-helper release. It writes a standalone Fortran helper and `xstarcalc.f90` insertion block so a local/debug XSTAR build can dump the live `epim(:)`, `bremsam(:)`, and `bremsint(:)` arrays immediately after `bremsmap` and before `calc_hmc_all/calc_hmc_ion`. This is required for exact type-53 `phint53` photoionization parity. No solver physics changed.
+Latest package note: **v0.3.173** adds the first type-53 `phint53` audit against an instrumented XSTAR live rate-grid probe. It reads `xstar_live_rate_grid_probe.csv`, selects a captured `epim(:)/bremsam(:)/bremsint(:)` state, recomputes the photoionization `ans1` side on live `bremsam(:)`, and compares to preserved full-global type-53 matrix rows. The O VII probe confirms the current Python matrix type-53 photoionization rates still exceed live-bremsam `phint53` rates by about 44×, so the remaining gap is now localized to the solver's proxy `xstar-powerlaw` type-53 normalization rather than `xo01_detal4` column choice. No solver physics changed.
 
 
 - `docs/user_guide.md`
