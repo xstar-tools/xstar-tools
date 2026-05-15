@@ -1,3 +1,5 @@
+Latest package note: **v0.3.190** adds a population/source-closure parity audit for the validated `xstar_population_closure_probe.csv`. The new `examples/83_audit_xstar_population_closure_parity.py` selects an XSTAR element solve occurrence, compares the post-`msolvelucy` population vector against preserved Python solver population products, and reports overlap rows plus XSTAR `ipmat2` rows missing from the current Python local basis. No default solver physics changed.
+
 Latest package note: **v0.3.188** adds population/source closure probe preparation for `calc_hmc_element.f90`. It writes a Fortran helper and before/after-`msolvelucy` insertion snippets to generate `xstar_population_closure_probe.csv`, then validates paired population-vector captures. This is the next parity layer after record-level `ucalc`/matrix parity and exact-rate replay showed negligible O VII triplet-population movement. No default solver physics changed.
 
 ## v0.3.187
