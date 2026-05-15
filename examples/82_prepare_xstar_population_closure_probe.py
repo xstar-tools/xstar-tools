@@ -28,7 +28,9 @@ def main() -> None:
         for key in [
             "audit_version", "status", "population_probe_csv", "n_rows", "n_captures",
             "n_before_captures", "n_after_captures", "n_before_after_pairs",
-            "n_bad_ipmat2_captures", "n_pair_ipmat2_mismatch",
+            "pairing_mode", "n_bad_ipmat2_captures", "n_paired_bad_ipmat2_captures",
+            "n_pair_ipmat2_mismatch", "n_pair_problem_mismatch",
+            "n_unpaired_before_captures", "n_unpaired_after_captures",
             "max_abs_population_sum_delta", "probe_ready_for_population_closure_parity",
             "correct_capture_site", "correct_fortran_product",
         ]:

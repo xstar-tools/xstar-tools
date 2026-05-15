@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.3.189 - 2026-05-15
+
+- Added paired population-closure probe wrappers `xap_pbefore`/`xap_pafter` with shared `solve_call_id`.
+- Added robust legacy validation/pairing for v0.3.188 population-closure CSVs with extra/unpaired captures.
+- Added paired capture summary output for pre/post-`msolvelucy` diagnostics.
+
 ## v0.3.188 - 2026-05-15
 
 - Added `xstar_atomic.xstar_population_closure_probe` and `examples/82_prepare_xstar_population_closure_probe.py`.
