@@ -1,3 +1,7 @@
+## v0.3.185
+
+Record-level replay solve reporting update: adds population-based triplet diagnostics, line-triplet availability status, and writes original plus replay normalized solve products. No default physics changed.
+
 ## v0.3.183
 
 - Add branch-aware record-level blocker diagnosis for source-code local matrix parity.

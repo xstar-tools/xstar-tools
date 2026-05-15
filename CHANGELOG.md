@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.3.185 - 2026-05-14
+
+Record-level replay solve reporting update: adds population-based triplet diagnostics, line-triplet availability status, and writes original plus replay normalized solve products. No default physics changed.
+
 ## v0.3.184 - 2026-05-14
 
 - Add controlled record-level `ucalc` matrix replay diagnostics.

@@ -254,7 +254,7 @@ def apply_record_level_ucalc_replay(
                 row[key] = float(new_abs)
         ratio = (float(old_abs) / max(float(new_abs), 1e-300)) if old_abs is not None else ""
         row.update({
-            "record_level_ucalc_replay_status": f"replayed_from_fortran_{branch}_v03184",
+            "record_level_ucalc_replay_status": f"replayed_from_fortran_{branch}_v03185",
             "record_level_ucalc_replay_branch": branch,
             "record_level_ucalc_replay_old_rate_s^-1": old_abs,
             "record_level_ucalc_replay_new_rate_s^-1": float(new_abs),
@@ -262,7 +262,7 @@ def apply_record_level_ucalc_replay(
             "record_level_ucalc_replay_selected_capture_index": rec_row.get("selected_capture_index"),
             "record_level_ucalc_replay_family_key": rec_row.get("family_key"),
             "record_level_ucalc_replay_blocker_hypothesis": rec_row.get("blocker_hypothesis"),
-            "full_global_assembly_status": "assembled_full_global_topology_with_record_level_ucalc_replay_v03184",
+            "full_global_assembly_status": "assembled_full_global_topology_with_record_level_ucalc_replay_v03185",
         })
         changed.append({
             "row_kind": "record_level_ucalc_replay_matrix_term",
@@ -334,6 +334,53 @@ def _family_summary(changed_rows: Sequence[Mapping[str, Any]]) -> List[Dict[str,
         })
     return out
 
+
+
+
+def _boolish(value: Any) -> bool:
+    txt = str(value).strip().lower()
+    return txt in {"1", "true", "t", "yes", "y"}
+
+
+def _triplet_population_summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Summarize solved populations in the He-like f/i/r upper levels.
+
+    The line-emissivity f/i/r fractions reported by
+    ``build_full_global_normalized_solve_comparison`` depend on available
+    line-row mappings.  For record-level replay diagnostics we also expose a
+    direct population-based triplet summary from the returned population rows.
+    This is not a replacement for emitted-line fractions, but it is robust for
+    solver-delta checks when the line mapping is absent or zero-valued.
+    """
+    sums = {"f": 0.0, "i": 0.0, "r": 0.0}
+    n_rows = 0
+    for row in rows:
+        if str(row.get("row_kind") or "") != "population":
+            continue
+        comp = str(row.get("triplet_component") or "").strip().lower()
+        if comp not in sums:
+            continue
+        if not (_boolish(row.get("is_triplet_upper")) or comp in sums):
+            continue
+        pop = _as_float(row.get("population_fraction"), None)
+        if pop is None or not math.isfinite(float(pop)):
+            continue
+        sums[comp] += max(0.0, float(pop))
+        n_rows += 1
+    total = sums["f"] + sums["i"] + sums["r"]
+    out: Dict[str, Any] = {
+        "triplet_population_upper_rows": n_rows,
+        "triplet_population_total": total,
+        "triplet_population_f_abs": sums["f"],
+        "triplet_population_i_abs": sums["i"],
+        "triplet_population_r_abs": sums["r"],
+        "triplet_population_f_fraction": (sums["f"] / total) if total > 0.0 else 0.0,
+        "triplet_population_i_fraction": (sums["i"] / total) if total > 0.0 else 0.0,
+        "triplet_population_r_fraction": (sums["r"] / total) if total > 0.0 else 0.0,
+        "triplet_population_R": (sums["f"] / sums["i"]) if sums["i"] > 0.0 else None,
+        "triplet_population_G": ((sums["f"] + sums["i"]) / sums["r"]) if sums["r"] > 0.0 else None,
+    }
+    return out
 
 def _summary_row_for_solve(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     for row in rows:
@@ -423,7 +470,13 @@ def audit_record_level_ucalc_matrix_replay(
         orig = _summary_row_for_solve(original_solve_rows)
         repl = _summary_row_for_solve(replay_solve_rows)
         solve_status = "completed"
-        for label, row in [("original_matrix", orig), ("record_level_ucalc_replay", repl)]:
+        original_pop_triplet = _triplet_population_summary(original_solve_rows)
+        replay_pop_triplet = _triplet_population_summary(replay_solve_rows)
+        for label, row, pop_triplet in [
+            ("original_matrix", orig, original_pop_triplet),
+            ("record_level_ucalc_replay", repl, replay_pop_triplet),
+        ]:
+            line_total = sum(float(row.get(k) or 0.0) for k in ("f_fraction", "i_fraction", "r_fraction"))
             solve_comparison_rows.append({
                 "row_kind": "record_level_ucalc_replay_solve_summary",
                 "comparison_case": label,
@@ -433,6 +486,9 @@ def audit_record_level_ucalc_matrix_replay(
                 "R": row.get("R"),
                 "G": row.get("G"),
                 "l2_distance_to_target": row.get("l2_distance_to_target"),
+                "line_triplet_fraction_sum": line_total,
+                "line_triplet_status": "line_triplet_available" if line_total > 0.0 else "line_triplet_zero_or_unavailable_use_population_triplet_columns",
+                **pop_triplet,
                 "solve_status": row.get("solve_status"),
                 "solver": row.get("solver"),
                 "n_negative_populations": row.get("n_negative_populations"),
@@ -441,7 +497,7 @@ def audit_record_level_ucalc_matrix_replay(
     ratios = [_as_float(r.get("old_over_new"), None) for r in changed_rows]
     ratios = [float(r) for r in ratios if r is not None and r > 0 and math.isfinite(r)]
     summary = {
-        "audit_version": "v0.3.184",
+        "audit_version": "v0.3.185",
         "ion": ion,
         "status": "record_level_ucalc_matrix_replay_audit_completed",
         "replacement_mode": replacement_mode,
@@ -490,11 +546,14 @@ def write_record_level_ucalc_matrix_replay_audit(
     terms_csv = out / f"{prefix}_matrix_terms.csv"
     comp_csv = out / f"{prefix}_solve_comparison.csv"
     solve_csv = out / f"{prefix}_replay_normalized_solve_comparison.csv"
+    original_solve_csv = out / f"{prefix}_original_normalized_solve_comparison.csv"
+    original_solve = list(audit.get("original_solve_rows", []) or [])
     _write_csv(changed_csv, changed)
     _write_csv(family_csv, family)
     _write_csv(terms_csv, terms)
     _write_csv(comp_csv, solve_comp)
     _write_csv(solve_csv, replay_solve)
+    _write_csv(original_solve_csv, original_solve)
     json_path = out / f"{prefix}.json"
     json_path.write_text(json.dumps({"summary": summary, "family_rows": family, "changed_rows": changed[:2000], "solve_comparison_rows": solve_comp}, indent=2, default=str), encoding="utf-8")
     md_path = out / f"{prefix}.md"
@@ -518,9 +577,9 @@ def write_record_level_ucalc_matrix_replay_audit(
     for r in family:
         lines.append(f"| {r.get('family_key')} | {r.get('n_replayed_terms')} | {r.get('median_old_over_new')} | {r.get('p16_old_over_new')} | {r.get('p84_old_over_new')} | {r.get('branch_counts')} |")
     if solve_comp:
-        lines.extend(["", "## Solve comparison", "", "| case | f | i | r | R | G | status |", "|---|---:|---:|---:|---:|---:|---|"])
+        lines.extend(["", "## Solve comparison", "", "| case | line f | line i | line r | pop f | pop i | pop r | status |", "|---|---:|---:|---:|---:|---:|---:|---|"])
         for r in solve_comp:
-            lines.append(f"| {r.get('comparison_case')} | {r.get('f_fraction')} | {r.get('i_fraction')} | {r.get('r_fraction')} | {r.get('R')} | {r.get('G')} | {r.get('solve_status')} |")
+            lines.append(f"| {r.get('comparison_case')} | {r.get('f_fraction')} | {r.get('i_fraction')} | {r.get('r_fraction')} | {r.get('triplet_population_f_fraction')} | {r.get('triplet_population_i_fraction')} | {r.get('triplet_population_r_fraction')} | {r.get('solve_status')} |")
     lines.extend(["", "## Interpretation", "", str(summary.get("interpretation") or "")])
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {
@@ -529,6 +588,7 @@ def write_record_level_ucalc_matrix_replay_audit(
         "replay_matrix_terms_csv": str(terms_csv),
         "solve_comparison_csv": str(comp_csv),
         "replay_normalized_solve_comparison_csv": str(solve_csv),
+        "original_normalized_solve_comparison_csv": str(original_solve_csv),
         "json": str(json_path),
         "markdown": str(md_path),
     }
