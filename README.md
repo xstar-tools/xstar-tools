@@ -1,3 +1,5 @@
+Latest package note: **v0.3.188** adds population/source closure probe preparation for `calc_hmc_element.f90`. It writes a Fortran helper and before/after-`msolvelucy` insertion snippets to generate `xstar_population_closure_probe.csv`, then validates paired population-vector captures. This is the next parity layer after record-level `ucalc`/matrix parity and exact-rate replay showed negligible O VII triplet-population movement. No default solver physics changed.
+
 ## v0.3.187
 
 Population/source closure diagnosis update: fixes replay family selector aliases so `type50` matches legacy `data_type_50` family keys, and adds `examples/81_diagnose_xstar_population_closure_from_replay_scan.py`. The current O VII family replay scan shows exact-`ucalc` rate replays move triplet population fractions by only ~8.36e-7, so the next source-code-equivalent target is XSTAR population/source closure rather than another isolated rate-family replay. No default solver physics changed.

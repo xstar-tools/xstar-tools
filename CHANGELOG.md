@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.188 - 2026-05-15
+
+- Added `xstar_atomic.xstar_population_closure_probe` and `examples/82_prepare_xstar_population_closure_probe.py`.
+- Prepares the next XSTAR debug product, `xstar_population_closure_probe.csv`, captured in `calc_hmc_element.f90` immediately before and after `msolvelucy`.
+- Writes a conservative free-form Fortran helper plus insertion snippets for before/after `msolvelucy`, a schema CSV, patch notes, and a validator for paired before/after population-vector captures.
+- This targets the closure layer identified by v0.3.187: adjacent-ion parent coupling, superlevel source/sink closure, RHS/normalization, and pre/post-`msolvelucy` population parity.
+- Instrumentation infrastructure only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
 ## v0.3.187 - 2026-05-15
 
 - Fixed record-level family replay selector aliases so user-facing selectors such as `type50` also match legacy family keys such as `unknown:data_type_50_rate_type_4` / `data_type_50_rate_type_4`.
