@@ -119,22 +119,63 @@ def _family_text(row: Mapping[str, Any], rec_row: Mapping[str, Any] | None = Non
     return (str((rec_row or {}).get("family_key") or "") + " " + _row_text(row)).lower()
 
 
+def family_selector_tokens(selector: str) -> List[str]:
+    """Return normalized tokens for user-facing family selectors.
+
+    Record-level family keys are not always named literally.  For example,
+    type-50 bound-bound rows can appear as ``unknown:data_type_50_rate_type_4``
+    because older matrix products did not carry a higher-level type-50 family
+    label.  This helper keeps command-line selectors such as ``type50`` useful
+    without changing the stored audit provenance.
+    """
+    tok = str(selector or "").strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+    if not tok:
+        return []
+    aliases = {
+        "type50": ["type50", "datatype50", "data_type_50", "rate_type_4", "boundbound"],
+        "data50": ["type50", "datatype50", "data_type_50", "rate_type_4", "boundbound"],
+        "boundbound": ["type50", "datatype50", "data_type_50", "rate_type_4", "boundbound"],
+        "type53": ["type53", "datatype53", "data_type_53", "phint53"],
+        "type77": ["type77", "datatype77", "data_type_77", "calt77"],
+        "type99": ["type99", "datatype99", "data_type_99", "superlevel"],
+        "type71": ["type71", "datatype71", "data_type_71", "calt71"],
+        "type68": ["type68", "datatype68", "data_type_68", "calt68"],
+        "type69": ["type69", "datatype69", "data_type_69", "calt69"],
+        "type63": ["type63", "datatype63", "data_type_63"],
+        "type56": ["type56", "datatype56", "data_type_56"],
+    }
+    return aliases.get(tok, [str(selector or "").strip().lower()])
+
+
+def family_selector_matches(selector: str, text: str) -> bool:
+    """Return True if a user family selector matches an audit text blob."""
+    raw = str(text or "").lower()
+    compact = raw.replace(" ", "").replace("-", "").replace("_", "")
+    for tok in family_selector_tokens(selector):
+        t = str(tok).lower()
+        if t in raw or t.replace("_", "") in compact:
+            return True
+    return False
+
+
 def _record_status_selected(rec_row: Mapping[str, Any], *, mode: str, families: Sequence[str]) -> bool:
     mode = str(mode or "blockers").strip().lower().replace("_", "-")
     fam = str(rec_row.get("family_key") or "").lower()
     hyp = str(rec_row.get("blocker_hypothesis") or "").lower()
     status = str(rec_row.get("record_parity_status") or "").lower()
+    priority = str(rec_row.get("blocker_priority") or "").lower()
+    match_text = " ".join(str(v) for v in rec_row.values()).lower()
     if mode in {"all", "all-records"}:
         return True
     if mode in {"differs", "differing"}:
         return "differs" in status
     if mode in {"blockers", "blocking", "high"}:
-        return ("blocking" in str(rec_row.get("blocker_priority") or "").lower()
-                or "high" in str(rec_row.get("blocker_priority") or "").lower()
-                or "type53" in hyp or "type77" in hyp or "type99" in hyp or "type50" in hyp)
+        return ("blocking" in priority
+                or "high" in priority
+                or "type53" in hyp or "type77" in hyp or "type99" in hyp or "type50" in hyp
+                or "data_type_50" in fam)
     if mode in {"families", "family"}:
-        toks = [f.lower() for f in families]
-        return any(t in fam for t in toks)
+        return any(family_selector_matches(f, match_text) for f in families)
     return False
 
 
@@ -254,7 +295,7 @@ def apply_record_level_ucalc_replay(
                 row[key] = float(new_abs)
         ratio = (float(old_abs) / max(float(new_abs), 1e-300)) if old_abs is not None else ""
         row.update({
-            "record_level_ucalc_replay_status": f"replayed_from_fortran_{branch}_v03185",
+            "record_level_ucalc_replay_status": f"replayed_from_fortran_{branch}_v03187",
             "record_level_ucalc_replay_branch": branch,
             "record_level_ucalc_replay_old_rate_s^-1": old_abs,
             "record_level_ucalc_replay_new_rate_s^-1": float(new_abs),
@@ -497,7 +538,7 @@ def audit_record_level_ucalc_matrix_replay(
     ratios = [_as_float(r.get("old_over_new"), None) for r in changed_rows]
     ratios = [float(r) for r in ratios if r is not None and r > 0 and math.isfinite(r)]
     summary = {
-        "audit_version": "v0.3.185",
+        "audit_version": "v0.3.187",
         "ion": ion,
         "status": "record_level_ucalc_matrix_replay_audit_completed",
         "replacement_mode": replacement_mode,

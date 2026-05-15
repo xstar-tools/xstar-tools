@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List
 
 from xstar_atomic.xstar_record_level_replay import (
     audit_record_level_ucalc_matrix_replay,
+    family_selector_matches,
     write_record_level_ucalc_matrix_replay_audit,
 )
 
@@ -62,12 +63,42 @@ def _selected_families(record_level_audit: str | Path, include: List[str], exclu
         if not fam:
             continue
         text = " ".join(str(v) for v in row.values()).lower()
-        if include and not any(tok.lower() in fam.lower() or tok.lower() in text for tok in include):
+        if include and not any(family_selector_matches(tok, text) for tok in include):
             continue
-        if exclude and any(tok.lower() in fam.lower() or tok.lower() in text for tok in exclude):
+        if exclude and any(family_selector_matches(tok, text) for tok in exclude):
             continue
         families.append(fam)
     return families
+
+
+def _expand_explicit_families(record_level_audit: str | Path, selectors: List[str]) -> List[str]:
+    """Resolve explicit command-line selectors to concrete family keys when possible.
+
+    This keeps short selectors such as ``type50`` from missing legacy family keys
+    like ``unknown:data_type_50_rate_type_4``.  Unknown selectors are retained so
+    downstream matching can still use them against record-level rows.
+    """
+    if not selectors:
+        return []
+    fam_csv = _resolve_family_summary(record_level_audit)
+    rows = _read_csv_rows(fam_csv)
+    out: List[str] = []
+    for sel in selectors:
+        matched = []
+        for row in rows:
+            fam = str(row.get("family_key") or "").strip()
+            if not fam:
+                continue
+            text = " ".join(str(v) for v in row.values()).lower()
+            if family_selector_matches(sel, text):
+                matched.append(fam)
+        if matched:
+            for fam in matched:
+                if fam not in out:
+                    out.append(fam)
+        elif sel not in out:
+            out.append(sel)
+    return out
 
 
 def _solve_summary(audit: Dict[str, Any], case: str) -> Dict[str, Any]:
@@ -169,7 +200,7 @@ def _write_outputs(result: Dict[str, Any], out_dir: str | Path, *, ion: str, fam
         for row in rows:
             writer.writerow(row)
     summary = {
-        "audit_version": "v0.3.186",
+        "audit_version": "v0.3.187",
         "ion": ion,
         "status": "record_level_ucalc_replay_family_scan_completed",
         "n_families_scanned": len(rows),
@@ -220,7 +251,7 @@ def main() -> None:
     p.add_argument("--print-summary", action="store_true")
     args = p.parse_args()
     explicit = [s.strip() for s in args.families.split(",") if s.strip()]
-    families = explicit or _selected_families(args.record_level_audit_csv, args.include_family, args.exclude_family)
+    families = _expand_explicit_families(args.record_level_audit_csv, explicit) if explicit else _selected_families(args.record_level_audit_csv, args.include_family, args.exclude_family)
     if not families:
         raise SystemExit("no families selected for replay scan")
     result = _scan(
@@ -242,7 +273,7 @@ def main() -> None:
     if args.print_summary:
         print("XSTAR record-level ucalc replay family scan")
         print("------------------------------------------------")
-        print("audit_version=v0.3.186")
+        print("audit_version=v0.3.187")
         print(f"ion={args.ion}")
         print(f"n_families_scanned={len(result.get('summary_rows', []))}")
         print(f"run_solver={bool(args.run_solver)}")

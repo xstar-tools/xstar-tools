@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.184"
+__version__ = "0.3.187"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -97,6 +97,11 @@ from .xstar_record_level_replay import (
     apply_record_level_ucalc_replay,
     audit_record_level_ucalc_matrix_replay,
     write_record_level_ucalc_matrix_replay_audit,
+)
+
+from .xstar_population_closure_diagnosis import (
+    diagnose_population_closure_from_family_scan,
+    write_population_closure_diagnosis,
 )
 
 from .workflow import (

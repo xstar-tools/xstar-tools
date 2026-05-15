@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.187 - 2026-05-15
+
+- Fixed record-level family replay selector aliases so user-facing selectors such as `type50` also match legacy family keys such as `unknown:data_type_50_rate_type_4` / `data_type_50_rate_type_4`.
+- Added `xstar_atomic.xstar_population_closure_diagnosis` and `examples/81_diagnose_xstar_population_closure_from_replay_scan.py`.
+- The new diagnosis consumes the v0.3.186 family replay scan and decides whether exact-`ucalc` rate replay actually moves the O VII triplet population balance.
+- For the current O VII blocker scan, the maximum population-fraction movement is only ~8.36e-7, so the next source-code-equivalent target is population/source closure: adjacent-ion parent coupling, superlevel source/sink closure, RHS/normalization, and pre/post-`msolvelucy` population parity.
+- Diagnostic-only release: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
 ## v0.3.186 - 2026-05-15
 
 Record-level replay family-isolation scan: adds `examples/80_scan_xstar_record_level_ucalc_replay_families.py`, which replays selected record-level families one at a time using Fortran `ucalc` ans1/ans2 branch rates and optionally re-solves each replay matrix. This separates which discrepant families actually move the O VII population balance. Diagnostic scan only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
