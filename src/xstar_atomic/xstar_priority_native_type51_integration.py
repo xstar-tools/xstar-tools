@@ -3,17 +3,21 @@
 This controlled diagnostic consumes two existing audit products:
 
 * the v0.3.199 priority matrix-balance audit, which contains every compact
-  matrix term touching the selected rows plus the captured XSTAR population
-  vector; and
+  matrix term whose matrix row is one of the selected rows, plus the captured
+  XSTAR population vector; and
 * the v0.3.203 native type-51 parity audit, which contains source-aligned
   native coefficients for all selected type-51 matrix insertions.
 
-Every matching type-51 term is replaced by its native coefficient.  All other
-rate families remain explicitly probe-backed.  The resulting hybrid system is
-used to recompute captured-population row balance and the six-row conditional
-solve.  This is an integration gate for the native type-51 assembler; it does
-not enable the production expanded compact-basis solver or claim complete
-native matrix/RHS closure.
+Every matching selected-row type-51 term is replaced by its native coefficient.
+The type-51 parity product also contains reciprocal insertions whose matrix row
+is external and whose matrix column is selected.  Those terms belong to the
+external-row equations of the future expanded solve, so they are reported as
+out of scope rather than treated as missing replacements.  All other rate
+families remain explicitly probe-backed.  The resulting hybrid system is used
+to recompute captured-population row balance and the six-row conditional solve.
+This is an integration gate for the native type-51 assembler; it does not
+enable the production expanded compact-basis solver or claim complete native
+matrix/RHS closure.
 """
 from __future__ import annotations
 
@@ -188,13 +192,16 @@ def build_priority_native_type51_integration_audit(
     relative_row_residual_tolerance: float = 5.0e-3,
     rank_rcond: float = 1.0e-12,
 ) -> Dict[str, Any]:
-    """Replace all selected-system type-51 probe terms and re-solve.
+    """Replace all selected-row type-51 probe terms and re-solve.
 
     The replacement source is the native coefficient stored in the v0.3.203
     parity product.  A term is matched first by record, capture index,
     insertion kind, compact row, and compact column.  A unique structural
     match that omits capture index is allowed for compatibility with older
-    matrix-balance products.
+    matrix-balance products.  Parity rows whose compact matrix row is not one
+    of the selected equations are retained as an explicit out-of-scope class;
+    they do not participate in this conditional solve and therefore do not
+    block selected-system integration readiness.
     """
     for name, value in (
         ("relative_population_tolerance", relative_population_tolerance),
@@ -258,6 +265,8 @@ def build_priority_native_type51_integration_audit(
     parity_by_exact: Dict[TermKey, List[int]] = defaultdict(list)
     parity_by_structural: Dict[StructuralTermKey, List[int]] = defaultdict(list)
     valid_parity_indices: List[int] = []
+    parity_selected_row_indices: set[int] = set()
+    parity_external_row_indices: set[int] = set()
     for index, row in enumerate(parity_terms):
         key = _term_key(row, record_field="record")
         if key is None:
@@ -265,6 +274,11 @@ def build_priority_native_type51_integration_audit(
         parity_by_exact[key].append(index)
         parity_by_structural[_structural_key(key)].append(index)
         valid_parity_indices.append(index)
+        row_ip = key[3]
+        if row_ip in selected_set:
+            parity_selected_row_indices.add(index)
+        else:
+            parity_external_row_indices.add(index)
     n_duplicate_exact_keys = sum(max(len(indices) - 1, 0) for indices in parity_by_exact.values())
 
     used_parity_indices: set[int] = set()
@@ -556,17 +570,68 @@ def build_priority_native_type51_integration_audit(
         })
 
     unused_parity_indices = sorted(set(valid_parity_indices) - used_parity_indices)
+    unused_selected_row_parity_indices = sorted(
+        parity_selected_row_indices - used_parity_indices
+    )
+    used_external_row_parity_indices = sorted(
+        parity_external_row_indices & used_parity_indices
+    )
+    out_of_scope_parity_indices = sorted(parity_external_row_indices)
+
+    parity_scope_rows: List[Dict[str, Any]] = []
+    for index in valid_parity_indices:
+        row = parity_terms[index]
+        row_ip = _as_int(row.get("compact_row_ipmat2"), None)
+        col_ip = _as_int(row.get("compact_col_ipmat2"), None)
+        in_selected_row_scope = index in parity_selected_row_indices
+        used = index in used_parity_indices
+        if in_selected_row_scope and used:
+            scope_status = "selected_row_scope_used"
+        elif in_selected_row_scope:
+            scope_status = "selected_row_scope_unused"
+        elif used:
+            scope_status = "external_row_out_of_scope_but_used"
+        else:
+            scope_status = "external_row_out_of_scope"
+        parity_scope_rows.append({
+            "parity_term_index": index,
+            "record": row.get("record", ""),
+            "capture_index": row.get("capture_index", ""),
+            "insertion_kind": row.get("insertion_kind", ""),
+            "compact_row_ipmat2": "" if row_ip is None else row_ip,
+            "compact_col_ipmat2": "" if col_ip is None else col_ip,
+            "row_endpoint_selected": row.get("row_endpoint_selected", ""),
+            "col_endpoint_selected": row.get("col_endpoint_selected", ""),
+            "selected_row_scope": in_selected_row_scope,
+            "used_by_selected_system": used,
+            "scope_status": scope_status,
+            "matrix_term_match": row.get("matrix_term_match", ""),
+            "record_parity_status": row.get("record_parity_status", ""),
+            "relative_difference": row.get("relative_difference", ""),
+        })
     parity_ready = bool(
         _as_bool(parity_summary.get("native_type51_record_rate_parity_ready"))
         and _as_bool(parity_summary.get("native_type51_compact_matrix_parity_ready"))
         and _as_bool(parity_summary.get("native_type51_internal_block_assembly_ready"))
     )
-    replacement_complete = bool(
+    selected_row_replacement_complete = bool(
         n_type51_terms > 0
         and n_type51_replaced == n_type51_terms
+        and n_type51_terms == len(parity_selected_row_indices)
         and not unmatched_type51_keys
-        and not unused_parity_indices
+        and not unused_selected_row_parity_indices
+        and not used_external_row_parity_indices
         and n_duplicate_exact_keys == 0
+    )
+    all_touching_manifest_terms_replaced = bool(
+        selected_row_replacement_complete
+        and not out_of_scope_parity_indices
+    )
+    all_parity_manifest_terms_accounted_for = bool(
+        selected_row_replacement_complete
+        and len(used_parity_indices) + len(out_of_scope_parity_indices)
+        == len(valid_parity_indices)
+        and not used_external_row_parity_indices
     )
     all_selected_rows_touched = rows_touched_by_native_type51 == selected_set
     max_hybrid_linear_residual = (
@@ -577,7 +642,8 @@ def build_priority_native_type51_integration_audit(
     integration_ready = bool(
         parent_ready
         and parity_ready
-        and replacement_complete
+        and selected_row_replacement_complete
+        and all_parity_manifest_terms_accounted_for
         and all_selected_rows_touched
         and not missing_population_columns
         and hybrid_solve["rank"] == n
@@ -589,7 +655,7 @@ def build_priority_native_type51_integration_audit(
     )
 
     summary = {
-        "audit_version": "v0.3.204",
+        "audit_version": "v0.3.205",
         "status": "priority_native_type51_integration_completed",
         "ion": balance_summary.get("ion", parity_summary.get("ion", "")),
         "selected_basis_solve_call_id": balance_summary.get(
@@ -607,8 +673,16 @@ def build_priority_native_type51_integration_audit(
         "n_type51_terms_unmatched": n_type51_terms - n_type51_replaced,
         "n_non_type51_probe_backed_terms": len(replacement_rows) - n_type51_terms,
         "n_type51_parity_terms": len(valid_parity_indices),
+        "n_type51_parity_terms_in_selected_row_scope": len(parity_selected_row_indices),
+        "n_type51_parity_terms_external_row_out_of_scope": len(parity_external_row_indices),
         "n_type51_parity_terms_used": len(used_parity_indices),
         "n_type51_parity_terms_unused": len(unused_parity_indices),
+        "n_type51_parity_terms_unused_in_selected_row_scope": len(
+            unused_selected_row_parity_indices
+        ),
+        "n_type51_parity_terms_used_outside_selected_row_scope": len(
+            used_external_row_parity_indices
+        ),
         "n_duplicate_type51_parity_exact_keys": n_duplicate_exact_keys,
         "n_selected_rows_touched_by_native_type51": len(rows_touched_by_native_type51),
         "n_selected_rows_not_touched_by_native_type51": len(selected_set - rows_touched_by_native_type51),
@@ -635,7 +709,12 @@ def build_priority_native_type51_integration_audit(
         "max_abs_hybrid_linear_solve_relative_residual": max_hybrid_linear_residual,
         "parent_fortran_priority_subset_row_balance_ready": parent_ready,
         "parent_native_type51_parity_ready": parity_ready,
-        "native_type51_all_touching_terms_replaced": replacement_complete,
+        "native_type51_all_selected_row_terms_replaced": selected_row_replacement_complete,
+        "native_type51_all_parity_manifest_terms_accounted_for": (
+            all_parity_manifest_terms_accounted_for
+        ),
+        "native_type51_all_touching_terms_replaced": all_touching_manifest_terms_replaced,
+        "native_type51_external_row_terms_required_for_selected_system": False,
         "native_type51_all_selected_rows_touched": all_selected_rows_touched,
         "native_type51_selected_system_integration_ready": integration_ready,
         "hybrid_selected_system_contains_probe_backed_non_type51_terms": (
@@ -663,8 +742,18 @@ def build_priority_native_type51_integration_audit(
         "external_rhs_rows": rhs_rows,
         "family_status_rows": family_rows,
         "singular_value_rows": singular_value_rows,
+        "parity_scope_rows": parity_scope_rows,
         "unmatched_type51_term_keys": unmatched_type51_keys,
         "unused_type51_parity_term_indices": unused_parity_indices,
+        "unused_type51_parity_term_indices_in_selected_row_scope": (
+            unused_selected_row_parity_indices
+        ),
+        "external_row_out_of_scope_type51_parity_term_indices": (
+            out_of_scope_parity_indices
+        ),
+        "used_external_row_type51_parity_term_indices": (
+            used_external_row_parity_indices
+        ),
         "hybrid_scaled_selected_matrix": np.asarray(hybrid_solve["scaled_matrix"]).tolist(),
         "hybrid_scaled_rhs": np.asarray(hybrid_solve["scaled_rhs"]).tolist(),
     }
@@ -686,6 +775,7 @@ def write_priority_native_type51_integration_audit(
         "external_rhs_csv": out / f"{prefix}_external_rhs.csv",
         "family_status_csv": out / f"{prefix}_family_status.csv",
         "singular_values_csv": out / f"{prefix}_singular_values.csv",
+        "parity_scope_csv": out / f"{prefix}_parity_scope.csv",
         "json": out / f"{prefix}.json",
         "markdown": out / f"{prefix}.md",
     }
@@ -696,6 +786,7 @@ def write_priority_native_type51_integration_audit(
     _write_csv(paths["external_rhs_csv"], audit.get("external_rhs_rows", []))
     _write_csv(paths["family_status_csv"], audit.get("family_status_rows", []))
     _write_csv(paths["singular_values_csv"], audit.get("singular_value_rows", []))
+    _write_csv(paths["parity_scope_csv"], audit.get("parity_scope_rows", []))
     paths["json"].write_text(json.dumps(audit, indent=2, sort_keys=True), encoding="utf-8")
 
     summary = audit.get("summary", {})
@@ -706,7 +797,8 @@ def write_priority_native_type51_integration_audit(
         f"- ion: `{summary.get('ion')}`",
         f"- selected compact rows: `{summary.get('selected_xstar_ipmat2_indices')}`",
         f"- native type-51 terms replaced: `{summary.get('n_type51_terms_replaced_with_native')}/{summary.get('n_type51_balance_terms')}`",
-        f"- native type-51 parity terms used: `{summary.get('n_type51_parity_terms_used')}/{summary.get('n_type51_parity_terms')}`",
+        f"- selected-row parity terms used: `{summary.get('n_type51_parity_terms_used')}/{summary.get('n_type51_parity_terms_in_selected_row_scope')}`",
+        f"- external-row parity terms out of selected-system scope: `{summary.get('n_type51_parity_terms_external_row_out_of_scope')}`",
         f"- selected rows touched: `{summary.get('n_selected_rows_touched_by_native_type51')}/{summary.get('n_selected_compact_rows')}`",
         f"- hybrid matrix rank: `{summary.get('hybrid_matrix_rank')}/{summary.get('matrix_dimension')}`",
         f"- hybrid scaled condition number: `{summary.get('hybrid_scaled_matrix_condition_number')}`",
@@ -715,7 +807,7 @@ def write_priority_native_type51_integration_audit(
         f"- native type-51 selected-system integration ready: `{summary.get('native_type51_selected_system_integration_ready')}`",
         f"- complete native compact closure ready: `{summary.get('native_priority_subset_matrix_closure_ready')}`",
         "",
-        "All matching type-51 coefficients are native values from the v0.3.203 parity product. Non-type-51 families remain explicitly probe-backed. The production expanded compact-basis solver is unchanged.",
+        "All selected-row type-51 coefficients are native values from the v0.3.203 parity product. Reciprocal terms in external rows are reported as out of scope for this six-row conditional system, not as missing replacements. Non-type-51 families remain explicitly probe-backed. The production expanded compact-basis solver is unchanged.",
     ]
     paths["markdown"].write_text("\n".join(lines) + "\n", encoding="utf-8")
     return paths

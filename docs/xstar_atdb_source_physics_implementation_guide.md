@@ -870,9 +870,9 @@ n_e=xpx\,xee.
 
 The v0.3.203 audit decodes each selected type-51 ATDB record, evaluates these rates, compares them with the same selected `ucalc` capture, reconstructs the four `calc_hmc_ion` matrix coefficients, and aggregates the selected-selected compact block. Passing this audit is the gate for enabling native type-51 terms in the 119-row active compact solver.
 
-## 12.3. Native type-51 selected-system integration gate (v0.3.204)
+## 12.3. Native type-51 selected-system integration gate (v0.3.204--v0.3.205)
 
-The v0.3.204 audit consumes the validated v0.3.199 record-term/population products and the v0.3.203 native type-51 coefficient products. For every compact term touching a selected row, it forms
+The v0.3.204 audit consumes the validated v0.3.199 record-term/population products and the v0.3.203 native type-51 coefficient products. v0.3.205 clarifies that the conditional system is defined by compact terms whose **matrix row** is selected. For every such term it forms
 
 \[
 A^{\rm hybrid}_{ij}=
@@ -884,7 +884,7 @@ A^{\rm probe}_{ij}, & \text{all other families}.
 
 This replacement is applied to both the selected block and the fixed-external closure, so type-51 contributions are replaced wherever they enter either \(A_{SS}\) or \(-A_{SE}x_E\). The audit independently reconstructs the all-probe and hybrid systems, checks captured-population row balance, solves both selected systems, and measures the population movement caused solely by native type 51.
 
-The integration-ready flag requires all selected-system type-51 terms to match exactly once, every selected row to be touched, no missing population columns, a full-rank nonnegative solve, row-balance and population agreement within tolerance, and machine-level linear residuals. Because type 50, type 71, type 53, and smaller families remain probe-backed, this gate does not set complete native compact closure ready and does not alter the production expanded-basis solver.
+The parity manifest contains 946 terms because it records every insertion touching a selected endpoint. Of these, 636 have a selected matrix row and enter the six selected equations; the remaining 310 are reciprocal off-diagonal insertions in external matrix rows with selected columns. v0.3.205 reports the latter as `external_row_out_of_scope` instead of treating them as missing replacements. The real O VII run replaces all 636 selected-row terms, leaves zero unmatched or unused terms inside selected-row scope, and changes the conditional populations from the all-probe solution by at most approximately `2.75e-8`. The integration-ready flag therefore passes. Because type 50, type 71, type 53, and smaller families remain probe-backed, this gate does not set complete native compact closure ready and does not alter the production expanded-basis solver.
 
 ## 13. Validation policy
 
@@ -928,4 +928,4 @@ Scientific references carried with the development review:
 - Bautista & Kallman (2001), *ApJS*, 134, 139.
 - Kallman et al. (2004), *ApJS*, 155, 675.
 
-The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.204. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
+The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.205. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.

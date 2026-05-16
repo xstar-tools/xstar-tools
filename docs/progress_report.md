@@ -1,6 +1,6 @@
 # XSTAR `atdb.fits` Python Reader Progress Report
 
-> **v0.3.204 update:** `examples/94_integrate_xstar_priority_native_type51.py` consumes the v0.3.199 matrix-balance product and the v0.3.203 native type-51 parity product, replaces all matching type-51 terms touching the selected compact rows, and reruns row balance plus the conditional solve. Non-type-51 families remain explicitly probe-backed; this is an integration gate rather than the production expanded-basis solver.
+> **v0.3.205 update:** `examples/94_integrate_xstar_priority_native_type51.py` now distinguishes the 636 type-51 terms in the six selected matrix rows from 310 reciprocal insertions in external matrix rows. All 636 selected-row terms are replaced natively; the 310 external-row terms are retained as explicit out-of-scope parity coverage and no longer block the selected-system readiness flag. The real O VII audit passes with a maximum hybrid/all-probe population change of approximately `2.75e-8`. Non-type-51 families remain probe-backed and the production expanded-basis solver is unchanged.
 
 ## 1. Project goal
 

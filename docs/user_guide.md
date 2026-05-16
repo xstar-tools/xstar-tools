@@ -1259,13 +1259,13 @@ The validated O VII compact-basis findings through v0.3.201 are:
 - the v0.3.201 conditional six-row solve holds the remaining 601 XSTAR compact populations fixed, uses a full-rank row-scaled 6x6 matrix with condition number about 5.8545, and recovers all six populations within 0.5%; the maximum relative population difference is about 3.0341e-3.
 - the v0.3.202 native-readiness audit shows that type 51 supplies about 97.77% of the internal population-weighted coupling, while type 50, type 71, and type 53 supply about 99.06%, 0.861%, and 0.0795% of the external RHS, respectively.
 - v0.3.203 adds an exact type-51 parity gate. It evaluates the ATDB Burgess--Tully payload using the XSTAR type-51 temperature floor, ATDB transition energy, detailed-balance convention, and `n_e=xpx*xee`, then compares native `ans1`/`ans2` and compact `ajisi` terms with the selected XSTAR probe rows. The legacy probe column named `xnx` actually contains `xee`; this is now documented explicitly.
-- v0.3.204 integrates every validated type-51 insertion touching the six selected rows into a controlled hybrid conditional system. It replaces both selected-selected and selected-external type-51 coefficients, reconstructs row balance and the conditional solve, and requires complete one-to-one replacement coverage. All other families remain explicitly probe-backed, so complete native compact closure remains false.
+- v0.3.204 introduced the controlled hybrid type-51 integration audit. v0.3.205 corrects its readiness scope: the six selected equations contain 636 type-51 terms and all 636 are replaced natively, while 310 reciprocal off-diagonal parity terms reside in external matrix rows and are reported as out of scope for the conditional system. The corrected real O VII audit sets `native_type51_selected_system_integration_ready=True`; the maximum hybrid/all-probe population change is approximately `2.75e-8`. All other families remain explicitly probe-backed, so complete native compact closure remains false.
 
 The approximately 44 type-53 scale remains an explicit future task. It is not treated as an empirical correction. The source-equivalent solution is to carry live `epim(:)`, `bremsam(:)`, and `bremsint(:)`, port `phint53.f90`/`phint53hunt.f90`, reproduce `ans1..ans6` and all matrix placements, and only then replace the historical proxy `xstar-powerlaw` terms.
 
 The implementation order is:
 
-1. complete the validated six-row native assembly by adding type-50/type-71 external closure after the v0.3.204 type-51 integration gate;
+1. complete the validated six-row native assembly by adding type-50/type-71 external closure after the corrected v0.3.205 type-51 integration gate;
 2. solve the validated 119-row active compact basis with exact aliases, external closure, RHS, and normalization;
 3. port the remaining native rate families touching the active basis;
 4. remove the type-53 proxy normalization;

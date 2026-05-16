@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.3.205 - 2026-05-16
+
+- Corrected the v0.3.204 native type-51 integration readiness scope. The six-row conditional audit is defined by matrix terms whose compact **row** is selected; it must not require reciprocal terms that belong to external-row equations.
+- The real O VII parity manifest contains 946 type-51 insertions touching a selected endpoint. Exactly 636 have selected matrix rows and enter the six selected equations; the remaining 310 are reciprocal off-diagonal insertions in external matrix rows with selected columns.
+- Added explicit parity-scope accounting: `n_type51_parity_terms_in_selected_row_scope`, `n_type51_parity_terms_external_row_out_of_scope`, `n_type51_parity_terms_unused_in_selected_row_scope`, `n_type51_parity_terms_used_outside_selected_row_scope`, and `native_type51_all_parity_manifest_terms_accounted_for`.
+- Added `xstar_priority_native_type51_integration_audit_parity_scope.csv`, which classifies every parity term as `selected_row_scope_used`, `selected_row_scope_unused`, `external_row_out_of_scope`, or the defensive error state `external_row_out_of_scope_but_used`.
+- The selected-system readiness gate now requires complete one-to-one replacement of all selected-row type-51 terms, zero unused selected-row parity terms, zero accidental use of external-row terms, complete accounting of the full parity manifest, full row coverage, preserved row balance, a full-rank nonnegative solve, and negligible movement from the all-probe solution.
+- Revalidated the user-provided O VII products: 636/636 selected-row type-51 terms are replaced, zero are unmatched, zero selected-row parity terms are unused, all 310 remaining parity terms are correctly classified as external-row out of scope, and `native_type51_selected_system_integration_ready=True`.
+- The corrected real audit preserves the v0.3.204 numerical solution: maximum hybrid/captured population difference `3.0341181e-3`, maximum hybrid/all-probe population change `2.7517811e-8`, maximum captured row residual `1.7471003e-3`, full rank 6/6, no negative populations, and linear residual below `3e-16`.
+- Complete native compact closure remains false because 1,950 non-type-51 terms are still probe-backed. The next target remains native type-50 and type-71 external RHS closure, followed by exact live-radiation type 53 without an empirical approximately 44 factor.
+
 ## v0.3.204 - 2026-05-16
 
 - Added `xstar_atomic.xstar_priority_native_type51_integration` and `examples/94_integrate_xstar_priority_native_type51.py`.

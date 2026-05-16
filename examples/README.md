@@ -1026,12 +1026,12 @@ PYTHONPATH=src python examples/93_audit_xstar_type51_native_parity.py \
 
 ### `94_integrate_xstar_priority_native_type51.py`
 
-Replace every validated type-51 term touching the selected rows and rerun row balance plus the conditional solve while retaining explicit probe-backed coefficients for all other families.
+Replace every validated type-51 term whose matrix row belongs to the selected conditional system, classify reciprocal external-row parity terms as out of scope, and rerun row balance plus the conditional solve while retaining explicit probe-backed coefficients for all other families.
 
 ```bash
 PYTHONPATH=src python examples/94_integrate_xstar_priority_native_type51.py \
   --priority-matrix-balance-audit xstar_priority_matrix_balance_o7_v03199 \
   --type51-native-parity-audit xstar_type51_native_parity_o7_v03203 \
-  --out-dir xstar_priority_native_type51_integration_o7_v03204 \
+  --out-dir xstar_priority_native_type51_integration_o7_v03205 \
   --print-summary
 ```
