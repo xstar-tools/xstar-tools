@@ -268,3 +268,18 @@ v0.3.179 adds backward-compatible Fortran wrappers for the older long probe rout
 ### v0.3.178 full-parity probe helper compiler fix
 
 v0.3.178 regenerates the full local parity probe helper as conservative free-form Fortran (`xap_ucalc`, `xap_mrow`) matching the observed HEASoft/XSTAR `.f90` compile path. It is a probe/instrumentation fix only; no solver physics or rate formula is changed.
+
+
+### Priority compact-matrix row-balance audit
+
+After example 89 reports a complete source-code-derived matrix manifest, example 90 evaluates the selected compact XSTAR row equations directly against the captured post-`msolvelucy` population vector:
+
+```bash
+PYTHONPATH=src python examples/90_audit_xstar_priority_matrix_balance.py \
+  --priority-matrix-closure-audit xstar_priority_matrix_closure_o7_v03198_latest \
+  --population-closure-parity-audit xstar_population_closure_parity_audit_o7_v03190_rank73 \
+  --out-dir xstar_priority_matrix_balance_o7_v03199 \
+  --print-summary
+```
+
+The audit aggregates the probed Fortran `ajisi(1,:)` coefficients into compact `ipmat2` entries and reports `sum_j A_ij x_j` for every activated priority row. It is a diagnostic gate before native compact-matrix/RHS assembly; no solver defaults are changed.

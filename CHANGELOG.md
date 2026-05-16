@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.199 - 2026-05-16
+
+- Added `xstar_atomic.xstar_priority_matrix_balance` and `examples/90_audit_xstar_priority_matrix_balance.py`.
+- Consumes a validated priority matrix-closure manifest and the captured XSTAR population-closure parity vector, aggregates record-level `ajisi(1,:)` insertions into compact `ipmat2` matrix entries, and evaluates the selected steady-state equations `A x` directly.
+- Writes row-balance, rate-family contribution, aggregated compact-matrix entry, record-term, and population-vector products.
+- For the O VII six-row priority subset (`79,80,241,242,244,293`), all six rows pass a 0.5% relative residual tolerance against the post-`msolvelucy` population vector; the maximum relative residual is about `1.7471e-3`.
+- This is a consistency gate before native assembly. It does not alter the default Python matrix, RHS/normalization closure, native rate formulas, or enable the expanded-basis solve.
+
 ## v0.3.198 - 2026-05-16
 
 - Fixed whole-run `latest-per-record` contamination in the priority-subset matrix-closure audit. Raw XSTAR probes contain records for every element, while the reconstructed compact block map describes only the selected element. The audit now filters selected `ucalc` captures to the reconstructed element `jkk_ion` blocks before loading and mapping matrix rows.

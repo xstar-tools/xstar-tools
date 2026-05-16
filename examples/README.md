@@ -647,3 +647,16 @@ Reconstructs a selected XSTAR compact element basis from the direct basis probe 
 ### `89_audit_xstar_priority_matrix_closure.py`
 
 Builds a source-code-derived compact matrix-closure manifest for the priority rows activated by example 88. It selects a common XSTAR `ucalc` occurrence rank, joins the corresponding four `calc_hmc_ion` matrix insertions, preserves shared parent-continuum aliases, and reports the exact rate families and counterpart compact rows required for native closure.
+
+
+### `90_audit_xstar_priority_matrix_balance.py`
+
+Aggregates the validated Fortran compact-matrix manifest from example 89 and evaluates steady-state row residuals against the captured XSTAR population vector. Use this before enabling native priority-subset matrix assembly.
+
+```bash
+PYTHONPATH=src python examples/90_audit_xstar_priority_matrix_balance.py \
+  --priority-matrix-closure-audit xstar_priority_matrix_closure_o7_v03198_latest \
+  --population-closure-parity-audit xstar_population_closure_parity_audit_o7_v03190_rank73 \
+  --out-dir xstar_priority_matrix_balance_o7_v03199 \
+  --print-summary
+```
