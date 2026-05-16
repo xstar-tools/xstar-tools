@@ -1,5 +1,8 @@
 # XSTAR `atdb.fits` Python Reader Progress Report
 
+> **v0.3.206 update:** `examples/95_audit_xstar_type50_type71_native_parity.py` adds source-code native parity for type 50 and type 71, and `examples/96_integrate_xstar_priority_native_type50_type71.py` replaces their validated selected-row coefficients after the v0.3.205 native-type-51 gate. Type-50 photoexcitation is accepted only from an explicit same-capture `bremsa(nb1)` context unless it is exactly zero from full covering or the XSTAR high-wavelength sentinel. The integration audit covers both selected-internal coefficients and fixed-external RHS terms, preserves all other families as probe-backed, and does not change the production expanded-basis solver.
+
+
 > **v0.3.205 update:** `examples/94_integrate_xstar_priority_native_type51.py` now distinguishes the 636 type-51 terms in the six selected matrix rows from 310 reciprocal insertions in external matrix rows. All 636 selected-row terms are replaced natively; the 310 external-row terms are retained as explicit out-of-scope parity coverage and no longer block the selected-system readiness flag. The real O VII audit passes with a maximum hybrid/all-probe population change of approximately `2.75e-8`. Non-type-51 families remain probe-backed and the production expanded-basis solver is unchanged.
 
 ## 1. Project goal

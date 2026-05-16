@@ -206,3 +206,22 @@ Priority native type-51 integration audit
    :members:
    :undoc-members:
    :show-inheritance:
+
+Native type-50/type-71 rate and selected-system audits
+-------------------------------------------------------
+
+.. automodule:: xstar_atomic.rates_type71
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: xstar_atomic.xstar_type50_type71_native_parity
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: xstar_atomic.xstar_priority_native_type50_type71_integration
+   :members:
+   :undoc-members:
+   :show-inheritance:
+

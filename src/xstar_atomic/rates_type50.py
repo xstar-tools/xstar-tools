@@ -230,4 +230,146 @@ __all__ = [
     "RateEvaluation",
     "evaluate_type50_bound_bound",
     "type50_formula_summary",
+    "XSTAR_C_LIGHT_CM_S",
+    "evaluate_type50_ucalc_record",
 ]
+
+XSTAR_C_LIGHT_CM_S = 3.0e10
+
+
+def evaluate_type50_ucalc_record(
+    decoded_line: Mapping[str, Any],
+    *,
+    ptmp1: float,
+    ptmp2: float,
+    cfrac: float,
+    bremsa_nb1: float | None = None,
+    flinabs_ptmp1: float | None = 1.0,
+    hydrogen_density_cm3: float | None = None,
+    high_wavelength_cutoff_A: float = 0.99e9,
+) -> dict[str, Any]:
+    """Evaluate a decoded XSTAR type-50 record in ``ucalc`` branch order.
+
+    The post-swap return convention is ``ans1`` lower-to-upper
+    photoexcitation and ``ans2`` upper-to-lower escaped decay.  The pumping
+    expression is evaluated only from an explicit same-state ``bremsa(nb1)``
+    value, except when ``cfrac >= 1`` (or the XSTAR high-wavelength sentinel applies),
+    where the native photoexcitation rate is exactly zero and no radiation
+    context is required.  Supply the captured XSTAR ``xpx`` value through
+    ``hydrogen_density_cm3`` to reproduce the source numerical floor
+    ``max(A*(ptmp1+ptmp2), 1e-20*xpx)`` exactly.
+
+    ``flinabs.f90`` in the audited XSTAR source currently returns unity; the
+    argument remains explicit so future source changes or probe products can
+    override it without changing this API.
+    """
+    def pick(*names: str) -> float | None:
+        for name in names:
+            value = _finite_or_none(decoded_line.get(name))
+            if value is not None:
+                return value
+        return None
+
+    aij = pick("A_s^-1", "A_s_inv", "aij_s_inv", "rate_s^-1")
+    flin = pick("f_osc_from_A", "oscillator_strength", "flin")
+    wavelength_a = pick("wavelength_A", "wavelength", "lambda_A")
+    energy_ev = pick("energy_eV", "line_energy_eV")
+    if energy_ev is None and wavelength_a is not None and wavelength_a > 0.0:
+        energy_ev = 12398.4016 / wavelength_a
+
+    p1 = _finite_or_none(ptmp1)
+    p2 = _finite_or_none(ptmp2)
+    cf = _finite_or_none(cfrac)
+    if cf is None:
+        cf = 1.0
+    cover = max(0.0, 1.0 - cf)
+    flinabs = _finite_or_none(flinabs_ptmp1)
+    if flinabs is None:
+        flinabs = 1.0
+    bremsa = _finite_or_none(bremsa_nb1)
+
+    escaped_raw = None
+    escaped = None
+    xpx = _finite_or_none(hydrogen_density_cm3)
+    density_floor = 1.0e-20 * xpx if xpx is not None else None
+    density_floor_applied = False
+    if aij is not None and p1 is not None and p2 is not None:
+        escaped_raw = aij * (p1 + p2)
+        if density_floor is not None:
+            escaped = max(escaped_raw, density_floor)
+            density_floor_applied = density_floor > escaped_raw
+        else:
+            escaped = escaped_raw
+
+    photo = None
+    radiation_context_required = True
+    photo_status = "not_evaluated"
+    if wavelength_a is not None and wavelength_a > high_wavelength_cutoff_A:
+        photo = 0.0
+        radiation_context_required = False
+        photo_status = "evaluated_zero_xstar_high_wavelength_sentinel"
+    elif cover == 0.0:
+        photo = 0.0
+        radiation_context_required = False
+        photo_status = "evaluated_zero_full_covering_fraction"
+    elif flin is not None and wavelength_a is not None and bremsa is not None:
+        # The source forms sigma ~ 1/vtherm and then multiplies by vtherm;
+        # canceling those factors is algebraically exact and avoids introducing
+        # a diagnostic velocity when only the final rate is required.
+        photo = (
+            0.02655
+            * flin
+            * wavelength_a
+            * 1.0e-8
+            * bremsa
+            / XSTAR_C_LIGHT_CM_S
+            * flinabs
+            * cover
+        )
+        photo_status = "evaluated_with_explicit_bremsa_context"
+
+    missing: list[str] = []
+    if escaped is None:
+        if aij is None:
+            missing.append("A_s^-1")
+        if p1 is None:
+            missing.append("ptmp1")
+        if p2 is None:
+            missing.append("ptmp2")
+    if photo is None:
+        if flin is None:
+            missing.append("oscillator_strength")
+        if wavelength_a is None:
+            missing.append("wavelength_A")
+        if bremsa is None:
+            missing.append("bremsa_nb1")
+
+    status = "evaluated" if escaped is not None and photo is not None else "not_evaluated"
+    return {
+        "status": status,
+        "reason": "" if status == "evaluated" else "missing_context:" + ",".join(sorted(set(missing))),
+        "ans1_photoexcitation_s^-1": photo,
+        "ans2_escaped_decay_s^-1": escaped,
+        "escaped_decay_before_density_floor_s^-1": escaped_raw,
+        "hydrogen_density_xpx_cm^-3": xpx,
+        "density_floor_s^-1": density_floor,
+        "density_floor_applied": density_floor_applied,
+        "source_equivalent_density_floor_context": xpx is not None,
+        "source_equivalent_rate_context": status == "evaluated" and xpx is not None,
+        "aij_s^-1": aij,
+        "oscillator_strength": flin,
+        "wavelength_A": wavelength_a,
+        "energy_eV": energy_ev,
+        "ptmp1": p1,
+        "ptmp2": p2,
+        "ptmp_sum": (p1 + p2) if p1 is not None and p2 is not None else None,
+        "cfrac": cf,
+        "covering_multiplier": cover,
+        "bremsa_nb1": bremsa,
+        "flinabs_ptmp1": flinabs,
+        "photoexcitation_status": photo_status,
+        "radiation_context_required": radiation_context_required,
+        "source_formula": TYPE50_SOURCE_FORMULA,
+        "source_light_speed_cm_s": XSTAR_C_LIGHT_CM_S,
+        "source_high_wavelength_cutoff_A": high_wavelength_cutoff_A,
+    }

@@ -1035,3 +1035,34 @@ PYTHONPATH=src python examples/94_integrate_xstar_priority_native_type51.py \
   --out-dir xstar_priority_native_type51_integration_o7_v03205 \
   --print-summary
 ```
+
+### `95_audit_xstar_type50_type71_native_parity.py`
+
+Evaluate selected type-50 and type-71 records natively, compare both `ucalc` rate branches and every compact insertion with XSTAR, and classify selected-internal, fixed-external, and external-row terms. Type-50 pumping requires an explicit same-capture radiation context unless it is exactly zero.
+
+```bash
+PYTHONPATH=src python examples/95_audit_xstar_type50_type71_native_parity.py \
+  --priority-matrix-closure-audit xstar_priority_matrix_closure_o7_v03198_latest \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --out-dir xstar_type50_type71_native_parity_o7_v03206 \
+  --print-summary
+```
+
+For a partial-covering run, also supply a CSV containing `capture_index`, `record`, and `bremsa_nb1`:
+
+```bash
+  --type50-radiation-context-csv xstar_type50_same_capture_radiation.csv
+```
+
+### `96_integrate_xstar_priority_native_type50_type71.py`
+
+Replace every validated selected-row type-50/type-71 term after the native type-51 gate, including selected-to-external RHS contributions, then recompute row balance and the conditional solve while preserving all remaining families as explicitly probe-backed.
+
+```bash
+PYTHONPATH=src python examples/96_integrate_xstar_priority_native_type50_type71.py \
+  --priority-native-type51-integration-audit xstar_priority_native_type51_integration_o7_v03205 \
+  --type50-type71-native-parity-audit xstar_type50_type71_native_parity_o7_v03206 \
+  --out-dir xstar_priority_native_type50_type71_integration_o7_v03206 \
+  --print-summary
+```
+

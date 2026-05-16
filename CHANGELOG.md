@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.206 - 2026-05-16
+
+- Added `xstar_atomic.rates_type71`, a FITS-independent source-code translation of the XSTAR `calt71.f90` and `ucalc.f90` data-type 71 branches. It supports the single-point and log-density/log-temperature grid forms, XSTAR boundary conventions, the source-equivalent `calt71` density argument `den=xpx`, and the final `ans1=0`, `ans2=A*(ptmp1+ptmp2)` convention.
+- Extended `xstar_atomic.rates_type50` with `evaluate_type50_ucalc_record`, which evaluates escaped radiative decay from decoded ATDB `A`, `ptmp1`, and `ptmp2`, including the source floor `max(A*(ptmp1+ptmp2),1e-20*xpx)`, and evaluates post-swap photoexcitation only from an explicit same-capture `bremsa(nb1)` radiation value. Full covering and the XSTAR high-wavelength sentinel are handled as exact zero-pumping branches; no proxy continuum is accepted.
+- Added `xstar_atomic.xstar_type50_type71_native_parity` and `examples/95_audit_xstar_type50_type71_native_parity.py`. The audit decodes all selected type-50/type-71 records, compares native `ans1`/`ans2` with the XSTAR `ucalc` probes, reconstructs every compact insertion touching a selected endpoint, and separates selected-internal, fixed-external, and external-row-out-of-scope terms.
+- Added `xstar_atomic.xstar_priority_native_type50_type71_integration` and `examples/96_integrate_xstar_priority_native_type50_type71.py`. The integration gate starts from the validated v0.3.205 native-type-51 term table, replaces every validated selected-row type-50/type-71 coefficient, recomputes `A_SS`, `-A_SE x_E`, row balance, conditioning, and the fixed-external conditional solution, and preserves all remaining families as explicit probe-backed terms.
+- Type-50/type-71 readiness requires record parity, compact-term parity, complete one-to-one selected-row replacement, zero accidental use of external-row terms, full fixed-external RHS coverage for both families, a full-rank nonnegative solve, captured-row balance, population agreement, and negligible movement relative to the parent native-type-51 solution.
+- The production expanded compact-basis solver remains unchanged. Complete native compact closure remains false until exact live-radiation type 53 and the remaining minor families are integrated. The approximately 44 type-53 discrepancy remains unresolved and no empirical correction is applied.
+
 ## v0.3.205 - 2026-05-16
 
 - Corrected the v0.3.204 native type-51 integration readiness scope. The six-row conditional audit is defined by matrix terms whose compact **row** is selected; it must not require reciprocal terms that belong to external-row equations.

@@ -1272,3 +1272,10 @@ The implementation order is:
 5. expand to the full 607-row O-element basis and repeat for C V, Mg XI, and Ca XIX;
 6. port ionization/thermal closure, radial transfer, and output writers;
 7. move performance-critical kernels to a C++ backend while retaining Python as the transparent reference and validation layer.
+
+### v0.3.206 native type-50/type-71 parity and integration gate
+
+The next controlled gate follows the validated native type-51 selected system. `examples/95_audit_xstar_type50_type71_native_parity.py` evaluates type 50 and type 71 directly from ATDB records and the same XSTAR probe state, compares post-`ucalc` `ans1`/`ans2`, and reconstructs all compact insertions touching a selected endpoint. Type 71 uses the source-equivalent `calt71` density argument `den=xpx` and ports both `calt71` table forms. Type 50 evaluates escaped decay as `max(A*(ptmp1+ptmp2),1e-20*xpx)`; radiation pumping is evaluated only when the exact same-capture `bremsa(nb1)` value is supplied, except for exact-zero full-cover/high-wavelength-sentinel branches. No power-law or detail-file proxy is admitted.
+
+`examples/96_integrate_xstar_priority_native_type50_type71.py` consumes the v0.3.205 native-type-51 term table and the new parity manifest, replaces every validated type-50/type-71 term whose compact matrix row is selected, and recomputes the selected matrix, fixed-external RHS, row residuals, conditioning, and conditional populations. Readiness requires complete one-to-one replacement and native fixed-external coverage for both families. Other families remain explicitly probe-backed; therefore complete native compact closure and production-solver enablement remain false. Exact live-radiation type 53 is the next major target, and no empirical approximately-44 scaling is used.
+

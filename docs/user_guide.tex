@@ -1281,4 +1281,11 @@ The implementation order is:
 \item move performance-critical kernels to a C++ backend while retaining Python as the transparent reference and validation layer.
 \end{enumerate}
 
+
+\subsection{v0.3.206 native type-50/type-71 parity and integration gate}
+
+The next controlled gate follows the validated native type-51 selected system. \texttt{examples/95\_audit\_xstar\_type50\_type71\_native\_parity.py} evaluates type 50 and type 71 directly from ATDB records and the same XSTAR probe state, compares the post-\texttt{ucalc} \texttt{ans1}/\texttt{ans2} branches, and reconstructs all compact insertions touching a selected endpoint. Type 71 ports both \texttt{calt71} table forms and follows \texttt{ucalc.f90} by passing \texttt{den=xpx} directly; the legacy probe field \texttt{xnx} contains \texttt{xee} but is not multiplied into this branch. Type 50 evaluates escaped decay as $\max[A(\mathrm{ptmp1}+\mathrm{ptmp2}),10^{-20}xpx]$; radiation pumping is evaluated only when the exact same-capture \texttt{bremsa(nb1)} value is supplied, except for exact-zero full-cover or high-wavelength-sentinel branches. No proxy continuum is admitted.
+
+\texttt{examples/96\_integrate\_xstar\_priority\_native\_type50\_type71.py} consumes the v0.3.205 native-type-51 term table and the new parity manifest, replaces every validated type-50/type-71 term whose compact matrix row is selected, and recomputes the selected matrix, fixed-external right-hand side, row residuals, conditioning, and conditional populations. Readiness requires complete one-to-one replacement and native fixed-external coverage for both families. Other families remain explicitly probe-backed, so complete native compact closure and production-solver enablement remain false. Exact live-radiation type 53 is the next major target; no empirical factor of approximately 44 is used.
+
 \end{document}

@@ -929,3 +929,10 @@ Scientific references carried with the development review:
 - Kallman et al. (2004), *ApJS*, 155, 675.
 
 The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.205. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
+
+## 12.4. Native type-50/type-71 selected-system parity and integration (v0.3.206)
+
+The v0.3.206 parity audit evaluates type 50 and type 71 at the same captured XSTAR state used by the compact manifest. Type-50 escaped decay is reconstructed as `max(A*(ptmp1+ptmp2),1e-20*xpx)`. Post-swap photoexcitation is evaluated only from an explicit same-capture `bremsa(nb1)` value and is otherwise accepted only when the source branch is exactly zero from full covering or the high-wavelength sentinel. Type 71 ports `calt71.f90`, including single-point and log-density/log-temperature records, and applies `ans1=0`, `ans2=A*(ptmp1+ptmp2)` with the source density argument `den=xpx` (the probe `xnx` field still records `xee`).
+
+The integration stage starts from the v0.3.205 native-type-51 selected system. It replaces all validated type-50/type-71 coefficients in selected matrix rows, including selected-selected terms and fixed-external terms contributing to `-A_SE x_E`. The manifest retains reciprocal external-row insertions as out-of-scope coverage. Native readiness requires rate and matrix parity, one-use exact/unique structural matching, complete selected-row replacement, native fixed-external coverage for both families, preserved row balance, and a full-rank nonnegative conditional solution. Type 53 and minor families remain probe-backed, so this remains a controlled hybrid gate rather than production expanded-basis closure.
+

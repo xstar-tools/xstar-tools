@@ -1,12 +1,21 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.205"
+__version__ = "0.3.206"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
 from .context import LocalPlasmaState, RadiationField, EscapeContext, XSTARContext, context_from_values, context_from_xstar_run
-from .rates_type50 import RateEvaluation, evaluate_type50_bound_bound
+from .rates_type50 import RateEvaluation, evaluate_type50_bound_bound, evaluate_type50_ucalc_record
 from .rates_type51 import evaluate_type51_ucalc_record
+from .rates_type71 import evaluate_calt71_record, evaluate_type71_ucalc_record
+from .xstar_type50_type71_native_parity import (
+    build_type50_type71_native_parity_audit,
+    write_type50_type71_native_parity_audit,
+)
+from .xstar_priority_native_type50_type71_integration import (
+    build_priority_native_type50_type71_integration_audit,
+    write_priority_native_type50_type71_integration_audit,
+)
 from .audit import type50_line_pumping
 from .benchmark import (
     XSTARLocalTarget,
@@ -177,7 +186,14 @@ __all__ = [
     "context_from_xstar_run",
     "RateEvaluation",
     "evaluate_type50_bound_bound",
+    "evaluate_type50_ucalc_record",
     "evaluate_type51_ucalc_record",
+    "evaluate_calt71_record",
+    "evaluate_type71_ucalc_record",
+    "build_type50_type71_native_parity_audit",
+    "write_type50_type71_native_parity_audit",
+    "build_priority_native_type50_type71_integration_audit",
+    "write_priority_native_type50_type71_integration_audit",
     "type50_line_pumping",
     "XSTARLocalTarget",
     "XSTARBenchmarkComparison",
