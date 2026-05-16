@@ -1,5 +1,7 @@
 # XSTAR `atdb.fits` Python Reader Progress Report
 
+> **v0.3.207 update:** the native type-71 parity gate now follows the source-specific endpoint order: `idest1` is the lower spectroscopic destination and `idest2` is the upper superlevel source. The user-provided O VII v0.3.206 audit showed exact native/probed type-71 rates and matrix coefficients; only the reused type-50 endpoint validator caused the false failure. No rate formula or production solver behavior changed.
+
 > **v0.3.206 update:** `examples/95_audit_xstar_type50_type71_native_parity.py` adds source-code native parity for type 50 and type 71, and `examples/96_integrate_xstar_priority_native_type50_type71.py` replaces their validated selected-row coefficients after the v0.3.205 native-type-51 gate. Type-50 photoexcitation is accepted only from an explicit same-capture `bremsa(nb1)` context unless it is exactly zero from full covering or the XSTAR high-wavelength sentinel. The integration audit covers both selected-internal coefficients and fixed-external RHS terms, preserves all other families as probe-backed, and does not change the production expanded-basis solver.
 
 

@@ -327,7 +327,24 @@ def build_type50_type71_native_parity_audit(
         x1 = _as_float(probe.get("ans1"), 0.0) or 0.0
         x2 = _as_float(probe.get("ans2"), 0.0) or 0.0
         rel1, rel2 = _relative_difference(ans1_native, x1), _relative_difference(ans2_native, x2)
-        endpoint = lower == _as_int(probe.get("idest2"), None) and upper == _as_int(probe.get("idest1"), None)
+        xstar_idest1 = _as_int(probe.get("idest1"), None)
+        xstar_idest2 = _as_int(probe.get("idest2"), None)
+        if family == "type50_rate4":
+            # ucalc.f90 type 50 energy-orders the endpoints before returning:
+            # idest1 is the upper level and idest2 is the lower level.
+            endpoint = lower == xstar_idest2 and upper == xstar_idest1
+            idest1_role = "upper_level"
+            idest2_role = "lower_level"
+            endpoint_convention = "type50_post_energy_order: idest1=upper, idest2=lower"
+        else:
+            # ucalc.f90 type 71 returns the packed ATDB order unchanged:
+            # idest1 is the lower spectroscopic destination and idest2 is the
+            # upper superlevel source. calc_hmc_ion later derives llo/lup from
+            # the level energies for the universal matrix insertion path.
+            endpoint = lower == xstar_idest1 and upper == xstar_idest2
+            idest1_role = "lower_spectroscopic_destination"
+            idest2_role = "upper_superlevel_source"
+            endpoint_convention = "type71_packed_order: idest1=lower_spectroscopic, idest2=upper_superlevel"
         evaluated = native.get("status") == "evaluated"
         if family == "type50_rate4":
             evaluated = evaluated and bool(native.get("source_equivalent_rate_context"))
@@ -335,7 +352,12 @@ def build_type50_type71_native_parity_audit(
         record_rows.append({
             "family_key": family, "record": rec, "capture_index": probe.get("capture_index", ""),
             "jkk_ion": probe.get("jkk_ion", ""), "lower_level": lower or "", "upper_level": upper or "",
-            "xstar_idest1_upper": probe.get("idest1", ""), "xstar_idest2_lower": probe.get("idest2", ""),
+            "xstar_idest1": probe.get("idest1", ""), "xstar_idest2": probe.get("idest2", ""),
+            "xstar_idest1_role": idest1_role, "xstar_idest2_role": idest2_role,
+            "endpoint_order_convention": endpoint_convention,
+            # Compatibility columns retained only where their names are true.
+            "xstar_idest1_upper": probe.get("idest1", "") if family == "type50_rate4" else "",
+            "xstar_idest2_lower": probe.get("idest2", "") if family == "type50_rate4" else "",
             "endpoint_order_match": endpoint, "temperature_K": temperature,
             "probe_xpx_hydrogen_density_cm^-3": xpx,
             "probe_legacy_xnx_value_interpreted_as_xee": xee,
@@ -440,7 +462,7 @@ def build_type50_type71_native_parity_audit(
     type50_ready = readiness.get("type50_rate4", False)
     type71_ready = readiness.get("type71_rate14", False)
     summary = {
-        "audit_version": "v0.3.206",
+        "audit_version": "v0.3.207",
         "status": "type50_type71_native_parity_audit_completed",
         "ion": parent.get("ion", ""),
         "selected_basis_solve_call_id": parent.get("selected_basis_solve_call_id", ""),

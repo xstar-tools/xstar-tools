@@ -80,7 +80,7 @@ def _make_closure(root: Path, *, cfrac: float = 1.0, bremsa: float | None = None
         },
         {
             "capture_index": 12, "ml_data": 701, "ltyp": 71, "lrtyp": 14,
-            "jkk_ion": 31, "idest1": 4, "idest2": 3,
+            "jkk_ion": 31, "idest1": 3, "idest2": 4,
             "ans1": t71["ans1_upward_s^-1"],
             "ans2": t71["ans2_downward_s^-1"],
             "ptmp1": 0.25, "ptmp2": 0.75,
@@ -197,7 +197,7 @@ def test_native_type50_type71_parity_matches_synthetic_probe(tmp_path: Path) -> 
         relative_rate_tolerance=1.0e-12,
     )
     summary = audit["summary"]
-    assert summary["audit_version"] == "v0.3.206"
+    assert summary["audit_version"] == "v0.3.207"
     assert summary["n_type50_records_rate_parity_pass"] == 1
     assert summary["n_type71_records_rate_parity_pass"] == 1
     assert summary["n_type50_compact_matrix_terms_match"] == 5
@@ -209,6 +209,44 @@ def test_native_type50_type71_parity_matches_synthetic_probe(tmp_path: Path) -> 
     paths = write_type50_type71_native_parity_audit(tmp_path / "out", audit)
     assert all(Path(path).exists() for path in paths.values())
 
+
+
+def test_type71_uses_packed_endpoint_order_not_type50_order(tmp_path: Path) -> None:
+    closure = tmp_path / "closure"
+    _make_closure(closure)
+    audit = build_type50_type71_native_parity_audit(
+        priority_matrix_closure_audit=closure,
+        decoded_type50_rows=[_type50_decoded()],
+        decoded_type71_rows=[_type71_decoded()],
+        relative_rate_tolerance=1.0e-12,
+    )
+    row = next(r for r in audit["record_rows"] if r["family_key"] == "type71_rate14")
+    assert row["lower_level"] == 3
+    assert row["upper_level"] == 4
+    assert int(row["xstar_idest1"]) == 3
+    assert int(row["xstar_idest2"]) == 4
+    assert row["xstar_idest1_role"] == "lower_spectroscopic_destination"
+    assert row["xstar_idest2_role"] == "upper_superlevel_source"
+    assert row["endpoint_order_match"] is True
+    assert row["record_parity_status"] == "pass"
+
+    # Reversing the probe endpoints is a real parity failure for type 71.
+    ucalc_path = closure / "xstar_priority_matrix_closure_audit_ucalc_records.csv"
+    rows = list(csv.DictReader(ucalc_path.open(newline="", encoding="utf-8")))
+    for probe in rows:
+        if int(probe["ltyp"]) == 71:
+            probe["idest1"], probe["idest2"] = probe["idest2"], probe["idest1"]
+    _write_csv(ucalc_path, rows)
+    failed = build_type50_type71_native_parity_audit(
+        priority_matrix_closure_audit=closure,
+        decoded_type50_rows=[_type50_decoded()],
+        decoded_type71_rows=[_type71_decoded()],
+        relative_rate_tolerance=1.0e-12,
+    )
+    failed_row = next(r for r in failed["record_rows"] if r["family_key"] == "type71_rate14")
+    assert failed_row["endpoint_order_match"] is False
+    assert failed_row["record_parity_status"] == "differs"
+    assert failed["summary"]["native_type71_selected_system_parity_ready"] is False
 
 def test_native_type50_parity_requires_explicit_radiation_when_not_full_cover(tmp_path: Path) -> None:
     closure = tmp_path / "closure"

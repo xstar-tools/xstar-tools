@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.207 - 2026-05-16
+
+- Corrected the type-71 endpoint-order validator in `xstar_type50_type71_native_parity.py`. XSTAR `ucalc.f90` type 71 returns the packed ATDB order `idest1=lower spectroscopic destination`, `idest2=upper superlevel source`; `calc_hmc_ion.f90` later derives `llo/lup` from level energies. The v0.3.206 audit incorrectly reused the type-50 convention `idest1=upper`, `idest2=lower`.
+- The user-provided O VII v0.3.206 products showed that all three type-71 native rates and all nine native matrix coefficients already matched XSTAR exactly. Only `endpoint_order_match=False` blocked record and matrix readiness.
+- Added family-neutral endpoint provenance columns `xstar_idest1`, `xstar_idest2`, `xstar_idest1_role`, `xstar_idest2_role`, and `endpoint_order_convention`. The legacy `xstar_idest1_upper` and `xstar_idest2_lower` columns are now populated only for type 50.
+- Added a regression test using the real source convention and a negative test proving that reversed type-71 endpoints fail parity.
+- No native rate formula, compact coefficient, production solver behavior, or type-53 treatment changed. After rerunning examples 95 and 96, the expected next milestone is native type-50/type-71 selected-system integration readiness, followed by exact live-radiation type 53.
+
 ## v0.3.206 - 2026-05-16
 
 - Added `xstar_atomic.rates_type71`, a FITS-independent source-code translation of the XSTAR `calt71.f90` and `ucalc.f90` data-type 71 branches. It supports the single-point and log-density/log-temperature grid forms, XSTAR boundary conventions, the source-equivalent `calt71` density argument `den=xpx`, and the final `ans1=0`, `ans2=A*(ptmp1+ptmp2)` convention.

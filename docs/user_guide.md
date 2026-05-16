@@ -1279,3 +1279,7 @@ The next controlled gate follows the validated native type-51 selected system. `
 
 `examples/96_integrate_xstar_priority_native_type50_type71.py` consumes the v0.3.205 native-type-51 term table and the new parity manifest, replaces every validated type-50/type-71 term whose compact matrix row is selected, and recomputes the selected matrix, fixed-external RHS, row residuals, conditioning, and conditional populations. Readiness requires complete one-to-one replacement and native fixed-external coverage for both families. Other families remain explicitly probe-backed; therefore complete native compact closure and production-solver enablement remain false. Exact live-radiation type 53 is the next major target, and no empirical approximately-44 scaling is used.
 
+
+### v0.3.207 type-71 endpoint-order correction
+
+The real O VII v0.3.206 audit demonstrated exact native/probed type-71 `ans1`, `ans2`, and compact coefficients, but the record gate rejected all three records because it reused the type-50 endpoint rule. XSTAR type 71 preserves the packed record order: `idest1` is the lower spectroscopic destination and `idest2` is the upper superlevel source. `calc_hmc_ion.f90` subsequently derives the lower/upper matrix endpoints from the level energies. v0.3.207 applies this family-specific convention and records explicit endpoint roles in the parity table. Type-50 endpoint handling and all rate formulas are unchanged.

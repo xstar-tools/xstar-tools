@@ -928,7 +928,7 @@ Scientific references carried with the development review:
 - Bautista & Kallman (2001), *ApJS*, 134, 139.
 - Kallman et al. (2004), *ApJS*, 155, 675.
 
-The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.205. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
+The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.207. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
 
 ## 12.4. Native type-50/type-71 selected-system parity and integration (v0.3.206)
 
@@ -936,3 +936,7 @@ The v0.3.206 parity audit evaluates type 50 and type 71 at the same captured XST
 
 The integration stage starts from the v0.3.205 native-type-51 selected system. It replaces all validated type-50/type-71 coefficients in selected matrix rows, including selected-selected terms and fixed-external terms contributing to `-A_SE x_E`. The manifest retains reciprocal external-row insertions as out-of-scope coverage. Native readiness requires rate and matrix parity, one-use exact/unique structural matching, complete selected-row replacement, native fixed-external coverage for both families, preserved row balance, and a full-rank nonnegative conditional solution. Type 53 and minor families remain probe-backed, so this remains a controlled hybrid gate rather than production expanded-basis closure.
 
+
+## 12.5. Type-71 endpoint-order correction (v0.3.207)
+
+The O VII v0.3.206 parity products showed exact agreement for all three type-71 rate pairs and all nine compact coefficients, but the records were rejected by an endpoint validator shared with type 50. The source conventions differ. Type 50 energy-orders its endpoints inside `ucalc.f90` and returns `idest1=upper`, `idest2=lower`. Type 71 reads the packed ATDB order unchanged and returns `idest1=lower spectroscopic destination`, `idest2=upper superlevel source`; `calc_hmc_ion.f90` then derives `llo/lup` from the level energies before matrix insertion. v0.3.207 uses the family-specific rule and adds explicit endpoint-role provenance. No type-71 interpolation, rate, or matrix formula changed.

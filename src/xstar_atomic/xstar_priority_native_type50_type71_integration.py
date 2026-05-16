@@ -549,7 +549,7 @@ def build_priority_native_type50_type71_integration_audit(
     remaining_probe = sum(1 for r in replacement_rows if not str(r["coefficient_provenance"]).startswith("native_type"))
 
     summary = {
-        "audit_version": "v0.3.206",
+        "audit_version": "v0.3.207",
         "status": "priority_native_type50_type71_integration_completed",
         "ion": parent_summary.get("ion", parity_summary.get("ion", "")),
         "selected_basis_solve_call_id": parent_summary.get("selected_basis_solve_call_id", parity_summary.get("selected_basis_solve_call_id", "")),
