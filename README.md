@@ -1,7 +1,7 @@
 # xstar-atomic
 
-Latest local development note: v0.3.195 activates the smallest high-population subset of missing XSTAR compact-basis rows required for a requested population-coverage target while preserving shared parent-continuum aliases.
-Latest package note: **v0.3.195** adds `examples/88_expand_xstar_priority_element_basis.py`. For the O VII solve-call 219 scaffold, the default 99.9999% target activates rows `293,241,244,242,80,79`, increasing represented solved-population coverage to about 0.999999946 without yet changing default solver physics.
+Latest local development note: v0.3.196 derives an exact compact-matrix closure manifest for the staged high-population basis rows from the raw XSTAR `ucalc` and `calc_hmc_ion` probes.
+Latest package note: **v0.3.196** adds `examples/89_audit_xstar_priority_matrix_closure.py`, preserving shared parent-continuum aliases while mapping every selected Fortran matrix insertion into compact `ipmat2` coordinates.
 
 Latest local development note: v0.3.194 converts the exact XSTAR compact element topology into a full 607-row Python basis scaffold with explicit mapped rows, shared aliases, missing-row priorities, and population-closure tiers.
 Latest package note: **v0.3.194** adds `examples/87_build_xstar_full_element_basis_scaffold.py`. It consumes the v0.3.193 remap audit, assigns deterministic placeholder indices for missing XSTAR rows, and prepares staged full-element basis expansion without changing default solver physics.

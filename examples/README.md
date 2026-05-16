@@ -643,3 +643,7 @@ PYTHONPATH=src python examples/63_audit_xstar_triplet_rate_terms.py \
 ### `86_audit_xstar_element_basis_remap.py`
 
 Reconstructs a selected XSTAR compact element basis from the direct basis probe and remaps Python population rows by physical ion/local-level identity, including parent-continuum aliases.
+
+### `89_audit_xstar_priority_matrix_closure.py`
+
+Builds a source-code-derived compact matrix-closure manifest for the priority rows activated by example 88. It selects a common XSTAR `ucalc` occurrence rank, joins the corresponding four `calc_hmc_ion` matrix insertions, preserves shared parent-continuum aliases, and reports the exact rate families and counterpart compact rows required for native closure.
