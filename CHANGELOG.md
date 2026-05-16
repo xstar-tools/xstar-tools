@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.3.193 - 2026-05-15
+
+- Added `xstar_atomic.xstar_element_basis_remap`.
+- Added `examples/86_audit_xstar_element_basis_remap.py`.
+- Reconstructs each selected XSTAR element solve as unique compact `ipmat2` rows while retaining duplicate parent-continuum/final-slot roles as explicit aliases.
+- Remaps preserved Python population rows by `(ion_stage, level_index) -> (nionp_current, local_level_index)` instead of sequential `global_index + 1`.
+- Writes exact basis rows, ion blocks, XSTAR role aliases, Python remap rows, Python alias groups, unmapped rows, and unrepresented XSTAR basis rows.
+- Optionally joins the paired post-`msolvelucy` population probe to quantify solved-population coverage after the corrected remap.
+- Diagnostic only; no default solver physics or matrix assembly changed.
+
 ## v0.3.192 - 2026-05-15
 
 - Added `xstar_atomic.xstar_element_basis_probe` and `examples/85_prepare_xstar_element_basis_probe.py`.

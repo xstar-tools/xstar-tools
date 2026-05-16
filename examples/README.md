@@ -639,3 +639,7 @@ PYTHONPATH=src python examples/63_audit_xstar_triplet_rate_terms.py \
   --out-dir xstar_triplet_rate_term_audit_o7_type63_v03158 \
   --print-summary
 ```
+
+### `86_audit_xstar_element_basis_remap.py`
+
+Reconstructs a selected XSTAR compact element basis from the direct basis probe and remaps Python population rows by physical ion/local-level identity, including parent-continuum aliases.
