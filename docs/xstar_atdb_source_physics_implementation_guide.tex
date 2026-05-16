@@ -1645,6 +1645,19 @@ n_e=xpx\,xee.
 \]
 The v0.3.203 audit compares the native record rates and the four compact matrix insertions with the same XSTAR capture before enabling type-51 terms in the active compact solver.
 
+\subsection{12.3. Native type-51 selected-system integration gate (v0.3.204)}
+
+The v0.3.204 audit consumes the validated v0.3.199 record-term and population products together with the v0.3.203 native type-51 coefficients. For every compact term touching a selected row, it forms
+\begin{equation}
+A^{\mathrm{hybrid}}_{ij}=\begin{cases}
+A^{\mathrm{native,51}}_{ij}, & \text{type 51},\\
+A^{\mathrm{probe}}_{ij}, & \text{all other families}.
+\end{cases}
+\end{equation}
+The replacement is applied wherever type 51 enters either the selected block $A_{SS}$ or the fixed-external closure $-A_{SE}x_E$. The all-probe and hybrid systems are reconstructed independently, their captured-population row residuals are compared, and both selected systems are solved.
+
+The integration-ready flag requires exact one-use replacement of every selected-system type-51 term, coverage of every selected row, no missing population columns, a full-rank nonnegative solve, row-balance and population agreement within tolerance, and machine-level linear residuals. Type 50, type 71, type 53, and smaller families remain probe-backed, so complete native compact closure remains false and the production expanded-basis solver is unchanged.
+
 \subsection{13. Validation policy}\label{validation-policy}
 
 A feature becomes a production default only after passing all applicable

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.3.204 - 2026-05-16
+
+- Added `xstar_atomic.xstar_priority_native_type51_integration` and `examples/94_integrate_xstar_priority_native_type51.py`.
+- The new controlled integration audit consumes the v0.3.199 priority matrix-balance products together with the validated v0.3.203 native type-51 parity products. It replaces every matching type-51 compact matrix term touching a selected row, including selected-selected internal terms and selected-external terms contributing to `-A_SE x_E`.
+- Added exact capture-key matching with a unique structural fallback, one-use-only native-term accounting, duplicate-key detection, unused-parity-term detection, missing-population detection, and explicit failure when any type-51 insertion is unmatched.
+- Reconstructs both the original all-probe system and the hybrid native-type-51/probe-other-family system, then compares aggregated compact entries, captured-population row residuals, external RHS values, matrix rank/conditioning, conditional populations, and linear residuals.
+- Readiness requires complete replacement coverage, all selected rows touched by native type 51, a full-rank nonnegative hybrid solve, all selected rows within the population and row-balance tolerances, and negligible population movement relative to the all-probe reference.
+- All non-type-51 families remain explicitly probe-backed, `native_priority_subset_matrix_closure_ready` remains false, and the production expanded compact-basis solver is unchanged. The next target is native type-50/type-71 external RHS closure, followed by exact live-radiation type 53 without an empirical approximately 44 factor.
+- Removed the machine-specific root `datapath` file from the source/distribution manifest and added it to `.gitignore`. Runtime datapath creation remains supported, but release archives no longer embed a developer-local absolute ATDB path.
+- Restored direct raw-record type-50 audit compatibility: rows carrying `data_type=50` and `rate_type=4` are recognized as radiative transitions even when the derived `kind="radiative_decay"` field is absent. This prevents valid explicit radiation-grid pumping audits from falling back to `not_type50_radiative_transition`.
+
 ## v0.3.203 - 2026-05-16
 
 - Added `xstar_atomic.rates_type51`, a FITS-independent source-code translation of the XSTAR `ucalc.f90` data-type 51 branch, including the original five-point and general nine-point Burgess--Tully spline paths, the wavelength-dependent BT temperature floor, the ATDB transition-energy convention, detailed balance, and density-scaled `ans1`/`ans2`.

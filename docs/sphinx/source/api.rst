@@ -198,3 +198,11 @@ XSTAR detail-state readers and type-50 audits
    :members:
    :undoc-members:
    :show-inheritance:
+
+Priority native type-51 integration audit
+-----------------------------------------
+
+.. automodule:: xstar_atomic.xstar_priority_native_type51_integration
+   :members:
+   :undoc-members:
+   :show-inheritance:

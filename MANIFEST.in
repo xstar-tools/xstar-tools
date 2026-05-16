@@ -8,7 +8,5 @@ recursive-include tests/data *.csv
 recursive-include examples/reference_outputs *.csv *.json
 recursive-include xstar_test_run *
 
-include datapath
 
-recursive-include data *
 include docs/helike_reproduction_source_code_diagnosis.md

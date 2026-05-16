@@ -1,5 +1,7 @@
 # XSTAR `atdb.fits` Python Reader Progress Report
 
+> **v0.3.204 update:** `examples/94_integrate_xstar_priority_native_type51.py` consumes the v0.3.199 matrix-balance product and the v0.3.203 native type-51 parity product, replaces all matching type-51 terms touching the selected compact rows, and reruns row balance plus the conditional solve. Non-type-51 families remain explicitly probe-backed; this is an integration gate rather than the production expanded-basis solver.
+
 ## 1. Project goal
 
 The goal is to develop a Python reader for the large XSTAR atomic database FITS file:

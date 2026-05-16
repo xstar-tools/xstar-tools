@@ -4591,7 +4591,20 @@ def _infer_transition_data_type(row: Mapping[str, object]) -> Optional[int]:
 
 
 def _is_type50_radiative_transition(row: Mapping[str, object]) -> bool:
-    return str(row.get("kind") or row.get("transition_kind") or "") == "radiative_decay" and _infer_transition_data_type(row) == 50
+    """Return whether *row* represents an ATDB type-50 radiative line.
+
+    Fully assembled transition logs carry ``kind="radiative_decay"``.  Raw
+    audit/API rows may instead expose only the source identifiers
+    ``data_type=50`` and ``rate_type=4``.  Accept both representations so the
+    source-code type-50 evaluator does not silently fall back to raw-A behavior
+    merely because a derived transition label has not yet been attached.
+    """
+    if _infer_transition_data_type(row) != 50:
+        return False
+    kind = str(row.get("kind") or row.get("transition_kind") or "").strip().lower()
+    if kind:
+        return kind == "radiative_decay"
+    return maybe_int(row.get("rate_type")) == 4
 
 
 def _first_finite_float(row: Mapping[str, object], names: Sequence[str]) -> Optional[float]:
@@ -4802,7 +4815,10 @@ def _xstar_nbinc_index(energy_eV: float, epi_grid: Sequence[float]) -> tuple[Opt
         return None, None
     e = float(energy_eV)
     n = len(epi_grid)
-    n_guard = max(2, n // 50)
+    # The final XSTAR ``ncn/50`` bins are production-grid guard bins.
+    # Tiny explicit diagnostic grids do not contain that reserved tail; applying
+    # the production guard rule to them can remove every useful interval.
+    n_guard = max(2, n // 50) if n >= 50 else 0
     n_search = max(1, n - n_guard)
     if e <= float(epi_grid[0]):
         return 0, 1

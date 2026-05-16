@@ -683,3 +683,355 @@ PYTHONPATH=src python examples/92_audit_xstar_priority_native_readiness.py \
   --out-dir xstar_priority_native_readiness_o7_v03202 \
   --print-summary
 ```
+
+## Advanced XSTAR source-parity and compact-basis audits
+
+### `64_audit_xstar_type71_cascade_rates.py`
+
+Audit type-71 cascade terms and their compact/full-global matrix placement.
+
+```bash
+PYTHONPATH=src python examples/64_audit_xstar_type71_cascade_rates.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --triplet-only \
+  --out-dir xstar_type71_cascade_rate_audit_o7 \
+  --print-summary
+```
+
+### `65_audit_xstar_type68_collision_rates.py`
+
+Audit type-68 He-like collision terms and their matrix partners.
+
+```bash
+PYTHONPATH=src python examples/65_audit_xstar_type68_collision_rates.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --triplet-only \
+  --out-dir xstar_type68_collision_rate_audit_o7 \
+  --print-summary
+```
+
+### `66_audit_xstar_type53_source_sink_rates.py`
+
+Audit type-53 photoionization/recombination source-sink topology in the preserved matrix.
+
+```bash
+PYTHONPATH=src python examples/66_audit_xstar_type53_source_sink_rates.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --triplet-only \
+  --out-dir xstar_type53_source_sink_rate_audit_o7 \
+  --print-summary
+```
+
+### `67_audit_xstar_type53_detail_phint53_radiation.py`
+
+Recompute type-53 `phint53` rates from an XSTAR detail-continuum state and compare them with preserved matrix terms.
+
+```bash
+PYTHONPATH=src python examples/67_audit_xstar_type53_detail_phint53_radiation.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --out-dir xstar_type53_detail_phint53_radiation_o7 \
+  --print-summary
+```
+
+### `68_audit_xstar_type53_detail_phint53_scale.py`
+
+Determine whether the type-53 matrix/detail discrepancy is approximately scale-like or strongly record-dependent.
+
+```bash
+PYTHONPATH=src python examples/68_audit_xstar_type53_detail_phint53_scale.py \
+  --phint53-audit-dir xstar_type53_detail_phint53_radiation_o7 \
+  --out-dir xstar_type53_detail_phint53_scale_o7 \
+  --print-summary
+```
+
+### `69_audit_xstar_type53_detail_phint53_bremsa_variants.py`
+
+Compare several available detail-continuum reconstructions for the type-53 `phint53` integral.
+
+```bash
+PYTHONPATH=src python examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --run-dir xstar_runs/helike_type69/o7_ne1e8 \
+  --ion "O VII" \
+  --fast \
+  --out-dir xstar_type53_detail_phint53_bremsa_variants_o7 \
+  --print-summary
+```
+
+### `70_audit_xstar_live_bremsa_source_path.py`
+
+Trace the XSTAR source path that constructs the live high-resolution `bremsa` radiation field.
+
+```bash
+PYTHONPATH=src python examples/70_audit_xstar_live_bremsa_source_path.py \
+  --xstar-source-root /path/to/xstar/xstar \
+  --out-dir xstar_live_bremsa_source_path_audit_v03168 \
+  --print-summary
+```
+
+### `71_audit_xstar_live_rate_grid_bremsa_path.py`
+
+Trace the `bremsmap` path from the live transfer field to `epim`, `bremsam`, and `bremsint` used by `ucalc`.
+
+```bash
+PYTHONPATH=src python examples/71_audit_xstar_live_rate_grid_bremsa_path.py \
+  --xstar-source-root /path/to/xstar/xstar \
+  --out-dir xstar_live_rate_grid_bremsa_path_audit_v03169 \
+  --print-summary
+```
+
+### `72_prepare_xstar_live_rate_grid_probe.py`
+
+Write or validate the schema and helper products for an instrumented XSTAR live-rate-grid probe.
+
+```bash
+PYTHONPATH=src python examples/72_prepare_xstar_live_rate_grid_probe.py \
+  --out-dir xstar_live_rate_grid_probe_v03170 \
+  --print-summary
+```
+
+### `73_prepare_xstar_live_rate_grid_probe_patch.py`
+
+Prepare source insertion snippets for capturing the live XSTAR rate grid after `bremsmap`.
+
+```bash
+PYTHONPATH=src python examples/73_prepare_xstar_live_rate_grid_probe_patch.py \
+  --xstar-source-root /path/to/xstar/xstar \
+  --out-dir xstar_live_rate_grid_probe_patch_v03171 \
+  --print-summary
+```
+
+### `74_audit_xstar_type53_live_bremsam_phint53.py`
+
+Recompute type-53 `phint53` rates from a captured live `epim`/`bremsam`/`bremsint` state.
+
+```bash
+PYTHONPATH=src python examples/74_audit_xstar_type53_live_bremsam_phint53.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --ion "O VII" \
+  --out-dir xstar_type53_live_bremsam_phint53_o7 \
+  --print-summary
+```
+
+### `75_audit_xstar_type53_live_bremsam_matrix_replacement.py`
+
+Replace preserved type-53 matrix terms with live-rate-grid `phint53` results and compare the re-solved populations.
+
+```bash
+PYTHONPATH=src python examples/75_audit_xstar_type53_live_bremsam_matrix_replacement.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --live-phint53-audit-csv xstar_type53_live_bremsam_phint53_o7 \
+  --out-dir xstar_type53_live_bremsam_matrix_replacement_o7 \
+  --print-summary
+```
+
+### `76_audit_xstar_source_code_equivalent_local_closure.py`
+
+Inventory remaining source-code-equivalent local matrix, population, parent, and superlevel closure requirements.
+
+```bash
+PYTHONPATH=src python examples/76_audit_xstar_source_code_equivalent_local_closure.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --xstar-source-root /path/to/xstar/xstar \
+  --out-dir xstar_source_code_equivalent_local_closure_o7 \
+  --print-summary
+```
+
+### `77_prepare_xstar_full_parity_probes.py`
+
+Prepare or validate the direct `ucalc` record and `calc_hmc_ion` matrix-insertion probes.
+
+```bash
+PYTHONPATH=src python examples/77_prepare_xstar_full_parity_probes.py \
+  --xstar-source-root /path/to/xstar/xstar \
+  --out-dir xstar_full_parity_probe_o7 \
+  --print-summary
+```
+
+### `78_audit_xstar_record_level_matrix_parity.py`
+
+Join preserved Python matrix terms to direct XSTAR `ucalc` and matrix-insertion captures at a selected occurrence.
+
+```bash
+PYTHONPATH=src python examples/78_audit_xstar_record_level_matrix_parity.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --ucalc-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_ucalc_record_probe.csv \
+  --matrix-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_calc_hmc_ion_matrix_probe.csv \
+  --selection occurrence-rank \
+  --occurrence-rank 73 \
+  --out-dir xstar_record_level_matrix_parity_audit_o7_v03183_rank73 \
+  --print-summary
+```
+
+### `79_audit_xstar_record_level_ucalc_matrix_replay.py`
+
+Replay selected exact XSTAR `ucalc` branches into the preserved matrix and optionally re-solve it.
+
+```bash
+PYTHONPATH=src python examples/79_audit_xstar_record_level_ucalc_matrix_replay.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --record-level-audit-csv xstar_record_level_matrix_parity_audit_o7_v03183_rank73 \
+  --replacement-mode blockers \
+  --run-solver \
+  --out-dir xstar_record_level_ucalc_matrix_replay_o7 \
+  --print-summary
+```
+
+### `80_scan_xstar_record_level_ucalc_replay_families.py`
+
+Replay one rate family at a time and rank each family by its effect on the solved populations.
+
+```bash
+PYTHONPATH=src python examples/80_scan_xstar_record_level_ucalc_replay_families.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --record-level-audit-csv xstar_record_level_matrix_parity_audit_o7_v03183_rank73 \
+  --run-solver \
+  --out-dir xstar_record_level_ucalc_replay_family_scan_o7 \
+  --print-summary
+```
+
+### `81_diagnose_xstar_population_closure_from_replay_scan.py`
+
+Use the family-replay scan to decide whether remaining differences are dominated by rates or by population/source closure.
+
+```bash
+PYTHONPATH=src python examples/81_diagnose_xstar_population_closure_from_replay_scan.py \
+  --family-scan-csv xstar_record_level_ucalc_replay_family_scan_o7 \
+  --ion "O VII" \
+  --out-dir xstar_population_closure_diagnosis_o7 \
+  --print-summary
+```
+
+### `82_prepare_xstar_population_closure_probe.py`
+
+Prepare or validate direct pre/post-`msolvelucy` population-vector probe products.
+
+```bash
+PYTHONPATH=src python examples/82_prepare_xstar_population_closure_probe.py \
+  --population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --out-dir xstar_population_closure_probe_o7_v03189_validated \
+  --print-summary
+```
+
+### `83_audit_xstar_population_closure_parity.py`
+
+Compare the captured XSTAR compact population vector with preserved Python population rows.
+
+```bash
+PYTHONPATH=src python examples/83_audit_xstar_population_closure_parity.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --occurrence-rank 73 \
+  --out-dir xstar_population_closure_parity_audit_o7_v03190_rank73 \
+  --print-summary
+```
+
+### `84_diagnose_xstar_population_basis_mapping.py`
+
+Rank the XSTAR compact rows missing from the then-current Python basis and diagnose incorrect sequential mapping.
+
+```bash
+PYTHONPATH=src python examples/84_diagnose_xstar_population_basis_mapping.py \
+  --population-closure-parity-audit xstar_population_closure_parity_audit_o7_v03190_rank73 \
+  --out-dir xstar_population_basis_mapping_o7_v03191 \
+  --print-summary
+```
+
+### `85_prepare_xstar_element_basis_probe.py`
+
+Prepare or validate direct `calc_hmc_element` compact-basis topology probes.
+
+```bash
+PYTHONPATH=src python examples/85_prepare_xstar_element_basis_probe.py \
+  --element-basis-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_element_basis_probe.csv \
+  --out-dir xstar_element_basis_probe_o7_v03192_validated \
+  --print-summary
+```
+
+### `86_audit_xstar_element_basis_remap.py`
+
+Reconstruct the exact compact element basis and remap Python rows by physical ion/local-level identity.
+
+```bash
+PYTHONPATH=src python examples/86_audit_xstar_element_basis_remap.py \
+  --benchmark-dir helike_local_reproduction_suite_solver_v03156 \
+  --ion "O VII" \
+  --element-basis-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_element_basis_probe.csv \
+  --population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --basis-solve-call-id 219 \
+  --out-dir xstar_element_basis_remap_audit_o7_v03193 \
+  --print-summary
+```
+
+### `87_build_xstar_full_element_basis_scaffold.py`
+
+Create an explicit full compact-element scaffold and population-ranked missing-row priorities.
+
+```bash
+PYTHONPATH=src python examples/87_build_xstar_full_element_basis_scaffold.py \
+  --element-basis-remap-audit xstar_element_basis_remap_audit_o7_v03193 \
+  --out-dir xstar_full_element_basis_scaffold_o7_v03194 \
+  --print-summary
+```
+
+### `88_expand_xstar_priority_element_basis.py`
+
+Activate the smallest missing-row subset needed to reach a requested captured-population coverage.
+
+```bash
+PYTHONPATH=src python examples/88_expand_xstar_priority_element_basis.py \
+  --full-element-basis-scaffold xstar_full_element_basis_scaffold_o7_v03194 \
+  --target-population-coverage 0.999999 \
+  --out-dir xstar_priority_basis_expansion_o7_v03195 \
+  --print-summary
+```
+
+### `89_audit_xstar_priority_matrix_closure.py`
+
+Build the complete direct-Fortran matrix manifest touching the activated compact rows.
+
+```bash
+PYTHONPATH=src python examples/89_audit_xstar_priority_matrix_closure.py \
+  --priority-basis-expansion xstar_priority_basis_expansion_o7_v03195 \
+  --ucalc-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_ucalc_record_probe.csv \
+  --matrix-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_calc_hmc_ion_matrix_probe.csv \
+  --occurrence-rank -1 \
+  --out-dir xstar_priority_matrix_closure_o7_v03198_latest \
+  --print-summary
+```
+
+### `93_audit_xstar_type51_native_parity.py`
+
+Evaluate selected type-51 records natively and compare `ans1`, `ans2`, and every compact insertion with XSTAR.
+
+```bash
+PYTHONPATH=src python examples/93_audit_xstar_type51_native_parity.py \
+  --priority-matrix-closure-audit xstar_priority_matrix_closure_o7_v03198_latest \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --out-dir xstar_type51_native_parity_o7_v03203 \
+  --print-summary
+```
+
+### `94_integrate_xstar_priority_native_type51.py`
+
+Replace every validated type-51 term touching the selected rows and rerun row balance plus the conditional solve while retaining explicit probe-backed coefficients for all other families.
+
+```bash
+PYTHONPATH=src python examples/94_integrate_xstar_priority_native_type51.py \
+  --priority-matrix-balance-audit xstar_priority_matrix_balance_o7_v03199 \
+  --type51-native-parity-audit xstar_type51_native_parity_o7_v03203 \
+  --out-dir xstar_priority_native_type51_integration_o7_v03204 \
+  --print-summary
+```

@@ -1,14 +1,14 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.3.203"
+version = "0.3.204"
 description = "Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
   {name = "Ashkbiz Danehkar"}
 ]

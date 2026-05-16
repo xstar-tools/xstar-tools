@@ -263,7 +263,10 @@ def xstar_nbinc_index(energy_eV: float, epi_grid: Sequence[float]) -> tuple[Opti
         return None, None
     e = float(energy_eV)
     n = len(epi_grid)
-    n_guard = max(2, n // 50)
+    # The final XSTAR ``ncn/50`` bins are production-grid guard bins.
+    # Tiny explicit diagnostic grids do not contain that reserved tail; applying
+    # the production guard rule to them can remove every useful interval.
+    n_guard = max(2, n // 50) if n >= 50 else 0
     n_search = max(1, n - n_guard)
     if e <= float(epi_grid[0]):
         return 0, 1
