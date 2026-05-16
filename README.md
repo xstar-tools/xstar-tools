@@ -1,3 +1,7 @@
+# xstar-atomic
+
+Latest local development note: v0.3.192 adds the XSTAR element-basis mapping probe (`examples/85_prepare_xstar_element_basis_probe.py`) for direct `calc_hmc_element.f90` `ipmat2` row-topology capture.
+
 Latest package note: **v0.3.191** adds `examples/84_diagnose_xstar_population_basis_mapping.py`, which consumes the population-closure parity audit and diagnoses the XSTAR element-basis mapping gap. For the O VII rank-73 probe, only ~2.6e-6 of the solved XSTAR population lies on current Python-mapped rows; the dominant population is in unmapped XSTAR `ipmat2`/`nion`/`nsup` blocks. This identifies XSTAR element-basis mapping and parent/superlevel closure, not isolated rate formulas, as the next implementation target. No default solver physics changed.
 
 Latest package note: **v0.3.190** adds a population/source-closure parity audit for the validated `xstar_population_closure_probe.csv`. The new `examples/83_audit_xstar_population_closure_parity.py` selects an XSTAR element solve occurrence, compares the post-`msolvelucy` population vector against preserved Python solver population products, and reports overlap rows plus XSTAR `ipmat2` rows missing from the current Python local basis. No default solver physics changed.
