@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.208 - 2026-05-16
+
+- Added exact live-radiation type-53 state, `phint53`/`ucalc` evaluator, record/matrix parity gate, and selected-system integration gate.
+- Added examples 97 and 98, focused tests, and independent standalone-Fortran numerical verification.
+- Preserved the current-ion continuum statistical weight in `rnist` for excited-parent type-53 records.
+- Added explicit live-state provenance checks and separate readiness for rate, heating/cooling, compact matrix, external RHS, and opacity/RRC channels.
+- No empirical approximately-44 scale and no production-solver behavior change.
+
 ## v0.3.207 - 2026-05-16
 
 - Corrected the type-71 endpoint-order validator in `xstar_type50_type71_native_parity.py`. XSTAR `ucalc.f90` type 71 returns the packed ATDB order `idest1=lower spectroscopic destination`, `idest2=upper superlevel source`; `calc_hmc_ion.f90` later derives `llo/lup` from level energies. The v0.3.206 audit incorrectly reused the type-50 convention `idest1=upper`, `idest2=lower`.

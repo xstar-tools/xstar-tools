@@ -1066,3 +1066,30 @@ PYTHONPATH=src python examples/96_integrate_xstar_priority_native_type50_type71.
   --print-summary
 ```
 
+
+### `97_audit_xstar_type53_live_native_parity.py`
+
+Evaluate XSTAR type 53 from an explicitly selected live reduced-grid radiation state, compare `ans1..ans6` and every compact insertion, and report separate rate, heating/cooling, matrix, external-RHS, and opacity/RRC readiness.
+
+```bash
+PYTHONPATH=src python examples/97_audit_xstar_type53_live_native_parity.py \
+  --priority-matrix-closure-audit xstar_priority_matrix_closure_o7_v03198_latest \
+  --live-rate-grid-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --live-density-field-semantics electron_density \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --out-dir xstar_type53_live_native_parity_o7_v03208 \
+  --print-summary
+```
+
+### `98_integrate_xstar_priority_native_type53.py`
+
+Replace every validated selected-row type-53 term after the native type-51/type-50/type-71 gate, including fixed-external RHS contributions, and rerun row balance plus the conditional solve.
+
+```bash
+PYTHONPATH=src python examples/98_integrate_xstar_priority_native_type53.py \
+  --priority-native-type50-type71-integration-audit xstar_priority_native_type50_type71_integration_o7_v03207 \
+  --type53-live-native-parity-audit xstar_type53_live_native_parity_o7_v03208 \
+  --out-dir xstar_priority_native_type53_integration_o7_v03208 \
+  --print-summary
+```

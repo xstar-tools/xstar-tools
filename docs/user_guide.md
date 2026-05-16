@@ -1283,3 +1283,18 @@ The next controlled gate follows the validated native type-51 selected system. `
 ### v0.3.207 type-71 endpoint-order correction
 
 The real O VII v0.3.206 audit demonstrated exact native/probed type-71 `ans1`, `ans2`, and compact coefficients, but the record gate rejected all three records because it reused the type-50 endpoint rule. XSTAR type 71 preserves the packed record order: `idest1` is the lower spectroscopic destination and `idest2` is the upper superlevel source. `calc_hmc_ion.f90` subsequently derives the lower/upper matrix endpoints from the level energies. v0.3.207 applies this family-specific convention and records explicit endpoint roles in the parity table. Type-50 endpoint handling and all rate formulas are unchanged.
+
+
+### v0.3.208 exact live-radiation type-53 gate
+
+`Type53LiveRadiationState` promotes the reduced `epim`, `bremsam`, and `bremsint` arrays to first-class provenance-bearing state. `evaluate_phint53_exact` ports the XSTAR `phint53.f90` cross-section mapping, threshold binning, photoionization, Milne recombination, heating, cooling, escape factors, and opacity/RRC array construction. `evaluate_type53_ucalc_record` adds the surrounding `ucalc.f90` LTE factor, `ans3..ans6` swaps, and electron-point-of-view correction. No analytic continuum or empirical factor is accepted.
+
+Example 97 requires an explicitly selected live-grid capture and compares `ans1..ans6` plus all compact insertions. Example 98 replaces validated selected-row type-53 terms after native types 51, 50, and 71. For the current O VII manifest, the target scope is 201 selected-internal and 173 fixed-external terms. Opacity/RRC readiness remains separate until the full level-population context is supplied, and `phint53hunt` remains future work.
+
+#### Roadmap status
+
+- **Phase A:** compact identities and aliases are ready, and the six-row conditional replay is validated; the autonomous 119-row solve is not complete.
+- **Phase B:** native types 51, 50, and 71 are complete for the priority subsystem; type 53 now has an exact gate pending a real-run pass; minor families remain.
+- **Phase C:** live arrays and complete `phint53` rate/heating/cooling behavior are implemented; real acceptance, `phint53hunt`, opacity/RRC parity, and four-ion validation remain.
+- **Phase D:** the 607-row scaffold exists, but tiered native activation and the full solve remain future work.
+- **Phases E--G:** source audits and API foundations exist, but autonomous ionization/thermal closure, radial transfer/output reproduction, and the C++ backend remain future milestones.

@@ -1292,4 +1292,16 @@ The next controlled gate follows the validated native type-51 selected system. \
 
 The real O VII v0.3.206 audit demonstrated exact native/probed type-71 \texttt{ans1}, \texttt{ans2}, and compact coefficients, but the record gate rejected all three records because it reused the type-50 endpoint rule. XSTAR type 71 preserves the packed record order: \texttt{idest1} is the lower spectroscopic destination and \texttt{idest2} is the upper superlevel source. \texttt{calc\_hmc\_ion.f90} subsequently derives the lower and upper matrix endpoints from the level energies. v0.3.207 applies this family-specific convention and records explicit endpoint roles in the parity table. Type-50 endpoint handling and all rate formulas are unchanged.
 
+
+
+\subsection{v0.3.208 exact live-radiation type-53 gate}
+
+The class \texttt{Type53LiveRadiationState} promotes the reduced \texttt{epim}, \texttt{bremsam}, and \texttt{bremsint} arrays to first-class provenance-bearing state. The native evaluator ports the XSTAR \texttt{phint53.f90} cross-section mapping, threshold binning, photoionization, Milne recombination, heating, cooling, escape factors, and opacity/RRC array construction. The surrounding \texttt{ucalc.f90} LTE factor, \texttt{ans3..ans6} swaps, and electron-point-of-view correction are also reproduced. No analytic continuum or empirical factor is accepted.
+
+Example 97 requires an explicitly selected live-grid capture and compares \texttt{ans1..ans6} plus all compact insertions. Example 98 replaces validated selected-row type-53 terms after native types 51, 50, and 71. For the current O VII manifest, the target scope is 201 selected-internal and 173 fixed-external terms. Opacity/RRC readiness remains separate until complete level-population context is supplied, and \texttt{phint53hunt} remains future work.
+
+\subsubsection{Roadmap status}
+
+Phase A has the corrected compact identities, aliases, and validated six-row conditional replay, but not the autonomous 119-row solve. Phase B has complete priority-subsystem integration for types 51, 50, and 71; type 53 now has an exact gate pending the real-run pass, while minor families remain. Phase C has first-class live arrays and complete \texttt{phint53} rate/heating/cooling behavior, but still requires \texttt{phint53hunt}, opacity/RRC parity, and four-ion validation. The 607-row scaffold exists for Phase D, while full ionization/thermal closure, radial transfer/output reproduction, and the C++ backend in Phases E--G remain future milestones.
+
 \end{document}

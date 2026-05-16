@@ -225,3 +225,15 @@ Native type-50/type-71 rate and selected-system audits
    :undoc-members:
    :show-inheritance:
 
+
+Type-53 exact live-radiation rates
+----------------------------------
+
+.. automodule:: xstar_atomic.rates_type53
+   :members:
+
+.. automodule:: xstar_atomic.xstar_type53_live_native_parity
+   :members:
+
+.. automodule:: xstar_atomic.xstar_priority_native_type53_integration
+   :members:
