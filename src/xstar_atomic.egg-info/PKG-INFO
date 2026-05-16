@@ -1,3 +1,29 @@
+Metadata-Version: 2.4
+Name: xstar-atomic
+Version: 0.3.197
+Summary: Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits
+Author: Ashkbiz Danehkar
+License: MIT
+Keywords: astronomy,atomic-data,xstar,fits,emissivity,x-ray
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Astronomy
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.23
+Requires-Dist: astropy>=5.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: build>=1.0; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=2; extra == "docs"
+Provides-Extra: hdf5
+Requires-Dist: h5py>=3; extra == "hdf5"
+Provides-Extra: sparse
+Requires-Dist: scipy>=1.8; extra == "sparse"
+
 # xstar-atomic
 
 Latest local development note: v0.3.197 fixes full-element priority matrix-manifest selection and endpoint mapping. Matrix endpoints are now translated exactly as XSTAR does in `calc_hmc_element.f90`, `compact_ipmat2 = ion_ipmat2_offset + indbi`, including adjacent-ion/superlevel endpoints with `indbi > nlev`. Non-matrix `ucalc` metadata records are separated from true four-row matrix records, and the full-element audit defaults to latest-per-record selection.

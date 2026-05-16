@@ -1,0 +1,15 @@
+[console_scripts]
+xstar-atomic-collisions = xstar_atomic.collisions:main
+xstar-atomic-download-data = xstar_atomic.data:main
+xstar-atomic-emissivity = xstar_atomic.emissivity:main
+xstar-atomic-export = xstar_atomic.export:main
+xstar-atomic-export-superwind = xstar_atomic.export:main
+xstar-atomic-hierarchy = xstar_atomic.hierarchy:main
+xstar-atomic-inspect = xstar_atomic.inspect:main
+xstar-atomic-lines = xstar_atomic.lines:main
+xstar-atomic-photoionization = xstar_atomic.photoionization:main
+xstar-atomic-plan-xstar-run = xstar_atomic.xstar_run:main
+xstar-atomic-recombination = xstar_atomic.recombination:main
+xstar-atomic-solver = xstar_atomic.solver:main
+xstar-atomic-validate-collisions = xstar_atomic.validation:main
+xstar-atomic-xstar-outputs = xstar_atomic.xstar_outputs:main

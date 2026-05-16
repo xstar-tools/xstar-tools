@@ -15,7 +15,10 @@ def main() -> None:
     parser.add_argument("--priority-basis-expansion", required=True)
     parser.add_argument("--ucalc-probe-csv")
     parser.add_argument("--matrix-probe-csv")
-    parser.add_argument("--occurrence-rank", type=int, default=73)
+    parser.add_argument(
+        "--occurrence-rank", type=int, default=-1,
+        help="Per-record occurrence rank; -1 selects the latest occurrence and is recommended for full-element multi-ion manifests.",
+    )
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
@@ -33,13 +36,17 @@ def main() -> None:
         print("--------------------------------------------")
         for key in [
             "audit_version", "status", "ion", "selected_basis_solve_call_id",
-            "occurrence_rank", "ucalc_probe_status", "matrix_probe_status",
+            "selection", "occurrence_rank", "ucalc_probe_status", "matrix_probe_status",
             "n_selected_compact_rows", "selected_xstar_ipmat2_indices",
             "n_selected_physical_roles", "n_selected_shared_alias_rows",
-            "n_selected_ucalc_records", "n_selected_records_with_four_matrix_rows",
+            "n_selected_ucalc_records", "n_selected_matrix_ucalc_records",
+            "n_selected_nonmatrix_ucalc_metadata_records",
+            "n_selected_records_with_expected_matrix_row_count",
+            "n_selected_records_with_four_matrix_rows",
             "n_fortran_matrix_rows_loaded", "n_compact_matrix_terms_touching_selected_rows",
-            "n_unmapped_matrix_endpoints", "n_selected_rows_with_fortran_records",
-            "n_selected_rows_without_fortran_records", "n_rate_families",
+            "compact_endpoint_mapping_mode", "n_unmapped_matrix_endpoints",
+            "n_selected_rows_with_fortran_matrix_terms",
+            "n_selected_rows_without_fortran_matrix_terms", "n_rate_families",
             "priority_role_manifest_ready", "fortran_priority_subset_matrix_manifest_ready",
             "native_priority_subset_matrix_closure_ready", "dominant_next_target",
         ]:
