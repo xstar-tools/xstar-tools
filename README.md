@@ -1,10 +1,10 @@
 # xstar-atomic
 
-Latest local development note: v0.3.193 reconstructs the exact XSTAR compact element `ipmat2` basis and remaps Python population rows by physical `(ion_stage, level_index)` identity, including parent-continuum aliases.
-Latest package note: **v0.3.193** adds `examples/86_audit_xstar_element_basis_remap.py`, which reconstructs a selected XSTAR compact element basis from the direct topology probe and remaps Python population rows by physical ion/local-level identity, retaining parent-continuum aliases. It can join the post-`msolvelucy` population probe to quantify corrected solved-population coverage. No default solver physics changed.
+Latest local development note: v0.3.194 converts the exact XSTAR compact element topology into a full 607-row Python basis scaffold with explicit mapped rows, shared aliases, missing-row priorities, and population-closure tiers.
+Latest package note: **v0.3.194** adds `examples/87_build_xstar_full_element_basis_scaffold.py`. It consumes the v0.3.193 remap audit, assigns deterministic placeholder indices for missing XSTAR rows, and prepares staged full-element basis expansion without changing default solver physics.
 
 
-Latest package note: **v0.3.191** adds `examples/84_diagnose_xstar_population_basis_mapping.py`, which consumes the population-closure parity audit and diagnoses the XSTAR element-basis mapping gap. For the O VII rank-73 probe, only ~2.6e-6 of the solved XSTAR population lies on current Python-mapped rows; the dominant population is in unmapped XSTAR `ipmat2`/`nion`/`nsup` blocks. This identifies XSTAR element-basis mapping and parent/superlevel closure, not isolated rate formulas, as the next implementation target. No default solver physics changed.
+Latest package note: **v0.3.194** adds `examples/87_build_xstar_full_element_basis_scaffold.py`. It consumes the v0.3.193 remap audit, assigns deterministic placeholder indices for missing XSTAR rows, and prepares staged full-element basis expansion without changing default solver physics.
 
 Latest package note: **v0.3.190** adds a population/source-closure parity audit for the validated `xstar_population_closure_probe.csv`. The new `examples/83_audit_xstar_population_closure_parity.py` selects an XSTAR element solve occurrence, compares the post-`msolvelucy` population vector against preserved Python solver population products, and reports overlap rows plus XSTAR `ipmat2` rows missing from the current Python local basis. No default solver physics changed.
 

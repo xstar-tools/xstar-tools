@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.194 - 2026-05-15
+
+- Added `xstar_atomic.xstar_full_element_basis` and `examples/87_build_xstar_full_element_basis_scaffold.py`.
+- Consumes the v0.3.193 element-basis remap audit and creates one explicit Python-side scaffold row for every compact XSTAR `ipmat2` row.
+- Existing Python rows retain physical mappings and shared parent-continuum aliases; unrepresented rows receive deterministic placeholder global indices.
+- Writes missing-row priorities, ion-block coverage, and cumulative population-closure tiers so the native full-element implementation can be staged by physical importance.
+- The scaffold is preparatory only: no default solver matrix, native rates, or closure equations are changed.
+
 ## v0.3.193 - 2026-05-15
 
 - Added `xstar_atomic.xstar_element_basis_remap`.

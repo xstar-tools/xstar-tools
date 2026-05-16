@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.193"
+__version__ = "0.3.194"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -108,6 +108,11 @@ from .xstar_population_closure_probe import (
     population_closure_probe_schema_rows,
     summarize_population_closure_probe_csv,
     write_population_closure_probe_products,
+)
+
+from .xstar_full_element_basis import (
+    build_full_element_basis_scaffold,
+    write_full_element_basis_scaffold,
 )
 
 from .workflow import (
