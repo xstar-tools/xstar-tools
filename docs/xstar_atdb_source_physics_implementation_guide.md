@@ -838,6 +838,38 @@ The six-row conditional solve separates the internal compact block from its exte
 
 Therefore the minimum controlled implementation sequence is: native type-51 internal coupling, native type-50/type-71 external closure, exact live-radiation type-53, then the smaller parent/superlevel and residual families. The approximately 44 type-53 scale must disappear through the `epim`/`bremsam`/`phint53` path; it must not be absorbed into a fitted multiplier.
 
+## 12.2. Native type-51 parity gate (v0.3.203)
+
+The first native family selected by the v0.3.202 readiness analysis is ATDB data type 51, the Burgess--Tully effective-collision-strength branch. XSTAR evaluates the spline at
+
+\[
+T_{\rm BT}=\max\!\left(T,\frac{2.8777\times10^6}{\lambda_{\AA}}\right),
+\]
+
+but retains the physical plasma temperature in the Maxwellian prefactor. For the energy-ordered upper and lower levels,
+
+\[
+q_{u\rightarrow l}=\frac{8.626\times10^{-8}\,\Upsilon(T_{\rm BT})}{\sqrt{T/10^4\,\mathrm{K}}\,g_u},
+\]
+
+\[
+q_{l\rightarrow u}=q_{u\rightarrow l}\,\frac{g_u}{g_l}\,\exp\!\left[-\frac{\Delta E}{0.861707\,(T/10^4\,\mathrm{K})}\right],
+\]
+
+and XSTAR returns
+
+\[
+\mathrm{ans1}=n_e q_{l\rightarrow u},\qquad\mathrm{ans2}=n_e q_{u\rightarrow l}.
+\]
+
+A probe-field clarification is essential: the historical CSV column named `xnx` was populated by the `calc_hmc_ion.f90` variable `xee`, not by the local `ucalc.f90` variable `xnx`. Therefore the physical electron density used by the native audit is
+
+\[
+n_e=xpx\,xee.
+\]
+
+The v0.3.203 audit decodes each selected type-51 ATDB record, evaluates these rates, compares them with the same selected `ucalc` capture, reconstructs the four `calc_hmc_ion` matrix coefficients, and aggregates the selected-selected compact block. Passing this audit is the gate for enabling native type-51 terms in the 119-row active compact solver.
+
 ## 13. Validation policy
 
 A feature becomes a production default only after passing all applicable layers:
@@ -880,4 +912,4 @@ Scientific references carried with the development review:
 - Bautista & Kallman (2001), *ApJS*, 134, 139.
 - Kallman et al. (2004), *ApJS*, 155, 675.
 
-The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.202. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
+The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.203. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.

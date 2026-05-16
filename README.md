@@ -1,3 +1,5 @@
+Latest local development note: **v0.3.203** adds an exact native type-51 record/matrix parity audit for the six-row O VII compact subsystem. It evaluates the ATDB Burgess--Tully records with the XSTAR `ucalc.f90` temperature, energy, detailed-balance, and density conventions, corrects the legacy probe `xnx` field interpretation (`n_e=xpx*xee`), and compares native `ans1`/`ans2` plus compact matrix terms. The production expanded-basis solver is unchanged.
+
 # xstar-atomic
 
 Latest local development note: **v0.3.202** adds a native-assembly readiness audit for the validated six-row O VII conditional solve. It ranks internal and external rate-family influence and defines the implementation order: type 51 internal coupling, type 50/type 71 external closure, then exact live-radiation type 53. No solver physics or empirical type-53 scale correction is introduced.

@@ -1264,6 +1264,7 @@ The validated O VII compact-basis findings through v0.3.201 are:
 \item their XSTAR row-balance residuals pass a 0.5\% threshold, with a maximum relative residual of approximately $1.7471\times10^{-3}$.
 \item the v0.3.201 conditional six-row solve holds the remaining 601 XSTAR compact populations fixed, uses a full-rank row-scaled $6\times6$ matrix with condition number approximately 5.8545, and recovers all six populations within 0.5\%; the maximum relative population difference is approximately $3.0341\times10^{-3}$.
 \item the v0.3.202 native-readiness audit finds that type 51 supplies approximately 97.77\% of the internal population-weighted coupling, while type 50, type 71, and type 53 supply approximately 99.06\%, 0.861\%, and 0.0795\% of the external right-hand side, respectively.
+\item v0.3.203 adds an exact type-51 parity gate using the XSTAR Burgess--Tully temperature floor, ATDB transition energy, detailed balance, and $n_e=xpx\,xee$, followed by record-level \texttt{ans1}/\texttt{ans2} and compact-matrix comparisons. The historical probe field named \texttt{xnx} is documented as containing \texttt{xee}.
 \end{itemize}
 
 The approximately 44 type-53 scale remains an explicit future task. It is not treated as an empirical correction. The source-equivalent solution is to carry live \texttt{epim(:)}, \texttt{bremsam(:)}, and \texttt{bremsint(:)}, port \texttt{phint53.f90}/\texttt{phint53hunt.f90}, reproduce \texttt{ans1..ans6} and all matrix placements, and only then replace the historical proxy \texttt{xstar-powerlaw} terms.

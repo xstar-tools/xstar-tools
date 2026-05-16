@@ -1618,6 +1618,33 @@ Here, $x_E$ is fixed to the captured XSTAR post-\texttt{msolvelucy} population v
 
 This validates the selected compact topology and external source closure. The coefficients are still XSTAR-probed. The next implementation replaces them family by family with native Python rates, then expands the same partitioned solve to all 119 active rows before introducing a fully autonomous normalization and ionization closure.
 
+\subsection{12.2. Native type-51 parity gate (v0.3.203)}
+
+The first native family selected by the v0.3.202 readiness analysis is ATDB data type 51, the Burgess--Tully effective-collision-strength branch. XSTAR evaluates the spline at
+\[
+T_{\rm BT}=\max\!\left(T,\frac{2.8777\times10^6}{\lambda_{\AA}}\right),
+\]
+but retains the physical plasma temperature in the Maxwellian prefactor. For energy-ordered upper and lower levels,
+\[
+q_{u\rightarrow l}=\frac{8.626\times10^{-8}\,\Upsilon(T_{\rm BT})}{\sqrt{T/10^4\,\mathrm{K}}\,g_u},
+\]
+\[
+q_{l\rightarrow u}=q_{u\rightarrow l}\,\frac{g_u}{g_l}\,
+\exp\!\left[-\frac{\Delta E}{0.861707\,(T/10^4\,\mathrm{K})}\right],
+\]
+and
+\[
+\mathrm{ans1}=n_e q_{l\rightarrow u},\qquad
+\mathrm{ans2}=n_e q_{u\rightarrow l}.
+\]
+
+The historical probe column named \texttt{xnx} was populated with the
+\texttt{calc\_hmc\_ion.f90} variable \texttt{xee}; therefore the physical density is
+\[
+n_e=xpx\,xee.
+\]
+The v0.3.203 audit compares the native record rates and the four compact matrix insertions with the same XSTAR capture before enabling type-51 terms in the active compact solver.
+
 \subsection{13. Validation policy}\label{validation-policy}
 
 A feature becomes a production default only after passing all applicable
