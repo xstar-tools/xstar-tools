@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.201 - 2026-05-16
+
+- Added `xstar_atomic.xstar_priority_conditional_solve` and `examples/91_audit_xstar_priority_conditional_solve.py`.
+- Partitions the validated selected compact equations as `A_SS x_S + A_SE x_E = 0`, holds the 601 non-selected XSTAR compact populations fixed, and solves the six activated rows from `A_SS x_S = -A_SE x_E`.
+- Writes selected matrix entries, external right-hand-side terms, rate-family RHS contributions, singular values, and row-by-row population comparisons.
+- For the O VII priority rows `79,80,241,242,244,293`, the row-scaled 6x6 matrix is full rank with condition number about `5.8545`; all six conditional populations agree with the captured XSTAR values within the 0.5% tolerance, with a maximum relative difference of about `3.0341e-3`.
+- This remains a probe-derived conditional solve. Native rate assembly, the 119-row active-basis solve, full RHS/normalization closure, and the type-53 approximately 44 scale correction remain future work.
+
 ## v0.3.199 - 2026-05-16
 
 - Added `xstar_atomic.xstar_priority_matrix_balance` and `examples/90_audit_xstar_priority_matrix_balance.py`.

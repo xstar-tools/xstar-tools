@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.199"
+__version__ = "0.3.201"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -249,4 +249,9 @@ __all__ = [
 from .xstar_priority_matrix_closure import (
     build_priority_matrix_closure_audit,
     write_priority_matrix_closure_audit,
+)
+
+from .xstar_priority_conditional_solve import (
+    build_priority_conditional_solve_audit,
+    write_priority_conditional_solve_audit,
 )

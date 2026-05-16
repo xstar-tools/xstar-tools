@@ -58,7 +58,7 @@
 
 \title{\texttt{xstar-atomic} User Guide}
 \author{XSTAR ATDB direct decoder, source-code-aligned rate audits, and prototype solvers}
-\date{Version 0.3.133}
+\date{Version 0.3.200}
 
 \begin{document}
 \maketitle
@@ -69,7 +69,9 @@
 
 \texttt{xstar-atomic} reads XSTAR's packed \texttt{atdb.fits} atomic database, evaluates selected XSTAR rate formulae, builds prototype level-population products, and provides source-code-first validation tools for comparing against same-run XSTAR outputs.
 
-The package is not intended to replace XSTAR. Its purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, and population-matrix term.
+The package is not yet a complete replacement for XSTAR. Its present purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, compact element basis, and population-matrix term. The long-term roadmap includes a source-equivalent Python implementation of the local plasma, population, transfer, and output layers, followed by a C++ backend for performance-critical kernels.
+
+The detailed technical reference is available in \texttt{docs/xstar\_atdb\_source\_physics\_implementation\_guide.md}; a standalone LaTeX version is provided as \texttt{docs/xstar\_atdb\_source\_physics\_implementation\_guide.tex}.
 
 \begin{lstlisting}[style=ctpython]
 import xstar_atomic as xa
@@ -1108,7 +1110,7 @@ v0.3.133: add function-by-function API examples to Markdown/LaTeX/Sphinx docs an
 v0.3.134: exact same-run XSTAR local-output reproduction targets.
 v0.3.135: one-command standard C V / O VII / Mg XI / Ca XIX benchmark suite.
 v0.3.136: stricter solver-triplet extraction and benchmark status reporting.
-v0.3.139: strengthened C/O/Mg/Ca benchmark comparison by adding XSTAR/solver R, G, L2 residuals, recording the solver triplet source, and adding 	exttt{--solver-preset xstar-local-state}.
+v0.3.139: strengthened C/O/Mg/Ca benchmark comparison by adding XSTAR/solver R, G, L2 residuals, recording the solver triplet source, and adding \texttt{--solver-preset xstar-local-state}.
 
 v0.3.138: strengthened ATDB datapath fallback. If XSTAR\_ATDB/XSTAR\_ATDB\_FITS are unset, the resolver uses configured datapath files, skips stale candidates, and then checks package data.
 Future: XSTAR radiation-field reader and exact line-energy bin mapping.
@@ -1234,5 +1236,46 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
 \end{lstlisting}
 
 The type-50 detail audit classifies matrix/rate residuals as \path|matrix_matches_ucalc_rate|, \path|rate_evaluator_mismatch|, \path|matrix_placement_mismatch|, or \path|no_matching_matrix_term|.
+
+
+\section{XSTAR architecture, ATDB physics, and full-implementation roadmap}
+
+The standalone guide \texttt{docs/xstar\_atdb\_source\_physics\_implementation\_guide.md} documents the packed \texttt{atdb.fits} vectors, ten-integer record header, element/ion/level hierarchy, \texttt{setptrs.f90} derived pointers, the XSTAR source call graph, and the complete record-to-\texttt{ucalc}-to-matrix-to-population path.  Its LaTeX counterpart is \texttt{docs/xstar\_atdb\_source\_physics\_implementation\_guide.tex}.
+
+The central local equations are
+\begin{equation}
+0=\sum_{j\ne i} n_jR_{j\rightarrow i}-n_i\sum_{j\ne i}R_{i\rightarrow j}+S_i,
+\qquad \sum_i x_i=1,
+\end{equation}
+\begin{equation}
+\Gamma_{\mathrm{PI}}=\int_{E_0}^{\infty}\sigma(E)\frac{F_E}{E}\,dE,
+\end{equation}
+and the He-like diagnostics
+\begin{equation}
+R=\frac{f}{i}, \qquad G=\frac{f+i}{r}.
+\end{equation}
+
+The validated O VII compact-basis findings through v0.3.201 are:
+\begin{itemize}
+\item the selected XSTAR O-element solve contains 607 compact \texttt{ipmat2} rows;
+\item physical remapping places all 114 existing Python population identities on 113 unique compact rows and covers 0.991904690445624 of the XSTAR solved population;
+\item adding compact rows 293, 241, 244, 242, 80, and 79 raises coverage to 0.9999999463123856;
+\item all six priority rows have complete Fortran matrix coverage and no unmapped endpoints;
+\item their XSTAR row-balance residuals pass a 0.5\% threshold, with a maximum relative residual of approximately $1.7471\times10^{-3}$.
+\item the v0.3.201 conditional six-row solve holds the remaining 601 XSTAR compact populations fixed, uses a full-rank row-scaled $6\times6$ matrix with condition number approximately 5.8545, and recovers all six populations within 0.5\%; the maximum relative population difference is approximately $3.0341\times10^{-3}$.
+\end{itemize}
+
+The approximately 44 type-53 scale remains an explicit future task. It is not treated as an empirical correction. The source-equivalent solution is to carry live \texttt{epim(:)}, \texttt{bremsam(:)}, and \texttt{bremsint(:)}, port \texttt{phint53.f90}/\texttt{phint53hunt.f90}, reproduce \texttt{ans1..ans6} and all matrix placements, and only then replace the historical proxy \texttt{xstar-powerlaw} terms.
+
+The implementation order is:
+\begin{enumerate}
+\item replace the probe-derived coefficients in the validated six-row conditional solve with native rate assembly;
+\item solve the validated 119-row active compact basis with exact aliases, external closure, right-hand side, and normalization;
+\item port the remaining native rate families touching the active basis;
+\item remove the type-53 proxy normalization;
+\item expand to the full 607-row O-element basis and repeat for C V, Mg XI, and Ca XIX;
+\item port ionization/thermal closure, radial transfer, and output writers;
+\item move performance-critical kernels to a C++ backend while retaining Python as the transparent reference and validation layer.
+\end{enumerate}
 
 \end{document}

@@ -1,5 +1,9 @@
 # xstar-atomic
 
+Latest local development note: **v0.3.201** adds a conditional compact solve for the six validated O VII priority rows. It solves the 6x6 selected block while holding the other 601 XSTAR populations fixed, recovers all six captured populations within 0.5%, and prepares replacement of probe-derived coefficients with native rate assembly. Default solver physics and the unresolved type-53 approximately 44 scale are unchanged.
+
+Latest documentation note: **v0.3.200** adds a comprehensive Markdown and LaTeX guide to the packed `atdb.fits` structures, XSTAR Fortran source layout, record-to-rate-to-matrix data flow, physical equations, C V/O VII/Mg XI/Ca XIX benchmark interpretation, findings through v0.3.199, the unresolved type-53 approximately 44 scale, and the staged Python/C++ implementation roadmap. This is a documentation-only release; solver physics is unchanged.
+
 Latest local development note: v0.3.198 fixes whole-run element leakage in `examples/89_audit_xstar_priority_matrix_closure.py`. Before compact endpoint mapping, per-record XSTAR probe selections are now restricted to the reconstructed element `jkk_ion` blocks. In the O VII v0.3.197 latest-per-record audit, all 7,432 apparent unmapped endpoints came from unrelated `jkk_ion=1--3`, while the O-element blocks are `jkk_ion=31--36`. The release adds an element-filter summary CSV and leaves native solver physics unchanged.
 Latest package note: **v0.3.198** is an audit correctness fix; rerun example 89 with the same command.
 
@@ -52,6 +56,8 @@ Latest package note: **v0.3.173** adds the first type-53 `phint53` audit against
 
 - `docs/user_guide.md`
 - `docs/user_guide.tex`
+- `docs/xstar_atdb_source_physics_implementation_guide.md`
+- `docs/xstar_atdb_source_physics_implementation_guide.tex`
 - `docs/sphinx/source/user_guide.rst`
 - `docs/sphinx/source/api.rst`
 

@@ -2,7 +2,9 @@
 
 `xstar-atomic` reads XSTAR's packed `atdb.fits` atomic database, evaluates selected XSTAR rate formulae, builds prototype level-population products, and provides source-code-first validation tools for comparing against same-run XSTAR outputs.
 
-The package is not intended to replace XSTAR. Its purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, and population-matrix term.
+The package is not intended to replace XSTAR yet. Its present purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, compact element basis, and population-matrix term. The long-term roadmap now includes a source-equivalent Python implementation of the local plasma, element-population, transfer, and output layers, followed by a C++ backend for performance-critical kernels.
+
+The detailed architecture and physics reference is [XSTAR atomic database, source architecture, physics, and implementation roadmap](xstar_atdb_source_physics_implementation_guide.md). A LaTeX version is provided as `docs/xstar_atdb_source_physics_implementation_guide.tex`.
 
 ```python
 import xstar_atomic as xa
@@ -23,6 +25,7 @@ from xstar_atomic import XSTARAtomic
 10. [Examples and source-module migration](#10-examples-and-source-module-migration)
 11. [Validation and tests](#11-validation-and-tests)
 12. [Roadmap](#12-roadmap)
+13. [XSTAR architecture, ATDB physics, and full-implementation roadmap](#13-xstar-architecture-atdb-physics-and-full-implementation-roadmap)
 
 
 ## 1. Installation and data setup
@@ -1220,3 +1223,49 @@ PYTHONPATH=src python examples/61_audit_xstar_detail_type50_rates.py \
 ```
 
 The type-50 detail audit classifies matrix/rate residuals as `matrix_matches_ucalc_rate`, `rate_evaluator_mismatch`, `matrix_placement_mismatch`, or `no_matching_matrix_term`.
+
+
+## 13. XSTAR architecture, ATDB physics, and full-implementation roadmap
+
+The standalone guide [`xstar_atdb_source_physics_implementation_guide.md`](xstar_atdb_source_physics_implementation_guide.md) documents the packed `atdb.fits` vectors, ten-integer record header, element/ion/level hierarchy, `setptrs.f90` derived pointers, the XSTAR source call graph, and the record-to-`ucalc`-to-matrix-to-population path. Its LaTeX counterpart is `xstar_atdb_source_physics_implementation_guide.tex`.
+
+The central local equations are the level statistical-equilibrium system
+
+\[
+0 = \sum_{j\ne i} n_j R_{j\rightarrow i}
+    - n_i \sum_{j\ne i} R_{i\rightarrow j} + S_i,
+\qquad \sum_i x_i=1,
+\]
+
+the photoionization rate
+
+\[
+\Gamma_{\rm PI}=\int_{E_0}^{\infty}\sigma(E)\,\frac{F_E}{E}\,dE,
+\]
+
+and the He-like diagnostics
+
+\[
+R=\frac{f}{i}, \qquad G=\frac{f+i}{r}.
+\]
+
+The validated O VII compact-basis findings through v0.3.201 are:
+
+- the selected XSTAR O-element solve contains 607 compact `ipmat2` rows;
+- physical remapping places all 114 existing Python population identities on 113 unique compact rows and covers 0.991904690445624 of the XSTAR solved population;
+- adding rows `293,241,244,242,80,79` raises coverage to 0.9999999463123856;
+- all six priority rows have complete Fortran matrix coverage and no unmapped endpoints;
+- their XSTAR row-balance residuals pass a 0.5% threshold, with a maximum relative residual of about 1.7471e-3.
+- the v0.3.201 conditional six-row solve holds the remaining 601 XSTAR compact populations fixed, uses a full-rank row-scaled 6x6 matrix with condition number about 5.8545, and recovers all six populations within 0.5%; the maximum relative population difference is about 3.0341e-3.
+
+The approximately 44 type-53 scale remains an explicit future task. It is not treated as an empirical correction. The source-equivalent solution is to carry live `epim(:)`, `bremsam(:)`, and `bremsint(:)`, port `phint53.f90`/`phint53hunt.f90`, reproduce `ans1..ans6` and all matrix placements, and only then replace the historical proxy `xstar-powerlaw` terms.
+
+The implementation order is:
+
+1. replace the probe-derived coefficients in the validated six-row conditional solve with native rate assembly;
+2. solve the validated 119-row active compact basis with exact aliases, external closure, RHS, and normalization;
+3. port the remaining native rate families touching the active basis;
+4. remove the type-53 proxy normalization;
+5. expand to the full 607-row O-element basis and repeat for C V, Mg XI, and Ca XIX;
+6. port ionization/thermal closure, radial transfer, and output writers;
+7. move performance-critical kernels to a C++ backend while retaining Python as the transparent reference and validation layer.

@@ -1,0 +1,1748 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+  10pt,
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{listings}
+\newcommand{\passthrough}[1]{#1}
+\lstset{defaultdialect=[5.3]Lua}
+\lstset{defaultdialect=[x86masm]Assembler}
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{5}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={XSTAR Atomic Database, Source Architecture, Physics, and Implementation Roadmap},
+  pdfauthor={xstar-atomic development documentation},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{XSTAR Atomic Database, Source Architecture, Physics, and
+Implementation Roadmap}
+\author{xstar-atomic development documentation}
+\date{Version 0.3.200}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\section{XSTAR atomic database, source architecture, physics, and
+implementation
+roadmap}\label{xstar-atomic-database-source-architecture-physics-and-implementation-roadmap}
+
+\textbf{Document version:} 0.3.200\\
+\textbf{Package:} \passthrough{\lstinline!xstar-atomic!}\\
+\textbf{Primary validation case:} the same-run He-like C V, O VII, Mg
+XI, and Ca XIX benchmark suite
+
+\subsection{1. Purpose and scope}\label{purpose-and-scope}
+
+This document is the technical bridge between three representations of
+the same calculation:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  the packed records in XSTAR's \passthrough{\lstinline!atdb.fits!}
+  atomic database;
+\item
+  the XSTAR Fortran routines that interpret those records and assemble
+  local rate equations;
+\item
+  the Python objects, audit products, and prototype solvers in
+  \passthrough{\lstinline!xstar-atomic!}.
+\end{enumerate}
+
+It is intended both as a reference for understanding XSTAR and as an
+implementation plan for a source-code-equivalent Python package with a
+later C++ backend. It records the findings through
+\passthrough{\lstinline!xstar-atomic!} v0.3.199, including the direct
+\passthrough{\lstinline!ucalc!}, matrix-insertion, population-vector,
+compact-basis, and row-balance probes.
+
+The current package is not yet a complete replacement for XSTAR. It can
+decode the database, evaluate and audit many individual processes,
+reconstruct selected local matrices, and compare them with instrumented
+XSTAR. A complete implementation still requires the full element basis,
+native source and normalization closure, thermal/ionization iteration,
+radial transfer, and output writers.
+
+\subsection{2. Executive model of how XSTAR
+works}\label{executive-model-of-how-xstar-works}
+
+For each radial zone, XSTAR performs a coupled calculation:
+
+\begin{lstlisting}
+input spectrum and shell state
+  -> local transferred continuum (epi, bremsa, bremsint, depths)
+  -> temperature/electron-fraction iteration
+  -> ionization rates and element compact population matrices
+  -> level and superlevel populations
+  -> line, RRC, continuum emissivity and opacity
+  -> heating/cooling and optical-depth updates
+  -> next zone/pass
+  -> xout_* and xoNN_detail/detal* products
+\end{lstlisting}
+
+The central source-code path is:
+
+\begin{lstlisting}
+src/xstar/xstar.f90
+  -> xstarsetup / readtbl / setptrs
+  -> radial shell and pass loop
+       -> step
+       -> trnfrc
+       -> xstarcalc
+            -> bremsmap
+            -> dsec (when temperature/electron fraction are iterated)
+            -> calc_hmc_all
+                 -> calc_hmc_element
+                      -> levwkelement
+                      -> calc_hmc_ion
+                           -> ucalc
+                      -> msolvelucy
+            -> calc_emisab_all
+            -> calc_emis_all
+       -> heatt / stpcut / savd
+  -> pprint / writespectra*
+\end{lstlisting}
+
+The important architectural lesson is that final
+\passthrough{\lstinline!xout\_*!} products are not a substitute for the
+live local arrays used by \passthrough{\lstinline!ucalc!}.
+Source-equivalent rates require the same local temperature, density,
+populations, optical depths, covering fraction, and radiation grid.
+
+\subsection{\texorpdfstring{3. \texttt{atdb.fits}: physical FITS
+layout}{3. atdb.fits: physical FITS layout}}\label{atdb.fits-physical-fits-layout}
+
+\subsubsection{3.1 Primary HDU and four packed vector
+extensions}\label{primary-hdu-and-four-packed-vector-extensions}
+
+\passthrough{\lstinline!atdb.fits!} is not organized as one semantic
+table per atomic process. The primary HDU stores metadata such as
+creation date and creator. Four vector extensions store all records:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+FITS extension
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Fortran/Python representation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Contents
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!POINTERS!} &
+\passthrough{\lstinline!masterdata\%nptrs!},
+\passthrough{\lstinline!ATDB.pointers!} & Ten integers per record
+describing type, payload lengths, and offsets. \\
+\passthrough{\lstinline!REALS!} &
+\passthrough{\lstinline!masterdata\%rdat1!},
+\passthrough{\lstinline!ATDB.reals!} & Concatenated single-precision
+real payloads. \\
+\passthrough{\lstinline!INTEGERS!} &
+\passthrough{\lstinline!masterdata\%idat1!},
+\passthrough{\lstinline!ATDB.integers!} & Concatenated integer payloads,
+including level and ion identifiers. \\
+\passthrough{\lstinline!CHARS!} &
+\passthrough{\lstinline!masterdata\%kdat1!},
+\passthrough{\lstinline!ATDB.chars!} & Concatenated character payloads
+such as labels/configurations. \\
+\end{longtable}
+
+The FITS \passthrough{\lstinline!LENGTH!} keyword of each extension
+gives the logical vector length. XSTAR reads these arrays in
+\passthrough{\lstinline!readtbl.f90!};
+\passthrough{\lstinline!xstar-atomic!} mirrors this layout in
+\passthrough{\lstinline!inspect.py!} and
+\passthrough{\lstinline!hierarchy.py!} with memory mapping and lazy
+loading of the large real vector.
+
+\subsubsection{3.2 Ten-integer record
+header}\label{ten-integer-record-header}
+
+Every record has the following pointer/header block:
+
+\begin{longtable}[]{@{}
+  >{\raggedleft\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.3077}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2308}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2308}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2308}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedleft
+Pointer index
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Fortran meaning
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Python field
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Notes
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & original record pointer/index & \passthrough{\lstinline!raw0!} &
+Database-defined identifier. \\
+2 & data type (\passthrough{\lstinline!ltyp!}) &
+\passthrough{\lstinline!data\_type!} & Selects the payload
+schema/formula family. \\
+3 & rate type (\passthrough{\lstinline!lrtyp!}) &
+\passthrough{\lstinline!rate\_type!} & Selects the physical role and
+parent traversal. \\
+4 & continuation flag & \passthrough{\lstinline!continuation!} &
+Retained for provenance; current \passthrough{\lstinline!dread!} logic
+rarely uses it. \\
+5 & number of real values & \passthrough{\lstinline!nreal!} & Slice
+length in \passthrough{\lstinline!REALS!}. \\
+6 & number of integer values & \passthrough{\lstinline!nint!} & Slice
+length in \passthrough{\lstinline!INTEGERS!}. \\
+7 & number of character bytes & \passthrough{\lstinline!nchar!} & Slice
+length in \passthrough{\lstinline!CHARS!}. \\
+8 & 1-based pointer into \passthrough{\lstinline!REALS!} &
+\passthrough{\lstinline!real\_ptr!} & Python subtracts one before
+slicing. \\
+9 & 1-based pointer into \passthrough{\lstinline!INTEGERS!} &
+\passthrough{\lstinline!int\_ptr!} & Python subtracts one before
+slicing. \\
+10 & 1-based pointer into \passthrough{\lstinline!CHARS!} &
+\passthrough{\lstinline!char\_ptr!} & Python subtracts one before
+slicing. \\
+\end{longtable}
+
+A raw record is therefore:
+
+\begin{lstlisting}
+RecordHeader + real slice + integer slice + character slice
+\end{lstlisting}
+
+The record header does not by itself define the semantic meaning of each
+payload position. That interpretation is selected by the
+\passthrough{\lstinline!(data\_type, rate\_type)!} pair and the relevant
+\passthrough{\lstinline!ucalc!}, \passthrough{\lstinline!calt*!}, or
+decoder branch.
+
+\subsubsection{3.3 Hierarchical record
+order}\label{hierarchical-record-order}
+
+\passthrough{\lstinline!setptrs.f90!} and
+\passthrough{\lstinline!xstar\_atomic.hierarchy!} reconstruct the
+database hierarchy from record order:
+
+\begin{lstlisting}
+element record (rate type 11)
+  -> ion records (rate type 12)
+       -> level records (rate type 13)
+       -> ionization/recombination records
+       -> collision records
+       -> radiative line records
+       -> superlevel and satellite records
+\end{lstlisting}
+
+The second-to-last integer in a level or many level-resolved records is
+commonly the local level number used by
+\passthrough{\lstinline!setptrs!} (\passthrough{\lstinline!nclev!}).
+This is a database convention, not a universal promise for every data
+type; each decoder must preserve the raw payload and document its
+interpretation.
+
+\subsubsection{\texorpdfstring{3.4 Derived pointer structures built by
+\texttt{setptrs.f90}}{3.4 Derived pointer structures built by setptrs.f90}}\label{derived-pointer-structures-built-by-setptrs.f90}
+
+XSTAR converts the sequential packed records into navigation arrays. The
+most important are:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Derived pointer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Purpose
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!npar(record)!} & Parent element or ion
+record. \\
+\passthrough{\lstinline!npnxt(record)!} & Next record of the same rate
+type under the same parent. \\
+\passthrough{\lstinline!npfirst(rate\_type)!} & First database record of
+a rate type. \\
+\passthrough{\lstinline!npfi(rate\_type, ion)!} & First record of a rate
+type for an ion. \\
+\passthrough{\lstinline!npfe(rate\_type, element)!} & First record of a
+rate type for an element. \\
+\passthrough{\lstinline!npilev(level, ion)!} & Database record for a
+local level. \\
+\passthrough{\lstinline!npilini!} / \passthrough{\lstinline!nplin!}
+families & Maps line records and line-emissivity indices. \\
+\passthrough{\lstinline!npcon!}, \passthrough{\lstinline!npconi!},
+\passthrough{\lstinline!npconi2!} & Connect photoionization records to
+continuum-emissivity indices. \\
+\passthrough{\lstinline!nlevs(ion)!} & Number of local rows associated
+with an ion record, including its compact parent/continuum
+convention. \\
+\passthrough{\lstinline!npnxt!} chains & Allow
+\passthrough{\lstinline!calc\_hmc\_ion!} to iterate records without
+scanning the full database. \\
+\end{longtable}
+
+\passthrough{\lstinline!xstar-atomic!} preserves the same hierarchy in
+\passthrough{\lstinline!ATDBIndexArrays!}: record number, data/rate
+types, payload counts and pointers, element, global ion index,
+spectroscopic ion stage, local level index, and parent-kind code. The
+NPZ hierarchy cache stores numeric arrays so a targeted selection does
+not require reconstructing more than a million Python objects.
+
+\subsubsection{3.5 Rate-type catalog}\label{rate-type-catalog}
+
+\begin{longtable}[]{@{}rl@{}}
+\toprule\noalign{}
+Code & XSTAR rate-type meaning \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & ground state ionization \\
+2 & level ionization/recombination \\
+3 & bound-bound collision \\
+4 & bound-bound radiative \\
+5 & bound-free collision (level) \\
+6 & total recombination \\
+7 & bound-free radiative (level) \\
+8 & total recombination \\
+9 & 2 photon decay \\
+11 & element data \\
+12 & ion data \\
+13 & level data \\
+14 & radiative superlevel-\textgreater spectroscopic level \\
+15 & CI total rate \\
+23 & collisional superlevel-\textgreater spectroscopic level \\
+40 & CI from superlevels \\
+41 & Auger decay / Fe K Auger \\
+42 & fluorescence / Auger-related \\
+\end{longtable}
+
+\subsubsection{3.6 Data-type catalog}\label{data-type-catalog}
+
+The following labels are those currently carried by
+\passthrough{\lstinline!xstar\_atomic.hierarchy!}. Some codes are
+historical or database-version dependent; unlabeled codes are
+deliberately kept as such instead of assigning an unsupported
+interpretation.
+
+\begin{longtable}[]{@{}rl@{}}
+\toprule\noalign{}
+Code & XSTAR data-type label used by
+\passthrough{\lstinline!xstar-atomic!} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+1 & radiative recombination: Aldrovandi \& Pequignot \\
+2 & charge exchange H0: Kingdon \& Ferland \\
+3 & autoionization: Hamilton, Sarazin, Chevalier \\
+4 & line data radiative: Mendoza; Raymond \& Smith \\
+5 & 2 photon transition collisional \\
+6 & level data \\
+7 & dielectronic recombination: Aldrovandi \& Pequignot \\
+8 & dielectronic recombination: Arnaud \& Raymond \\
+9 & charge exchange H0 Kingdon \& Ferland \\
+10 & charge exchange H+ Kingdon \& Ferland \\
+11 & 2 photon radiative \\
+12 & photoionization, excited levels: hydrogenic \\
+13 & element data \\
+14 & ion data \\
+15 & photoionization: Barfield, Koontz \& Huebner \\
+16 & Arnaud \& Raymond collisional ionization \\
+17 & collisional excitation hydrogenic: Cota \\
+18 & radiative recombination hydrogenic: Cota \\
+19 & photoionization: HULLAC \\
+20 & charge exchange H+ Kingdon \& Ferland \\
+21 & PI cross section continued \\
+22 & dielectronic recombination: Storey \\
+23 & photoionization, excited levels: Clark \\
+24 & PI cross section Clark continued \\
+25 & collisional ionization: Raymond \& Smith \\
+26 & collisional ionization hydrogenic: Cota \\
+27 & photoionization: hydrogenic \\
+28 & line data collisional: Mendoza; Raymond \& Smith \\
+29 & collisional ionization data: scaled hydrogenic \\
+30 & radiative recombination hydrogenic: Gould \& Thakur \\
+31 & line data no levels \\
+32 & collisional ionization: Cota \\
+33 & line data collisional: HULLAC \\
+34 & line data radiative: Mendoza; Raymond \& Smith \\
+35 & photoionization: table from BKH \\
+36 & photoionization, excited levels: hydrogenic no level \\
+49 & OP PI cross sections for inner shells \\
+50 & OP line radiative rates \\
+51 & OP and CHIANTI line collisional rates \\
+52 & same as 59 but rate type 7 \\
+53 & OP PI cross sections \\
+54 & H-like Cij, Bautista, H-like ion \\
+55 & hydrogenic PI cross sections, Bautista format \\
+56 & tabulated collision strength, Bautista \\
+57 & effective charge for collisional ionization \\
+58 & H-like recombination rates, Bautista \\
+59 & Verner PI cross sections \\
+60 & Calloway H-like collision strength \\
+61 & H-like Cij, Bautista, non-H-like ion \\
+62 & Calloway H-like collision strength \\
+63 & H-like Cij, Bautista, H-like ion \\
+64 & hydrogenic PI cross sections, Bautista format \\
+65 & effective charge for collisional ionization \\
+66 & like type 69 but fine-structure data \\
+67 & effective collision strengths from Keenan et al. \\
+68 & He-like collision strengths by Zhang \& Sampson \\
+69 & Kato \& Nakazaki fit to He-like collision strengths \\
+70 & coefficients for photoionization cross sections of superlevels \\
+71 & transition rates from superlevel to spectroscopic levels \\
+72 & autoionization rates for satellite levels \\
+73 & fit to collisional strengths, satellite levels, He-like ions \\
+74 & delta functions added to photoionization cross sections for DR \\
+75 & autoionization data for Fe XXIV satellites \\
+76 & 2 photon decay \\
+77 & collisional rates from 71 \\
+78 & Auger level data \\
+79 & fluorescence line data \\
+80 & collisional ionization rates, ground of Fe and Ni \\
+81 & Bhatia Fe XIX collision strengths \\
+82 & Fe UTA radiative rates \\
+83 & Fe UTA level data \\
+84 & Iron K PI cross sections, spectator Auger binned \\
+85 & Iron K PI cross sections, spectator Auger summed \\
+86 & Iron K Auger data \\
+88 & unlabeled XSTAR data type 88 \\
+91 & unlabeled XSTAR data type 91 \\
+92 & unlabeled XSTAR data type 92 \\
+95 & Bryans collisional ionization / CI total rates \\
+98 & CHIANTI 2016 collisional excitation rates \\
+99 & unlabeled XSTAR data type 99 \\
+\end{longtable}
+
+\subsubsection{3.7 Key record layouts used in the current
+implementation}\label{key-record-layouts-used-in-the-current-implementation}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Data/rate type
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Process
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Important payload interpretation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Main source routine
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+13/11 & Element metadata & abundance, atomic weight, element identity &
+\passthrough{\lstinline!setptrs!},
+\passthrough{\lstinline!levwkelement!} \\
+14/12 & Ion metadata & global ion index, ion stage, number of levels,
+labels & \passthrough{\lstinline!setptrs!},
+\passthrough{\lstinline!levwk!},
+\passthrough{\lstinline!levwkelement!} \\
+6/13, 83/13 & Level data & energy, statistical weight, level number,
+configuration & \passthrough{\lstinline!setptrs!},
+\passthrough{\lstinline!levwk*!} \\
+50/4 & Bound-bound radiative line & wavelength/energy, oscillator
+strength, A value, upper/lower level indices &
+\passthrough{\lstinline!ucalc!} type 50,
+\passthrough{\lstinline!calc\_hmc\_ion!} \\
+53/7 & OP bound-free photoionization & threshold, energy-offset grid,
+cross-section grid, destination levels & \passthrough{\lstinline!ucalc!}
+type 53, \passthrough{\lstinline!phint53!} \\
+56/3 & Tabulated effective collision strengths & temperature grid,
+upsilon values, level pair & \passthrough{\lstinline!upsil*!}, collision
+decoder \\
+63/3 & Bautista hydrogenic collisions and same-n l mixing & quantum
+numbers, fit/control integers, level pair &
+\passthrough{\lstinline!amcrs!}, \passthrough{\lstinline!anl1!},
+\passthrough{\lstinline!erc!}, \passthrough{\lstinline!velimp!} \\
+68/3 & He-like collision strengths & Zhang-Sampson parameters and
+transition indices & \passthrough{\lstinline!calt68!} \\
+69/3 & He-like fitted collision strengths & Kato-Nakazaki fit parameters
+and transition indices & \passthrough{\lstinline!calt69!},
+\passthrough{\lstinline!calc\_kato!} \\
+70/7 & Superlevel photoionization & superlevel cross-section
+coefficients and parent mapping & \passthrough{\lstinline!calt70!},
+\passthrough{\lstinline!phint53hunt!} \\
+71/14 & Superlevel radiative cascade & A value and
+superlevel-to-spectroscopic destination &
+\passthrough{\lstinline!calt71!} \\
+74/7 & Dielectronic-recombination resonance contribution &
+delta-function resonance strength and destination mapping &
+\passthrough{\lstinline!calt74!} \\
+77/23 & Superlevel collisional cascade & density-scaled collisional
+partner of type 71 & \passthrough{\lstinline!calt77!} \\
+99/7 & Superlevel source/sink closure & recombination normalization plus
+photoionization search & \passthrough{\lstinline!calt99!},
+\passthrough{\lstinline!phint53hunt!} \\
+\end{longtable}
+
+\subsection{4. XSTAR source-code layout}\label{xstar-source-code-layout}
+
+\subsubsection{4.1 Top-level directories}\label{top-level-directories}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Path
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Role
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!src/xstar/xstar.f90!} & Executable driver, input
+handling, radial shell/pass loop, final products. \\
+\passthrough{\lstinline!xstarlib/src/!} & Atomic data, local plasma
+solve, transfer, emissivity, matrix, numerical routines. \\
+\passthrough{\lstinline!data/!} & Runtime auxiliary data; the large
+\passthrough{\lstinline!atdb.fits!} is normally distributed/installed
+separately. \\
+\passthrough{\lstinline!manual/!} and \passthrough{\lstinline!doc/!} &
+XSTAR manual and supporting documentation. \\
+\passthrough{\lstinline!utils/!}, \passthrough{\lstinline!scripts/!} &
+Conversion, setup, and operational helpers. \\
+\end{longtable}
+
+\subsubsection{4.2 Functional source map}\label{functional-source-map}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Stage
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Principal routines
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Live data produced/consumed
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Database read & \passthrough{\lstinline!readtbl!},
+\passthrough{\lstinline!dread!}, \passthrough{\lstinline!setptrs!},
+\passthrough{\lstinline!globaldata!} & \passthrough{\lstinline!nptrs!},
+\passthrough{\lstinline!rdat1!}, \passthrough{\lstinline!idat1!},
+\passthrough{\lstinline!kdat1!}, derived pointers. \\
+Continuum setup & \passthrough{\lstinline!ener!}, incident-spectrum
+routines & high-resolution \passthrough{\lstinline!epi!},
+incident/diffuse spectral arrays. \\
+Transfer & \passthrough{\lstinline!trnfrc!},
+\passthrough{\lstinline!trnfrn!}, \passthrough{\lstinline!bremsmap!} &
+\passthrough{\lstinline!bremsa!}, \passthrough{\lstinline!bremsint!},
+mapped \passthrough{\lstinline!epim!},
+\passthrough{\lstinline!bremsam!}. \\
+Thermal/charge iteration & \passthrough{\lstinline!dsec!},
+\passthrough{\lstinline!heatf!}, \passthrough{\lstinline!heatt!} &
+temperature, electron fraction, heating/cooling. \\
+Ion rates & \passthrough{\lstinline!calc\_ion\_rates!},
+\passthrough{\lstinline!istruc!}, \passthrough{\lstinline!ioneqm!} &
+total ionization/recombination rates and ion fractions. \\
+Element basis & \passthrough{\lstinline!calc\_hmc\_all!},
+\passthrough{\lstinline!calc\_hmc\_element!},
+\passthrough{\lstinline!levwkelement!} & compact
+\passthrough{\lstinline!ipmat2!} basis, ion/superlevel maps, initial
+populations. \\
+Record rates & \passthrough{\lstinline!calc\_hmc\_ion!},
+\passthrough{\lstinline!ucalc!}, \passthrough{\lstinline!calt*!},
+\passthrough{\lstinline!phint53*!} &
+\passthrough{\lstinline!ans1..ans6!}, rate provenance,
+opacity/emissivity contributions. \\
+Matrix solve & \passthrough{\lstinline!msolvelucy!},
+\passthrough{\lstinline!leqt2f!}, LU helpers & level/superlevel
+population vector \passthrough{\lstinline!x!}. \\
+Emissivity/opacity & \passthrough{\lstinline!calc\_emis*!},
+\passthrough{\lstinline!calc\_emisab*!},
+\passthrough{\lstinline!linopac!} & lines, RRCs, continuum emissivity
+and opacity. \\
+Depth update & \passthrough{\lstinline!stpcut!} & direction-dependent
+\passthrough{\lstinline!tau0!}, \passthrough{\lstinline!tauc!},
+continuum depths. \\
+Output & \passthrough{\lstinline!savd!},
+\passthrough{\lstinline!fstepr*!}, \passthrough{\lstinline!pprint!},
+\passthrough{\lstinline!writespectra*!} &
+\passthrough{\lstinline!xoNN\_detail/detal*!} and
+\passthrough{\lstinline!xout\_*!} products. \\
+\end{longtable}
+
+\subsubsection{4.3 Output products and their debugging
+value}\label{output-products-and-their-debugging-value}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Product
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Main contents
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Parity use
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!xout\_abund1.fits!} & zone temperature, electron
+fraction/density information, ion fractions & local-state selection and
+ionization closure. \\
+\passthrough{\lstinline!xout\_lines1.fits!} & final line
+luminosities/emissivities & f/i/r benchmark target, not a live rate
+field. \\
+\passthrough{\lstinline!xout\_rrc1.fits!},
+\passthrough{\lstinline!xout\_cont1.fits!},
+\passthrough{\lstinline!xout\_spect1.fits!} & RRC/continuum/final
+spectrum & output-layer validation. \\
+\passthrough{\lstinline!xoNN\_detail.fits!} & level populations by zone
+& post-solve population parity. \\
+\passthrough{\lstinline!xoNN\_detal2.fits!} & line emissivity, opacity,
+inward/outward optical depths & type-50 escape and line-transfer
+audits. \\
+\passthrough{\lstinline!xoNN\_detal3.fits!} & RRC emissivity, opacity,
+depths & bound-free escape audits. \\
+\passthrough{\lstinline!xoNN\_detal4.fits!} & continuum
+emissivity/opacity/depth arrays & reconstruction aid, but not identical
+to live \passthrough{\lstinline!bremsam!}. \\
+\end{longtable}
+
+\subsection{5. From an ATDB record to a matrix
+coefficient}\label{from-an-atdb-record-to-a-matrix-coefficient}
+
+The record-to-solution path is:
+
+\begin{lstlisting}
+ATDB record number
+  -> POINTERS header
+  -> REALS/INTEGERS/CHARS payload slices
+  -> setptrs parent and rate-type chains
+  -> calc_hmc_ion chooses local destinations and escape context
+  -> ucalc dispatches by data type
+  -> ans1..ans6 raw physical outputs
+  -> possible branch-specific swaps/sign changes
+  -> four ajisi/indbi insertions for a two-way transition
+  -> calc_hmc_element adds ion-block ipmat2 offsets
+  -> msolvelucy solves the compact element system
+\end{lstlisting}
+
+For a matrix-active two-way process,
+\passthrough{\lstinline!calc\_hmc\_ion!} typically emits four entries:
+two off-diagonal gains and two diagonal losses. A rate comparison is
+incomplete unless both the numeric values and these row/column
+placements agree.
+
+\subsubsection{5.1 Compact element basis and parent-continuum
+aliases}\label{compact-element-basis-and-parent-continuum-aliases}
+
+XSTAR does not concatenate independent ion level lists naively. Within
+\passthrough{\lstinline!calc\_hmc\_element!}, the compact basis advances
+approximately as:
+
+\begin{lstlisting}[language=Fortran]
+ipmat2 = ipmat2 + nlev - 1
+\end{lstlisting}
+
+and adds a final parent/continuum slot after the ion loop. Consequently,
+the last row of one ion block can be the same compact unknown as the
+ground/parent role of the adjacent ion. One compact
+\passthrough{\lstinline!ipmat2!} row may therefore have multiple
+physical role labels.
+
+The v0.3.192--v0.3.198 probes established the exact O-element topology
+for the selected O VII benchmark:
+
+\begin{itemize}
+\tightlist
+\item
+  607 compact XSTAR population rows;
+\item
+  six ion blocks in the selected element solve;
+\item
+  six shared alias rows;
+\item
+  all matrix endpoints mapped by
+  \passthrough{\lstinline!compact\_ipmat2 = ion\_ipmat2\_offset + indbi!};
+\item
+  all unrelated-element records filtered before compact mapping.
+\end{itemize}
+
+\subsection{6. Physical equations and their source-code
+roles}\label{physical-equations-and-their-source-code-roles}
+
+\subsubsection{6.1 Radiation and ionization
+parameter}\label{radiation-and-ionization-parameter}
+
+XSTAR commonly characterizes the incident radiation by
+
+\[
+\xi = \frac{L_{\mathrm{ion}}}{n\,r^2}
+\quad [\mathrm{erg\,cm\,s^{-1}}],
+\]
+
+where the exact density convention follows the run definition. The local
+rate calculation does not use only \(\xi\); it uses the transferred
+spectral field. In the current source path:
+
+\begin{itemize}
+\tightlist
+\item
+  \passthrough{\lstinline!epi(:)!} is an energy grid;
+\item
+  \passthrough{\lstinline!bremsa(:)!} is the live high-resolution
+  ionizing field used by transfer;
+\item
+  \passthrough{\lstinline!epim(:)!},
+  \passthrough{\lstinline!bremsam(:)!}, and
+  \passthrough{\lstinline!bremsint(:)!} are the mapped rate grid passed
+  to atomic calculations.
+\end{itemize}
+
+\passthrough{\lstinline!bremsmap.f90!} primarily maps the
+high-resolution field to the rate grid by bin lookup and constructs its
+cumulative integral. It does not contain a hidden factor near 44.
+
+\subsubsection{6.2 Atomic levels and
+wavelengths}\label{atomic-levels-and-wavelengths}
+
+For levels \(i\) and \(j\),
+
+\[
+\Delta E_{ij} = E_j-E_i, \qquad
+\lambda_{ji} = \frac{hc}{|\Delta E_{ij}|}.
+\]
+
+Each level also carries a statistical weight \(g_i\). XSTAR uses level
+energies and weights for transition ordering, detailed balance, LTE
+ratios, continuum thresholds, and matrix destinations. The database
+wavelength may be retained for line identification, while energy
+differences can be used for energy conservation in emissivity
+calculations.
+
+\subsubsection{6.3 Statistical equilibrium of level
+populations}\label{statistical-equilibrium-of-level-populations}
+
+For each compact population row \(i\), steady state requires
+
+\[
+0 = \sum_{j\ne i} n_j R_{j\rightarrow i}
+    -n_i\sum_{j\ne i}R_{i\rightarrow j}
+    +S_i,
+\]
+
+where \(S_i\) includes processes represented through adjacent-ion and
+source closure. In matrix form,
+
+\[
+\mathbf{{A}}\,\mathbf{{x}}=\mathbf{{b}},
+\]
+
+with one row replaced by a normalization condition such as
+
+\[
+\sum_i x_i=1.
+\]
+
+\passthrough{\lstinline!calc\_hmc\_ion!} creates sparse transition
+entries, \passthrough{\lstinline!calc\_hmc\_element!} maps them into
+compact element coordinates, and \passthrough{\lstinline!msolvelucy!}
+solves through a superlevel condensation/fixed-point procedure. The
+row-balance audit evaluates
+
+\[
+r_i=\sum_j A_{{ij}}x_j
+\]
+
+against the captured post-\passthrough{\lstinline!msolvelucy!} vector.
+
+\subsubsection{6.4 Ionization equilibrium}\label{ionization-equilibrium}
+
+A simplified adjacent-stage balance is
+
+\[
+n_q\,\Gamma_q = n_{{q+1}}\,n_e\,\alpha_{{q+1}},
+\]
+
+but XSTAR assembles all included stages and channels. In a general
+steady-state form,
+
+\[
+0=\sum_{{q'\ne q}} n_{{q'}} I_{{q'\rightarrow q}}
+  -n_q\sum_{{q'\ne q}} I_{{q\rightarrow q'}},
+\qquad
+\sum_q f_q=1.
+\]
+
+\passthrough{\lstinline!calc\_ion\_rates!} accumulates total
+photoionization and recombination terms;
+\passthrough{\lstinline!istruc!}/\passthrough{\lstinline!ioneqm!} solve
+the ion fractions. Level-resolved and superlevel source terms then
+couple the ion solution to the element population matrix.
+
+\subsubsection{6.5 Photoionization and heating: type
+53}\label{photoionization-and-heating-type-53}
+
+For a level with threshold \(E_0\), the physical forward rate is
+represented by
+
+\[
+\Gamma_{{\rm PI}} = \int_{{E_0}}^\infty
+\sigma(E)\,\frac{F_E}{E}\,dE,
+\]
+
+and the corresponding photoelectron heating is
+
+\[
+H_{{\rm PI}} = n_i\int_{{E_0}}^\infty
+(E-E_0)\,\sigma(E)\,\frac{F_E}{E}\,dE.
+\]
+
+\passthrough{\lstinline!phint53.f90!} maps the OP cross-section grid
+onto the XSTAR energy grid and trapezoid-integrates the rate and heating
+terms. Its code contains paired factors of 12.56 that cancel in the
+forward photoionization integrand. The reverse branch uses a
+Milne/detailed-balance construction, statistical-weight/LTE factors, and
+the local temperature.
+
+\paragraph{The unresolved approximately 44
+scale}\label{the-unresolved-approximately-44-scale}
+
+The instrumented live-rate-grid audit found
+
+\begin{lstlisting}
+preserved Python type-53 proxy matrix rate / XSTAR live phint53 ans1 ≈ 44.2
+\end{lstlisting}
+
+This is not a hidden \passthrough{\lstinline!bremsmap!} or
+\passthrough{\lstinline!phint53!} constant. It is currently interpreted
+as the ratio of the legacy diagnostic
+\passthrough{\lstinline!xstar-powerlaw!} normalization to the
+source-code-equivalent live \passthrough{\lstinline!bremsam!} rate.
+Replaying exact XSTAR \passthrough{\lstinline!ucalc!} type-53 rates
+changed the O VII triplet population fractions by only about
+\(8.4\times10^{{-7}}\), so this scale is real but was not the dominant
+cause of the earlier triplet population mismatch.
+
+The planned fix is not an empirical division by 44. The production path
+must:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  carry the exact local \passthrough{\lstinline!epim!},
+  \passthrough{\lstinline!bremsam!}, and
+  \passthrough{\lstinline!bremsint!} state;
+\item
+  port the complete type-53 threshold mapping and
+  \passthrough{\lstinline!phint53!} integral;
+\item
+  compare native Python \passthrough{\lstinline!ans1..ans6!} with the
+  same XSTAR \passthrough{\lstinline!ucalc!} capture;
+\item
+  replace proxy matrix terms only after branch-level and
+  matrix-placement parity pass.
+\end{enumerate}
+
+\subsubsection{6.6 Recombination and the Milne
+relation}\label{recombination-and-the-milne-relation}
+
+Radiative recombination is the inverse of photoionization.
+Schematically,
+
+\[
+\alpha_i(T) = \int_0^\infty v\,f_M(v,T)\,
+\sigma_{{\rm RR},i}(v)\,dv,
+\]
+
+where the recombination cross section is related to the photoionization
+cross section by detailed balance. XSTAR's implementation uses
+statistical-weight factors, an LTE population ratio, the Maxwell factor
+\(\exp[-(E-E_0)/kT]\), and the same cross-section grid. The
+\passthrough{\lstinline!phint53!} reverse side also generates RRC
+emissivity and recombination cooling.
+
+Total recombination data types provide fitted rates, while types 70, 74,
+and 99 participate in explicit superlevel and dielectronic-recombination
+closure. A full implementation must not replace these with arbitrary
+source vectors.
+
+\subsubsection{6.7 Electron-impact excitation and
+de-excitation}\label{electron-impact-excitation-and-de-excitation}
+
+For an effective collision strength \(\Upsilon_{{ij}}(T)\), the common
+Maxwellian form is
+
+\[
+q_{{ij}} = \frac{{8.629\times10^{{-6}}}}{{g_i T^{{1/2}}}}
+\Upsilon_{{ij}}(T)\exp\left(-\frac{{\Delta E_{{ij}}}}{{kT}}\right)
+\quad \mathrm{{cm^3\,s^{{-1}}}},
+\]
+
+\[
+q_{{ji}} = \frac{{8.629\times10^{{-6}}}}{{g_j T^{{1/2}}}}
+\Upsilon_{{ij}}(T).
+\]
+
+Matrix rates are \(C_{{ij}}=n_e q_{{ij}}\). In the current He-like work:
+
+\begin{itemize}
+\tightlist
+\item
+  type 56 carries tabulated effective collision strengths;
+\item
+  type 63 implements Bautista hydrogenic transitions and same-\(n\)
+  \(l\)-mixing branches;
+\item
+  type 68 uses Zhang-Sampson He-like collision strengths;
+\item
+  type 69 uses Kato-Nakazaki fits;
+\item
+  type 77 provides superlevel-to-spectroscopic collisional coupling.
+\end{itemize}
+
+Direct probes established near-unity record/matrix parity for types 63,
+68, and 69 in the selected O VII local state.
+
+\subsubsection{6.8 Radiative decay, escape, and line pumping: type
+50}\label{radiative-decay-escape-and-line-pumping-type-50}
+
+For a line with spontaneous rate \(A_{{ul}}\), XSTAR first constructs
+direction/covering factors
+
+\[
+p_1=P_{{\rm esc}}(\tau_{{\rm in}})(1-C_f),
+\]
+
+\[
+p_2=P_{{\rm esc}}(\tau_{{\rm out}})(1-C_f)
+ +2P_{{\rm esc}}(\tau_{{\rm in}}+\tau_{{\rm out}})C_f.
+\]
+
+The escaped decay rate before the final branch swap is
+
+\[
+R_{{u\rightarrow l}}^{{\rm esc}}=A_{{ul}}(p_1+p_2).
+\]
+
+The line-center velocity-integrated cross-section factor is represented
+in the source as
+
+\[
+\sigma_v = 0.02655\,f_{{lu}}\,\frac{{\lambda_{{\rm cm}}}}{{v_{{\rm th/turb}}}},
+\]
+
+and the photoexcitation/pumping rate is approximately
+
+\[
+R_{{l\rightarrow u}} = \sigma_v\,
+\mathrm{{bremsa}}(E_{{ul}})\,\frac{{v_{{\rm th/turb}}}}{{c}}
+\,f_{{\rm linabs}}\,(1-C_f).
+\]
+
+\passthrough{\lstinline!ucalc!} finally swaps
+\passthrough{\lstinline!ans1!} and \passthrough{\lstinline!ans2!} so the
+returned forward branch is excitation and the reverse branch is escaped
+decay. For \(C_f=1\), pumping is suppressed and the escape term uses the
+combined inward+outward optical depth. The v0.3.156 detail-state audit
+verified all five O VII triplet type-50 rows and the matrix insertions.
+
+\subsubsection{6.9 Line width, opacity, and
+emissivity}\label{line-width-opacity-and-emissivity}
+
+\passthrough{\lstinline!linopac.f90!} combines thermal and turbulent
+widths in quadrature:
+
+\[
+\Delta E_D = \sqrt{{\Delta E_{{\rm th}}^2+\Delta E_{{\rm turb}}^2}},
+\]
+
+with \(v_{{\rm th}}\propto\sqrt{{T/A}}\) and \(\Delta E/E=v/c\). It
+deposits a Gaussian/Voigt line profile into the continuum opacity grid
+or uses a single-bin approximation in fast mode.
+
+For a radiative transition, the optically modified emissivity is
+proportional to
+
+\[
+\epsilon_{{ul}} = n_u A_{{ul}} h\nu\,P_{{\rm esc}},
+\]
+
+with inward/outward pieces separated by the escape factors. Net line
+output may also subtract radiative excitation/absorption, as in the
+\passthrough{\lstinline!calc\_emis\_ion!} expression involving
+\passthrough{\lstinline!ans2*abund2 - ans1*abund1!}.
+
+\subsubsection{6.10 Superlevels and compact
+closure}\label{superlevels-and-compact-closure}
+
+Superlevels reduce a large level system by grouping rows through
+\passthrough{\lstinline!nsup!}. \passthrough{\lstinline!msolvelucy!}
+computes within-superlevel fractions
+
+\[
+r_i=\frac{{x_i}}{{p_{{s(i)}}}},
+\qquad
+p_s=\sum_{{i\in s}}x_i,
+\]
+
+constructs a condensed superlevel matrix, imposes number conservation,
+solves for \(p_s\), and reconstructs \(x_i=r_i p_{{s(i)}}\). Fixed-point
+iterations then update level fractions and superlevel totals.
+
+Types 71 and 77 connect superlevels to spectroscopic levels radiatively
+and collisionally. Types 70, 74, and 99 couple photoionization,
+dielectronic recombination, parent continua, and superlevel source/sink
+closure. These branches are essential for a physical full-element
+solution.
+
+\subsubsection{6.11 Thermal balance}\label{thermal-balance}
+
+The local temperature is determined by
+
+\[
+H(T,n_e,\{{f_q\}},J_E)-C(T,n_e,\{{f_q\}},J_E)=0,
+\]
+
+with charge/electron consistency solved simultaneously or iteratively.
+Heating includes photoelectrons, Compton and other channels; cooling
+includes line emission, recombination, free-free emission, and other
+atomic channels. \passthrough{\lstinline!dsec!} repeatedly calls the
+population/ionization calculation while adjusting temperature and
+electron fraction.
+
+\subsubsection{6.12 Radial transfer and optical-depth
+evolution}\label{radial-transfer-and-optical-depth-evolution}
+
+The transferred field at a zone depends on incident radiation,
+attenuation, and diffuse emission. XSTAR uses direction-dependent
+continuum/line depths and a single-stream approximation in the current
+transfer path. \passthrough{\lstinline!trnfrc!} constructs the local
+continuum used by the rates; \passthrough{\lstinline!stpcut!} updates
+line and continuum optical depths after the local solution. A full
+replacement must therefore iterate transfer and plasma state rather than
+solve isolated zones only.
+
+\subsection{7. He-like C V, O VII, Mg XI, and Ca XIX
+calculations}\label{he-like-c-v-o-vii-mg-xi-and-ca-xix-calculations}
+
+\subsubsection{7.1 Triplet diagnostics}\label{triplet-diagnostics}
+
+The principal He-like lines are:
+
+\begin{itemize}
+\tightlist
+\item
+  forbidden \(f\): \(1s2s\,^3S_1\rightarrow1s^2\,^1S_0\);
+\item
+  intercombination \(i\): \(1s2p\,^3P_{{1,2}}\rightarrow1s^2\,^1S_0\),
+  often summed;
+\item
+  resonance \(r\): \(1s2p\,^1P_1\rightarrow1s^2\,^1S_0\).
+\end{itemize}
+
+The standard diagnostics are
+
+\[
+R=\frac{{f}}{{i}},
+\qquad
+G=\frac{{f+i}}{{r}}.
+\]
+
+\(R\) responds strongly to density and radiation-driven transfer between
+\(^3S\) and \(^3P\); \(G\) responds to the balance of
+recombination/cascade feeding, collision excitation, and resonance-line
+transfer.
+
+\subsubsection{7.2 Canonical same-run benchmark
+suite}\label{canonical-same-run-benchmark-suite}
+
+\begin{longtable}[]{@{}lrrl@{}}
+\toprule\noalign{}
+Ion & Atomic number & Default wavelength window & Run directory \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+C V & 6 & 40.0--42.0 Å &
+\passthrough{\lstinline!helike\_type69/c5\_ne1e8!} \\
+O VII & 8 & 21.0--23.0 Å &
+\passthrough{\lstinline!helike\_type69/o7\_ne1e8!} \\
+Mg XI & 12 & 9.0--9.4 Å &
+\passthrough{\lstinline!helike\_type69/mg11\_ne1e8!} \\
+Ca XIX & 20 & 3.0--3.35 Å &
+\passthrough{\lstinline!helike\_type69/ca19\_xi3\_ne1e8!} \\
+\end{longtable}
+
+These cases test the same atomic architecture across increasing nuclear
+charge and line energy. The exact local temperature, electron density,
+ion fraction, and \(\log\xi\) are extracted from each same-run XSTAR
+output rather than imposed from one universal model.
+
+\subsubsection{7.3 Physical processes that control the four-ion
+benchmark}\label{physical-processes-that-control-the-four-ion-benchmark}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Process
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Main data/source branches
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Effect on f/i/r
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Spontaneous decay and escape & type 50, \passthrough{\lstinline!pescl!},
+\passthrough{\lstinline!calc\_hmc\_ion!} & Direct line drain; optical
+depth changes apparent resonance strength. \\
+Line pumping & type 50 plus live radiation and
+\passthrough{\lstinline!cfrac!} & Transfers population upward;
+suppressed for \passthrough{\lstinline!cfrac=1!}. \\
+Direct electron excitation & types 63, 68, 69 & Feeds triplet and
+resonance upper levels with strong temperature/density dependence. \\
+Radiative cascades & type 71 & Feeds spectroscopic levels from
+superlevels. \\
+Collisional superlevel coupling & type 77 & Redistributes superlevel
+populations. \\
+Photoionization/RR & type 53 & Couples levels to parent continuum and
+produces RRC/heating/cooling. \\
+DR/source closure & types 70, 74, 99 & Supplies and drains
+superlevels/parent continua. \\
+Adjacent-ion compact aliases &
+\passthrough{\lstinline!calc\_hmc\_element!} topology & Ensures
+ion-stage and level-population normalization are solved consistently. \\
+\end{longtable}
+
+\subsubsection{7.4 Current benchmark
+interpretation}\label{current-benchmark-interpretation}
+
+O VII is the deepest source-code parity case because it has direct
+rate-grid, \passthrough{\lstinline!ucalc!}, matrix, population, basis,
+and balance probes. C V, Mg XI, and Ca XIX are retained as cross-ion
+regression cases. The aim is not to tune each ion separately; it is to
+implement one source-equivalent data/rate/basis pipeline that reproduces
+all four under their own local XSTAR states.
+
+\subsection{8. New findings established by the validation
+sequence}\label{new-findings-established-by-the-validation-sequence}
+
+\subsubsection{8.1 Type-50 escape and
+pumping}\label{type-50-escape-and-pumping}
+
+\begin{itemize}
+\tightlist
+\item
+  The exact \passthrough{\lstinline!cfrac!}-dependent
+  \passthrough{\lstinline!ptmp1/ptmp2!} formulas are required.
+\item
+  For the O VII benchmark with \passthrough{\lstinline!cfrac=1!}, line
+  pumping is zero.
+\item
+  Five selected O VII triplet type-50 records match
+  \passthrough{\lstinline!ucalc!} and matrix insertions.
+\item
+  A global diagnostic escape factor such as 0.35 must not be used as the
+  production source-equivalent treatment.
+\end{itemize}
+
+\subsubsection{8.2 Matrix-family parity}\label{matrix-family-parity}
+
+At the selected O VII local state:
+
+\begin{itemize}
+\tightlist
+\item
+  type 63, 68, and 69 collision matrix terms are essentially at unity
+  parity;
+\item
+  type 71 cascade terms are at approximately 0.998 median parity;
+\item
+  type 50 contains exact triplet matches but older non-triplet proxy
+  treatments remain in historical products;
+\item
+  type 77 showed a moderate historical difference and remains a
+  native-port target;
+\item
+  type 53 historical proxy rows differ strongly from live
+  \passthrough{\lstinline!phint53!} rates.
+\end{itemize}
+
+\subsubsection{8.3 The type-53 scale is real but not the main population
+lever}\label{the-type-53-scale-is-real-but-not-the-main-population-lever}
+
+Live \passthrough{\lstinline!epim/bremsam!} recomputation confirmed the
+approximately 44 scale. Controlled replay of exact XSTAR
+\passthrough{\lstinline!ucalc!} rates for type 53, 50, 77, and 99 moved
+O VII triplet population fractions by at most about
+\(8.36\times10^{{-7}}\). This established that population/source closure
+and basis mapping had to be fixed before interpreting rate-family
+changes end to end.
+
+\subsubsection{8.4 Direct Fortran probes}\label{direct-fortran-probes}
+
+The instrumentation now captures:
+
+\begin{itemize}
+\tightlist
+\item
+  per-record \passthrough{\lstinline!ucalc ans1..ans6!};
+\item
+  the four \passthrough{\lstinline!calc\_hmc\_ion!} matrix insertions
+  and shared capture IDs;
+\item
+  live \passthrough{\lstinline!epim!},
+  \passthrough{\lstinline!bremsam!}, and
+  \passthrough{\lstinline!bremsint!} rate grids;
+\item
+  paired before/after-\passthrough{\lstinline!msolvelucy!} population
+  vectors;
+\item
+  exact \passthrough{\lstinline!calc\_hmc\_element!} compact-basis roles
+  and ion-block offsets.
+\end{itemize}
+
+These probes convert implementation questions into direct record/row
+comparisons rather than inferred fits to final line ratios.
+
+\subsubsection{8.5 Exact O-element compact
+basis}\label{exact-o-element-compact-basis}
+
+The selected O-element solve has:
+
+\begin{itemize}
+\tightlist
+\item
+  607 compact population rows;
+\item
+  352 nonzero post-solve rows;
+\item
+  six compact ion blocks and shared parent-continuum aliases.
+\end{itemize}
+
+The original sequential Python
+\passthrough{\lstinline!xstar\_ipmat2\_index!} mapping was wrong.
+Physical remapping by
+\passthrough{\lstinline!(ion\_stage, level\_index)!} maps all 114
+current Python population identities to 113 unique compact rows and
+raises captured XSTAR population coverage from about
+\(2.6\times10^{{-6}}\) to
+
+\[
+0.991904690445624.
+\]
+
+\subsubsection{8.6 Six-row priority
+expansion}\label{six-row-priority-expansion}
+
+Adding compact rows
+
+\begin{lstlisting}
+293, 241, 244, 242, 80, 79
+\end{lstlisting}
+
+raises represented solved-population coverage to
+
+\[
+0.9999999463123856.
+\]
+
+Three are ordinary rows and three are shared
+parent-continuum/next-ion-ground aliases. The active staged basis
+contains 119 unique compact rows represented by 120 physical Python
+identities.
+
+\subsubsection{8.7 Complete priority-row matrix manifest and
+balance}\label{complete-priority-row-matrix-manifest-and-balance}
+
+After correcting endpoint translation and element filtering:
+
+\begin{itemize}
+\tightlist
+\item
+  all six priority rows have Fortran matrix coverage;
+\item
+  1,260 matrix-active records have four rows;
+\item
+  nine intentional non-matrix metadata records have zero rows;
+\item
+  no compact matrix endpoints are unmapped;
+\item
+  the six selected row equations pass a 0.5\% relative residual
+  threshold against the captured XSTAR population vector;
+\item
+  the maximum row residual is approximately \(1.7471\times10^{{-3}}\).
+\end{itemize}
+
+This is the strongest current evidence that the reconstructed topology
+and probed terms are correct for the staged subset.
+
+\subsection{\texorpdfstring{9. \texttt{xstar-atomic} data and software
+structures}{9. xstar-atomic data and software structures}}\label{xstar-atomic-data-and-software-structures}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Python structure/module
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Purpose
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!ATDB!}, \passthrough{\lstinline!RecordHeader!},
+\passthrough{\lstinline!RawRecord!} & Low-level packed FITS access. \\
+\passthrough{\lstinline!ATDBIndexArrays!},
+\passthrough{\lstinline!IndexedRecord!},
+\passthrough{\lstinline!ElementInfo!}, \passthrough{\lstinline!IonInfo!}
+& Array-backed element/ion/level hierarchy and targeted selection. \\
+\passthrough{\lstinline!XSTARAtomic!} & Reusable high-level database
+object and workflow namespaces. \\
+\passthrough{\lstinline!LocalPlasmaState!} & Temperature, density,
+ionization and local abundance state. \\
+\passthrough{\lstinline!RadiationField!} & Energy grid and local
+radiation samples; future source-equivalent rate-grid carrier. \\
+\passthrough{\lstinline!EscapeContext!} &
+\passthrough{\lstinline!cfrac!}, line/continuum optical depths,
+velocity/escape data. \\
+\passthrough{\lstinline!XSTARContext!} & Combined state/radiation/escape
+object. \\
+\passthrough{\lstinline!RateEvaluation!} & Numeric rate plus
+raw/interpreted branch provenance. \\
+\passthrough{\lstinline!XSTARContinuumState!},
+\passthrough{\lstinline!XSTARZoneState!},
+\passthrough{\lstinline!XSTARRunState!} & Skeleton for future full
+radial calculations and output recreation. \\
+Record-level parity products & Join Python records to XSTAR
+\passthrough{\lstinline!ucalc!} and four matrix rows. \\
+Element-basis probe/remap/scaffold & Reconstructs compact
+\passthrough{\lstinline!ipmat2!} topology and aliases. \\
+Priority expansion/closure/balance products & Staged native
+implementation manifest and consistency gates. \\
+\end{longtable}
+
+\subsection{10. Current implementation
+status}\label{current-implementation-status}
+
+\subsubsection{Source-equivalent or strongly
+validated}\label{source-equivalent-or-strongly-validated}
+
+\begin{itemize}
+\tightlist
+\item
+  packed FITS vector reader and hierarchy;
+\item
+  level and line extraction;
+\item
+  selected photoionization and recombination decoders;
+\item
+  type 56 and validated type 63 collision branches;
+\item
+  type 68 and 69 He-like collision evaluation/matrix placement;
+\item
+  type 50 triplet detail-state escape/pumping calculation;
+\item
+  type 71 cascade evaluation/matrix placement;
+\item
+  raw record-level \passthrough{\lstinline!ucalc!} and matrix probe
+  association;
+\item
+  exact O-element compact-basis reconstruction and physical remapping;
+\item
+  six-row priority matrix manifest and row-balance validation.
+\end{itemize}
+
+\subsubsection{Diagnostic or incomplete}\label{diagnostic-or-incomplete}
+
+\begin{itemize}
+\tightlist
+\item
+  historical proxy \passthrough{\lstinline!xstar-powerlaw!} type-53
+  matrix normalization;
+\item
+  native type 77 implementation over the expanded basis;
+\item
+  native type 70/74/99 parent/superlevel source closure;
+\item
+  expanded-basis RHS and normalization assembly;
+\item
+  complete 607-row native element solve;
+\item
+  coupled ionization/temperature iteration;
+\item
+  radial transfer and output reproduction.
+\end{itemize}
+
+\subsection{11. Roadmap to a full XSTAR
+implementation}\label{roadmap-to-a-full-xstar-implementation}
+
+\subsubsection{Phase A: controlled 119-row compact
+solve}\label{phase-a-controlled-119-row-compact-solve}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Instantiate the corrected 113 mapped compact rows plus the six
+  priority rows.
+\item
+  Preserve all parent-continuum aliases as one unknown with multiple
+  role labels.
+\item
+  Assemble probed matrix entries and explicit RHS/normalization terms.
+\item
+  Solve the 119-row system and compare every population and selected row
+  residual with XSTAR.
+\item
+  Keep this as a replay/parity mode until native formulas reproduce it.
+\end{enumerate}
+
+\textbf{Acceptance gates:} no unmapped endpoints; normalization exactly
+one; priority rows below the residual tolerance; mapped population
+fractions agree within declared tolerances.
+
+\subsubsection{Phase B: native rates for the priority
+subset}\label{phase-b-native-rates-for-the-priority-subset}
+
+Port only the rate families actually touching the six selected rows.
+Every native branch must reproduce:
+
+\begin{lstlisting}
+raw ATDB payload -> ans1..ans6 -> four matrix rows -> row balance
+\end{lstlisting}
+
+No empirical source weights or scale factors should be accepted in
+production mode.
+
+\subsubsection{Phase C: eliminate the type-53 approximately 44
+scale}\label{phase-c-eliminate-the-type-53-approximately-44-scale}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Promote \passthrough{\lstinline!epim!},
+  \passthrough{\lstinline!bremsam!}, \passthrough{\lstinline!bremsint!}
+  to first-class live-state arrays.
+\item
+  Port complete \passthrough{\lstinline!phint53!} and
+  \passthrough{\lstinline!phint53hunt!} behavior.
+\item
+  Validate threshold binning, cross-section mapping, forward rate,
+  reverse rate, heating/cooling, opacity, and RRC emissivity.
+\item
+  Replace proxy type-53 terms only after record-level parity.
+\item
+  Repeat across C V, O VII, Mg XI, and Ca XIX.
+\end{enumerate}
+
+\subsubsection{Phase D: expand from 119 to all 607 compact
+rows}\label{phase-d-expand-from-119-to-all-607-compact-rows}
+
+Use the population-ranked scaffold to add remaining rows in tiers. For
+each tier:
+
+\begin{itemize}
+\tightlist
+\item
+  add row identities and aliases;
+\item
+  add all touching records and endpoints;
+\item
+  verify row balance;
+\item
+  compare population coverage and line emissivities;
+\item
+  retain a deterministic mapping from physical roles to compact rows.
+\end{itemize}
+
+\subsubsection{Phase E: full ionization and thermal
+closure}\label{phase-e-full-ionization-and-thermal-closure}
+
+Port and validate:
+
+\begin{itemize}
+\tightlist
+\item
+  total ionization/recombination rates;
+\item
+  \passthrough{\lstinline!istruc!}/\passthrough{\lstinline!ioneqm!} ion
+  fractions;
+\item
+  \passthrough{\lstinline!levwkelement!} source construction;
+\item
+  \passthrough{\lstinline!msolvelucy!} superlevel iteration;
+\item
+  heating/cooling and electron-fraction closure;
+\item
+  \passthrough{\lstinline!dsec!} convergence behavior.
+\end{itemize}
+
+\subsubsection{Phase F: radial transfer and output
+products}\label{phase-f-radial-transfer-and-output-products}
+
+Implement the zone/pass driver, continuum transfer, optical-depth
+update, and output writers. Validate detail products first, then final
+spectra:
+
+\begin{lstlisting}
+xoNN_detail/detal2/detal3/detal4
+  -> xout_abund/lines/rrc/cont/spect
+\end{lstlisting}
+
+\subsubsection{Phase G: C++ backend}\label{phase-g-c-backend}
+
+The Python implementation remains the readable reference and audit
+layer. Performance-critical kernels should expose stable array-oriented
+interfaces suitable for C++:
+
+\begin{itemize}
+\tightlist
+\item
+  cross-section mapping and
+  \passthrough{\lstinline!phint53/phint53hunt!} integrals;
+\item
+  collision-rate grid evaluation;
+\item
+  sparse matrix assembly;
+\item
+  Lucy/sparse linear solves;
+\item
+  transfer and optical-depth loops;
+\item
+  thermal iteration.
+\end{itemize}
+
+The backend must consume and return the same typed Python state objects
+and provenance IDs. Python tests and direct XSTAR probes remain the
+correctness oracle.
+
+\subsection{12. Conditional compact solve milestone (v0.3.201)}\label{conditional-compact-solve-milestone-v0.3.201}
+
+For the six activated rows, partition the compact steady-state equations into selected and external blocks,
+\begin{equation}
+A_{SS}x_S + A_{SE}x_E = 0,
+\qquad
+A_{SS}x_S = -A_{SE}x_E.
+\end{equation}
+Here, $x_E$ is fixed to the captured XSTAR post-\texttt{msolvelucy} population vector. This isolates compact matrix assembly and source/sink closure without yet claiming an autonomous Python element solve. For O VII rows 79, 80, 241, 242, 244, and 293, the row-scaled selected matrix is full rank, its condition number is approximately 5.8545, and all six solved populations agree with XSTAR within 0.5\%. The maximum relative difference is approximately $3.0341\times10^{-3}$; the linear-system residual is below $4\times10^{-16}$.
+
+This validates the selected compact topology and external source closure. The coefficients are still XSTAR-probed. The next implementation replaces them family by family with native Python rates, then expands the same partitioned solve to all 119 active rows before introducing a fully autonomous normalization and ionization closure.
+
+\subsection{13. Validation policy}\label{validation-policy}
+
+A feature becomes a production default only after passing all applicable
+layers:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Database parity:} raw payload and level/ion identity are
+  correct.
+\item
+  \textbf{Rate parity:} native \passthrough{\lstinline!ans1..ans6!}
+  match the same XSTAR capture.
+\item
+  \textbf{Matrix parity:} row/column/sign and diagonal partners match.
+\item
+  \textbf{Basis parity:} compact index and alias roles match.
+\item
+  \textbf{Population parity:} pre/post solve vectors and normalization
+  match.
+\item
+  \textbf{Emissivity parity:} lines/RRC/continuum match from the same
+  populations.
+\item
+  \textbf{Cross-ion regression:} C V, O VII, Mg XI, and Ca XIX pass
+  without ion-specific tuning.
+\item
+  \textbf{End-to-end parity:} radial/detail/final products agree within
+  documented tolerances.
+\end{enumerate}
+
+\subsection{14. Practical source-to-Python
+map}\label{practical-source-to-python-map}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+XSTAR source
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Python counterpart or target
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!readtbl.f90!},
+\passthrough{\lstinline!dread.f90!} &
+\passthrough{\lstinline!inspect.py!},
+\passthrough{\lstinline!hierarchy.ATDB!} \\
+\passthrough{\lstinline!setptrs.f90!} &
+\passthrough{\lstinline!ATDBIndexArrays!}, hierarchy cache,
+process-specific joins \\
+\passthrough{\lstinline!trnfrc.f90!},
+\passthrough{\lstinline!bremsmap.f90!} &
+\passthrough{\lstinline!RadiationField!}, live rate-grid probes, future
+transfer backend \\
+\passthrough{\lstinline!calc\_ion\_rates.f90!},
+\passthrough{\lstinline!istruc.f90!} & current audits; future native
+ionization closure \\
+\passthrough{\lstinline!levwkelement.f90!} & basis/source probes; future
+element-state constructor \\
+\passthrough{\lstinline!calc\_hmc\_ion.f90!} & record-level parity,
+compact matrix manifests \\
+\passthrough{\lstinline!ucalc.f90!}, \passthrough{\lstinline!calt*.f90!}
+& process-specific rate evaluators and provenance \\
+\passthrough{\lstinline!phint53.f90!},
+\passthrough{\lstinline!phint53hunt.f90!} & live type-53 audits; future
+native PI/RR kernels \\
+\passthrough{\lstinline!calc\_hmc\_element.f90!} & element-basis
+probes/remap/scaffold/priority expansion \\
+\passthrough{\lstinline!msolvelucy.f90!} &
+\passthrough{\lstinline!xstar-lucy!} prototype and future
+source-equivalent solver \\
+\passthrough{\lstinline!calc\_emis*!},
+\passthrough{\lstinline!linopac.f90!} & emissivity/export modules and
+future opacity parity \\
+\passthrough{\lstinline!stpcut.f90!} & future line/RRC depth
+evolution \\
+\passthrough{\lstinline!fstepr*!},
+\passthrough{\lstinline!writespectra*!} & output readers now; future
+writers \\
+\end{longtable}
+
+\subsection{15. References and source
+provenance}\label{references-and-source-provenance}
+
+Primary code reference: the XSTAR Fortran source distributed with the
+reviewed package, especially \passthrough{\lstinline!readtbl.f90!},
+\passthrough{\lstinline!setptrs.f90!},
+\passthrough{\lstinline!xstarcalc.f90!},
+\passthrough{\lstinline!calc\_hmc\_all.f90!},
+\passthrough{\lstinline!calc\_hmc\_element.f90!},
+\passthrough{\lstinline!calc\_hmc\_ion.f90!},
+\passthrough{\lstinline!ucalc.f90!},
+\passthrough{\lstinline!phint53.f90!},
+\passthrough{\lstinline!calt68.f90!},
+\passthrough{\lstinline!calt69.f90!},
+\passthrough{\lstinline!calt71.f90!},
+\passthrough{\lstinline!calt74.f90!},
+\passthrough{\lstinline!calt77.f90!},
+\passthrough{\lstinline!calt99.f90!},
+\passthrough{\lstinline!msolvelucy.f90!},
+\passthrough{\lstinline!trnfrc.f90!},
+\passthrough{\lstinline!stpcut.f90!}, and the output routines.
+
+Scientific references carried with the development review:
+
+\begin{itemize}
+\tightlist
+\item
+  Kallman et al.~(1996), \emph{ApJ}, 465, 994.
+\item
+  Kallman \& Bautista (2001), \emph{ApJS}, 133, 221.
+\item
+  Bautista \& Kallman (2001), \emph{ApJS}, 134, 139.
+\item
+  Kallman et al.~(2004), \emph{ApJS}, 155, 675.
+\end{itemize}
+
+The numerical findings in this document are from same-run XSTAR debug
+probes and \passthrough{\lstinline!xstar-atomic!} audit products through
+v0.3.201. They should be regenerated when the XSTAR source/database
+version, benchmark inputs, or compact-basis selection changes.
+
+\end{document}
