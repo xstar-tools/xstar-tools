@@ -1257,6 +1257,7 @@ The validated O VII compact-basis findings through v0.3.201 are:
 - all six priority rows have complete Fortran matrix coverage and no unmapped endpoints;
 - their XSTAR row-balance residuals pass a 0.5% threshold, with a maximum relative residual of about 1.7471e-3.
 - the v0.3.201 conditional six-row solve holds the remaining 601 XSTAR compact populations fixed, uses a full-rank row-scaled 6x6 matrix with condition number about 5.8545, and recovers all six populations within 0.5%; the maximum relative population difference is about 3.0341e-3.
+- the v0.3.202 native-readiness audit shows that type 51 supplies about 97.77% of the internal population-weighted coupling, while type 50, type 71, and type 53 supply about 99.06%, 0.861%, and 0.0795% of the external RHS, respectively.
 
 The approximately 44 type-53 scale remains an explicit future task. It is not treated as an empirical correction. The source-equivalent solution is to carry live `epim(:)`, `bremsam(:)`, and `bremsint(:)`, port `phint53.f90`/`phint53hunt.f90`, reproduce `ans1..ans6` and all matrix placements, and only then replace the historical proxy `xstar-powerlaw` terms.
 

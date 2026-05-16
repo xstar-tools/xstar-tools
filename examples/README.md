@@ -660,3 +660,26 @@ PYTHONPATH=src python examples/90_audit_xstar_priority_matrix_balance.py \
   --out-dir xstar_priority_matrix_balance_o7_v03199 \
   --print-summary
 ```
+
+### `91_audit_xstar_priority_conditional_solve.py`
+
+Solves the six activated compact rows while holding the remaining XSTAR population rows fixed. This validates the selected compact matrix and external source/sink closure before native-rate replacement.
+
+```bash
+PYTHONPATH=src python examples/91_audit_xstar_priority_conditional_solve.py \
+  --priority-matrix-balance-audit xstar_priority_matrix_balance_o7_v03199 \
+  --out-dir xstar_priority_conditional_solve_o7_v03201 \
+  --print-summary
+```
+
+### `92_audit_xstar_priority_native_readiness.py`
+
+Ranks the internal selected-block couplings and external right-hand-side families by population-weighted influence. It assigns conservative native implementation statuses and writes the staged port plan from probe-derived coefficients to native rate assembly.
+
+```bash
+PYTHONPATH=src python examples/92_audit_xstar_priority_native_readiness.py \
+  --priority-conditional-solve-audit xstar_priority_conditional_solve_o7_v03201 \
+  --priority-matrix-balance-audit xstar_priority_matrix_balance_o7_v03199 \
+  --out-dir xstar_priority_native_readiness_o7_v03202 \
+  --print-summary
+```

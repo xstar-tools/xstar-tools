@@ -827,6 +827,17 @@ Here, `x_E` is fixed to the captured XSTAR post-`msolvelucy` population vector. 
 
 This validates the selected compact topology and external source closure. The coefficients are still XSTAR-probed. The next implementation replaces them family by family with native Python rates, then expands the same partitioned solve to all 119 active rows before introducing a fully autonomous normalization and ionization closure.
 
+## 12.1. Native-assembly readiness milestone (v0.3.202)
+
+The six-row conditional solve separates the internal compact block from its external closure. Ranking the population-weighted terms gives a concrete native port order:
+
+- type 51 contributes about 97.77% of the internal selected-block coupling;
+- type 50 contributes about 99.06% of the external right-hand side;
+- type 71 contributes about 0.861% of the external right-hand side;
+- type 53 contributes about 0.0795% of the external right-hand side in this state, but remains mandatory for source equivalence and for other radiation-dominated states.
+
+Therefore the minimum controlled implementation sequence is: native type-51 internal coupling, native type-50/type-71 external closure, exact live-radiation type-53, then the smaller parent/superlevel and residual families. The approximately 44 type-53 scale must disappear through the `epim`/`bremsam`/`phint53` path; it must not be absorbed into a fitted multiplier.
+
 ## 13. Validation policy
 
 A feature becomes a production default only after passing all applicable layers:
@@ -869,4 +880,4 @@ Scientific references carried with the development review:
 - Bautista & Kallman (2001), *ApJS*, 134, 139.
 - Kallman et al. (2004), *ApJS*, 155, 675.
 
-The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.201. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.
+The numerical findings in this document are from same-run XSTAR debug probes and `xstar-atomic` audit products through v0.3.202. They should be regenerated when the XSTAR source/database version, benchmark inputs, or compact-basis selection changes.

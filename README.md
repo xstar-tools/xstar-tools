@@ -1,6 +1,6 @@
 # xstar-atomic
 
-Latest local development note: **v0.3.201** adds a conditional compact solve for the six validated O VII priority rows. It solves the 6x6 selected block while holding the other 601 XSTAR populations fixed, recovers all six captured populations within 0.5%, and prepares replacement of probe-derived coefficients with native rate assembly. Default solver physics and the unresolved type-53 approximately 44 scale are unchanged.
+Latest local development note: **v0.3.202** adds a native-assembly readiness audit for the validated six-row O VII conditional solve. It ranks internal and external rate-family influence and defines the implementation order: type 51 internal coupling, type 50/type 71 external closure, then exact live-radiation type 53. No solver physics or empirical type-53 scale correction is introduced.
 
 Latest documentation note: **v0.3.200** adds a comprehensive Markdown and LaTeX guide to the packed `atdb.fits` structures, XSTAR Fortran source layout, record-to-rate-to-matrix data flow, physical equations, C V/O VII/Mg XI/Ca XIX benchmark interpretation, findings through v0.3.199, the unresolved type-53 approximately 44 scale, and the staged Python/C++ implementation roadmap. This is a documentation-only release; solver physics is unchanged.
 
