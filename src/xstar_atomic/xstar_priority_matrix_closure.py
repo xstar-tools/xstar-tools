@@ -9,7 +9,11 @@ translation
 ``element_ipmat2 = ion_ipmat2_offset + indbi``
 
 and then retains every four-row Fortran matrix insertion that touches an
-activated compact row.  This is essential for photoionization/recombination
+activated compact row.  Before endpoint mapping, selected ``ucalc`` captures
+are restricted to the element's reconstructed ``jkk_ion`` blocks.  This avoids
+letting unrelated H/He/etc. matrix rows contaminate the unmapped-endpoint
+count when ``latest-per-record`` is used across the whole XSTAR run.  The exact
+endpoint translation remains essential for photoionization/recombination
 records whose local ``indbi`` endpoint lies beyond the current ion's ``nlev``:
 those indices intentionally enter an adjacent-ion or superlevel block and must
 not be interpreted as missing local levels.
@@ -267,6 +271,41 @@ def _select_ucalc_occurrence_rows(
     return rows
 
 
+def _filter_selected_element_ucalc_rows(
+    selected_ucalc: Sequence[Mapping[str, Any]],
+    valid_jkk_ions: Sequence[int],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Restrict whole-run per-record selections to one reconstructed element.
+
+    The raw probes contain every element evaluated during the XSTAR run.  A
+    latest-per-record selection therefore contains valid captures for many
+    unrelated ``jkk_ion`` values.  Those rows must be excluded before compact
+    endpoint mapping, because the reconstructed block offsets describe only the
+    selected element.
+    """
+    valid = set(int(value) for value in valid_jkk_ions)
+    included: List[Dict[str, Any]] = []
+    excluded: List[Dict[str, Any]] = []
+    counts: Dict[int | None, int] = defaultdict(int)
+    for raw in selected_ucalc:
+        row = dict(raw)
+        jkk = _as_int(row.get("jkk_ion"), None)
+        counts[jkk] += 1
+        if jkk in valid:
+            included.append(row)
+        else:
+            excluded.append(row)
+    summary_rows = [
+        {
+            "jkk_ion": "" if jkk is None else jkk,
+            "n_selected_ucalc_records": count,
+            "element_filter_status": "included_selected_element_block" if jkk in valid else "excluded_non_element_block",
+        }
+        for jkk, count in sorted(counts.items(), key=lambda item: (-1 if item[0] is None else item[0]))
+    ]
+    return included, excluded, summary_rows
+
+
 def _load_selected_matrix_rows(
     matrix_csv: Path,
     selected_ucalc: Sequence[Mapping[str, Any]],
@@ -452,14 +491,20 @@ def build_priority_matrix_closure_audit(
     matrix_path, matrix_status = _resolve_optional_csv(matrix_probe_csv, "xstar_calc_hmc_ion_matrix_probe.csv")
 
     selected_all_ucalc: List[Dict[str, Any]] = []
+    selected_element_ucalc: List[Dict[str, Any]] = []
+    excluded_non_element_ucalc: List[Dict[str, Any]] = []
+    element_filter_rows: List[Dict[str, Any]] = []
     raw_matrix_rows: List[Dict[str, Any]] = []
     all_mapped_matrix_rows: List[Dict[str, Any]] = []
     compact_matrix_rows: List[Dict[str, Any]] = []
     unmapped_rows: List[Dict[str, Any]] = []
     if ucalc_status == "csv_loaded" and ucalc_path is not None:
         selected_all_ucalc = _select_ucalc_occurrence_rows(ucalc_path, occurrence_rank=occurrence_rank)
-    if selected_all_ucalc and matrix_status == "csv_loaded" and matrix_path is not None:
-        raw_matrix_rows = _load_selected_matrix_rows(matrix_path, selected_all_ucalc)
+        selected_element_ucalc, excluded_non_element_ucalc, element_filter_rows = (
+            _filter_selected_element_ucalc_rows(selected_all_ucalc, sorted(jkk_to_nionp))
+        )
+    if selected_element_ucalc and matrix_status == "csv_loaded" and matrix_path is not None:
+        raw_matrix_rows = _load_selected_matrix_rows(matrix_path, selected_element_ucalc)
         all_mapped_matrix_rows, compact_matrix_rows, unmapped_rows = _map_matrix_terms(
             raw_matrix_rows,
             jkk_to_nionp,
@@ -480,7 +525,7 @@ def build_priority_matrix_closure_audit(
             touching_terms_by_record[rec].append(row)
 
     ucalc_by_record = {
-        _as_int(row.get("ml_data"), 0) or 0: row for row in selected_all_ucalc
+        _as_int(row.get("ml_data"), 0) or 0: row for row in selected_element_ucalc
     }
     matrix_touching_records = set(touching_terms_by_record)
     direct_nonmatrix_records: set[int] = set()
@@ -611,7 +656,7 @@ def build_priority_matrix_closure_audit(
     )
     status = "priority_matrix_closure_manifest_completed" if probes_loaded else "priority_matrix_closure_role_manifest_ready_probe_csvs_not_loaded"
     summary = {
-        "audit_version": "v0.3.197",
+        "audit_version": "v0.3.198",
         "status": status,
         "ion": prior_summary.get("ion", ""),
         "selected_basis_solve_call_id": prior_summary.get("selected_basis_solve_call_id", ""),
@@ -621,6 +666,11 @@ def build_priority_matrix_closure_audit(
         "matrix_probe_status": matrix_status,
         "ucalc_probe_csv": str(ucalc_path or ""),
         "matrix_probe_csv": str(matrix_path or ""),
+        "element_jkk_ions": ";".join(str(v) for v in sorted(jkk_to_nionp)),
+        "n_all_elements_ucalc_records_selected_at_occurrence": len(selected_all_ucalc),
+        "n_selected_element_ucalc_records_at_occurrence": len(selected_element_ucalc),
+        "n_excluded_non_element_ucalc_records": len(excluded_non_element_ucalc),
+        "element_probe_filter_mode": "reconstructed_element_jkk_blocks_before_matrix_load",
         "n_selected_compact_rows": len(selected_ips),
         "selected_xstar_ipmat2_indices": ";".join(str(v) for v in selected_ips),
         "n_selected_physical_roles": len(role_rows),
@@ -655,6 +705,7 @@ def build_priority_matrix_closure_audit(
     return {
         "summary": summary,
         "block_rows": block_rows,
+        "element_filter_rows": element_filter_rows,
         "role_rows": role_rows,
         "ucalc_rows": ucalc_rows,
         "nonmatrix_ucalc_rows": nonmatrix_ucalc_rows,
@@ -677,6 +728,7 @@ def write_priority_matrix_closure_audit(out_dir: str | Path, audit: Mapping[str,
     out.mkdir(parents=True, exist_ok=True)
     paths = {
         "block_map_csv": out / "xstar_priority_matrix_closure_audit_block_map.csv",
+        "element_filter_summary_csv": out / "xstar_priority_matrix_closure_audit_element_filter_summary.csv",
         "role_map_csv": out / "xstar_priority_matrix_closure_audit_role_map.csv",
         "ucalc_records_csv": out / "xstar_priority_matrix_closure_audit_ucalc_records.csv",
         "nonmatrix_ucalc_records_csv": out / "xstar_priority_matrix_closure_audit_nonmatrix_ucalc_records.csv",
@@ -689,6 +741,7 @@ def write_priority_matrix_closure_audit(out_dir: str | Path, audit: Mapping[str,
         "markdown": out / "xstar_priority_matrix_closure_audit.md",
     }
     _write_csv(paths["block_map_csv"], list(audit.get("block_rows", [])))
+    _write_csv(paths["element_filter_summary_csv"], list(audit.get("element_filter_rows", [])))
     _write_csv(paths["role_map_csv"], list(audit.get("role_rows", [])))
     _write_csv(paths["ucalc_records_csv"], list(audit.get("ucalc_rows", [])))
     _write_csv(paths["nonmatrix_ucalc_records_csv"], list(audit.get("nonmatrix_ucalc_rows", [])))
@@ -707,6 +760,8 @@ def write_priority_matrix_closure_audit(out_dir: str | Path, audit: Mapping[str,
         f"- status: `{summary.get('status')}`",
         f"- ion: `{summary.get('ion')}`",
         f"- occurrence_rank: `{summary.get('occurrence_rank')}`",
+        f"- element jkk blocks: `{summary.get('element_jkk_ions')}`",
+        f"- excluded non-element captures: `{summary.get('n_excluded_non_element_ucalc_records')}`",
         f"- selected compact rows: `{summary.get('selected_xstar_ipmat2_indices')}`",
         f"- selected physical roles: `{summary.get('n_selected_physical_roles')}`",
         f"- selected matrix ucalc records: `{summary.get('n_selected_matrix_ucalc_records')}`",
@@ -718,7 +773,7 @@ def write_priority_matrix_closure_audit(out_dir: str | Path, audit: Mapping[str,
         f"- Fortran manifest ready: `{summary.get('fortran_priority_subset_matrix_manifest_ready')}`",
         f"- native matrix closure ready: `{summary.get('native_priority_subset_matrix_closure_ready')}`",
         "",
-        "Matrix endpoints are translated exactly as in `calc_hmc_element.f90`: `compact_ipmat2 = ion_ipmat2_offset + indbi`. Shared parent-continuum / next-ion-ground rows remain one compact unknown with multiple physical roles. Non-matrix `ucalc` metadata records are retained separately and do not falsely fail the four-row insertion check.",
+        "Whole-run `ucalc` selections are first restricted to the reconstructed element `jkk_ion` blocks, preventing unrelated-element captures from contaminating endpoint readiness. Matrix endpoints are then translated exactly as in `calc_hmc_element.f90`: `compact_ipmat2 = ion_ipmat2_offset + indbi`. Shared parent-continuum / next-ion-ground rows remain one compact unknown with multiple physical roles. Non-matrix `ucalc` metadata records are retained separately and do not falsely fail the four-row insertion check.",
     ]
     paths["markdown"].write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {key: str(path) for key, path in paths.items()}

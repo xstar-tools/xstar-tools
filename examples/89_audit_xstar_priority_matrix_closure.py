@@ -37,6 +37,9 @@ def main() -> None:
         for key in [
             "audit_version", "status", "ion", "selected_basis_solve_call_id",
             "selection", "occurrence_rank", "ucalc_probe_status", "matrix_probe_status",
+            "element_jkk_ions", "n_all_elements_ucalc_records_selected_at_occurrence",
+            "n_selected_element_ucalc_records_at_occurrence",
+            "n_excluded_non_element_ucalc_records", "element_probe_filter_mode",
             "n_selected_compact_rows", "selected_xstar_ipmat2_indices",
             "n_selected_physical_roles", "n_selected_shared_alias_rows",
             "n_selected_ucalc_records", "n_selected_matrix_ucalc_records",

@@ -1,5 +1,9 @@
 # xstar-atomic
 
+Latest local development note: v0.3.198 fixes whole-run element leakage in `examples/89_audit_xstar_priority_matrix_closure.py`. Before compact endpoint mapping, per-record XSTAR probe selections are now restricted to the reconstructed element `jkk_ion` blocks. In the O VII v0.3.197 latest-per-record audit, all 7,432 apparent unmapped endpoints came from unrelated `jkk_ion=1--3`, while the O-element blocks are `jkk_ion=31--36`. The release adds an element-filter summary CSV and leaves native solver physics unchanged.
+Latest package note: **v0.3.198** is an audit correctness fix; rerun example 89 with the same command.
+
+
 Latest local development note: v0.3.197 fixes full-element priority matrix-manifest selection and endpoint mapping. Matrix endpoints are now translated exactly as XSTAR does in `calc_hmc_element.f90`, `compact_ipmat2 = ion_ipmat2_offset + indbi`, including adjacent-ion/superlevel endpoints with `indbi > nlev`. Non-matrix `ucalc` metadata records are separated from true four-row matrix records, and the full-element audit defaults to latest-per-record selection.
 Latest package note: **v0.3.197** updates `examples/89_audit_xstar_priority_matrix_closure.py`; no default solver physics is changed.
 
