@@ -140,16 +140,51 @@ def _selected_indices(summary: Mapping[str, Any], rows: Sequence[Mapping[str, An
     return sorted(out)
 
 
+def _infer_type53_nlevp_from_probe_endpoint(
+    *, xstar_idest2: int | None, packed_parent_offset: int | None,
+) -> int | None:
+    """Infer XSTAR ``nlevp`` from the probed type-53 endpoint.
+
+    ``ucalc.f90`` defines
+
+    ``idest2 = nlevp + idat(nidt-3) - 1``.
+
+    The maximum type-13 level index is not a safe substitute for ``nlevp``:
+    ATDB extraction can expose additional rows that are not members of the
+    active XSTAR ion-local block.  The direct ``ucalc`` endpoint is therefore
+    the authoritative source for parity work.
+    """
+    if xstar_idest2 is None or packed_parent_offset is None:
+        return None
+    value = int(xstar_idest2) - int(packed_parent_offset) + 1
+    return value if value > 0 else None
+
+
 def _decode_type53_records(
     *, atdb_fits: str | Path, wanted_records: Sequence[int],
+    endpoint_hints: Mapping[int, Sequence[Mapping[str, Any]]] | None = None,
     index_cache_path: str | Path | None = None, rebuild_index_cache: bool = False,
 ) -> tuple[dict[int, dict[str, Any]], dict[str, Any]]:
-    """Decode packed type-53 records plus current/parent level context."""
+    """Decode packed type-53 records plus exact XSTAR ion-block context.
+
+    The active continuum index ``nlevp`` is inferred record by record from the
+    direct XSTAR ``ucalc`` endpoint and the packed parent-level offset.  This
+    avoids the v0.3.208 error of using ``max(extracted_level_index)``, which can
+    include rows outside the active ion-local block and consequently corrupt
+    the continuum statistical weight, parent excitation, threshold, and Milne
+    factor.
+    """
     from .hierarchy import ATDB
     from .lines import extract_levels
 
     wanted = {int(v) for v in wanted_records}
+    hints = {int(k): [dict(x) for x in v] for k, v in (endpoint_hints or {}).items()}
     decoded: dict[int, dict[str, Any]] = {}
+    n_probe_inferred = 0
+    n_max_level_fallback = 0
+    n_inconsistent = 0
+    n_missing_continuum = 0
+
     with ATDB(atdb_fits, prompt_for_data=False) as db:
         records = db.select_records(
             data_type=53, rate_type=7, use_cache=True, cache_path=index_cache_path,
@@ -162,6 +197,7 @@ def _decode_type53_records(
                 groups[(int(r.element_z), int(r.ion_stage))].append(r)
 
         level_cache: dict[tuple[int, int], dict[int, dict[str, Any]]] = {}
+
         def levels(z: int, stage: int) -> dict[int, dict[str, Any]]:
             key = (z, stage)
             if key not in level_cache:
@@ -181,31 +217,79 @@ def _decode_type53_records(
             parent = levels(z, stage + 1)
             if not cur:
                 continue
-            nlev = max(cur)
-            continuum = cur.get(nlev, {})
-            continuum_energy = _as_float(continuum.get("energy_eV"), 0.0) or 0.0
-            continuum_g = _as_float(continuum.get("statistical_weight_g"), 0.0) or 0.0
+            atdb_max_level_index = max(cur)
             for r in recs:
-                h = db.header(int(r.recno))
+                recno = int(r.recno)
+                h = db.header(recno)
                 reals = [float(v) for v in db.real_slice(h)]
                 ints = [int(v) for v in db.int_slice(h)]
                 bound = ints[-2] if len(ints) >= 2 else None
                 offset = ints[-3] if len(ints) >= 3 else 1
-                idest2 = nlev + int(offset) - 1
+
+                observed_idest2 = sorted({
+                    int(v) for row in hints.get(recno, [])
+                    if (v := _as_int(row.get("idest2"), None)) is not None and v > 0
+                })
+                inferred_candidates = sorted({
+                    int(v) for obs in observed_idest2
+                    if (v := _infer_type53_nlevp_from_probe_endpoint(
+                        xstar_idest2=obs, packed_parent_offset=offset,
+                    )) is not None
+                })
+                inference_consistent = len(inferred_candidates) <= 1
+                if len(inferred_candidates) == 1:
+                    nlevp = inferred_candidates[0]
+                    nlevp_source = "ucalc_idest2_minus_packed_parent_offset_plus_one"
+                    n_probe_inferred += 1
+                else:
+                    nlevp = atdb_max_level_index
+                    nlevp_source = (
+                        "fallback_atdb_max_level_index_no_probe_hint"
+                        if not inferred_candidates
+                        else "fallback_atdb_max_level_index_inconsistent_probe_hints"
+                    )
+                    n_max_level_fallback += 1
+                    if len(inferred_candidates) > 1:
+                        n_inconsistent += 1
+
+                continuum = cur.get(int(nlevp), {})
+                continuum_found = bool(continuum)
+                if not continuum_found:
+                    n_missing_continuum += 1
+                continuum_energy = _as_float(continuum.get("energy_eV"), 0.0) or 0.0
+                continuum_g = _as_float(continuum.get("statistical_weight_g"), 0.0) or 0.0
+                idest2 = int(nlevp) + int(offset) - 1
+                endpoint_consistent = not observed_idest2 or all(v == idest2 for v in observed_idest2)
+
                 bound_row = cur.get(int(bound or -1), {})
                 base_threshold = _as_float(bound_row.get("binding_from_continuum_eV"), 0.0) or 0.0
-                parent_local = idest2 - nlev + 1
-                parent_row = parent.get(parent_local, {}) if idest2 > nlev else {}
-                parent_excitation = (_as_float(parent_row.get("energy_eV"), 0.0) or 0.0) if idest2 > nlev else 0.0
-                destination_g = (_as_float(parent_row.get("statistical_weight_g"), continuum_g) or continuum_g) if idest2 > nlev else continuum_g
+                parent_local = int(offset)
+                parent_row = parent.get(parent_local, {}) if idest2 > nlevp else {}
+                parent_excitation = (
+                    _as_float(parent_row.get("energy_eV"), 0.0) or 0.0
+                ) if idest2 > nlevp else 0.0
+                destination_g = (
+                    _as_float(parent_row.get("statistical_weight_g"), continuum_g) or continuum_g
+                ) if idest2 > nlevp else continuum_g
                 ntmp = max(1, len(reals) // 2)
                 e_ryd = [reals[2 * i] for i in range(ntmp) if 2 * i + 1 < len(reals)]
-                sigma = [max(0.0, reals[2 * i + 1]) * 1.0e-18 for i in range(ntmp) if 2 * i + 1 < len(reals)]
-                decoded[int(r.recno)] = {
-                    "record": int(r.recno), "element_z": z, "element": r.element_symbol,
-                    "ion_stage": stage, "ion": r.ion_label, "nlev": nlev,
+                sigma = [
+                    max(0.0, reals[2 * i + 1]) * 1.0e-18
+                    for i in range(ntmp) if 2 * i + 1 < len(reals)
+                ]
+                decoded[recno] = {
+                    "record": recno, "element_z": z, "element": r.element_symbol,
+                    "ion_stage": stage, "ion": r.ion_label,
+                    "nlev": int(nlevp), "xstar_nlevp": int(nlevp),
+                    "atdb_max_level_index": int(atdb_max_level_index),
+                    "nlevp_source": nlevp_source,
+                    "nlevp_inference_consistent": inference_consistent,
+                    "packed_parent_offset": int(offset),
+                    "observed_xstar_idest2_values": observed_idest2,
+                    "decoded_endpoint_consistent_with_probe": endpoint_consistent,
+                    "continuum_row_found_at_xstar_nlevp": continuum_found,
                     "bound_level": bound, "destination_level": idest2,
-                    "parent_local_level": parent_local if idest2 > nlev else 1,
+                    "parent_local_level": parent_local,
                     "threshold_eV": base_threshold + parent_excitation,
                     "base_threshold_eV": base_threshold,
                     "parent_excitation_eV": parent_excitation,
@@ -225,9 +309,12 @@ def _decode_type53_records(
             "index_cache_status": getattr(db, "_last_index_cache_status", ""),
             "n_type53_records_decoded": len(decoded),
             "n_type53_records_missing_from_atdb": len(wanted - set(decoded)),
+            "n_type53_records_nlevp_inferred_from_ucalc_endpoint": n_probe_inferred,
+            "n_type53_records_nlevp_fallback_to_atdb_max": n_max_level_fallback,
+            "n_type53_records_nlevp_inference_inconsistent": n_inconsistent,
+            "n_type53_records_missing_continuum_row_at_xstar_nlevp": n_missing_continuum,
         }
     return decoded, meta
-
 
 def _context_check(
     *, state: Type53LiveRadiationState, probe_rows: Sequence[Mapping[str, Any]],
@@ -314,8 +401,19 @@ def build_type53_live_native_parity_audit(
     else:
         if atdb_fits is None:
             raise ValueError("atdb_fits is required unless decoded_type53_rows are supplied")
+        endpoint_hints: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        for row in ucalc:
+            rec = _as_int(row.get("ml_data"), None)
+            if rec is not None and rec > 0:
+                endpoint_hints[int(rec)].append({
+                    "capture_index": row.get("capture_index", ""),
+                    "idest1": row.get("idest1", ""),
+                    "idest2": row.get("idest2", ""),
+                    "jkk_ion": row.get("jkk_ion", ""),
+                })
         decoded, atdb_meta = _decode_type53_records(
             atdb_fits=atdb_fits, wanted_records=wanted,
+            endpoint_hints=endpoint_hints,
             index_cache_path=index_cache_path, rebuild_index_cache=rebuild_index_cache,
         )
 
@@ -367,8 +465,9 @@ def build_type53_live_native_parity_audit(
         xstar_ans = [_as_float(probe.get(f"ans{i}"), 0.0) or 0.0 for i in range(1, 7)]
         rels = [_rel(a, b) for a, b in zip(native_ans, xstar_ans)]
         endpoint = d is not None and _as_int(probe.get("idest1"), None) == _as_int(d.get("bound_level"), None) and _as_int(probe.get("idest2"), None) == _as_int(d.get("destination_level"), None)
+        decoder_context_ready = bool(d is not None) and bool((d or {}).get("nlevp_inference_consistent", True)) and bool((d or {}).get("decoded_endpoint_consistent_with_probe", True)) and bool((d or {}).get("continuum_row_found_at_xstar_nlevp", True))
         evaluated = native.get("status") == "evaluated"
-        rate_pass = evaluated and context_ready and endpoint and rels[0] <= relative_rate_tolerance and rels[1] <= relative_rate_tolerance
+        rate_pass = evaluated and context_ready and decoder_context_ready and endpoint and rels[0] <= relative_rate_tolerance and rels[1] <= relative_rate_tolerance
         heat_pass = rate_pass and all(v <= relative_rate_tolerance for v in rels[2:])
         row = {
             "family_key": "type53_rate7", "record": rec, "capture_index": probe.get("capture_index", ""),
@@ -377,6 +476,16 @@ def build_type53_live_native_parity_audit(
             "xstar_idest2": probe.get("idest2", ""), "native_idest2_destination": (d or {}).get("destination_level", ""),
             "endpoint_order_convention": "type53_packed_order: idest1=bound, idest2=continuum_or_parent",
             "endpoint_order_match": endpoint,
+            "decoder_context_ready": decoder_context_ready,
+            "xstar_nlevp": (d or {}).get("xstar_nlevp", (d or {}).get("nlev", "")),
+            "atdb_max_level_index": (d or {}).get("atdb_max_level_index", ""),
+            "nlevp_source": (d or {}).get("nlevp_source", "predecoded_or_unspecified"),
+            "nlevp_inference_consistent": (d or {}).get("nlevp_inference_consistent", True),
+            "packed_parent_offset": (d or {}).get("packed_parent_offset", ""),
+            "observed_xstar_idest2_values": ";".join(str(v) for v in (d or {}).get("observed_xstar_idest2_values", [])),
+            "decoded_endpoint_consistent_with_probe": (d or {}).get("decoded_endpoint_consistent_with_probe", True),
+            "continuum_row_found_at_xstar_nlevp": (d or {}).get("continuum_row_found_at_xstar_nlevp", True),
+            "parent_local_level": (d or {}).get("parent_local_level", ""),
             "temperature_K": (_as_float(probe.get("t_xstar_1e4K"), 0.0) or 0.0) * 1.0e4,
             "xpx_cm^-3": _as_float(probe.get("xpx"), 0.0) or 0.0,
             "probe_legacy_xnx_value_interpreted_as_xee": _as_float(probe.get("xnx"), 0.0) or 0.0,
@@ -430,7 +539,8 @@ def build_type53_live_native_parity_audit(
     selected_terms = [r for r in matrix_rows if _as_bool(r.get("row_endpoint_selected"))]
     external_terms = [r for r in selected_terms if not _as_bool(r.get("col_endpoint_selected"))]
     internal_terms = [r for r in selected_terms if _as_bool(r.get("col_endpoint_selected"))]
-    rate_ready = bool(record_rows) and all(r["record_rate_parity_status"] == "pass" for r in record_rows)
+    decoder_ready = bool(record_rows) and all(_as_bool(r.get("decoder_context_ready")) for r in record_rows)
+    rate_ready = bool(record_rows) and decoder_ready and all(r["record_rate_parity_status"] == "pass" for r in record_rows)
     heat_ready = bool(record_rows) and all(r["record_heating_cooling_parity_status"] == "pass" for r in record_rows)
     matrix_ready = bool(matrix_rows) and all(_as_bool(r["matrix_term_match"]) for r in matrix_rows)
     selected_ready = bool(selected_terms) and all(_as_bool(r["matrix_term_match"]) for r in selected_terms)
@@ -455,12 +565,13 @@ def build_type53_live_native_parity_audit(
         "max_ans2_relative_difference": max((float(r["ans2_relative_difference"]) for r in record_rows), default=math.inf),
         "max_heating_cooling_relative_difference": max((float(r[f"ans{i}_relative_difference"]) for r in record_rows for i in range(3, 7)), default=math.inf),
         "max_matrix_term_relative_difference": max((float(r["relative_difference"]) for r in matrix_rows if r.get("relative_difference") != ""), default=math.inf),
+        "decoder_context_ready": decoder_ready,
         "live_rate_parity_ready": rate_ready, "heating_cooling_parity_ready": heat_ready,
         "compact_matrix_parity_ready": matrix_ready, "selected_system_parity_ready": selected_ready,
         "external_rhs_parity_ready": external_ready,
     }]
     summary = {
-        "audit_version": "v0.3.208", "status": "type53_exact_live_native_parity_audit_completed",
+        "audit_version": "v0.3.209", "status": "type53_exact_live_native_parity_audit_completed",
         "ion": parent.get("ion", ""), "selected_basis_solve_call_id": parent.get("selected_basis_solve_call_id", ""),
         "selection": parent.get("selection", ""), "occurrence_rank": parent.get("occurrence_rank", ""),
         "selected_xstar_ipmat2_indices": ";".join(str(v) for v in selected),
@@ -468,7 +579,7 @@ def build_type53_live_native_parity_audit(
         "live_rate_grid_probe_csv": str(live_rate_grid_probe_csv or "preloaded"),
         "live_rate_grid_state_selector": str(live_rate_grid_state), "live_rate_grid_state_selection_status": state_selection_status,
         "live_density_field_semantics": live_density_field_semantics, "lfast": int(lfast),
-        "live_state_context_ready": context_ready, **atdb_meta,
+        "live_state_context_ready": context_ready, "type53_decoder_context_ready": decoder_ready, **atdb_meta,
         "n_selected_type53_ucalc_records": len(record_rows),
         "n_type53_records_rate_parity_pass": sum(r["record_rate_parity_status"] == "pass" for r in record_rows),
         "n_type53_records_heating_cooling_parity_pass": sum(r["record_heating_cooling_parity_status"] == "pass" for r in record_rows),
@@ -509,6 +620,7 @@ def write_type53_live_native_parity_audit(out_dir: str | Path, audit: Mapping[st
         f"- Audit version: `{s.get('audit_version','')}`",
         f"- Ion: `{s.get('ion','')}`",
         f"- Live state context ready: `{s.get('live_state_context_ready',False)}`",
+        f"- XSTAR ion-block/continuum decoder ready: `{s.get('type53_decoder_context_ready',False)}`",
         f"- Native type-53 live-rate parity ready: `{s.get('native_type53_exact_live_rate_parity_ready',False)}`",
         f"- Heating/cooling parity ready: `{s.get('native_type53_heating_cooling_parity_ready',False)}`",
         f"- Compact matrix parity ready: `{s.get('native_type53_compact_matrix_parity_ready',False)}`",
@@ -519,4 +631,7 @@ def write_type53_live_native_parity_audit(out_dir: str | Path, audit: Mapping[st
     return {k: str(v) for k, v in paths.items()}
 
 
-__all__ = ["build_type53_live_native_parity_audit", "write_type53_live_native_parity_audit"]
+__all__ = [
+    "build_type53_live_native_parity_audit",
+    "write_type53_live_native_parity_audit",
+]

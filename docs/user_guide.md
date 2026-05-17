@@ -1298,3 +1298,8 @@ Example 97 requires an explicitly selected live-grid capture and compares `ans1.
 - **Phase C:** live arrays and complete `phint53` rate/heating/cooling behavior are implemented; real acceptance, `phint53hunt`, opacity/RRC parity, and four-ion validation remain.
 - **Phase D:** the 607-row scaffold exists, but tiered native activation and the full solve remain future work.
 - **Phases E--G:** source audits and API foundations exist, but autonomous ionization/thermal closure, radial transfer/output reproduction, and the C++ backend remain future milestones.
+
+### v0.3.209 active type-53 continuum-index correction
+
+The first real O VII v0.3.208 run selected the correct live radiation state but failed every type-53 endpoint and rate comparison. The failure was traced to the ATDB decoder, not to `phint53`: it used the maximum extracted type-13 level index (`110`) as `nlevp`, while the direct XSTAR relation `idest2=nlevp+idat(nidt-3)-1` gives `nlevp=79` for the selected records. This created a false 57.919 eV parent excitation and corrupted the threshold, continuum statistical weight, Milne factor, and endpoint mapping. v0.3.209 derives `nlevp` from the probed endpoint and packed parent offset and requires explicit decoder-context readiness. The numerical `phint53` kernel and no-empirical-scale policy are unchanged.
+

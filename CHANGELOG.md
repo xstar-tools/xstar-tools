@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.3.209 - 2026-05-16
+
+- Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.
+- v0.3.208 incorrectly used the maximum extracted type-13 level index. In the real O VII products this selected level 110 instead of XSTAR `nlevp=79`, assigned a false 57.919 eV parent excitation to ground-parent records, and corrupted the continuum weight, threshold, Milne exponent, endpoint validation, and all type-53 rate/matrix comparisons.
+- Added explicit decoder provenance and readiness fields: inferred `xstar_nlevp`, ATDB maximum level index, packed parent offset, inference source/consistency, continuum-row availability, endpoint consistency, and aggregate fallback/error counts.
+- The parity gate now requires both live-radiation context readiness and exact ion-block/continuum decoder readiness. It does not fall back silently to the ATDB maximum when a direct endpoint-derived `nlevp` is available.
+- Added focused regression tests for ground-parent and excited-parent endpoint inference and for rejection of inconsistent decoder context. No `phint53` numerical formula, empirical scale, or production solver behavior changed.
+
 ## v0.3.208 - 2026-05-16
 
 - Added exact live-radiation type-53 state, `phint53`/`ucalc` evaluator, record/matrix parity gate, and selected-system integration gate.

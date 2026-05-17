@@ -1,5 +1,7 @@
 # xstar-atomic
 
+> **v0.3.209:** fixes the real O VII type-53 parity blocker by deriving XSTAR's active continuum index `nlevp` from the direct `ucalc` endpoint and the packed parent offset. v0.3.208 used the maximum extracted level index (`110`) instead of the active XSTAR continuum row (`79`), which introduced a false parent excitation and invalidated all type-53 rates. The exact live-radiation `phint53` kernel is unchanged; rerun examples 97 and 98 to test the corrected decoder.
+
 > **v0.3.208:** adds an exact live-radiation type-53 `phint53`/`ucalc` reference implementation and controlled parity/integration gates. The gate consumes an explicitly selected live `epim`/`bremsam`/`bremsint` capture, validates state provenance, compares `ans1..ans6` and compact matrix insertions, and does not apply the unresolved empirical approximately-44 scale. Real O VII acceptance remains required before the type-53 milestone is considered complete.
 
 Latest local development note: **v0.3.202** adds a native-assembly readiness audit for the validated six-row O VII conditional solve. It ranks internal and external rate-family influence and defines the implementation order: type 51 internal coupling, type 50/type 71 external closure, then exact live-radiation type 53. No solver physics or empirical type-53 scale correction is introduced.

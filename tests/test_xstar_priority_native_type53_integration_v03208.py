@@ -121,7 +121,7 @@ def test_type53_integration_replaces_internal_and_external_terms(tmp_path: Path)
         relative_row_residual_tolerance=1e-12,
     )
     s = audit["summary"]
-    assert s["audit_version"] == "v0.3.208"
+    assert s["audit_version"] == "v0.3.209"
     assert s["n_type53_balance_terms"] == 2
     assert s["n_type53_terms_replaced_with_native"] == 2
     assert s["n_type53_terms_unmatched"] == 0

@@ -1,6 +1,6 @@
 """Integrate validated exact live-radiation type-53 terms after native types 51/50/71.
 
-This controlled gate starts from the v0.3.208 selected-system term table, where
+This controlled gate starts from the validated v0.3.207 selected-system term table, where
 types 51, 50, and 71 are already native. It replaces every validated selected-
 row type-53 term, including selected-to-external RHS contributions, then
 recomputes row balance and the fixed-external conditional solve.
@@ -546,7 +546,7 @@ def build_priority_native_type53_integration_audit(
     remaining_probe = sum(1 for r in replacement_rows if not str(r["coefficient_provenance"]).startswith("native_type"))
 
     summary = {
-        "audit_version": "v0.3.208",
+        "audit_version": "v0.3.209",
         "status": "priority_native_type53_integration_completed",
         "ion": parent_summary.get("ion", parity_summary.get("ion", "")),
         "selected_basis_solve_call_id": parent_summary.get("selected_basis_solve_call_id", parity_summary.get("selected_basis_solve_call_id", "")),

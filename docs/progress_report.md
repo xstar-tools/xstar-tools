@@ -672,3 +672,7 @@ The code is not yet a complete replacement for XSTAR’s internal atomic databas
 9. The emissivity table is direct-excitation only and does not solve full level populations.
 10. The explicit type-63 branch selector needs comparison against native XSTAR outputs for a controlled test case.
 
+### v0.3.209 active type-53 continuum-index correction
+
+The first real O VII v0.3.208 run selected the correct live radiation state but failed every type-53 endpoint and rate comparison. The failure was traced to the ATDB decoder, not to `phint53`: it used the maximum extracted type-13 level index (`110`) as `nlevp`, while the direct XSTAR relation `idest2=nlevp+idat(nidt-3)-1` gives `nlevp=79` for the selected records. This created a false 57.919 eV parent excitation and corrupted the threshold, continuum statistical weight, Milne factor, and endpoint mapping. v0.3.209 derives `nlevp` from the probed endpoint and packed parent offset and requires explicit decoder-context readiness. The numerical `phint53` kernel and no-empirical-scale policy are unchanged.
+
