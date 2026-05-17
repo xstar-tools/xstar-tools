@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.5")
+            print("port_version=v0.4.6")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")
@@ -218,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"n_records_skipped={a.n_records_skipped}")
             print(f"n_records_blocked={a.n_records_blocked}")
             print(f"n_unmapped_matrix_endpoints={a.n_unmapped_endpoints}")
+            print(f"n_source_ipmat_endpoint_clamps={a.n_source_ipmat_endpoint_clamps}")
             print(f"n_matrix_terms={len(a.terms)}")
             print(f"strict_matrix_assembly_ready={a.strict_assembly_ready}")
             if s is not None:
@@ -236,7 +237,17 @@ def main(argv: list[str] | None = None) -> int:
                 print("solver_status=not_run_due_to_incomplete_strict_assembly")
             print(f"full_element_direct_solve_ready={result.full_element_direct_solve_ready}")
             print("six_row_and_119_row_products_role=regression_subsets_only")
-            print("dominant_next_target=generalize_validated_element_solve_to_all_30_elements_then_local_ionization_thermal_closure")
+            if not a.strict_assembly_ready:
+                dominant_next_target = "resolve_remaining_element_matrix_assembly_blockers"
+            elif s is None:
+                dominant_next_target = "execute_full_element_population_solve"
+            elif not s.converged or s.n_negative_populations > 0:
+                dominant_next_target = "resolve_607_row_matrix_rank_or_msolvelucy_convergence"
+            elif not result.full_element_direct_solve_ready:
+                dominant_next_target = "resolve_full_element_acceptance_tolerance"
+            else:
+                dominant_next_target = "generalize_validated_element_solve_to_all_30_elements_then_local_ionization_thermal_closure"
+            print(f"dominant_next_target={dominant_next_target}")
             for key, path in outputs.items():
                 print(f"{key}: {path}")
         return 0 if result.full_element_direct_solve_ready or args.allow_context_blocked else 2

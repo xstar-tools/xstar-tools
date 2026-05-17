@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from xstar_atomic.source_port.element_equilibrium import (
+    ElementBasisRow,
+    ElementCompactBasis,
+    ElementIonBlock,
+    _matrix_terms_for_result,
+)
+from xstar_atomic.source_port.ucalc import (
+    UCalcContext,
+    UCalcLevel,
+    UCalcLevelTable,
+    UCalcRecord,
+    UCalcResult,
+    UCalcStatus,
+    default_source_faithful_ucalc,
+)
+
+
+def test_type63_nondipole_record_is_source_zero_not_blocked():
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(1, energy_ev=0.0, statistical_weight=2.0, principal_n=2, orbital_l=0),
+            2: UCalcLevel(2, energy_ev=1.0, statistical_weight=6.0, principal_n=2, orbital_l=2),
+        },
+        nlev=2,
+    )
+    record = UCalcRecord(
+        record=1,
+        data_type=63,
+        rate_type=5,
+        continuation=0,
+        reals=(),
+        integers=(1, 2, 8, 1),
+    )
+    context = UCalcContext(
+        temperature_k=1.0e6,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.0,
+        levels=levels,
+        nlev=2,
+        extras={"element_z": 8, "ion_stage": 7},
+    )
+    result = default_source_faithful_ucalc().evaluate(record, context, strict=False)
+    assert result.status is UCalcStatus.EVALUATED
+    assert result.ans1 == 0.0
+    assert result.ans2 == 0.0
+    assert result.idest1 == 1
+    assert result.idest2 == 2
+    assert result.diagnostics["source_zero_behavior"] == "ucalc_label63_preserves_initialized_zero_rates"
+
+
+def test_msolvelucy_ipmat_clamp_aliases_excited_parent_endpoint_to_last_row():
+    basis = ElementCompactBasis(
+        element_z=8,
+        min_ion_stage=3,
+        max_ion_stage=8,
+        blocks=[],
+        rows=[ElementBasisRow(i) for i in range(1, 608)],
+        n_rows=607,
+        n_superlevels=1,
+        n_ions=6,
+        normalization_row=607,
+    )
+    block = ElementIonBlock(
+        ion_index=35,
+        ion_record=1,
+        element_z=8,
+        ion_stage=7,
+        nlev=241,
+        compact_start=335,
+        compact_stop=575,
+        first_level_record=1,
+    )
+    result = UCalcResult(
+        record=21523,
+        data_type=53,
+        rate_type=7,
+        status=UCalcStatus.EVALUATED,
+        ans1=2.0,
+        ans2=3.0,
+        idest1=8,
+        idest2=276,
+    )
+    terms = _matrix_terms_for_result(
+        result=result,
+        basis=basis,
+        block=block,
+        levels=UCalcLevelTable(),
+        term_start=1,
+        xpx=1.0e8,
+    )
+    assert [(t.row, t.column) for t in terms] == [
+        (607, 342),
+        (342, 607),
+        (342, 342),
+        (607, 607),
+    ]
+    assert terms[0].source_row_unclamped == 610
+    assert terms[1].source_column_unclamped == 610
+    assert sum(t.source_ipmat_clamped for t in terms) == 3

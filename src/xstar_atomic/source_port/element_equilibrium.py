@@ -205,6 +205,9 @@ class MatrixTerm:
     lower_endpoint: int
     upper_endpoint: int
     ucalc_status: str
+    source_row_unclamped: int = 0
+    source_column_unclamped: int = 0
+    source_ipmat_clamped: bool = False
 
 
 @dataclass
@@ -245,6 +248,7 @@ class ElementMatrixAssembly:
     n_records_blocked: int
     n_unmapped_endpoints: int
     strict_assembly_ready: bool
+    n_source_ipmat_endpoint_clamps: int = 0
 
 
 @dataclass
@@ -635,22 +639,29 @@ def _matrix_terms_for_result(
         raise ElementEquilibriumError(
             f"record {result.record} returned invalid endpoints {result.idest1},{result.idest2}"
         )
-    row_lower = block.compact_index(lower)
-    row_upper = block.compact_index(upper)
-    if not (1 <= row_lower <= basis.n_rows and 1 <= row_upper <= basis.n_rows):
+    raw_row_lower = block.compact_index(lower)
+    raw_row_upper = block.compact_index(upper)
+    if raw_row_lower <= 0 or raw_row_upper <= 0:
         raise ElementEquilibriumError(
-            f"record {result.record} endpoints {lower},{upper} map to rows "
-            f"{row_lower},{row_upper} outside 1..{basis.n_rows}"
+            f"record {result.record} endpoints {lower},{upper} map to non-positive rows "
+            f"{raw_row_lower},{raw_row_upper}"
         )
+
+    # msolvelucy.f90 aliases endpoints beyond the active compact dimension
+    # through ``min(ipmat, indb(...))``. Preserve that source behavior rather
+    # than rejecting excited-parent destinations outside the selected basis.
+    row_lower = min(basis.n_rows, raw_row_lower)
+    row_upper = min(basis.n_rows, raw_row_upper)
+
     a1, a2 = float(result.ans1), float(result.ans2)
     specs = (
-        ("forward_offdiag", row_upper, row_lower, a1, a2, 0.0, 0.0),
-        ("reverse_offdiag", row_lower, row_upper, a2, a1, 0.0, 0.0),
-        ("forward_diag_loss", row_lower, row_lower, -a1, -a1, float(result.ans4) * xpx, float(result.ans6) * xpx),
-        ("reverse_diag_loss", row_upper, row_upper, -a2, -a2, -float(result.ans3) * xpx, -float(result.ans5) * xpx),
+        ("forward_offdiag", row_upper, row_lower, raw_row_upper, raw_row_lower, a1, a2, 0.0, 0.0),
+        ("reverse_offdiag", row_lower, row_upper, raw_row_lower, raw_row_upper, a2, a1, 0.0, 0.0),
+        ("forward_diag_loss", row_lower, row_lower, raw_row_lower, raw_row_lower, -a1, -a1, float(result.ans4) * xpx, float(result.ans6) * xpx),
+        ("reverse_diag_loss", row_upper, row_upper, raw_row_upper, raw_row_upper, -a2, -a2, -float(result.ans3) * xpx, -float(result.ans5) * xpx),
     )
     out: List[MatrixTerm] = []
-    for offset, (role, row, col, aj1, aj2, cj, cj2) in enumerate(specs):
+    for offset, (role, row, col, raw_row, raw_col, aj1, aj2, cj, cj2) in enumerate(specs):
         out.append(
             MatrixTerm(
                 term_index=term_start + offset,
@@ -671,6 +682,9 @@ def _matrix_terms_for_result(
                 lower_endpoint=lower,
                 upper_endpoint=upper,
                 ucalc_status=result.status.value,
+                source_row_unclamped=raw_row,
+                source_column_unclamped=raw_col,
+                source_ipmat_clamped=(raw_row != row or raw_col != col),
             )
         )
     return out
@@ -735,6 +749,7 @@ def assemble_element_matrix(
     record_results: List[Dict[str, Any]] = []
     ion_summaries: List[IonAssemblySummary] = []
     n_seen = n_eval = n_noop = n_skipped = n_blocked = n_unmapped = 0
+    n_source_clamps = 0
 
     for block in basis.blocks:
             levels = level_tables[block.ion_index]
@@ -867,6 +882,10 @@ def assemble_element_matrix(
                                 n_blocked += 1
                                 summary.n_records_blocked += 1
                         else:
+                            if any(term.source_ipmat_clamped for term in new_terms):
+                                n_source_clamps += 1
+                                record_results[-1]["source_ipmat_endpoint_clamped"] = True
+                                record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
                             terms.extend(new_terms)
                             n_eval += 1
                             summary.n_records_evaluated += 1
@@ -906,6 +925,7 @@ def assemble_element_matrix(
         n_records_skipped=n_skipped,
         n_records_blocked=n_blocked,
         n_unmapped_endpoints=n_unmapped,
+        n_source_ipmat_endpoint_clamps=n_source_clamps,
         strict_assembly_ready=strict_ready,
     )
 
@@ -1277,7 +1297,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.3",
+    port_version: str = "v0.4.6",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
@@ -1372,6 +1392,7 @@ def write_element_equilibrium_products(
         "n_records_skipped": assembly.n_records_skipped,
         "n_records_blocked": assembly.n_records_blocked,
         "n_unmapped_matrix_endpoints": assembly.n_unmapped_endpoints,
+        "n_source_ipmat_endpoint_clamps": assembly.n_source_ipmat_endpoint_clamps,
         "n_matrix_terms": len(assembly.terms),
         "strict_matrix_assembly_ready": assembly.strict_assembly_ready,
         "source_sequence_complete": result.source_sequence_complete,
@@ -1379,6 +1400,18 @@ def write_element_equilibrium_products(
         "six_row_and_119_row_products_role": "regression_subsets_only",
         "production_acceptance_target": f"full_{basis.n_rows}_row_element_matrix_and_population_vector",
     }
+    if not assembly.strict_assembly_ready:
+        dominant_next_target = "resolve_remaining_element_matrix_assembly_blockers"
+    elif solve is None:
+        dominant_next_target = "execute_full_element_population_solve"
+    elif not solve.converged or solve.n_negative_populations > 0:
+        dominant_next_target = "resolve_607_row_matrix_rank_or_msolvelucy_convergence"
+    elif not result.full_element_direct_solve_ready:
+        dominant_next_target = "resolve_full_element_acceptance_tolerance"
+    else:
+        dominant_next_target = "generalize_validated_element_solve_to_all_30_elements_then_local_ionization_thermal_closure"
+    summary["dominant_next_target"] = dominant_next_target
+
     if solve is not None:
         summary.update(
             {
@@ -1421,6 +1454,7 @@ def write_element_equilibrium_products(
         f"- Matrix terms: `{len(assembly.terms)}`",
         f"- Blocked records: `{assembly.n_records_blocked}`",
         f"- Unmapped endpoints: `{assembly.n_unmapped_endpoints}`",
+        f"- Source ipmat endpoint clamps: `{assembly.n_source_ipmat_endpoint_clamps}`",
         f"- Strict matrix assembly ready: `{assembly.strict_assembly_ready}`",
         f"- Solver converged: `{summary.get('solver_converged')}`",
         f"- Full direct solve ready: `{result.full_element_direct_solve_ready}`",

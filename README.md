@@ -449,3 +449,7 @@ PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
 ```
 
 Use `--escape-detail-policy strict_selected_zone` when only rows explicitly present in the selected radial HDU may be accepted.
+
+### Final strict-assembly source controls (v0.4.6)
+
+The v0.4.5 production rerun left 531 blockers. These were not missing runtime state: 243 type-63 records are source-defined zero transitions, and 288 O VII type-53/type-74 parent endpoints are clamped by XSTAR's `msolvelucy` rule `min(ipmat, indb)`. v0.4.6 reproduces both behaviors and reports every raw-to-clamped endpoint in the matrix-term products. The next rerun should reach the 607-row solver directly.

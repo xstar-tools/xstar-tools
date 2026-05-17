@@ -1160,13 +1160,18 @@ PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
   --escape-zone last \
   --escape-detail-policy source_sparse_reconstruct \
   --write-derived-escape-npz xstar_o7_escape_state.npz \
-  --out-dir xstar_o_element_equilibrium_v045 \
+  --out-dir xstar_o_element_equilibrium_v046 \
   --print-summary
 ```
 
 Use `--assume-optically-thin` only for a genuinely optically thin model or a
 controlled smoke test.  In strict mode, missing radiation or escape state
 blocks readiness rather than falling back to old probe coefficients.
+
+v0.4.6 also reproduces XSTAR's source-zero type-63 branches and the
+`msolvelucy` `min(ipmat, indb)` endpoint alias. The summary reports
+`n_source_ipmat_endpoint_clamps`; raw and clamped rows are retained in the
+matrix-term CSV.
 
 
 ### `103_build_xstar_escape_state.py`

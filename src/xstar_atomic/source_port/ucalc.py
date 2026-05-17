@@ -1580,7 +1580,32 @@ class SourceFaithfulUCalc:
         ev=evaluate_collision_row(row,c.temperature_k,grid,electron_density_cm3=c.electron_density_cm3)
         qexc=_finite(ev.get("q_excitation_cm3_s")); qde=_finite(ev.get("q_deexcitation_cm3_s"))
         if qexc is None or qde is None:
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("diagnostic") or "collision_evaluation_failed"),diagnostics=ev)
+            reason = str(
+                ev.get("eval_diagnostic")
+                or ev.get("type63_reason")
+                or ev.get("diagnostic")
+                or "collision_evaluation_failed"
+            )
+            # ucalc.f90 label 63 leaves initialized ans1/ans2 at zero when
+            # Delta-l is not one or the literal record-order angular selector
+            # aa1 vanishes. These are evaluated source-zero records, not
+            # rejected runtime context.
+            source_zero_type63 = {
+                "delta_l_not_equal_1",
+                "same_n_delta_l_not_equal_1",
+                "nonpositive_xstar_record_order_aa1",
+            }
+            if r.data_type == 63 and reason in source_zero_type63:
+                qexc = 0.0
+                qde = 0.0
+                ev = dict(ev)
+                ev["source_zero_behavior"] = "ucalc_label63_preserves_initialized_zero_rates"
+                ev["source_zero_reason"] = reason
+            else:
+                return self._base_result(
+                    r, s, UCalcStatus.SOURCE_REJECTED,
+                    reason=reason, diagnostics=ev,
+                )
         ans1=qexc*c.electron_density_cm3; ans2=qde*c.electron_density_cm3
         de=float(row.get("delta_e_level_eV") or 0.0)
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*de*ERG_PER_EV,ans6=ans1*de*ERG_PER_EV,

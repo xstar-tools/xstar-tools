@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# v0.4.6 - 2026-05-17
+
+v0.4.6 closes the remaining strict-assembly blockers exposed by the production v0.4.5 O III--O VIII run. The run reduced blockers from 4,124 to 531; all 531 were source-control-flow interpretation issues rather than missing plasma or escape context.
+
+- Reclassifies 243 type-63 records with `Delta-l != 1`, same-n non-dipole coupling, or zero record-order `aa1` as source-evaluated zero-rate records. `ucalc.f90` label 63 initializes `ans1/ans2` to zero and leaves them zero in these branches; Python no longer reports them as rejected collisions.
+- Implements the `msolvelucy.f90` compact-index rule `min(ipmat, indb(...))`. The 288 O VII type-53/type-74 excited-parent endpoints that map to raw compact row 610 are now source-aliased to the final active row 607 instead of being rejected.
+- Adds raw and clamped matrix endpoint provenance (`source_row_unclamped`, `source_column_unclamped`, `source_ipmat_clamped`) and the summary count `n_source_ipmat_endpoint_clamps`.
+- Keeps genuinely invalid non-positive endpoints as errors; no basis extension, record deletion, fitted rate, or proxy matrix term is introduced.
+- Adds focused tests for type-63 source-zero behavior and the exact O VII 610-to-607 `ipmat` alias.
+
+No rate formula, optical-depth reconstruction, compact basis, or Lucy solver equation changed. A production rerun is required to verify `n_records_blocked=0`, `n_unmapped_matrix_endpoints=0`, and to evaluate actual 607-row solver convergence.
+
 # v0.4.5 - 2026-05-17
 
 
