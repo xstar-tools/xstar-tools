@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.11 - 2026-05-17
+
+v0.4.11 fixes the parity CLI regression exposed when the exact solve-call-219 runtime state makes strict element assembly incomplete.
+
+- Population parity is now conditional on an actually executed native element solve. Supplying a population probe no longer raises `population parity requires an executed element solve` before ordinary assembly products can be written.
+- Lucy state parity is likewise deferred when population parity is unavailable because strict assembly did not execute.
+- The complete element matrix parity gate still runs on the exact-state partial assembly, so existing `ucalc` and `calc_hmc_ion` probes can identify the source family responsible for missing native terms.
+- Adds grouped strict-assembly blocker products: `xstar_element_assembly_blocker_summary.csv`, `.json`, and `.md`.
+- Records explicit `population_parity_status` and `msolvelucy_state_parity_status` values in the runtime-context summary and console output.
+- Preserves strict scientific behavior: no blocked record is silently dropped into a parity-accepted solve, and no probe coefficient is inserted into the native operator.
+
+The same v0.4.10 command can be rerun unchanged. If the exact captured runtime exposes source-translation blockers, the command now completes its diagnostics, writes the partial matrix and grouped blocker inventory, and exits nonzero only through the normal incomplete-solve acceptance status rather than an early exception.
+
 # v0.4.10 - 2026-05-17
 
 v0.4.10 prevents a captured-zone runtime mismatch from being misdiagnosed as a source-rate-family failure during the oxygen population-parity gate.

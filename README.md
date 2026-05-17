@@ -13,6 +13,11 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+
+### v0.4.11 exact-state parity preflight
+
+Population and iteration-state parity now run only after a strict native element solve has actually executed. If the selected XSTAR solve-call runtime exposes context-blocked source records, example 102 still writes the complete partial assembly, record-level matrix comparison, and grouped blocker products instead of stopping with an early parity exception. Inspect `xstar_element_assembly_blocker_summary.csv/.json/.md` to select the next source routine to correct.
+
 ### v0.4.10 captured-zone runtime context
 
 When `--xstar-population-probe-csv` is supplied, example 102 now uses the selected solve call's exact `T`, `xpx`, `xee`, and `cfrac` before evaluating any native rate. This avoids comparing a Python matrix assembled at nominal CLI values with an XSTAR matrix captured at a different converged zone state. Use `--population-probe-runtime-policy check` to require explicit inputs to match, or `ignore` only for a controlled mismatch experiment.

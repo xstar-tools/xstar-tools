@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
+from collections import Counter
 from typing import Any
 
 import numpy as np
@@ -208,6 +210,83 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+
+def _write_assembly_blocker_summary(assembly: object, out_dir: str | Path) -> dict[str, Path]:
+    """Write a compact grouped summary when strict assembly cannot execute.
+
+    Population and Lucy parity require a native solve, but a context-blocked
+    assembly is itself a valuable source-port diagnostic.  Preserve that
+    result instead of raising before the ordinary element products are written.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    blocked = list(getattr(assembly, "blocked_records", ()) or ())
+    counts: Counter[tuple[str, str, str, str]] = Counter()
+    for row in blocked:
+        data_type = str(row.get("data_type", ""))
+        rate_type = str(row.get("rate_type", ""))
+        status = str(row.get("status", ""))
+        reason = str(row.get("reason", "") or status or "unspecified")
+        counts[(data_type, rate_type, status, reason)] += 1
+    rows = [
+        {
+            "data_type": key[0],
+            "rate_type": key[1],
+            "status": key[2],
+            "reason": key[3],
+            "count": count,
+        }
+        for key, count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1], item[0][3]),
+        )
+    ]
+    csv_path = out / "xstar_element_assembly_blocker_summary.csv"
+    fields = ["data_type", "rate_type", "status", "reason", "count"]
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    summary = {
+        "port_version": "v0.4.11",
+        "status": "strict_element_assembly_incomplete",
+        "n_records_blocked": int(getattr(assembly, "n_records_blocked", len(blocked))),
+        "n_unmapped_matrix_endpoints": int(getattr(assembly, "n_unmapped_endpoints", 0)),
+        "n_grouped_blocker_reasons": len(rows),
+        "top_blockers": rows[:20],
+        "population_parity_status": "not_run_due_to_incomplete_strict_assembly",
+        "msolvelucy_state_parity_status": "not_run_due_to_incomplete_strict_assembly",
+    }
+    json_path = out / "xstar_element_assembly_blocker_summary.json"
+    json_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    md_path = out / "xstar_element_assembly_blocker_summary.md"
+    lines = [
+        "# XSTAR element strict-assembly blocker summary",
+        "",
+        f"- Port version: `v0.4.11`",
+        f"- Blocked records: `{summary['n_records_blocked']}`",
+        f"- Unmapped endpoints: `{summary['n_unmapped_matrix_endpoints']}`",
+        f"- Grouped reasons: `{summary['n_grouped_blocker_reasons']}`",
+        "- Population parity: `not run; no strict native solve was executed`",
+        "- Lucy-state parity: `not run; no strict native solve was executed`",
+        "",
+        "| Count | Data type | Rate type | Status | Reason |",
+        "|---:|---:|---:|---|---|",
+    ]
+    for row in rows[:50]:
+        reason = str(row["reason"]).replace("|", "\\|")
+        status = str(row["status"]).replace("|", "\\|")
+        lines.append(
+            f"| {row['count']} | {row['data_type']} | {row['rate_type']} | {status} | {reason} |"
+        )
+    md_path.write_text("\n".join(lines) + "\n")
+    return {
+        "assembly_blocker_summary_csv": csv_path,
+        "assembly_blocker_summary_json": json_path,
+        "assembly_blocker_summary_markdown": md_path,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     requested_runtime = {
@@ -337,62 +416,73 @@ def main(argv: list[str] | None = None) -> int:
             result.full_element_matrix_parity = matrix_parity
         parity = None
         parity_outputs = {}
+        population_parity_status = "not_supplied"
         if args.xstar_population_probe_csv:
             if result.solve is None:
-                raise SystemExit("ERROR: population parity requires an executed element solve")
-            try:
-                reference = load_xstar_population_reference(
-                    args.xstar_population_probe_csv,
-                    element_z=args.element_z,
-                    n_rows=result.assembly.basis.n_rows,
-                    solve_call_id=args.xstar_population_solve_call_id,
-                    occurrence_rank=args.xstar_population_occurrence_rank,
-                )
-                parity = compare_element_population_parity(
-                    result.assembly,
-                    result.solve,
-                    context,
-                    reference,
-                    run_xstar_before_seeded_solve=not args.no_xstar_before_seeded_solve,
-                    max_abs_tolerance=args.population_parity_max_abs_tolerance,
-                    l1_tolerance=args.population_parity_l1_tolerance,
-                    relative_tolerance=args.population_parity_relative_tolerance,
-                    relative_floor=args.population_parity_relative_floor,
-                )
-            except (FileNotFoundError, PopulationParityError, ValueError) as exc:
-                raise SystemExit(f"ERROR: {exc}") from exc
-            result.population_parity = parity
+                population_parity_status = "not_run_due_to_incomplete_strict_assembly"
+            else:
+                try:
+                    reference = load_xstar_population_reference(
+                        args.xstar_population_probe_csv,
+                        element_z=args.element_z,
+                        n_rows=result.assembly.basis.n_rows,
+                        solve_call_id=args.xstar_population_solve_call_id,
+                        occurrence_rank=args.xstar_population_occurrence_rank,
+                    )
+                    parity = compare_element_population_parity(
+                        result.assembly,
+                        result.solve,
+                        context,
+                        reference,
+                        run_xstar_before_seeded_solve=not args.no_xstar_before_seeded_solve,
+                        max_abs_tolerance=args.population_parity_max_abs_tolerance,
+                        l1_tolerance=args.population_parity_l1_tolerance,
+                        relative_tolerance=args.population_parity_relative_tolerance,
+                        relative_floor=args.population_parity_relative_floor,
+                    )
+                except (FileNotFoundError, PopulationParityError, ValueError) as exc:
+                    raise SystemExit(f"ERROR: {exc}") from exc
+                result.population_parity = parity
+                population_parity_status = "completed"
         state_parity = None
         state_parity_outputs = {}
+        msolvelucy_state_parity_status = "not_supplied"
         if args.xstar_msolvelucy_state_probe_dir:
-            if parity is None:
+            if not args.xstar_population_probe_csv:
                 raise SystemExit(
                     "ERROR: --xstar-msolvelucy-state-probe-dir requires "
                     "--xstar-population-probe-csv so the same solve_call_id and XSTAR-before seed are selected"
                 )
-            comparison_solve = parity.seeded_solve if parity.seeded_solve is not None else result.solve
-            comparison_trace_source = (
-                "xstar_before_seeded_python_solve"
-                if parity.seeded_solve is not None else "python_native_seed_solve"
-            )
-            if comparison_solve is None or comparison_solve.trace is None:
-                raise SystemExit("ERROR: msolvelucy state parity requires a captured Python trace")
-            try:
-                state_parity = compare_msolvelucy_state_probe(
-                    comparison_solve.trace,
-                    args.xstar_msolvelucy_state_probe_dir,
-                    solve_call_id=parity.reference.solve_call_id,
-                    comparison_trace_source=comparison_trace_source,
-                    absolute_tolerance=args.msolvelucy_state_absolute_tolerance,
-                    relative_tolerance=args.msolvelucy_state_relative_tolerance,
-                    relative_floor=args.msolvelucy_state_relative_floor,
+            if parity is None:
+                msolvelucy_state_parity_status = "not_run_due_to_population_parity_unavailable"
+            else:
+                comparison_solve = parity.seeded_solve if parity.seeded_solve is not None else result.solve
+                comparison_trace_source = (
+                    "xstar_before_seeded_python_solve"
+                    if parity.seeded_solve is not None else "python_native_seed_solve"
                 )
-            except (FileNotFoundError, MSolveStateParityError, ValueError) as exc:
-                raise SystemExit(f"ERROR: {exc}") from exc
-            result.msolvelucy_state_parity = state_parity
+                if comparison_solve is None or comparison_solve.trace is None:
+                    msolvelucy_state_parity_status = "not_run_due_to_missing_python_trace"
+                else:
+                    try:
+                        state_parity = compare_msolvelucy_state_probe(
+                            comparison_solve.trace,
+                            args.xstar_msolvelucy_state_probe_dir,
+                            solve_call_id=parity.reference.solve_call_id,
+                            comparison_trace_source=comparison_trace_source,
+                            absolute_tolerance=args.msolvelucy_state_absolute_tolerance,
+                            relative_tolerance=args.msolvelucy_state_relative_tolerance,
+                            relative_floor=args.msolvelucy_state_relative_floor,
+                        )
+                    except (FileNotFoundError, MSolveStateParityError, ValueError) as exc:
+                        raise SystemExit(f"ERROR: {exc}") from exc
+                    result.msolvelucy_state_parity = state_parity
+                    msolvelucy_state_parity_status = "completed"
         outputs = write_element_equilibrium_products(result, args.out_dir)
+        if not result.assembly.strict_assembly_ready:
+            outputs.update(_write_assembly_blocker_summary(result.assembly, args.out_dir))
         runtime_context_summary = {
-            "port_version": "v0.4.10",
+            "port_version": "v0.4.11",
             "status": "element_runtime_context_selected",
             "runtime_context_source": runtime_context_source,
             "population_probe_runtime_policy": args.population_probe_runtime_policy,
@@ -410,13 +500,15 @@ def main(argv: list[str] | None = None) -> int:
             "selected_probe_metadata": (
                 {} if runtime_reference is None else runtime_reference.metadata
             ),
+            "population_parity_status": population_parity_status,
+            "msolvelucy_state_parity_status": msolvelucy_state_parity_status,
         }
         runtime_json = Path(args.out_dir) / "xstar_element_runtime_context.json"
         runtime_json.write_text(json.dumps(runtime_context_summary, indent=2, sort_keys=True) + "\n")
         runtime_md = Path(args.out_dir) / "xstar_element_runtime_context.md"
         runtime_md.write_text(
             "# XSTAR element runtime-context selection\n\n"
-            f"- Port version: `v0.4.10`\n"
+            f"- Port version: `v0.4.11`\n"
             f"- Source: `{runtime_context_source}`\n"
             f"- Policy: `{args.population_probe_runtime_policy}`\n"
             f"- Requested T: `{requested_runtime['temperature_k']}` K\n"
@@ -444,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.10")
+            print("port_version=v0.4.11")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"runtime_context_source={runtime_context_source}")
             print(f"population_probe_runtime_policy={args.population_probe_runtime_policy}")
@@ -542,10 +634,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"msolvelucy_state_parity_diagnosis={state_parity.diagnosis}")
             else:
                 print("msolvelucy_state_parity_ready=False")
-                print("msolvelucy_state_parity_status=not_supplied")
+                print(f"msolvelucy_state_parity_status={msolvelucy_state_parity_status}")
             if parity is None:
                 print("xstar_population_parity_ready=False")
-                print("population_parity_status=not_supplied")
+                print(f"population_parity_status={population_parity_status}")
             if not a.strict_assembly_ready:
                 dominant_next_target = "resolve_remaining_element_matrix_assembly_blockers"
             elif s is None:
