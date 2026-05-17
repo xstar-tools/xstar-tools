@@ -42,6 +42,9 @@ class MSolveStateParityResult:
     detail_rows: List[Dict[str, Any]]
     msolvelucy_state_parity_ready: bool
     first_failing_component: str
+    first_failing_comparison_key: str
+    first_failing_outer_iteration: int
+    first_failing_fixed_iteration: int
     diagnosis: str
     absolute_tolerance: float
     relative_tolerance: float
@@ -323,8 +326,71 @@ def compare_msolvelucy_state_probe(
                 ready=all(bool(row["within_tolerance"]) for row in rows),
             )
         )
-    first_failure = next((metric.component for metric in metrics if not metric.ready), "")
-    ready = not first_failure
+    # Component-level metrics aggregate all outer iterations.  Once an early
+    # matrix mismatch changes the population vector, every outer-start value in
+    # the following iteration also differs.  Selecting the first failed
+    # *component aggregate* therefore misdiagnoses a downstream outer-start
+    # difference as an input-seed problem.  Identify the first failed scalar in
+    # actual msolvelucy execution order instead.
+    fixed_component_order = {
+        "fixed_population_before": 0,
+        "fixed_riu": 1,
+        "fixed_rui": 2,
+        "fixed_ril": 3,
+        "fixed_rli": 4,
+        "fixed_population_after": 5,
+    }
+    phase_order = {
+        "level_outer_start": 0,
+        "rr_population": 1,
+        "rr_fraction": 2,
+        "superlevel_before_condensed_solve": 3,
+        "condensed_matrix_raw": 4,
+        "superlevel_after_condensed_solve": 5,
+        "level_after_condensed_solve": 6,
+        "level_outer_end": 8,
+    }
+
+    def execution_key(row: Mapping[str, Any]) -> Tuple[int, int, int, int, int, int, str]:
+        component = str(row.get("component") or "")
+        outer = int(row.get("outer_iteration") or 0)
+        fixed = int(row.get("fixed_iteration") or 0)
+        compact = int(row.get("compact_index") or 0)
+        superlevel = int(row.get("superlevel") or 0)
+        matrix_row = int(row.get("row_superlevel") or 0)
+        matrix_column = int(row.get("column_superlevel") or 0)
+        if component in fixed_component_order:
+            return (
+                outer,
+                7,
+                fixed,
+                fixed_component_order[component],
+                compact,
+                0,
+                str(row.get("comparison_key") or ""),
+            )
+        index1 = compact or superlevel or matrix_row
+        index2 = matrix_column
+        return (
+            outer,
+            phase_order.get(component, 99),
+            0,
+            0,
+            index1,
+            index2,
+            str(row.get("comparison_key") or ""),
+        )
+
+    failing_rows = sorted(
+        (row for row in details if not bool(row["within_tolerance"])),
+        key=execution_key,
+    )
+    first_failure_row = failing_rows[0] if failing_rows else None
+    first_failure = "" if first_failure_row is None else str(first_failure_row["component"])
+    first_failure_key = "" if first_failure_row is None else str(first_failure_row["comparison_key"])
+    first_failure_outer = 0 if first_failure_row is None else int(first_failure_row.get("outer_iteration") or 0)
+    first_failure_fixed = 0 if first_failure_row is None else int(first_failure_row.get("fixed_iteration") or 0)
+    ready = first_failure_row is None
     diagnosis_map = {
         "level_outer_start": "xstar_before_seed_or_iteration_selection_mismatch",
         "rr_population": "outer_start_population_mismatch",
@@ -350,6 +416,9 @@ def compare_msolvelucy_state_probe(
         detail_rows=details,
         msolvelucy_state_parity_ready=ready,
         first_failing_component=first_failure,
+        first_failing_comparison_key=first_failure_key,
+        first_failing_outer_iteration=first_failure_outer,
+        first_failing_fixed_iteration=first_failure_fixed,
         diagnosis=diagnosis,
         absolute_tolerance=float(absolute_tolerance),
         relative_tolerance=float(relative_tolerance),
@@ -374,7 +443,7 @@ def write_msolvelucy_state_parity_products(
     result: MSolveStateParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.8",
+    port_version: str = "v0.4.9",
 ) -> Dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -394,6 +463,9 @@ def write_msolvelucy_state_parity_products(
         "n_compared_values": len(result.detail_rows),
         "msolvelucy_state_parity_ready": result.msolvelucy_state_parity_ready,
         "first_failing_component": result.first_failing_component,
+        "first_failing_comparison_key": result.first_failing_comparison_key,
+        "first_failing_outer_iteration": result.first_failing_outer_iteration,
+        "first_failing_fixed_iteration": result.first_failing_fixed_iteration,
         "msolvelucy_state_parity_diagnosis": result.diagnosis,
         "component_metrics": [metric.__dict__ for metric in result.component_metrics],
     }
@@ -411,6 +483,9 @@ def write_msolvelucy_state_parity_products(
                 f"- Trace source: `{result.comparison_trace_source}`",
                 f"- State parity ready: `{result.msolvelucy_state_parity_ready}`",
                 f"- First failing component: `{result.first_failing_component}`",
+                f"- First failing comparison: `{result.first_failing_comparison_key}`",
+                f"- First failing outer iteration: `{result.first_failing_outer_iteration}`",
+                f"- First failing fixed iteration: `{result.first_failing_fixed_iteration}`",
                 f"- Diagnosis: `{result.diagnosis}`",
             ]
         )

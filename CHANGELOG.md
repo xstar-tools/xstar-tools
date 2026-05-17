@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.4.9 - 2026-05-17
+
+v0.4.9 turns the first true oxygen `msolvelucy` divergence into a record-level source-port gate instead of another broad diagnostic cycle.
+
+- Fixes the state-parity comparator so it reports the first failed scalar in actual `msolvelucy` execution order. Component summaries still aggregate all outer iterations, but a downstream outer-iteration start can no longer hide an earlier condensed-matrix failure.
+- Confirms from the v0.4.8 products that outer-iteration-1 level populations and `rr` fractions match XSTAR exactly; the first genuine mismatch is the raw 13x13 condensed matrix (`L1=7.282738055010392e4`, maximum absolute entry difference `3.6399039672513376e4`).
+- Adds optional complete record-level parity against the existing instrumented `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`. The comparison joins latest-per-record XSTAR captures to every native `MatrixTerm`, reports unmatched terms and `aj1/aj2` differences by data/rate family, and identifies the dominant first failing family. Probe coefficients are never inserted into the production solve.
+- Corrects `ucalc.f90` label 76 two-photon semantics. After the source's final channel swap, the matrix-facing rates are `ans1=0`, `ans2=A`; line escape factors do not attenuate the two-photon population decay. The energy channels are `ans3=-A*DeltaE*ergsev`, `ans4=0`.
+- Adds `--xstar-ucalc-probe-csv`, `--xstar-matrix-probe-csv`, matrix-parity tolerances, and `--require-full-element-matrix-parity` to example 102 and the element CLI.
+- Extends JSON, Markdown, and console summaries with the exact first failing comparison key and outer/fixed iteration.
+- Keeps the full 607-row Python solve unchanged unless the label-76 correction affects an active record. No empirical scale or probe-backed coefficient is introduced.
+
+The intended next run reuses the existing solve-call-219 population/state probes and adds the historical `ucalc` and `calc_hmc_ion` probes. Its family summary should identify the source routine responsible for the residual condensed-matrix mismatch.
+
 # v0.4.8 - 2026-05-17
 
 v0.4.8 corrects the first source-level mismatch exposed by the v0.4.7 oxygen population and `msolvelucy` state comparison.

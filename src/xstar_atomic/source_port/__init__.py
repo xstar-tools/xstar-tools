@@ -150,6 +150,14 @@ from .msolvelucy_state_parity import (
     write_msolvelucy_state_parity_products,
 )
 
+from .full_element_matrix_parity import (
+    FullElementMatrixParityError,
+    MatrixFamilyParityMetrics,
+    FullElementMatrixParityResult,
+    compare_full_element_matrix_probe,
+    write_full_element_matrix_parity_products,
+)
+
 from .ucalc_dispatch import (
     UCalcBranch,
     UCalcDispatcher,
@@ -263,6 +271,11 @@ __all__ = [
     "MSolveStateParityResult",
     "compare_msolvelucy_state_probe",
     "write_msolvelucy_state_parity_products",
+    "FullElementMatrixParityError",
+    "MatrixFamilyParityMetrics",
+    "FullElementMatrixParityResult",
+    "compare_full_element_matrix_probe",
+    "write_full_element_matrix_parity_products",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",

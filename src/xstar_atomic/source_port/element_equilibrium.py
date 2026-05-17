@@ -337,6 +337,7 @@ class ElementEquilibriumResult:
     source_sequence_complete: bool = True
     population_parity: Optional[Any] = None
     msolvelucy_state_parity: Optional[Any] = None
+    full_element_matrix_parity: Optional[Any] = None
 
 
 # ---------------------------------------------------------------------------
@@ -1416,7 +1417,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.8",
+    port_version: str = "v0.4.9",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
@@ -1560,6 +1561,7 @@ def write_element_equilibrium_products(
         "production_acceptance_target": f"full_{basis.n_rows}_row_element_matrix_and_population_vector",
     }
     parity = result.population_parity
+    matrix_parity = result.full_element_matrix_parity
     if not assembly.strict_assembly_ready:
         dominant_next_target = "resolve_remaining_element_matrix_assembly_blockers"
     elif solve is None:
@@ -1568,6 +1570,8 @@ def write_element_equilibrium_products(
         dominant_next_target = "resolve_msolvelucy_convergence"
     elif not result.full_element_direct_solve_ready:
         dominant_next_target = "resolve_full_element_execution_acceptance"
+    elif matrix_parity is not None and not matrix_parity.full_element_matrix_parity_ready:
+        dominant_next_target = matrix_parity.diagnosis
     elif parity is None:
         dominant_next_target = "run_xstar_population_parity_gate_before_generalization"
     elif not parity.xstar_population_parity_ready:
@@ -1579,6 +1583,14 @@ def write_element_equilibrium_products(
     else:
         dominant_next_target = "generalize_population_validated_element_solve_then_local_ionization_thermal_closure"
     summary["dominant_next_target"] = dominant_next_target
+    summary["full_element_matrix_parity_supplied"] = matrix_parity is not None
+    summary["full_element_matrix_parity_ready"] = bool(
+        matrix_parity and matrix_parity.full_element_matrix_parity_ready
+    )
+    if matrix_parity is not None:
+        summary["full_element_matrix_parity_diagnosis"] = matrix_parity.diagnosis
+        summary["full_element_matrix_first_failing_data_type"] = matrix_parity.first_failing_data_type
+        summary["full_element_matrix_first_failing_rate_type"] = matrix_parity.first_failing_rate_type
     summary["xstar_population_parity_supplied"] = parity is not None
     summary["xstar_population_parity_ready"] = bool(parity and parity.xstar_population_parity_ready)
     summary["milestone3_population_parity_ready"] = bool(parity and parity.xstar_population_parity_ready)
@@ -1596,6 +1608,9 @@ def write_element_equilibrium_products(
     if state_parity is not None:
         summary["msolvelucy_state_parity_diagnosis"] = state_parity.diagnosis
         summary["msolvelucy_first_failing_component"] = state_parity.first_failing_component
+        summary["msolvelucy_first_failing_comparison_key"] = state_parity.first_failing_comparison_key
+        summary["msolvelucy_first_failing_outer_iteration"] = state_parity.first_failing_outer_iteration
+        summary["msolvelucy_first_failing_fixed_iteration"] = state_parity.first_failing_fixed_iteration
 
     if solve is not None:
         summary.update(
@@ -1647,6 +1662,7 @@ def write_element_equilibrium_products(
         f"- Strict matrix assembly ready: `{assembly.strict_assembly_ready}`",
         f"- Solver converged: `{summary.get('solver_converged')}`",
         f"- Full direct solve ready: `{result.full_element_direct_solve_ready}`",
+        f"- Full record-matrix parity ready: `{bool(matrix_parity and matrix_parity.full_element_matrix_parity_ready)}`",
         f"- XSTAR population parity supplied: `{parity is not None}`",
         f"- XSTAR population parity ready: `{bool(parity and parity.xstar_population_parity_ready)}`",
         f"- `msolvelucy` state parity ready: `{bool(result.msolvelucy_state_parity and result.msolvelucy_state_parity.msolvelucy_state_parity_ready)}`",

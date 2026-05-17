@@ -1850,11 +1850,27 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=r.reals[1], idest1=id1, idest2=id2)
 
     def _eval_type76(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        i=r.integers; id1,id2=i[0],i[1]
-        rate=float(r.reals[0])*(c.ptmp1+c.ptmp2)
-        de=abs(c.levels.energy(id1)-c.levels.energy(id2))
-        return self._ctx_result(r,s,ans2=rate,ans3=-rate*de*ERG_PER_EV,idest1=id1,idest2=id2,
-                                context_fields_used=("ptmp1","ptmp2","levels"))
+        if len(r.integers) < 2 or len(r.reals) < 1:
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type76_short_record")
+        # ucalc.f90 label 76 starts with ans1=A and ans2=0, constructs the
+        # two-photon emissivity spectrum, then performs the universal final
+        # swap.  The matrix-facing result is therefore ans1=0, ans2=A.  The
+        # line escape factors ptmp1/ptmp2 are not applied to the two-photon
+        # population decay rate.
+        id1, id2 = int(r.integers[0]), int(r.integers[1])
+        aij = max(float(r.reals[0]), 0.0)
+        de = abs(c.levels.energy(id1) - c.levels.energy(id2))
+        return self._ctx_result(
+            r,
+            s,
+            ans1=0.0,
+            ans2=aij,
+            ans3=-aij * de * ERG_PER_EV,
+            ans4=0.0,
+            idest1=id1,
+            idest2=id2,
+            context_fields_used=("levels",),
+        )
 
     def _eval_type77(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.xstar_element_solver import _xstar_calt77_rates

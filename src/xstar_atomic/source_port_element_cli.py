@@ -28,6 +28,9 @@ from .source_port import (
     MSolveStateParityError,
     compare_msolvelucy_state_probe,
     write_msolvelucy_state_parity_products,
+    FullElementMatrixParityError,
+    compare_full_element_matrix_probe,
+    write_full_element_matrix_parity_products,
 )
 
 
@@ -160,6 +163,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--msolvelucy-state-relative-tolerance", type=float, default=5.0e-5)
     parser.add_argument("--msolvelucy-state-relative-floor", type=float, default=1.0e-30)
     parser.add_argument(
+        "--xstar-ucalc-probe-csv",
+        help="Instrumented xstar_ucalc_record_probe.csv for complete record-level matrix parity",
+    )
+    parser.add_argument(
+        "--xstar-matrix-probe-csv",
+        help="Instrumented xstar_calc_hmc_ion_matrix_probe.csv for complete record-level matrix parity",
+    )
+    parser.add_argument("--full-element-matrix-absolute-tolerance", type=float, default=1.0e-10)
+    parser.add_argument("--full-element-matrix-relative-tolerance", type=float, default=5.0e-5)
+    parser.add_argument("--full-element-matrix-relative-floor", type=float, default=1.0e-30)
+    parser.add_argument(
+        "--require-full-element-matrix-parity", action="store_true",
+        help="Return a nonzero status unless the supplied record-level XSTAR matrix probes match",
+    )
+    parser.add_argument(
         "--require-msolvelucy-state-parity", action="store_true",
         help="Return a nonzero status unless the supplied iteration-level state probe matches",
     )
@@ -227,6 +245,25 @@ def main(argv: list[str] | None = None) -> int:
             element_z=args.element_z,
             context=context,
         )
+        matrix_parity = None
+        matrix_parity_outputs = {}
+        if bool(args.xstar_ucalc_probe_csv) != bool(args.xstar_matrix_probe_csv):
+            raise SystemExit(
+                "ERROR: --xstar-ucalc-probe-csv and --xstar-matrix-probe-csv must be supplied together"
+            )
+        if args.xstar_ucalc_probe_csv and args.xstar_matrix_probe_csv:
+            try:
+                matrix_parity = compare_full_element_matrix_probe(
+                    result.assembly,
+                    args.xstar_ucalc_probe_csv,
+                    args.xstar_matrix_probe_csv,
+                    absolute_tolerance=args.full_element_matrix_absolute_tolerance,
+                    relative_tolerance=args.full_element_matrix_relative_tolerance,
+                    relative_floor=args.full_element_matrix_relative_floor,
+                )
+            except (FileNotFoundError, FullElementMatrixParityError, ValueError) as exc:
+                raise SystemExit(f"ERROR: {exc}") from exc
+            result.full_element_matrix_parity = matrix_parity
         parity = None
         parity_outputs = {}
         if args.xstar_population_probe_csv:
@@ -283,6 +320,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise SystemExit(f"ERROR: {exc}") from exc
             result.msolvelucy_state_parity = state_parity
         outputs = write_element_equilibrium_products(result, args.out_dir)
+        if matrix_parity is not None:
+            matrix_parity_outputs = write_full_element_matrix_parity_products(matrix_parity, args.out_dir)
+            outputs.update(matrix_parity_outputs)
         if parity is not None:
             parity_outputs = write_element_population_parity_products(parity, args.out_dir)
             outputs.update(parity_outputs)
@@ -294,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.8")
+            print("port_version=v0.4.9")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")
@@ -353,6 +393,16 @@ def main(argv: list[str] | None = None) -> int:
                 print("solver_status=not_run_due_to_incomplete_strict_assembly")
             print(f"full_element_direct_solve_ready={result.full_element_direct_solve_ready}")
             print("six_row_and_119_row_products_role=regression_subsets_only")
+            if matrix_parity is not None:
+                print(f"full_element_matrix_parity_ready={matrix_parity.full_element_matrix_parity_ready}")
+                print(f"full_element_matrix_terms_matched={matrix_parity.n_matched_terms}")
+                print(f"full_element_matrix_terms_outside_tolerance={matrix_parity.n_terms_outside_tolerance}")
+                print(f"full_element_matrix_first_failing_data_type={matrix_parity.first_failing_data_type}")
+                print(f"full_element_matrix_first_failing_rate_type={matrix_parity.first_failing_rate_type}")
+                print(f"full_element_matrix_parity_diagnosis={matrix_parity.diagnosis}")
+            else:
+                print("full_element_matrix_parity_ready=False")
+                print("full_element_matrix_parity_status=not_supplied")
             if parity is not None:
                 print(f"selected_xstar_population_solve_call_id={parity.reference.solve_call_id}")
                 print(f"python_initial_vs_xstar_before_l1={parity.initial_metrics.l1_difference}")
@@ -366,6 +416,9 @@ def main(argv: list[str] | None = None) -> int:
             if state_parity is not None:
                 print(f"msolvelucy_state_parity_ready={state_parity.msolvelucy_state_parity_ready}")
                 print(f"msolvelucy_first_failing_component={state_parity.first_failing_component}")
+                print(f"msolvelucy_first_failing_comparison_key={state_parity.first_failing_comparison_key}")
+                print(f"msolvelucy_first_failing_outer_iteration={state_parity.first_failing_outer_iteration}")
+                print(f"msolvelucy_first_failing_fixed_iteration={state_parity.first_failing_fixed_iteration}")
                 print(f"msolvelucy_state_parity_diagnosis={state_parity.diagnosis}")
             else:
                 print("msolvelucy_state_parity_ready=False")
@@ -381,6 +434,8 @@ def main(argv: list[str] | None = None) -> int:
                 dominant_next_target = "resolve_msolvelucy_convergence"
             elif not result.full_element_direct_solve_ready:
                 dominant_next_target = "resolve_full_element_execution_acceptance"
+            elif matrix_parity is not None and not matrix_parity.full_element_matrix_parity_ready:
+                dominant_next_target = matrix_parity.diagnosis
             elif parity is None:
                 dominant_next_target = "run_xstar_population_parity_gate_before_generalization"
             elif not parity.xstar_population_parity_ready:
@@ -394,6 +449,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"dominant_next_target={dominant_next_target}")
             for key, path in outputs.items():
                 print(f"{key}: {path}")
+        if args.require_full_element_matrix_parity:
+            return 0 if matrix_parity is not None and matrix_parity.full_element_matrix_parity_ready else 2
         if args.require_msolvelucy_state_parity:
             return 0 if state_parity is not None and state_parity.msolvelucy_state_parity_ready else 2
         if args.require_xstar_population_parity:

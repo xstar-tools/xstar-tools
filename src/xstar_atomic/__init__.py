@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -146,6 +146,9 @@ from .source_port import (
     compare_element_population_parity, write_element_population_parity_products,
     MSolveStateParityError, StateComponentMetrics, MSolveStateParityResult,
     compare_msolvelucy_state_probe, write_msolvelucy_state_parity_products,
+    FullElementMatrixParityError, MatrixFamilyParityMetrics,
+    FullElementMatrixParityResult, compare_full_element_matrix_probe,
+    write_full_element_matrix_parity_products,
     EscapeStateError, EscapeStateBuildResult, load_escape_state_from_xstar_run,
     write_escape_state_npz, write_escape_state_summary,
 )
@@ -478,4 +481,9 @@ __all__.extend([
     "MSolveStateParityResult",
     "compare_msolvelucy_state_probe",
     "write_msolvelucy_state_parity_products",
+    "FullElementMatrixParityError",
+    "MatrixFamilyParityMetrics",
+    "FullElementMatrixParityResult",
+    "compare_full_element_matrix_probe",
+    "write_full_element_matrix_parity_products",
 ])

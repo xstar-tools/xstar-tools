@@ -13,6 +13,18 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.9 oxygen record-level matrix parity
+
+The Milestone-3 acceptance path now stops at the first true XSTAR/Python divergence. The v0.4.8 state products show exact outer-iteration-1 populations and `rr` fractions; the first mismatch is the raw condensed superlevel matrix. v0.4.9 can join the complete native 607-row matrix manifest directly to the existing XSTAR `ucalc` and `calc_hmc_ion` probe products and rank the responsible data/rate family without replacing any production coefficient.
+
+Add these options to the normal oxygen parity command:
+
+```bash
+  --xstar-ucalc-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_ucalc_record_probe.csv   --xstar-matrix-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_calc_hmc_ion_matrix_probe.csv
+```
+
+Outputs include `xstar_full_element_matrix_parity_details.csv`, a family summary, and the first failing type/rate pair. The same release also corrects label-76 two-photon decay channel semantics and reports state failures in actual Lucy execution order.
+
 ### v0.4.3 complete element statistical-equilibrium subsystem
 
 The next original-source sequence is now available as one direct execution path:
