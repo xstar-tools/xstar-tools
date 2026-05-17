@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.7")
+            print("port_version=v0.4.8")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")

@@ -374,9 +374,13 @@ def compare_element_population_parity(
         )
 
     python_nsup = assembly.basis.nsup[1:]
-    python_nion = assembly.basis.nion[1:]
+    python_ion_counter = assembly.basis.nion[1:]
+    python_ion_stage = assembly.basis.ion_stage[1:]
     nsup_matches = bool(np.array_equal(python_nsup, reference.nsup))
-    nion_matches = bool(np.array_equal(python_nion, reference.nion))
+    # The XSTAR population probe column named ``nion`` contains the physical
+    # ion stage (O III=3, ..., O VIII=8), not the compact block ordinal
+    # (1, ..., 6) used internally by the Python Lucy solver.
+    nion_matches = bool(np.array_equal(python_ion_stage, reference.nion))
 
     if native_metrics.ready and nsup_matches and nion_matches:
         diagnosis = "population_parity_reproduced_from_python_native_seed"
@@ -407,9 +411,10 @@ def compare_element_population_parity(
                 "python_nsup": int(python_nsup[i]),
                 "xstar_nsup": int(reference.nsup[i]),
                 "nsup_matches": bool(python_nsup[i] == reference.nsup[i]),
-                "python_nion": int(python_nion[i]),
+                "python_ion_counter": int(python_ion_counter[i]),
+                "python_ion_stage": int(python_ion_stage[i]),
                 "xstar_nion": int(reference.nion[i]),
-                "nion_matches": bool(python_nion[i] == reference.nion[i]),
+                "nion_matches": bool(python_ion_stage[i] == reference.nion[i]),
                 "xstar_before_population": float(reference.before[i]),
                 "python_initial_population": float(python_initial[i]),
                 "initial_minus_xstar_before": float(python_initial[i] - reference.before[i]),
@@ -485,7 +490,7 @@ def write_element_population_parity_products(
     result: ElementPopulationParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.7",
+    port_version: str = "v0.4.8",
 ) -> Dict[str, Path]:
     """Write row, aggregate, JSON, Markdown, and NPZ parity products."""
     out = Path(out_dir)

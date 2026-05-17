@@ -79,7 +79,7 @@ def _write_probe(path: Path, before=(0.5, 0.5), after=(0.8, 0.2), solve_call_id=
                 "stage_capture_index": capture, "stage": stage, "ml_element": 8,
                 "element_z": 8, "ipmat2": 2, "nsp": 2, "nionp": 1, "nindbe": 4,
                 "nit": 0 if stage.startswith("before") else 2, "nit2": 0, "nit3": 0,
-                "level_index": index, "x_population": value, "nsup": index, "nion": 1,
+                "level_index": index, "x_population": value, "nsup": index, "nion": 7,
                 "t_xstar_1e4K": 100.0, "xee": 1.0, "xpx": 1.0e8, "cfrac": 1.0,
             })
     with path.open("w", newline="") as handle:

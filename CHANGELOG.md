@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# v0.4.8 - 2026-05-17
+
+v0.4.8 corrects the first source-level mismatch exposed by the v0.4.7 oxygen population and `msolvelucy` state comparison.
+
+- Fixes `ucalc.f90` label-86 packed endpoint decoding: Python now uses integer fields `[-4]` and `[-5]`, matching the Fortran expressions `np1i-1+nidt-3` and `np1i-1+nidt-4`. The previous one-field shift placed very large Auger rates in incorrect compact superlevels.
+- Preserves the supplied population-vector scale at `msolvelucy` entry, matching the source before its first fixed-point normalization.
+- Compares XSTAR probe `nion` against physical ion stage rather than the internal compact block ordinal, with shared aliases assigned to the next-ion ground stage exactly as XSTAR overwrites them.
+- Replaces the generated `msolvelucy` instrumentation with the safe target-filtered helper using independent call counting, `newunit=` file units, the true `ndss` matrix leading dimension, and post-condensed capture outside the level loop.
+- Adds focused regression tests for type-86 decoding, unnormalized Lucy entry state, and physical ion-stage alias semantics.
+
 # v0.4.7 - 2026-05-17
 
 v0.4.7 adds the Milestone-3 scientific acceptance gate after the v0.4.6 full 607-row oxygen solve reached strict assembly and Lucy convergence.

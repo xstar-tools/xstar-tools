@@ -500,3 +500,9 @@ No probed coefficient or population is used by the production matrix assembly.
 ### Final strict-assembly source controls (v0.4.6)
 
 The v0.4.5 production rerun left 531 blockers. These were not missing runtime state: 243 type-63 records are source-defined zero transitions, and 288 O VII type-53/type-74 parent endpoints are clamped by XSTAR's `msolvelucy` rule `min(ipmat, indb)`. v0.4.6 reproduces both behaviors and reports every raw-to-clamped endpoint in the matrix-term products. The next rerun should reach the 607-row solver directly.
+
+### Oxygen condensed-matrix parity correction (v0.4.8)
+
+The first v0.4.7 state comparison showed that all 607 `nsup` assignments and the first-iteration `rr` fractions agree with XSTAR. Two apparent earlier failures were comparison artifacts: compact ion counters were compared with physical ion stages, and the captured pre-solve vector was normalized before the controlled seeded solve. v0.4.8 corrects both.
+
+The first physical mismatch was then traced to type-86 Auger endpoint decoding. XSTAR label 86 reads packed integer fields `[-4]` and `[-5]`; the previous Python translation used `[-3]` and `[-4]`. The correction restores source-faithful compact placement of these large rates. Rerun the same example 102 command with the existing XSTAR state probes; no new XSTAR instrumentation run is required.

@@ -117,9 +117,29 @@ class ElementCompactBasis:
 
     @property
     def nion(self) -> np.ndarray:
+        """One-based compact ion-block counters used internally by ``msolvelucy``."""
         out = np.zeros(self.n_rows + 1, dtype=np.int32)
         for row in self.rows:
             out[row.compact_index] = row.ion_counter
+        return out
+
+    @property
+    def ion_stage(self) -> np.ndarray:
+        """Physical ion stage for each compact row, matching XSTAR probe ``nion``.
+
+        ``calc_hmc_element`` overwrites a shared parent-continuum/next-ground
+        compact row when the following ion block is installed.  Therefore a
+        shared alias takes the ion stage of its next-ion ground role, i.e. the
+        largest physical ion stage among its roles.  This is distinct from the
+        compact block counter returned by :attr:`nion`.
+        """
+        out = np.zeros(self.n_rows + 1, dtype=np.int32)
+        for row in self.rows:
+            stages = [int(role.get("ion_stage", 0)) for role in row.roles if int(role.get("ion_stage", 0)) > 0]
+            if stages:
+                out[row.compact_index] = max(stages)
+            elif row.ion_counter > 0:
+                out[row.compact_index] = self.min_ion_stage + row.ion_counter - 1
         return out
 
 
@@ -979,7 +999,13 @@ def msolvelucy(
     basis = assembly.basis
     n = basis.n_rows
     x = np.asarray(assembly.initial_populations[1 : n + 1], dtype=float).copy()
-    x /= max(float(x.sum()), 1.0e-300)
+    # Source ``msolvelucy.f90`` enters the first outer iteration with the
+    # supplied population vector exactly as received.  It does not normalize
+    # ``x`` until the fixed-point update.  Preserving the input scale is
+    # essential for iteration-state parity with the captured pre-solve vector;
+    # the condensed solve itself subsequently imposes number conservation.
+    if not np.all(np.isfinite(x)) or float(np.sum(x)) <= 0.0:
+        raise ElementEquilibriumError("msolvelucy received a non-positive or non-finite population seed")
     nsup = basis.nsup[1:]
     nion = basis.nion[1:]
     nspmx = basis.n_superlevels
@@ -1390,7 +1416,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.7",
+    port_version: str = "v0.4.8",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)

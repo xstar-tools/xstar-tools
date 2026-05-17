@@ -844,8 +844,8 @@ class SourceFaithfulUCalc:
         elif dt == 79 and len(i) >= 2:
             id1, id2 = i[0], i[1]
         elif dt == 86:
-            id1 = max(i[-3] if len(i) >= 3 else 1, 1)
-            id2 = max((i[-2] if len(i) >= 2 else 1) + nlev - 1, 1)
+            id1 = max(i[-4] if len(i) >= 4 else 1, 1)
+            id2 = max((i[-5] if len(i) >= 5 else 1) + nlev - 1, 1)
         return self._base_result(record, spec, UCalcStatus.INDEX_ONLY, idest1=id1, idest2=id2)
 
     def _register_builtin_evaluators(self) -> None:
@@ -1837,9 +1837,17 @@ class SourceFaithfulUCalc:
             idest1=up,idest2=lo,opakab=op,context_fields_used=("temperature_k","turbulent_velocity_km_s","ptmp1","ptmp2","levels"))
 
     def _eval_type86(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        if len(r.reals)<2 or len(r.integers)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type86_short_record")
-        id1=r.integers[-3]; id2=c.nlevp+r.integers[-4]-1
-        return self._ctx_result(r,s,ans1=r.reals[1],idest1=id1,idest2=id2)
+        if len(r.reals) < 2 or len(r.integers) < 5:
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type86_short_record")
+        # ucalc.f90 label 86:
+        #   idest1=idat(np1i-1+nidt-3)  -> zero-based packed integer [-4]
+        #   idest2=nlevp+idat(np1i-1+nidt-4)-1 -> packed integer [-5]
+        # The previous Python translation used [-3]/[-4], shifting both
+        # endpoints by one metadata field and moving very large Auger rates
+        # into the wrong compact superlevels.
+        id1 = r.integers[-4]
+        id2 = c.nlevp + r.integers[-5] - 1
+        return self._ctx_result(r, s, ans1=r.reals[1], idest1=id1, idest2=id2)
 
     def _eval_type76(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i=r.integers; id1,id2=i[0],i[1]
