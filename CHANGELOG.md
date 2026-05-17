@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.4.0 - 2026-05-16
+
+- Pivoted the primary roadmap to a systematic source-faithful Python translation
+  of the original XSTAR call graph.
+- Added one-based Fortran array/intrinsic compatibility helpers.
+- Added typed atomic, plasma, radiation, matrix, thermal, transfer, and top-level
+  Python XSTAR state containers.
+- Added source-tree/tarball inventory, routine extraction, call-edge output, and
+  stage classification.
+- Added a machine-readable translation ledger with conservative validation
+  status.
+- Added an original-stage Python driver that fails explicitly at the first
+  untranslated routine.
+- Added a unified `ucalc` branch registry for currently translated types 50, 51,
+  53, and 71.
+- Added example 99, source-port documentation, focused tests, and generated
+  source inventory products.
+- Retained existing probes and parity audits as regression oracles rather than
+  the main implementation path.
+
+# Changelog
+
 ## v0.3.209 - 2026-05-16
 
 - Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.

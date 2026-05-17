@@ -13,3 +13,7 @@ include docs/helike_reproduction_source_code_diagnosis.md
 
 include xstar_atomic_v0.3.208.md
 include xstar_atomic_v0.3.209.md
+
+include XSTAR_PYTHON_PORT.md
+include xstar_atomic_v0.4.0.md
+recursive-include xstar_python_source_port_inventory_v0400 *.csv *.json

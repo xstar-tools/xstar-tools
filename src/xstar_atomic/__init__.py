@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.3.209"
+__version__ = "0.4.0"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -283,4 +283,20 @@ from .xstar_priority_matrix_closure import (
 from .xstar_priority_conditional_solve import (
     build_priority_conditional_solve_audit,
     write_priority_conditional_solve_audit,
+)
+
+
+# Source-faithful full-XSTAR Python port infrastructure (v0.4 series).
+from .source_port import (
+    FortranArray,
+    FortranRuntimeError,
+    XSTARPythonState,
+    XSTARStage,
+    XSTARPythonDriver,
+    UnportedXSTARRoutine,
+    UCalcDispatcher,
+    default_ucalc_dispatcher,
+    build_source_inventory,
+    write_source_inventory,
+    default_port_ledger,
 )

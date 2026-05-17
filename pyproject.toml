@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.3.209"
-description = "Direct reader, rate evaluator, emissivity tools, and prototype solvers for XSTAR atomic data in atdb.fits"
+version = "0.4.0"
+description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -45,6 +45,7 @@ xstar-atomic-export-superwind = "xstar_atomic.export:main"
 xstar-atomic-xstar-outputs = "xstar_atomic.xstar_outputs:main"
 xstar-atomic-download-data = "xstar_atomic.data:main"
 xstar-atomic-plan-xstar-run = "xstar_atomic.xstar_run:main"
+xstar-atomic-source-inventory = "xstar_atomic.source_port_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

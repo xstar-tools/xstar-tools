@@ -1093,3 +1093,15 @@ PYTHONPATH=src python examples/98_integrate_xstar_priority_native_type53.py \
   --out-dir xstar_priority_native_type53_integration_o7_v03208 \
   --print-summary
 ```
+
+
+### `99_inventory_xstar_source_port.py`
+
+Inventory the original XSTAR Fortran source tree or tarball, write file/routine/call-edge tables, and initialize the machine-readable Python translation ledger.  This is the foundation for the v0.4 source-file-by-source-file port.
+
+```bash
+PYTHONPATH=src python examples/99_inventory_xstar_source_port.py \
+  --source-tar xstar_source.tar.gz \
+  --out-dir xstar_python_source_port_inventory_v0400 \
+  --print-summary
+```

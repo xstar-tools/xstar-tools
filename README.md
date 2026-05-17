@@ -1,5 +1,32 @@
 # xstar-atomic
 
+
+## Full XSTAR Python source port
+
+Starting with v0.4.0, the primary goal is a source-faithful Python
+implementation of the complete XSTAR execution path.  The project now includes
+a Fortran-compatible runtime layer, typed whole-program state, source inventory
+and call-graph tools, a translation ledger, an executable stage driver, and a
+unified `ucalc` dispatcher.  Existing atomic audits remain correctness oracles,
+but new development proceeds by translating complete source routines and
+subsystems.
+
+See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
+
+Generate the source inventory from the supplied XSTAR tarball with:
+
+```bash
+PYTHONPATH=src python examples/99_inventory_xstar_source_port.py \
+  --source-tar xstar_source.tar.gz \
+  --out-dir xstar_python_source_port_inventory_v0400 \
+  --print-summary
+```
+
+The official `atdb.fits` remains external because it is large; use
+`xstar-atomic-download-data` or provide a local file through `XSTAR_ATDB`.
+
+
+
 > **v0.3.209:** fixes the real O VII type-53 parity blocker by deriving XSTAR's active continuum index `nlevp` from the direct `ucalc` endpoint and the packed parent offset. v0.3.208 used the maximum extracted level index (`110`) instead of the active XSTAR continuum row (`79`), which introduced a false parent excitation and invalidated all type-53 rates. The exact live-radiation `phint53` kernel is unchanged; rerun examples 97 and 98 to test the corrected decoder.
 
 > **v0.3.208:** adds an exact live-radiation type-53 `phint53`/`ucalc` reference implementation and controlled parity/integration gates. The gate consumes an explicitly selected live `epim`/`bremsam`/`bremsint` capture, validates state provenance, compares `ans1..ans6` and compact matrix insertions, and does not apply the unresolved empirical approximately-44 scale. Real O VII acceptance remains required before the type-53 milestone is considered complete.
