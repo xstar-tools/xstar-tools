@@ -1,9 +1,15 @@
-"""Registry-based dispatcher mirroring the top-level structure of ``ucalc.f90``."""
+"""Backward-compatible registry facade for the complete ``ucalc`` subsystem.
+
+New code should use :class:`xstar_atomic.source_port.ucalc.SourceFaithfulUCalc`
+directly.  The small registry class remains for callers introduced in v0.4.0,
+but ``default_ucalc_dispatcher`` now exposes all source labels 1..102 and
+delegates to the single authoritative implementation.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 
 UCalcEvaluator = Callable[..., Any]
@@ -19,7 +25,7 @@ class UCalcBranch:
 
 
 class UCalcDispatcher:
-    """Explicit registry for translated ``ucalc`` data-type branches."""
+    """Explicit registry retained for compatibility with the v0.4.0 API."""
 
     def __init__(self) -> None:
         self._branches: Dict[int, UCalcBranch] = {}
@@ -38,7 +44,7 @@ class UCalcDispatcher:
             return self._branches[int(data_type)]
         except KeyError as exc:
             raise NotImplementedError(
-                f"XSTAR ucalc data type {data_type} has not yet been translated"
+                f"XSTAR ucalc data type {data_type} is outside the source range 1..102"
             ) from exc
 
     def evaluate(self, data_type: int, /, *args: Any, **kwargs: Any) -> Any:
@@ -46,46 +52,33 @@ class UCalcDispatcher:
 
 
 def default_ucalc_dispatcher() -> UCalcDispatcher:
-    """Create the source-port dispatcher from currently validated branches."""
-    from xstar_atomic.rates_type50 import evaluate_type50_ucalc_record
-    from xstar_atomic.rates_type51 import evaluate_type51_ucalc_record
-    from xstar_atomic.rates_type53 import evaluate_type53_ucalc_record
-    from xstar_atomic.rates_type71 import evaluate_type71_ucalc_record
+    """Return a legacy registry facade over all complete source branches.
 
+    Each evaluator expects ``(UCalcRecord, UCalcContext, strict=True)`` and
+    returns ``UCalcResult``.  This preserves the registry-shaped API while
+    avoiding a second, incomplete implementation path.
+    """
+
+    from .ucalc import SourceFaithfulUCalc
+
+    source = SourceFaithfulUCalc()
     dispatcher = UCalcDispatcher()
-    dispatcher.register(
-        UCalcBranch(
-            50,
-            ("ucalc.f90", "pescv.f90", "pescl.f90"),
-            evaluate_type50_ucalc_record,
-            "validated_selected_system",
-            "Exact decay; pumping requires explicit live radiation unless identically zero.",
+    for data_type in source.registered_data_types:
+        spec = source.catalog[data_type]
+
+        def evaluate(record: Any, context: Any, *, strict: bool = True, _source=source) -> Any:
+            return _source.evaluate(record, context, strict=strict)
+
+        dispatcher.register(
+            UCalcBranch(
+                data_type=data_type,
+                source_routines=spec.source_routines,
+                evaluator=evaluate,
+                validation_status=spec.validation_status,
+                notes=";".join(spec.notes),
+            )
         )
-    )
-    dispatcher.register(
-        UCalcBranch(
-            51,
-            ("ucalc.f90", "upsil.f90", "upsiln.f90"),
-            evaluate_type51_ucalc_record,
-            "validated_selected_system",
-            "Five-point records directly validated; nine-point branch needs broader coverage.",
-        )
-    )
-    dispatcher.register(
-        UCalcBranch(
-            53,
-            ("ucalc.f90", "phint53.f90", "rnist.f90"),
-            evaluate_type53_ucalc_record,
-            "translated_pending_real_context_parity",
-            "Exact live-rate kernel; current real O VII context association remains unresolved.",
-        )
-    )
-    dispatcher.register(
-        UCalcBranch(
-            71,
-            ("ucalc.f90", "calt71.f90"),
-            evaluate_type71_ucalc_record,
-            "validated_selected_system",
-        )
-    )
     return dispatcher
+
+
+__all__ = ["UCalcBranch", "UCalcDispatcher", "default_ucalc_dispatcher"]

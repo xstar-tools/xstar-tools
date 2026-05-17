@@ -13,6 +13,38 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.2 complete `ucalc` subsystem
+
+The complete packed-record execution boundary of `ucalc.f90` is now available:
+
+```text
+packed ATDB record
+  -> data/rate type identification
+  -> idat/rdat/cdat decoding
+  -> source branch and called leaf routines
+  -> ans1..ans6, idest1..idest4, opacity, diagnostics, provenance
+```
+
+All source labels 1 through 102 are registered.  Physical branches execute
+natively when their required plasma, level, pointer, and radiation context is
+present; missing context is reported explicitly and is never replaced by a
+proxy.  Source-defined metadata and disabled branches return source no-op
+results.
+
+Run the subsystem inventory against a production database with:
+
+```bash
+PYTHONPATH=src python examples/101_port_xstar_ucalc.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --out-dir xstar_ucalc_source_port_v042 \
+  --print-summary
+```
+
+This does not evaluate all 1.2 million records numerically because a full XSTAR
+zone state is not yet available.  It does decode and dispatch one record for
+every active ATDB data type and reports native/no-op/untranslated coverage.
+
 ### v0.4.1 atomic-database subsystem
 
 The translated Python driver now completes the first three XSTAR stages:

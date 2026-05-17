@@ -62,6 +62,29 @@ from .atomic_database import (
     write_atomic_database_products,
 )
 
+
+from .ucalc import (
+    UCalcLevel,
+    UCalcLevelTable,
+    UCalcRecord,
+    UCalcContext,
+    UCalcStatus,
+    UCalcProvenance,
+    UCalcResult,
+    UCalcExecutionError,
+    UCalcUntranslatedBranch,
+    UCalcBranchSpec,
+    SourceFaithfulUCalc,
+    complete_ucalc_branch_catalog,
+    default_source_faithful_ucalc,
+)
+from .ucalc_inventory import (
+    build_ucalc_data_type_inventory,
+    build_ucalc_branch_catalog_rows,
+    build_ucalc_index_only_samples,
+    write_ucalc_subsystem_products,
+)
+
 from .ucalc_dispatch import (
     UCalcBranch,
     UCalcDispatcher,
@@ -93,6 +116,23 @@ __all__ = [
     "XSTARStage",
     "UnportedXSTARRoutine",
     "XSTARPythonDriver",
+    "UCalcLevel",
+    "UCalcLevelTable",
+    "UCalcRecord",
+    "UCalcContext",
+    "UCalcStatus",
+    "UCalcProvenance",
+    "UCalcResult",
+    "UCalcExecutionError",
+    "UCalcUntranslatedBranch",
+    "UCalcBranchSpec",
+    "SourceFaithfulUCalc",
+    "complete_ucalc_branch_catalog",
+    "default_source_faithful_ucalc",
+    "build_ucalc_data_type_inventory",
+    "build_ucalc_branch_catalog_rows",
+    "build_ucalc_index_only_samples",
+    "write_ucalc_subsystem_products",
     "UCalcBranch",
     "UCalcDispatcher",
     "default_ucalc_dispatcher",

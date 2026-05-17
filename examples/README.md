@@ -1119,3 +1119,22 @@ PYTHONPATH=src python examples/100_port_xstar_atomic_database.py \
   --out-dir xstar_atomic_database_port_v041 \
   --print-summary
 ```
+
+### `101_port_xstar_ucalc.py`
+
+Run the complete source-faithful `ucalc.f90` subsystem against a packed XSTAR
+atomic database.  The command writes the 1--102 branch catalog, counts active
+ATDB records by data/rate type, and performs one index-only packed-record decode
+per active data type.
+
+```bash
+PYTHONPATH=src python examples/101_port_xstar_ucalc.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --out-dir xstar_ucalc_source_port_v042 \
+  --print-summary
+```
+
+The command validates complete source control flow and packed-record decoding;
+it does not claim that all records were numerically evaluated without a full
+zone plasma/radiation context.

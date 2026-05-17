@@ -1,5 +1,797 @@
 # CHANGELOG
 
+# v0.4.2 - 2026-05-17
+
+- Completes the source-faithful Python control-flow translation of `xstarlib/src/ucalc.f90` for all computed-GOTO labels 1 through 102.
+- Adds `xstar_atomic.source_port.ucalc` with packed `UCalcRecord` decoding, typed `UCalcContext`, `UCalcResult` (`ans1..ans6`, `idest1..idest4`, opacity, status, diagnostics, and source provenance), strict/non-strict execution, and index-only endpoint mode.
+- Registers 75 native physical branches and 27 source-defined metadata/no-op branches. No physical label is unregistered and no proxy fallback is used. Missing level, density, pointer, or radiation state is returned explicitly as `blocked_missing_context`.
+- Adds source translations of shared leaf routines in `xstar_atomic.source_port.ucalc_leaves`, including `expo`, `exintn`, spline interpolation, `phextrap`, `bkhsgo`, `milne`, `gull1`, `hphotx`, `pexs`, `calt70`, Sampson/Kato collision helpers, and APED Maxwellian-rate interpolation.
+- Incorporates the previously validated type-50, type-51, type-53, and type-71 implementations into the unified dispatcher and fixes the generic collision adapter to consume the validated excitation/de-excitation coefficient keys.
+- Preserves source ordering for labels that jump directly to `9000`, including disabled types 84, 93, and 94; these return source no-op results before index-only handling.
+- Adds `xstar_atomic.source_port.ucalc_inventory`, `xstar-atomic-port-ucalc`, and `examples/101_port_xstar_ucalc.py`. The command inventories production ATDB data types, writes the complete branch catalog, and performs one packed-record/index-only execution per active data type without copying the large REALS vector.
+- Updates the source-port ledger: the `ucalc` subsystem is translated, while numerical parity remains explicitly branch-specific. The unresolved real-context type-53 case remains a regression benchmark rather than an empirical correction.
+- Does not yet translate `levwkelement`, `calc_hmc_ion`, `calc_hmc_element`, or `msolvelucy`; these form the next coherent subsystem.
+- Validation: 334 tests passed and 22 data-dependent tests skipped; compileall, source/wheel builds, isolated wheel installation/import, CLI checks, archive content checks, and checksums passed.
+
+
+## v0.4.1
+
+- Translated the runtime atomic-database initialization subsystem from `readtbl.f90` and the active path of `setptrs.f90`.
+- Added memory-mapped one-based packed-vector views for POINTERS, REALS, INTEGERS, and CHARS, with full record-span validation.
+- Added source-ordered construction of `npar`, `npnxt`, `npfirst`, `npfi`, `nplin`/`nplini`, `npcon`/`npconi`/`npconi2`, `npilev`/`npilevi`, `nlevs`, and explicit element/ion/global-level maps.
+- Added runtime-relevant `dbwk2` pointer rebuild and non-mutating report operations; interactive database editing modes remain intentionally unported because normal XSTAR setup does not call them.
+- Added a fingerprinted compressed derived-pointer cache, reusable CSV/JSON/Markdown products, driver-stage registration, the `xstar-atomic-port-atdb` command, and example 100.
+- Added focused packed-FITS, pointer-invariant, cache, driver, malformed-input, CLI, and public-API tests.
+- The next source-port milestone is the complete `ucalc.f90` dispatcher and all called rate routines.
+
+## v0.4.0
+
+- Pivoted the primary roadmap to a systematic source-faithful Python translation
+  of the original XSTAR call graph.
+- Added one-based Fortran array/intrinsic compatibility helpers.
+- Added typed atomic, plasma, radiation, matrix, thermal, transfer, and top-level
+  Python XSTAR state containers.
+- Added source-tree/tarball inventory, routine extraction, call-edge output, and
+  stage classification.
+- Added a machine-readable translation ledger with conservative validation
+  status.
+- Added an original-stage Python driver that fails explicitly at the first
+  untranslated routine.
+- Added a unified `ucalc` branch registry for currently translated types 50, 51,
+  53, and 71.
+- Added example 99, source-port documentation, focused tests, and generated
+  source inventory products.
+- Retained existing probes and parity audits as regression oracles rather than
+  the main implementation path.
+
+# Changelog
+
+## v0.3.209
+
+- Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.
+- v0.3.208 incorrectly used the maximum extracted type-13 level index. In the real O VII products this selected level 110 instead of XSTAR `nlevp=79`, assigned a false 57.919 eV parent excitation to ground-parent records, and corrupted the continuum weight, threshold, Milne exponent, endpoint validation, and all type-53 rate/matrix comparisons.
+- Added explicit decoder provenance and readiness fields: inferred `xstar_nlevp`, ATDB maximum level index, packed parent offset, inference source/consistency, continuum-row availability, endpoint consistency, and aggregate fallback/error counts.
+- The parity gate now requires both live-radiation context readiness and exact ion-block/continuum decoder readiness. It does not fall back silently to the ATDB maximum when a direct endpoint-derived `nlevp` is available.
+- Added focused regression tests for ground-parent and excited-parent endpoint inference and for rejection of inconsistent decoder context. No `phint53` numerical formula, empirical scale, or production solver behavior changed.
+
+## v0.3.208
+
+- Added exact live-radiation type-53 state, `phint53`/`ucalc` evaluator, record/matrix parity gate, and selected-system integration gate.
+- Added examples 97 and 98, focused tests, and independent standalone-Fortran numerical verification.
+- Preserved the current-ion continuum statistical weight in `rnist` for excited-parent type-53 records.
+- Added explicit live-state provenance checks and separate readiness for rate, heating/cooling, compact matrix, external RHS, and opacity/RRC channels.
+- No empirical approximately-44 scale and no production-solver behavior change.
+
+## v0.3.207
+
+- Corrected the type-71 endpoint-order validator in `xstar_type50_type71_native_parity.py`. XSTAR `ucalc.f90` type 71 returns the packed ATDB order `idest1=lower spectroscopic destination`, `idest2=upper superlevel source`; `calc_hmc_ion.f90` later derives `llo/lup` from level energies. The v0.3.206 audit incorrectly reused the type-50 convention `idest1=upper`, `idest2=lower`.
+- The user-provided O VII v0.3.206 products showed that all three type-71 native rates and all nine native matrix coefficients already matched XSTAR exactly. Only `endpoint_order_match=False` blocked record and matrix readiness.
+- Added family-neutral endpoint provenance columns `xstar_idest1`, `xstar_idest2`, `xstar_idest1_role`, `xstar_idest2_role`, and `endpoint_order_convention`. The legacy `xstar_idest1_upper` and `xstar_idest2_lower` columns are now populated only for type 50.
+- Added a regression test using the real source convention and a negative test proving that reversed type-71 endpoints fail parity.
+- No native rate formula, compact coefficient, production solver behavior, or type-53 treatment changed. After rerunning examples 95 and 96, the expected next milestone is native type-50/type-71 selected-system integration readiness, followed by exact live-radiation type 53.
+
+## v0.3.206
+
+- Added `xstar_atomic.rates_type71`, a FITS-independent source-code translation of the XSTAR `calt71.f90` and `ucalc.f90` data-type 71 branches. It supports the single-point and log-density/log-temperature grid forms, XSTAR boundary conventions, the source-equivalent `calt71` density argument `den=xpx`, and the final `ans1=0`, `ans2=A*(ptmp1+ptmp2)` convention.
+- Extended `xstar_atomic.rates_type50` with `evaluate_type50_ucalc_record`, which evaluates escaped radiative decay from decoded ATDB `A`, `ptmp1`, and `ptmp2`, including the source floor `max(A*(ptmp1+ptmp2),1e-20*xpx)`, and evaluates post-swap photoexcitation only from an explicit same-capture `bremsa(nb1)` radiation value. Full covering and the XSTAR high-wavelength sentinel are handled as exact zero-pumping branches; no proxy continuum is accepted.
+- Added `xstar_atomic.xstar_type50_type71_native_parity` and `examples/95_audit_xstar_type50_type71_native_parity.py`. The audit decodes all selected type-50/type-71 records, compares native `ans1`/`ans2` with the XSTAR `ucalc` probes, reconstructs every compact insertion touching a selected endpoint, and separates selected-internal, fixed-external, and external-row-out-of-scope terms.
+- Added `xstar_atomic.xstar_priority_native_type50_type71_integration` and `examples/96_integrate_xstar_priority_native_type50_type71.py`. The integration gate starts from the validated v0.3.205 native-type-51 term table, replaces every validated selected-row type-50/type-71 coefficient, recomputes `A_SS`, `-A_SE x_E`, row balance, conditioning, and the fixed-external conditional solution, and preserves all remaining families as explicit probe-backed terms.
+- Type-50/type-71 readiness requires record parity, compact-term parity, complete one-to-one selected-row replacement, zero accidental use of external-row terms, full fixed-external RHS coverage for both families, a full-rank nonnegative solve, captured-row balance, population agreement, and negligible movement relative to the parent native-type-51 solution.
+- The production expanded compact-basis solver remains unchanged. Complete native compact closure remains false until exact live-radiation type 53 and the remaining minor families are integrated. The approximately 44 type-53 discrepancy remains unresolved and no empirical correction is applied.
+
+## v0.3.205
+
+- Corrected the v0.3.204 native type-51 integration readiness scope. The six-row conditional audit is defined by matrix terms whose compact **row** is selected; it must not require reciprocal terms that belong to external-row equations.
+- The real O VII parity manifest contains 946 type-51 insertions touching a selected endpoint. Exactly 636 have selected matrix rows and enter the six selected equations; the remaining 310 are reciprocal off-diagonal insertions in external matrix rows with selected columns.
+- Added explicit parity-scope accounting: `n_type51_parity_terms_in_selected_row_scope`, `n_type51_parity_terms_external_row_out_of_scope`, `n_type51_parity_terms_unused_in_selected_row_scope`, `n_type51_parity_terms_used_outside_selected_row_scope`, and `native_type51_all_parity_manifest_terms_accounted_for`.
+- Added `xstar_priority_native_type51_integration_audit_parity_scope.csv`, which classifies every parity term as `selected_row_scope_used`, `selected_row_scope_unused`, `external_row_out_of_scope`, or the defensive error state `external_row_out_of_scope_but_used`.
+- The selected-system readiness gate now requires complete one-to-one replacement of all selected-row type-51 terms, zero unused selected-row parity terms, zero accidental use of external-row terms, complete accounting of the full parity manifest, full row coverage, preserved row balance, a full-rank nonnegative solve, and negligible movement from the all-probe solution.
+- Revalidated the user-provided O VII products: 636/636 selected-row type-51 terms are replaced, zero are unmatched, zero selected-row parity terms are unused, all 310 remaining parity terms are correctly classified as external-row out of scope, and `native_type51_selected_system_integration_ready=True`.
+- The corrected real audit preserves the v0.3.204 numerical solution: maximum hybrid/captured population difference `3.0341181e-3`, maximum hybrid/all-probe population change `2.7517811e-8`, maximum captured row residual `1.7471003e-3`, full rank 6/6, no negative populations, and linear residual below `3e-16`.
+- Complete native compact closure remains false because 1,950 non-type-51 terms are still probe-backed. The next target remains native type-50 and type-71 external RHS closure, followed by exact live-radiation type 53 without an empirical approximately 44 factor.
+
+## v0.3.204
+
+- Added `xstar_atomic.xstar_priority_native_type51_integration` and `examples/94_integrate_xstar_priority_native_type51.py`.
+- The new controlled integration audit consumes the v0.3.199 priority matrix-balance products together with the validated v0.3.203 native type-51 parity products. It replaces every matching type-51 compact matrix term touching a selected row, including selected-selected internal terms and selected-external terms contributing to `-A_SE x_E`.
+- Added exact capture-key matching with a unique structural fallback, one-use-only native-term accounting, duplicate-key detection, unused-parity-term detection, missing-population detection, and explicit failure when any type-51 insertion is unmatched.
+- Reconstructs both the original all-probe system and the hybrid native-type-51/probe-other-family system, then compares aggregated compact entries, captured-population row residuals, external RHS values, matrix rank/conditioning, conditional populations, and linear residuals.
+- Readiness requires complete replacement coverage, all selected rows touched by native type 51, a full-rank nonnegative hybrid solve, all selected rows within the population and row-balance tolerances, and negligible population movement relative to the all-probe reference.
+- All non-type-51 families remain explicitly probe-backed, `native_priority_subset_matrix_closure_ready` remains false, and the production expanded compact-basis solver is unchanged. The next target is native type-50/type-71 external RHS closure, followed by exact live-radiation type 53 without an empirical approximately 44 factor.
+- Removed the machine-specific root `datapath` file from the source/distribution manifest and added it to `.gitignore`. Runtime datapath creation remains supported, but release archives no longer embed a developer-local absolute ATDB path.
+- Restored direct raw-record type-50 audit compatibility: rows carrying `data_type=50` and `rate_type=4` are recognized as radiative transitions even when the derived `kind="radiative_decay"` field is absent. This prevents valid explicit radiation-grid pumping audits from falling back to `not_type50_radiative_transition`.
+
+## v0.3.203
+
+- Added `xstar_atomic.rates_type51`, a FITS-independent source-code translation of the XSTAR `ucalc.f90` data-type 51 branch, including the original five-point and general nine-point Burgess--Tully spline paths, the wavelength-dependent BT temperature floor, the ATDB transition-energy convention, detailed balance, and density-scaled `ans1`/`ans2`.
+- Added `xstar_atomic.xstar_type51_native_parity` and `examples/93_audit_xstar_type51_native_parity.py`. The audit decodes the selected type-51 ATDB records, compares native excitation/de-excitation rates with the same XSTAR `ucalc` captures, reconstructs all touching compact `ajisi` terms, and aggregates the selected-selected internal compact entries.
+- Corrected the interpretation of the legacy full-parity probe field named `xnx`: the instrumentation call passed `xee`, so the physical electron density for collisional rates is `n_e = xpx * xee`. The original CSV field is retained for compatibility and the audit records the corrected semantics explicitly.
+- This is a parity/integration gate only. Native type-51 terms are not yet enabled in the production expanded compact-basis solver; type-50/type-71 external closure and the exact live-radiation type-53 implementation remain subsequent steps.
+
+## v0.3.202
+
+- Added `xstar_atomic.xstar_priority_native_readiness` and `examples/92_audit_xstar_priority_native_readiness.py`.
+- Consumes the validated v0.3.201 conditional-solve products and, when supplied, the v0.3.199 record-term table to separate selected-block couplings `A_SS` from the external closure term `-A_SE x_E`.
+- Ranks each ATDB/XSTAR rate family by its absolute population-weighted influence, assigns a conservative native implementation status, and writes internal-family, external-RHS-family, row-dominance, and staged implementation-plan products.
+- For the O VII six-row subsystem, type 51 supplies about 97.77% of the internal population-weighted coupling. Type 50 supplies about 99.06% of the external RHS, type 71 about 0.861%, and type 53 about 0.0795%; the top three external families account for about 99.99937%.
+- Defines the minimum native port order as type 51 internal coupling, type 50 plus type 71 external closure, then exact live-radiation type 53. The approximately 44 type-53 discrepancy remains explicitly blocked on a source-equivalent `phint53` implementation and is not corrected empirically.
+- Diagnostic/planning release only: no default rate formulas, compact matrix coefficients, RHS/normalization closure, or solver behavior changed.
+
+## v0.3.201
+
+- Added `xstar_atomic.xstar_priority_conditional_solve` and `examples/91_audit_xstar_priority_conditional_solve.py`.
+- Partitions the validated selected compact equations as `A_SS x_S + A_SE x_E = 0`, holds the 601 non-selected XSTAR compact populations fixed, and solves the six activated rows from `A_SS x_S = -A_SE x_E`.
+- Writes selected matrix entries, external right-hand-side terms, rate-family RHS contributions, singular values, and row-by-row population comparisons.
+- For the O VII priority rows `79,80,241,242,244,293`, the row-scaled 6x6 matrix is full rank with condition number about `5.8545`; all six conditional populations agree with the captured XSTAR values within the 0.5% tolerance, with a maximum relative difference of about `3.0341e-3`.
+- This remains a probe-derived conditional solve. Native rate assembly, the 119-row active-basis solve, full RHS/normalization closure, and the type-53 approximately 44 scale correction remain future work.
+
+## v0.3.200
+
+- Added `docs/xstar_atdb_source_physics_implementation_guide.md` and a matching standalone LaTeX document.
+- Documented the complete packed `atdb.fits` vector/header model, hierarchy and `setptrs.f90` derived pointers, XSTAR source-tree/call-graph layout, and the link from ATDB records through `ucalc`, matrix insertion, compact `ipmat2` mapping, `msolvelucy`, emissivity, transfer, and outputs.
+- Added equations and physical interpretation for ionization parameter, level/statistical equilibrium, ionization balance, type-53 photoionization/heating and Milne recombination, collisional excitation/de-excitation, type-50 escape/pumping, opacity/emissivity, superlevels, thermal balance, and radial transfer.
+- Consolidated the C V/O VII/Mg XI/Ca XIX benchmark design and all major findings through v0.3.199, including the approximately 44 type-53 proxy normalization, exact O-element 607-row compact basis, six-row priority expansion, complete matrix manifest, and row-balance validation.
+- Updated both Markdown and LaTeX user guides with the new architecture/physics roadmap and explicit Python-to-C++ implementation sequence.
+- Documentation-only release: no default solver physics, rate formulas, matrix assembly, or benchmark results changed.
+
+## v0.3.199
+
+- Added `xstar_atomic.xstar_priority_matrix_balance` and `examples/90_audit_xstar_priority_matrix_balance.py`.
+- Consumes a validated priority matrix-closure manifest and the captured XSTAR population-closure parity vector, aggregates record-level `ajisi(1,:)` insertions into compact `ipmat2` matrix entries, and evaluates the selected steady-state equations `A x` directly.
+- Writes row-balance, rate-family contribution, aggregated compact-matrix entry, record-term, and population-vector products.
+- For the O VII six-row priority subset (`79,80,241,242,244,293`), all six rows pass a 0.5% relative residual tolerance against the post-`msolvelucy` population vector; the maximum relative residual is about `1.7471e-3`.
+- This is a consistency gate before native assembly. It does not alter the default Python matrix, RHS/normalization closure, native rate formulas, or enable the expanded-basis solve.
+
+## v0.3.198
+
+- Fixed whole-run `latest-per-record` contamination in the priority-subset matrix-closure audit. Raw XSTAR probes contain records for every element, while the reconstructed compact block map describes only the selected element. The audit now filters selected `ucalc` captures to the reconstructed element `jkk_ion` blocks before loading and mapping matrix rows.
+- Added `element_jkk_ions`, all-element/selected-element/excluded-record counts, and `element_probe_filter_mode` summary fields.
+- Added `xstar_priority_matrix_closure_audit_element_filter_summary.csv` to document included and excluded `jkk_ion` blocks.
+- The O VII v0.3.197 latest-per-record output contained 7,432 apparent unmapped endpoints, but all came from unrelated `jkk_ion=1,2,3`; the O-element block map is `jkk_ion=31--36`. These rows are now excluded before endpoint readiness is evaluated.
+- Exact `calc_hmc_element` endpoint translation, shared parent-continuum aliases, and non-matrix `ucalc` metadata classification are unchanged. No native solver physics, rate formulas, RHS/normalization closure, or expanded-basis solve changed.
+
+## v0.3.197
+
+- Corrected the priority-subset compact matrix endpoint mapping to follow the actual `calc_hmc_element.f90` assembly rule, `indbe = indbi + ipmat2`, rather than treating every `indbi` value as a level index inside the current ion block.
+- Endpoints with `indbi > nlev` are now mapped into their intended adjacent-ion/superlevel compact rows instead of being reported as missing. This directly addresses all 75 false unmapped endpoints in the O VII v0.3.196 rank-73 audit.
+- The audit now selects the requested occurrence for all probed ATDB records first, maps every selected Fortran matrix row, and only then filters records/terms touching the activated compact rows. This avoids preselection losses at cross-block endpoints.
+- Added explicit classification of non-matrix `ucalc` metadata records. Records such as type-6/rate-13 rows with `idest2=0` intentionally produce no four-row `ajisi/indbi` insertion and no longer falsely fail matrix-manifest readiness.
+- Added block-offset and non-matrix-record CSV products plus clearer matrix-record and selected-row readiness counts.
+- `examples/89_audit_xstar_priority_matrix_closure.py` now defaults to `--occurrence-rank -1` (`latest-per-record`), which is the appropriate selection for a full-element manifest spanning ion blocks whose records can have unequal occurrence counts. A positive common occurrence rank remains available for controlled scans.
+- This remains diagnostic/implementation-manifest infrastructure only. Native rate ports, RHS/normalization closure, and the expanded compact-basis solve are still disabled by default.
+
+## v0.3.196
+
+- Added `xstar_atomic.xstar_priority_matrix_closure` and `examples/89_audit_xstar_priority_matrix_closure.py`.
+- Joins the v0.3.195 activated compact-basis rows to the raw XSTAR `ucalc` and `calc_hmc_ion` probes at a common occurrence rank.
+- Preserves shared parent-continuum / next-ion-ground aliases as one compact unknown with multiple physical roles.
+- Maps the four Fortran `ajisi/indbi` insertions for every selected record into reconstructed compact `ipmat2` row/column coordinates.
+- Writes physical-role, selected-record, compact-matrix-term, selected-row, family, unmapped-endpoint, and closure-requirement products.
+- This is a source-code-derived implementation manifest only; native formula ports, RHS/normalization closure, and the expanded-basis solve remain disabled by default.
+
+## v0.3.195
+
+- Added `xstar_atomic.xstar_priority_basis_expansion` and `examples/88_expand_xstar_priority_element_basis.py`.
+- The new staged expansion consumes the v0.3.194 full-element scaffold and activates the smallest population-ranked subset of missing compact `ipmat2` rows needed for a requested solved-population coverage.
+- Shared parent-continuum / next-ion-ground rows remain one compact unknown with explicit multiple physical roles; they are not duplicated as independent source rows.
+- The audit writes an activation manifest, expanded compact-basis table, alias map, per-ion-block closure requirements, deferred-row table, JSON, and Markdown report.
+- For the O VII solve-call 219 scaffold, the default 99.9999% target activates six rows (`293,241,244,242,80,79`) across `nionp=4,5,6`, raising represented XSTAR solved-population coverage from `0.991904690445624` to `0.9999999463123856`.
+- This is basis-instantiation and closure-planning infrastructure only. Native matrix terms, RHS/normalization closure, and the full-element solve are still not enabled by default.
+
+## v0.3.194
+
+- Added `xstar_atomic.xstar_full_element_basis` and `examples/87_build_xstar_full_element_basis_scaffold.py`.
+- Consumes the v0.3.193 element-basis remap audit and creates one explicit Python-side scaffold row for every compact XSTAR `ipmat2` row.
+- Existing Python rows retain physical mappings and shared parent-continuum aliases; unrepresented rows receive deterministic placeholder global indices.
+- Writes missing-row priorities, ion-block coverage, and cumulative population-closure tiers so the native full-element implementation can be staged by physical importance.
+- The scaffold is preparatory only: no default solver matrix, native rates, or closure equations are changed.
+
+## v0.3.193
+
+- Added `xstar_atomic.xstar_element_basis_remap`.
+- Added `examples/86_audit_xstar_element_basis_remap.py`.
+- Reconstructs each selected XSTAR element solve as unique compact `ipmat2` rows while retaining duplicate parent-continuum/final-slot roles as explicit aliases.
+- Remaps preserved Python population rows by `(ion_stage, level_index) -> (nionp_current, local_level_index)` instead of sequential `global_index + 1`.
+- Writes exact basis rows, ion blocks, XSTAR role aliases, Python remap rows, Python alias groups, unmapped rows, and unrepresented XSTAR basis rows.
+- Optionally joins the paired post-`msolvelucy` population probe to quantify solved-population coverage after the corrected remap.
+- Diagnostic only; no default solver physics or matrix assembly changed.
+
+## v0.3.192
+
+- Added `xstar_atomic.xstar_element_basis_probe` and `examples/85_prepare_xstar_element_basis_probe.py`.
+- Prepares the next XSTAR debug product, `xstar_element_basis_probe.csv`, to capture the source-code element-basis topology inside `calc_hmc_element.f90`.
+- The probe records `basis_solve_call_id`, `row_kind`, `ml_ion`, `klion`, `jkk_ion`, `nlev`, `ion_start_ipmat2`, `ion_start_ipmat`, `local_level_index`, `element_ipmat_index`, `xstar_ipmat2_index`, `nsup`, and `nion` for ion population rows, parent-continuum/shared-link rows, and the final parent-continuum slot.
+- Writes conservative free-form Fortran helper plus three insertion snippets: begin of second-pass basis construction, ion-row capture after `x(mm+ipmat2)` mapping and before `ipmat2=ipmat2+nlev-1`, and final-row capture after the final `ipmat2=ipmat2+1`.
+- This directly targets the v0.3.191 diagnosis that Python's current `xstar_ipmat2_index` mapping is not source-equivalent to XSTAR's full O-element basis.
+- Diagnostic probe infrastructure only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.191
+
+- Added `xstar_atomic.xstar_population_basis_mapping` and `examples/84_diagnose_xstar_population_basis_mapping.py`.
+- Consumes the population-closure parity audit products from example 83 and summarizes where the solved XSTAR element population lives in `nion`/`nsup`/`ipmat2` basis blocks.
+- Writes basis-block, dominant-unmapped-row, Python-mapping-block, capture-scan, and implementation-plan CSVs.
+- The O VII rank-73 diagnosis shows that Python's current `xstar_ipmat2_index` mapping covers only ~2.6e-6 of the selected XSTAR solved population; dominant rows are unmapped XSTAR rows such as ipmat2=575, 335, and 607.
+- Diagnostic mapping/topology audit only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.190
+
+- Added `xstar_atomic.xstar_population_closure_parity` and `examples/83_audit_xstar_population_closure_parity.py`.
+- Consumes the validated raw `xstar_population_closure_probe.csv`, selects an element occurrence such as O occurrence-rank 73 / latest, and compares the XSTAR before/after `msolvelucy` population vector against preserved Python solver population products.
+- Writes capture-scan, overlap-row, and unmapped-XSTAR-row CSVs to quantify whether the current Python local basis covers XSTAR's full element `ipmat2` basis and whether overlapping rows agree.
+- Diagnostic population/source closure audit only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+
+## v0.3.189
+
+- Added paired population-closure probe wrappers `xap_pbefore`/`xap_pafter` with shared `solve_call_id`.
+- Added robust legacy validation/pairing for v0.3.188 population-closure CSVs with extra/unpaired captures.
+- Added paired capture summary output for pre/post-`msolvelucy` diagnostics.
+
+## v0.3.188
+
+- Added `xstar_atomic.xstar_population_closure_probe` and `examples/82_prepare_xstar_population_closure_probe.py`.
+- Prepares the next XSTAR debug product, `xstar_population_closure_probe.csv`, captured in `calc_hmc_element.f90` immediately before and after `msolvelucy`.
+- Writes a conservative free-form Fortran helper plus insertion snippets for before/after `msolvelucy`, a schema CSV, patch notes, and a validator for paired before/after population-vector captures.
+- This targets the closure layer identified by v0.3.187: adjacent-ion parent coupling, superlevel source/sink closure, RHS/normalization, and pre/post-`msolvelucy` population parity.
+- Instrumentation infrastructure only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.187
+
+- Fixed record-level family replay selector aliases so user-facing selectors such as `type50` also match legacy family keys such as `unknown:data_type_50_rate_type_4` / `data_type_50_rate_type_4`.
+- Added `xstar_atomic.xstar_population_closure_diagnosis` and `examples/81_diagnose_xstar_population_closure_from_replay_scan.py`.
+- The new diagnosis consumes the v0.3.186 family replay scan and decides whether exact-`ucalc` rate replay actually moves the O VII triplet population balance.
+- For the current O VII blocker scan, the maximum population-fraction movement is only ~8.36e-7, so the next source-code-equivalent target is population/source closure: adjacent-ion parent coupling, superlevel source/sink closure, RHS/normalization, and pre/post-`msolvelucy` population parity.
+- Diagnostic-only release: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.186
+
+Record-level replay family-isolation scan: adds `examples/80_scan_xstar_record_level_ucalc_replay_families.py`, which replays selected record-level families one at a time using Fortran `ucalc` ans1/ans2 branch rates and optionally re-solves each replay matrix. This separates which discrepant families actually move the O VII population balance. Diagnostic scan only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.185
+
+Record-level replay solve reporting update: adds population-based triplet diagnostics, line-triplet availability status, and writes original plus replay normalized solve products. No default physics changed.
+
+## v0.3.184
+
+- Add controlled record-level `ucalc` matrix replay diagnostics.
+- New module `xstar_atomic.xstar_record_level_replay` and example `examples/79_audit_xstar_record_level_ucalc_matrix_replay.py`.
+- Consumes a selected record-level parity audit (for example O VII occurrence-rank 73), replaces selected Python matrix-row magnitudes with Fortran `ucalc` `ans1`/`ans2` branch values while preserving Python topology/signs, and writes replay matrix terms plus changed-term/family summaries.
+- Optional `--run-solver` re-solves the original and replay matrices in environments with the full solver dependencies.
+- Diagnostic replay scaffold only: no default solver physics, native rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.183
+
+- Add branch-aware record-level blocker diagnosis for source-code local matrix parity.
+- Include type-99 parent/superlevel closure rows using `type99_records` when generic `record` is absent.
+- Add per-record branch-ratio columns and recommended next actions for type-53, type-50, type-77, and type-99 closure blockers.
+
+## v0.3.182
+
+- Adds local-state occurrence-rank selection to the record-level XSTAR matrix parity audit.
+- `examples/78_audit_xstar_record_level_matrix_parity.py` now supports `--selection occurrence-rank --occurrence-rank N` and `--scan-occurrence-ranks` to diagnose which repeated XSTAR `ucalc` call epoch best corresponds to a preserved Python local matrix.
+- This prevents over-interpreting the legacy `latest-per-record` comparison when a full XSTAR probe contains many zones/passes.
+- Writes `xstar_record_level_matrix_parity_audit_occurrence_scan.csv` alongside the record and family summaries.
+- Diagnostic selection infrastructure only: no solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.181
+
+- Add record-level XSTAR local matrix parity audit.
+- New module `xstar_atomic.xstar_record_level_parity` reads preserved Python full-global matrix terms plus instrumented XSTAR `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`.
+- New example `examples/78_audit_xstar_record_level_matrix_parity.py` selects the latest Fortran `ucalc` capture for each Python ATDB record, joins the four `calc_hmc_ion` matrix insertion rows, validates the Fortran `ans1/ans2 -> ajisi` self-consistency, and summarizes Python/Fortran matrix-rate agreement by record and family.
+- This is a diagnostic parity-audit layer only; no solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.180
+
+- Fixed full-parity probe association between `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`.
+- The matrix probe now writes the current `ucalc` capture id in `capture_index` and writes the independent matrix-row counter as `matrix_capture_index`.
+- The validator now flags legacy v0.3.179-style independent matrix counters with `matrix_capture_index_status=independent_matrix_capture_index_needs_v03180_rerun` instead of reporting misleading one-row matrix groups.
+- No solver physics, rate formula, parent/superlevel closure, or empirical triplet tuning changed.
+
+# Changelog
+
+## v0.3.209
+
+- Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.
+- v0.3.208 incorrectly used the maximum extracted type-13 level index. In the real O VII products this selected level 110 instead of XSTAR `nlevp=79`, assigned a false 57.919 eV parent excitation to ground-parent records, and corrupted the continuum weight, threshold, Milne exponent, endpoint validation, and all type-53 rate/matrix comparisons.
+- Added explicit decoder provenance and readiness fields: inferred `xstar_nlevp`, ATDB maximum level index, packed parent offset, inference source/consistency, continuum-row availability, endpoint consistency, and aggregate fallback/error counts.
+- The parity gate now requires both live-radiation context readiness and exact ion-block/continuum decoder readiness. It does not fall back silently to the ATDB maximum when a direct endpoint-derived `nlevp` is available.
+- Added focused regression tests for ground-parent and excited-parent endpoint inference and for rejection of inconsistent decoder context. No `phint53` numerical formula, empirical scale, or production solver behavior changed.
+
+## v0.3.179
+
+- Fixes the full-parity XSTAR probe link step by adding backward-compatible Fortran wrappers `xstar_atomic_probe_ucalc_record` and `xstar_atomic_probe_matrix_row` around the v0.3.178 short helper routines `xap_ucalc` and `xap_mrow`.
+- This handles debug builds where `calc_hmc_ion.f90` still contains the older long-name insertion snippets while the helper was regenerated from v0.3.178.
+- Instrumentation/link compatibility only: no solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.178
+
+- Fixes the full-parity XSTAR probe helper generated in v0.3.176/v0.3.177 for the actual HEASoft/XSTAR `.f90` free-form compilation path.
+- Replaces fixed-form continuation snippets with conservative free-form Fortran using trailing `&` continuation.
+- Shortens probe helper routine names to `xap_ucalc` and `xap_mrow` to avoid older compiler/name-length surprises.
+- Updates the `calc_hmc_ion.f90` insertion snippets to call `xap_ucalc` / `xap_mrow`.
+- Adds a generated-helper syntax test using `gfortran` when available.
+- No solver physics, rate formulas, parent/superlevel closure, or empirical triplet tuning changed.
+
+## v0.3.177
+
+- Fixed the full local parity probe Fortran helper for HEASoft/XSTAR fixed-form compilation.
+- Rewrote generated helper and insertion snippets with fixed-form continuation marks in column 6 instead of free-form `&`.
+- No solver physics, rate formulas, or empirical triplet tuning changed.
+
+# Changelog
+
+## v0.3.209
+
+- Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.
+- v0.3.208 incorrectly used the maximum extracted type-13 level index. In the real O VII products this selected level 110 instead of XSTAR `nlevp=79`, assigned a false 57.919 eV parent excitation to ground-parent records, and corrupted the continuum weight, threshold, Milne exponent, endpoint validation, and all type-53 rate/matrix comparisons.
+- Added explicit decoder provenance and readiness fields: inferred `xstar_nlevp`, ATDB maximum level index, packed parent offset, inference source/consistency, continuum-row availability, endpoint consistency, and aggregate fallback/error counts.
+- The parity gate now requires both live-radiation context readiness and exact ion-block/continuum decoder readiness. It does not fall back silently to the ATDB maximum when a direct endpoint-derived `nlevp` is available.
+- Added focused regression tests for ground-parent and excited-parent endpoint inference and for rejection of inconsistent decoder context. No `phint53` numerical formula, empirical scale, or production solver behavior changed.
+
+## v0.3.176
+
+- Added `xstar_atomic.xstar_full_parity_probes` and `examples/77_prepare_xstar_full_parity_probes.py`.
+- Added schemas/readers/validators for the two minimum XSTAR debug products needed for source-code-equivalent local matrix parity: `xstar_ucalc_record_probe.csv` and `xstar_calc_hmc_ion_matrix_probe.csv`.
+- Added a debug-only Fortran helper plus insertion templates for `calc_hmc_ion.f90` immediately after `ucalc` and after each `ajisi/indbi` matrix insertion row.
+- Reports whether the probes are ready for record-level `ucalc ans1..ans6` and matrix insertion parity, including missing columns and four-row insertion checks.
+- No default solver physics, rate formulas, or empirical triplet tuning changed.
+
+## v0.3.175
+
+- Added `xstar_atomic.xstar_full_parity_closure` for a source-code-equivalent local closure audit.
+- Added `examples/76_audit_xstar_source_code_equivalent_local_closure.py`, which inventories preserved full-global matrix terms by source family and classifies rows as source-code kernel present, proxy/scaffold, mixed proxy/source, or incomplete parent/superlevel closure.
+- The audit writes a family summary, required Fortran subroutine inventory, `ucalc` probe schema, `calc_hmc_ion` matrix-insertion probe schema, population probe schema, source snippet audit, Fortran probe notes, JSON, and Markdown.
+- Explicitly identifies the blocking gaps for full local matrix/population parity: universal `ucalc` `ans1..ans6` parity, exact `calc_hmc_ion` `ajisi/indbi` row insertion parity, and source-code type-70/type-74/type-99 parent/superlevel closure.
+- Audit/probe-planning release only: no solver physics, rate formulas, default matrix assembly, or empirical triplet tuning changed.
+
+## v0.3.174
+
+- Added a controlled type-53 live-bremsam matrix-replacement solve audit: `audit_type53_live_bremsam_matrix_replacement(...)` and `write_type53_live_bremsam_matrix_replacement_audit(...)`.
+- Added `examples/75_audit_xstar_type53_live_bremsam_matrix_replacement.py`, which consumes the example-74 live-bremsam `phint53` records, replaces only type-53 photoionization gain/loss rates in a preserved full-global matrix with live `phint53` ans1 values, and re-solves for f/i/r movement.
+- The audit writes a replacement matrix, changed-term inventory, solve-comparison CSV, replacement normalized-solve CSV, JSON, and Markdown summary.
+- This is a controlled diagnostic mode only; it does not change default solver physics, rate formulas, or empirical triplet tuning.
+
+## v0.3.173
+
+- Added the first type-53 photoionization audit against instrumented XSTAR live rate-grid arrays: `audit_type53_live_bremsam_phint53(...)` and `write_type53_live_bremsam_phint53_audit(...)`.
+- Added `examples/74_audit_xstar_type53_live_bremsam_phint53.py`, which reads `xstar_live_rate_grid_probe.csv`, selects a capture state, recomputes the `phint53.f90` photoionization `ans1` side on live `epim(:)` / `bremsam(:)`, and compares against preserved full-global type-53 matrix photoionization rows.
+- The uploaded O VII live-rate-grid probe validates as 5 capture states and 4995 total grid points; using the final capture gives 30/30 triplet rows evaluated and 276/277 full rows evaluated.
+- The audit finds the current Python matrix type-53 photoionization rows still exceed live-bremsam `phint53` rates by a median factor of about 44, so the previous normalization gap is not due to `xo01_detal4` alone. This points to the current solver matrix using the proxy `xstar-powerlaw` type-53 normalization rather than true XSTAR live `bremsam(:)`.
+- Diagnostic/audit release only: no solver physics, rate formulas, or empirical triplet tuning changed.
+
+## v0.3.172
+
+- Fix live-rate-grid probe validation for instrumented XSTAR runs that use placeholder zone/pass metadata for every `bremsmap` capture.
+- The probe reader now splits sequential capture blocks when `grid_index` resets, so a CSV with repeated blocks of `grid_index=1..ncn2m` is read as multiple live states rather than one non-monotonic state.
+- Adds readiness metadata `probe_block_split_method=nominal_key_then_grid_index_reset_v03172` and `n_probe_states_placeholder_zone_index`.
+- No solver physics, rate formulas, or empirical triplet tuning changed.
+
+## v0.3.171
+
+- Live-rate-grid probe instrumentation helper release only; no solver physics, rate formulas, or empirical triplet tuning changed.
+- Added `examples/73_prepare_xstar_live_rate_grid_probe_patch.py` to write a standalone Fortran helper and `xstarcalc.f90` insertion block for local/debug XSTAR builds.
+- Added `live_rate_grid_probe_fortran_helper(...)`, `live_rate_grid_probe_xstarcalc_insertion_block(...)`, `locate_xstarcalc_bremsmap_site(...)`, and `prepare_live_rate_grid_probe_patch_products(...)`.
+- The helper writes `xstar_live_rate_grid_probe.csv` with live `epim(:)`, `bremsam(:)`, and `bremsint(:)` after `bremsmap` and before `calc_hmc_all/calc_hmc_ion`.
+- The generated insertion block uses `temperature_K=t*1.d4` and `electron_density_cm^-3=xee*xpx` based on `xstarcalc.f90` units.
+- Keeps the default `zone_expression=-1` as a safe placeholder because `xstarcalc.f90` may not have the radial shell index in scope; users can replace it with a real zone variable if available.
+
+## v0.3.169
+
+
+## v0.3.170
+
+- Added `xstar_atomic.xstar_live_rate_grid_probe` and `examples/72_prepare_xstar_live_rate_grid_probe.py`.
+- Standardizes the live XSTAR rate-grid probe schema for `epim(:)`, `bremsam(:)`, and `bremsint(:)` immediately after `bremsmap` and before `calc_hmc_all`.
+- Writes a guarded Fortran probe template and validates optional long-form probe CSVs.
+- Diagnostic workflow only: no solver physics, rate formulas, or empirical triplet tuning changed.
+
+- Source-provenance/instrumentation planning cleanup only; no solver physics, rate formulas, or empirical triplet tuning changed.
+- Adds `audit_xstar_live_rate_grid_bremsa_path(...)` and `write_xstar_live_rate_grid_bremsa_path_audit(...)` to `xstar_atomic.xstar_source_provenance`.
+- Adds `examples/71_audit_xstar_live_rate_grid_bremsa_path.py`, which extends the v0.3.167/v0.3.168 live-bremsa source audit through the XSTAR rate-grid handoff: `trnfrc.f90` high-resolution `bremsa(:)` -> `xstarcalc.f90` `bremsmap(...)` -> reduced-grid `epim(:)/bremsam(:)` -> `calc_hmc_all/calc_hmc_ion` -> `ucalc/phint53`.
+- Records that exact type-53 photoionization parity requires exposing or reconstructing the live rate-grid `epim(:), bremsam(:), bremsint(:)` state immediately after `bremsmap`, not another `xo01_detal4` `zrems(1:5)` variant.
+- Writes capture-column and instrumentation-step CSV files plus Fortran probe notes for a guarded XSTAR debug dump.
+- Keeps Python as the transparent audit/orchestration layer while documenting that production RT-coupled rate/matrix kernels should move to the planned C++ backend after physics parity is complete.
+
+## v0.3.168
+
+- Bugfix/diagnostic cleanup only; no solver physics, rate formulas, or empirical triplet tuning changed.
+- Improves `examples/70_audit_xstar_live_bremsa_source_path.py` so `--variant-summary-csv` can be a CSV file, an audit output directory, or an audit `.tar.gz`.
+- Reports missing or mis-pointed variant-summary paths explicitly instead of silently printing `best_variant=None`.
+- Keeps the source-code conclusion from v0.3.167: XSTAR live `trnfrc.f90` `bremsa(:)` uses `zremsz(:)` and is not written directly to `xo01_detal4.fits`; detail `zrems(1:5)` variants do not recover the live field.
+
+## v0.3.167
+
+- Added a lightweight source-code provenance audit for the XSTAR live `bremsa(:)` radiation field; no solver physics changed.
+- New module `xstar_atomic.xstar_source_provenance` with `audit_xstar_live_bremsa_source_path(...)`, `write_xstar_live_bremsa_source_path_audit(...)`, and `summarize_bremsa_variant_gap(...)`.
+- New `examples/70_audit_xstar_live_bremsa_source_path.py` scans the XSTAR Fortran source for the `trnfrc.f90` live `bremsa(:)` construction, `phint53.f90` consumption, and the `savd.f90 -> fstepr4.f90` detail-output handoff.
+- The audit records that live outward transfer uses `bremsa(jk)=zremsz(jk)*exp(-dpthc(1,jk))/(12.56*r19*r19)`, while `xo01_detal4.fits` is written from `zrems(1:5)`, opacity, emissivities, and continuum depths, not from live `bremsa(:)` or `zremsz(:)`.
+- When supplied with the v0.3.166 example-69 variant summary, the audit classifies the O VII result as `source_path_confirmed_detail_variants_do_not_recover_live_bremsa`.
+- This supports the next physics target: reconstruct or expose live `zremsz(:)/bremsa(:)` at the same `trnfrc -> xstarcalc -> calc_hmc_ion -> ucalc/phint53` call site, rather than treating `xo01_detal4` continuum columns as exact live-rate inputs.
+
+## v0.3.166
+
+- Bugfix/performance compatibility cleanup for `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py`; no solver physics changed.
+- Fixed the NumPy 2.x compatibility bug caused by `getattr(np, "trapezoid", np.trapz)`, whose default argument is evaluated eagerly and crashes in environments where `np.trapz` has been removed.
+- The vectorized phint53 bremsa-variant audit now uses `np.trapezoid` when available and a small local trapezoidal fallback otherwise.
+- Updated audit metadata to `v0.3.166` and added regression coverage for NumPy builds without `np.trapz`.
+
+## v0.3.165
+
+- Performance/diagnostic cleanup for `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py`; no solver physics changed.
+- Vectorized the type-53 `phint53` bremsa-variant integration by precomputing the cross-section/interpolation kernel once per record and evaluating all selected continuum variants together with array operations.
+- Added `--variants`, `--fast`, `--profile`, and `--skip-records-csv` to control expensive diagnostic runs and reduce unnecessary full-sample output.
+- Added timing/profile fields (`integration_seconds`, `total_seconds`, `n_vectorized_record_batches`, and `n_evaluated_variant_record_pairs`) to the audit summary and Markdown report.
+- Documented that this remains a Python audit prototype; production RT-coupled rate, matrix, and transfer kernels should move to the planned C++ backend after physics parity is fixed.
+
+## v0.3.164
+
+- Added a type-53 detail-continuum bremsa-variant audit to diagnose the v0.3.162/v0.3.163 photoionization normalization gap.
+- New `audit_type53_detail_phint53_bremsa_variants(...)` and `write_type53_detail_phint53_bremsa_variants_audit(...)` helpers in `xstar_atomic.xstar_matrix_parity`.
+- New `examples/69_audit_xstar_type53_detail_phint53_bremsa_variants.py` command-line audit.
+- The audit recomputes type-53 `phint53` photoionization rates using multiple `xo01_detal4.fits` `zrems(1:5)`/attenuation/geometric reconstruction variants and scores whether any available detail-column variant matches the matrix without a free scale.
+- It records the source-code distinction that `trnfrc.f90` uses live outward `zremsz(:)` for `bremsa(:)`, while `fstepr4.f90` writes `zrems(1:5,:)` detail columns and not `zremsz`.
+- No solver physics or empirical triplet tuning changed.
+
+## v0.3.160
+
+- Added source-code/local handoff parity auditing for XSTAR data type 68 He-like collision terms.
+- New `audit_type68_collision_rates(...)` and `write_type68_collision_rate_audit(...)` helpers in `xstar_atomic.xstar_matrix_parity`.
+- New `examples/65_audit_xstar_type68_collision_rates.py` command-line audit.
+- The audit checks `directional_q_cm3_s * electron_density_cm^-3` against full-global matrix rates, verifies off-diagonal gain / diagonal loss partner placement, and reports triplet-touching coverage.
+- No solver physics or empirical triplet tuning changed.
+
+## v0.3.159
+
+- Added a source-code-equivalent type-71 superlevel cascade parity audit.
+- Added `audit_type71_cascade_rates(...)` and `write_type71_cascade_rate_audit(...)` to `xstar_atomic.xstar_matrix_parity`.
+- Added `examples/64_audit_xstar_type71_cascade_rates.py`, which checks the `calt71.f90` interpolated `Aij` handoff through the `ucalc.f90` type-71 branch into full-global matrix gain/loss terms.
+- The audit reports term-level `matrix_rate - 10**type71_calt71_log10_aij` residuals, record-level gain/loss pair closure, partner placement, and triplet-destination/triplet-row coverage.
+- O VII v0.3.156 products show 148/148 type-71 matrix terms match `calt71` Aij, 148/148 partner checks match, and 74/74 record-level gain/loss pairs close. With `--triplet-only`, 20/20 triplet-destination terms match and 10/10 record-level pairs close.
+- No solver physics, source terms, or empirical triplet tuning changed.
+
+## v0.3.158
+
+- Fixed the triplet-flow grouping in `xstar_atomic.xstar_matrix_parity` so flows are grouped by `(triplet_component, triplet_global_index, rate_family)` rather than combining all intercombination upper levels under one displayed label.
+- Added `audit_triplet_rate_terms(...)` and `write_triplet_rate_term_audit(...)` to rank individual He-like triplet population-row matrix terms by absolute signed contribution.
+- Added `examples/63_audit_xstar_triplet_rate_terms.py`, which reports data type/source path/record, local off-diagonal/diagonal partner placement, and concrete next detail-audit targets.
+- O VII v0.3.156 products show 222 triplet-row terms; the largest families are type 50, type 71, type 68, type 53, type 63, type 69, type 53 `xstar-ucalc`, and type 77.
+- No solver physics or empirical triplet tuning changed.
+
+## v0.3.157
+
+- Added `xstar_atomic.xstar_matrix_parity`, a source-code-parity audit layer that reads preserved full-global solver matrix terms and normalized-solve products from example 56.
+- Added `examples/62_audit_xstar_local_matrix_parity.py` to rank matrix rate families by data type/source path and report which families feed or drain He-like f/i/r upper levels.
+- The audit can ingest the example-61 type-50 detail audit CSV and mark audited type-50 rows as `detail_rate_and_matrix_parity_verified_for_audited_type50_lines` when all matrix rows match.
+- This is an audit/triage release only: no empirical triplet tuning and no intentional solver-physics changes.
+
+## v0.3.156
+
+- Propagate same-run detail-output covering fraction (`cfrac`) from `xo01_detal2.fits` depth rows into type-50 matrix assembly.
+- Add a fallback `type50_cfrac` path for XSTAR line-escape evaluation when a transition row carries tau0 but not cfrac.
+- Refine the detail-state type-50 audit to classify `matrix_cfrac_mismatch` separately from generic rate-evaluator mismatches.
+- No intentional change to source terms or non-type-50 solver physics.
+
+## v0.3.155
+
+- Added detail-state type-50 tau handoff from `xo01_detal2.fits` into the `xstar-local-state` solver preset when same-run detail outputs and an ATDB are available.
+- Added `xstar_atomic.xstar_detail.build_detail_type50_depth_rows_for_solver(...)` to map `xo01_detal2.fits` line `tau_in`/`tau_out` rows onto ATDB type-50 lower/upper level indices for matrix assembly.
+- Added the solver keyword `xstar_type50_depth_lines_csv` and safe `type50_escape_source=xstar-detail-lines` path so the population matrix can use detail-state `tau0(1:2,line)` values without reusing final `xout_lines1.fits` products.
+- Improved the detail-state type-50 matrix audit classification: scalar 0.35 escape fallback mismatches are now reported as `matrix_tau0_missing_scalar_escape_proxy` rather than generic `rate_evaluator_mismatch`.
+- No type-50 photoexcitation is forced; for `cfrac=1` the `ucalc.f90` photoexcitation branch remains zero.
+
+## v0.3.154
+
+- Added solver-product preservation to `examples/56_reproduce_xstar_local_outputs.py` via `--write-solver-products` and `--solver-output-root`.
+- Preserved solver products are written from the in-memory solver result using historical filenames such as `xstar_like_element_solver_full_global_matrix_terms.csv`, plus a products manifest.
+- Benchmark comparison CSV/JSON rows now record paths to the preserved full-global matrix terms, normalized-solve comparison, and summary JSON.
+- Added automatic matrix-term handoff to `examples/61_audit_xstar_detail_type50_rates.py` via `--benchmark-dir` / `--benchmark-comparisons-csv`.
+- The detail-state type-50 audit now compares `ucalc.f90` escaped/photo rates against all matching matrix rows and classifies each residual as `matrix_matches_ucalc_rate`, `rate_evaluator_mismatch`, `matrix_placement_mismatch`, or `no_matching_matrix_term`.
+- No solver physics changed.
+
+## v0.3.153
+
+- Added `examples/61_audit_xstar_detail_type50_rates.py`, a row-by-row XSTAR detail-state type-50 audit for He-like triplet lines.
+- Added public detail-audit helpers in `xstar_atomic.xstar_detail` for `pescl`, `ptmp1/ptmp2`, XSTAR-style `nbinc`, type-50 `vtherm`, and source-code type-50 rate rows.
+- The audit reads `xo01_detal2.fits`/`xo01_detal4.fits`, matches selected O VII f/i/r line rows to ATDB type-50 records when available, computes escaped decay and photoexcitation using `calc_hmc_ion.f90` + `ucalc.f90` formulas, and writes CSV/JSON/Markdown products.
+- Optional matrix-term CSV matching adds residual columns without changing solver physics.
+
+## v0.3.152
+
+- Fixed XSTAR detail-state population when `xout_abund1.fits` contains a trailing all-zero sentinel ABUNDANCES row.
+- The detail-state reader now carries forward the most recent valid plasma state for final/cumulative detail HDUs whose matching abundance row is a zero sentinel, avoiding misleading `T=0`, `ne=0`, and `logxi=0` summaries.
+- Added `abundance_row_source` provenance to zone summaries and field-status outputs.
+- Added regression coverage for O VII detail outputs with a zero abundance sentinel row.
+
+
+## v0.3.151
+
+- Added `xstar_atomic.xstar_detail`, a detail-output reader that populates the Python live-state schema from XSTAR `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal4.fits`, and `xout_abund1.fits`.
+- Added lightweight BINTABLE parsing to the built-in FITS fallback so XSTAR detail products can be read even when `astropy` is unavailable.
+- Added `examples/60_populate_xstar_live_state_from_detail.py` to write per-zone live-state summaries and field-status tables.
+- No solver physics changed.
+
+## v0.3.150
+
+- Added `xstar_atomic.xstar_state`, which defines explicit Python live-state containers needed for future XSTAR-output recreation:
+  - `XSTARContinuumState` for `epi(:)`, `bremsa(:)`, `bremsint(:)`, and continuum optical depths.
+  - `XSTARLineTransferState` for `tau0(1:2,line)`, optional `ptmp1/ptmp2`, and line emissivity/opacity arrays.
+  - `XSTARZoneState` for zone-local `T`, `ne`, `cfrac`, `vturbi`, ion fractions, level populations, and heating/cooling maps.
+  - `XSTARRunState` for the full run state across radial zones.
+- Added `required_live_state_fields()`, `create_initial_xstar_run_state_from_input(...)`, and `write_xstar_state_skeleton(...)`.
+- Added `examples/59_create_xstar_live_state_skeleton.py` to write JSON/Markdown/CSV state-schema products from an XSTAR command or `run_xstar.sh`.
+- Extended the XSTAR recreation plan JSON with a `live_state_schema` section.
+- No full XSTAR recreation or solver physics change yet; this release makes the required internal state explicit and reusable.
+
+## v0.3.149
+
+- Adds the first Python XSTAR-output recreation planning layer.
+- New module `xstar_atomic.xstar_run` parses shell-style `xstar key=value` command lines and `run_xstar.sh` files into normalized `XSTARInputParameters`.
+- Adds `standard_xstar_output_products()`, `xstar_recreation_plan(...)`, and `write_xstar_recreation_plan(...)` to map `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal3.fits`, `xo01_detal4.fits`, `xout_abund1.fits`, `xout_lines1.fits`, `xout_rrc1.fits`, `xout_cont1.fits`, and `xout_spect1.fits` onto the live XSTAR internal state required for source-code-parity recreation.
+- Adds `examples/58_plan_xstar_output_recreation.py` and the console entry point `xstar-atomic-plan-xstar-run`.
+- This is a planning/audit release only: it does not claim to run the full XSTAR thermal/ionization/radiative-transfer iteration or write exact replacement FITS products yet.
+
+## v0.3.148
+
+- Restored the `xstar-local-state` benchmark preset to the historical examples/51--52 full-global validation branch.
+- Stopped treating post-transfer `xout_lines1.fits` line depths as the live `tau0(:,:)` array used by `calc_hmc_ion.f90` in the population matrix.
+- Stopped treating final `xout_cont1.fits`/`xout_spect1.fits` spectra as the live local `bremsa(:)` array for the default source-code-parity preset.
+- Added `xstar-local-state-experimental-pumping` for explicitly unsafe output-table pumping experiments.
+- Added `docs/helike_fortran_python_gap_audit.md` documenting the relevant XSTAR Fortran source path and the remaining exact-parity requirement.
+- No empirical triplet scaling was added.
+
+## v0.3.147
+
+- Corrects the first type-50 pumping benchmark path to use the same-run XSTAR `cfrac` parameter from the FITS `PARAMETERS` table when available.
+- The `xstar-local-state` preset no longer assumes `cfrac=0`; if `cfrac` cannot be read, it falls back to `cfrac=1` to avoid unphysical maximum pumping.
+- Adds `xstar_cfrac` / `xstar_cfrac_source` target metadata and comparison columns, plus `solver_type50_cfrac` diagnostics.
+- Keeps type-50 line pumping opt-in through `xstar-line-escape-and-pumping`; no empirical scale factors are added.
+
+## v0.3.146
+
+- Corrects the first type-50 line-pumping benchmark implementation after the v0.3.145 four-ion run showed severe over-pumping from the diagnostic `xstar-powerlaw` continuum.
+- Adds same-run XSTAR continuum-spectrum support for the local-state benchmark: `xout_cont1.fits` or `xout_spect1.fits` is converted to a temporary UTF-8 CSV and passed to the full-global solver as an `xstar-output` radiation grid.
+- Converts the XSTAR spectrum column (`transmitted` by default) to the internal `bremsa`-like grid using the source-code geometry from `trnfrc.f90`, `bremsa=zremsz*exp(-tau)/(12.56*(r/1e19)^2)`, with the selected local radius from `xout_abund1.fits`.
+- Changes the `xstar-local-state` preset so type-50 pumping is evaluated only from the same-run XSTAR output spectrum when available; if no output spectrum is present, the pumping branch is not evaluated instead of falling back to an arbitrary power-law normalization.
+- Adds diagnostic columns for the radiation spectrum path, selected column, conversion status, and number of grid points.
+- Adds regression tests ensuring `xstar-output` pumping uses the explicit XSTAR output grid and does not silently fall back to the proxy continuum.
+
+## v0.3.145
+
+- Fixes the first `xstar-line-escape-and-pumping` benchmark run, which failed on non-type-50 transitions with `cannot access local variable 'pumping_terms' where it is not associated with a value`.
+- Initializes the type-50 pumping diagnostic payload for all bound-bound rows, including raw-A and non-type-50 transitions.
+- Keeps type-50 photoexcitation injection opt-in through `xstar-line-escape-and-pumping`; no additional empirical scaling is added.
+
+## v0.3.144
+
+- Added the first source-code-matched type-50 lower-to-upper photoexcitation / line-pumping matrix mode.
+- New treatment alias: `xstar-line-escape-and-pumping`.  It keeps the XSTAR line-escape downward branch and injects the upward pumping branch from `ucalc.f90` type 50.
+- The pumping rate uses the XSTAR algebra `sigma=0.02655*flin*lambda_cm/vtherm` and `ans1_postswap=sigma*bremsa(nb1)*vtherm/3e10*flinabs(ptmp1)*(1-cfrac)`, with `flinabs=1` as in `flinabs.f90`.
+- Added XSTAR-style helpers for type-50 thermal velocity, oscillator-strength recovery from A-values/statistical weights, and `nbinc`-style bin selection on the explicit solver `epi`/`bremsa` grid.
+- The `xstar-local-state` benchmark preset now uses `type50_bound_bound_treatment="xstar-line-escape-and-pumping"` with same-run line depths and the explicit diagnostic `xstar-powerlaw` `epi`/`bremsa` grid.
+- Added regression tests for injected type-50 pumping matrix terms and the `cfrac=1` suppression path.
+- This is the first opt-in physics implementation of type-50 pumping; comparison to the C V/O VII/Mg XI/Ca XIX same-run XSTAR benchmark should be inspected before making it a default predictive mode.
+
+## v0.3.143
+
+- Added a controlled same-run line-depth matrix escape mode for local XSTAR reproduction benchmarks.
+- The `xstar-local-state` benchmark preset now passes `type50_escape_source="xstar-reference-lines"`, so matching type-50 triplet transitions can use `depth_inward`/`depth_outward` from the same-run converted `xout_lines1.fits` reference table instead of the scalar 0.35 escape fallback.
+- Added internal transition-depth matching by reversed level indices and wavelength, mirroring the XSTAR source-code flow where `calc_hmc_ion.f90` supplies `ptmp1`/`ptmp2` to `ucalc.f90` before type-50 rates are assembled.
+- This is a benchmark/reproduction mode, not a final predictive radiation-transfer replacement: true arbitrary-condition reproduction still requires a source-code-matched local radiation field (`epi`, `bremsa(nb1)`, `flinabs`, and `cfrac`) and type-50 line pumping.
+
+## v0.3.142
+
+- Fixed the local-state benchmark triplet-source preference used by `examples/56_reproduce_xstar_local_outputs.py`.
+- The `xstar-local-state` solver benchmark now prefers `full_global_xstar_tau0_calc_emis_ion`, matching the historical examples 51--52 validation workflow.
+- Kept `full_global_xstar_reference_depth_emit_outward_calc_emis_ion` available as a secondary diagnostic instead of using it as the default benchmark source when both branches are present.
+- Added a regression test that fails if the benchmark again silently prefers the reference-depth postprocess branch over the historical tau0 branch.
+- No solver physics changed; type-50 photoexcitation remains audit-only.
+
+## v0.3.141
+
+- Added source-code-gap diagnostics to the He-like local-output reproduction benchmark.
+- The comparison table now includes solver-to-XSTAR ratios for f/i/r/R/G, a residual-pattern label, same-run resonance-line depth/escape diagnostics, and solver type-50/radiation settings.
+- Added `docs/helike_reproduction_source_code_diagnosis.md`, summarizing the XSTAR source-code path (`calc_hmc_ion.f90`, `ucalc.f90` type 50, `calc_emis_ion.f90`, `pescl.f90`) and the current likely gaps: audit-only type-50 photoexcitation, scalar matrix escape fallback, and proxy radiation-field normalization.
+- No solver physics changed.  This release improves diagnosis/reporting only.
+
+# Changelog
+
+## v0.3.209
+
+- Corrected the exact-live type-53 ATDB decoder to derive XSTAR's active ion-local continuum index `nlevp` from the direct probed endpoint relation `idest2 = nlevp + idat(nidt-3) - 1`.
+- v0.3.208 incorrectly used the maximum extracted type-13 level index. In the real O VII products this selected level 110 instead of XSTAR `nlevp=79`, assigned a false 57.919 eV parent excitation to ground-parent records, and corrupted the continuum weight, threshold, Milne exponent, endpoint validation, and all type-53 rate/matrix comparisons.
+- Added explicit decoder provenance and readiness fields: inferred `xstar_nlevp`, ATDB maximum level index, packed parent offset, inference source/consistency, continuum-row availability, endpoint consistency, and aggregate fallback/error counts.
+- The parity gate now requires both live-radiation context readiness and exact ion-block/continuum decoder readiness. It does not fall back silently to the ATDB maximum when a direct endpoint-derived `nlevp` is available.
+- Added focused regression tests for ground-parent and excited-parent endpoint inference and for rejection of inconsistent decoder context. No `phint53` numerical formula, empirical scale, or production solver behavior changed.
+
+## v0.3.140
+
+- Fixed `--solver-preset xstar-local-state` in the He-like C/O/Mg/Ca benchmark suite.
+- The benchmark no longer passes the binary/ascii FITS table `xout_lines1.fits` directly to the lower-level solver option `xstar_reference_lines_csv`, which expects a converted CSV file.
+- When the local-state preset needs same-run XSTAR reference lines, the benchmark now writes the already-loaded selected XSTAR line rows to a temporary UTF-8 CSV and passes that CSV to `solve_element_reference`.
+- This removes the `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 ...` failure seen when the solver tried to read `xout_lines1.fits` as CSV.
+- Added a regression test that verifies the local-state preset passes a `.csv` reference table, not a `.fits` file.
+- No solver physics changed; this fixes benchmark plumbing so the real solver-vs-XSTAR residuals can be inspected.
+
+## v0.3.139
+
+- Strengthen the He-like C/O/Mg/Ca same-run benchmark comparison after the API reorganization.
+- Add solver and XSTAR diagnostic columns for `R=f/i`, `G=(f+i)/r`, and L2 distance to the exact same-run XSTAR triplet target.
+- Record the solver triplet source used in the benchmark comparison so quick workflow summaries are not confused with the source-code-first full-global validation path.
+- Prefer full-global / `calc_emis_ion` triplet summaries when present; use `summary.he_like_triplet` only as a fallback and mark it with a warning.
+- Add `--solver-preset xstar-local-state` to `examples/56_reproduce_xstar_local_outputs.py`; the preset mirrors the solver settings generated by `examples/51_run_helike_local_state_validation.py`.
+- Add `docs/helike_benchmark_diagnosis.md` summarizing the XSTAR source-code path (`calc_hmc_ion.f90`, `ucalc.f90`, `calc_emis_ion.f90`) and why the quick workflow-default solver can reproduce different residuals from the earlier local-state validation workflow.
+- No solver physics changed; type-50 photoexcitation/line pumping remains audit-only.
+
+## v0.3.138
+
+- Strengthened XSTAR ATDB path resolution for solver benchmarks and workflow APIs.
+- If `XSTAR_ATDB` and `XSTAR_ATDB_FITS` are unset, the resolver now explicitly uses configured `datapath` files and can consult a `datapath` file in the current working tree.
+- Added `get_data_paths()` so diagnostics can show all configured datapath candidates.
+- Skips stale datapath entries and falls through to the next valid candidate before reporting that no `atdb.fits` was found.
+- Source distributions no longer include a machine-specific `datapath` file; users configure it locally with `python -m xstar_atomic.data --set-path /path/to/atdb.fits`.
+- No solver physics changed. The C V/O VII/Mg XI/Ca XIX benchmark residuals are unchanged and remain the next physics target.
+
+## v0.3.137
+
+- Fixed the four-ion local-output benchmark solver mode so it accepts the common `XSTAR_ATDB` environment variable in addition to `XSTAR_ATDB_FITS`.
+- Treats a blank `--atdb` value, such as `--atdb "$XSTAR_ATDB"` when the shell variable is unset, as not provided and falls back to the configured resolver instead of trying `./atdb.fits`.
+- Lets the normal ATDB resolver handle `--atdb`, `XSTAR_ATDB_FITS`, `XSTAR_ATDB`, and saved `datapath` consistently during solver comparisons.
+- The example summary now prints solver f/i/r values and comparison warnings, making failed solver setup visible immediately at the terminal.
+
+## v0.3.136
+
+- Fixed the C V / O VII / Mg XI / Ca XIX XSTAR reproduction benchmark solver-comparison extraction.
+- `examples/56_reproduce_xstar_local_outputs.py --run-solver` now reads the current solver's `summary["he_like_triplet"]` result and fills `solver_f_fraction`, `solver_i_fraction`, and `solver_r_fraction` when available.
+- The benchmark no longer reports `solver_compared` when solver triplet fractions are missing; it reports `solver_no_triplet_values` with an explicit warning instead.
+- Added regression tests for solver-summary triplet extraction and missing-triplet status handling.
+- No solver physics changed; this release only fixes benchmark reporting/extraction.
+
+## v0.3.135
+
+- Added a built-in standard C V / O VII / Mg XI / Ca XIX benchmark suite for `examples/56_reproduce_xstar_local_outputs.py` via `--standard-helike-suite --xstar-runs-root xstar_runs`.
+- Added `default_helike_benchmark_cases(...)` and `write_default_helike_cases_csv(...)` to create the canonical four-ion case table programmatically or as an editable CSV.
+- Improved the missing `--cases-csv` error message with a copy-pasteable case-table recipe and a pointer to `--standard-helike-suite`.
+- Updated README, examples README, Markdown/LaTeX/Sphinx user-guide examples for the new one-command four-ion benchmark workflow.
+- No solver physics changed; this remains exact XSTAR target extraction plus optional residual reporting.
+
+## v0.3.134
+
+- Added `src/xstar_atomic/benchmark.py`, a same-run XSTAR local-output reproduction layer for C V, O VII, Mg XI, and Ca XIX benchmarks.
+- Added `XSTARLocalTarget` and `XSTARBenchmarkComparison` result objects that keep the exact local state from `xout_abund1.fits` and exact He-like triplet target from `xout_lines1.fits` separate from any solver residual.
+- Added public helpers `build_xstar_local_target(...)`, `reproduce_xstar_run(...)`, `run_xstar_benchmark_suite(...)`, `write_xstar_benchmark_outputs(...)`, and `write_xstar_benchmark_suite(...)`. These are exported at the top level and through `xstar_atomic.validate`/`XSTARAtomic.validate`.
+- Added `examples/56_reproduce_xstar_local_outputs.py`, a CLI wrapper that writes local-state, triplet-target, selected-line, comparison, JSON, and Markdown benchmark products.
+- Updated Markdown, LaTeX, and Sphinx user guides with the new same-run reproduction benchmark API and CLI example.
+- Updated `examples/README.md` and the example-to-source migration map for example 56.
+- No solver physics changed; type-50 photoexcitation remains audit-only. This release establishes exact XSTAR-output targets before further solver corrections.
+
+## v0.3.133
+
+- Expanded `docs/user_guide.md`, `docs/user_guide.tex`, and `docs/sphinx/source/user_guide.rst` with function-by-function examples for the top-level workflow API, context classes, `RateEvaluation`, audit-only type-50 evaluation, and expert object namespaces.
+- Fixed the LaTeX `Examples and source-module migration` table layout by using breakable path-style entries so long example filenames and API names no longer overlap.
+- Updated documentation regression tests so the API examples are checked across Markdown, LaTeX, and Sphinx sources.
+- No solver physics changed; type-50 photoexcitation / line pumping remains audit-only.
+
+## v0.3.132
+
+- Expanded and clarified the public API documentation in `docs/user_guide.md` with a canonical workflow-first API section, a top-level function summary table, expert namespace examples, public namespace-module examples, and explicit notes about prototype/not-yet-final physics APIs.
+- Rewrote `docs/sphinx/source/user_guide.rst` so the Sphinx user guide now mirrors the Markdown/LaTeX organization instead of remaining an older CLI-focused page.
+- Expanded `docs/sphinx/source/api.rst` to include the workflow-first API (`xstar_atomic.workflow`), public namespaces (`rates`, `matrix`, `solve`, `validate`, `runs`), context objects, type-50 evaluator, and audit module.
+- Expanded `docs/user_guide.tex` with the same workflow-first and expert API material and retained the LaTeX table of contents.
+- Added documentation regression tests requiring the new public API names to appear in Markdown, LaTeX, and Sphinx docs.
+- No solver physics changed; type-50 photoexcitation remains audit-only and is not injected into the population matrix.
+
+## v0.3.131
+
+- Added the first workflow-first module-level public API layer inspired by the earlier `chianti-tools` review:
+  - `open_database(...)`
+  - `get_levels(...)`, `get_lines(...)`, `get_wavelengths(...)`, `get_energies(...)`
+  - `match_line(...)`, `match_lines(...)`
+  - `get_collisions(...)`, `get_photoionization(...)`, `get_recombination(...)`
+  - `calc_emissivity(...)`, `calc_rate(...)`, `calc_triplet(...)`
+  - `solve_populations(...)`, `build_matrix(...)` wrappers around the current solver workflow.
+- Added `XSTARContext` plus `context_from_values(...)` and `context_from_xstar_run(...)` for lightweight local XSTAR contexts selected from `xout_abund1.fits`.
+- Added namespace-style expert API attributes on `XSTARAtomic`:
+  - `db.context.from_values(...)`, `db.context.from_xstar_run(...)`
+  - `db.rates.type50(...)`
+  - `db.audit.type50_line_pumping(...)`
+  - `db.matrix.build_ion(...)`
+  - `db.solve.ion(...)`
+  - `db.validate.compare_xstar_run(...)`.
+- Added public namespace modules `xstar_atomic.rates`, `xstar_atomic.solve`, `xstar_atomic.matrix`, `xstar_atomic.validate`, and `xstar_atomic.runs` as stable import locations for future API growth.
+- Expanded Markdown and LaTeX docs with the new workflow-first API calls and expert namespace examples.
+- Added API tests for public workflow functions and namespace modules.
+- No solver physics changed; type-50 photoexcitation remains audit-only and is not injected into the population matrix.
+
+## v0.3.129
+
+- Added `examples/README.md`, organizing all example scripts by workflow/relevance and giving a minimal command for each example. The README also adds recommended learning paths for new users, decoder development, emissivity/export work, O VII triplet development, full-global XSTAR validation, and Mg/Ca validation.
+- Expanded `docs/user_guide.md` with a table of contents and a new public API cookbook covering database setup, line/level queries, collision and recombination products, local context objects, the audit-only type-50 evaluator, high-level `XSTARAtomic` convenience methods, source-code audits, and export workflows.
+- Expanded `docs/user_guide.tex` with `\tableofcontents` after `\maketitle` and the same public API cookbook examples as the Markdown guide.
+- Updated the package README and manifest so the examples README is discoverable and included in source distributions.
+- No solver physics changed; type-50 photoexcitation remains audit-only.
+
+## v0.3.128
+
+- Added `src/xstar_atomic/context.py` with public `LocalPlasmaState`, `RadiationField`, and `EscapeContext` containers for local XSTAR plasma, radiation, and escape/geometry state.
+- Added `src/xstar_atomic/rates_type50.py` with the `RateEvaluation` result class and audit-only `evaluate_type50_bound_bound(...)` evaluator for the XSTAR `ucalc.f90` type-50 bound-bound radiative branch. The evaluator records pre-swap escaped decay, pre-swap photoexcitation, post-swap lower-to-upper photoexcitation, post-swap upper-to-lower escaped decay, sigma, `bremsa(nb1)`, `flinabs(ptmp1)`, `cfrac`, and `ptmp` terms when available.
+- Added `src/xstar_atomic/audit.py` with reusable `type50_line_pumping(...)` audit workflow and `Type50LinePumpingAudit` return object.
+- Converted `examples/55_audit_helike_type50_line_pumping.py` into a thin CLI wrapper around `xstar_atomic.audit.type50_line_pumping(...)`, preserving the previous command-line interface while making the audit callable as a public API.
+- Added `XSTARAtomic.type50_rate(...)` and `XSTARAtomic.audit_type50_line_pumping(...)` convenience methods.
+- Reorganized `docs/user_guide.md` and `docs/user_guide.tex` into a workflow-first structure similar to `chianti-tools`: installation/data setup, quick start, database access, context objects, source-code-aligned rate evaluators, matrix/solver workflows, XSTAR-output validation, audit workflows, example-to-source migration, tests, and roadmap.
+- Added `docs/example_to_source_api_map.md`, identifying which example scripts should migrate into stable source modules as the API hardens.
+- No solver physics changed; the type-50 line-pumping/photoexcitation implementation remains audit-only and no empirical triplet scale fitting was added.
+
+## v0.3.127
+
+- Added `examples/55_audit_helike_type50_line_pumping.py`, a source-code-first audit for the missing XSTAR type-50 bound-bound photoexcitation / line-pumping path after all-ion local-state validation.
+- The new audit records the XSTAR `ucalc.f90` type-50 source-code formula for the upward photoexcitation term, identifies the required radiation-field inputs (`epi`, `bremsa`, `flinabs`, `cfrac`, thermal velocity, and escape probabilities), and reports that the current `xstar-line-escape` population matrix has zero explicit photoexcitation into `1s2p 1P1`.
+- The audit combines local-state case metadata, same-run XSTAR triplet targets, comparison summaries, and full-global matrix terms, but does not fit or apply any empirical triplet scale.
+- No solver physics changed; this release documents the next source-code implementation target: port XSTAR `ucalc.f90` type-50 `ans2` line-pumping using the correct local radiation normalization before interpreting collision-rate scale residuals.
+
+## v0.3.126
+
+- Added `examples/54_audit_helike_resonance_population_flux.py`, a source-code-first diagnostic that combines solved population fractions with full-global matrix terms to compute population-weighted feed and loss paths for the He-like resonance upper level `1s2p 1P1`.
+- The new audit writes `helike_resonance_population_flux_summary.csv`, `helike_resonance_population_flux_detail.csv`, `helike_resonance_population_flux_audit.md`, and `helike_resonance_population_flux_audit.json`.
+- The audit separates direct ground-to-resonance feed, collisional cascade/mixing feed, radiative cascade feed, explicit photoexcitation feed, and resonance losses. It also records a clearly marked linearized equivalent feed diagnostic but does not apply or fit any scale factor.
+- On the user's all-ion local-state comparison, all four ions still have low resonance fractions and zero population-weighted explicit photoexcitation into `1s2p 1P1`, reinforcing that the next source-code target should be XSTAR bound-bound line pumping / local radiation normalization before any collision-rate scale interpretation.
+- No solver physics changed and no empirical triplet scale fitting was added.
+
+## v0.3.125
+
+- Added `examples/53_audit_helike_resonance_deficit.py`, a diagnostic-only audit for the common local-state residual in C V, O VII, Mg XI, and Ca XIX.
+- The new audit reads `helike_local_state_cases.csv`, per-ion `xstar_detail_population_comparison_summary.json` files, same-run XSTAR triplet line CSVs, resonance-collisional-feed audits, radiation-context audits, and full-global matrix terms.
+- It reports the resonance-fraction deficit, solver/target f/i/r residuals, XSTAR line depths, direct resonance-collisional feed sums by data type, diagnostic radiation-field provenance, and whether any nonzero photoexcitation terms into `1s2p 1P1` are present in the assembled matrix.
+- Applied to the user’s all-ion local-state run, all four ions have solver `f` high, solver `r` low, and zero explicit nonzero photoexcitation into the resonance upper level in the assembled matrix audit. This points next to XSTAR line-pumping/radiation normalization and direct ground-to-resonance feeding, not per-ion triplet scale fitting.
+- No solver physics changed and no empirical triplet scale fitting was added.
+
+## v0.3.124
+
+- Fixed the default output label in `examples/51_run_helike_local_state_validation.py` so newly generated local-state solver directories use `v03124` instead of the stale `v03122` label.
+- Added `examples/52_summarize_helike_local_state_comparison.py`, a diagnostic-only summary tool that combines `helike_local_state_cases.csv` with per-ion `xstar_detail_population_comparison_summary.json` files.
+- The new summary reports local XSTAR `T/ne/log xi`, solver f/i/r, same-run XSTAR f/i/r, residuals, `R`, `G`, `L2`, and the common residual pattern across C V, O VII, Mg XI, and Ca XIX.
+- Applied to the user’s v0.3.123 all-ion local-state output, the common residual is solver `f` high and solver `r` low for all four ions. This points to direct ground/resonance feeding and radiation/line-pumping normalization before any row-level type-56/type-63/type-68/type-69 rate interpretation.
+- No solver physics changed and no empirical triplet scale fitting was added.
+
+## v0.3.123
+
+- Fixed generated He-like local-state validation shell scripts from `examples/51_run_helike_local_state_validation.py`.
+- Commands are now written with shell-quoted tokens, so ion names containing spaces, especially `C V` and `O VII`, are passed correctly to `python -m xstar_atomic.xstar_outputs --ion ...`.
+- This fixes failures like `xstar_outputs.py: error: unrecognized arguments: V` in `compare_helike_local_state_solvers.sh`.
+- No solver physics changed; no empirical triplet scale fitting was added.
+
+## v0.3.122
+
+- Fixed `examples/51_run_helike_local_state_validation.py` density selection in `--selection-mode max` runs. When `--target-electron-density` and `--nearest-density` are supplied, the script now constrains to the closest available local XSTAR electron density before choosing the maximum He-like fraction. This prevents mixed-density trees from selecting ne≈1 cm^-3 C V/O VII/Ca XIX states when the requested validation target is ne≈1e8 cm^-3.
+- The local-state comparison target now prefers the matched XSTAR run directory: if a selected `xout_abund1.fits` has a sibling `xout_lines1.fits`, the script uses a same-directory triplet CSV when present or auto-generates one under `auto_xstar_triplet_targets/`. Generic/preconverted target CSVs are now only fallback targets.
+- Added provenance columns `target_csv_source` and `target_csv_source_policy` to clarify whether the comparison uses same-run XSTAR lines or a fallback target search.
+- No solver physics changed and no empirical triplet scale fitting was added.
+- Validation: `compileall` passed; selected pytest suite passed with 10 passed and 3 skipped.
+
+
+## v0.3.121
+
+- Improved `examples/51_run_helike_local_state_validation.py` for He-like validation trees that contain C/O density-only runs such as `helike_type69/c5_ne1e8` and `helike_type69/o7_ne1e8`.
+- The driver now records available local `log xi` and electron-density values when a requested `--log-xi` / density filter excludes an ion-specific XSTAR run. This makes it clear when C V/O VII are present but not at the requested `log xi=3` Mg/Ca condition.
+- Added automatic triplet-target CSV creation from the matched XSTAR `xout_lines1.fits` when a preconverted `xstar_*_triplet_lines.csv` is absent. Generated CSVs are written under `auto_xstar_triplet_targets/`, and the compare script includes the conversion command before running `examples/43_compare_xstar_detail_populations.py`.
+- This supports source-code-first local-state validation for C V, O VII, Mg XI, and Ca XIX from the same `xstar_runs` tree without requiring separate manual conversion steps.
+- No solver physics changed and no empirical triplet scale fitting was added.
+
+## v0.3.120
+
+- Improved `examples/51_run_helike_local_state_validation.py` for practical local-state validation against XSTAR `xout_abund1.fits` products.
+- Added `--target-electron-density`, `--electron-density-tolerance-dex`, and `--nearest-density` so a grid containing multiple XSTAR density runs can be reduced to the requested local density, e.g. `ne≈1e8 cm^-3`, before generating solver commands.
+- De-duplicated repeated `xout_abund1.fits` discoveries that arise when the same case appears in both copied and nested `mg_ca_triplet_targets` layouts.
+- Stopped using unrelated Mg/Ca `xout_abund1.fits` tables as C V/O VII local states when no matching C/O XSTAR run directory is present. C/O are now marked as missing local state unless matching `c5`/`o7` XSTAR `xout_abund1.fits` cases exist.
+- No solver physics changes and no empirical triplet scale fitting.
+
+## v0.3.119
+
+- Added `examples/51_run_helike_local_state_validation.py`, a source-code-first driver that reads XSTAR `xout_abund1.fits` local-zone states and prepares/runs He-like solver comparisons at those local `T`, `ne`, and `log xi` conditions for C V, O VII, Mg XI, and Ca XIX.
+- The new driver writes `helike_local_state_cases.csv`, `helike_local_state_zone_candidates.csv`, `helike_local_state_summary.json`, `helike_local_state_validation_plan.md`, and reproducible shell scripts for solver and comparison commands.
+- Supports `--selection-mode grid|max` and `--log-xi` for either full local-state grids or a single selected log-xi comparison.
+- Keeps the source-code-first policy: no empirical triplet scale fitting and no default solver-physics changes. The generated commands use XSTAR local `T` and `ne`; radiation normalization remains explicitly marked as not yet tied to XSTAR xi/transfer.
+- On the supplied `xstar_runs` Mg/Ca grid, the driver finds usable local-state cases for Mg XI and Ca XIX but reports C V and O VII as missing/nonzero local-state targets in that specific run tree, because the Mg/Ca `xout_abund1.fits` files have zero C V and O VII He-like fractions.
+
 ## v0.4.1 - 2026-05-16
 
 - Translated the runtime atomic-database initialization subsystem from `readtbl.f90` and the active path of `setptrs.f90`.

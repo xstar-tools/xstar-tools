@@ -18,3 +18,5 @@ include XSTAR_PYTHON_PORT.md
 include xstar_atomic_v0.4.0.md
 recursive-include xstar_python_source_port_inventory_v0400 *.csv *.json
 include xstar_atomic_v0.4.1.md
+
+include xstar_atomic_v0.4.2.md
