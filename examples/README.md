@@ -1138,3 +1138,30 @@ PYTHONPATH=src python examples/101_port_xstar_ucalc.py \
 The command validates complete source control flow and packed-record decoding;
 it does not claim that all records were numerically evaluated without a full
 zone plasma/radiation context.
+### `102_port_xstar_element_equilibrium.py`
+
+Run the complete translated element statistical-equilibrium subsystem:
+`levwkelement -> calc_hmc_ion -> calc_hmc_element -> msolvelucy`.  The command
+builds the exact compact basis, preserves parent-continuum aliases, traverses
+all records through the source pointer tables, assembles raw and normalized
+matrices plus RHS, and solves the complete element population vector.  For
+oxygen stages O III--O VIII the target contains 607 compact rows.
+
+```bash
+PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --temperature-k 1.0e6 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
+  --escape-npz /path/to/xstar_escape_state.npz \
+  --out-dir xstar_o_element_equilibrium_v043 \
+  --print-summary
+```
+
+Use `--assume-optically-thin` only for a genuinely optically thin model or a
+controlled smoke test.  In strict mode, missing radiation or escape state
+blocks readiness rather than falling back to old probe coefficients.
+

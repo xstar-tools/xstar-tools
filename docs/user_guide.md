@@ -1303,3 +1303,24 @@ Example 97 requires an explicitly selected live-grid capture and compares `ans1.
 
 The first real O VII v0.3.208 run selected the correct live radiation state but failed every type-53 endpoint and rate comparison. The failure was traced to the ATDB decoder, not to `phint53`: it used the maximum extracted type-13 level index (`110`) as `nlevp`, while the direct XSTAR relation `idest2=nlevp+idat(nidt-3)-1` gives `nlevp=79` for the selected records. This created a false 57.919 eV parent excitation and corrupted the threshold, continuum statistical weight, Milne factor, and endpoint mapping. v0.3.209 derives `nlevp` from the probed endpoint and packed parent offset and requires explicit decoder-context readiness. The numerical `phint53` kernel and no-empirical-scale policy are unchanged.
 
+## v0.4.3 complete element statistical-equilibrium source port
+
+The primary population-solver path is now the translated source sequence
+`levwk/levwkelement -> calc_hmc_ion -> calc_hmc_element -> msolvelucy`.  The
+compact basis is built from the v0.4.1 pointers, with each ion adding `nlev-1`
+new unknowns so parent-continuum rows are identical to the next ion's ground
+row.  The production O III--O VIII level counts produce 607 rows and five
+shared aliases.
+
+Every ion record is traversed through `npfi`, `npar`, and `npnxt`, evaluated by
+the unified v0.4.2 `ucalc` dispatcher, and inserted into the four source matrix
+positions.  The subsystem returns the raw rate matrix, normalization-constrained
+matrix and RHS, heating/cooling matrices, complete source provenance, blocker
+records, populations, and solver diagnostics.  `msolvelucy`, `leqt2f`,
+`ludcmp`, `lubksb`, and `mprove` are translated in the same subsystem.
+
+The six-row and 119-row products are regression subsets only.  Strict production
+acceptance is the full 607-row oxygen matrix and population vector with matching
+live-radiation and line/RRC optical-depth state; missing context blocks readiness
+and is not replaced with probe coefficients.
+

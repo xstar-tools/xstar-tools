@@ -245,3 +245,24 @@ Source-faithful atomic-database initialization
    :members:
    :undoc-members:
    :show-inheritance:
+
+Complete source-faithful ucalc subsystem
+----------------------------------------
+
+.. automodule:: xstar_atomic.source_port.ucalc
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Complete element statistical-equilibrium subsystem
+---------------------------------------------------
+
+.. automodule:: xstar_atomic.source_port.element_equilibrium
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: xstar_atomic.source_port.linear_algebra
+   :members:
+   :undoc-members:
+   :show-inheritance:

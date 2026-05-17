@@ -13,6 +13,43 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.3 complete element statistical-equilibrium subsystem
+
+The next original-source sequence is now available as one direct execution path:
+
+```text
+levwkelement
+  -> calc_hmc_ion
+  -> calc_hmc_element
+  -> msolvelucy
+```
+
+It builds XSTAR's compact element basis with shared continuum/ground aliases,
+traverses all ion records through the v0.4.1 pointers, evaluates them through
+the v0.4.2 `ucalc` dispatcher, assembles the full gain/loss and
+heating/cooling matrices, applies the normalization equation, and solves the
+populations with the translated Lucy superlevel iteration and linear-algebra
+helpers.  The default oxygen target O III--O VIII has 607 compact rows.
+
+```bash
+PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --temperature-k 1.0e6 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
+  --escape-npz /path/to/xstar_escape_state.npz \
+  --out-dir xstar_o_element_equilibrium_v043 \
+  --print-summary
+```
+
+Strict readiness requires complete source-equivalent radiation and optical-depth
+state.  Records missing that context are reported as blockers; the port does not
+insert probe-derived matrix coefficients.  Six-row and 119-row products are now
+regression subsets only.
+
 ### v0.4.2 complete `ucalc` subsystem
 
 The complete packed-record execution boundary of `ucalc.f90` is now available:

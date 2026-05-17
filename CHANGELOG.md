@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.4.3 - 2026-05-17
+
+- Translates the complete element statistical-equilibrium source sequence `levwkelement -> calc_hmc_ion -> calc_hmc_element -> msolvelucy` as one coherent subsystem in `xstar_atomic.source_port.element_equilibrium`.
+- Builds the exact one-based compact `ipmat/ipmat2` topology from the v0.4.1 element/ion/level pointers, including shared parent-continuum/next-ion-ground rows, source superlevel (`nsup`) and ion (`nion`) maps, and the final normalization row.  The production oxygen O III--O VIII level counts produce 607 compact rows and five shared aliases directly from the source rule `ipmat2 += nlev - 1`.
+- Traverses every ion record through `npfi`, `npar`, and `npnxt`, calls the unified v0.4.2 `SourceFaithfulUCalc`, applies source escape probabilities, preserves the rate-type-1 excited-level photoionization suppression, and inserts all four `calc_hmc_ion` gain/loss terms plus heating/cooling coefficients.
+- Adds explicit raw and normalization-constrained dense matrices, RHS, record/ion provenance, blocked-context records, endpoint failures, and source-no-op accounting.  Missing radiation, optical-depth, level, or pointer state is reported explicitly; no probe coefficient or empirical fallback is inserted.
+- Translates `levwk.f90` and the element LTE seed chaining in `levwkelement.f90`.
+- Adds `xstar_atomic.source_port.linear_algebra`, translating `ludcmp`, `lubksb`, `mprove`, and `leqt2f`, including source range handling and explicit singular-matrix errors.
+- Translates the Lucy superlevel condensation, normalized superlevel solve, within-superlevel fixed-point iteration, population normalization/positivity diagnostics, row residuals, heating/cooling accumulation, level in/out-rate diagnostics, and ionization/recombination totals from `msolvelucy.f90`.
+- Adds `xstar-atomic-port-element` and `examples/102_port_xstar_element_equilibrium.py`, writing the complete compact basis, source-level matrix terms, normalized matrix/RHS, populations, ion summaries, blockers, solver diagnostics, JSON, and Markdown products.
+- Registers the translated `ELEMENT_POPULATIONS` stage on the whole-program source driver and updates the machine-readable port ledger for `levwk`, `levwkelement`, `calc_hmc_ion`, `calc_hmc_element`, `msolvelucy`, and the linear-algebra helpers.
+- The six-row and 119-row products are retained only as regression subsets.  The principal acceptance output is the complete element matrix and population vector; the default oxygen target is O III--O VIII with 607 rows.
+- The code path is complete, but a source-equivalent production 607-row numerical acceptance run still requires the matching XSTAR plasma, live-radiation, line/RRC optical-depth, and ion-stage context.  The subsystem refuses strict readiness when any required context is missing.
+
 # v0.4.2 - 2026-05-17
 
 - Completes the source-faithful Python control-flow translation of `xstarlib/src/ucalc.f90` for all computed-GOTO labels 1 through 102.

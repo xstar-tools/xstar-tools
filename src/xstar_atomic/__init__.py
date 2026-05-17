@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -126,6 +126,15 @@ from .xstar_population_closure_probe import (
 from .xstar_full_element_basis import (
     build_full_element_basis_scaffold,
     write_full_element_basis_scaffold,
+)
+
+from .source_port import (
+    ElementEquilibriumError, ElementIonBlock, ElementBasisRow, ElementCompactBasis,
+    EscapeProbabilityContext, ElementEquilibriumContext, MatrixTerm, IonAssemblySummary,
+    ElementMatrixAssembly, LucySolveResult, ElementEquilibriumResult,
+    build_level_table, build_element_compact_basis, levwk, levwkelement,
+    assemble_element_matrix, msolvelucy, solve_element_statistical_equilibrium,
+    register_element_equilibrium_stage, write_element_equilibrium_products,
 )
 
 from .workflow import (
@@ -329,6 +338,28 @@ from .source_port import (
     save_derived_pointer_cache,
     load_derived_pointer_cache,
     write_atomic_database_products,
+    XSTARLinearAlgebraError, LUDecomposition, LinearSolveResult,
+    ludcmp, lubksb, mprove, leqt2f,
+    ElementEquilibriumError,
+    ElementIonBlock,
+    ElementBasisRow,
+    ElementCompactBasis,
+    EscapeProbabilityContext,
+    ElementEquilibriumContext,
+    MatrixTerm,
+    IonAssemblySummary,
+    ElementMatrixAssembly,
+    LucySolveResult,
+    ElementEquilibriumResult,
+    build_level_table,
+    build_element_compact_basis,
+    levwk,
+    levwkelement,
+    assemble_element_matrix,
+    msolvelucy,
+    solve_element_statistical_equilibrium,
+    register_element_equilibrium_stage,
+    write_element_equilibrium_products,
 )
 
 __all__.extend([
@@ -373,4 +404,31 @@ __all__.extend([
     "save_derived_pointer_cache",
     "load_derived_pointer_cache",
     "write_atomic_database_products",
+    "XSTARLinearAlgebraError",
+    "LUDecomposition",
+    "LinearSolveResult",
+    "ludcmp",
+    "lubksb",
+    "mprove",
+    "leqt2f",
+    "ElementEquilibriumError",
+    "ElementIonBlock",
+    "ElementBasisRow",
+    "ElementCompactBasis",
+    "EscapeProbabilityContext",
+    "ElementEquilibriumContext",
+    "MatrixTerm",
+    "IonAssemblySummary",
+    "ElementMatrixAssembly",
+    "LucySolveResult",
+    "ElementEquilibriumResult",
+    "build_level_table",
+    "build_element_compact_basis",
+    "levwk",
+    "levwkelement",
+    "assemble_element_matrix",
+    "msolvelucy",
+    "solve_element_statistical_equilibrium",
+    "register_element_equilibrium_stage",
+    "write_element_equilibrium_products",
 ])
