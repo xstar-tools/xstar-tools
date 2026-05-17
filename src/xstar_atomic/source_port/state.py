@@ -10,12 +10,24 @@ import numpy as np
 
 @dataclass
 class XSTARAtomicState:
-    """Packed ATDB tables and pointer structures created by ``readtbl/setptrs``."""
+    """Packed ATDB tables and pointer structures created by ``readtbl/setptrs``.
+
+    ``master`` and ``derived`` are typed source-port objects.  The legacy
+    ``tables``/``pointers`` dictionaries remain populated for compatibility
+    with pre-v0.4 audit code while the whole-program port is assembled.
+    """
 
     atdb_path: Optional[str] = None
+    master: Optional[Any] = None
+    derived: Optional[Any] = None
     tables: Dict[str, Any] = field(default_factory=dict)
-    pointers: Dict[str, np.ndarray] = field(default_factory=dict)
+    pointers: Dict[str, Any] = field(default_factory=dict)
     provenance: Dict[str, Any] = field(default_factory=dict)
+
+    def close(self) -> None:
+        """Close any memory-mapped FITS handle owned by the atomic state."""
+        if self.master is not None and hasattr(self.master, "close"):
+            self.master.close()
 
 
 @dataclass

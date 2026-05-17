@@ -237,3 +237,11 @@ Type-53 exact live-radiation rates
 
 .. automodule:: xstar_atomic.xstar_priority_native_type53_integration
    :members:
+
+Source-faithful atomic-database initialization
+----------------------------------------------
+
+.. automodule:: xstar_atomic.source_port.atomic_database
+   :members:
+   :undoc-members:
+   :show-inheritance:

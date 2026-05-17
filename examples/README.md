@@ -1105,3 +1105,17 @@ PYTHONPATH=src python examples/99_inventory_xstar_source_port.py \
   --out-dir xstar_python_source_port_inventory_v0400 \
   --print-summary
 ```
+
+### `100_port_xstar_atomic_database.py`
+
+Run the first complete source-port subsystem, translating XSTAR
+`readtbl.f90` and the active pointer-construction path in `setptrs.f90`.  The
+command writes a reusable compressed pointer cache and element/ion/rate-family
+summaries while retaining the large packed FITS vectors as memory-mapped data.
+
+```bash
+PYTHONPATH=src python examples/100_port_xstar_atomic_database.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --out-dir xstar_atomic_database_port_v041 \
+  --print-summary
+```

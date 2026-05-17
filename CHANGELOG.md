@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.4.1 - 2026-05-16
+
+- Translated the runtime atomic-database initialization subsystem from `readtbl.f90` and the active path of `setptrs.f90`.
+- Added memory-mapped one-based packed-vector views for POINTERS, REALS, INTEGERS, and CHARS, with full record-span validation.
+- Added source-ordered construction of `npar`, `npnxt`, `npfirst`, `npfi`, `nplin`/`nplini`, `npcon`/`npconi`/`npconi2`, `npilev`/`npilevi`, `nlevs`, and explicit element/ion/global-level maps.
+- Added runtime-relevant `dbwk2` pointer rebuild and non-mutating report operations; interactive database editing modes remain intentionally unported because normal XSTAR setup does not call them.
+- Added a fingerprinted compressed derived-pointer cache, reusable CSV/JSON/Markdown products, driver-stage registration, the `xstar-atomic-port-atdb` command, and example 100.
+- Added focused packed-FITS, pointer-invariant, cache, driver, malformed-input, CLI, and public-API tests.
+- The next source-port milestone is the complete `ucalc.f90` dispatcher and all called rate routines.
+
 ## v0.4.0 - 2026-05-16
 
 - Pivoted the primary roadmap to a systematic source-faithful Python translation

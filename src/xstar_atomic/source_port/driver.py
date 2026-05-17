@@ -43,9 +43,16 @@ SOURCE_ORDER: Sequence[XSTARStage] = (
 class UnportedXSTARRoutine(NotImplementedError):
     """Raised at the first untranslated source stage."""
 
-    def __init__(self, stage: XSTARStage, source_routines: Sequence[str]):
+    def __init__(
+        self,
+        stage: XSTARStage,
+        source_routines: Sequence[str],
+        *,
+        state: XSTARPythonState | None = None,
+    ):
         self.stage = stage
         self.source_routines = tuple(source_routines)
+        self.state = state
         message = (
             f"XSTAR Python source port has not implemented stage {stage.value!r}; "
             f"source routines: {', '.join(self.source_routines) or 'not recorded'}"
@@ -113,7 +120,9 @@ class XSTARPythonDriver:
             handler = self.handlers.get(stage)
             if handler is None:
                 raise UnportedXSTARRoutine(
-                    stage, self.source_routines.get(stage, ())
+                    stage,
+                    self.source_routines.get(stage, ()),
+                    state=result,
                 )
             handler(result)
             result.provenance.setdefault("completed_stages", []).append(stage.value)

@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -299,4 +299,44 @@ from .source_port import (
     build_source_inventory,
     write_source_inventory,
     default_port_ledger,
+    AtomicDatabaseError,
+    PackedRecordHeader,
+    XSTARMasterData,
+    XSTARDerivedPointers,
+    DBWK2Instruction,
+    readtbl,
+    setptrs,
+    dbwk2,
+    load_atomic_database_state,
+    register_atomic_database_stages,
+    save_derived_pointer_cache,
+    load_derived_pointer_cache,
+    write_atomic_database_products,
 )
+
+__all__.extend([
+    "FortranArray",
+    "FortranRuntimeError",
+    "XSTARPythonState",
+    "XSTARStage",
+    "XSTARPythonDriver",
+    "UnportedXSTARRoutine",
+    "UCalcDispatcher",
+    "default_ucalc_dispatcher",
+    "build_source_inventory",
+    "write_source_inventory",
+    "default_port_ledger",
+    "AtomicDatabaseError",
+    "PackedRecordHeader",
+    "XSTARMasterData",
+    "XSTARDerivedPointers",
+    "DBWK2Instruction",
+    "readtbl",
+    "setptrs",
+    "dbwk2",
+    "load_atomic_database_state",
+    "register_atomic_database_stages",
+    "save_derived_pointer_cache",
+    "load_derived_pointer_cache",
+    "write_atomic_database_products",
+])

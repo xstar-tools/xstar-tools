@@ -13,6 +13,27 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.1 atomic-database subsystem
+
+The translated Python driver now completes the first three XSTAR stages:
+
+```text
+setup -> read_atomic_database -> build_pointers
+```
+
+Run the source-faithful `readtbl -> setptrs` port with:
+
+```bash
+PYTHONPATH=src python examples/100_port_xstar_atomic_database.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --out-dir xstar_atomic_database_port_v041 \
+  --print-summary
+```
+
+This creates a reusable fingerprinted pointer cache and summaries of elements,
+ions, levels, lines, continua, and rate families.  The packed FITS vectors stay
+memory mapped, so the production database is not duplicated in memory.
+
 Generate the source inventory from the supplied XSTAR tarball with:
 
 ```bash
