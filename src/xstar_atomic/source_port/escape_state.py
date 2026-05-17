@@ -53,6 +53,15 @@ class EscapeStateBuildResult:
     n_out_of_range_rrc_indices: int
     line_file: Path
     rrc_file: Path
+    detail_policy: str = "strict_selected_zone"
+    n_line_hdus_scanned: int = 1
+    n_rrc_hdus_scanned: int = 1
+    n_line_indices_carried_forward: int = 0
+    n_rrc_indices_carried_forward: int = 0
+    n_line_indices_zero_filled: int = 0
+    n_rrc_indices_zero_filled: int = 0
+    exact_live_arrays: bool = True
+    source_writer_threshold_reconstruction: bool = False
 
     @property
     def complete(self) -> bool:
@@ -81,6 +90,15 @@ class EscapeStateBuildResult:
             "n_out_of_range_rrc_indices": self.n_out_of_range_rrc_indices,
             "line_file": str(self.line_file),
             "rrc_file": str(self.rrc_file),
+            "detail_policy": self.detail_policy,
+            "n_line_hdus_scanned": self.n_line_hdus_scanned,
+            "n_rrc_hdus_scanned": self.n_rrc_hdus_scanned,
+            "n_line_indices_carried_forward": self.n_line_indices_carried_forward,
+            "n_rrc_indices_carried_forward": self.n_rrc_indices_carried_forward,
+            "n_line_indices_zero_filled": self.n_line_indices_zero_filled,
+            "n_rrc_indices_zero_filled": self.n_rrc_indices_zero_filled,
+            "exact_live_arrays": self.exact_live_arrays,
+            "source_writer_threshold_reconstruction": self.source_writer_threshold_reconstruction,
             "complete": self.complete,
             "source_routines": ["fstepr2.f90", "fstepr3.f90", "calc_hmc_ion.f90"],
         }
@@ -110,6 +128,48 @@ def _select_hdu(hdus: Sequence[Mapping[str, Any]], selector: str | int) -> Mappi
         f"zone/HDU selector {requested} is outside the available range "
         f"(radial zones 1..{len(hdus)})"
     )
+
+
+def _selected_prefix(hdus: Sequence[Mapping[str, Any]], selected: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    """Return all radial HDUs through the selected zone, in source order."""
+    for pos, hdu in enumerate(hdus):
+        if hdu is selected or int(hdu.get("hdu_index", -1)) == int(selected.get("hdu_index", -2)):
+            return hdus[: pos + 1]
+    return (selected,)
+
+
+def _map_hdu_history(
+    hdus: Sequence[Mapping[str, Any]], *, size: int, index_keys: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray, int, int, int, int, int]:
+    """Carry sparse detail rows forward through radial zones."""
+    tau_in = np.full(int(size), np.nan, dtype=float)
+    tau_out = np.full(int(size), np.nan, dtype=float)
+    duplicates = out_of_range = accepted = 0
+    previous_seen: set[int] = set()
+    selected_seen: set[int] = set()
+    for hpos, hdu in enumerate(hdus):
+        zone_seen: set[int] = set()
+        for row in hdu.get("rows", []):
+            idx = _index(row, *index_keys)
+            tin = _number(row, "tau_in", "depth_inward")
+            tout = _number(row, "tau_out", "depth_outward")
+            if idx is None or tin is None or tout is None:
+                continue
+            if idx < 1 or idx > size:
+                out_of_range += 1
+                continue
+            if idx in zone_seen:
+                duplicates += 1
+            zone_seen.add(idx)
+            tau_in[idx - 1] = tin
+            tau_out[idx - 1] = tout
+            accepted += 1
+        if hpos == len(hdus) - 1:
+            selected_seen = zone_seen
+        previous_seen.update(zone_seen)
+    carried = len(previous_seen - selected_seen)
+    unique = int(np.count_nonzero(np.isfinite(tau_in) & np.isfinite(tau_out)))
+    return tau_in, tau_out, unique, duplicates, out_of_range, carried, accepted
 
 
 def _number(row: Mapping[str, Any], *keys: str) -> float | None:
@@ -170,6 +230,7 @@ def load_escape_state_from_xstar_run(
     *,
     zone: str | int = "last",
     allow_missing_as_zero: bool = False,
+    detail_policy: str = "strict_selected_zone",
 ) -> EscapeStateBuildResult:
     """Build line and RRC escape arrays from an XSTAR run directory.
 
@@ -183,8 +244,13 @@ def load_escape_state_from_xstar_run(
     zone:
         ``first``, ``last``, a FITS HDU index, or a 1-based radial-zone ordinal.
     allow_missing_as_zero:
-        Forwarded to :class:`EscapeProbabilityContext`.  Keep false for strict
-        source-equivalent execution.
+        Forwarded to :class:`EscapeProbabilityContext`.
+    detail_policy:
+        ``strict_selected_zone`` maps only rows written in the selected HDU and
+        preserves absent entries as NaN. ``source_sparse_reconstruct`` scans all
+        zones through the selected one, carries the latest written value forward,
+        and fills never-written entries with zero because ``fstepr2/fstepr3`` omit
+        rows below their source output thresholds.
     """
     root = Path(run_dir)
     line_file = root / "xo01_detal2.fits"
@@ -197,24 +263,51 @@ def load_escape_state_from_xstar_run(
               "or use --assume-optically-thin only for a controlled optically thin test."
         )
 
-    line_hdu = _select_hdu(read_fits_table_hdus(line_file, "XSTAR_RADIAL"), zone)
-    rrc_hdu = _select_hdu(read_fits_table_hdus(rrc_file, "XSTAR_RADIAL"), zone)
+    line_hdus = read_fits_table_hdus(line_file, "XSTAR_RADIAL")
+    rrc_hdus = read_fits_table_hdus(rrc_file, "XSTAR_RADIAL")
+    line_hdu = _select_hdu(line_hdus, zone)
+    rrc_hdu = _select_hdu(rrc_hdus, zone)
     line_rows = list(line_hdu.get("rows", []))
     rrc_rows = list(rrc_hdu.get("rows", []))
+    policy = str(detail_policy).strip().lower()
+    if policy not in {"strict_selected_zone", "source_sparse_reconstruct"}:
+        raise EscapeStateError("detail_policy must be strict_selected_zone or source_sparse_reconstruct")
+    if policy == "strict_selected_zone":
+        line_in, line_out, _n, dup_line, oor_line = _map_rows(
+            line_rows, size=int(derived.nlsvn), index_keys=("index", "line_index"),
+        )
+        rrc_in, rrc_out, _n2, dup_rrc, oor_rrc = _map_rows(
+            rrc_rows, size=int(derived.ncsvn), index_keys=("rrc_index", "index", "continuum_index"),
+        )
+        line_loaded, rrc_loaded = int(_n), int(_n2)
+        line_unresolved = int(derived.nlsvn) - line_loaded
+        rrc_unresolved = int(derived.ncsvn) - rrc_loaded
+        line_scan = rrc_scan = 1
+        line_carried = rrc_carried = 0
+        line_zero = rrc_zero = 0
+        exact = True
+        reconstructed = False
+    else:
+        line_prefix = _selected_prefix(line_hdus, line_hdu)
+        rrc_prefix = _selected_prefix(rrc_hdus, rrc_hdu)
+        line_in, line_out, _n, dup_line, oor_line, line_carried, _ = _map_hdu_history(
+            line_prefix, size=int(derived.nlsvn), index_keys=("index", "line_index"),
+        )
+        rrc_in, rrc_out, _n2, dup_rrc, oor_rrc, rrc_carried, _ = _map_hdu_history(
+            rrc_prefix, size=int(derived.ncsvn), index_keys=("rrc_index", "index", "continuum_index"),
+        )
+        line_loaded, rrc_loaded = int(_n), int(_n2)
+        line_unresolved = rrc_unresolved = 0
+        line_scan, rrc_scan = len(line_prefix), len(rrc_prefix)
+        line_missing_mask = ~(np.isfinite(line_in) & np.isfinite(line_out))
+        rrc_missing_mask = ~(np.isfinite(rrc_in) & np.isfinite(rrc_out))
+        line_zero = int(np.count_nonzero(line_missing_mask))
+        rrc_zero = int(np.count_nonzero(rrc_missing_mask))
+        line_in[line_missing_mask] = 0.0; line_out[line_missing_mask] = 0.0
+        rrc_in[rrc_missing_mask] = 0.0; rrc_out[rrc_missing_mask] = 0.0
+        exact = False
+        reconstructed = True
 
-    line_in, line_out, n_line_loaded, dup_line, oor_line = _map_rows(
-        line_rows,
-        size=int(derived.nlsvn),
-        index_keys=("index", "line_index"),
-    )
-    rrc_in, rrc_out, n_rrc_loaded, dup_rrc, oor_rrc = _map_rows(
-        rrc_rows,
-        size=int(derived.ncsvn),
-        index_keys=("rrc_index", "index", "continuum_index"),
-    )
-
-    n_line_unique = int(np.count_nonzero(np.isfinite(line_in) & np.isfinite(line_out)))
-    n_rrc_unique = int(np.count_nonzero(np.isfinite(rrc_in) & np.isfinite(rrc_out)))
     context = EscapeProbabilityContext(
         line_tau_in=line_in,
         line_tau_out=line_out,
@@ -230,16 +323,25 @@ def load_escape_state_from_xstar_run(
         rrc_hdu_index=int(rrc_hdu.get("hdu_index", -1)),
         n_line_rows=len(line_rows),
         n_rrc_rows=len(rrc_rows),
-        n_line_indices_loaded=n_line_unique,
-        n_rrc_indices_loaded=n_rrc_unique,
-        n_line_indices_missing=int(derived.nlsvn) - n_line_unique,
-        n_rrc_indices_missing=int(derived.ncsvn) - n_rrc_unique,
+        n_line_indices_loaded=line_loaded,
+        n_rrc_indices_loaded=rrc_loaded,
+        n_line_indices_missing=line_unresolved,
+        n_rrc_indices_missing=rrc_unresolved,
         n_duplicate_line_indices=dup_line,
         n_duplicate_rrc_indices=dup_rrc,
         n_out_of_range_line_indices=oor_line,
         n_out_of_range_rrc_indices=oor_rrc,
         line_file=line_file,
         rrc_file=rrc_file,
+        detail_policy=policy,
+        n_line_hdus_scanned=line_scan,
+        n_rrc_hdus_scanned=rrc_scan,
+        n_line_indices_carried_forward=line_carried,
+        n_rrc_indices_carried_forward=rrc_carried,
+        n_line_indices_zero_filled=line_zero,
+        n_rrc_indices_zero_filled=rrc_zero,
+        exact_live_arrays=exact,
+        source_writer_threshold_reconstruction=reconstructed,
     )
 
 
@@ -272,6 +374,9 @@ def write_escape_state_summary(result: EscapeStateBuildResult, out_dir: str | Pa
         "",
         f"- Run directory: `{payload['run_dir']}`",
         f"- Zone selector: `{payload['zone_selector']}`",
+        f"- Detail policy: `{payload['detail_policy']}`",
+        f"- Exact live arrays: `{payload['exact_live_arrays']}`",
+        f"- Source-writer threshold reconstruction: `{payload['source_writer_threshold_reconstruction']}`",
         f"- Line HDU index: `{payload['line_hdu_index']}`",
         f"- RRC HDU index: `{payload['rrc_hdu_index']}`",
         f"- Loaded line indices: `{payload['n_line_indices_loaded']}` / "

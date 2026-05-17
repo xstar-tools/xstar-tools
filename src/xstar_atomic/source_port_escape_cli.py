@@ -26,6 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-npz", required=True)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--allow-missing-as-zero", action="store_true")
+    parser.add_argument(
+        "--detail-policy", choices=("source_sparse_reconstruct", "strict_selected_zone"),
+        default="source_sparse_reconstruct",
+    )
     parser.add_argument("--print-summary", action="store_true")
     return parser
 
@@ -39,16 +43,20 @@ def main(argv: list[str] | None = None) -> int:
             built.derived,
             zone=args.zone,
             allow_missing_as_zero=args.allow_missing_as_zero,
+            detail_policy=args.detail_policy,
         )
         npz = write_escape_state_npz(result, args.out_npz)
         reports = write_escape_state_summary(result, args.out_dir)
         if args.print_summary:
             print("XSTAR source-faithful line/RRC escape-state builder")
             print("----------------------------------------------------")
-            print("port_version=v0.4.4")
+            print("port_version=v0.4.5")
             print("status=escape_state_built")
             print(f"xstar_run_dir={result.run_dir}")
             print(f"zone_selector={result.zone_selector}")
+            print(f"detail_policy={result.detail_policy}")
+            print(f"exact_live_arrays={result.exact_live_arrays}")
+            print(f"source_writer_threshold_reconstruction={result.source_writer_threshold_reconstruction}")
             print(f"line_hdu_index={result.line_hdu_index}")
             print(f"rrc_hdu_index={result.rrc_hdu_index}")
             print(f"n_line_indices_loaded={result.n_line_indices_loaded}")

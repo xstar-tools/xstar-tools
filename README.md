@@ -430,3 +430,22 @@ xstar-atomic-port-escape \
 The builder uses `xo01_detal2.fits` for line depths and `xo01_detal3.fits` for
 RRC depths. It does not use the continuum-grid `xo01_detal4.fits` as an RRC
 optical-depth substitute.
+
+
+### Full oxygen runtime-context correction (v0.4.5)
+
+The production element command now decodes type-50 A values, collision metadata, type-53 cross sections, and type-99 thresholds directly from the packed ATDB/runtime level state. When `--xstar-run-dir` is used, sparse `detal2/detal3` rows are reconstructed through zone history by default:
+
+```bash
+PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
+  --atdb /path/to/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --temperature-k 1e6 --hydrogen-density-cm3 1e8 --electron-fraction-xee 1 \
+  --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
+  --xstar-run-dir /path/to/xstar_run --escape-zone last \
+  --escape-detail-policy source_sparse_reconstruct \
+  --out-dir xstar_o_element_equilibrium_v045 --print-summary
+```
+
+Use `--escape-detail-policy strict_selected_zone` when only rows explicitly present in the selected radial HDU may be accepted.

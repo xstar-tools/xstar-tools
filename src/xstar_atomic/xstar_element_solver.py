@@ -2469,6 +2469,8 @@ def _xstar_calt99_superlevel_bound_free(
         "type99_cross_section_energy_ry_max": max(e_ry) if e_ry else None,
         "type99_cross_section_scaled_mb_min": min(xs_mb_scaled) if xs_mb_scaled else None,
         "type99_cross_section_scaled_mb_max": max(xs_mb_scaled) if xs_mb_scaled else None,
+        "type99_cross_section_energy_ryd": list(e_ry),
+        "type99_cross_section_scaled_cm2": list(sigma_cm2_scaled),
         "type99_note": ";".join(notes),
     })
 

@@ -104,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for saving escape arrays derived from --xstar-run-dir",
     )
     parser.add_argument(
+        "--escape-detail-policy",
+        choices=("source_sparse_reconstruct", "strict_selected_zone"),
+        default="source_sparse_reconstruct",
+        help="Reconstruct sparse detail history (default) or require rows in the selected zone only",
+    )
+    parser.add_argument(
         "--assume-optically-thin",
         action="store_true",
         help="Use zero optical depth when an escape array is not supplied",
@@ -136,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                     built.derived,
                     zone=args.escape_zone,
                     allow_missing_as_zero=args.assume_optically_thin,
+                    detail_policy=args.escape_detail_policy,
                 )
                 escape = escape_build.context
                 if args.write_derived_escape_npz:
@@ -175,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.4")
+            print("port_version=v0.4.5")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")
@@ -187,6 +194,13 @@ def main(argv: list[str] | None = None) -> int:
             if escape_build is not None:
                 print("escape_state_source=xstar_run_detail_files")
                 print(f"escape_state_zone_selector={escape_build.zone_selector}")
+                print(f"escape_state_detail_policy={escape_build.detail_policy}")
+                print(f"escape_state_exact_live_arrays={escape_build.exact_live_arrays}")
+                print(f"escape_state_source_writer_threshold_reconstruction={escape_build.source_writer_threshold_reconstruction}")
+                print(f"n_escape_line_indices_carried_forward={escape_build.n_line_indices_carried_forward}")
+                print(f"n_escape_rrc_indices_carried_forward={escape_build.n_rrc_indices_carried_forward}")
+                print(f"n_escape_line_indices_zero_filled={escape_build.n_line_indices_zero_filled}")
+                print(f"n_escape_rrc_indices_zero_filled={escape_build.n_rrc_indices_zero_filled}")
                 print(f"n_escape_line_indices_loaded={escape_build.n_line_indices_loaded}")
                 print(f"n_escape_line_indices_missing={escape_build.n_line_indices_missing}")
                 print(f"n_escape_rrc_indices_loaded={escape_build.n_rrc_indices_loaded}")

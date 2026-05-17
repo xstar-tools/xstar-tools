@@ -783,6 +783,7 @@ def assemble_element_matrix(
                         master=master,
                         extras={
                             "element_z": element_z,
+                            "element_symbol": __import__("xstar_atomic.hierarchy", fromlist=["Z_TO_SYMBOL"]).Z_TO_SYMBOL.get(element_z, str(element_z)),
                             "ion_stage": block.ion_stage,
                             "ion_charge": block.ion_stage - 1,
                             "ion_record": block.ion_record,

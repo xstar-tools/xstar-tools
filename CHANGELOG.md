@@ -1,5 +1,20 @@
 # CHANGELOG
 
+# v0.4.5 - 2026-05-17
+
+
+v0.4.5 fixes the implementation blockers exposed by the first production 607-row O III--O VIII assembly. The compact basis and matrix topology were already correct; 4,124 records were blocked by record/context adapters rather than by the statistical-equilibrium solver.
+
+- Corrects the type-50 packed REALS layout: wavelength is `rdat(1)` and the Einstein A value is `rdat(3)`. The oscillator strength is reconstructed from A, wavelength, and endpoint statistical weights using the exact `ucalc.f90` formula. When line pumping is active, `bremsa(nb1)` is selected directly from the live radiation grid.
+- Supplies the complete element/ion/label/source-format schema required by the validated type-56/63/67/68/69/98 collision evaluators.
+- Decodes type-53 cross-section pairs, threshold, current continuum statistical weight, and excited-parent destination context directly from the packed record and the element level tables. Predecoded diagnostic rows are no longer required by the production element path.
+- Derives type-99 thresholds and statistical weights from the same level/parent context, evaluates `calt99`, and adds a live-grid translation of `find53/phint53hunt`, including adaptive grid refinement and source heating/cooling channel ordering.
+- Adds sparse radial-detail reconstruction. `source_sparse_reconstruct` scans every `XSTAR_RADIAL` HDU through the selected zone, carries the most recent written optical depth forward, and assigns zero only to indices never written because `fstepr2/fstepr3` suppress rows below their source output thresholds. Reports distinguish exact live arrays from threshold-bounded reconstruction. `strict_selected_zone` preserves the previous NaN/blocking behavior.
+- Adds `--escape-detail-policy` to the element CLI and `--detail-policy` to the escape-state CLI. The command-line default for XSTAR run directories is `source_sparse_reconstruct`; the Python API retains `strict_selected_zone` as its backward-compatible default.
+- Adds focused runtime-context tests for type 50, collisions, direct packed type 53, live type 99, and sparse optical-depth history.
+
+No empirical type-53 scale, fitted source term, or probe matrix coefficient is introduced. A production rerun is still required before claiming that all 7,360 oxygen records assemble and that the 607-row solve converges.
+
 # v0.4.4 - 2026-05-17
 
 - Fixes the element-equilibrium CLI example that referenced a non-existent placeholder `xstar_o7_escape_state.npz`. Missing NPZ paths now fail with an actionable message instead of a raw Python traceback.

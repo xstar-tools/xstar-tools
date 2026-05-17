@@ -1158,8 +1158,9 @@ PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
   --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
   --xstar-run-dir /path/to/xstar_run \
   --escape-zone last \
+  --escape-detail-policy source_sparse_reconstruct \
   --write-derived-escape-npz xstar_o7_escape_state.npz \
-  --out-dir xstar_o_element_equilibrium_v044 \
+  --out-dir xstar_o_element_equilibrium_v045 \
   --print-summary
 ```
 
@@ -1185,5 +1186,4 @@ PYTHONPATH=src python examples/103_build_xstar_escape_state.py \
   --print-summary
 ```
 
-Missing indices remain unavailable in strict mode. Use
-`--allow-missing-as-zero` only when zero optical depth is physically intended.
+The default command-line policy reconstructs sparse detail history through the selected zone and zero-fills indices never emitted because they remained below the XSTAR writer thresholds. Use `--detail-policy strict_selected_zone` to preserve absent rows as unavailable, or `--allow-missing-as-zero` only when zero optical depth is independently intended.

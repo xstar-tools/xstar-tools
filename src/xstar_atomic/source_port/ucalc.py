@@ -143,6 +143,105 @@ def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: 
     return {"ans1":sumr,"ans2":ne*sumi,"ans3":sumh,"ans4":ne*sumc,"ans5":sumh2,"ans6":ne*sumc2,"opakab":opakab,"nb1":nb,"nphint":nph}
 
 
+def _find53_cross_section(energy_ryd: np.ndarray, sigma_cm2: np.ndarray, efnd_ryd: float) -> float:
+    """Translate ``find53.f90`` interpolation/extrapolation."""
+    if energy_ryd.size < 2 or efnd_ryd < 0.0 or efnd_ryd > float(energy_ryd[-1]):
+        return 0.0
+    j = int(np.searchsorted(energy_ryd, efnd_ryd, side="right") - 1)
+    j = max(0, min(j, energy_ryd.size - 2))
+    e0, e1 = float(energy_ryd[j]), float(energy_ryd[j + 1])
+    s0, s1 = max(float(sigma_cm2[j]), 0.0), max(float(sigma_cm2[j + 1]), 0.0)
+    if j + 1 == energy_ryd.size - 1 and e0 > 0.0 and e1 > 0.0 and efnd_ryd > 0.0:
+        slope = math.log(max(s1, 1.0e-26) / max(s0, 1.0e-26)) / math.log(max(e1, 1.0e-26) / max(e0, 1.0e-26))
+        return max(0.0, s0 * (efnd_ryd / e0) ** slope)
+    if e1 == e0:
+        return max(s0, 0.0)
+    f = (efnd_ryd - e0) / (e1 - e0)
+    return max(0.0, s0 + f * (s1 - s0))
+
+
+def _phint53hunt_exact(
+    *, energy_above_threshold_ryd: Sequence[float], cross_section_cm2: Sequence[float],
+    threshold_ev: float, context: "UCalcContext", swrat: float, crit: float = 0.01,
+) -> dict[str, float | int | str]:
+    """Translate ``phint53hunt.f90`` for the type-99 live-grid branch."""
+    egrid = np.asarray(energy_above_threshold_ryd, dtype=float)
+    sigma = np.asarray(cross_section_cm2, dtype=float)
+    if egrid.size < 2 or egrid.size != sigma.size:
+        return {"status": "not_evaluated_bad_cross_section_grid"}
+    epi, bremsa, _ = _radiation_arrays(context.radiation)
+    n = epi.size
+    numcon3 = n - max(2, n // 50)
+    nb = _nbinc(threshold_ev, epi)
+    if nb >= numcon3:
+        return {"status": "not_evaluated_threshold_above_guard_tail"}
+    emax = threshold_ev + float(egrid[-1]) * 13.605692
+    nph = min(_nbinc(emax, epi), numcon3 - 1)
+    span = max(nph - nb, 1)
+    power = max(0, int(math.log(max(float(span), 1.0), 2.0) + 0.5))
+    ndelt = 2 ** power
+    while ndelt > 2 and (nb + ndelt >= numcon3 or (epi[min(nb + ndelt, n - 1)] - threshold_ev) / 13.605692 > egrid[-1]):
+        ndelt //= 2
+    nph = min(nb + max(ndelt, 1), numcon3 - 1)
+    t = context.t
+    bktm = XSTAR_KT_EV_PER_1E4K * t
+    rnist = 5.216e-21 * float(swrat) / max(t * math.sqrt(max(t, 0.0)), 1.0e-48)
+    previous = None
+    nskip = max(nph - nb, 1)
+    npass = 0
+    sums = (0.0,) * 6
+    while nskip > 1 or previous is None:
+        npass += 1
+        nskip = max(1, nskip // 2)
+        sumr = sumh = sumi = sumc = sumh2 = sumc2 = 0.0
+        tempr = tempi = atmp2 = atmp22 = 0.0
+        ener = float(epi[nb])
+        indices = list(range(max(0, nb - 1), nph + 1, nskip))
+        if indices[-1] != nph:
+            indices.append(nph)
+        for k in indices:
+            enero = ener
+            ener = float(epi[k])
+            bremtmp = float(bremsa[k]) / 25.3
+            tempio, atmp2o, atmp22o = tempi, atmp2, atmp22
+            sgtmp = 0.0
+            if ener >= threshold_ev:
+                efnd = (ener - threshold_ev) / 13.605692
+                sgtmp = _find53_cross_section(egrid, sigma, efnd)
+                exptmp = _expo(-(ener - threshold_ev) / max(bktm, 1.0e-48))
+                bbnurj = min(2.0e4, ener) ** 3
+                tempi1 = rnist * bbnurj * sgtmp * exptmp * 1.571e22 / max(ener, 1.0e-48)
+                tempi2 = rnist * bremtmp * sgtmp * exptmp / max(ener, 1.0e-48)
+                tempi = tempi1 + tempi2
+                atmp2 = tempi * ener
+                atmp22 = tempi * (ener - threshold_ev)
+            tempro = tempr
+            tempr = 25.3 * sgtmp * bremtmp / max(ener, 1.0e-48)
+            de = ener - enero
+            sumr += (tempr + tempro) * de / 2.0
+            sumh += (tempr * ener + tempro * enero) * de / 2.0
+            sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * de / 2.0
+            sumi += (tempi + tempio) * de / 2.0
+            sumc += (atmp2 + atmp2o) * de / 2.0
+            sumc2 += (atmp22 + atmp22o) * de / 2.0
+        sums = (sumr, sumi, sumh, sumc, sumh2, sumc2)
+        if previous is not None:
+            tests = [abs((a-b)/(a+b+1.0e-24)) for a,b in zip(previous[:4], sums[:4])]
+            if max(tests) <= crit and sumi > 1.0e-24:
+                break
+        previous = sums
+        if nskip <= 1:
+            break
+    sumr, sumi, sumh, sumc, sumh2, sumc2 = sums
+    ne = context.electron_density_cm3
+    return {
+        "status": "evaluated_phint53hunt_live_grid", "pirt": sumr, "rrrt": ne * sumi,
+        "piht": sumh * ERG_PER_EV, "rrcl": ne * sumc * ERG_PER_EV,
+        "piht2": sumh2 * ERG_PER_EV, "rrcl2": ne * sumc2 * ERG_PER_EV,
+        "npass": npass, "nb1_zero_based": nb, "nphint_zero_based": nph,
+    }
+
+
 def _photo_result_swapped(dispatch: "SourceFaithfulUCalc", r: "UCalcRecord", c: "UCalcContext", s: "UCalcBranchSpec", *, sigma: Sequence[float], threshold: float, swrat: float, id1: int, id2: int, zero_reverse: bool = False) -> "UCalcResult":
     ph=_phintfo_exact(sigma_cm2=sigma,threshold_ev=threshold,context=c,swrat=swrat)
     a1,a2=ph["ans1"],ph["ans2"]; a3,a4=-ph["ans4"],-ph["ans3"]; a5,a6=-ph["ans6"],-ph["ans5"]
@@ -1349,23 +1448,53 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*threshold*ERG_PER_EV,ans6=ans1*threshold*ERG_PER_EV,idest1=id1,idest2=id2,diagnostics={"upsilon":ups,"threshold_eV":threshold},context_fields_used=("temperature_k","xpx","xee","levels"))
 
     def _eval_type50(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
+        """Translate the complete type-50 ``ucalc`` record decode and rate.
+
+        XSTAR stores wavelength at ``rdat(1)`` and A at ``rdat(3)``.  The
+        oscillator strength is reconstructed from A and the endpoint
+        statistical weights exactly as in label 50 of ``ucalc.f90``.
+        """
         from xstar_atomic.rates_type50 import evaluate_type50_ucalc_record
         decoded = dict(c.extras.get("decoded_type50", {}))
+        i = r.integers
+        id1, id2 = (int(i[0]), int(i[1])) if len(i) >= 2 else (0, 0)
         if not decoded:
-            decoded = {"A_s^-1": r.reals[3] if len(r.reals) > 3 else None,
-                       "oscillator_strength": r.reals[1] if len(r.reals) > 1 else None,
-                       "wavelength_A": abs(r.reals[0]) if r.reals else None}
+            wavelength = abs(float(r.reals[0])) if r.reals else None
+            aij = float(r.reals[2]) if len(r.reals) > 2 else None
+            flin = None
+            if wavelength and aij is not None and id1 > 0 and id2 > 0:
+                ggup = c.levels.weight(id1)
+                gglo = c.levels.weight(id2)
+                if ggup > 0.0 and gglo > 0.0:
+                    flin = 1.0e-16 * aij * ggup * wavelength * wavelength / (0.667274 * gglo)
+            decoded = {
+                "A_s^-1": aij,
+                "f_osc_from_A": flin,
+                "wavelength_A": wavelength,
+            }
         bremsa = c.extras.get("bremsa_nb1")
-        ev = evaluate_type50_ucalc_record(decoded, ptmp1=c.ptmp1, ptmp2=c.ptmp2,
-                                           cfrac=c.covering_fraction, bremsa_nb1=bremsa,
-                                           hydrogen_density_cm3=c.hydrogen_density_cm3)
+        # Source label 50 samples bremsa at the line energy.  This context is
+        # unnecessary for cfrac=1, but derive it directly when pumping is live.
+        if bremsa is None and c.radiation is not None and c.covering_fraction < 1.0:
+            try:
+                epi, brem, _ = _radiation_arrays(c.radiation)
+                wavelength = float(decoded.get("wavelength_A") or 0.0)
+                if wavelength > 0.0:
+                    bremsa = float(brem[_nbinc(12398.54 / wavelength, epi)])
+            except Exception:
+                bremsa = None
+        ev = evaluate_type50_ucalc_record(
+            decoded, ptmp1=c.ptmp1, ptmp2=c.ptmp2,
+            cfrac=c.covering_fraction, bremsa_nb1=bremsa,
+            hydrogen_density_cm3=c.hydrogen_density_cm3,
+        )
         if ev.get("status") != "evaluated":
             return self._base_result(r, s, UCalcStatus.CONTEXT_BLOCKED, reason=str(ev.get("reason")), diagnostics=ev)
-        i = r.integers
-        id1, id2 = (i[0], i[1]) if len(i) >= 2 else (0, 0)
-        return self._ctx_result(r, s, ans1=float(ev["ans1_photoexcitation_s^-1"]),
-                                ans2=float(ev["ans2_escaped_decay_s^-1"]), idest1=id1, idest2=id2,
-                                diagnostics=ev, context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx"))
+        return self._ctx_result(
+            r, s, ans1=float(ev["ans1_photoexcitation_s^-1"]),
+            ans2=float(ev["ans2_escaped_decay_s^-1"]), idest1=id1, idest2=id2,
+            diagnostics=ev, context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels"),
+        )
 
     def _collision_row(self, r: UCalcRecord, c: UCalcContext) -> tuple[dict, list[dict]]:
         # Build the stable row schema used by the already validated collision kernels.
@@ -1381,9 +1510,24 @@ class SourceFaithfulUCalc:
         ea, eb = levels.energy(a), levels.energy(b)
         lower, upper = (a, b) if ea <= eb else (b, a)
         delta = abs(levels.energy(upper)-levels.energy(lower))
+        from xstar_atomic.hierarchy import Z_TO_SYMBOL, roman
+        element_z = int(c.extras.get("element_z", 0) or 0)
+        ion_stage = int(c.extras.get("ion_stage", 0) or 0)
+        element = str(c.extras.get("element_symbol") or Z_TO_SYMBOL.get(element_z, str(element_z) if element_z else ""))
+        formats = {
+            51: "BT_CHIANTI_pre2016_type51", 56: "tabulated_upsilon_type56",
+            63: "bautista_nl_algorithm_type63", 67: "helike_keenan_mccann_kingston_type67",
+            68: "helike_zhang_sampson_type68", 69: "helike_kato_nakazaki_type69",
+            98: "BT_CHIANTI2016_type98",
+        }
         row: Dict[str, Any] = {
-            "record": r.record, "data_type": dt, "rate_type": r.rate_type,
+            "record": r.record, "element": element, "ion_stage": ion_stage,
+            "ion_roman": roman(ion_stage) if ion_stage > 0 else "",
+            "data_type": dt, "rate_type": r.rate_type,
+            "source_format": formats.get(dt, f"data_type_{dt}"),
             "lower_level": lower, "upper_level": upper,
+            "lower_label": (levels.get(lower).label if levels.get(lower) else ""),
+            "upper_label": (levels.get(upper).label if levels.get(upper) else ""),
             "g_lower": levels.weight(lower), "g_upper": levels.weight(upper),
             "delta_e_level_eV": delta,
             "wavelength_from_levels_A": 12398.4016/delta if delta > 0 else None,
@@ -1445,20 +1589,54 @@ class SourceFaithfulUCalc:
 
     def _eval_type53(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.rates_type53 import evaluate_type53_ucalc_record
-        decoded=c.extras.get("decoded_type53_by_record",{}).get(r.record) or c.extras.get("decoded_type53")
+        decoded = c.extras.get("decoded_type53_by_record", {}).get(r.record) or c.extras.get("decoded_type53")
+        i = r.integers
+        id1 = int(i[-2]) if len(i) >= 2 else 0
+        off = int(i[-3]) if len(i) >= 3 else 1
+        id2 = max(c.nlevp + off - 1, c.nlevp)
+        if decoded is None and c.radiation is not None and id1 > 0:
+            try:
+                bound = c.levels.require(id1)
+                continuum = c.levels.require(c.nlevp)
+                parent_excitation, destination_g = self._parent_destination_context(c, id2)
+                # For excited parents the map stores excitation above the
+                # parent ground; the physical destination energy includes the
+                # current-ion continuum energy.
+                destination_energy = continuum.energy_ev + (parent_excitation if id2 > c.nlevp else 0.0)
+                threshold = self._level_threshold(c, id1) + (parent_excitation if id2 > c.nlevp else 0.0)
+                n_pairs = len(r.reals) // 2
+                decoded = {
+                    "record": r.record,
+                    "energy_above_threshold_ryd": [float(r.reals[2*k]) for k in range(n_pairs)],
+                    "cross_section_cm2": [max(0.0, float(r.reals[2*k+1])) * 1.0e-18 for k in range(n_pairs)],
+                    "threshold_eV": threshold,
+                    "bound_statistical_weight": bound.statistical_weight,
+                    "continuum_statistical_weight": continuum.statistical_weight,
+                    "destination_statistical_weight": destination_g or continuum.statistical_weight,
+                    "continuum_energy_eV": continuum.energy_ev,
+                    "bound_energy_eV": bound.energy_ev,
+                    "destination_energy_eV": destination_energy,
+                    "packed_parent_offset": off,
+                    "decode_source": "packed_type53_record_plus_element_level_context",
+                }
+            except (KeyError, ValueError, IndexError) as exc:
+                return self._context_blocked(r, s, f"type53_decode:{exc}")
         if decoded is None or c.radiation is None:
-            return self._base_result(r,s,UCalcStatus.CONTEXT_BLOCKED,reason="type53 requires decoded cross-section/level context and live epim/bremsam/bremsint")
-        ev=evaluate_type53_ucalc_record(decoded,c.radiation,temperature_k=c.temperature_k,
-                                         xpx_cm3=c.hydrogen_density_cm3,electron_fraction_xee=c.electron_fraction_xee,
-                                         ptmp1=c.ptmp1,ptmp2=c.ptmp2,lfast=c.lfast,abund1=c.abund1,abund2=c.abund2)
+            return self._context_blocked(r, s, "type53 requires packed cross-section/level context and live epim/bremsam/bremsint")
+        ev = evaluate_type53_ucalc_record(
+            decoded, self._live_type53_state(c), temperature_k=c.temperature_k,
+            xpx_cm3=c.hydrogen_density_cm3, electron_fraction_xee=c.electron_fraction_xee,
+            ptmp1=c.ptmp1, ptmp2=c.ptmp2, lfast=c.lfast, abund1=c.abund1, abund2=c.abund2,
+        )
         if ev.get("status") != "evaluated":
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("status")),diagnostics=ev)
-        i=r.integers; id1=i[-2] if len(i)>=2 else 0; off=i[-3] if len(i)>=3 else 1; id2=max(c.nlevp+off-1,c.nlevp)
-        return self._ctx_result(r,s,ans1=float(ev["ans1_photoionization_s^-1"]),ans2=float(ev["ans2_milne_recombination_s^-1"]),
-                                ans3=float(ev["ans3_cooling_signed_erg_s^-1"]),ans4=float(ev["ans4_heating_signed_erg_s^-1"]),
-                                ans5=float(ev["ans5_electron_pov_cooling_signed_erg_s^-1"]),ans6=float(ev["ans6_electron_pov_heating_signed_erg_s^-1"]),
-                                idest1=id1,idest2=id2,opakab=float(ev.get("opakab_cm^-1") or 0.0),diagnostics=ev,
-                                context_fields_used=("temperature_k","xpx","xee","ptmp1","ptmp2","radiation","levels"))
+            return self._base_result(r, s, UCalcStatus.SOURCE_REJECTED, reason=str(ev.get("status")), diagnostics=ev)
+        return self._ctx_result(
+            r, s, ans1=float(ev["ans1_photoionization_s^-1"]), ans2=float(ev["ans2_milne_recombination_s^-1"]),
+            ans3=float(ev["ans3_cooling_signed_erg_s^-1"]), ans4=float(ev["ans4_heating_signed_erg_s^-1"]),
+            ans5=float(ev["ans5_electron_pov_cooling_signed_erg_s^-1"]), ans6=float(ev["ans6_electron_pov_heating_signed_erg_s^-1"]),
+            idest1=id1, idest2=id2, opakab=float(ev.get("opakab_cm^-1") or 0.0), diagnostics=ev,
+            context_fields_used=("temperature_k", "xpx", "xee", "ptmp1", "ptmp2", "radiation", "levels"),
+        )
 
     def _eval_type54(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.collisions import anl1_py
@@ -1676,18 +1854,67 @@ class SourceFaithfulUCalc:
                                 context_fields_used=("temperature_k","xpx","xee"))
 
     def _eval_type99(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
+        """Translate ``calt99 -> phint53hunt`` with the live radiation grid."""
         from xstar_atomic.xstar_element_solver import _xstar_calt99_superlevel_bound_free
-        threshold=c.extras.get("type99_threshold_ryd_by_record",{}).get(r.record) or c.extras.get("type99_threshold_ryd")
-        ev=_xstar_calt99_superlevel_bound_free(temperature=c.temperature_k, electron_density=c.electron_density_cm3, threshold_ry=threshold,
-            bound_stat_weight=c.extras.get("type99_bound_stat_weight"), continuum_stat_weight=c.extras.get("type99_continuum_stat_weight"),
-            reals=list(r.reals), ints=list(r.integers),
-            radiation_context_rows=c.extras.get("type99_radiation_context_rows"))
-        ans1=_finite(ev.get("type99_phint53hunt_ans1_photoionization_s^-1")); ans2=_finite(ev.get("type99_phint53hunt_ans2_recombination_s^-1"))
-        if ans1 is None or ans2 is None:
-            return self._base_result(r,s,UCalcStatus.CONTEXT_BLOCKED,reason=str(ev.get("type99_calt99_status") or ev.get("type99_phint53hunt_status")),diagnostics=ev)
-        i=r.integers; id1=i[-2] if len(i)>=2 else 0; id2=max(c.nlevp+(i[-3] if len(i)>=3 else 1)-1,c.nlevp)
-        return self._ctx_result(r,s,ans1=ans1,ans2=ans2,idest1=id1,idest2=id2,diagnostics=ev,
-                                context_fields_used=("temperature_k","xpx","xee","radiation","levels"))
+        i = r.integers
+        id1 = min(int(i[-2]) if len(i) >= 2 else 1, max(c.nlevp - 1, 1))
+        off = int(i[-3]) if len(i) >= 3 else 1
+        id2 = max(c.nlevp + off - 1, c.nlevp)
+        if c.radiation is None:
+            return self._context_blocked(r, s, "type99_requires_live_radiation")
+        try:
+            bound = c.levels.require(id1)
+            continuum = c.levels.require(c.nlevp)
+        except KeyError as exc:
+            return self._context_blocked(r, s, f"type99_level_context:{exc}")
+        parent_excitation, destination_g = self._parent_destination_context(c, id2)
+        if id2 > c.nlevp:
+            threshold_ev = abs(bound.energy_ev + parent_excitation)
+            destination_energy = continuum.energy_ev + parent_excitation
+        else:
+            threshold_ev = abs(bound.energy_ev - continuum.energy_ev)
+            destination_energy = continuum.energy_ev
+        if threshold_ev <= 0.0 or bound.statistical_weight <= 0.0 or destination_g <= 0.0:
+            return self._context_blocked(r, s, "type99_missing_or_bad_threshold_or_statistical_weight")
+        threshold_ryd = threshold_ev / 13.6
+        ev = _xstar_calt99_superlevel_bound_free(
+            temperature=c.temperature_k, electron_density=c.electron_density_cm3, threshold_ry=threshold_ryd,
+            bound_stat_weight=bound.statistical_weight, continuum_stat_weight=destination_g,
+            reals=list(r.reals), ints=list(r.integers), radiation_context_rows=None,
+        )
+        rec = _finite(ev.get("type99_calt99_rec_cm3_s"))
+        e_ryd = ev.get("type99_cross_section_energy_ryd")
+        sigma = ev.get("type99_cross_section_scaled_cm2")
+        if rec is None or not e_ryd or not sigma:
+            return self._base_result(r, s, UCalcStatus.CONTEXT_BLOCKED, reason=str(ev.get("type99_calt99_status")), diagnostics=ev)
+        swrat = bound.statistical_weight / max(destination_g, 1.0e-300)
+        ph = _phint53hunt_exact(
+            energy_above_threshold_ryd=e_ryd, cross_section_cm2=sigma,
+            threshold_ev=threshold_ev, context=c, swrat=swrat, crit=0.01,
+        )
+        ans2d = _finite(ph.get("rrrt"))
+        if ans2d is None or ans2d <= 1.0e-48:
+            return self._ctx_result(r, s, idest1=id1, idest2=id2, diagnostics={**ev, **ph, "type99_scale": 0.0},
+                                    context_fields_used=("temperature_k", "xpx", "xee", "radiation", "levels"))
+        scale = rec * c.electron_density_cm3 / ans2d
+        ans1 = float(ph["pirt"]) * scale
+        ans2 = rec * c.electron_density_cm3
+        ans3 = float(ph["piht"]) * scale
+        ans4 = float(ph["rrcl"])
+        ans5_pre = float(ph["piht2"]) * scale
+        ans6_pre = float(ph["rrcl2"])
+        ans5 = -ans6_pre
+        ans6 = -ans5_pre
+        ans3, ans4 = -ans4, -ans3
+        energy_difference = destination_energy - bound.energy_ev
+        ans6 *= (abs(ans4) - energy_difference * ERG_PER_EV * ans1) / max(1.0e-43, abs(ans4) - threshold_ev * ERG_PER_EV * ans1)
+        ans5 *= (abs(ans3) - energy_difference * ERG_PER_EV * ans2) / max(1.0e-43, abs(ans3) - threshold_ev * ERG_PER_EV * ans2)
+        diagnostics = {**ev, **ph, "type99_threshold_eV_derived": threshold_ev, "type99_swrat": swrat, "type99_scale": scale}
+        return self._ctx_result(
+            r, s, ans1=ans1, ans2=ans2, ans3=ans3, ans4=ans4, ans5=ans5, ans6=ans6,
+            idest1=id1, idest2=id2, diagnostics=diagnostics,
+            context_fields_used=("temperature_k", "xpx", "xee", "radiation", "levels"),
+        )
 
 
 def default_source_faithful_ucalc() -> SourceFaithfulUCalc:

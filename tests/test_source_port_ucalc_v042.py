@@ -34,7 +34,7 @@ def _write_ucalc_atdb(path: Path) -> None:
         dict(dt=6, rt=13, reals=[0.0, 2.0, 13.6, 13.6], ints=[1, 101], chars=b"1s"),
         dict(dt=6, rt=13, reals=[10.2, 6.0, 13.6, 13.6], ints=[2, 102], chars=b"2p"),
         dict(dt=1, rt=1, reals=[2.0, 0.5], ints=[1, 1], chars=b"rr"),
-        dict(dt=50, rt=4, reals=[1215.67, 0.416, 0.0, 6.265e8, 1.0], ints=[2, 1, 1], chars=b"lya"),
+        dict(dt=50, rt=4, reals=[1215.67, 0.0, 6.265e8, 1.0], ints=[2, 1, 1], chars=b"lya"),
         dict(dt=0, rt=0, reals=[], ints=[], chars=b""),
     ]
     pointers = []
@@ -204,7 +204,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.4"
+    assert xa.__version__ == "0.4.5"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 
