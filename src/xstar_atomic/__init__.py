@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.6"
+__version__ = "0.4.7"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -123,6 +123,12 @@ from .xstar_population_closure_probe import (
     write_population_closure_probe_products,
 )
 
+from .xstar_msolvelucy_state_probe import (
+    msolvelucy_state_probe_helper,
+    msolvelucy_insertion_snippets,
+    write_msolvelucy_state_probe_products,
+)
+
 from .xstar_full_element_basis import (
     build_full_element_basis_scaffold,
     write_full_element_basis_scaffold,
@@ -131,10 +137,15 @@ from .xstar_full_element_basis import (
 from .source_port import (
     ElementEquilibriumError, ElementIonBlock, ElementBasisRow, ElementCompactBasis,
     EscapeProbabilityContext, ElementEquilibriumContext, MatrixTerm, IonAssemblySummary,
-    ElementMatrixAssembly, LucySolveResult, ElementEquilibriumResult,
+    ElementMatrixAssembly, LucyIterationTrace, LucySolveResult, ElementEquilibriumResult,
     build_level_table, build_element_compact_basis, levwk, levwkelement,
     assemble_element_matrix, msolvelucy, solve_element_statistical_equilibrium,
     register_element_equilibrium_stage, write_element_equilibrium_products,
+    PopulationParityError, XSTARPopulationReference, PopulationMetrics,
+    ElementPopulationParityResult, load_xstar_population_reference,
+    compare_element_population_parity, write_element_population_parity_products,
+    MSolveStateParityError, StateComponentMetrics, MSolveStateParityResult,
+    compare_msolvelucy_state_probe, write_msolvelucy_state_parity_products,
     EscapeStateError, EscapeStateBuildResult, load_escape_state_from_xstar_run,
     write_escape_state_npz, write_escape_state_summary,
 )
@@ -284,6 +295,9 @@ __all__ = [
     "population_closure_probe_schema_rows",
     "summarize_population_closure_probe_csv",
     "write_population_closure_probe_products",
+    "msolvelucy_state_probe_helper",
+    "msolvelucy_insertion_snippets",
+    "write_msolvelucy_state_probe_products",
 ]
 
 from .xstar_priority_matrix_closure import (
@@ -351,6 +365,7 @@ from .source_port import (
     MatrixTerm,
     IonAssemblySummary,
     ElementMatrixAssembly,
+    LucyIterationTrace,
     LucySolveResult,
     ElementEquilibriumResult,
     build_level_table,
@@ -362,6 +377,18 @@ from .source_port import (
     solve_element_statistical_equilibrium,
     register_element_equilibrium_stage,
     write_element_equilibrium_products,
+    PopulationParityError,
+    XSTARPopulationReference,
+    PopulationMetrics,
+    ElementPopulationParityResult,
+    load_xstar_population_reference,
+    compare_element_population_parity,
+    write_element_population_parity_products,
+    MSolveStateParityError,
+    StateComponentMetrics,
+    MSolveStateParityResult,
+    compare_msolvelucy_state_probe,
+    write_msolvelucy_state_parity_products,
 )
 
 __all__.extend([
@@ -427,6 +454,7 @@ __all__.extend([
     "MatrixTerm",
     "IonAssemblySummary",
     "ElementMatrixAssembly",
+    "LucyIterationTrace",
     "LucySolveResult",
     "ElementEquilibriumResult",
     "build_level_table",
@@ -438,4 +466,16 @@ __all__.extend([
     "solve_element_statistical_equilibrium",
     "register_element_equilibrium_stage",
     "write_element_equilibrium_products",
+    "PopulationParityError",
+    "XSTARPopulationReference",
+    "PopulationMetrics",
+    "ElementPopulationParityResult",
+    "load_xstar_population_reference",
+    "compare_element_population_parity",
+    "write_element_population_parity_products",
+    "MSolveStateParityError",
+    "StateComponentMetrics",
+    "MSolveStateParityResult",
+    "compare_msolvelucy_state_probe",
+    "write_msolvelucy_state_parity_products",
 ])

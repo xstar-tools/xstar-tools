@@ -115,6 +115,7 @@ from .element_equilibrium import (
     MatrixTerm,
     IonAssemblySummary,
     ElementMatrixAssembly,
+    LucyIterationTrace,
     LucySolveResult,
     ElementEquilibriumResult,
     pescl,
@@ -128,6 +129,25 @@ from .element_equilibrium import (
     solve_element_statistical_equilibrium,
     register_element_equilibrium_stage,
     write_element_equilibrium_products,
+)
+
+
+from .population_parity import (
+    PopulationParityError,
+    XSTARPopulationReference,
+    PopulationMetrics,
+    ElementPopulationParityResult,
+    load_xstar_population_reference,
+    compare_element_population_parity,
+    write_element_population_parity_products,
+)
+
+from .msolvelucy_state_parity import (
+    MSolveStateParityError,
+    StateComponentMetrics,
+    MSolveStateParityResult,
+    compare_msolvelucy_state_probe,
+    write_msolvelucy_state_parity_products,
 )
 
 from .ucalc_dispatch import (
@@ -217,6 +237,7 @@ __all__ = [
     "MatrixTerm",
     "IonAssemblySummary",
     "ElementMatrixAssembly",
+    "LucyIterationTrace",
     "LucySolveResult",
     "ElementEquilibriumResult",
     "pescl",
@@ -230,6 +251,18 @@ __all__ = [
     "solve_element_statistical_equilibrium",
     "register_element_equilibrium_stage",
     "write_element_equilibrium_products",
+    "PopulationParityError",
+    "XSTARPopulationReference",
+    "PopulationMetrics",
+    "ElementPopulationParityResult",
+    "load_xstar_population_reference",
+    "compare_element_population_parity",
+    "write_element_population_parity_products",
+    "MSolveStateParityError",
+    "StateComponentMetrics",
+    "MSolveStateParityResult",
+    "compare_msolvelucy_state_probe",
+    "write_msolvelucy_state_parity_products",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",

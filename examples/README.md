@@ -1192,3 +1192,14 @@ PYTHONPATH=src python examples/103_build_xstar_escape_state.py \
 ```
 
 The default command-line policy reconstructs sparse detail history through the selected zone and zero-fills indices never emitted because they remained below the XSTAR writer thresholds. Use `--detail-policy strict_selected_zone` to preserve absent rows as unavailable, or `--allow-missing-as-zero` only when zero optical depth is independently intended.
+
+
+### `104_prepare_xstar_msolvelucy_state_probe.py`
+
+Write a free-form Fortran helper and five source-local insertion snippets for a debug XSTAR build. The resulting CSVs can be passed to example 102 with `--xstar-msolvelucy-state-probe-dir` to compare every outer, condensed-superlevel, and fixed-point state against the XSTAR-before-seeded Python solve.
+
+```bash
+PYTHONPATH=src python examples/104_prepare_xstar_msolvelucy_state_probe.py \
+  --out-dir xstar_msolvelucy_state_probe_v047 \
+  --print-summary
+```

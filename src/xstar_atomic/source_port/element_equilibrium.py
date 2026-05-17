@@ -177,6 +177,7 @@ class ElementEquilibriumContext:
     lucy_tolerance: float = 1.0e-2
     fixed_point_tolerance: float = 1.0e-2
     allow_lstsq_fallback: bool = True
+    capture_lucy_trace: bool = False
 
     @property
     def electron_density_cm3(self) -> float:
@@ -252,6 +253,16 @@ class ElementMatrixAssembly:
 
 
 @dataclass
+class LucyIterationTrace:
+    """Long-form state captured from the translated ``msolvelucy`` loops."""
+
+    outer_level_rows: List[Dict[str, Any]] = field(default_factory=list)
+    superlevel_rows: List[Dict[str, Any]] = field(default_factory=list)
+    condensed_matrix_rows: List[Dict[str, Any]] = field(default_factory=list)
+    fixed_point_rows: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class LucySolveResult:
     """Result and diagnostics from the translated ``msolvelucy`` solver."""
 
@@ -265,7 +276,13 @@ class LucySolveResult:
     normalization: float
     normalization_error: float
     max_relative_row_residual: float
+    max_active_relative_row_residual: float
     l1_row_residual: float
+    l1_relative_row_residual: float
+    n_zero_scale_rows: int
+    row_residual: np.ndarray
+    row_scale: np.ndarray
+    relative_row_residual: np.ndarray
     solver_method: str
     condensed_rank: int
     condensed_dimension: int
@@ -287,6 +304,7 @@ class LucySolveResult:
     ionization_components: np.ndarray
     recombination_components: np.ndarray
     notes: List[str] = field(default_factory=list)
+    trace: Optional[LucyIterationTrace] = None
 
 
 @dataclass
@@ -297,6 +315,8 @@ class ElementEquilibriumResult:
     solve: Optional[LucySolveResult]
     full_element_direct_solve_ready: bool
     source_sequence_complete: bool = True
+    population_parity: Optional[Any] = None
+    msolvelucy_state_parity: Optional[Any] = None
 
 
 # ---------------------------------------------------------------------------
@@ -974,10 +994,12 @@ def msolvelucy(
     runtime_notes: List[str] = []
     condensed_rank = 0
     used_dense_fallback = False
+    trace = LucyIterationTrace() if context.capture_lucy_trace else None
 
     while outer_diff > context.lucy_tolerance and outer < context.max_lucy_iterations:
         outer += 1
         xo = x.copy()
+        outer_start = x.copy()
         p = np.zeros(nspmx, dtype=float)
         for i in range(n):
             sp = int(nsup[i]) - 1
@@ -999,6 +1021,7 @@ def msolvelucy(
                 condensed[spm, spn] += term.aj1 * rr[nn]
                 condensed[spm, spm] -= term.aj2 * rr[mm]
 
+        p_start = p.copy()
         p_new, method, condensed_rank = _solve_normalized(
             condensed,
             nspmx,
@@ -1008,6 +1031,7 @@ def msolvelucy(
         for i in range(n):
             sp = int(nsup[i]) - 1
             x[i] = rr[i] * p_new[sp]
+        x_after_condensed = x.copy()
 
         fixed_diff = 10.0
         fixed_iter = 0
@@ -1055,8 +1079,64 @@ def msolvelucy(
                 fixed_diff = float(np.sum((ratios[mask] - 1.0) ** 2))
             else:
                 fixed_diff = 0.0
+            if trace is not None:
+                for i in range(n):
+                    trace.fixed_point_rows.append(
+                        {
+                            "outer_iteration": outer,
+                            "fixed_iteration": fixed_iter,
+                            "global_fixed_iteration": total_fixed,
+                            "compact_index": i + 1,
+                            "superlevel": int(nsup[i]),
+                            "ion_counter": int(nion[i]),
+                            "population_before": float(xold[i]),
+                            "riu": float(riu[i]),
+                            "rui": float(rui[i]),
+                            "ril": float(ril[i]),
+                            "rli": float(rli[i]),
+                            "population_after": float(x[i]),
+                            "fixed_difference": float(fixed_diff),
+                        }
+                    )
             if fixed_diff >= 1.0e3:
                 break
+
+        if trace is not None:
+            for i in range(n):
+                trace.outer_level_rows.append(
+                    {
+                        "outer_iteration": outer,
+                        "compact_index": i + 1,
+                        "superlevel": int(nsup[i]),
+                        "ion_counter": int(nion[i]),
+                        "population_outer_start": float(outer_start[i]),
+                        "rr": float(rr[i]),
+                        "population_after_condensed": float(x_after_condensed[i]),
+                        "population_after_fixed_point": float(x[i]),
+                        "fixed_iterations_this_outer": fixed_iter,
+                        "fixed_difference": float(fixed_diff),
+                    }
+                )
+            for sp in range(nspmx):
+                trace.superlevel_rows.append(
+                    {
+                        "outer_iteration": outer,
+                        "superlevel": sp + 1,
+                        "population_before_condensed_solve": float(p_start[sp]),
+                        "population_after_condensed_solve": float(p_new[sp]),
+                    }
+                )
+            for spm in range(nspmx):
+                for spn in range(nspmx):
+                    trace.condensed_matrix_rows.append(
+                        {
+                            "outer_iteration": outer,
+                            "row_superlevel": spm + 1,
+                            "column_superlevel": spn + 1,
+                            "raw_matrix_value": float(condensed[spm, spn]),
+                            "normalized_matrix_value": 1.0 if spm == nspmx - 1 else float(condensed[spm, spn]),
+                        }
+                    )
 
         if used_dense_fallback:
             break
@@ -1070,11 +1150,17 @@ def msolvelucy(
 
     normalization = float(np.sum(x))
     residual = assembly.dense_matrix @ x
-    row_scale = np.maximum(
-        np.sum(np.abs(assembly.dense_matrix) * np.abs(x[np.newaxis, :]), axis=1),
-        1.0e-300,
-    )
+    raw_row_scale = np.sum(np.abs(assembly.dense_matrix) * np.abs(x[np.newaxis, :]), axis=1)
+    row_scale = np.maximum(raw_row_scale, 1.0e-300)
     relative_residual = np.abs(residual) / row_scale
+    active_residual_rows = raw_row_scale > 1.0e-12
+    max_active_relative_residual = (
+        float(np.max(relative_residual[active_residual_rows]))
+        if np.any(active_residual_rows) else 0.0
+    )
+    l1_residual = float(np.sum(np.abs(residual)))
+    l1_relative_residual = l1_residual / max(float(np.sum(raw_row_scale)), 1.0e-300)
+    n_zero_scale_rows = int(np.count_nonzero(raw_row_scale <= 1.0e-300))
 
     heating = cooling = heating2 = cooling2 = 0.0
     for term in terms:
@@ -1168,7 +1254,13 @@ def msolvelucy(
         normalization=normalization,
         normalization_error=abs(normalization - 1.0),
         max_relative_row_residual=float(np.max(relative_residual)),
-        l1_row_residual=float(np.sum(np.abs(residual))),
+        max_active_relative_row_residual=max_active_relative_residual,
+        l1_row_residual=l1_residual,
+        l1_relative_row_residual=l1_relative_residual,
+        n_zero_scale_rows=n_zero_scale_rows,
+        row_residual=residual.copy(),
+        row_scale=raw_row_scale.copy(),
+        relative_row_residual=relative_residual.copy(),
         solver_method="+".join(sorted(set(solver_methods))) or "none",
         condensed_rank=condensed_rank,
         condensed_dimension=nspmx,
@@ -1190,6 +1282,7 @@ def msolvelucy(
         ionization_components=ionization_components,
         recombination_components=recombination_components,
         notes=notes,
+        trace=trace,
     )
 
 
@@ -1297,7 +1390,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.6",
+    port_version: str = "v0.4.7",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
@@ -1352,6 +1445,43 @@ def write_element_equilibrium_products(
     populations_csv = out / "xstar_element_populations.csv"
     _write_csv(populations_csv, populations_rows, list(populations_rows[0]) if populations_rows else [])
 
+    residual_rows: List[Dict[str, Any]] = []
+    if solve is not None:
+        for i, row in enumerate(basis.rows):
+            residual_rows.append(
+                {
+                    "compact_index": i + 1,
+                    "superlevel": row.superlevel,
+                    "ion_counter": row.ion_counter,
+                    "population": float(solve.populations[i]),
+                    "absolute_row_residual": float(abs(solve.row_residual[i])),
+                    "signed_row_residual": float(solve.row_residual[i]),
+                    "row_equation_scale": float(solve.row_scale[i]),
+                    "relative_row_residual": float(solve.relative_row_residual[i]),
+                    "active_scale_gt_1e_12": bool(solve.row_scale[i] > 1.0e-12),
+                    "zero_scale_row": bool(solve.row_scale[i] <= 1.0e-300),
+                }
+            )
+    residuals_csv = out / "xstar_element_row_residuals.csv"
+    _write_csv(
+        residuals_csv,
+        residual_rows,
+        list(residual_rows[0]) if residual_rows else ["compact_index"],
+    )
+
+    trace_outputs: Dict[str, Path] = {}
+    if solve is not None and solve.trace is not None:
+        trace_specs = [
+            ("lucy_outer_trace_csv", "xstar_msolvelucy_outer_level_trace.csv", solve.trace.outer_level_rows),
+            ("lucy_superlevel_trace_csv", "xstar_msolvelucy_superlevel_trace.csv", solve.trace.superlevel_rows),
+            ("lucy_condensed_matrix_trace_csv", "xstar_msolvelucy_condensed_matrix_trace.csv", solve.trace.condensed_matrix_rows),
+            ("lucy_fixed_point_trace_csv", "xstar_msolvelucy_fixed_point_trace.csv", solve.trace.fixed_point_rows),
+        ]
+        for key, filename, rows in trace_specs:
+            path = out / filename
+            _write_csv(path, rows, list(rows[0]) if rows else ["status"])
+            trace_outputs[key] = path
+
     matrix_npz = out / "xstar_element_matrix.npz"
     np.savez_compressed(
         matrix_npz,
@@ -1371,6 +1501,9 @@ def write_element_equilibrium_products(
         recombination_totals=np.asarray([] if solve is None else solve.recombination_totals),
         ionization_components=np.asarray([] if solve is None else solve.ionization_components),
         recombination_components=np.asarray([] if solve is None else solve.recombination_components),
+        row_residual=np.asarray([] if solve is None else solve.row_residual),
+        row_scale=np.asarray([] if solve is None else solve.row_scale),
+        relative_row_residual=np.asarray([] if solve is None else solve.relative_row_residual),
         nsup=basis.nsup[1:],
         nion=basis.nion[1:],
     )
@@ -1400,17 +1533,43 @@ def write_element_equilibrium_products(
         "six_row_and_119_row_products_role": "regression_subsets_only",
         "production_acceptance_target": f"full_{basis.n_rows}_row_element_matrix_and_population_vector",
     }
+    parity = result.population_parity
     if not assembly.strict_assembly_ready:
         dominant_next_target = "resolve_remaining_element_matrix_assembly_blockers"
     elif solve is None:
         dominant_next_target = "execute_full_element_population_solve"
     elif not solve.converged or solve.n_negative_populations > 0:
-        dominant_next_target = "resolve_607_row_matrix_rank_or_msolvelucy_convergence"
+        dominant_next_target = "resolve_msolvelucy_convergence"
     elif not result.full_element_direct_solve_ready:
-        dominant_next_target = "resolve_full_element_acceptance_tolerance"
+        dominant_next_target = "resolve_full_element_execution_acceptance"
+    elif parity is None:
+        dominant_next_target = "run_xstar_population_parity_gate_before_generalization"
+    elif not parity.xstar_population_parity_ready:
+        dominant_next_target = parity.diagnosis
+    elif result.msolvelucy_state_parity is None:
+        dominant_next_target = "run_msolvelucy_iteration_state_parity_before_generalization"
+    elif not result.msolvelucy_state_parity.msolvelucy_state_parity_ready:
+        dominant_next_target = result.msolvelucy_state_parity.diagnosis
     else:
-        dominant_next_target = "generalize_validated_element_solve_to_all_30_elements_then_local_ionization_thermal_closure"
+        dominant_next_target = "generalize_population_validated_element_solve_then_local_ionization_thermal_closure"
     summary["dominant_next_target"] = dominant_next_target
+    summary["xstar_population_parity_supplied"] = parity is not None
+    summary["xstar_population_parity_ready"] = bool(parity and parity.xstar_population_parity_ready)
+    summary["milestone3_population_parity_ready"] = bool(parity and parity.xstar_population_parity_ready)
+    if parity is not None:
+        summary["population_parity_diagnosis"] = parity.diagnosis
+        summary["selected_xstar_solve_call_id"] = parity.reference.solve_call_id
+        summary["python_initial_vs_xstar_before_l1"] = parity.initial_metrics.l1_difference
+        summary["python_native_final_vs_xstar_after_l1"] = parity.native_final_metrics.l1_difference
+        summary["python_xstar_before_seeded_final_vs_xstar_after_l1"] = (
+            None if parity.seeded_final_metrics is None else parity.seeded_final_metrics.l1_difference
+        )
+    state_parity = result.msolvelucy_state_parity
+    summary["msolvelucy_state_parity_supplied"] = state_parity is not None
+    summary["msolvelucy_state_parity_ready"] = bool(state_parity and state_parity.msolvelucy_state_parity_ready)
+    if state_parity is not None:
+        summary["msolvelucy_state_parity_diagnosis"] = state_parity.diagnosis
+        summary["msolvelucy_first_failing_component"] = state_parity.first_failing_component
 
     if solve is not None:
         summary.update(
@@ -1425,7 +1584,11 @@ def write_element_equilibrium_products(
                 "population_normalization": solve.normalization,
                 "population_normalization_error": solve.normalization_error,
                 "max_relative_row_residual": solve.max_relative_row_residual,
+                "max_active_relative_row_residual": solve.max_active_relative_row_residual,
                 "l1_row_residual": solve.l1_row_residual,
+                "l1_relative_row_residual": solve.l1_relative_row_residual,
+                "n_zero_scale_rows": solve.n_zero_scale_rows,
+                "lucy_trace_captured": solve.trace is not None,
                 "condensed_matrix_rank": solve.condensed_rank,
                 "condensed_matrix_dimension": solve.condensed_dimension,
                 "dense_normalized_matrix_rank": solve.dense_rank,
@@ -1458,6 +1621,10 @@ def write_element_equilibrium_products(
         f"- Strict matrix assembly ready: `{assembly.strict_assembly_ready}`",
         f"- Solver converged: `{summary.get('solver_converged')}`",
         f"- Full direct solve ready: `{result.full_element_direct_solve_ready}`",
+        f"- XSTAR population parity supplied: `{parity is not None}`",
+        f"- XSTAR population parity ready: `{bool(parity and parity.xstar_population_parity_ready)}`",
+        f"- `msolvelucy` state parity ready: `{bool(result.msolvelucy_state_parity and result.msolvelucy_state_parity.msolvelucy_state_parity_ready)}`",
+        f"- Dominant next target: `{dominant_next_target}`",
         "",
         "The six-row and 119-row products are retained only as regression subsets; "
         "the acceptance target is the complete compact element matrix and population vector.",
@@ -1470,7 +1637,9 @@ def write_element_equilibrium_products(
         "ions_csv": ions_csv,
         "blocked_csv": blocked_csv,
         "populations_csv": populations_csv,
+        "residuals_csv": residuals_csv,
         "matrix_npz": matrix_npz,
         "json": json_path,
         "markdown": markdown_path,
+        **trace_outputs,
     }

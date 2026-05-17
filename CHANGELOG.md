@@ -1,5 +1,21 @@
 # CHANGELOG
 
+# v0.4.7 - 2026-05-17
+
+v0.4.7 adds the Milestone-3 scientific acceptance gate after the v0.4.6 full 607-row oxygen solve reached strict assembly and Lucy convergence.
+
+- Adds paired XSTAR population-probe loading for one complete `before_msolvelucy`/`after_msolvelucy` solve call, with explicit element, compact-dimension, solve-call, and occurrence selection.
+- Compares the Python LTE seed to XSTAR's pre-solve vector and the native Python final vector to XSTAR's post-solve vector using scale-aware row, L1, L2, total-variation, ion, and superlevel products.
+- Repeats the same assembled Python solve from XSTAR's captured pre-`msolvelucy` vector. This controlled alternate-seed solve distinguishes initial-state errors from matrix/runtime-context errors without inserting XSTAR coefficients or populations into the production path.
+- Adds iteration-level Python `msolvelucy` tracing for outer populations, superlevel populations, `rr`, the condensed `ajissup` matrix, and every fixed-point `riu/rui/ril/rli` update.
+- Adds one-time Fortran state-probe generation in example 104 and a direct XSTAR/Python state comparator that identifies the first failing component of the Lucy algorithm.
+- Adds explicit `xstar_population_parity_ready` and `msolvelucy_state_parity_ready` gates. A converged direct solve is no longer described as population validated until these gates pass.
+- Replaces the misleading single row-residual diagnostic with active-scale maximum relative residual, L1-relative residual, zero-scale-row count, and a row-level residual CSV.
+- Adds CLI options for population references, state-probe directories, trace output, parity tolerances, and strict parity-required exit statuses.
+- Keeps the six-row and 119-row systems as regression subsets only; no fitted source, empirical rate scale, or probe-backed matrix term is introduced.
+
+The next production run should use the existing paired population probe for solve call 219. If final parity fails, the XSTAR-before-seeded result and first failing Lucy state component determine whether the next source correction belongs to initialization, superlevel condensation, linear algebra, or fixed-point rate assembly.
+
 # v0.4.6 - 2026-05-17
 
 v0.4.6 closes the remaining strict-assembly blockers exposed by the production v0.4.5 O III--O VIII run. The run reduced blockers from 4,124 to 531; all 531 were source-control-flow interpretation issues rather than missing plasma or escape context.

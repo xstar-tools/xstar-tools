@@ -450,6 +450,53 @@ PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
 
 Use `--escape-detail-policy strict_selected_zone` when only rows explicitly present in the selected radial HDU may be accepted.
 
+
+### Oxygen population and `msolvelucy` state parity (v0.4.7)
+
+The v0.4.6 O III--O VIII production run assembled all 607 compact rows and converged the translated Lucy solver, but solver convergence alone does not establish XSTAR population parity. v0.4.7 adds the missing acceptance layer.
+
+Supply the paired XSTAR population probe used in the earlier basis work:
+
+```bash
+PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
+  --atdb /path/to/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --temperature-k 1.0e6 --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --escape-npz xstar_o7_escape_state_v045.npz \
+  --xstar-population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --xstar-population-solve-call-id 219 \
+  --write-msolvelucy-trace \
+  --out-dir xstar_o_element_equilibrium_v047 \
+  --print-summary
+```
+
+The command performs two Python solves with the same native matrix:
+
+1. the normal source-faithful LTE-seeded solve;
+2. a controlled solve initialized from XSTAR's captured pre-`msolvelucy` vector.
+
+If the second solve matches XSTAR while the first does not, initialization is the blocker. If both fail, the assembled operator or supplied runtime state is the blocker. Products include complete row, ion, superlevel, residual, outer-iteration, condensed-matrix, and fixed-point comparisons.
+
+For iteration-level XSTAR state parity, generate the one-time debug instrumentation:
+
+```bash
+PYTHONPATH=src python examples/104_prepare_xstar_msolvelucy_state_probe.py \
+  --out-dir xstar_msolvelucy_state_probe_v047 \
+  --print-summary
+```
+
+After rebuilding and rerunning the same XSTAR case, add:
+
+```text
+--xstar-msolvelucy-state-probe-dir <directory-containing-the-five-state-probe-CSVs>
+```
+
+No probed coefficient or population is used by the production matrix assembly.
+
 ### Final strict-assembly source controls (v0.4.6)
 
 The v0.4.5 production rerun left 531 blockers. These were not missing runtime state: 243 type-63 records are source-defined zero transitions, and 288 O VII type-53/type-74 parent endpoints are clamped by XSTAR's `msolvelucy` rule `min(ipmat, indb)`. v0.4.6 reproduces both behaviors and reports every raw-to-clamped endpoint in the matrix-term products. The next rerun should reach the 607-row solver directly.
