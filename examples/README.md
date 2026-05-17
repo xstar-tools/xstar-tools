@@ -1156,8 +1156,10 @@ PYTHONPATH=src python examples/102_port_xstar_element_equilibrium.py \
   --hydrogen-density-cm3 1.0e8 \
   --electron-fraction-xee 1.0 \
   --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
-  --escape-npz /path/to/xstar_escape_state.npz \
-  --out-dir xstar_o_element_equilibrium_v043 \
+  --xstar-run-dir /path/to/xstar_run \
+  --escape-zone last \
+  --write-derived-escape-npz xstar_o7_escape_state.npz \
+  --out-dir xstar_o_element_equilibrium_v044 \
   --print-summary
 ```
 
@@ -1165,3 +1167,23 @@ Use `--assume-optically-thin` only for a genuinely optically thin model or a
 controlled smoke test.  In strict mode, missing radiation or escape state
 blocks readiness rather than falling back to old probe coefficients.
 
+
+### `103_build_xstar_escape_state.py`
+
+Build the exact line and RRC optical-depth arrays consumed by `calc_hmc_ion`.
+The source products are `xo01_detal2.fits` for `tau0(1:2,line)` and
+`xo01_detal3.fits` for `tauc(1:2,rrc)`.
+
+```bash
+PYTHONPATH=src python examples/103_build_xstar_escape_state.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --xstar-run-dir /path/to/xstar_run \
+  --zone last \
+  --out-npz xstar_o7_escape_state.npz \
+  --out-dir xstar_escape_state_v044 \
+  --print-summary
+```
+
+Missing indices remain unavailable in strict mode. Use
+`--allow-missing-as-zero` only when zero optical depth is physically intended.

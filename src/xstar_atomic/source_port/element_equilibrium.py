@@ -143,7 +143,8 @@ class EscapeProbabilityContext:
     def _value(values: Optional[np.ndarray], index: int) -> Optional[float]:
         if values is None or index <= 0 or index > len(values):
             return None
-        return float(values[index - 1])
+        value = float(values[index - 1])
+        return value if math.isfinite(value) else None
 
     def line_taus(self, index: int) -> Tuple[Optional[float], Optional[float]]:
         return self._value(self.line_tau_in, index), self._value(self.line_tau_out, index)

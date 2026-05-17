@@ -96,6 +96,15 @@ from .linear_algebra import (
     leqt2f,
 )
 
+
+from .escape_state import (
+    EscapeStateError,
+    EscapeStateBuildResult,
+    load_escape_state_from_xstar_run,
+    write_escape_state_npz,
+    write_escape_state_summary,
+)
+
 from .element_equilibrium import (
     ElementEquilibriumError,
     ElementIonBlock,
@@ -221,4 +230,9 @@ __all__ = [
     "solve_element_statistical_equilibrium",
     "register_element_equilibrium_stage",
     "write_element_equilibrium_products",
+    "EscapeStateError",
+    "EscapeStateBuildResult",
+    "load_escape_state_from_xstar_run",
+    "write_escape_state_npz",
+    "write_escape_state_summary",
 ]

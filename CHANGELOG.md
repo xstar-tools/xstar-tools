@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.4.4 - 2026-05-17
+
+- Fixes the element-equilibrium CLI example that referenced a non-existent placeholder `xstar_o7_escape_state.npz`. Missing NPZ paths now fail with an actionable message instead of a raw Python traceback.
+- Adds source-faithful escape-state reconstruction from XSTAR radial detail products: `xo01_detal2.fits` supplies `tau0(1:2,line)` indexed by global line index, and `xo01_detal3.fits` supplies `tauc(1:2,rrc)` indexed by global RRC/continuum index. `xo01_detal4.fits` is not used for this purpose because it stores the continuum energy-grid state.
+- Adds `xstar_atomic.source_port.escape_state`, `xstar-atomic-port-escape`, and `examples/103_build_xstar_escape_state.py`. The builder maps detail rows onto the exact v0.4.1 `nplini`/`npconi2` array lengths, preserves missing entries as NaN in strict mode, writes a reusable NPZ, and emits coverage/provenance reports.
+- Extends `xstar-atomic-port-element` with `--xstar-run-dir`, `--escape-zone`, and `--write-derived-escape-npz`, mutually exclusive with `--escape-npz`.
+- Changes `EscapeProbabilityContext` so non-finite array entries are treated as missing context rather than propagating NaNs into escape functions and the element matrix.
+- Keeps `--assume-optically-thin` explicit and opt-in; missing detail rows are never silently converted to zero depth in strict source-equivalent mode.
+
 # v0.4.3 - 2026-05-17
 
 - Translates the complete element statistical-equilibrium source sequence `levwkelement -> calc_hmc_ion -> calc_hmc_element -> msolvelucy` as one coherent subsystem in `xstar_atomic.source_port.element_equilibrium`.

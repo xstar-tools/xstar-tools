@@ -1,0 +1,286 @@
+"""Source-faithful line and RRC optical-depth state for the element port.
+
+XSTAR writes the arrays consumed by ``calc_hmc_ion`` to two radial detail
+products:
+
+* ``xo01_detal2.fits`` stores ``tau0(1:2,line)`` and identifies each row by
+  the global line index used by ``derivedpointers%nplini``;
+* ``xo01_detal3.fits`` stores ``tauc(1:2,rrc)`` and identifies each row by
+  the global RRC/continuum index used by ``derivedpointers%npconi2``.
+
+This module maps those rows back into the one-dimensional NumPy arrays used by
+:class:`~xstar_atomic.source_port.element_equilibrium.EscapeProbabilityContext`.
+Missing indices remain NaN and therefore block strict assembly rather than
+silently becoming optically thin.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import math
+from pathlib import Path
+from typing import Any, Dict, Iterable, Mapping, Sequence
+
+import numpy as np
+
+from ..xstar_outputs import read_fits_table_hdus
+from .atomic_database import XSTARDerivedPointers
+from .element_equilibrium import EscapeProbabilityContext
+
+
+class EscapeStateError(RuntimeError):
+    """Raised when XSTAR line/RRC detail state cannot be constructed."""
+
+
+@dataclass(frozen=True)
+class EscapeStateBuildResult:
+    """Result of mapping XSTAR radial detail rows onto global pointer indices."""
+
+    context: EscapeProbabilityContext
+    run_dir: Path
+    zone_selector: str
+    line_hdu_index: int | None
+    rrc_hdu_index: int | None
+    n_line_rows: int
+    n_rrc_rows: int
+    n_line_indices_loaded: int
+    n_rrc_indices_loaded: int
+    n_line_indices_missing: int
+    n_rrc_indices_missing: int
+    n_duplicate_line_indices: int
+    n_duplicate_rrc_indices: int
+    n_out_of_range_line_indices: int
+    n_out_of_range_rrc_indices: int
+    line_file: Path
+    rrc_file: Path
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.n_line_indices_missing == 0
+            and self.n_rrc_indices_missing == 0
+            and self.n_out_of_range_line_indices == 0
+            and self.n_out_of_range_rrc_indices == 0
+        )
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "run_dir": str(self.run_dir),
+            "zone_selector": self.zone_selector,
+            "line_hdu_index": self.line_hdu_index,
+            "rrc_hdu_index": self.rrc_hdu_index,
+            "n_line_rows": self.n_line_rows,
+            "n_rrc_rows": self.n_rrc_rows,
+            "n_line_indices_loaded": self.n_line_indices_loaded,
+            "n_rrc_indices_loaded": self.n_rrc_indices_loaded,
+            "n_line_indices_missing": self.n_line_indices_missing,
+            "n_rrc_indices_missing": self.n_rrc_indices_missing,
+            "n_duplicate_line_indices": self.n_duplicate_line_indices,
+            "n_duplicate_rrc_indices": self.n_duplicate_rrc_indices,
+            "n_out_of_range_line_indices": self.n_out_of_range_line_indices,
+            "n_out_of_range_rrc_indices": self.n_out_of_range_rrc_indices,
+            "line_file": str(self.line_file),
+            "rrc_file": str(self.rrc_file),
+            "complete": self.complete,
+            "source_routines": ["fstepr2.f90", "fstepr3.f90", "calc_hmc_ion.f90"],
+        }
+
+
+def _select_hdu(hdus: Sequence[Mapping[str, Any]], selector: str | int) -> Mapping[str, Any]:
+    if not hdus:
+        raise EscapeStateError("detail file contains no XSTAR_RADIAL extensions")
+    token = str(selector).strip().lower()
+    if token == "first":
+        return hdus[0]
+    if token == "last":
+        return hdus[-1]
+    try:
+        requested = int(token)
+    except ValueError as exc:
+        raise EscapeStateError("zone selector must be 'first', 'last', an HDU index, or a 1-based zone number") from exc
+
+    # Prefer an exact FITS HDU index because that is unambiguous and is exposed
+    # by read_fits_table_hdus.  Fall back to a one-based radial-zone ordinal.
+    for hdu in hdus:
+        if int(hdu.get("hdu_index", -1)) == requested:
+            return hdu
+    if 1 <= requested <= len(hdus):
+        return hdus[requested - 1]
+    raise EscapeStateError(
+        f"zone/HDU selector {requested} is outside the available range "
+        f"(radial zones 1..{len(hdus)})"
+    )
+
+
+def _number(row: Mapping[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = row.get(key)
+        try:
+            out = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(out):
+            return out
+    return None
+
+
+def _index(row: Mapping[str, Any], *keys: str) -> int | None:
+    value = _number(row, *keys)
+    if value is None:
+        return None
+    rounded = int(round(value))
+    if abs(value - rounded) > 1.0e-6:
+        return None
+    return rounded
+
+
+def _map_rows(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    size: int,
+    index_keys: Sequence[str],
+) -> tuple[np.ndarray, np.ndarray, int, int, int]:
+    tau_in = np.full(int(size), np.nan, dtype=float)
+    tau_out = np.full(int(size), np.nan, dtype=float)
+    seen: set[int] = set()
+    duplicates = 0
+    out_of_range = 0
+    accepted = 0
+    for row in rows:
+        idx = _index(row, *index_keys)
+        tin = _number(row, "tau_in", "depth_inward")
+        tout = _number(row, "tau_out", "depth_outward")
+        if idx is None or tin is None or tout is None:
+            continue
+        if idx < 1 or idx > size:
+            out_of_range += 1
+            continue
+        if idx in seen:
+            duplicates += 1
+        seen.add(idx)
+        tau_in[idx - 1] = tin
+        tau_out[idx - 1] = tout
+        accepted += 1
+    return tau_in, tau_out, accepted, duplicates, out_of_range
+
+
+def load_escape_state_from_xstar_run(
+    run_dir: str | Path,
+    derived: XSTARDerivedPointers,
+    *,
+    zone: str | int = "last",
+    allow_missing_as_zero: bool = False,
+) -> EscapeStateBuildResult:
+    """Build line and RRC escape arrays from an XSTAR run directory.
+
+    Parameters
+    ----------
+    run_dir:
+        Directory containing ``xo01_detal2.fits`` and ``xo01_detal3.fits``.
+    derived:
+        v0.4.1 source-port pointer state.  ``nlsvn`` and ``ncsvn`` define the
+        exact global line/RRC array lengths expected by ``calc_hmc_ion``.
+    zone:
+        ``first``, ``last``, a FITS HDU index, or a 1-based radial-zone ordinal.
+    allow_missing_as_zero:
+        Forwarded to :class:`EscapeProbabilityContext`.  Keep false for strict
+        source-equivalent execution.
+    """
+    root = Path(run_dir)
+    line_file = root / "xo01_detal2.fits"
+    rrc_file = root / "xo01_detal3.fits"
+    missing = [str(path) for path in (line_file, rrc_file) if not path.is_file()]
+    if missing:
+        raise EscapeStateError(
+            "missing XSTAR escape-state detail file(s): " + ", ".join(missing)
+            + ". Run XSTAR with detail output enabled (lwrite/lprint as required), "
+              "or use --assume-optically-thin only for a controlled optically thin test."
+        )
+
+    line_hdu = _select_hdu(read_fits_table_hdus(line_file, "XSTAR_RADIAL"), zone)
+    rrc_hdu = _select_hdu(read_fits_table_hdus(rrc_file, "XSTAR_RADIAL"), zone)
+    line_rows = list(line_hdu.get("rows", []))
+    rrc_rows = list(rrc_hdu.get("rows", []))
+
+    line_in, line_out, n_line_loaded, dup_line, oor_line = _map_rows(
+        line_rows,
+        size=int(derived.nlsvn),
+        index_keys=("index", "line_index"),
+    )
+    rrc_in, rrc_out, n_rrc_loaded, dup_rrc, oor_rrc = _map_rows(
+        rrc_rows,
+        size=int(derived.ncsvn),
+        index_keys=("rrc_index", "index", "continuum_index"),
+    )
+
+    n_line_unique = int(np.count_nonzero(np.isfinite(line_in) & np.isfinite(line_out)))
+    n_rrc_unique = int(np.count_nonzero(np.isfinite(rrc_in) & np.isfinite(rrc_out)))
+    context = EscapeProbabilityContext(
+        line_tau_in=line_in,
+        line_tau_out=line_out,
+        continuum_tau_in=rrc_in,
+        continuum_tau_out=rrc_out,
+        allow_missing_as_zero=allow_missing_as_zero,
+    )
+    return EscapeStateBuildResult(
+        context=context,
+        run_dir=root,
+        zone_selector=str(zone),
+        line_hdu_index=int(line_hdu.get("hdu_index", -1)),
+        rrc_hdu_index=int(rrc_hdu.get("hdu_index", -1)),
+        n_line_rows=len(line_rows),
+        n_rrc_rows=len(rrc_rows),
+        n_line_indices_loaded=n_line_unique,
+        n_rrc_indices_loaded=n_rrc_unique,
+        n_line_indices_missing=int(derived.nlsvn) - n_line_unique,
+        n_rrc_indices_missing=int(derived.ncsvn) - n_rrc_unique,
+        n_duplicate_line_indices=dup_line,
+        n_duplicate_rrc_indices=dup_rrc,
+        n_out_of_range_line_indices=oor_line,
+        n_out_of_range_rrc_indices=oor_rrc,
+        line_file=line_file,
+        rrc_file=rrc_file,
+    )
+
+
+def write_escape_state_npz(result: EscapeStateBuildResult, path: str | Path) -> Path:
+    """Write a reusable escape-state NPZ in the element CLI schema."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    context = result.context
+    np.savez_compressed(
+        target,
+        line_tau_in=np.asarray(context.line_tau_in, dtype=float),
+        line_tau_out=np.asarray(context.line_tau_out, dtype=float),
+        continuum_tau_in=np.asarray(context.continuum_tau_in, dtype=float),
+        continuum_tau_out=np.asarray(context.continuum_tau_out, dtype=float),
+        metadata_json=np.asarray(json.dumps(result.as_dict(), sort_keys=True)),
+    )
+    return target
+
+
+def write_escape_state_summary(result: EscapeStateBuildResult, out_dir: str | Path) -> Dict[str, Path]:
+    """Write JSON and Markdown coverage reports for a derived escape state."""
+    root = Path(out_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    json_path = root / "xstar_escape_state_summary.json"
+    md_path = root / "xstar_escape_state_summary.md"
+    payload = result.as_dict()
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    lines = [
+        "# XSTAR source-faithful escape state",
+        "",
+        f"- Run directory: `{payload['run_dir']}`",
+        f"- Zone selector: `{payload['zone_selector']}`",
+        f"- Line HDU index: `{payload['line_hdu_index']}`",
+        f"- RRC HDU index: `{payload['rrc_hdu_index']}`",
+        f"- Loaded line indices: `{payload['n_line_indices_loaded']}` / "
+        f"`{payload['n_line_indices_loaded'] + payload['n_line_indices_missing']}`",
+        f"- Loaded RRC indices: `{payload['n_rrc_indices_loaded']}` / "
+        f"`{payload['n_rrc_indices_loaded'] + payload['n_rrc_indices_missing']}`",
+        f"- Complete global arrays: `{payload['complete']}`",
+        "",
+        "Missing entries remain NaN and block strict element assembly. They are not silently treated as optically thin.",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": json_path, "markdown": md_path}

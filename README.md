@@ -410,3 +410,23 @@ PYTHONPATH=src python examples/90_audit_xstar_priority_matrix_balance.py \
 ```
 
 The audit aggregates the probed Fortran `ajisi(1,:)` coefficients into compact `ipmat2` entries and reports `sum_j A_ij x_j` for every activated priority row. It is a diagnostic gate before native compact-matrix/RHS assembly; no solver defaults are changed.
+
+
+### Source-faithful escape state (v0.4.4)
+
+Build line and RRC optical-depth arrays from an XSTAR run:
+
+```bash
+xstar-atomic-port-escape \
+  --atdb /path/to/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --xstar-run-dir /path/to/xstar_run \
+  --zone last \
+  --out-npz xstar_escape_state.npz \
+  --out-dir xstar_escape_state_v044 \
+  --print-summary
+```
+
+The builder uses `xo01_detal2.fits` for line depths and `xo01_detal3.fits` for
+RRC depths. It does not use the continuum-grid `xo01_detal4.fits` as an RRC
+optical-depth substitute.

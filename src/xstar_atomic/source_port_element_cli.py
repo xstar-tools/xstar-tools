@@ -7,6 +7,13 @@ from typing import Any
 
 import numpy as np
 
+from .source_port.escape_state import (
+    EscapeStateError,
+    load_escape_state_from_xstar_run,
+    write_escape_state_npz,
+    write_escape_state_summary,
+)
+
 from .source_port import (
     ElementEquilibriumContext,
     EscapeProbabilityContext,
@@ -37,10 +44,17 @@ def _select_live_state(path: str | None, selector: str) -> Any:
     raise ValueError(f"capture index {capture} was not found in {path}")
 
 
-def _load_escape(path: str | None, assume_optically_thin: bool) -> EscapeProbabilityContext:
+def _load_escape_npz(path: str | None, assume_optically_thin: bool) -> EscapeProbabilityContext:
     if path is None:
         return EscapeProbabilityContext(allow_missing_as_zero=assume_optically_thin)
-    with np.load(path, allow_pickle=False) as z:
+    target = Path(path)
+    if not target.is_file():
+        raise FileNotFoundError(
+            f"escape NPZ does not exist: {target}. Supply a real file, use --xstar-run-dir "
+            "to derive it from xo01_detal2.fits/xo01_detal3.fits, or use "
+            "--assume-optically-thin only for a controlled optically thin test."
+        )
+    with np.load(target, allow_pickle=False) as z:
         def maybe(name: str):
             return np.asarray(z[name], dtype=float) if name in z.files else None
         return EscapeProbabilityContext(
@@ -75,7 +89,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lfast", type=int, default=2)
     parser.add_argument("--live-rate-grid-probe-csv")
     parser.add_argument("--live-rate-grid-state", default="last", help="first, last, or capture_index")
-    parser.add_argument("--escape-npz", help="NPZ with line_tau_in/out and continuum_tau_in/out")
+    escape_group = parser.add_mutually_exclusive_group()
+    escape_group.add_argument("--escape-npz", help="NPZ with line_tau_in/out and continuum_tau_in/out")
+    escape_group.add_argument(
+        "--xstar-run-dir",
+        help="Build escape state from xo01_detal2.fits (lines) and xo01_detal3.fits (RRCs)",
+    )
+    parser.add_argument(
+        "--escape-zone", default="last",
+        help="XSTAR radial zone/HDU selector for --xstar-run-dir: first, last, integer zone, or HDU index",
+    )
+    parser.add_argument(
+        "--write-derived-escape-npz",
+        help="Optional path for saving escape arrays derived from --xstar-run-dir",
+    )
     parser.add_argument(
         "--assume-optically-thin",
         action="store_true",
@@ -101,7 +128,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         radiation = _select_live_state(args.live_rate_grid_probe_csv, args.live_rate_grid_state)
-        escape = _load_escape(args.escape_npz, args.assume_optically_thin)
+        escape_build = None
+        try:
+            if args.xstar_run_dir:
+                escape_build = load_escape_state_from_xstar_run(
+                    args.xstar_run_dir,
+                    built.derived,
+                    zone=args.escape_zone,
+                    allow_missing_as_zero=args.assume_optically_thin,
+                )
+                escape = escape_build.context
+                if args.write_derived_escape_npz:
+                    write_escape_state_npz(escape_build, args.write_derived_escape_npz)
+                write_escape_state_summary(escape_build, args.out_dir)
+            else:
+                escape = _load_escape_npz(args.escape_npz, args.assume_optically_thin)
+        except (FileNotFoundError, EscapeStateError) as exc:
+            raise SystemExit(f"ERROR: {exc}") from exc
         context = ElementEquilibriumContext(
             temperature_k=args.temperature_k,
             hydrogen_density_cm3=args.hydrogen_density_cm3,
@@ -132,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.3")
+            print("port_version=v0.4.4")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")
@@ -141,6 +184,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"n_superlevels={a.basis.n_superlevels}")
             print(f"normalization_row={a.basis.normalization_row}")
             print(f"n_shared_alias_rows={sum(r.is_shared_alias for r in a.basis.rows)}")
+            if escape_build is not None:
+                print("escape_state_source=xstar_run_detail_files")
+                print(f"escape_state_zone_selector={escape_build.zone_selector}")
+                print(f"n_escape_line_indices_loaded={escape_build.n_line_indices_loaded}")
+                print(f"n_escape_line_indices_missing={escape_build.n_line_indices_missing}")
+                print(f"n_escape_rrc_indices_loaded={escape_build.n_rrc_indices_loaded}")
+                print(f"n_escape_rrc_indices_missing={escape_build.n_rrc_indices_missing}")
+                print(f"escape_state_global_arrays_complete={escape_build.complete}")
+            elif args.escape_npz:
+                print(f"escape_state_source=npz:{args.escape_npz}")
+            elif args.assume_optically_thin:
+                print("escape_state_source=explicit_optically_thin_zero_depth")
+            else:
+                print("escape_state_source=missing_strict_context")
             print(f"n_records_seen={a.n_records_seen}")
             print(f"n_records_evaluated={a.n_records_evaluated}")
             print(f"n_records_source_noop={a.n_records_source_noop}")

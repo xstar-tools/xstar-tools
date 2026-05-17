@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.4.3"
+version = "0.4.4"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -49,6 +49,7 @@ xstar-atomic-source-inventory = "xstar_atomic.source_port_cli:main"
 xstar-atomic-port-atdb = "xstar_atomic.source_port_atomic_db_cli:main"
 xstar-atomic-port-ucalc = "xstar_atomic.source_port_ucalc_cli:main"
 xstar-atomic-port-element = "xstar_atomic.source_port_element_cli:main"
+xstar-atomic-port-escape = "xstar_atomic.source_port_escape_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
