@@ -13,6 +13,10 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.10 captured-zone runtime context
+
+When `--xstar-population-probe-csv` is supplied, example 102 now uses the selected solve call's exact `T`, `xpx`, `xee`, and `cfrac` before evaluating any native rate. This avoids comparing a Python matrix assembled at nominal CLI values with an XSTAR matrix captured at a different converged zone state. Use `--population-probe-runtime-policy check` to require explicit inputs to match, or `ignore` only for a controlled mismatch experiment.
+
 ### v0.4.9 oxygen record-level matrix parity
 
 The Milestone-3 acceptance path now stops at the first true XSTAR/Python divergence. The v0.4.8 state products show exact outer-iteration-1 populations and `rr` fractions; the first mismatch is the raw condensed superlevel matrix. v0.4.9 can join the complete native 607-row matrix manifest directly to the existing XSTAR `ucalc` and `calc_hmc_ion` probe products and rank the responsible data/rate family without replacing any production coefficient.

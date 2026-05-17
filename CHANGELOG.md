@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.10 - 2026-05-17
+
+v0.4.10 prevents a captured-zone runtime mismatch from being misdiagnosed as a source-rate-family failure during the oxygen population-parity gate.
+
+- Reads `t_xstar_1e4K`, `xpx`, `xee`, and `cfrac` from the selected paired population-probe solve before any native `ucalc` or matrix assembly work.
+- Adds `--population-probe-runtime-policy use|check|ignore`. The default `use` policy evaluates the full native element matrix at the exact XSTAR solve-call state; `check` requires explicit CLI values to match; `ignore` preserves the old controlled-mismatch behavior.
+- Reports requested and effective temperature, hydrogen density, electron fraction, electron density, and covering fraction in the console and in `xstar_element_runtime_context.json/.md`.
+- Validates that the selected probe `ipmat2` matches the native compact basis before parity products are accepted.
+- Exposes `XSTARRuntimeContextReference` and `load_xstar_runtime_context_reference` through the public API.
+- Leaves probe coefficients comparison-only; no XSTAR rate or population is inserted into the native matrix.
+
+The v0.4.9 oxygen run used `T=1e6 K` and `xee=1`, while solve call 219 was captured at `T=7.6655185577588316e4 K`, `xpx=1e8 cm^-3`, and `xee=1.2046560563936872`. This explains the simultaneous disagreement in density/temperature-sensitive type 51, 57, 63, 68, 69, 71, 77, and 99 families.
+
 # v0.4.9 - 2026-05-17
 
 v0.4.9 turns the first true oxygen `msolvelucy` divergence into a record-level source-port gate instead of another broad diagnostic cycle.

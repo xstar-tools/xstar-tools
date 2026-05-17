@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.9"
+__version__ = "0.4.10"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -141,8 +141,8 @@ from .source_port import (
     build_level_table, build_element_compact_basis, levwk, levwkelement,
     assemble_element_matrix, msolvelucy, solve_element_statistical_equilibrium,
     register_element_equilibrium_stage, write_element_equilibrium_products,
-    PopulationParityError, XSTARPopulationReference, PopulationMetrics,
-    ElementPopulationParityResult, load_xstar_population_reference,
+    PopulationParityError, XSTARPopulationReference, XSTARRuntimeContextReference, PopulationMetrics,
+    ElementPopulationParityResult, load_xstar_population_reference, load_xstar_runtime_context_reference,
     compare_element_population_parity, write_element_population_parity_products,
     MSolveStateParityError, StateComponentMetrics, MSolveStateParityResult,
     compare_msolvelucy_state_probe, write_msolvelucy_state_parity_products,
@@ -382,9 +382,11 @@ from .source_port import (
     write_element_equilibrium_products,
     PopulationParityError,
     XSTARPopulationReference,
+    XSTARRuntimeContextReference,
     PopulationMetrics,
     ElementPopulationParityResult,
     load_xstar_population_reference,
+    load_xstar_runtime_context_reference,
     compare_element_population_parity,
     write_element_population_parity_products,
     MSolveStateParityError,
@@ -471,9 +473,11 @@ __all__.extend([
     "write_element_equilibrium_products",
     "PopulationParityError",
     "XSTARPopulationReference",
+    "XSTARRuntimeContextReference",
     "PopulationMetrics",
     "ElementPopulationParityResult",
     "load_xstar_population_reference",
+    "load_xstar_runtime_context_reference",
     "compare_element_population_parity",
     "write_element_population_parity_products",
     "MSolveStateParityError",

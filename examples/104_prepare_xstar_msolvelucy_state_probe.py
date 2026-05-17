@@ -16,7 +16,7 @@ def main(argv=None) -> int:
     if args.print_summary:
         print("XSTAR msolvelucy state-probe preparation")
         print("-----------------------------------------")
-        print("port_version=v0.4.9")
+        print("port_version=v0.4.10")
         print("status=msolvelucy_state_probe_products_written")
         for key, path in outputs.items():
             print(f"{key}: {path}")

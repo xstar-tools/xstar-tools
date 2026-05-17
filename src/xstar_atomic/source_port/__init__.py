@@ -135,9 +135,11 @@ from .element_equilibrium import (
 from .population_parity import (
     PopulationParityError,
     XSTARPopulationReference,
+    XSTARRuntimeContextReference,
     PopulationMetrics,
     ElementPopulationParityResult,
     load_xstar_population_reference,
+    load_xstar_runtime_context_reference,
     compare_element_population_parity,
     write_element_population_parity_products,
 )
@@ -261,9 +263,11 @@ __all__ = [
     "write_element_equilibrium_products",
     "PopulationParityError",
     "XSTARPopulationReference",
+    "XSTARRuntimeContextReference",
     "PopulationMetrics",
     "ElementPopulationParityResult",
     "load_xstar_population_reference",
+    "load_xstar_runtime_context_reference",
     "compare_element_population_parity",
     "write_element_population_parity_products",
     "MSolveStateParityError",

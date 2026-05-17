@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from .source_port import (
     write_element_equilibrium_products,
     PopulationParityError,
     load_xstar_population_reference,
+    load_xstar_runtime_context_reference,
     compare_element_population_parity,
     write_element_population_parity_products,
     MSolveStateParityError,
@@ -143,6 +145,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--xstar-population-occurrence-rank", type=int, default=-1,
         help="1-based matching O-element solve occurrence, or -1 for latest (default)",
     )
+    parser.add_argument(
+        "--population-probe-runtime-policy",
+        choices=("use", "check", "ignore"),
+        default="use",
+        help=(
+            "How to handle T/xpx/xee/cfrac stored in the selected population probe: "
+            "use them before matrix assembly (default), require explicit inputs to match, "
+            "or ignore them for a controlled mismatch test"
+        ),
+    )
+    parser.add_argument(
+        "--population-probe-runtime-relative-tolerance",
+        type=float,
+        default=5.0e-8,
+        help="Relative tolerance for --population-probe-runtime-policy check",
+    )
     parser.add_argument("--population-parity-max-abs-tolerance", type=float, default=5.0e-3)
     parser.add_argument("--population-parity-l1-tolerance", type=float, default=5.0e-3)
     parser.add_argument("--population-parity-relative-tolerance", type=float, default=5.0e-3)
@@ -192,6 +210,53 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    requested_runtime = {
+        "temperature_k": float(args.temperature_k),
+        "hydrogen_density_cm3": float(args.hydrogen_density_cm3),
+        "electron_fraction_xee": float(args.electron_fraction_xee),
+        "electron_density_cm3": float(args.hydrogen_density_cm3) * float(args.electron_fraction_xee),
+        "covering_fraction": float(args.covering_fraction),
+    }
+    runtime_reference = None
+    effective_runtime = dict(requested_runtime)
+    runtime_context_source = "explicit_cli"
+    if args.xstar_population_probe_csv and args.population_probe_runtime_policy != "ignore":
+        try:
+            runtime_reference = load_xstar_runtime_context_reference(
+                args.xstar_population_probe_csv,
+                element_z=args.element_z,
+                solve_call_id=args.xstar_population_solve_call_id,
+                occurrence_rank=args.xstar_population_occurrence_rank,
+            )
+        except (FileNotFoundError, PopulationParityError, ValueError) as exc:
+            raise SystemExit(f"ERROR: {exc}") from exc
+        probe_runtime = {
+            "temperature_k": runtime_reference.temperature_k,
+            "hydrogen_density_cm3": runtime_reference.hydrogen_density_cm3,
+            "electron_fraction_xee": runtime_reference.electron_fraction_xee,
+            "electron_density_cm3": runtime_reference.electron_density_cm3,
+            "covering_fraction": runtime_reference.covering_fraction,
+        }
+        if args.population_probe_runtime_policy == "check":
+            tol = float(args.population_probe_runtime_relative_tolerance)
+            mismatches = []
+            for key, reference_value in probe_runtime.items():
+                requested_value = requested_runtime[key]
+                scale = max(abs(reference_value), abs(requested_value), 1.0e-300)
+                if abs(requested_value - reference_value) > tol * scale:
+                    mismatches.append(
+                        f"{key}: requested={requested_value:.17g}, probe={reference_value:.17g}"
+                    )
+            if mismatches:
+                raise SystemExit(
+                    "ERROR: explicit runtime context does not match the selected XSTAR population probe: "
+                    + "; ".join(mismatches)
+                )
+            runtime_context_source = "explicit_cli_verified_against_xstar_population_probe"
+        else:
+            effective_runtime = probe_runtime
+            runtime_context_source = "xstar_population_probe"
+
     built = load_atomic_database_state(
         args.atdb,
         pointer_cache=args.pointer_cache,
@@ -217,14 +282,14 @@ def main(argv: list[str] | None = None) -> int:
         except (FileNotFoundError, EscapeStateError) as exc:
             raise SystemExit(f"ERROR: {exc}") from exc
         context = ElementEquilibriumContext(
-            temperature_k=args.temperature_k,
-            hydrogen_density_cm3=args.hydrogen_density_cm3,
-            electron_fraction_xee=args.electron_fraction_xee,
+            temperature_k=effective_runtime["temperature_k"],
+            hydrogen_density_cm3=effective_runtime["hydrogen_density_cm3"],
+            electron_fraction_xee=effective_runtime["electron_fraction_xee"],
             min_ion_stage=args.min_ion_stage,
             max_ion_stage=args.max_ion_stage,
             radiation=radiation,
             escape=escape,
-            covering_fraction=args.covering_fraction,
+            covering_fraction=effective_runtime["covering_fraction"],
             turbulent_velocity_km_s=args.turbulent_velocity_km_s,
             neutral_h_density_cm3=args.neutral_h_density_cm3,
             ionized_h_density_cm3=args.ionized_h_density_cm3,
@@ -245,6 +310,12 @@ def main(argv: list[str] | None = None) -> int:
             element_z=args.element_z,
             context=context,
         )
+        if runtime_reference is not None and runtime_reference.n_rows != result.assembly.basis.n_rows:
+            raise SystemExit(
+                "ERROR: selected population-probe runtime context has "
+                f"ipmat2={runtime_reference.n_rows}, but the native basis has "
+                f"{result.assembly.basis.n_rows} rows"
+            )
         matrix_parity = None
         matrix_parity_outputs = {}
         if bool(args.xstar_ucalc_probe_csv) != bool(args.xstar_matrix_probe_csv):
@@ -320,6 +391,45 @@ def main(argv: list[str] | None = None) -> int:
                 raise SystemExit(f"ERROR: {exc}") from exc
             result.msolvelucy_state_parity = state_parity
         outputs = write_element_equilibrium_products(result, args.out_dir)
+        runtime_context_summary = {
+            "port_version": "v0.4.10",
+            "status": "element_runtime_context_selected",
+            "runtime_context_source": runtime_context_source,
+            "population_probe_runtime_policy": args.population_probe_runtime_policy,
+            "requested_runtime": requested_runtime,
+            "effective_runtime": effective_runtime,
+            "selected_xstar_population_solve_call_id": (
+                None if runtime_reference is None else runtime_reference.solve_call_id
+            ),
+            "selected_xstar_population_occurrence_rank": (
+                None if runtime_reference is None else runtime_reference.occurrence_rank
+            ),
+            "selected_xstar_population_n_rows": (
+                None if runtime_reference is None else runtime_reference.n_rows
+            ),
+            "selected_probe_metadata": (
+                {} if runtime_reference is None else runtime_reference.metadata
+            ),
+        }
+        runtime_json = Path(args.out_dir) / "xstar_element_runtime_context.json"
+        runtime_json.write_text(json.dumps(runtime_context_summary, indent=2, sort_keys=True) + "\n")
+        runtime_md = Path(args.out_dir) / "xstar_element_runtime_context.md"
+        runtime_md.write_text(
+            "# XSTAR element runtime-context selection\n\n"
+            f"- Port version: `v0.4.10`\n"
+            f"- Source: `{runtime_context_source}`\n"
+            f"- Policy: `{args.population_probe_runtime_policy}`\n"
+            f"- Requested T: `{requested_runtime['temperature_k']}` K\n"
+            f"- Effective T: `{effective_runtime['temperature_k']}` K\n"
+            f"- Requested xpx: `{requested_runtime['hydrogen_density_cm3']}` cm^-3\n"
+            f"- Effective xpx: `{effective_runtime['hydrogen_density_cm3']}` cm^-3\n"
+            f"- Requested xee: `{requested_runtime['electron_fraction_xee']}`\n"
+            f"- Effective xee: `{effective_runtime['electron_fraction_xee']}`\n"
+            f"- Effective ne: `{effective_runtime['electron_density_cm3']}` cm^-3\n"
+            f"- Effective cfrac: `{effective_runtime['covering_fraction']}`\n"
+        )
+        outputs["runtime_context_json"] = runtime_json
+        outputs["runtime_context_markdown"] = runtime_md
         if matrix_parity is not None:
             matrix_parity_outputs = write_full_element_matrix_parity_products(matrix_parity, args.out_dir)
             outputs.update(matrix_parity_outputs)
@@ -334,8 +444,18 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.9")
+            print("port_version=v0.4.10")
             print("status=element_statistical_equilibrium_subsystem_completed")
+            print(f"runtime_context_source={runtime_context_source}")
+            print(f"population_probe_runtime_policy={args.population_probe_runtime_policy}")
+            print(f"requested_temperature_k={requested_runtime['temperature_k']}")
+            print(f"effective_temperature_k={effective_runtime['temperature_k']}")
+            print(f"requested_hydrogen_density_cm3={requested_runtime['hydrogen_density_cm3']}")
+            print(f"effective_hydrogen_density_cm3={effective_runtime['hydrogen_density_cm3']}")
+            print(f"requested_electron_fraction_xee={requested_runtime['electron_fraction_xee']}")
+            print(f"effective_electron_fraction_xee={effective_runtime['electron_fraction_xee']}")
+            print(f"effective_electron_density_cm3={effective_runtime['electron_density_cm3']}")
+            print(f"effective_covering_fraction={effective_runtime['covering_fraction']}")
             print(f"element_z={a.basis.element_z}")
             print(f"ion_stage_range={a.basis.min_ion_stage}..{a.basis.max_ion_stage}")
             print(f"n_compact_rows={a.basis.n_rows}")

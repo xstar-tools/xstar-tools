@@ -47,6 +47,25 @@ class XSTARPopulationReference:
     metadata: Dict[str, Any]
 
 
+
+
+@dataclass(frozen=True)
+class XSTARRuntimeContextReference:
+    """Runtime state attached to one paired XSTAR ``msolvelucy`` capture."""
+
+    source_csv: str
+    solve_call_id: str
+    occurrence_rank: int
+    element_z: int
+    n_rows: int
+    temperature_k: float
+    hydrogen_density_cm3: float
+    electron_fraction_xee: float
+    electron_density_cm3: float
+    covering_fraction: float
+    metadata: Dict[str, Any]
+
+
 @dataclass(frozen=True)
 class PopulationMetrics:
     """Scale-aware comparison of one candidate population vector."""
@@ -193,6 +212,106 @@ def _pair_captures(captures: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]
                 )
                 break
     return pairs
+
+
+
+
+def load_xstar_runtime_context_reference(
+    path: str | Path,
+    *,
+    element_z: int,
+    solve_call_id: Optional[str] = None,
+    occurrence_rank: int = -1,
+) -> XSTARRuntimeContextReference:
+    """Select the runtime state for one complete paired population capture.
+
+    This selection intentionally occurs before native matrix assembly so every
+    temperature- and density-dependent ``ucalc`` branch is evaluated at the
+    exact XSTAR state being used for population and iteration parity.
+    """
+    rows = _read_rows(path)
+    captures = _capture_groups(rows)
+    pairs = _pair_captures(captures)
+    matching = [
+        pair for pair in pairs
+        if _as_int(pair["before"].get("element_z"), None) == int(element_z)
+        and _as_int(pair["after"].get("element_z"), None) == int(element_z)
+        and bool(pair["before"].get("complete"))
+        and bool(pair["after"].get("complete"))
+    ]
+    if not matching:
+        raise PopulationParityError(
+            f"no complete before/after msolvelucy pair for element_z={element_z} in {path}"
+        )
+    selected: Optional[Dict[str, Any]] = None
+    selected_rank = 0
+    if solve_call_id is not None:
+        token = str(solve_call_id).strip()
+        for rank, pair in enumerate(matching, start=1):
+            if str(pair.get("solve_call_id") or "").strip() == token:
+                selected = pair
+                selected_rank = rank
+                break
+        if selected is None:
+            raise PopulationParityError(f"solve_call_id={token} was not found among matching captures")
+    else:
+        if occurrence_rank == -1:
+            selected = matching[-1]
+            selected_rank = len(matching)
+        elif 1 <= occurrence_rank <= len(matching):
+            selected = matching[occurrence_rank - 1]
+            selected_rank = occurrence_rank
+        else:
+            raise PopulationParityError(
+                f"occurrence_rank={occurrence_rank} outside 1..{len(matching)}, or use -1"
+            )
+    assert selected is not None
+    before_meta = dict(selected["before"].get("metadata") or {})
+    after_meta = dict(selected["after"].get("metadata") or {})
+    metadata = {**before_meta, **after_meta}
+    temperature_1e4 = _as_float(metadata.get("t_xstar_1e4K"), None)
+    xpx = _as_float(metadata.get("xpx"), None)
+    xee = _as_float(metadata.get("xee"), None)
+    cfrac = _as_float(metadata.get("cfrac"), None)
+    missing = [
+        name for name, value in (
+            ("t_xstar_1e4K", temperature_1e4),
+            ("xpx", xpx),
+            ("xee", xee),
+            ("cfrac", cfrac),
+        ) if value is None
+    ]
+    if missing:
+        raise PopulationParityError(
+            "selected population probe lacks runtime fields: " + ", ".join(missing)
+        )
+    temperature_k = float(temperature_1e4) * 1.0e4
+    hydrogen_density = float(xpx)
+    electron_fraction = float(xee)
+    covering_fraction = float(cfrac)
+    if temperature_k <= 0.0 or hydrogen_density <= 0.0 or electron_fraction <= 0.0:
+        raise PopulationParityError(
+            "selected population probe has nonpositive temperature, xpx, or xee"
+        )
+    n_rows = _as_int(selected["before"].get("ipmat2"), 0) or 0
+    metadata.update({
+        "before_capture_index": selected["before"].get("capture_index"),
+        "after_capture_index": selected["after"].get("capture_index"),
+        "n_matching_pairs": len(matching),
+    })
+    return XSTARRuntimeContextReference(
+        source_csv=str(Path(path)),
+        solve_call_id=str(selected.get("solve_call_id") or ""),
+        occurrence_rank=selected_rank,
+        element_z=int(element_z),
+        n_rows=int(n_rows),
+        temperature_k=temperature_k,
+        hydrogen_density_cm3=hydrogen_density,
+        electron_fraction_xee=electron_fraction,
+        electron_density_cm3=hydrogen_density * electron_fraction,
+        covering_fraction=covering_fraction,
+        metadata=metadata,
+    )
 
 
 def load_xstar_population_reference(
@@ -490,7 +609,7 @@ def write_element_population_parity_products(
     result: ElementPopulationParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.9",
+    port_version: str = "v0.4.10",
 ) -> Dict[str, Path]:
     """Write row, aggregate, JSON, Markdown, and NPZ parity products."""
     out = Path(out_dir)
