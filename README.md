@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.21 exact type-53 pre-parent threshold gate
+
+The v0.4.20 oxygen run retained complete population parity but left 180 type-53/rate-7 terms outside the strict matrix tolerance. All 45 affected O IV records are exact zero in XSTAR. Label 53 tests `rlev(4,idest1)-rlev(1,idest1) <= 0` before adding an excited-parent energy; Python instead clamped the base threshold to zero and then added the parent correction. v0.4.21 preserves the literal source ordering and returns evaluated zero terms for those records. No fitted scale is used.
+
 ### v0.4.20 current-source continuum constants and population-parity milestone
 
 The v0.4.19 exact-state oxygen run is the first native 607-row solve to pass population parity, with final L1 difference `1.9974981259622204e-05` and all rows within the 0.5% gate. The leading remaining matched-topology rate discrepancy is type 99/rate 7. Current XSTAR continuum integrators derive `kT=0.8617333262145178*T4` eV from `constants.f90`, while Python retained the older `0.861707*T4` coefficient. v0.4.20 uses the current source constants in `phintfo/phint53hunt` without changing formulas that literally use the historical coefficient. No fitted scale is used.

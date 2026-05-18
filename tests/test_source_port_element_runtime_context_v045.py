@@ -115,6 +115,60 @@ def test_type53_uses_fourth_from_end_parent_offset_for_excited_parent():
     assert result.diagnostics["destination_statistical_weight"] == pytest.approx(3.0)
 
 
+def test_type53_preserves_pre_parent_nonpositive_threshold_zero_gate():
+    # XSTAR checks ett=rlev(4,idest1)-rlev(1,idest1) before adding the
+    # excited-parent energy.  The base threshold is -10 eV here, while the
+    # later +20 eV parent correction would make a seemingly valid +10 eV
+    # threshold.  Source behavior is nevertheless an evaluated zero record.
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(
+                1,
+                energy_ev=20.0,
+                statistical_weight=2.0,
+                ionization_potential_ev=10.0,
+                label="autoionizing_bound",
+            ),
+            2: UCalcLevel(
+                2,
+                energy_ev=30.0,
+                statistical_weight=1.0,
+                ionization_potential_ev=30.0,
+                continuum_energy_ev=30.0,
+                label="continuum",
+            ),
+        },
+        nlev=2,
+    )
+    context = UCalcContext(
+        temperature_k=1.0e6,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.0,
+        nlev=2,
+        levels=levels,
+        radiation=_radiation(),
+        extras={
+            "element_z": 8,
+            "element_symbol": "O",
+            "ion_stage": 4,
+            "parent_level_energy_ev_by_destination": {3: 20.0},
+            "parent_level_stat_weight_by_destination": {3: 3.0},
+        },
+    )
+    result = SourceFaithfulUCalc().evaluate(
+        UCalcRecord(3054, 53, 7, 0, (0.0, 1.0, 10.0, 0.5), (4, 2, 8, 1, 31)),
+        context,
+    )
+    assert result.status is UCalcStatus.EVALUATED
+    assert (result.idest1, result.idest2) == (1, 3)
+    assert result.ans1 == result.ans2 == 0.0
+    assert result.ans3 == result.ans4 == result.ans5 == result.ans6 == 0.0
+    assert result.diagnostics["source_type53_base_threshold_eV"] == pytest.approx(-10.0)
+    assert result.diagnostics["source_type53_zero_gate"] == "ett_le_zero_before_excited_parent_correction"
+    assert result.diagnostics["source_type53_parent_correction_applied"] is False
+    assert result.diagnostics["source_type53_zero_matrix_terms_expected"] == 4
+
+
 def test_type99_derives_threshold_and_uses_live_phint53hunt():
     # nden=1, ntem=2, nxs=2; then density, temperatures, recombination table,
     # and two cross-section pairs.

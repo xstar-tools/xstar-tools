@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.21 - 2026-05-18
+
+v0.4.21 reproduces the label-53 base-threshold gate that occurs before XSTAR applies an excited-parent correction.
+
+- The v0.4.20 solve retains population parity but has 180 failing type-53 terms from 45 O IV records.
+- Every affected XSTAR record has exact zero forward and reverse rates, while Python emitted finite values.
+- XSTAR evaluates `ett=rlev(4,idest1)-rlev(1,idest1)` and exits when `ett<=0` before adding the excited-parent energy.
+- Python previously clamped the base threshold to zero and then added the parent excitation, incorrectly reviving high or autoionizing levels.
+- The production branch now keeps the raw base threshold, returns an evaluated all-zero result with the original endpoints when it is nonpositive, and applies the parent correction only after the gate passes.
+- Adds provenance and a regression where the parent correction would otherwise make the final threshold positive.
+
+No empirical scale or probe coefficient is used. Existing solve-call-219 probes can be reused.
+
 # v0.4.20 - 2026-05-18
 
 v0.4.20 aligns the source-port continuum integrators with the current XSTAR `constants.f90` values after v0.4.19 passed the complete 607-row population-parity gate.

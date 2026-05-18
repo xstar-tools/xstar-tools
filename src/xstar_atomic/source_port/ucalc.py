@@ -1779,16 +1779,58 @@ class SourceFaithfulUCalc:
         id1 = int(i[-2])
         off = int(i[-4])
         id2 = c.nlevp + off - 1
+
+        # ucalc.f90 label 53 applies the bound-level threshold gate *before*
+        # correcting the threshold for an excited parent destination:
+        #
+        #   eth = rlev(4,idest1) - rlev(1,idest1)
+        #   ett = eth
+        #   if (ett.le.0.) go to 9000
+        #   ...
+        #   if (idest2.gt.nlevp) ett=ett+rdat(parent_level)
+        #
+        # Do not clamp the base threshold to zero and then add the parent
+        # excitation.  High/autoionizing bound levels must retain the source
+        # zero-rate result even when the later parent correction would make
+        # the final threshold positive.  calc_hmc_ion still inserts the four
+        # zero matrix terms, so return an evaluated zero result with endpoints
+        # rather than SOURCE_NOOP.
+        try:
+            bound_for_gate = c.levels.require(id1)
+        except (KeyError, ValueError, IndexError) as exc:
+            return self._context_blocked(r, s, f"type53_bound_level:{exc}")
+        base_threshold = (
+            float(bound_for_gate.ionization_potential_ev)
+            - float(bound_for_gate.energy_ev)
+        )
+        if base_threshold <= 0.0:
+            return self._ctx_result(
+                r, s,
+                ans1=0.0, ans2=0.0, ans3=0.0, ans4=0.0, ans5=0.0, ans6=0.0,
+                idest1=id1, idest2=id2,
+                diagnostics={
+                    "packed_parent_offset": off,
+                    "packed_parent_offset_index": -4,
+                    "packed_bound_level_index": -2,
+                    "source_idest2_expression": "nlevp + integers[-4] - 1",
+                    "source_type53_base_threshold_eV": base_threshold,
+                    "source_type53_zero_gate": "ett_le_zero_before_excited_parent_correction",
+                    "source_type53_parent_correction_applied": False,
+                    "source_type53_zero_matrix_terms_expected": 4,
+                },
+                context_fields_used=("levels",),
+            )
+
         if decoded is None and c.radiation is not None and id1 > 0:
             try:
-                bound = c.levels.require(id1)
+                bound = bound_for_gate
                 continuum = c.levels.require(c.nlevp)
                 parent_excitation, destination_g = self._parent_destination_context(c, id2)
                 # For excited parents the map stores excitation above the
                 # parent ground; the physical destination energy includes the
                 # current-ion continuum energy.
                 destination_energy = continuum.energy_ev + (parent_excitation if id2 > c.nlevp else 0.0)
-                threshold = self._level_threshold(c, id1) + (parent_excitation if id2 > c.nlevp else 0.0)
+                threshold = base_threshold + (parent_excitation if id2 > c.nlevp else 0.0)
                 n_pairs = len(r.reals) // 2
                 decoded = {
                     "record": r.record,
