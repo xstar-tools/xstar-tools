@@ -2031,8 +2031,16 @@ class SourceFaithfulUCalc:
         """Translate ``calt99 -> phint53hunt`` with the live radiation grid."""
         from xstar_atomic.xstar_element_solver import _xstar_calt99_superlevel_bound_free
         i = r.integers
+        # ucalc.f90 label 99:
+        #   idest1 = idat(np1i+nidt-2)          -> packed integer [-2]
+        #   idest2 = nlev+idat(np1i-1+nidt-3)-1
+        #          = nlev+packed integer [-4]-1
+        #
+        # The packed [-3] field is the linked parent-ion/element identity,
+        # not the parent-level offset.  Using it moves type-99 source/sink
+        # terms into unrelated excited-parent compact rows.
         id1 = min(int(i[-2]) if len(i) >= 2 else 1, max(c.nlevp - 1, 1))
-        off = int(i[-3]) if len(i) >= 3 else 1
+        off = int(i[-4]) if len(i) >= 4 else 1
         id2 = max(c.nlevp + off - 1, c.nlevp)
         if c.radiation is None:
             return self._context_blocked(r, s, "type99_requires_live_radiation")
@@ -2052,9 +2060,15 @@ class SourceFaithfulUCalc:
             return self._context_blocked(r, s, "type99_missing_or_bad_threshold_or_statistical_weight")
         threshold_ryd = threshold_ev / 13.6
         ev = _xstar_calt99_superlevel_bound_free(
-            temperature=c.temperature_k, electron_density=c.electron_density_cm3, threshold_ry=threshold_ryd,
-            bound_stat_weight=bound.statistical_weight, continuum_stat_weight=destination_g,
-            reals=list(r.reals), ints=list(r.integers), radiation_context_rows=None,
+            temperature=c.temperature_k,
+            electron_density=c.electron_density_cm3,
+            calt99_density=c.hydrogen_density_cm3,
+            threshold_ry=threshold_ryd,
+            bound_stat_weight=bound.statistical_weight,
+            continuum_stat_weight=destination_g,
+            reals=list(r.reals),
+            ints=list(r.integers),
+            radiation_context_rows=None,
         )
         rec = _finite(ev.get("type99_calt99_rec_cm3_s"))
         e_ryd = ev.get("type99_cross_section_energy_ryd")
@@ -2083,7 +2097,17 @@ class SourceFaithfulUCalc:
         energy_difference = destination_energy - bound.energy_ev
         ans6 *= (abs(ans4) - energy_difference * ERG_PER_EV * ans1) / max(1.0e-43, abs(ans4) - threshold_ev * ERG_PER_EV * ans1)
         ans5 *= (abs(ans3) - energy_difference * ERG_PER_EV * ans2) / max(1.0e-43, abs(ans3) - threshold_ev * ERG_PER_EV * ans2)
-        diagnostics = {**ev, **ph, "type99_threshold_eV_derived": threshold_ev, "type99_swrat": swrat, "type99_scale": scale}
+        diagnostics = {
+            **ev,
+            **ph,
+            "type99_threshold_eV_derived": threshold_ev,
+            "type99_swrat": swrat,
+            "type99_scale": scale,
+            "type99_parent_level_offset_packed_index": -4,
+            "type99_parent_level_offset": off,
+            "type99_calt99_density_semantics": "hydrogen_density_xpx",
+            "type99_phint53hunt_density_semantics": "electron_density_xpx_times_xee",
+        }
         return self._ctx_result(
             r, s, ans1=ans1, ans2=ans2, ans3=ans3, ans4=ans4, ans5=ans5, ans6=ans6,
             idest1=id1, idest2=id2, diagnostics=diagnostics,

@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.13 exact type-99 endpoint and density semantics
+
+The solve-call-219 exact-state run improved the final oxygen population L1 difference to about 0.192 and ranked type 99/rate 7 next. v0.4.13 now decodes the type-99 parent-level offset from packed integer `[-4]`, restoring the source continuum/next-ion-ground aliases, and evaluates `calt99` at `den=xpx` while retaining `xnx=xpx*xee` for `phint53hunt` and the final recombination rate. Existing XSTAR probe products can be reused.
+
 ### v0.4.12 exact type-74 and type-95 source corrections
 
 The exact solve-call-219 run exposed 42 strict blockers, all from type-74 delta-resonance records. The source permits a zero DR coefficient while retaining a nonzero live-radiation forward rate; v0.4.12 now evaluates `calt74` directly on the live radiation arrays, preserves zero reverse coefficients, and uses the exact label-74 endpoints and statistical-weight handoff. The same release corrects label 95 to use `eint`'s ordinary `E1(x)` result rather than the scaled `expint` value and reproduces the Fortran spline indexing.

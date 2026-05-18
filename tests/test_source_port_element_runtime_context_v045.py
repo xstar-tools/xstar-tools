@@ -85,14 +85,29 @@ def test_type99_derives_threshold_and_uses_live_phint53hunt():
     # nden=1, ntem=2, nxs=2; then density, temperatures, recombination table,
     # and two cross-section pairs.
     reals = (8.0, 5.0, 7.0, 1.0e-12, 2.0e-12, 0.0, 1.0, 10.0, 0.5)
+    # Real type-99 records retain the linked type-70 tail:
+    # i8=parent level offset, i9=parent ion/element field,
+    # i10=bound level, i11=current ion.
+    integers = (1, 2, 2, 0, 0, 0, 0, 1, 8, 1, 31)
+    context = _context()
+    context.electron_fraction_xee = 1.2
     result = SourceFaithfulUCalc().evaluate(
-        UCalcRecord(4, 99, 7, 0, reals, (1, 2, 2, 1, 1, 1)),
-        _context(),
+        UCalcRecord(4, 99, 7, 0, reals, integers),
+        context,
     )
     assert result.status is UCalcStatus.EVALUATED
+    assert (result.idest1, result.idest2) == (1, 2)
+    assert result.diagnostics["type99_parent_level_offset_packed_index"] == -4
+    assert result.diagnostics["type99_parent_level_offset"] == 1
     assert result.diagnostics["type99_threshold_eV_derived"] == pytest.approx(13.6)
     assert result.diagnostics["status"] == "evaluated_phint53hunt_live_grid"
-    assert result.ans2 > 0.0
+    # calt99 receives XSTAR den=xpx, not xpx*xee.
+    assert result.diagnostics["type99_calt99_density_cm3_used"] == pytest.approx(1.0e8)
+    assert result.diagnostics["type99_calt99_density_semantics"] == "hydrogen_density_xpx"
+    assert result.diagnostics["type99_phint53hunt_density_semantics"] == "electron_density_xpx_times_xee"
+    assert result.ans2 == pytest.approx(
+        result.diagnostics["type99_calt99_rec_cm3_s"] * 1.2e8
+    )
 
 
 def _write_radial(path: Path, zones: list[tuple[np.ndarray, np.ndarray, np.ndarray]], index_name: str) -> None:

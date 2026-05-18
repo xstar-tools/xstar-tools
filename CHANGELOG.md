@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.13 - 2026-05-17
+
+v0.4.13 corrects the source mapping and density handoff for `ucalc.f90` label 99 after the exact solve-call-219 oxygen run ranked type 99/rate 7 as the next matrix-parity blocker.
+
+- Corrects the packed type-99 parent-level offset from integer field `[-3]` to `[-4]`, matching `idest2=nlev+idat(np1i-1+nidt-3)-1`. The old field is the linked parent-ion/element identity and moved type-99 gain/loss partners into unrelated excited-parent compact rows.
+- Restores the shared continuum/next-ion-ground endpoint for the production O III--O VII type-99 records. The affected Python rows 110, 273, 326, 369, and 598 now map to the source rows 79, 241, 293, 335, and 575 when the packed parent-level offset is one.
+- Separates the two source density semantics in the type-99 path: `calt99.f90` interpolates its recombination table at `den=xpx`, while `phint53hunt.f90` and the final `rec*xnx` normalization use `xnx=xpx*xee`.
+- Reproduces `calt99.f90`'s one-based density-bracket behavior, including first-branch handling below the grid and the source fallback above the maximum.
+- Adds explicit provenance for the packed endpoint field and the `xpx` versus `xpx*xee` density roles.
+- Adds focused tests using the realistic 11-integer linked type-70/type-99 tail and a non-unity electron fraction.
+
+No XSTAR probe rate or population is inserted into the production operator. Existing solve-call-219 population, state, `ucalc`, and matrix probes can be reused.
+
 # v0.4.12 - 2026-05-17
 
 v0.4.12 fixes the exact-state type-74 assembly blockers and the dominant type-95/rate-5 matrix-rate error exposed by the v0.4.11 oxygen run.

@@ -2314,6 +2314,7 @@ def _xstar_calt99_superlevel_bound_free(
     *,
     temperature: float,
     electron_density: float,
+    calt99_density: Optional[float] = None,
     threshold_ry: float,
     bound_stat_weight: Optional[float],
     continuum_stat_weight: Optional[float],
@@ -2377,7 +2378,10 @@ def _xstar_calt99_superlevel_bound_free(
         out["type99_calt99_status"] = "not_evaluated_short_record"
         out["type99_note"] = f"need at least {min_len} reals, got {len(rd)}"
         return out
-    if temperature <= 0.0 or electron_density <= 0.0:
+    density_for_calt99 = float(
+        electron_density if calt99_density is None else calt99_density
+    )
+    if temperature <= 0.0 or electron_density <= 0.0 or density_for_calt99 <= 0.0:
         out["type99_calt99_status"] = "not_evaluated_nonpositive_temperature_or_density"
         return out
     eth = maybe_float(threshold_ry)
@@ -2395,28 +2399,37 @@ def _xstar_calt99_superlevel_bound_free(
         val = rd[table0 + it_idx * nden + id_idx]
         return math.log10(val + 1.0e-30) if val > -1.0e-31 else float(val)
 
-    rne = math.log10(float(electron_density))
+    # ucalc.f90 label 99 passes ``den=xpx`` to calt99, while the later
+    # phint53hunt/Milne normalization receives ``xnx=xpx*xee``.  Keep the two
+    # densities distinct.
+    rne = math.log10(density_for_calt99)
     rte = math.log10(float(temperature))
     notes = []
-    # calt99 clips temperature to just inside the tabulated range.  Its density
-    # handling is historically less strict; use a bracketed endpoint-preserving
-    # interpretation that avoids invalid Python indices while reporting clips.
+    # calt99 clips temperature to just inside the tabulated range.
     if rte < temp_grid[0] or rte > temp_grid[-1]:
         rte_old = rte
         rte = min(0.999 * temp_grid[-1], max(1.001 * temp_grid[0], rte))
         notes.append(f"logT_clipped_from_{rte_old:g}_to_{rte:g}")
-    if rne <= dens_grid[0]:
-        in0 = 0
-        notes.append("logne_at_or_below_grid_min_uses_first_density_branch")
-    elif rne >= dens_grid[-1]:
-        in0 = max(0, nden - 2)
-        notes.append("logne_at_or_above_grid_max_clipped_to_last_interval")
+
+    # Literal calt99 one-based density-bracket semantics.  ``in`` starts at
+    # zero, becomes one below the grid minimum, and is set only when a tabulated
+    # interval contains rne.  Above the maximum the source therefore falls back
+    # to the first density branch after ``in=max(in,1)``.
+    in_fortran = 0
+    if nden > 1:
+        if rne <= dens_grid[0]:
+            in_fortran = 1
+            notes.append("logden_at_or_below_grid_min_uses_first_density_branch")
+        else:
+            for i_fortran in range(1, nden):
+                if dens_grid[i_fortran - 1] <= rne <= dens_grid[i_fortran]:
+                    in_fortran = i_fortran
+            in_fortran = max(in_fortran, 1)
+            if rne > dens_grid[-1]:
+                notes.append("logden_above_grid_max_source_falls_back_to_first_density_branch")
     else:
-        in0 = 0
-        for k in range(nden - 1):
-            if dens_grid[k] <= rne <= dens_grid[k + 1]:
-                in0 = k
-                break
+        in_fortran = 1
+    in0 = in_fortran - 1
     it0 = 0
     for k in range(ntem - 1):
         if temp_grid[k] <= rte < temp_grid[k + 1]:
@@ -2428,8 +2441,10 @@ def _xstar_calt99_superlevel_bound_free(
         out["type99_calt99_status"] = "not_evaluated_degenerate_temperature_grid"
         return out
     rec1 = rcoef(it0, in0) + (rcoef(it0 + 1, in0) - rcoef(it0, in0)) / (t1 - t0) * (rte - t0)
-    # Source-code branch: if density is first/last branch, do not interpolate in density.
-    if in0 <= 0 or in0 >= nden - 1:
+    # Source-code branch: ``if (in.eq.nden .or. in.le.1)``.  In normal
+    # bracket selection ``in`` spans 1..nden-1, so only the first branch skips
+    # density interpolation; the final interval is still interpolated.
+    if in_fortran == nden or in_fortran <= 1:
         log_rec = rec1
     else:
         n0, n1 = dens_grid[in0], dens_grid[in0 + 1]
@@ -2462,6 +2477,10 @@ def _xstar_calt99_superlevel_bound_free(
         "type99_calt99_n_cross_section_pairs": int(nxs),
         "type99_calt99_log10_rec": float(log_rec),
         "type99_calt99_log10_ne_used": float(rne),
+        "type99_calt99_density_cm3_used": float(density_for_calt99),
+        "type99_calt99_density_semantics": (
+            "explicit_calt99_density" if calt99_density is not None else "electron_density_legacy_default"
+        ),
         "type99_calt99_log10_temperature_used": float(rte),
         "type99_calt99_density_bracket_index0": int(in0),
         "type99_calt99_temperature_bracket_index0": int(it0),
