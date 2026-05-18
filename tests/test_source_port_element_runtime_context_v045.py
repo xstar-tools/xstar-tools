@@ -139,6 +139,12 @@ def test_type99_derives_threshold_and_uses_live_phint53hunt():
     assert result.diagnostics["type99_calt99_density_cm3_used"] == pytest.approx(1.0e8)
     assert result.diagnostics["type99_calt99_density_semantics"] == "hydrogen_density_xpx"
     assert result.diagnostics["type99_phint53hunt_density_semantics"] == "electron_density_xpx_times_xee"
+    # Current XSTAR phint53hunt.f90 obtains bktm from constants.f90 rather
+    # than the older rounded 0.861707*T4 coefficient used by some labels.
+    assert result.diagnostics["source_bktm_eV"] == pytest.approx(
+        1.380649e-16 * 1.0e4 / 1.602176634e-12 * 100.0
+    )
+    assert result.diagnostics["source_erg_per_eV"] == pytest.approx(1.602176634e-12)
     assert result.ans2 == pytest.approx(
         result.diagnostics["type99_calt99_rec_cm3_s"] * 1.2e8
     )

@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.20 current-source continuum constants and population-parity milestone
+
+The v0.4.19 exact-state oxygen run is the first native 607-row solve to pass population parity, with final L1 difference `1.9974981259622204e-05` and all rows within the 0.5% gate. The leading remaining matched-topology rate discrepancy is type 99/rate 7. Current XSTAR continuum integrators derive `kT=0.8617333262145178*T4` eV from `constants.f90`, while Python retained the older `0.861707*T4` coefficient. v0.4.20 uses the current source constants in `phintfo/phint53hunt` without changing formulas that literally use the historical coefficient. No fitted scale is used.
+
 ### v0.4.19 exact type-53 excited-parent endpoint
 
 The v0.4.18 exact-state run confirmed type 57/rate 5 is ready and ranked type 53/rate 7 next. XSTAR decodes the type-53 parent-level offset from the fourth packed integer from the end; Python used the third-from-last linked parent-ion field, routing 702 of 733 records to incorrect endpoints and supplying incorrect excited-parent thresholds and weights to `phint53`. v0.4.19 uses `integers[-4]`, preserves the bound level at `[-2]`, and adds a realistic packed-tail regression. No fitted scale is used.

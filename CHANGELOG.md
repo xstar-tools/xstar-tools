@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.20 - 2026-05-18
+
+v0.4.20 aligns the source-port continuum integrators with the current XSTAR `constants.f90` values after v0.4.19 passed the complete 607-row population-parity gate.
+
+- The v0.4.19 native-final population vector agrees with XSTAR at L1 `1.9974981259622204e-05`; all 607 rows pass the configured 0.5% gate.
+- Type 99/rate 7 remains the leading matched-topology matrix-rate discrepancy: all 28 endpoints match, reverse rates agree near `1e-6`, but most forward rates are high by `4.1e-5`--`7.8e-5`.
+- Current XSTAR `phintfo/phint53/phint53hunt` compute `bktm=bk*tm/ergsev` from `bk=1.380649e-16` and `ergsev=1.602176634e-12`, giving `0.8617333262145178*T4` eV.
+- Python still used the historical rounded `0.861707*T4` continuum coefficient, lowering the Milne integral and raising the rescaled type-99 forward rate with exactly the observed sign.
+- Adds explicit current-source Boltzmann and eV/erg constants for continuum integration and uses them in `phintfo`, `phint53hunt`, and type-99 energy bookkeeping. Historical formulas that literally contain `0.861707` remain unchanged.
+- Adds regression coverage for the exact source-derived `bktm` and energy conversion.
+
+No empirical scale, probe rate, or captured population is inserted. Existing solve-call-219 probes can be reused.
+
 # v0.4.19 - 2026-05-18
 
 v0.4.19 corrects the packed excited-parent endpoint for XSTAR `ucalc.f90` label 53 after the exact solve-call-219 oxygen run moved the leading mismatch to type 53/rate 7.

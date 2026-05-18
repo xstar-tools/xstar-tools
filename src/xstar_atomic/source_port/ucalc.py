@@ -27,6 +27,15 @@ from .atomic_database import XSTARMasterData
 ERG_PER_EV = 1.602197e-12
 XSTAR_KT_EV_PER_1E4K = 0.861707
 
+# Current XSTAR ``constants.f90`` values used by the continuum-integration
+# routines.  Keep these separate from historical formulas that literally use
+# the older rounded coefficients above.
+XSTAR_SOURCE_ERG_PER_EV = 1.602176634e-12
+XSTAR_SOURCE_BOLTZMANN_ERG_K = 1.380649e-16
+XSTAR_SOURCE_KT_EV_PER_1E4K = (
+    XSTAR_SOURCE_BOLTZMANN_ERG_K * 1.0e4 / XSTAR_SOURCE_ERG_PER_EV
+)
+
 
 def _expo(value: float) -> float:
     return math.exp(min(max(float(value), -60.0), 60.0))
@@ -166,7 +175,7 @@ def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: 
     if sig.size != epi.size:
         raise ValueError("cross section must be mapped to the live radiation grid")
     nb, nph, skip = _enxt_bounds(threshold_ev, epi, context.t, context.lfast)
-    bktm = XSTAR_KT_EV_PER_1E4K * context.t
+    bktm = XSTAR_SOURCE_KT_EV_PER_1E4K * context.t
     rnist = 5.216e-21 * float(swrat) / max(context.t * context.tsq, 1e-48)
     sumr=sumh=sumh2=sumi=sumc=sumc2=0.0
     tempro=tempio=atmp2o=atmp22o=0.0; enero=float(epi[nb]); opakab=0.0
@@ -176,20 +185,27 @@ def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: 
         ener=float(epi[k]); s=max(float(sig[k]),0.0); brem=float(bremsa[k])/25.3
         tempr=25.3*s*brem/max(ener,1e-48); de=ener-enero
         sumr += (tempr+tempro)*de/2.0
-        sumh += (tempr*ener+tempro*enero)*de*ERG_PER_EV/2.0
-        sumh2 += (tempr*(ener-threshold_ev)+tempro*(enero-threshold_ev))*de*ERG_PER_EV/2.0
+        sumh += (tempr*ener+tempro*enero)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
+        sumh2 += (tempr*(ener-threshold_ev)+tempro*(enero-threshold_ev))*de*XSTAR_SOURCE_ERG_PER_EV/2.0
         exptst=max(1e-36,(ener-threshold_ev)/max(bktm,1e-48)); ex=_expo(-exptst)
         bbnurj=min(ener,2e4)**3*1.571e22
         tempi1=rnist*bbnurj*ex*s/max(ener,1e-48); tempi2=rnist*brem*ex*s/max(ener,1e-48); tempi=tempi1+tempi2
         atmp2=tempi1*ener; atmp22=tempi1*(ener-threshold_ev)
         sumi += (tempi+tempio)*de/2.0
-        sumc += (atmp2+atmp2o)*de*ERG_PER_EV/2.0
-        sumc2 += (atmp22+atmp22o)*de*ERG_PER_EV/2.0
+        sumc += (atmp2+atmp2o)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
+        sumc2 += (atmp22+atmp22o)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
         optmp=context.abund1*s*context.hydrogen_density_cm3
         if pos <= 1: opakab=optmp
         tempro=tempr; tempio=tempi; atmp2o=atmp2; atmp22o=atmp22; enero=ener
     ne=context.electron_density_cm3
-    return {"ans1":sumr,"ans2":ne*sumi,"ans3":sumh,"ans4":ne*sumc,"ans5":sumh2,"ans6":ne*sumc2,"opakab":opakab,"nb1":nb,"nphint":nph}
+    return {
+        "ans1": sumr, "ans2": ne * sumi, "ans3": sumh, "ans4": ne * sumc,
+        "ans5": sumh2, "ans6": ne * sumc2, "opakab": opakab,
+        "nb1": nb, "nphint": nph,
+        "source_bktm_eV": bktm,
+        "source_erg_per_eV": XSTAR_SOURCE_ERG_PER_EV,
+        "source_boltzmann_erg_K": XSTAR_SOURCE_BOLTZMANN_ERG_K,
+    }
 
 
 def _find53_cross_section(energy_ryd: np.ndarray, sigma_cm2: np.ndarray, efnd_ryd: float) -> float:
@@ -255,7 +271,7 @@ def _phint53hunt_exact(
         break
 
     t = context.t
-    bktm = XSTAR_KT_EV_PER_1E4K * t
+    bktm = XSTAR_SOURCE_KT_EV_PER_1E4K * t
     rnist = 5.216e-21 * float(swrat) / max(t * math.sqrt(max(t, 0.0)), 1.0e-48)
     luse = np.zeros(n, dtype=np.int8)
     ansar1 = np.zeros(n, dtype=float)
@@ -324,10 +340,10 @@ def _phint53hunt_exact(
         "status": "evaluated_phint53hunt_live_grid",
         "pirt": sumr,
         "rrrt": ne * sumi,
-        "piht": sumh * ERG_PER_EV,
-        "rrcl": ne * sumc * ERG_PER_EV,
-        "piht2": sumh2 * ERG_PER_EV,
-        "rrcl2": ne * sumc2 * ERG_PER_EV,
+        "piht": sumh * XSTAR_SOURCE_ERG_PER_EV,
+        "rrcl": ne * sumc * XSTAR_SOURCE_ERG_PER_EV,
+        "piht2": sumh2 * XSTAR_SOURCE_ERG_PER_EV,
+        "rrcl2": ne * sumc2 * XSTAR_SOURCE_ERG_PER_EV,
         "npass": npass,
         "nbinc_threshold_fortran": nbinc_threshold,
         "nb1_fortran": nb1,
@@ -338,6 +354,9 @@ def _phint53hunt_exact(
         "last_pass_last_kl_fortran": last_pass_indices[-1] if last_pass_indices else None,
         "last_pass_includes_nphint": bool(last_pass_indices and last_pass_indices[-1] == nphint),
         "type99_phint53hunt_grid_policy": "literal_nbinc_plus_one_and_natural_kl_stride",
+        "source_bktm_eV": bktm,
+        "source_erg_per_eV": XSTAR_SOURCE_ERG_PER_EV,
+        "source_boltzmann_erg_K": XSTAR_SOURCE_BOLTZMANN_ERG_K,
     }
 
 
@@ -2311,8 +2330,8 @@ class SourceFaithfulUCalc:
         ans6 = -ans5_pre
         ans3, ans4 = -ans4, -ans3
         energy_difference = destination_energy - bound.energy_ev
-        ans6 *= (abs(ans4) - energy_difference * ERG_PER_EV * ans1) / max(1.0e-43, abs(ans4) - threshold_ev * ERG_PER_EV * ans1)
-        ans5 *= (abs(ans3) - energy_difference * ERG_PER_EV * ans2) / max(1.0e-43, abs(ans3) - threshold_ev * ERG_PER_EV * ans2)
+        ans6 *= (abs(ans4) - energy_difference * XSTAR_SOURCE_ERG_PER_EV * ans1) / max(1.0e-43, abs(ans4) - threshold_ev * XSTAR_SOURCE_ERG_PER_EV * ans1)
+        ans5 *= (abs(ans3) - energy_difference * XSTAR_SOURCE_ERG_PER_EV * ans2) / max(1.0e-43, abs(ans3) - threshold_ev * XSTAR_SOURCE_ERG_PER_EV * ans2)
         diagnostics = {
             **ev,
             **ph,
