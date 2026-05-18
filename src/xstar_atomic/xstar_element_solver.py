@@ -1222,8 +1222,9 @@ def _xstar_calt57(te: float, den2: float, e: float, ep: float, n: int) -> dict:
 
     Returns the rate coefficient ``cion`` [cm^3/s] and inverse three-body
     coefficient ``crec`` [cm^6/s] before XSTAR's ``ucalc`` multiplies by density
-    and statistical weights.  This remains diagnostic in v0.3.18+ and is not
-    assembled into the matrix by default.
+    and statistical weights.  The v0.4 source-port dispatcher uses this kernel
+    directly for production label-57 matrix assembly; older v0.3 audit helpers
+    continue to expose their diagnostic energy-convention comparisons.
     """
     if n <= 0:
         return {"python_eval_status": "type57_bad_principal_quantum_number"}

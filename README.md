@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.18 literal type-57 `e1`/`eth` handoff
+
+The v0.4.17 exact-state run confirmed type 63 is resolved and ranked type 57/rate 5 next. XSTAR calls `calt57` with `e=rlev(1,idest1)` and `ep=eth=rlev(1,nlevp)-rlev(1,idest1)`. The Python source-port branch had supplied the absolute parent continuum energy as `ep`, creating nonzero rates where XSTAR returns zero and changing all active ionization coefficients. v0.4.18 now applies the literal `ep=eth` convention and the source pre-kernel gates. No fitted scale is used.
+
 ### v0.4.17 exact record-order quantum handoff for same-`n` type 63
 
 The v0.4.16 rerun remained unchanged because the same-`n` evaluator was still called with energy-ordered lower/upper quantum numbers while receiving packed record-order statistical weights. v0.4.17 passes the packed initial/final `n,l` values into the native `amcrs/velimp` branch and derives the public excitation/de-excitation representation only after native `ans1/ans2` have been formed. No collision kernel or fitted scale is changed.

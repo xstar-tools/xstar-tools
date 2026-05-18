@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.4.18 - 2026-05-18
+
+v0.4.18 fixes the source-energy handoff for XSTAR `ucalc.f90` label 57 after the exact solve-call-219 oxygen run moved the first failing family to type 57/rate 5.
+
+- The v0.4.17 run confirmed type 63/rate 3 is resolved: all 2,120 terms match topologically and the family passes the matrix-parity gate.
+- Type 57 contains 1,156 matched-topology terms from 289 records, with 738 terms outside tolerance. Many XSTAR records are exactly zero while Python produced finite rates; the remaining active XSTAR records were often underestimated by orders of magnitude.
+- XSTAR sets `e1=rlev(1,idest1)`, `eth=max(0,rlev(1,nlevp)-rlev(1,idest1))`, and then deliberately calls `calt57(...,e=e1,ep=eth,...)`.
+- The production Python branch instead passed the parent level's absolute continuum energy as `ep`. That bypassed the source `ep < e` zero gate and changed the effective `rio=(ep-e)/13.6`, `rc`, `rno`, `irc`, and detailed-balance coefficients for every active record.
+- The source-port dispatcher now passes `ep=eth`, preserves `idest2=nlevp`, and applies the literal pre-kernel gates `i57>0`, `idest1>1`, `idest1<=nlevp`, and `eth>0`.
+- Ground-level type-57 records remain exact zero-rate source exits, matching the `ucalc` guard before `calt57`.
+- Adds provenance for `e1`, `eth`, `ep`, and the literal `e1_rlev1_ep_eth` convention plus a regression that prevents absolute-continuum fallback.
+
+No type-57 scale, probe coefficient, or population is inserted into the native operator. Existing solve-call-219 XSTAR probes can be reused.
+
 # v0.4.17 - 2026-05-18
 
 v0.4.17 fixes the remaining type-63/rate-3 same-`n` record-order bug that v0.4.16 exposed but did not fully correct.

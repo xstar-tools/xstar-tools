@@ -1893,18 +1893,83 @@ class SourceFaithfulUCalc:
 
     def _eval_type57(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.xstar_element_solver import _xstar_calt57
-        i=r.integers; id1=i[-2] if len(i)>=2 else 1; id2=c.nlevp
-        lev=c.levels.require(id1); parent=c.levels.require(c.nlevp)
-        n=lev.principal_n or (i[0] if i else 1)
-        ev=_xstar_calt57(c.temperature_k,c.electron_density_cm3,lev.energy_ev,parent.continuum_energy_ev or parent.energy_ev,int(n))
-        cion=_finite(ev.get("type57_cion_cm3_s")); crec=_finite(ev.get("type57_crec_cm6_s"))
+
+        # Literal ucalc.f90 label-57 setup:
+        #   i57   = idat(np1i)
+        #   idest1= idat(np1i+nidt-2)
+        #   idest2= nlevp
+        #   e1    = rlev(1,idest1)
+        #   eth   = max(0,rlev(1,nlevp)-rlev(1,idest1))
+        #   ep    = eth
+        # The calt57 gate compares ep with e1.  Passing the absolute parent
+        # continuum energy instead of eth changes both the zero/nonzero gate
+        # and every active ionization coefficient.
+        i = r.integers
+        i57 = int(i[0]) if i else 0
+        id1 = int(i[-2]) if len(i) >= 2 else 1
+        id2 = int(c.nlevp)
+        if i57 <= 0 or id1 <= 1 or id1 > id2:
+            return self._ctx_result(
+                r, s, ans1=0.0, ans2=0.0, idest1=id1, idest2=id2,
+                diagnostics={
+                    "python_eval_status": "type57_ucalc_gate_zero",
+                    "type57_i57": i57,
+                    "type57_idest1": id1,
+                    "type57_idest2": id2,
+                },
+                context_fields_used=("temperature_k", "xpx", "xee", "levels"),
+            )
+
+        lev = c.levels.require(id1)
+        parent = c.levels.require(id2)
+        n = int(lev.principal_n or i57)
+        e1 = float(lev.energy_ev)
+        eth = max(float(parent.energy_ev) - e1, 0.0)
+        if eth <= 0.0:
+            return self._ctx_result(
+                r, s, ans1=0.0, ans2=0.0, idest1=id1, idest2=id2,
+                diagnostics={
+                    "python_eval_status": "type57_nonpositive_eth_zero",
+                    "type57_i57": i57,
+                    "type57_e1_ev": e1,
+                    "type57_eth_ev": eth,
+                },
+                context_fields_used=("temperature_k", "xpx", "xee", "levels"),
+            )
+
+        ev = _xstar_calt57(
+            c.temperature_k,
+            c.electron_density_cm3,
+            e1,
+            eth,
+            n,
+        )
+        ev = dict(ev)
+        ev.update({
+            "type57_ucalc_energy_convention": "e1_rlev1_ep_eth",
+            "type57_i57": i57,
+            "type57_e1_ev": e1,
+            "type57_eth_ev": eth,
+            "type57_ep_ev": eth,
+        })
+        cion = _finite(ev.get("type57_cion_cm3_s"))
+        crec = _finite(ev.get("type57_crec_cm6_s"))
         if cion is None or crec is None:
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("python_eval_status")),diagnostics=ev)
-        g1=max(lev.statistical_weight,1e-48); g2=max(parent.statistical_weight,1e-48)
-        ans1=cion*c.electron_density_cm3; ans2=crec*(g1/g2)*c.electron_density_cm3**2
-        eth=max(parent.energy_ev-lev.energy_ev,0.0)
-        return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=-ans2*eth*ERG_PER_EV,ans6=-ans1*eth*ERG_PER_EV,
-                                idest1=id1,idest2=id2,diagnostics=ev,context_fields_used=("temperature_k","xpx","xee","levels"))
+            return self._base_result(
+                r, s, UCalcStatus.SOURCE_REJECTED,
+                reason=str(ev.get("python_eval_status")), diagnostics=ev,
+            )
+        g1 = max(lev.statistical_weight, 1e-48)
+        g2 = max(parent.statistical_weight, 1e-48)
+        ans1 = cion * c.electron_density_cm3
+        ans2 = crec * (g1 / g2) * c.electron_density_cm3**2
+        return self._ctx_result(
+            r, s, ans1=ans1, ans2=ans2,
+            ans5=-ans2 * eth * ERG_PER_EV,
+            ans6=-ans1 * eth * ERG_PER_EV,
+            idest1=id1, idest2=id2, diagnostics=ev,
+            context_fields_used=("temperature_k", "xpx", "xee", "levels"),
+        )
 
     def _eval_type71(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.rates_type71 import evaluate_type71_ucalc_record

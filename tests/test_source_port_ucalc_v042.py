@@ -205,7 +205,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.17"
+    assert xa.__version__ == "0.4.18"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 
@@ -297,3 +297,62 @@ def test_type95_uses_eint_e1_not_scaled_expint_em1():
     assert result.ans1 == pytest.approx(expected)
     assert result.diagnostics["e1"] == pytest.approx(e1)
     assert (result.idest1, result.idest2) == (1, 2)
+
+
+def test_type57_uses_literal_ucalc_eth_and_ground_gate(monkeypatch):
+    """Label 57 passes ep=eth, not the absolute parent continuum energy."""
+    import xstar_atomic.xstar_element_solver as solver
+
+    calls = []
+
+    def fake_calt57(te, den2, e, ep, n):
+        calls.append((te, den2, e, ep, n))
+        return {
+            "python_eval_status": "evaluated_type57_calt57_diagnostic",
+            "type57_cion_cm3_s": 2.0e-9,
+            "type57_crec_cm6_s": 5.0e-20,
+        }
+
+    monkeypatch.setattr(solver, "_xstar_calt57", fake_calt57)
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(1, energy_ev=0.0, statistical_weight=2.0, principal_n=1),
+            2: UCalcLevel(2, energy_ev=60.0, statistical_weight=4.0, principal_n=3),
+            3: UCalcLevel(
+                3,
+                energy_ev=100.0,
+                continuum_energy_ev=999.0,
+                statistical_weight=2.0,
+            ),
+        },
+        nlev=3,
+    )
+    context = UCalcContext(
+        temperature_k=7.665518557758832e4,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.2,
+        nlev=3,
+        levels=levels,
+    )
+    result = SourceFaithfulUCalc().evaluate(
+        UCalcRecord(9001, 57, 5, 0, (), (3, 2, 8)), context
+    )
+
+    assert calls == [pytest.approx((context.temperature_k, 1.2e8, 60.0, 40.0, 3))]
+    assert result.status is UCalcStatus.EVALUATED
+    assert (result.idest1, result.idest2) == (2, 3)
+    assert result.ans1 == pytest.approx(2.0e-9 * 1.2e8)
+    assert result.ans2 == pytest.approx(5.0e-20 * (4.0 / 2.0) * (1.2e8**2))
+    assert result.diagnostics["type57_ucalc_energy_convention"] == "e1_rlev1_ep_eth"
+    assert result.diagnostics["type57_ep_ev"] == pytest.approx(40.0)
+
+    # ucalc exits before calt57 for idest1 <= 1.  The endpoint contract remains
+    # visible, but both rates are exactly zero and the kernel is not called.
+    ground = SourceFaithfulUCalc().evaluate(
+        UCalcRecord(9002, 57, 5, 0, (), (1, 1, 8)), context
+    )
+    assert len(calls) == 1
+    assert ground.status is UCalcStatus.EVALUATED
+    assert (ground.idest1, ground.idest2) == (1, 3)
+    assert ground.ans1 == ground.ans2 == 0.0
+    assert ground.diagnostics["python_eval_status"] == "type57_ucalc_gate_zero"
