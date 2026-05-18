@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.14 - 2026-05-18
+
+v0.4.14 completes the literal `phint53hunt.f90` grid-control translation for type 99 after v0.4.13 restored the correct compact endpoints but left the native forward rates 1.5--2.4% high for most active ion stages.
+
+- Adds a direct translation of `huntf.f90`/`nbinc.f90` for the type-99 live-radiation path. XSTAR returns a one-based nearest logarithmic-grid index over the guard-tail-truncated continuum, not a NumPy lower bracket.
+- Preserves the asymmetric source use of that result: `nb1=nbinc(eth)+1`, whereas `nphint=nbinc(emaxx)`.
+- Reproduces the literal power-of-two `ndelt` selection and one-based `kl` loop. The previous Python integration forcibly appended `nphint` to every quadrature pass; Fortran stops at the last naturally reached `kl=kl+nskp` value.
+- Retains `luse`, `ansar1`, and `ansar2` across successive refinement passes exactly as the source does.
+- Adds provenance for the source `nbinc`, `nb1`, `nphint`, final stride, and whether the last pass naturally included the endpoint.
+- Adds focused tests for nearest-log-grid `nbinc` behavior and the non-forced `nphint` endpoint.
+
+No empirical type-99 scale is applied. The v0.4.13 run already showed exact endpoints and reverse rates at about one-part-per-million; v0.4.14 changes only the native forward integration control flow. Existing solve-call-219 XSTAR probes can be reused.
+
 # v0.4.13 - 2026-05-17
 
 v0.4.13 corrects the source mapping and density handoff for `ucalc.f90` label 99 after the exact solve-call-219 oxygen run ranked type 99/rate 7 as the next matrix-parity blocker.

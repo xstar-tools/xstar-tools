@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.14 exact type-99 `phint53hunt` grid control
+
+After v0.4.13 corrected type-99 endpoints, all 28 matrix terms matched XSTAR topologically and the reverse rates agreed at roughly `1e-6` relative precision, but most forward rates remained 1.5--2.4% high. v0.4.14 ports the literal `huntf`/`nbinc` nearest-log-grid rule and the one-based `phint53hunt` stride loop. Python no longer forces the high-energy `nphint` endpoint into every refinement pass. No fitted scale is used, and the existing solve-call-219 probes can be reused.
+
 ### v0.4.13 exact type-99 endpoint and density semantics
 
 The solve-call-219 exact-state run improved the final oxygen population L1 difference to about 0.192 and ranked type 99/rate 7 next. v0.4.13 now decodes the type-99 parent-level offset from packed integer `[-4]`, restoring the source continuum/next-ion-ground aliases, and evaluates `calt99` at `den=xpx` while retaining `xnx=xpx*xee` for `phint53hunt` and the final recombination rate. Existing XSTAR probe products can be reused.

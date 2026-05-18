@@ -98,6 +98,55 @@ def _nbinc(energy: float, epi: Sequence[float]) -> int:
     return max(0, min(int(np.searchsorted(arr, float(energy), side="right") - 1), len(arr) - 1))
 
 
+def _xstar_nbinc_fortran_value(energy: float, epi: Sequence[float]) -> int:
+    """Return the literal one-based integer value from ``nbinc.f90``.
+
+    ``nbinc`` does not return a conventional lower bracket.  It calls
+    ``huntf`` on the source's truncated logarithmic continuum range and then
+    selects the nearer of the estimated grid point and its successor.  The
+    numeric one-based result is retained because ``phint53hunt.f90`` uses it
+    both directly and as ``nb1=nbinc(...)+1``.
+    """
+    arr = np.asarray(epi, dtype=float)
+    n = int(arr.size)
+    if n < 3:
+        return 1
+    numcon2 = max(2, n // 50)
+    numcon3 = n - numcon2
+    work = arr[:numcon3]
+    x = float(energy)
+    jlo = 1
+    if x < 1.0e-34 or work[0] <= 1.0e-34 or work[-1] <= 1.0e-34:
+        return jlo
+    xtmp = max(x, float(work[1]))
+    denom = math.log(float(work[-1]) / float(work[0]))
+    if denom == 0.0:
+        return jlo
+    jlo = int((numcon3 - 1) * math.log(xtmp / float(work[0])) / denom) + 1
+    if jlo < numcon3:
+        tst = abs(math.log(x / (1.0e-34 + float(work[jlo - 1]))))
+        tst2 = abs(math.log(x / (1.0e-34 + float(work[jlo]))))
+        if tst2 < tst:
+            jlo += 1
+    return max(1, min(numcon3, jlo))
+
+
+def _xstar_phint53hunt_pass_indices(nb1: int, nphint: int, nskip: int) -> list[int]:
+    """Return literal one-based ``kl`` values from a phint53hunt pass.
+
+    The Fortran loop does not force the final ``nphint`` endpoint into a pass;
+    it stops after the last naturally reached ``kl=kl+nskp`` value.
+    """
+    kl = max(1, int(nb1) - 1)
+    stop = int(nphint)
+    step = max(1, int(nskip))
+    out: list[int] = []
+    while kl <= stop:
+        out.append(kl)
+        kl += step
+    return out
+
+
 def _enxt_bounds(eth: float, epi: Sequence[float], t_1e4: float, lfast: int) -> tuple[int, int, int]:
     n = len(epi); nb = _nbinc(eth, epi); bktm = XSTAR_KT_EV_PER_1E4K * t_1e4
     if lfast <= 2:
@@ -164,81 +213,131 @@ def _phint53hunt_exact(
     *, energy_above_threshold_ryd: Sequence[float], cross_section_cm2: Sequence[float],
     threshold_ev: float, context: "UCalcContext", swrat: float, crit: float = 0.01,
 ) -> dict[str, float | int | str]:
-    """Translate ``phint53hunt.f90`` for the type-99 live-grid branch."""
+    """Translate ``phint53hunt.f90`` for the type-99 live-grid branch.
+
+    Continuum-bin indices are retained in their literal one-based Fortran form
+    until an array access is made.  In particular, source ``nb1`` is
+    ``nbinc(eth)+1`` whereas source ``nphint`` is ``nbinc(emaxx)``.
+    """
     egrid = np.asarray(energy_above_threshold_ryd, dtype=float)
     sigma = np.asarray(cross_section_cm2, dtype=float)
     if egrid.size < 2 or egrid.size != sigma.size:
         return {"status": "not_evaluated_bad_cross_section_grid"}
     epi, bremsa, _ = _radiation_arrays(context.radiation)
-    n = epi.size
-    numcon3 = n - max(2, n // 50)
-    nb = _nbinc(threshold_ev, epi)
-    if nb >= numcon3:
-        return {"status": "not_evaluated_threshold_above_guard_tail"}
+    n = int(epi.size)
+    numcon2 = max(2, n // 50)
+    numcon3 = n - numcon2
+
+    # phint53hunt.f90: nb1=nbinc(ethi,epi,ncn2)+1
+    nbinc_threshold = _xstar_nbinc_fortran_value(threshold_ev, epi)
+    nb1 = nbinc_threshold + 1
+    if nb1 >= numcon3:
+        return {
+            "status": "not_evaluated_threshold_above_guard_tail",
+            "nbinc_threshold_fortran": nbinc_threshold,
+            "nb1_fortran": nb1,
+        }
+
     emax = threshold_ev + float(egrid[-1]) * 13.605692
-    nph = min(_nbinc(emax, epi), numcon3 - 1)
-    span = max(nph - nb, 1)
-    power = max(0, int(math.log(max(float(span), 1.0), 2.0) + 0.5))
-    ndelt = 2 ** power
-    while ndelt > 2 and (nb + ndelt >= numcon3 or (epi[min(nb + ndelt, n - 1)] - threshold_ev) / 13.605692 > egrid[-1]):
-        ndelt //= 2
-    nph = min(nb + max(ndelt, 1), numcon3 - 1)
+    nphint = _xstar_nbinc_fortran_value(emax, epi)
+    ndelt = max(nphint - nb1, 1)
+    itmp = int(math.log(float(ndelt)) / 0.69315 + 0.5)
+    while True:
+        ndelt = 2 ** itmp
+        nphint = nb1 + ndelt
+        etst = 0.0
+        if nphint <= numcon3:
+            etst = (float(epi[nphint - 1]) - threshold_ev) / 13.605692
+        if nphint > numcon3 or etst > float(egrid[-1]):
+            itmp -= 1
+            if itmp > 1:
+                continue
+        break
+
     t = context.t
     bktm = XSTAR_KT_EV_PER_1E4K * t
     rnist = 5.216e-21 * float(swrat) / max(t * math.sqrt(max(t, 0.0)), 1.0e-48)
-    previous = None
-    nskip = max(nph - nb, 1)
+    luse = np.zeros(n, dtype=np.int8)
+    ansar1 = np.zeros(n, dtype=float)
+    ansar2 = np.zeros(n, dtype=float)
+    nskip = ndelt
     npass = 0
-    sums = (0.0,) * 6
-    while nskip > 1 or previous is None:
+    sumr = sumh = sumi = sumc = sumh2 = sumc2 = 0.0
+    tst1 = tst2 = tst3 = tst4 = float("inf")
+    last_pass_indices: list[int] = []
+
+    while (
+        (tst3 > crit or tst1 > crit or tst2 > crit or tst4 > crit or sumi <= 1.0e-24)
+        and nskip > 1
+    ):
         npass += 1
         nskip = max(1, nskip // 2)
+        sumro, sumho, sumio, sumco = sumr, sumh, sumi, sumc
         sumr = sumh = sumi = sumc = sumh2 = sumc2 = 0.0
         tempr = tempi = atmp2 = atmp22 = 0.0
-        ener = float(epi[nb])
-        indices = list(range(max(0, nb - 1), nph + 1, nskip))
-        if indices[-1] != nph:
-            indices.append(nph)
-        for k in indices:
+        ener = float(epi[nb1 - 1])
+        pass_indices = _xstar_phint53hunt_pass_indices(nb1, nphint, nskip)
+        last_pass_indices = pass_indices
+        for kl in pass_indices:
+            k = kl - 1
             enero = ener
-            ener = float(epi[k])
+            epii = float(epi[k])
+            ener = epii
             bremtmp = float(bremsa[k]) / 25.3
             tempio, atmp2o, atmp22o = tempi, atmp2, atmp22
             sgtmp = 0.0
             if ener >= threshold_ev:
-                efnd = (ener - threshold_ev) / 13.605692
-                sgtmp = _find53_cross_section(egrid, sigma, efnd)
-                exptmp = _expo(-(ener - threshold_ev) / max(bktm, 1.0e-48))
-                bbnurj = min(2.0e4, ener) ** 3
-                tempi1 = rnist * bbnurj * sgtmp * exptmp * 1.571e22 / max(ener, 1.0e-48)
-                tempi2 = rnist * bremtmp * sgtmp * exptmp / max(ener, 1.0e-48)
-                tempi = tempi1 + tempi2
-                atmp2 = tempi * ener
-                atmp22 = tempi * (ener - threshold_ev)
+                if luse[k] == 0:
+                    efnd = (ener - threshold_ev) / 13.605692
+                    sgtmp = _find53_cross_section(egrid, sigma, efnd)
+                    exptmp = _expo(-(epii - threshold_ev) / max(bktm, 1.0e-48))
+                    bbnurj = min(2.0e4, epii) ** 3
+                    tempi1 = rnist * bbnurj * sgtmp * exptmp * 1.571e22 / max(epii, 1.0e-48)
+                    tempi2 = rnist * bremtmp * sgtmp * exptmp / max(epii, 1.0e-48)
+                    tempi = tempi1 + tempi2
+                    atmp2 = tempi * epii
+                    atmp22 = tempi * (epii - threshold_ev)
+                    ansar1[k] = sgtmp
+                    ansar2[k] = atmp2
+                else:
+                    sgtmp = float(ansar1[k])
+                    atmp2 = float(ansar2[k])
+                    tempi = atmp2 / max(epii, 1.0e-48)
+                    atmp22 = tempi * (epii - threshold_ev)
             tempro = tempr
-            tempr = 25.3 * sgtmp * bremtmp / max(ener, 1.0e-48)
-            de = ener - enero
-            sumr += (tempr + tempro) * de / 2.0
-            sumh += (tempr * ener + tempro * enero) * de / 2.0
-            sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * de / 2.0
-            sumi += (tempi + tempio) * de / 2.0
-            sumc += (atmp2 + atmp2o) * de / 2.0
-            sumc2 += (atmp22 + atmp22o) * de / 2.0
-        sums = (sumr, sumi, sumh, sumc, sumh2, sumc2)
-        if previous is not None:
-            tests = [abs((a-b)/(a+b+1.0e-24)) for a,b in zip(previous[:4], sums[:4])]
-            if max(tests) <= crit and sumi > 1.0e-24:
-                break
-        previous = sums
-        if nskip <= 1:
-            break
-    sumr, sumi, sumh, sumc, sumh2, sumc2 = sums
+            tempr = 25.3 * sgtmp * bremtmp / max(epii, 1.0e-48)
+            deld = ener - enero
+            sumr += (tempr + tempro) * deld / 2.0
+            sumh += (tempr * ener + tempro * enero) * deld / 2.0
+            sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * deld / 2.0
+            sumi += (tempi + tempio) * deld / 2.0
+            sumc += (atmp2 + atmp2o) * deld / 2.0
+            sumc2 += (atmp22 + atmp22o) * deld / 2.0
+            luse[k] = 1
+        tst3 = abs((sumio - sumi) / (sumio + sumi + 1.0e-24))
+        tst1 = abs((sumro - sumr) / (sumro + sumr + 1.0e-24))
+        tst2 = abs((sumho - sumh) / (sumho + sumh + 1.0e-24))
+        tst4 = abs((sumco - sumc) / (sumco + sumc + 1.0e-24))
+
     ne = context.electron_density_cm3
     return {
-        "status": "evaluated_phint53hunt_live_grid", "pirt": sumr, "rrrt": ne * sumi,
-        "piht": sumh * ERG_PER_EV, "rrcl": ne * sumc * ERG_PER_EV,
-        "piht2": sumh2 * ERG_PER_EV, "rrcl2": ne * sumc2 * ERG_PER_EV,
-        "npass": npass, "nb1_zero_based": nb, "nphint_zero_based": nph,
+        "status": "evaluated_phint53hunt_live_grid",
+        "pirt": sumr,
+        "rrrt": ne * sumi,
+        "piht": sumh * ERG_PER_EV,
+        "rrcl": ne * sumc * ERG_PER_EV,
+        "piht2": sumh2 * ERG_PER_EV,
+        "rrcl2": ne * sumc2 * ERG_PER_EV,
+        "npass": npass,
+        "nbinc_threshold_fortran": nbinc_threshold,
+        "nb1_fortran": nb1,
+        "nphint_fortran": nphint,
+        "ndelt_fortran": ndelt,
+        "nskip_last_fortran": nskip,
+        "last_pass_first_kl_fortran": last_pass_indices[0] if last_pass_indices else None,
+        "last_pass_last_kl_fortran": last_pass_indices[-1] if last_pass_indices else None,
+        "last_pass_includes_nphint": bool(last_pass_indices and last_pass_indices[-1] == nphint),
+        "type99_phint53hunt_grid_policy": "literal_nbinc_plus_one_and_natural_kl_stride",
     }
 
 
