@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.16 same-n type-63 record-order channels
+
+The v0.4.15 rerun showed that the nine remaining type-63 failures were all same-`n` `amcrs/velimp` records. v0.4.15 corrected only the `nf != ni` Bautista branch, so the same-`n` path still returned energy-ordered rates. v0.4.16 exposes the literal XSTAR `ans1/ans2` channels from the same-`n` branch using the packed initial/final endpoints and their statistical weights. No collision kernel or fitted scale is changed.
+
 ### v0.4.15 literal type-63 record-order matrix channels
 
 The v0.4.14 exact-state run moved the first failing family to type 63/rate 3. All 2,120 type-63 terms matched topologically, but 36 terms from nine O VII records had their forward and reverse channels exchanged because those packed records store the higher endpoint first. v0.4.15 preserves XSTAR's literal `idest1 -> idest2` `ans1` channel and `idest2 -> idest1` `ans2` channel instead of converting them to an energy-ordered collision convention. The validated Bautista `anl1`/`erc` kernel is unchanged.

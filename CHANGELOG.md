@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# v0.4.16 - 2026-05-18
+
+v0.4.16 fixes the remaining type-63/rate-3 matrix-channel mismatch in the same-`n` `amcrs/velimp` branch.
+
+- Preserves packed `idest1 -> idest2` direction for same-`n` type-63 records.
+- Exposes native `ans1`/`ans2` before the generic collision-table energy ordering.
+- Uses the record-initial and record-final statistical weights exactly as `ucalc.f90` does.
+- Adds a direct regression for a descending-endpoint same-`n` O VII-style record.
+- Does not change `anl1`, `amcrs`, `velimp`, density scaling, or any other collision family.
+
 # v0.4.15 - 2026-05-18
 
 v0.4.15 corrects the matrix-facing channel convention for XSTAR `ucalc.f90` label 63 after the exact solve-call-219 oxygen run ranked type 63/rate 3 as the first failing record family.

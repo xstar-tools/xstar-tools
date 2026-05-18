@@ -867,6 +867,8 @@ def evaluate_type63_same_n_lmixing(
     electron_density_cm3: float = 1.0,
     g_lower: Optional[float] = None,
     g_upper: Optional[float] = None,
+    g_initial: Optional[float] = None,
+    g_final: Optional[float] = None,
 ) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
     """Evaluate XSTAR ucalc.f90 type-63 same-n l-changing branch.
 
@@ -930,13 +932,32 @@ def evaluate_type63_same_n_lmixing(
         return None, None, sum_a, diag
     gl = float(g_lower) if g_lower not in (None, 0, 0.0) else float(2*lff + 1)
     gu = float(g_upper) if g_upper not in (None, 0, 0.0) else float(2*lii + 1)
-    # cn is for l_high -> l_low.  The reverse low-l -> high-l rate follows
-    # the XSTAR detailed-balance factor.  Map this onto the energy-ordered
-    # lower->upper / upper->lower convention used by xstar-atomic.
-    if li > lf:  # lower level has higher l, upper has lower l
+
+    # Literal ucalc.f90 label-63 same-n channel semantics.  XSTAR keeps
+    # idest1/idest2 in packed record order and sets ans1 for idest1->idest2
+    # and ans2 for the reverse channel.  The statistical weights here are
+    # therefore those of the record-initial and record-final endpoints, not
+    # the energy-ordered lower/upper endpoints.
+    gi = float(g_initial) if g_initial not in (None, 0, 0.0) else float(2*li + 1)
+    gf = float(g_final) if g_final not in (None, 0, 0.0) else float(2*lf + 1)
+    if lf < li:
+        ans1_forward = cn
+        ans2_reverse = cn * gi / gf if gf != 0.0 else None
+    else:
+        ans2_reverse = cn
+        ans1_forward = cn * gf / gi if gi != 0.0 else None
+    diag["type63_ucalc_ans1_forward_cm3_s"] = ans1_forward
+    diag["type63_ucalc_ans2_reverse_cm3_s"] = ans2_reverse
+    diag["type63_same_n_g_initial"] = gi
+    diag["type63_same_n_g_final"] = gf
+
+    # Preserve the public collision-table API's energy-ordered rates for
+    # callers that consume q_excitation/q_deexcitation.  The source-port
+    # matrix adapter uses the literal ans1/ans2 diagnostics above instead.
+    if li > lf:  # energy-lower endpoint has higher l, energy-upper has lower l
         q_lower_to_upper = cn
         q_upper_to_lower = cn * gl / gu if gu != 0.0 else None
-    else:        # lower level has lower l, upper has higher l
+    else:
         q_upper_to_lower = cn
         q_lower_to_upper = cn * gu / gl if gl != 0.0 else None
     diag["type63_reason"] = "evaluated_same_n_lmixing_amcrs_velimp"
@@ -1436,6 +1457,8 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
                 electron_density_cm3=electron_density_cm3,
                 g_lower=row.get("g_lower"),
                 g_upper=row.get("g_upper"),
+                g_initial=row.get("type63_initial_g"),
+                g_final=row.get("type63_final_g"),
             )
             method = diag.get("type63_reason") or "type63_same_n_not_evaluated"
             if method == "evaluated_same_n_lmixing_amcrs_velimp":
