@@ -609,7 +609,7 @@ def write_element_population_parity_products(
     result: ElementPopulationParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.11",
+    port_version: str = "v0.4.12",
 ) -> Dict[str, Path]:
     """Write row, aggregate, JSON, Markdown, and NPZ parity products."""
     out = Path(out_dir)

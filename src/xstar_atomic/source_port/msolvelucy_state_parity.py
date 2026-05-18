@@ -443,7 +443,7 @@ def write_msolvelucy_state_parity_products(
     result: MSolveStateParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.11",
+    port_version: str = "v0.4.12",
 ) -> Dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

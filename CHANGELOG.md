@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.4.12 - 2026-05-17
+
+v0.4.12 fixes the exact-state type-74 assembly blockers and the dominant type-95/rate-5 matrix-rate error exposed by the v0.4.11 oxygen run.
+
+- Translates `ucalc.f90` label 74 and `calt74.f90` directly against the live `epi/bremsa` radiation arrays. The forward delta-resonance photoionization rate is evaluated by source-compatible linear interpolation and the literal `4.752e-22` conversion.
+- Accepts a zero type-74 DR coefficient as a valid source result. At solve call 219 all 42 blocked records had `alpha=0` because the source Boltzmann cutoff skipped their resonances, while their live-radiation forward rates remained nonzero.
+- Corrects type-74 endpoint semantics to `idest1=idat(nidt-1)`, `idest2=nlevp`, `idest3=idat(nidt)`, and `idest4=idest3+1`.
+- Applies only the source `g_lower/g_continuum` factor to the type-74 reverse coefficient; label 74 does not multiply `ans1` or `ans2` by density.
+- Corrects type-95 Bryans collisional-ionization evaluation. XSTAR label 95 calls `eint`, whose first result is the ordinary `E1(x)` integral; the previous Python branch incorrectly used the scaled `expint` quantity `x exp(x) E1(x)` directly.
+- Reproduces the literal one-based type-95 spline bracket and storage offsets instead of NumPy endpoint-clamping interpolation.
+- Adds focused source-port tests for zero-alpha/nonzero-forward type-74 records and the type-95 `eint` distinction.
+
+No probe rate is inserted into the production operator. Existing solve-call-219 population, state, `ucalc`, and matrix probes can be reused for the next oxygen parity run.
+
 # v0.4.11 - 2026-05-17
 
 v0.4.11 fixes the parity CLI regression exposed when the exact solve-call-219 runtime state makes strict element assembly incomplete.

@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.12 exact type-74 and type-95 source corrections
+
+The exact solve-call-219 run exposed 42 strict blockers, all from type-74 delta-resonance records. The source permits a zero DR coefficient while retaining a nonzero live-radiation forward rate; v0.4.12 now evaluates `calt74` directly on the live radiation arrays, preserves zero reverse coefficients, and uses the exact label-74 endpoints and statistical-weight handoff. The same release corrects label 95 to use `eint`'s ordinary `E1(x)` result rather than the scaled `expint` value and reproduces the Fortran spline indexing.
+
 ### v0.4.11 exact-state parity preflight
 
 Population and iteration-state parity now run only after a strict native element solve has actually executed. If the selected XSTAR solve-call runtime exposes context-blocked source records, example 102 still writes the complete partial assembly, record-level matrix comparison, and grouped blocker products instead of stopping with an early parity exception. Inspect `xstar_element_assembly_blocker_summary.csv/.json/.md` to select the next source routine to correct.

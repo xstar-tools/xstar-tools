@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -204,7 +205,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.11"
+    assert xa.__version__ == "0.4.12"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 
@@ -218,3 +219,81 @@ def test_legacy_default_dispatcher_delegates_to_complete_authoritative_path():
                              UCalcContext(temperature_k=1.0e4, hydrogen_density_cm3=2.0, electron_fraction_xee=3.0))
     assert result.status is UCalcStatus.EVALUATED
     assert result.ans1 == pytest.approx(12.0)
+
+
+def test_type74_uses_live_radiation_accepts_zero_alpha_and_source_endpoints():
+    from types import SimpleNamespace
+
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(1, energy_ev=0.0, statistical_weight=2.0),
+            2: UCalcLevel(2, energy_ev=10.0, statistical_weight=4.0),
+            3: UCalcLevel(3, energy_ev=100.0, statistical_weight=6.0),
+            41: UCalcLevel(41, energy_ev=20.0, statistical_weight=2.0),
+        },
+        nlev=3,
+    )
+    radiation = SimpleNamespace(
+        epim_eV=np.asarray([100.0, 500.0, 1000.0]),
+        bremsam=np.asarray([1.0e10, 2.0e10, 3.0e10]),
+        bremsint=np.zeros(3),
+    )
+    context = UCalcContext(
+        temperature_k=7.665518557758832e4,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.2046560563936872,
+        nlev=3,
+        levels=levels,
+        radiation=radiation,
+    )
+    # xt, two resonance energies in Ryd, then two delta heights.  At this
+    # temperature both DR exponent arguments exceed the source cutoff, so
+    # alpha=0 is a legitimate evaluated result, not a rejected record.
+    record = UCalcRecord(21769, 74, 7, 0, (1.0, 30.0, 40.0, 2.0, 3.0), (41, 7))
+    result = SourceFaithfulUCalc().evaluate(record, context)
+
+    e1 = (30.0 + 1.0) * 13.60569253
+    e2 = (40.0 + 1.0) * 13.60569253
+    b1 = 1.0e10 + (2.0e10 - 1.0e10) * (e1 - 100.0) / 400.0
+    b2 = 2.0e10 + (3.0e10 - 2.0e10) * (e2 - 500.0) / 500.0
+    expected_rate = (2.0 * b1 + 3.0 * b2) * 4.752e-22
+
+    assert result.status is UCalcStatus.EVALUATED
+    assert result.ans1 == pytest.approx(expected_rate)
+    assert result.ans2 == 0.0
+    assert (result.idest1, result.idest2, result.idest3, result.idest4) == (41, 3, 7, 8)
+    assert result.diagnostics["source_zero_reverse_rate"] is True
+
+
+def test_type95_uses_eint_e1_not_scaled_expint_em1():
+    from xstar_atomic.xstar_element_solver import _xstar_eint
+
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(1, energy_ev=0.0, statistical_weight=2.0),
+            2: UCalcLevel(2, energy_ev=13.6, statistical_weight=4.0),
+        },
+        nlev=2,
+    )
+    context = UCalcContext(
+        temperature_k=1.0e6,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.2,
+        nlev=2,
+        levels=levels,
+    )
+    # ee, tmin, three transformed-temperature knots, three rho knots.
+    reals = (10.0, 0.0, 0.0, 0.5, 0.9, 1.0, 2.0, 3.0)
+    record = UCalcRecord(17362, 95, 5, 0, reals, (1, 1, 7))
+    result = SourceFaithfulUCalc().evaluate(record, context)
+
+    tt = (0.861707 * 100.0) / 10.0
+    xx = 1.0 - 0.693147 / math.log(tt + 2.0)
+    rho = 2.0 + (xx - 0.5) * (3.0 - 2.0) / (0.9 - 0.5)
+    e1, _, _ = _xstar_eint(1.0 / tt)
+    expected = 1.0e-6 * e1 * rho / math.sqrt(tt * 10.0**3) * context.electron_density_cm3
+
+    assert result.status is UCalcStatus.EVALUATED
+    assert result.ans1 == pytest.approx(expected)
+    assert result.diagnostics["e1"] == pytest.approx(e1)
+    assert (result.idest1, result.idest2) == (1, 2)

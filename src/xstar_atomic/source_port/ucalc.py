@@ -1810,14 +1810,97 @@ class SourceFaithfulUCalc:
             diagnostics={"calt72_rate_cm3_s":rate},context_fields_used=("temperature_k","xpx","xee","levels"))
 
     def _eval_type74(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        from xstar_atomic.xstar_element_solver import _xstar_calt74_alpha_diagnostic
-        ev=_xstar_calt74_alpha_diagnostic(c.temperature_k,r.reals)
-        alpha=_finite(ev.get("type74_alpha_unweighted_cm3_s")) or _finite(ev.get("calt74_alpha_cm3_s")) or _finite(ev.get("alpha_cm3_s"))
-        if alpha is None:
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("status") or "calt74_failed"),diagnostics=ev)
-        i=r.integers; id1=i[-2] if len(i)>=2 else 0; id2=c.nlevp+(i[-3] if len(i)>=3 else 1)-1
-        return self._ctx_result(r,s,ans2=alpha*c.electron_density_cm3,idest1=id1,idest2=id2,diagnostics=ev,
-                                context_fields_used=("temperature_k","xpx","xee"))
+        """Translate XSTAR ``ucalc`` label 74 and ``calt74.f90``.
+
+        Type 74 supplies delta-function resonances added to a bound-free
+        photoionization cross section.  ``calt74`` returns a forward
+        radiation rate and an *unweighted* DR coefficient.  The source then
+        applies only ``g_lower/g_continuum`` to the reverse coefficient; it
+        does not multiply either branch by density inside label 74.
+        """
+        rd = tuple(float(x) for x in r.reals)
+        ints = r.integers
+        if len(rd) < 3 or len(ints) < 2:
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type74_short_record")
+        m = (len(rd) - 1) // 2
+        if m <= 0 or 1 + 2 * m > len(rd):
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type74_bad_delta_coefficient_layout")
+        if c.radiation is None:
+            return self._context_blocked(r, s, "type74_requires_live_radiation")
+        try:
+            epi, bremsa, _ = _radiation_arrays(c.radiation)
+        except Exception as exc:
+            return self._context_blocked(r, s, f"type74_live_radiation:{exc}")
+        if len(epi) < 2 or len(epi) != len(bremsa):
+            return self._context_blocked(r, s, "type74_invalid_live_radiation_grid")
+
+        # Literal coefficient layout from calt74.f90.
+        xt = rd[0]
+        energies = rd[1:1 + m]
+        heights = rd[1 + m:1 + 2 * m]
+        te = float(c.temperature_k) * 1.38066e-16
+        ryk = 4.589343e10
+        alpha_sum = 0.0
+        alpha_terms_used = 0
+        alpha_terms_skipped = 0
+        for x, hgh in zip(energies, heights):
+            arg = x / max(ryk * te, 1.0e-300)
+            if arg < 40.0:
+                alpha_sum += _expo(-arg) * (x + xt) * (x + xt) * hgh
+                alpha_terms_used += 1
+            else:
+                alpha_terms_skipped += 1
+        alpha = alpha_sum * 213.9577e-9 / max(te ** 1.5 * ryk * ryk, 1.0e-300)
+
+        # Source calt74 returns a zero forward rate when its final resonance
+        # lies above the live grid.  Otherwise linearly interpolate bremsa at
+        # every resonance energy and apply the literal conversion factor.
+        ry_ev = 13.60569253
+        resonance_energies = tuple((x + xt) * ry_ev for x in energies)
+        rate_sum = 0.0
+        rate_terms_used = 0
+        if resonance_energies and resonance_energies[-1] <= float(epi[-1]):
+            for eres, hgh in zip(resonance_energies, heights):
+                if eres < float(epi[0]) or eres > float(epi[-1]):
+                    continue
+                k = _linear_hunt(epi, eres)
+                e0, e1 = float(epi[k]), float(epi[k + 1])
+                b0, b1 = float(bremsa[k]), float(bremsa[k + 1])
+                frac = 0.0 if e1 == e0 else (eres - e0) / (e1 - e0)
+                rate_sum += (b0 + frac * (b1 - b0)) * hgh
+                rate_terms_used += 1
+        rate = rate_sum * 4.752e-22
+
+        # ucalc.f90 label 74 endpoint semantics:
+        # idest1=idat(np1i+nidt-2), idest2=nlevp,
+        # idest3=idat(np1i+nidt-1), idest4=idest3+1.
+        id1 = int(ints[-2])
+        id2 = int(c.nlevp)
+        id3 = int(ints[-1])
+        id4 = id3 + 1
+        gglo = c.levels.weight(id1)
+        ggup = c.levels.weight(id2)
+        if gglo <= 0.0 or ggup <= 1.0e-24:
+            return self._context_blocked(r, s, "type74_missing_or_bad_statistical_weights")
+        ans2 = alpha * gglo / ggup
+        diagnostics = {
+            "type74_calt74_status": "evaluated_type74_calt74_live",
+            "type74_rate_unweighted_s^-1": rate,
+            "type74_alpha_unweighted_cm3_s": alpha,
+            "type74_statistical_weight_ratio": gglo / ggup,
+            "type74_m_delta_count": m,
+            "type74_delta_terms_alpha_used": alpha_terms_used,
+            "type74_delta_terms_alpha_skipped_arg_ge_40": alpha_terms_skipped,
+            "type74_delta_terms_rate_used": rate_terms_used,
+            "type74_resonance_energy_eV_min": min(resonance_energies) if resonance_energies else None,
+            "type74_resonance_energy_eV_max": max(resonance_energies) if resonance_energies else None,
+            "source_zero_reverse_rate": bool(alpha == 0.0),
+        }
+        return self._ctx_result(
+            r, s, ans1=rate, ans2=ans2, idest1=id1, idest2=id2,
+            idest3=id3, idest4=id4, diagnostics=diagnostics,
+            context_fields_used=("temperature_k", "radiation", "levels"),
+        )
 
     def _eval_type75(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i=r.integers; id1=max(i[-3] if len(i)>=3 else 1,1); id2=max((i[-2] if len(i)>=2 else 1)+c.nlevp-1,1)
@@ -1884,17 +1967,59 @@ class SourceFaithfulUCalc:
                                 idest1=id1,idest2=id2,diagnostics=ev,context_fields_used=("temperature_k","xpx","levels"))
 
     def _eval_type95(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        from xstar_atomic.xstar_element_solver import _xstar_expint_em1
-        ee=r.reals[0]; ns=(len(r.reals)-2)//2; tt=(XSTAR_KT_EV_PER_1E4K*c.t)/ee
-        xx=1.0-0.693147/math.log(tt+2.0); xg=r.reals[2:2+ns]; yg=r.reals[2+ns:2+2*ns]
-        rho=float(np.interp(xx,xg,yg)); e1=_xstar_expint_em1(1.0/tt)
-        if e1 is None: return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason="eint_failed")
-        ans1=1e-6*e1*rho/math.sqrt(tt*ee**3)*c.electron_density_cm3
-        id1=1; id2=c.nlevp+(r.integers[1]-1 if r.rate_type==5 and len(r.integers)>=3 else 0) if r.rate_type==5 else 1
-        g1=max(c.levels.weight(id1),1e-48); g2=max(c.levels.weight(c.nlevp),1e-48)
-        rinf=2.08e-22*g1/g2/c.t/c.tsq; ans2=ans1*rinf*c.electron_density_cm3/_expo(-1.0/tt)
-        return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*ee*ERG_PER_EV,ans6=ans1*ee*ERG_PER_EV,
-                                idest1=id1,idest2=id2,diagnostics={"rho":rho,"e1":e1},context_fields_used=("temperature_k","xpx","xee","levels"))
+        from xstar_atomic.xstar_element_solver import _xstar_eint
+        if len(r.reals) < 6 or len(r.integers) < 2:
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type95_short_record")
+        ee = float(r.reals[0])
+        ns = (len(r.reals) - 2) // 2
+        if ee <= 0.0 or ns < 2 or 2 + 2 * ns > len(r.reals):
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type95_bad_spline_record")
+        tt = (XSTAR_KT_EV_PER_1E4K * c.t) / ee
+        if tt <= 0.0:
+            return self._base_result(r, s, UCalcStatus.SOURCE_REJECTED, reason="type95_bad_scaled_temperature")
+        xx = 1.0 - 0.693147 / math.log(tt + 2.0)
+
+        # Reproduce the source's 1-based upper-bracket search and literal
+        # spline storage offsets rather than NumPy's endpoint-clamping interp.
+        rd = tuple(float(x) for x in r.reals)
+        mm = 1
+        while mm < ns and xx > rd[1 + mm]:
+            mm += 1
+        ly, ry = ns + mm, 1 + ns + mm
+        lx, rx = mm, 1 + mm
+        if max(ly, ry, lx, rx) >= len(rd):
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type95_spline_index_out_of_range")
+        denom = rd[rx] - rd[lx]
+        if denom == 0.0:
+            return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type95_zero_spline_interval")
+        rho = rd[ly] + (xx - rd[lx]) * (rd[ry] - rd[ly]) / denom
+
+        # ucalc label 95 calls eint(), whose first output is E1(x).  The old
+        # translation used expint's scaled em1=x*exp(x)*E1(x) directly.
+        e1, _, _ = _xstar_eint(1.0 / tt)
+        if e1 is None:
+            return self._base_result(r, s, UCalcStatus.SOURCE_REJECTED, reason="eint_failed")
+        citmp1 = 1.0e-6 * e1 * rho / math.sqrt(tt * ee ** 3)
+        ans1 = citmp1 * c.electron_density_cm3
+
+        if r.rate_type == 5:
+            id1 = int(r.integers[0])
+            id2 = int(c.nlevp - 1 + r.integers[1]) if len(r.integers) >= 3 else int(c.nlevp)
+        else:
+            id1 = id2 = 1
+        g1 = c.levels.weight(id1)
+        g2 = c.levels.weight(c.nlevp)
+        if g1 <= 0.0 or g2 <= 1.0e-24:
+            return self._context_blocked(r, s, "type95_missing_or_bad_statistical_weights")
+        rinf = 2.08e-22 * g1 / g2 / max(c.t * c.tsq, 1.0e-300)
+        ans2 = ans1 * rinf * c.electron_density_cm3 / _expo(-1.0 / tt)
+        return self._ctx_result(
+            r, s, ans1=ans1, ans2=ans2, ans5=ans2 * ee * ERG_PER_EV,
+            ans6=ans1 * ee * ERG_PER_EV, idest1=id1, idest2=id2,
+            diagnostics={"rho": rho, "e1": e1, "scaled_temperature_tt": tt,
+                         "spline_upper_index_fortran": mm},
+            context_fields_used=("temperature_k", "xpx", "xee", "levels"),
+        )
 
     def _eval_type96(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i=r.integers; id1=max(i[-3] if len(i)>=3 else 1,1); id2=max((i[-2] if len(i)>=2 else 1)+c.nlevp-1,1)
