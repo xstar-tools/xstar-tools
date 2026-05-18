@@ -145,17 +145,17 @@ def test_msolvelucy_ipmat_clamp_aliases_excited_parent_endpoint_to_last_row():
     assert sum(t.source_ipmat_clamped for t in terms) == 3
 
 
-def test_type63_same_n_descending_record_preserves_ucalc_channel_direction():
+def test_type63_same_n_descending_record_uses_record_order_quantum_numbers():
     levels = UCalcLevelTable(
         levels={
-            1: UCalcLevel(1, energy_ev=10.0, statistical_weight=7.0, principal_n=5, orbital_l=3),
-            2: UCalcLevel(2, energy_ev=20.0, statistical_weight=9.0, principal_n=5, orbital_l=4),
+            # The packed initial endpoint is higher in energy but has lower l.
+            # Energy ordering therefore reverses the record-order quantum pair,
+            # exactly as in the nine O VII solve-call-219 failures.
+            1: UCalcLevel(1, energy_ev=10.0, statistical_weight=3.0, principal_n=5, orbital_l=1),
+            2: UCalcLevel(2, energy_ev=20.0, statistical_weight=1.0, principal_n=5, orbital_l=0),
         },
         nlev=2,
     )
-    # This exercises the same-n amcrs/velimp branch used by the nine O VII
-    # records in the solve-call-219 matrix comparison.  The higher-energy,
-    # higher-l endpoint is stored first in the packed type-63 record.
     record = UCalcRecord(
         record=22361,
         data_type=63,
@@ -177,6 +177,10 @@ def test_type63_same_n_descending_record_preserves_ucalc_channel_direction():
     assert result.status is UCalcStatus.EVALUATED
     assert (result.idest1, result.idest2) == (2, 1)
     assert result.diagnostics["type63_matrix_channel_convention"] == "literal_ucalc_record_order"
+    assert result.diagnostics["type63_same_n_lii"] == 1
+    assert result.diagnostics["type63_same_n_lff"] == 0
+    assert result.diagnostics["type63_same_n_g_initial"] == 1.0
+    assert result.diagnostics["type63_same_n_g_final"] == 3.0
     assert result.ans1 == pytest.approx(
         result.diagnostics["type63_ucalc_ans1_forward_cm3_s"]
         * context.electron_density_cm3
@@ -185,7 +189,17 @@ def test_type63_same_n_descending_record_preserves_ucalc_channel_direction():
         result.diagnostics["type63_ucalc_ans2_reverse_cm3_s"]
         * context.electron_density_cm3
     )
-    # lf < li: XSTAR uses ans1=cn and ans2=cn*g_initial/g_final.
-    assert result.diagnostics["type63_ucalc_ans2_reverse_cm3_s"] == pytest.approx(
-        result.diagnostics["type63_ucalc_ans1_forward_cm3_s"] * 9.0 / 7.0
+    # Record order is li=0 -> lf=1, so XSTAR sets ans2=cn and
+    # ans1=cn*g_final/g_initial=3*cn.
+    assert result.diagnostics["type63_ucalc_ans1_forward_cm3_s"] == pytest.approx(
+        3.0 * result.diagnostics["type63_ucalc_ans2_reverse_cm3_s"]
+    )
+    # The public collision-table view remains energy ordered: lower level 1
+    # excites to upper level 2 through the native reverse channel.
+    assert result.diagnostics["type63_public_energy_order_source"] == "record_endpoint_energies"
+    assert result.diagnostics["q_excitation_cm3_s"] == pytest.approx(
+        result.diagnostics["type63_ucalc_ans2_reverse_cm3_s"]
+    )
+    assert result.diagnostics["q_deexcitation_cm3_s"] == pytest.approx(
+        result.diagnostics["type63_ucalc_ans1_forward_cm3_s"]
     )

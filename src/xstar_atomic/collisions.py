@@ -869,6 +869,8 @@ def evaluate_type63_same_n_lmixing(
     g_upper: Optional[float] = None,
     g_initial: Optional[float] = None,
     g_final: Optional[float] = None,
+    energy_initial_eV: Optional[float] = None,
+    energy_final_eV: Optional[float] = None,
 ) -> Tuple[Optional[float], Optional[float], Optional[float], dict]:
     """Evaluate XSTAR ucalc.f90 type-63 same-n l-changing branch.
 
@@ -952,14 +954,31 @@ def evaluate_type63_same_n_lmixing(
     diag["type63_same_n_g_final"] = gf
 
     # Preserve the public collision-table API's energy-ordered rates for
-    # callers that consume q_excitation/q_deexcitation.  The source-port
-    # matrix adapter uses the literal ans1/ans2 diagnostics above instead.
-    if li > lf:  # energy-lower endpoint has higher l, energy-upper has lower l
+    # callers that consume q_excitation/q_deexcitation.  The native ans1/ans2
+    # channels above are in packed record order, so derive the public view from
+    # the endpoint energies rather than from l ordering.  This distinction is
+    # essential for descending ATDB records: the energy-ordered lower/upper
+    # quantum numbers can be the reverse of the record-initial/final pair.
+    ei = float(energy_initial_eV) if energy_initial_eV is not None else None
+    ef = float(energy_final_eV) if energy_final_eV is not None else None
+    if ei is not None and ef is not None and math.isfinite(ei) and math.isfinite(ef):
+        if ei <= ef:
+            q_lower_to_upper = ans1_forward
+            q_upper_to_lower = ans2_reverse
+        else:
+            q_lower_to_upper = ans2_reverse
+            q_upper_to_lower = ans1_forward
+        diag["type63_public_energy_order_source"] = "record_endpoint_energies"
+    elif li > lf:
+        # Compatibility fallback for callers that do not provide endpoint
+        # energies.  Matrix insertion never uses this fallback.
         q_lower_to_upper = cn
         q_upper_to_lower = cn * gl / gu if gu != 0.0 else None
+        diag["type63_public_energy_order_source"] = "legacy_l_order_fallback"
     else:
         q_upper_to_lower = cn
         q_lower_to_upper = cn * gu / gl if gl != 0.0 else None
+        diag["type63_public_energy_order_source"] = "legacy_l_order_fallback"
     diag["type63_reason"] = "evaluated_same_n_lmixing_amcrs_velimp"
     return q_lower_to_upper, q_upper_to_lower, sum_a, diag
 
@@ -1448,10 +1467,10 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
     elif dt == 63:
         if row.get("n_lower") is not None and row.get("n_upper") is not None and int(row.get("n_lower")) == int(row.get("n_upper")):
             q_exc, q_deexc, _sum_a, diag = evaluate_type63_same_n_lmixing(
-                row.get("n_lower"),
-                row.get("l_lower"),
-                row.get("n_upper"),
-                row.get("l_upper"),
+                row.get("type63_initial_n"),
+                row.get("type63_initial_l"),
+                row.get("type63_final_n"),
+                row.get("type63_final_l"),
                 row.get("type63_iq"),
                 temperature_k,
                 electron_density_cm3=electron_density_cm3,
@@ -1459,6 +1478,8 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
                 g_upper=row.get("g_upper"),
                 g_initial=row.get("type63_initial_g"),
                 g_final=row.get("type63_final_g"),
+                energy_initial_eV=row.get("type63_initial_energy_eV"),
+                energy_final_eV=row.get("type63_final_energy_eV"),
             )
             method = diag.get("type63_reason") or "type63_same_n_not_evaluated"
             if method == "evaluated_same_n_lmixing_amcrs_velimp":
@@ -1572,6 +1593,9 @@ def evaluate_collision_row(row: dict, temperature_k: float, grid_rows_for_record
         "type63_same_n_lff",
         "type63_same_n_ne_cm^-3",
         "type63_same_n_psi",
+        "type63_same_n_g_initial",
+        "type63_same_n_g_final",
+        "type63_public_energy_order_source",
     ):
         if key in extra_diag:
             out[key] = extra_diag[key]

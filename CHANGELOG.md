@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# v0.4.17 - 2026-05-18
+
+v0.4.17 fixes the remaining type-63/rate-3 same-`n` record-order bug that v0.4.16 exposed but did not fully correct.
+
+- The v0.4.16 production rerun still had the identical 36 failing terms because `evaluate_collision_row()` called the same-`n` evaluator with energy-ordered `n_lower/l_lower` and `n_upper/l_upper`.
+- Record-order statistical weights were supplied at the same time, so the `lf < li`/`lf > li` branch was selected from one orientation while the detailed-balance ratio came from another.
+- The same-`n` evaluator now receives `type63_initial_n/l` and `type63_final_n/l`, exactly matching `ucalc.f90`'s packed `idest1/idest2` quantum states.
+- Native `ans1/ans2` remain in record order for matrix insertion. The public collision-table excitation/de-excitation view is derived afterward from the two endpoint energies.
+- Adds a regression matching the real O VII failure pattern: packed initial `l=0,g=1` is higher in energy than packed final `l=1,g=3`; XSTAR returns `ans1=3*cn`, `ans2=cn`.
+- Does not change `anl1`, `amcrs`, `velimp`, density scaling, or any other rate family.
+
 # v0.4.16 - 2026-05-18
 
 v0.4.16 fixes the remaining type-63/rate-3 matrix-channel mismatch in the same-`n` `amcrs/velimp` branch.

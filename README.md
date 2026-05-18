@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.17 exact record-order quantum handoff for same-`n` type 63
+
+The v0.4.16 rerun remained unchanged because the same-`n` evaluator was still called with energy-ordered lower/upper quantum numbers while receiving packed record-order statistical weights. v0.4.17 passes the packed initial/final `n,l` values into the native `amcrs/velimp` branch and derives the public excitation/de-excitation representation only after native `ans1/ans2` have been formed. No collision kernel or fitted scale is changed.
+
 ### v0.4.16 same-n type-63 record-order channels
 
 The v0.4.15 rerun showed that the nine remaining type-63 failures were all same-`n` `amcrs/velimp` records. v0.4.15 corrected only the `nf != ni` Bautista branch, so the same-`n` path still returned energy-ordered rates. v0.4.16 exposes the literal XSTAR `ans1/ans2` channels from the same-`n` branch using the packed initial/final endpoints and their statistical weights. No collision kernel or fitted scale is changed.
