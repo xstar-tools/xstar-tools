@@ -14,6 +14,11 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.19 exact type-53 excited-parent endpoint
+
+The v0.4.18 exact-state run confirmed type 57/rate 5 is ready and ranked type 53/rate 7 next. XSTAR decodes the type-53 parent-level offset from the fourth packed integer from the end; Python used the third-from-last linked parent-ion field, routing 702 of 733 records to incorrect endpoints and supplying incorrect excited-parent thresholds and weights to `phint53`. v0.4.19 uses `integers[-4]`, preserves the bound level at `[-2]`, and adds a realistic packed-tail regression. No fitted scale is used.
+
+
 ### v0.4.18 literal type-57 `e1`/`eth` handoff
 
 The v0.4.17 exact-state run confirmed type 63 is resolved and ranked type 57/rate 5 next. XSTAR calls `calt57` with `e=rlev(1,idest1)` and `ep=eth=rlev(1,nlevp)-rlev(1,idest1)`. The Python source-port branch had supplied the absolute parent continuum energy as `ep`, creating nonzero rates where XSTAR returns zero and changing all active ionization coefficients. v0.4.18 now applies the literal `ep=eth` convention and the source pre-kernel gates. No fitted scale is used.

@@ -916,7 +916,13 @@ class SourceFaithfulUCalc:
             id1, id2 = (i[0] if i else 0), nlev
         elif dt == 11 and len(i) >= 2:
             id1, id2 = i[1], i[0]
-        elif dt in {12, 15, 19, 23, 27, 35, 36, 49, 53, 55, 59, 64, 70, 85, 88, 99}:
+        elif dt == 53:
+            # Label 53 uses the fourth packed integer from the end for the
+            # parent-level offset; [-3] is the linked parent-ion/element field.
+            id1 = i[-2] if len(i) >= 2 else 0
+            parent_offset = i[-4] if len(i) >= 4 else 1
+            id2 = nlev + parent_offset - 1
+        elif dt in {12, 15, 19, 23, 27, 35, 36, 49, 55, 59, 64, 70, 85, 88, 99}:
             id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
             parent_offset = i[-3] if len(i) >= 3 else 1
             id2 = max(nlev + parent_offset - 1, nlev)
@@ -1739,9 +1745,21 @@ class SourceFaithfulUCalc:
         from xstar_atomic.rates_type53 import evaluate_type53_ucalc_record
         decoded = c.extras.get("decoded_type53_by_record", {}).get(r.record) or c.extras.get("decoded_type53")
         i = r.integers
-        id1 = int(i[-2]) if len(i) >= 2 else 0
-        off = int(i[-3]) if len(i) >= 3 else 1
-        id2 = max(c.nlevp + off - 1, c.nlevp)
+        # ucalc.f90 label 53:
+        #   idest1 = idat(np1i+nidt-2)             -> packed integer [-2]
+        #   idest2 = nlevp+idat(np1i-1+nidt-3)-1 -> packed integer [-4]
+        # The third integer from the end is a linked parent-ion/element field,
+        # not the parent-level offset.  Using [-3] collapses almost every
+        # excited-parent destination onto an unrelated row and also feeds the
+        # wrong threshold/statistical weight into phint53.
+        if len(i) < 4:
+            return self._base_result(
+                r, s, UCalcStatus.INVALID_RECORD,
+                reason="type53_requires_four_packed_tail_integers",
+            )
+        id1 = int(i[-2])
+        off = int(i[-4])
+        id2 = c.nlevp + off - 1
         if decoded is None and c.radiation is not None and id1 > 0:
             try:
                 bound = c.levels.require(id1)
@@ -1765,6 +1783,9 @@ class SourceFaithfulUCalc:
                     "bound_energy_eV": bound.energy_ev,
                     "destination_energy_eV": destination_energy,
                     "packed_parent_offset": off,
+                    "packed_parent_offset_index": -4,
+                    "packed_bound_level_index": -2,
+                    "source_idest2_expression": "nlevp + integers[-4] - 1",
                     "decode_source": "packed_type53_record_plus_element_level_context",
                 }
             except (KeyError, ValueError, IndexError) as exc:
@@ -1778,6 +1799,13 @@ class SourceFaithfulUCalc:
         )
         if ev.get("status") != "evaluated":
             return self._base_result(r, s, UCalcStatus.SOURCE_REJECTED, reason=str(ev.get("status")), diagnostics=ev)
+        ev = {
+            **dict(ev),
+            "packed_parent_offset": off,
+            "packed_parent_offset_index": -4,
+            "packed_bound_level_index": -2,
+            "source_idest2_expression": "nlevp + integers[-4] - 1",
+        }
         return self._ctx_result(
             r, s, ans1=float(ev["ans1_photoionization_s^-1"]), ans2=float(ev["ans2_milne_recombination_s^-1"]),
             ans3=float(ev["ans3_cooling_signed_erg_s^-1"]), ans4=float(ev["ans4_heating_signed_erg_s^-1"]),

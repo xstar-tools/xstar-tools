@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.19 - 2026-05-18
+
+v0.4.19 corrects the packed excited-parent endpoint for XSTAR `ucalc.f90` label 53 after the exact solve-call-219 oxygen run moved the leading mismatch to type 53/rate 7.
+
+- The v0.4.18 family comparison contains 733 type-53 records and 2,932 terms on each side, but only 826 matched terms; 2,106 terms were Python-only and 2,106 were XSTAR-only.
+- 702 records used the wrong parent destination. O III--O VII were collapsed to one unrelated row per ion block, while all 31 O VIII continuum records were already topologically correct.
+- XSTAR uses `idest1=idat(np1i+nidt-2)` and `idest2=nlevp+idat(np1i-1+nidt-3)-1`. In a zero-based packed tuple, the bound level is `[-2]` and the parent-level offset is `[-4]`.
+- The previous source-port branch used `[-3]`, which is the linked parent-ion/element field. This changed both matrix topology and the excited-parent threshold/statistical weight supplied to `phint53`.
+- The production dispatcher now uses `integers[-4]`, computes `idest2=nlevp+offset-1` literally, and records the packed indices and source expression in provenance.
+- Adds a realistic regression where `[-4]` and `[-3]` deliberately differ.
+
+The `phint53` kernel, live radiation arrays, density semantics, and matrix insertion rules are unchanged. No empirical rate scale or probe coefficient is used. Existing solve-call-219 probes can be reused.
+
 # v0.4.18 - 2026-05-18
 
 v0.4.18 fixes the source-energy handoff for XSTAR `ucalc.f90` label 57 after the exact solve-call-219 oxygen run moved the first failing family to type 57/rate 5.

@@ -72,13 +72,47 @@ def test_collision_adapter_supplies_complete_element_ion_schema():
 
 def test_type53_decodes_packed_cross_section_without_predecoded_record():
     result = SourceFaithfulUCalc().evaluate(
-        UCalcRecord(3, 53, 7, 0, (0.0, 1.0, 10.0, 0.5), (1, 1, 1)),
+        UCalcRecord(3, 53, 7, 0, (0.0, 1.0, 10.0, 0.5), (1, 9, 1, 31)),
         _context(),
     )
     assert result.status is UCalcStatus.EVALUATED
     assert (result.idest1, result.idest2) == (1, 2)
     assert result.ans1 >= 0.0 and result.ans2 > 0.0
     assert result.diagnostics["threshold_eV"] == pytest.approx(13.6)
+    assert result.diagnostics["packed_parent_offset"] == 1
+    assert result.diagnostics["packed_parent_offset_index"] == -4
+
+
+def test_type53_index_only_uses_fourth_from_end_parent_offset():
+    context = _context()
+    context.indonly = True
+    result = SourceFaithfulUCalc().evaluate(
+        UCalcRecord(3052, 53, 7, 0, (), (4, 2, 8, 1, 31)),
+        context,
+    )
+    assert result.status is UCalcStatus.INDEX_ONLY
+    assert (result.idest1, result.idest2) == (1, 3)
+
+
+def test_type53_uses_fourth_from_end_parent_offset_for_excited_parent():
+    context = _context()
+    context.extras.update({
+        "parent_level_energy_ev_by_destination": {3: 5.0},
+        "parent_level_stat_weight_by_destination": {3: 3.0},
+    })
+    # Real type-53 tail semantics: [-4]=parent level offset, [-3]=linked
+    # parent ion/element field, [-2]=bound level, [-1]=current ion.
+    result = SourceFaithfulUCalc().evaluate(
+        UCalcRecord(3053, 53, 7, 0, (0.0, 1.0, 10.0, 0.5), (4, 2, 8, 1, 31)),
+        context,
+    )
+    assert result.status is UCalcStatus.EVALUATED
+    assert (result.idest1, result.idest2) == (1, 3)
+    assert result.diagnostics["packed_parent_offset"] == 2
+    assert result.diagnostics["packed_parent_offset_index"] == -4
+    assert result.diagnostics["source_idest2_expression"] == "nlevp + integers[-4] - 1"
+    assert result.diagnostics["threshold_eV"] == pytest.approx(18.6)
+    assert result.diagnostics["destination_statistical_weight"] == pytest.approx(3.0)
 
 
 def test_type99_derives_threshold_and_uses_live_phint53hunt():

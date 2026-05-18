@@ -154,7 +154,7 @@ def test_context_required_branch_is_explicitly_blocked_not_approximated():
     ucalc = SourceFaithfulUCalc()
     context = UCalcContext(temperature_k=1.0e6, nlev=2, levels=_levels())
     result = ucalc.evaluate(
-        UCalcRecord(53, 53, 7, 0, (1.0, 1.0), (1, 1, 1)),
+        UCalcRecord(53, 53, 7, 0, (1.0, 1.0), (1, 1, 1, 1)),
         context,
         strict=False,
     )
@@ -205,7 +205,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.18"
+    assert xa.__version__ == "0.4.19"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 
