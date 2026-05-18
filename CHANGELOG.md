@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.4.15 - 2026-05-18
+
+v0.4.15 corrects the matrix-facing channel convention for XSTAR `ucalc.f90` label 63 after the exact solve-call-219 oxygen run ranked type 63/rate 3 as the first failing record family.
+
+- The v0.4.14 family comparison contained 2,120 type-63 matrix terms with all endpoints matched, but 36 terms from nine O VII records failed. Every failing record stored `idest1` above `idest2` in the packed ATDB record.
+- The Bautista `anl1`/`erc` kernel was already correct to the existing numerical precision. The error occurred afterward: the source-port adapter converted the literal record-order `ans1/ans2` pair into energy-ordered excitation/de-excitation rates and also reordered the endpoints before matrix insertion.
+- XSTAR preserves `idest1=idat(nidt-4)`, `idest2=idat(nidt-3)` and inserts `ans1` for the forward `idest1 -> idest2` channel and `ans2` for the reverse channel, including records whose endpoints descend in energy or level index.
+- The production adapter now consumes `type63_ucalc_ans1_forward_cm3_s` and `type63_ucalc_ans2_reverse_cm3_s` directly, multiplies each by the live electron density, and preserves the packed endpoint direction.
+- Source-zero nondipole records and the existing same-`n` l-mixing path retain their prior behavior.
+- Adds a regression using a descending packed type-63 record and records `type63_matrix_channel_convention=literal_ucalc_record_order` in provenance.
+
+No collision coefficient is fitted or read back from the XSTAR probes. Existing solve-call-219 population, state, `ucalc`, and matrix probes can be reused.
+
 # v0.4.14 - 2026-05-18
 
 v0.4.14 completes the literal `phint53hunt.f90` grid-control translation for type 99 after v0.4.13 restored the correct compact endpoints but left the native forward rates 1.5--2.4% high for most active ion stages.

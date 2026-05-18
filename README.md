@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.15 literal type-63 record-order matrix channels
+
+The v0.4.14 exact-state run moved the first failing family to type 63/rate 3. All 2,120 type-63 terms matched topologically, but 36 terms from nine O VII records had their forward and reverse channels exchanged because those packed records store the higher endpoint first. v0.4.15 preserves XSTAR's literal `idest1 -> idest2` `ans1` channel and `idest2 -> idest1` `ans2` channel instead of converting them to an energy-ordered collision convention. The validated Bautista `anl1`/`erc` kernel is unchanged.
+
 ### v0.4.14 exact type-99 `phint53hunt` grid control
 
 After v0.4.13 corrected type-99 endpoints, all 28 matrix terms matched XSTAR topologically and the reverse rates agreed at roughly `1e-6` relative precision, but most forward rates remained 1.5--2.4% high. v0.4.14 ports the literal `huntf`/`nbinc` nearest-log-grid rule and the one-based `phint53hunt` stride loop. Python no longer forces the high-energy `nphint` endpoint into every refinement pass. No fitted scale is used, and the existing solve-call-219 probes can be reused.

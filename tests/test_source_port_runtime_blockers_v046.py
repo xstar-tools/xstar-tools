@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from xstar_atomic.source_port.element_equilibrium import (
     ElementBasisRow,
     ElementCompactBasis,
@@ -48,6 +50,48 @@ def test_type63_nondipole_record_is_source_zero_not_blocked():
     assert result.idest1 == 1
     assert result.idest2 == 2
     assert result.diagnostics["source_zero_behavior"] == "ucalc_label63_preserves_initialized_zero_rates"
+
+
+def test_type63_nchanging_descending_record_preserves_ucalc_channel_direction():
+    levels = UCalcLevelTable(
+        levels={
+            1: UCalcLevel(1, energy_ev=0.0, statistical_weight=1.0, principal_n=2, orbital_l=0),
+            2: UCalcLevel(2, energy_ev=20.0, statistical_weight=3.0, principal_n=3, orbital_l=1),
+        },
+        nlev=2,
+    )
+    # Type 63 packed endpoints are idat[nidt-4], idat[nidt-3].  This record
+    # deliberately stores the higher-energy level first, as do the nine O VII
+    # records that failed the v0.4.15 full-matrix parity comparison.
+    record = UCalcRecord(
+        record=22361,
+        data_type=63,
+        rate_type=3,
+        continuation=0,
+        reals=(),
+        integers=(2, 1, 7, 8),
+    )
+    context = UCalcContext(
+        temperature_k=7.665518557758832e4,
+        hydrogen_density_cm3=1.0e8,
+        electron_fraction_xee=1.2046560563936872,
+        levels=levels,
+        nlev=2,
+        extras={"element_z": 8, "ion_stage": 7},
+    )
+    result = default_source_faithful_ucalc().evaluate(record, context, strict=False)
+
+    assert result.status is UCalcStatus.EVALUATED
+    assert (result.idest1, result.idest2) == (2, 1)
+    assert result.diagnostics["type63_matrix_channel_convention"] == "literal_ucalc_record_order"
+    assert result.ans1 == pytest.approx(
+        result.diagnostics["type63_ucalc_ans1_forward_cm3_s"]
+        * context.electron_density_cm3
+    )
+    assert result.ans2 == pytest.approx(
+        result.diagnostics["type63_ucalc_ans2_reverse_cm3_s"]
+        * context.electron_density_cm3
+    )
 
 
 def test_msolvelucy_ipmat_clamp_aliases_excited_parent_endpoint_to_last_row():
