@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.34 calc_hmc_all pre-continuum, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.35 calc_hmc_all pre-continuum, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -106,7 +106,7 @@ subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
   logical :: exists
 
   if (xap_hmc_capture .ne. 1) return
-  if (element_z .ne. xap_hmc_target_element) return
+  if (xap_hmc_target_element .gt. 0 .and. element_z .ne. xap_hmc_target_element) return
   inquire(file='xstar_calc_hmc_element_pre_matrix_probe.csv', &
           exist=exists)
   open(newunit=lun, file='xstar_calc_hmc_element_pre_matrix_probe.csv', &
@@ -168,7 +168,7 @@ subroutine xap_hmc_matrix_terms(element_index, element_z, ipmat, nindb, &
   xap_hmc_current_element_index = element_index
   xap_hmc_current_element_z = element_z
   if (xap_hmc_capture .ne. 1) return
-  if (element_z .ne. xap_hmc_target_element) return
+  if (xap_hmc_target_element .gt. 0 .and. element_z .ne. xap_hmc_target_element) return
 
   inquire(file='xstar_calc_hmc_all_matrix_terms_probe.csv', &
           exist=exists)
@@ -228,7 +228,8 @@ subroutine xap_hmc_msolvelucy_final_snapshot(ipmat, nindb, ajisb, &
   logical :: exists
 
   if (xap_hmc_capture .ne. 1) return
-  if (xap_hmc_current_element_z .ne. xap_hmc_target_element) return
+  if (xap_hmc_target_element .gt. 0 .and. &
+      xap_hmc_current_element_z .ne. xap_hmc_target_element) return
 
   inquire(file='xstar_calc_hmc_all_msolvelucy_final_matrix_probe.csv', &
           exist=exists)
@@ -299,7 +300,7 @@ subroutine xap_hmc_leveltemp_energy(element_z, ion_stage, ion_index, &
   logical :: exists
 
   if (xap_hmc_capture .ne. 1) return
-  if (element_z .ne. xap_hmc_target_element) return
+  if (xap_hmc_target_element .gt. 0 .and. element_z .ne. xap_hmc_target_element) return
   if (rate_type .ne. 7) return
   if (.not. (data_type .eq. 49 .or. data_type .eq. 53 .or. &
              data_type .eq. 99)) return
@@ -333,7 +334,8 @@ subroutine xap_hmc_thermal_families(ntyp_local, rntpsv, rltpsv)
   real(8) :: scale
 
   if (xap_hmc_capture .ne. 1) return
-  if (xap_hmc_current_element_z .ne. xap_hmc_target_element) return
+  if (xap_hmc_target_element .gt. 0 .and. &
+      xap_hmc_current_element_z .ne. xap_hmc_target_element) return
 
   inquire(file='xstar_calc_hmc_all_thermal_data_type_probe.csv', &
           exist=exists)
@@ -529,7 +531,9 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
         "5. To select by call number, set `XSTAR_ATOMIC_HMC_TARGET_CALL`. "
-        "Other controls are `XSTAR_ATOMIC_HMC_TARGET_ELEMENT`, `_T4`, `_XEE`, "
+        "Set `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` to capture detailed products "
+        "for every positive-abundance element in the selected call. Other "
+        "controls are `_T4`, `_XEE`, "
         "`_XPX`, `_RTOL`, and `_ATOL`.\n\n"
         "Outputs:\n\n"
         "- `xstar_calc_hmc_element_pre_matrix_probe.csv`\n"

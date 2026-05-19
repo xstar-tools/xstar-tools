@@ -13,22 +13,49 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.35 starts the full positive-abundance fixed-state element loop
 
-### v0.4.34 bounded oxygen-parity corrections
+v0.4.35 begins the source-order expansion beyond the accepted oxygen-only
+pre-continuum gate. The active element set is read from the selected XSTAR
+`calc_hmc_all` element probe and contains every source element with
+`abel(jk) > 1e-24`; inactive zero-abundance ATDB elements are not falsely
+required for charge-scope closure. The new all-element plan preserves source
+order, abundance, `mml/mmu`, same-call seed coverage, matrix coverage, final
+solver coverage, thermal-family coverage, and mutable-workspace coverage.
 
-v0.4.34 preserves the `levwkelement` LTE vector `rnise_lte` separately from
-the same-call `xileve` solver seed, represents the complete zero-initialized
-`leveltemp` workspace through the source capacity `ndl=5000`, and reproduces
-the cached-branch stale-`atmp22` behavior of `phint53hunt.f90`. These changes
-are limited to the exact remaining v0.4.33 oxygen blockers: 35 `rnisg` rows,
-349 `bilevg` rows, 205 type-53 workspace-energy rows, 196 type-53 `cj2`
-records, seven type-99 `ans5` records, and two thermal-family `cooling2` rows.
+The accepted v0.4.34 oxygen call-73 result is packaged and enforced as a
+mandatory regression prerequisite. The new CLI and example are:
 
-The compact benchmark under `xstar_atomic.benchmarks.oxygen_v0434` freezes
-those counts, and example 107 validates them without external data. The
-existing v0.4.33 eight-hook XSTAR probe products can be reused; no XSTAR
-source rebuild is required. Final acceptance still requires rerunning example
-105 and obtaining `xstar_oxygen_pre_continuum_acceptance_ready=True`.
+```text
+xstar-atomic-port-all-elements
+examples/108_port_xstar_calc_hmc_all_all_elements_fixed_state.py
+```
+
+The existing call-73 probe can start an H/He/O execution with
+`--initial-population-policy use-available`: oxygen uses its exact same-call
+`xileve` seed while H and He use the translated autonomous fallback. Complete
+all-element parity requires rebuilding the unchanged eight-hook instrumentation
+with `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0`, rerunning XSTAR, and then using
+`--initial-population-policy require-all`. This release stops before
+`comp2 -> freef -> bremem -> heatf`; no complete local-zone result is claimed.
+
+### v0.4.34 separated LTE state, complete leveltemp workspace, and source cached integration
+
+v0.4.34 closes the three source-state differences isolated by the complete
+v0.4.33 oxygen diagnosis. The `levwkelement` LTE vector is now retained as
+`lte_populations` while the captured same-call `xileve` state remains the
+independent `msolvelucy` seed. Global `rnisg` and `bilevg` therefore use source
+`rnise` without disturbing the already validated solver state.
+
+The shared `leveltemp` array is represented through source `ndl=5000` with
+zero-valued untouched columns before the ordered partial writes. The cached
+`phint53hunt` branch also preserves the source's stale `atmp22` value instead of
+recomputing it. These changes target the exact v0.4.33 discrepancy groups
+`35/349/205/196/7/2`. Example 107 audits those groups and requires all six to
+be zero in the v0.4.34 result. No new XSTAR build is needed; reuse the existing
+eight-hook probe CSVs and require
+`oxygen_pre_continuum_acceptance_ready=True`.
+
 
 ### v0.4.33 exact mutable-workspace tracing and same-call solver-state replay
 

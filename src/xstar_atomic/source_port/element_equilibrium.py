@@ -40,6 +40,9 @@ from .ucalc import (
 )
 
 
+XSTAR_LEVELTEMP_NDL = 5000
+
+
 class ElementEquilibriumError(RuntimeError):
     """Raised when a source-faithful element matrix cannot be constructed."""
 
@@ -281,11 +284,9 @@ class ElementMatrixAssembly:
     strict_assembly_ready: bool
     n_source_ipmat_endpoint_clamps: int = 0
     leveltemp_workspace_trace: List[Dict[str, Any]] = field(default_factory=list)
-    # ``levwkelement`` returns the LTE population vector ``rnise``.  Source
-    # ``calc_hmc_element`` keeps that vector for the exported ``rnisg`` and
-    # ``bilevg`` arrays while independently mapping incoming ``xileve`` into
-    # the compact solver seed.  ``initial_populations`` is therefore the
-    # msolvelucy seed; ``lte_populations`` is the untouched LTE diagnostic.
+    # Source ``rnise`` from ``levwkelement``.  This remains distinct from
+    # ``initial_populations``, which is the incoming ``xileve`` vector mapped
+    # to compact ``x`` immediately before ``msolvelucy``.
     lte_populations: Optional[np.ndarray] = None
 
 
@@ -439,46 +440,6 @@ def build_level_table(
     return UCalcLevelTable(levels=levels, nlev=nlev)
 
 
-XSTAR_LEVELTEMP_NDL = 5000
-
-
-def _zero_leveltemp_level(index: int) -> UCalcLevel:
-    """Return one untouched source ``leveltemp`` column.
-
-    ``leveltemp%rlev`` is a fixed ``(10, ndl)`` Fortran work array.  The
-    module initialization used by the captured XSTAR run leaves never-written
-    columns numerically zero.  Keeping explicit zero-valued level objects lets
-    the Python port distinguish an untouched valid workspace column from an
-    endpoint that is truly outside source capacity.
-    """
-
-    return UCalcLevel(index=int(index))
-
-
-def _new_zero_leveltemp_workspace(
-    *, capacity: int = XSTAR_LEVELTEMP_NDL,
-) -> tuple[UCalcLevelTable, Dict[int, Dict[str, Any]]]:
-    """Create the complete zero-initialized shared ``leveltemp`` workspace."""
-
-    if int(capacity) <= 0:
-        raise ElementEquilibriumError("leveltemp workspace capacity must be positive")
-    levels = {
-        index: _zero_leveltemp_level(index)
-        for index in range(1, int(capacity) + 1)
-    }
-    owners: Dict[int, Dict[str, Any]] = {
-        index: {
-            "ion_index": 0,
-            "ion_stage": 0,
-            "nlev": 0,
-            "write_sequence": 0,
-            "phase": "initial_unwritten_zero",
-        }
-        for index in range(1, int(capacity) + 1)
-    }
-    return UCalcLevelTable(levels=levels, nlev=0), owners
-
-
 def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:
     """Copy the mutable Fortran ``leveltemp`` workspace state.
 
@@ -513,11 +474,6 @@ def _overwrite_leveltemp_workspace(
     """
 
     nlev = int(current.nlev)
-    capacity = max(workspace.levels, default=0)
-    if nlev > capacity:
-        raise ElementEquilibriumError(
-            f"calc_rates_level_lte nlev={nlev} exceeds leveltemp capacity {capacity}"
-        )
     for index in range(1, nlev + 1):
         workspace.levels[index] = current.require(index)
         if owner_by_column is not None:
@@ -546,7 +502,27 @@ def _initialize_leveltemp_workspace_from_levwkelement(
 
     if not basis.blocks:
         raise ElementEquilibriumError("cannot initialize leveltemp without active ion blocks")
-    workspace, owner_by_column = _new_zero_leveltemp_workspace()
+    # ``leveltemp%rlev`` is a fixed ``(10,ndl)`` Fortran work array.  It is
+    # zero-initialized before the active-ion writes used by this bounded
+    # fixed-state replay.  Columns never touched by ``calc_rates_level_lte``
+    # therefore remain addressable zeros rather than absent Python entries.
+    workspace = UCalcLevelTable(
+        levels={
+            index: UCalcLevel(index=index)
+            for index in range(1, XSTAR_LEVELTEMP_NDL + 1)
+        },
+        nlev=0,
+    )
+    owner_by_column: Dict[int, Dict[str, Any]] = {
+        index: {
+            "ion_index": 0,
+            "ion_stage": 0,
+            "nlev": 0,
+            "write_sequence": 0,
+            "phase": "initial_unwritten_zero",
+        }
+        for index in range(1, XSTAR_LEVELTEMP_NDL + 1)
+    }
     trace: List[Dict[str, Any]] = []
     for sequence, block in enumerate(basis.blocks, start=1):
         current = level_tables[block.ion_index]
@@ -569,7 +545,6 @@ def _initialize_leveltemp_workspace_from_levwkelement(
             "workspace_max_column_before": previous_max,
             "workspace_max_column_after": max(workspace.levels, default=0),
             "n_retained_higher_columns": max(0, previous_max - current.nlev),
-            "workspace_capacity": XSTAR_LEVELTEMP_NDL,
         })
     return workspace, owner_by_column, trace
 
@@ -918,17 +893,21 @@ def assemble_element_matrix(
         max_ion_stage=context.max_ion_stage,
     )
     rnise_lte, level_tables = levwkelement(master, derived, basis, context)
-    solver_initial_populations = np.asarray(rnise_lte, dtype=float).copy()
+    # Source ``rnise`` and the compact solver seed are independent arrays.
+    # ``levwkelement`` owns the LTE vector used later for ``rnisg``/``bilevg``;
+    # ``calc_hmc_element`` maps the incoming global ``xileve`` state into
+    # compact ``x`` immediately before ``msolvelucy``.
+    solver_initial = rnise_lte.copy()
     if context.initial_populations is not None:
         supplied = np.asarray(context.initial_populations, dtype=float).reshape(-1)
         if supplied.size not in {basis.n_rows, basis.n_rows + 1}:
             raise ElementEquilibriumError(
                 f"initial population length {supplied.size} does not match {basis.n_rows}"
             )
-        solver_initial_populations = np.zeros(basis.n_rows + 1, dtype=float)
-        solver_initial_populations[1:] = supplied[-basis.n_rows :]
-        total = solver_initial_populations[1:].sum()
-        if total <= 0 or not np.all(np.isfinite(solver_initial_populations[1:])):
+        solver_initial = np.zeros(basis.n_rows + 1, dtype=float)
+        solver_initial[1:] = supplied[-basis.n_rows :]
+        total = solver_initial[1:].sum()
+        if total <= 0 or not np.all(np.isfinite(solver_initial[1:])):
             raise ElementEquilibriumError(
                 "supplied initial populations have non-positive or non-finite sum"
             )
@@ -1048,10 +1027,6 @@ def assemble_element_matrix(
                             "ion_stage": block.ion_stage,
                             "ion_charge": block.ion_stage - 1,
                             "ion_record": block.ion_record,
-                            # ``ucalc`` source branches that consume the LTE
-                            # population vector must see the untouched
-                            # levwkelement result, not the independent xileve
-                            # seed passed to msolvelucy.
                             "rnise": rnise_lte,
                             "compact_start": block.compact_start,
                             "parent_level_energy_ev_by_destination": parent_energy_map,
@@ -1201,7 +1176,7 @@ def assemble_element_matrix(
     strict_ready = n_blocked == 0 and n_unmapped == 0 and len(terms) > 0
     return ElementMatrixAssembly(
         basis=basis,
-        initial_populations=solver_initial_populations,
+        initial_populations=solver_initial,
         terms=terms,
         dense_matrix=dense,
         normalized_matrix=normalized,
@@ -1220,7 +1195,7 @@ def assemble_element_matrix(
         n_source_ipmat_endpoint_clamps=n_source_clamps,
         strict_assembly_ready=strict_ready,
         leveltemp_workspace_trace=leveltemp_write_trace,
-        lte_populations=np.asarray(rnise_lte, dtype=float).copy(),
+        lte_populations=rnise_lte,
     )
 
 
@@ -1683,7 +1658,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.34",
+    port_version: str = "v0.4.35",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
@@ -1724,20 +1699,16 @@ def write_element_equilibrium_products(
     _write_csv(blocked_csv, assembly.blocked_records, blocked_fields)
 
     populations_rows: List[Dict[str, Any]] = []
-    lte_populations = (
-        assembly.lte_populations
-        if assembly.lte_populations is not None
-        else assembly.initial_populations
-    )
     for i, row in enumerate(basis.rows, start=1):
         populations_rows.append(
             {
                 "compact_index": i,
-                "solver_initial_population": float(assembly.initial_populations[i]),
-                "lte_population_rnise": float(lte_populations[i]),
-                # Historical spelling retained as an alias for downstream
-                # readers; it continues to mean the msolvelucy seed.
                 "initial_population": float(assembly.initial_populations[i]),
+                "lte_population": float(
+                    assembly.lte_populations[i]
+                    if assembly.lte_populations is not None
+                    else assembly.initial_populations[i]
+                ),
                 "solved_population": "" if solve is None else float(solve.populations[i - 1]),
                 "final_outer_start_population": "" if solve is None else float(solve.final_outer_start_populations[i - 1]),
                 "superlevel": row.superlevel,
@@ -1794,7 +1765,7 @@ def write_element_equilibrium_products(
         heating_matrix=assembly.heating_matrix,
         heating_matrix2=assembly.heating_matrix2,
         initial_populations=assembly.initial_populations[1:],
-        lte_populations=(
+        lte_populations=np.asarray(
             assembly.initial_populations[1:]
             if assembly.lte_populations is None
             else assembly.lte_populations[1:]

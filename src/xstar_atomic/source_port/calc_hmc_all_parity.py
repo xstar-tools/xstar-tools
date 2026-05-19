@@ -1057,7 +1057,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
         if legacy_probe_present
         else matrix_closure_ready is not False
     )
-    # v0.4.34 oxygen acceptance is intentionally stricter than the historical
+    # v0.4.33 oxygen acceptance is intentionally stricter than the historical
     # v0.4.29/v0.4.30 gate.  It requires the synchronized final-solver probe
     # pair, source-order xtot parity, type-53 rate-7 cj2 closure, and no
     # remaining O III--O V/O III--O IV blocker.
@@ -1094,7 +1094,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and oxygen_reassessment_gate
     )
     # Preserve the historical comparator contract for old five/six-hook probe
-    # directories.  As soon as either v0.4.34 final-snapshot file is present,
+    # directories.  As soon as either v0.4.33 final-snapshot file is present,
     # the public acceptance gate becomes the stricter synchronized oxygen gate.
     acceptance_gate_ready = (
         oxygen_pre_continuum_acceptance_ready
@@ -1265,6 +1265,8 @@ def compare_calc_hmc_all_pre_continuum_probe(
 def write_calc_hmc_all_pre_continuum_parity_products(
     result: CalcHMCAllPreContinuumParityResult,
     out_dir: str | Path,
+    *,
+    port_version: str = "v0.4.35",
 ) -> Dict[str, str]:
     """Write row-level, attribution, JSON, and Markdown products."""
 
@@ -1421,7 +1423,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     _write_rows(oxygen_reassessment_path, result.oxygen_reassessment)
 
     payload = {
-        "port_version": "v0.4.34",
+        "port_version": port_version,
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,

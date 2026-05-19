@@ -174,22 +174,6 @@ class FixedStateCalcHMCAllResult:
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
 
 
-def _assembly_lte_population_vector(assembly: Any) -> np.ndarray:
-    """Return source ``rnise`` independently from the msolvelucy seed.
-
-    v0.4.33 correctly replayed incoming ``xileve`` as the compact solver seed,
-    but the same array was also exported as LTE ``rnisg``.  Source
-    ``calc_hmc_element`` retains the two vectors independently.  The fallback
-    is kept only for synthetic/legacy test assemblies that predate the
-    ``lte_populations`` field.
-    """
-
-    source = getattr(assembly, "lte_populations", None)
-    if source is None:
-        source = assembly.initial_populations
-    return np.asarray(source, dtype=float)
-
-
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
 ElementSolver = Callable[..., ElementEquilibriumResult]
 PreMatrixSolver = Callable[..., Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]]
@@ -236,6 +220,7 @@ def calc_hmc_all(
     pressure: float = 0.0,
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
+    required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
     pre_matrix_solver: PreMatrixSolver = calc_element_pre_matrix_balance,
@@ -302,7 +287,19 @@ def calc_hmc_all(
         int(z) for z in np.asarray(ion_element_z).reshape(-1) if int(z) > 0
     }
     requested_element_z = {int(item.element_z) for item in elements if float(item.abundance) > 1.0e-24}
-    charge_scope_complete = bool(available_element_z) and requested_element_z == available_element_z
+    if required_element_z is None:
+        charge_scope_reference = "all_atdb_elements_legacy_default"
+        required_element_z_set = set(available_element_z)
+    else:
+        charge_scope_reference = "explicit_positive_abundance_element_scope"
+        required_element_z_set = {int(z) for z in required_element_z if int(z) > 0}
+        unknown = required_element_z_set - available_element_z
+        if unknown:
+            raise CalcHMCAllError(
+                "required element scope contains elements absent from the ATDB: "
+                + ",".join(str(z) for z in sorted(unknown))
+            )
+    charge_scope_complete = bool(required_element_z_set) and requested_element_z == required_element_z_set
 
     # Preserve the native XSTAR global array indices so bounded probe products
     # can be compared without guessing from element/stage/local-level labels.
@@ -480,7 +477,12 @@ def calc_hmc_all(
         enelec += fully_stripped * float(z) * abundance
 
         populations = np.asarray(solve.populations, dtype=float)
-        lte = _assembly_lte_population_vector(equilibrium.assembly)
+        lte_source = getattr(equilibrium.assembly, "lte_populations", None)
+        if lte_source is None:
+            # Compatibility for synthetic/legacy assemblies predating the
+            # explicit source ``rnise`` field.
+            lte_source = equilibrium.assembly.initial_populations
+        lte = np.asarray(lte_source, dtype=float)
         lte_has_guard = lte.size == populations.size + 1
         nlev_by_stage = {
             int(block.ion_stage): int(block.nlev)
@@ -637,6 +639,11 @@ def calc_hmc_all(
             "global_level_mapping_source": "derivedpointers.npilev(local_ordinal,ion_index)",
             "global_element_index_source": global_element_index_source,
             "continuum_complete": bool(continuum.complete),
+            "charge_scope_reference": charge_scope_reference,
+            "required_element_z": sorted(required_element_z_set),
+            "requested_element_z": sorted(requested_element_z),
+            "missing_required_element_z": sorted(required_element_z_set - requested_element_z),
+            "extra_requested_element_z": sorted(requested_element_z - required_element_z_set),
             "dsec_deferred": True,
         },
     )
@@ -652,6 +659,7 @@ def register_fixed_state_calc_hmc_all(
     pressure: float = 0.0,
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
+    required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
     """Register fixed-state ``calc_hmc_all`` on the source-routine driver."""
@@ -670,6 +678,7 @@ def register_fixed_state_calc_hmc_all(
             pressure=pressure,
             lcdd=lcdd,
             continuum_kernel=continuum_kernel,
+            required_element_z=required_element_z,
             dispatcher=dispatcher,
         )
         state.plasma.temperature = result.temperature_k
@@ -803,7 +812,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.34",
+    port_version: str = "v0.4.35",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

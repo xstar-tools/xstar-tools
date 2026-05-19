@@ -225,20 +225,6 @@ def _find53_cross_section(energy_ryd: np.ndarray, sigma_cm2: np.ndarray, efnd_ry
     return max(0.0, s0 + f * (s1 - s0))
 
 
-def _phint53hunt_reuse_cached_point(
-    *, sgtmp: float, atmp2: float, epii: float, stale_atmp22: float,
-) -> tuple[float, float, float, float]:
-    """Return the literal cached-point state from ``phint53hunt.f90``.
-
-    The source restores ``sgtmp`` and ``atmp2`` from cache and derives
-    ``tempi=atmp2/epii``.  It intentionally leaves ``atmp22`` untouched, so
-    the preceding loop value survives into the electron-energy quadrature.
-    """
-
-    energy = max(float(epii), 1.0e-48)
-    return float(sgtmp), float(atmp2) / energy, float(atmp2), float(stale_atmp22)
-
-
 def _phint53hunt_exact(
     *, energy_above_threshold_ryd: Sequence[float], cross_section_cm2: Sequence[float],
     threshold_ev: float, context: "UCalcContext", swrat: float, crit: float = 0.01,
@@ -295,7 +281,7 @@ def _phint53hunt_exact(
     sumr = sumh = sumi = sumc = sumh2 = sumc2 = 0.0
     tst1 = tst2 = tst3 = tst4 = float("inf")
     last_pass_indices: list[int] = []
-    n_cached_atmp22_reuses = 0
+    cached_atmp22_stale_reuses = 0
 
     while (
         (tst3 > crit or tst1 > crit or tst2 > crit or tst4 > crit or sumi <= 1.0e-24)
@@ -331,19 +317,15 @@ def _phint53hunt_exact(
                     ansar1[k] = sgtmp
                     ansar2[k] = atmp2
                 else:
-                    sgtmp, tempi, atmp2, atmp22 = _phint53hunt_reuse_cached_point(
-                        sgtmp=float(ansar1[k]),
-                        atmp2=float(ansar2[k]),
-                        epii=epii,
-                        stale_atmp22=atmp22,
-                    )
-                    n_cached_atmp22_reuses += 1
-                    # Literal phint53hunt.f90 execution history: the cached
-                    # luse branch restores sgtmp/atmp2 and derives tempi, but
-                    # it does *not* assign atmp22.  The shared scalar therefore
-                    # retains the preceding loop value within this pass.  This
-                    # stale value feeds sumc2 and is required for exact type-99
-                    # ans5 / cooling2 parity.
+                    sgtmp = float(ansar1[k])
+                    atmp2 = float(ansar2[k])
+                    tempi = atmp2 / max(epii, 1.0e-48)
+                    # Literal ``phint53hunt.f90`` behavior: the cached
+                    # ``luse(kl)`` branch restores ``sgtmp``/``atmp2`` and
+                    # recomputes ``tempi`` but does not assign ``atmp22``.
+                    # The value therefore remains stale from the preceding
+                    # loop point in the current integration pass.
+                    cached_atmp22_stale_reuses += 1
             tempro = tempr
             tempr = 25.3 * sgtmp * bremtmp / max(epii, 1.0e-48)
             deld = ener - enero
@@ -378,8 +360,8 @@ def _phint53hunt_exact(
         "last_pass_last_kl_fortran": last_pass_indices[-1] if last_pass_indices else None,
         "last_pass_includes_nphint": bool(last_pass_indices and last_pass_indices[-1] == nphint),
         "type99_phint53hunt_grid_policy": "literal_nbinc_plus_one_and_natural_kl_stride",
-        "type99_cached_atmp22_policy": "preserve_preceding_loop_value",
-        "type99_n_cached_atmp22_reuses": n_cached_atmp22_reuses,
+        "type99_phint53hunt_cached_atmp22_policy": "preserve_stale_previous_loop_value",
+        "n_cached_atmp22_stale_reuses": cached_atmp22_stale_reuses,
         "source_bktm_eV": bktm,
         "source_erg_per_eV": XSTAR_SOURCE_ERG_PER_EV,
         "source_boltzmann_erg_K": XSTAR_SOURCE_BOLTZMANN_ERG_K,

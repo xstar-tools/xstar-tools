@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.4.35 - 2026-05-19
+
+v0.4.35 starts the full source-order, positive-abundance fixed-state
+`calc_hmc_all` element scope while retaining the accepted v0.4.34 oxygen
+call-73 result as a mandatory packaged regression gate. The new
+`all_element_fixed_state` module derives the active source element list from
+positive-abundance type-11 probe rows, preserves source order and `mml/mmu`,
+tracks per-element same-call seed/matrix/final/thermal/workspace coverage, and
+executes the complete pre-continuum element loop with explicit charge-scope
+accounting. Initial-population policies are `use-available`, `require-all`, and
+`ignore`.
+
+The release adds CLI `xstar-atomic-port-all-elements`, example 108, and
+all-element scope CSV/JSON/Markdown products. The existing probe can start the
+H/He/O loop with exact oxygen state plus autonomous H/He fallback. The generated
+eight-hook helper now treats `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` as detailed
+all-abundant-element capture; insertion locations are unchanged, but a helper
+replacement and XSTAR rebuild are required for complete all-element parity.
+Continuum leaves remain intentionally untranslated.
+
+Validation passed with 6 focused v0.4.35 tests, 129 source-port tests, and the complete historical suite with 442 passed and 22 skipped. The clean source distribution passed all 129 source-port tests; `compileall`, sdist/wheel builds, installed-wheel checks, packaged oxygen-gate checks, and GNU Fortran helper compilation also passed. The existing call-73 plan resolves H, He, and O, with detailed same-call coverage presently available only for oxygen. No full all-element physical parity is claimed until a new `TARGET_ELEMENT=0` XSTAR capture is run.
+
 ## v0.4.34 - 2026-05-19
 
 v0.4.34 is a bounded Milestone-4 oxygen-parity correction release. It is

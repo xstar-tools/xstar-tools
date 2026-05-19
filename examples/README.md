@@ -1231,22 +1231,66 @@ Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available
 
 ### `106_prepare_xstar_calc_hmc_all_probe.py`
 
-Write the bounded, diagnostic-only eight-hook Fortran helper and source-local insertion snippets for `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix and pre-continuum state, complete same-call input `xileve` vector, exact mutable `leveltemp` reads for type 49/53/99 rate-7 records, same-call matrix, thermal families, and synchronized final `msolvelucy` matrix/`x`/`xo` products. `XSTAR_ATOMIC_HMC_TARGET_CALL` selects an exact `calc_hmc_all` invocation; `XSTAR_ATOMIC_HMC_TARGET_RECORD` can bound the exact leveltemp trace to one record.
+Write the bounded, diagnostic-only eight-hook Fortran helper and source-local insertion snippets for `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix and pre-continuum state, complete same-call input `xileve` vector, exact mutable `leveltemp` reads for type 49/53/99 rate-7 records, same-call matrix, thermal families, and synchronized final `msolvelucy` matrix/`x`/`xo` products. `XSTAR_ATOMIC_HMC_TARGET_CALL` selects an exact `calc_hmc_all` invocation; `XSTAR_ATOMIC_HMC_TARGET_RECORD` can bound the exact leveltemp trace to one record. The default detailed target is oxygen (`XSTAR_ATOMIC_HMC_TARGET_ELEMENT=8`); set `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` to capture every positive-abundance element for the selected call.
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
-  --out-dir xstar_calc_hmc_all_probe_v0434 \
+  --out-dir xstar_calc_hmc_all_probe_v0433 \
   --print-summary
 ```
 
-### `107_validate_v0434_oxygen_regression.py`
+### `107_audit_v0434_oxygen_corrections.py`
 
-Validate the compact, packaged v0.4.34 oxygen regression oracle without an
-ATDB file or XSTAR executable. The command checks the frozen inventories for
-35 `rnisg` rows, 349 `bilevg` rows, 205 exact type-53 `leveltemp` rows, 196
-type-53 `cj2` records, seven type-99 `ans5` records, and two thermal-family
-rows.
+Count the six bounded discrepancy groups isolated from the production v0.4.33
+oxygen diagnosis. Running it on the v0.4.33 output must reproduce the target
+counts `35/349/205/196/7/2`; running it on the v0.4.34 output requires all six
+counts to be zero before oxygen acceptance can pass.
 
 ```bash
-PYTHONPATH=src python examples/107_validate_v0434_oxygen_regression.py
+PYTHONPATH=src python examples/107_audit_v0434_oxygen_corrections.py \
+  xstar_o_calc_hmc_all_fixed_state_v0434 \
+  --json xstar_o_calc_hmc_all_fixed_state_v0434/v0434_correction_gates.json
 ```
+
+
+### `108_port_xstar_calc_hmc_all_all_elements_fixed_state.py`
+
+Run the complete source-order pre-continuum element loop for every element with
+positive abundance in a captured `calc_hmc_all` call. The accepted v0.4.34
+oxygen call-73 result is mandatory and is checked before execution. With the
+existing oxygen-focused probe, `use-available` replays the exact oxygen seed and
+uses translated autonomous initialization for H and He.
+
+```bash
+PYTHONPATH=src python \
+  examples/108_port_xstar_calc_hmc_all_all_elements_fixed_state.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --temperature-k 76655.18557758832 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.2046560563936872 \
+  --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --escape-npz /path/to/xstar_o7_escape_state.npz \
+  --xstar-population-probe-csv /path/to/xstar_population_closure_probe.csv \
+  --xstar-population-solve-call-id 219 \
+  --population-probe-runtime-policy check \
+  --xstar-calc-hmc-probe-dir /path/to/call73_probe_directory \
+  --xstar-calc-hmc-call-id 73 \
+  --oxygen-call73-regression-dir /path/to/xstar_o_calc_hmc_all_fixed_state_v0434 \
+  --initial-population-policy use-available \
+  --out-dir xstar_all_calc_hmc_all_fixed_state_v0435 \
+  --print-summary
+```
+
+For complete detailed all-element parity, rebuild the v0.4.35 helper and rerun
+XSTAR with:
+
+```bash
+export XSTAR_ATOMIC_HMC_TARGET_CALL=73
+export XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0
+```
+
+Then rerun example 108 with `--initial-population-policy require-all`. Require
+`all_element_detailed_parity_probe_ready=True` and close all-element summary,
+global-array, matrix, final-solver, and thermal parity before beginning `comp2`.

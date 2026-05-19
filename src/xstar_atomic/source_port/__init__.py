@@ -169,6 +169,20 @@ from .local_zone import (
     write_fixed_state_calc_hmc_all_products,
 )
 
+from .all_element_fixed_state import (
+    AllElementFixedStateError,
+    OxygenCall73RegressionGate,
+    OXYGEN_CALL73_REQUIRED_TRUE_FIELDS,
+    validate_oxygen_call73_regression,
+    AllElementProbeElement,
+    AllElementFixedStatePlan,
+    AllElementFixedStateRun,
+    load_all_element_fixed_state_plan,
+    build_all_element_fixed_state_requests,
+    run_all_element_fixed_state,
+    write_all_element_fixed_state_products,
+)
+
 from .calc_hmc_all_closure import (
     ElementXSTARVectorClosure,
     XSTARVectorMatrixClosureResult,
@@ -246,6 +260,14 @@ from .ucalc_dispatch import (
     UCalcDispatcher,
     default_ucalc_dispatcher,
 )
+
+from .v0434_regression import (
+    V0434_BASELINE_TARGET_COUNTS,
+    V0434RegressionGateResult,
+    assess_v0434_oxygen_correction_gates,
+    write_v0434_regression_gate_summary,
+)
+
 
 __all__ = [
     "FortranSourceFile",
@@ -390,6 +412,17 @@ __all__ = [
     "calc_hmc_all",
     "register_fixed_state_calc_hmc_all",
     "write_fixed_state_calc_hmc_all_products",
+    "AllElementFixedStateError",
+    "OxygenCall73RegressionGate",
+    "OXYGEN_CALL73_REQUIRED_TRUE_FIELDS",
+    "validate_oxygen_call73_regression",
+    "AllElementProbeElement",
+    "AllElementFixedStatePlan",
+    "AllElementFixedStateRun",
+    "load_all_element_fixed_state_plan",
+    "build_all_element_fixed_state_requests",
+    "run_all_element_fixed_state",
+    "write_all_element_fixed_state_products",
     "CalcHMCAllParityError",
     "CalcHMCAllProbeCritfReference",
     "CalcHMCAllProbeElementReference",
@@ -418,6 +451,10 @@ __all__ = [
     "FullElementMatrixParityResult",
     "compare_full_element_matrix_probe",
     "write_full_element_matrix_parity_products",
+    "V0434_BASELINE_TARGET_COUNTS",
+    "V0434RegressionGateResult",
+    "assess_v0434_oxygen_correction_gates",
+    "write_v0434_regression_gate_summary",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",

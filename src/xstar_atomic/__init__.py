@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.34"
+__version__ = "0.4.35"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -155,6 +155,11 @@ from .source_port import (
     FixedStateElementResult, FixedStateCalcHMCAllResult,
     resolve_calc_hmc_all_density, calc_hmc_all, register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
+    AllElementFixedStateError, OxygenCall73RegressionGate,
+    OXYGEN_CALL73_REQUIRED_TRUE_FIELDS, validate_oxygen_call73_regression,
+    AllElementProbeElement, AllElementFixedStatePlan, AllElementFixedStateRun,
+    load_all_element_fixed_state_plan, build_all_element_fixed_state_requests,
+    run_all_element_fixed_state, write_all_element_fixed_state_products,
     CalcHMCAllParityError, CalcHMCAllProbeCritfReference,
     CalcHMCAllProbeElementReference, CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult, SameCallMatrixParityResult,
@@ -559,6 +564,17 @@ __all__.extend([
     "calc_hmc_all",
     "register_fixed_state_calc_hmc_all",
     "write_fixed_state_calc_hmc_all_products",
+    "AllElementFixedStateError",
+    "OxygenCall73RegressionGate",
+    "OXYGEN_CALL73_REQUIRED_TRUE_FIELDS",
+    "validate_oxygen_call73_regression",
+    "AllElementProbeElement",
+    "AllElementFixedStatePlan",
+    "AllElementFixedStateRun",
+    "load_all_element_fixed_state_plan",
+    "build_all_element_fixed_state_requests",
+    "run_all_element_fixed_state",
+    "write_all_element_fixed_state_products",
     "CalcHMCAllParityError",
     "CalcHMCAllProbeCritfReference",
     "CalcHMCAllProbeElementReference",

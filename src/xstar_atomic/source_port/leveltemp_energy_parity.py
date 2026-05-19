@@ -28,7 +28,7 @@ class LeveltempEnergyParityResult:
 
 
 def _coerce_float(value: Any) -> float:
-    """Return a parser-compatible float or NaN for missing diagnostics."""
+    """Parse a Fortran scalar, returning NaN for an absent diagnostic."""
     if value is None:
         return float("nan")
     if isinstance(value, str) and not value.strip():
