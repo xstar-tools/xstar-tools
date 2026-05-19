@@ -96,6 +96,10 @@ class FixedStateElementResult:
     request: FixedStateElementRequest
     equilibrium: ElementEquilibriumResult
     calc_ion_rates: Dict[int, CalcIonRatesResult]
+    preliminary_pirt: Dict[int, float]
+    preliminary_rrrt: Dict[int, float]
+    second_pass_pirt: Dict[int, float]
+    second_pass_rrrt: Dict[int, float]
     preliminary_istruc: IstrucResult
     source_limits: IonStageLimitResult
     selected_min_ion_stage: int
@@ -123,6 +127,8 @@ class FixedStateCalcHMCAllResult:
     element_results: List[FixedStateElementResult]
     ion_fractions: Dict[Tuple[int, int], float]
     preliminary_ion_fractions: Dict[Tuple[int, int], float]
+    preliminary_rrrt: Dict[Tuple[int, int], float]
+    preliminary_pirt: Dict[Tuple[int, int], float]
     rrrt: Dict[Tuple[int, int], float]
     pirt: Dict[Tuple[int, int], float]
     htt: Dict[int, float]
@@ -158,6 +164,7 @@ class FixedStateCalcHMCAllResult:
     charge_closure_scope_complete: bool
     complete_fixed_state_ready: bool
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    global_element_index_by_z: Dict[int, int] = field(default_factory=dict)
     global_ion_index_by_key: Dict[Tuple[int, int], int] = field(default_factory=dict)
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
 
@@ -239,6 +246,8 @@ def calc_hmc_all(
 
     ion_fractions: Dict[Tuple[int, int], float] = {}
     preliminary_ion_fractions: Dict[Tuple[int, int], float] = {}
+    preliminary_rrrt: Dict[Tuple[int, int], float] = {}
+    preliminary_pirt: Dict[Tuple[int, int], float] = {}
     rrrt: Dict[Tuple[int, int], float] = {}
     pirt: Dict[Tuple[int, int], float] = {}
     htt: Dict[int, float] = {}
@@ -288,26 +297,45 @@ def calc_hmc_all(
         if key[0] in requested_element_z and key[0] > 0 and key[1] > 0:
             global_ion_index_by_key[key] = ion_index
 
+    # Element arrays such as htt/cll are indexed by source element ordinal
+    # ``jk``, not by atomic number.  Decode the exact ordinal from the packed
+    # rate-type-11 element headers.
+    global_element_index_by_z: Dict[int, int] = {}
+    global_element_index_source = "packed_type11_element_ordinal"
+    element_records = np.asarray(getattr(derived, "element_records", ()), dtype=int).reshape(-1)
+    for element_index in range(1, element_records.size):
+        element_record = int(element_records[element_index])
+        if element_record <= 0 or not hasattr(master, "record_integers"):
+            continue
+        integers = np.asarray(master.record_integers(element_record), dtype=int).reshape(-1)
+        if integers.size and int(integers[0]) > 0:
+            global_element_index_by_z[int(integers[0])] = element_index
+    # Synthetic/minimal tests may omit packed element headers.  Preserve a
+    # deterministic fallback without using it in production provenance.
+    if not global_element_index_by_z:
+        global_element_index_source = "synthetic_sorted_element_fallback"
+        for element_index, z in enumerate(sorted(available_element_z), start=1):
+            global_element_index_by_z[int(z)] = element_index
+
+    # Global level arrays use the source ordinal ``mm`` in
+    # derivedpointers%npilev(mm,jkk).  Packed local level labels are metadata
+    # and are not valid substitutes for this ordinal.
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = {}
-    level_records = np.asarray(
-        getattr(derived, "level_record_by_global_index", ()), dtype=int
-    ).reshape(-1)
-    n_level_records = int(getattr(derived, "n_level_records", max(0, level_records.size - 1)))
-    npar = np.asarray(getattr(derived, "npar", ()), dtype=int).reshape(-1)
-    for global_level_index in range(1, min(n_level_records + 1, level_records.size)):
-        level_record = int(level_records[global_level_index])
-        if level_record <= 0 or level_record >= npar.size:
-            continue
-        ion_index = ion_record_to_index.get(int(npar[level_record]))
-        if ion_index is None or ion_index >= ion_elements.size or ion_index >= ion_stages.size:
-            continue
-        z = int(ion_elements[ion_index])
-        stage = int(ion_stages[ion_index])
-        if z not in requested_element_z:
-            continue
-        local_level = int(master.local_level_index(level_record))
-        if stage > 0 and local_level > 0:
-            global_level_index_by_key[(z, stage, local_level)] = global_level_index
+    npilev = np.asarray(getattr(derived, "npilev", ()), dtype=int)
+    nlevs = np.asarray(getattr(derived, "nlevs", ()), dtype=int).reshape(-1)
+    if npilev.ndim == 2:
+        for ion_index in range(1, min(n_ions + 1, ion_stages.size, ion_elements.size, nlevs.size)):
+            z = int(ion_elements[ion_index])
+            stage = int(ion_stages[ion_index])
+            if z not in requested_element_z or stage <= 0:
+                continue
+            nlev = int(nlevs[ion_index])
+            for local_ordinal in range(1, min(nlev + 1, npilev.shape[0])):
+                if ion_index >= npilev.shape[1]:
+                    break
+                global_level_index = int(npilev[local_ordinal, ion_index])
+                if global_level_index > 0:
+                    global_level_index_by_key[(z, stage, local_ordinal)] = global_level_index
 
     for request in elements:
         request.validate()
@@ -346,8 +374,14 @@ def calc_hmc_all(
         mmu[z] = selected_max
 
         for stage, item in calc_rates_by_stage.items():
-            pirt[(z, int(stage))] = float(item.pirti)
-            rrrt[(z, int(stage))] = float(item.rrrti)
+            key = (z, int(stage))
+            preliminary_pirt[key] = float(item.pirti)
+            preliminary_rrrt[key] = float(item.rrrti)
+            # calc_hmc_element starts its returned arrays with these
+            # preliminary values; active ions are overwritten by the second
+            # calc_hmc_ion pass below.
+            pirt[key] = float(item.pirti)
+            rrrt[key] = float(item.rrrti)
         for stage in range(1, preliminary.n_rates + 2):
             preliminary_ion_fractions[(z, stage)] = float(preliminary.fractions[stage])
 
@@ -381,6 +415,15 @@ def calc_hmc_all(
         all_ready &= ready
         if solve is None:
             raise CalcHMCAllError(f"element Z={z} did not produce a population solution")
+
+        second_pass_pirt: Dict[int, float] = {}
+        second_pass_rrrt: Dict[int, float] = {}
+        for ion_summary in getattr(equilibrium.assembly, "ion_summaries", ()):
+            stage = int(ion_summary.ion_stage)
+            second_pass_pirt[stage] = float(ion_summary.second_pass_pirt)
+            second_pass_rrrt[stage] = float(ion_summary.second_pass_rrrt)
+            pirt[(z, stage)] = float(ion_summary.second_pass_pirt)
+            rrrt[(z, stage)] = float(ion_summary.second_pass_rrrt)
 
         element_ht = float(solve.heating) * abundance
         element_cl = float(solve.cooling) * abundance
@@ -438,6 +481,10 @@ def calc_hmc_all(
                 request=request,
                 equilibrium=equilibrium,
                 calc_ion_rates=calc_rates_by_stage,
+                preliminary_pirt={stage: float(item.pirti) for stage, item in calc_rates_by_stage.items()},
+                preliminary_rrrt={stage: float(item.rrrti) for stage, item in calc_rates_by_stage.items()},
+                second_pass_pirt=second_pass_pirt,
+                second_pass_rrrt=second_pass_rrrt,
                 preliminary_istruc=preliminary,
                 source_limits=source_limits,
                 selected_min_ion_stage=selected_min,
@@ -497,6 +544,8 @@ def calc_hmc_all(
         element_results=element_results,
         ion_fractions=ion_fractions,
         preliminary_ion_fractions=preliminary_ion_fractions,
+        preliminary_rrrt=preliminary_rrrt,
+        preliminary_pirt=preliminary_pirt,
         rrrt=rrrt,
         pirt=pirt,
         htt=htt,
@@ -531,6 +580,7 @@ def calc_hmc_all(
         element_loop_ready=all_ready,
         charge_closure_scope_complete=charge_scope_complete,
         complete_fixed_state_ready=complete,
+        global_element_index_by_z=global_element_index_by_z,
         global_ion_index_by_key=global_ion_index_by_key,
         global_level_index_by_key=global_level_index_by_key,
         diagnostics={
@@ -540,6 +590,9 @@ def calc_hmc_all(
             "pre_matrix_ready": bool(all_pre_matrix_ready),
             "calc_ion_rates_translated": True,
             "istruc_ioneqm_translated": True,
+            "second_pass_calc_hmc_ion_rates_translated": True,
+            "global_level_mapping_source": "derivedpointers.npilev(local_ordinal,ion_index)",
+            "global_element_index_source": global_element_index_source,
             "continuum_complete": bool(continuum.complete),
             "dsec_deferred": True,
         },
@@ -623,7 +676,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.25",
+    port_version: str = "v0.4.26",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -640,6 +693,7 @@ def write_fixed_state_calc_hmc_all_products(
             fieldnames=(
                 "element_z", "ion_stage",
                 "preliminary_istruc_fraction", "final_ion_fraction",
+                "preliminary_pirt_s_inv", "preliminary_rrrt_s_inv",
                 "pirt_s_inv", "rrrt_s_inv",
                 "stot_flow_s_inv", "atot_flow_s_inv", "xtot",
             ),
@@ -648,6 +702,8 @@ def write_fixed_state_calc_hmc_all_products(
         ion_keys = sorted(
             set(result.preliminary_ion_fractions)
             | set(result.ion_fractions)
+            | set(result.preliminary_pirt)
+            | set(result.preliminary_rrrt)
             | set(result.pirt)
             | set(result.rrrt)
             | set(result.stotg)
@@ -659,6 +715,8 @@ def write_fixed_state_calc_hmc_all_products(
                 "ion_stage": stage,
                 "preliminary_istruc_fraction": result.preliminary_ion_fractions.get((z, stage), 0.0),
                 "final_ion_fraction": result.ion_fractions.get((z, stage), 0.0),
+                "preliminary_pirt_s_inv": result.preliminary_pirt.get((z, stage), 0.0),
+                "preliminary_rrrt_s_inv": result.preliminary_rrrt.get((z, stage), 0.0),
                 "pirt_s_inv": result.pirt.get((z, stage), 0.0),
                 "rrrt_s_inv": result.rrrt.get((z, stage), 0.0),
                 "stot_flow_s_inv": result.stotg.get((z, stage), 0.0),
@@ -671,7 +729,7 @@ def write_fixed_state_calc_hmc_all_products(
         writer = csv.DictWriter(
             handle,
             fieldnames=(
-                "element_z", "abundance", "requested_min_ion_stage", "requested_max_ion_stage",
+                "element_z", "global_element_index", "abundance", "requested_min_ion_stage", "requested_max_ion_stage",
                 "selected_min_ion_stage", "selected_max_ion_stage", "critf",
                 "ion_stage_selection", "pre_matrix_ready",
                 "heating", "cooling", "heating2", "cooling2",
@@ -683,6 +741,7 @@ def write_fixed_state_calc_hmc_all_products(
         for item in result.element_results:
             writer.writerow({
                 "element_z": item.request.element_z,
+                "global_element_index": result.global_element_index_by_z.get(item.request.element_z, 0),
                 "abundance": item.request.abundance,
                 "requested_min_ion_stage": item.request.min_ion_stage,
                 "requested_max_ion_stage": item.request.max_ion_stage,
@@ -738,7 +797,7 @@ def write_fixed_state_calc_hmc_all_products(
         writer = csv.DictWriter(
             handle,
             fieldnames=(
-                "element_z", "ion_stage", "local_level", "population", "lte_population",
+                "element_z", "ion_stage", "local_level", "global_level_index", "population", "lte_population",
                 "departure_coefficient", "gamma", "alpha",
                 "igammamax_record", "ialphamax_record",
             ),
@@ -750,6 +809,7 @@ def write_fixed_state_calc_hmc_all_products(
                 "element_z": z,
                 "ion_stage": stage,
                 "local_level": level,
+                "global_level_index": result.global_level_index_by_key.get(key, 0),
                 "population": result.xilevg[key],
                 "lte_population": result.rnisg.get(key, 0.0),
                 "departure_coefficient": result.bilevg.get(key, 0.0),
@@ -772,7 +832,12 @@ def write_fixed_state_calc_hmc_all_products(
         "n_elements": len(result.element_results),
         "n_ion_entries": len(result.ion_fractions),
         "n_preliminary_ion_entries": len(result.preliminary_ion_fractions),
+        "n_preliminary_rate_entries": len(result.preliminary_pirt),
+        "n_second_pass_rate_entries": len(result.pirt),
         "n_level_entries": len(result.xilevg),
+        "n_global_element_mappings": len(result.global_element_index_by_z),
+        "n_global_ion_mappings": len(result.global_ion_index_by_key),
+        "n_global_level_mappings": len(result.global_level_index_by_key),
         "pre_matrix_ready": result.pre_matrix_ready,
         "httot": result.httot,
         "cltot": result.cltot,
@@ -800,6 +865,8 @@ def write_fixed_state_calc_hmc_all_products(
         f"- Electron fraction: `{result.electron_fraction_xee:.16g}`\n"
         f"- Elements: `{len(result.element_results)}`\n"
         f"- Pre-matrix calc_ion_rates/istruc ready: `{result.pre_matrix_ready}`\n"
+        f"- Second-pass calc_hmc_ion rate entries: `{len(result.pirt)}`\n"
+        f"- Source global-level mappings: `{len(result.global_level_index_by_key)}`\n"
         f"- Element loop ready: `{result.element_loop_ready}`\n"
         f"- Charge-closure scope complete: `{result.charge_closure_scope_complete}`\n"
         f"- Continuum leaves complete: `{result.continuum.complete}`\n"

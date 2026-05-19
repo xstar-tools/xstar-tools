@@ -208,12 +208,12 @@ def compare_calc_hmc_all_pre_continuum_probe(
         if stage <= z:
             rows.append(_metric(
                 "calc_ion_rates_pirt", f"Z={z},stage={stage}",
-                result.pirt.get(key, 0.0), float(record["pirt"]),
+                result.preliminary_pirt.get(key, 0.0), float(record["pirt"]),
                 rtol=rtol, atol=atol,
             ))
             rows.append(_metric(
                 "calc_ion_rates_rrrt", f"Z={z},stage={stage}",
-                result.rrrt.get(key, 0.0), float(record["rrrt"]),
+                result.preliminary_rrrt.get(key, 0.0), float(record["rrrt"]),
                 rtol=rtol, atol=atol,
             ))
 
@@ -313,10 +313,20 @@ def compare_calc_hmc_all_pre_continuum_probe(
                 rtol=rtol, atol=atol,
             ))
 
-    # Per-element heating/cooling arrays occupy indices 1..nl in the same
-    # probe record even though the CSV column retains the legacy index name.
+    # Per-element heating/cooling arrays occupy source element ordinal ``jk``
+    # indices, not atomic-number indices.  Use the exact type-11 element map
+    # retained by calc_hmc_all.
+    element_index_by_z = dict(getattr(result, "global_element_index_by_z", {}))
     for z in sorted(probe_elements):
-        record = ion_by_index.get(z)
+        element_index = element_index_by_z.get(z)
+        if element_index is None:
+            if _nonzero((
+                result.htt.get(z, 0.0), result.cll.get(z, 0.0),
+                result.htt2.get(z, 0.0), result.cll2.get(z, 0.0),
+            )):
+                ion_missing_xstar += 1
+            continue
+        record = ion_by_index.get(int(element_index))
         if record is None:
             if _nonzero((
                 result.htt.get(z, 0.0), result.cll.get(z, 0.0),
@@ -331,7 +341,8 @@ def compare_calc_hmc_all_pre_continuum_probe(
             ("element_cll2", result.cll2, "cll2"),
         ):
             rows.append(_metric(
-                component, f"Z={z}", values.get(z, 0.0), float(record[field_name]),
+                component, f"element_index={element_index},Z={z}",
+                values.get(z, 0.0), float(record[field_name]),
                 rtol=rtol, atol=atol,
             ))
 
@@ -437,6 +448,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "summary_scope_complete": summary_comparable,
             "deferred_summary_fields": deferred_summary_fields,
             "n_global_ion_probe_rows": len(ion_rows),
+            "global_element_index_by_z": element_index_by_z,
             "n_global_level_probe_rows": len(level_rows),
             "n_compared_global_level_indices": len(compared_level_indices),
             "pre_matrix_missing_python_keys": pre_matrix_missing_python,
@@ -468,7 +480,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
             writer.writerow(row.__dict__)
 
     payload = {
-        "port_version": "v0.4.25",
+        "port_version": "v0.4.26",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,

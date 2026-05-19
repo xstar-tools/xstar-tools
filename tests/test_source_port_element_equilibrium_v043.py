@@ -76,6 +76,10 @@ def test_source_faithful_element_sequence_solves_complete_synthetic_element(tmp_
         assert result.assembly.n_records_blocked == 0
         assert result.assembly.n_unmapped_endpoints == 0
         assert len(result.assembly.terms) == 4
+        assert len(result.assembly.ion_summaries) == 1
+        summary = result.assembly.ion_summaries[0]
+        assert summary.second_pass_pirt >= 0.0
+        assert summary.second_pass_rrrt >= 0.0
         assert result.solve is not None
         assert result.solve.converged is True
         assert result.solve.normalization == pytest.approx(1.0)
@@ -173,7 +177,7 @@ def test_element_equilibrium_cli_and_public_api(tmp_path: Path, capsys):
     text = capsys.readouterr().out
     assert "full_element_direct_solve_ready=True" in text
     assert (out / "xstar_element_equilibrium_summary.json").is_file()
-    assert xa.__version__ == "0.4.25"
+    assert xa.__version__ == "0.4.26"
     assert callable(xa.solve_element_statistical_equilibrium)
     assert "solve_element_statistical_equilibrium" in xa.__all__
 

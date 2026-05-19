@@ -91,11 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.25"
+PORT_LEDGER_VERSION = "v0.4.26"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "XSTAR pre-continuum calc_hmc_all parity -> comp2 -> freef -> "
-    "bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec"
+    "production oxygen global-array parity -> full all-element fixed-state "
+    "scope -> comp2 -> freef -> bremem -> heatf -> complete fixed-state "
+    "calc_hmc_all parity -> dsec"
 )
 
 
@@ -177,22 +178,22 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.linear_algebra.lubksb", "source-order back-substitution tests"),
         E("xstar/xstarlib/src/mprove.f90", "mprove", "milestone3_linear_algebra", V,
           "xstar_atomic.source_port.linear_algebra.mprove", "source-order iterative-refinement tests"),
-        E("xstar/xstarlib/src/calc_ion_rates.f90", "calc_ion_rates", "milestone4_local_zone", T,
+        E("xstar/xstarlib/src/calc_ion_rates.f90", "calc_ion_rates", "milestone4_local_zone", V,
           "xstar_atomic.source_port.ion_balance.calc_ion_rates",
-          "source-family traversal, ans1 accumulation, and selected-record unit tests",
-          "Integrated into the fixed-state element loop; awaiting the bounded XSTAR pre-matrix probe run for direct validation."),
-        E("xstar/xstarlib/src/istruc.f90", "istruc", "milestone4_local_zone", T,
+          "bounded calc_hmc_all call-73 pre-matrix probe: all oxygen pirt/rrrt rows within tolerance",
+          "Validated for the captured oxygen fixed-state benchmark; broader all-element coverage remains future work."),
+        E("xstar/xstarlib/src/istruc.f90", "istruc", "milestone4_local_zone", V,
           "xstar_atomic.source_port.ion_balance.istruc",
-          "one-based guard, final-stage residual, and adjacent-stage equilibrium tests",
-          "Integrated before the multilevel solve; direct XSTAR probe comparison remains pending."),
-        E("xstar/xstarlib/src/ioneqm.f90", "ioneqm", "milestone4_local_zone", T,
+          "bounded call-73 oxygen ion fractions plus exact mml/mmu/critf selection",
+          "Validated for the captured oxygen fixed-state benchmark."),
+        E("xstar/xstarlib/src/ioneqm.f90", "ioneqm", "milestone4_local_zone", V,
           "xstar_atomic.source_port.ion_balance.ioneqm",
-          "source overflow-avoidance algorithm, normalization, and adjacent-rate ratio tests",
-          "Direct XSTAR probe comparison remains pending."),
+          "bounded call-73 oxygen preliminary ion fractions and source-ratio regression tests",
+          "Validated through istruc for the captured oxygen fixed-state benchmark."),
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
-          "fixed-state pre-matrix rates, istruc-derived stage limits, corrected one-based level mapping, and source-shaped aggregation tests",
-          "A bounded pre-continuum XSTAR probe and comparator are included. Full all-element parity and comp2/freef/bremem/heatf continuum closure remain pending."),
+          "call-73 pre-matrix parity, source-ordinal npilev mapping, second-pass calc_hmc_ion pirt/rrrt, and source element-index aggregation",
+          "Global-array production rerun is required for final oxygen acceptance; full all-element parity and comp2/freef/bremem/heatf remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -206,6 +207,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 and the pre-matrix half of fixed-state calc_hmc_all are callable; pre-continuum validation, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; global-array acceptance, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

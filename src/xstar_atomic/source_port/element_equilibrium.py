@@ -237,6 +237,10 @@ class IonAssemblySummary:
     ion_stage: int
     ion_record: int
     nlev: int
+    # Source calc_hmc_ion scalar totals from the second matrix-building pass.
+    # These are distinct from the preliminary calc_ion_rates/istruc values.
+    second_pass_pirt: float = 0.0
+    second_pass_rrrt: float = 0.0
     n_records_seen: int = 0
     n_records_evaluated: int = 0
     n_records_source_noop: int = 0
@@ -895,16 +899,30 @@ def assemble_element_matrix(
                         summary.blocked_reasons[reason] = summary.blocked_reasons.get(reason, 0) + 1
                         blocked_records.append(row)
                     else:
+                        # calc_hmc_ion applies this source filter before both
+                        # scalar pirt accumulation and matrix insertion.
+                        if result.rate_type == 1 and result.idest1 != 1:
+                            result = replace(result, ans1=0.0)
+                        record_results[-1]["ans1_after_calc_hmc_ion_filter"] = float(result.ans1)
+                        record_results[-1]["ans2_after_calc_hmc_ion_filter"] = float(result.ans2)
+
+                        # Literal calc_hmc_ion second-pass totals.  These are
+                        # what calc_hmc_element returns to calc_hmc_all after
+                        # the active ion range is selected; they must not be
+                        # confused with preliminary calc_ion_rates totals.
+                        if result.rate_type in {1, 7, 40, 42}:
+                            if result.idest1 == 1:
+                                summary.second_pass_pirt += float(result.ans1)
+                            if result.idest2 >= block.nlev:
+                                summary.second_pass_rrrt += float(result.ans2)
+
                         # Source branches with a missing endpoint do not enter
                         # calc_hmc_ion's four-row matrix block.  They may still
-                        # contribute scalar ionization/recombination totals.
+                        # contribute the scalar totals accumulated above.
                         if result.idest1 <= 0 or result.idest2 <= 0:
                             record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
                             record = int(derived.npnxt[record])
                             continue
-                        # Prevent duplicate rate-type-1 photoionization from excited levels.
-                        if result.rate_type == 1 and result.idest1 != 1:
-                            result = replace(result, ans1=0.0)
                         try:
                             new_terms = _matrix_terms_for_result(
                                 result=result,
@@ -1417,7 +1435,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.25",
+    port_version: str = "v0.4.26",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)

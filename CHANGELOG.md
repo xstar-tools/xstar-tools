@@ -1,5 +1,52 @@
 # CHANGELOG
 
+## v0.4.26 - 2026-05-19
+
+v0.4.26 corrects the structural global-array mappings exposed by the first
+scope-aware `calc_hmc_all` pre-continuum comparison.
+
+### Corrected
+
+- Global level products now use the literal XSTAR pointer
+  `derivedpointers%npilev(local_ordinal, ion_index)`.  The source ordinal in the
+  ion's level traversal is no longer reconstructed from a packed local-level
+  label.
+- Preliminary `calc_ion_rates` `pirt/rrrt` values remain dedicated inputs to
+  `ioneqm/istruc`, while the selected ion stages now export the independent
+  second-pass `calc_hmc_ion` `pirt/rrrt` values used by `calc_hmc_all`.
+- Element-indexed `htt`, `cll`, `htt2`, and `cll2` parity now uses the source
+  element ordinal from the type-11 element table rather than assuming that the
+  array index equals atomic number `Z`.
+
+### Added
+
+- `IonAssemblySummary.second_pass_pirt` and `second_pass_rrrt`, accumulated with
+  the literal `calc_hmc_ion.f90` type and endpoint gates.
+- Separate preliminary and second-pass ion-rate columns in fixed-state products.
+- Source global-element and global-level index maps in the local-zone result and
+  diagnostics.
+- Regression coverage for irregular packed level labels, noncontiguous `npilev`
+  indices, source element ordinals, and preliminary/second-pass rate separation.
+
+### Validation and production status
+
+The source-port suite passes 87 tests.  A selected API/package/docs set passes 34 tests.  `compileall`, sdist/wheel builds, installed-wheel API/CLI checks, packaged benchmark access, and Fortran probe compilation pass.  The complete historical test suite was attempted but exceeded the 150-second execution limit and is not claimed as fully passed.  An offline reanalysis of the user's
+v0.4.25 products shows that the source-ordinal remap reduces global-level
+failures from 614 to 290; `rnisg` and `gammag` mapping failures disappear.  The
+second-pass O III--O VIII `pirt/rrrt` values reconstructed from the accepted
+matrix terms all agree with the captured XSTAR values within the 0.5% gate.
+
+A fresh global-array parity result is not claimed in the build environment,
+because the production `atdb.fits`, pointer cache, runtime probes, and escape
+state are available only in the user's XSTAR tree.  Example 105 is the
+production acceptance run for v0.4.26.
+
+### Next order
+
+`production oxygen global-array parity -> full all-element fixed-state scope ->
+comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity ->
+dsec`.
+
 ## v0.4.25 - 2026-05-18
 
 v0.4.25 completes the bounded pre-continuum parity layer for element-subset `calc_hmc_all` validation.

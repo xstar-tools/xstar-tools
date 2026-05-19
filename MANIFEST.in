@@ -73,3 +73,11 @@ include xstar_o_calc_hmc_all_fixed_state_v0423_diagnosis_v0424.md
 
 include xstar_atomic_v0.4.25.md
 include xstar_o_calc_hmc_all_fixed_state_v0424_critf1e7_diagnosis_v0425.md
+
+include xstar_atomic_v0.4.26.md
+include xstar_o_calc_hmc_all_fixed_state_v0425_diagnosis_v0426.md
+include xstar_atomic_conversation_summary_v0426.md
+
+include xstar_calc_hmc_all_v0426_offline_second_pass_rates.csv
+include xstar_calc_hmc_all_v0426_offline_global_level_summary.csv
+include xstar_calc_hmc_all_v0426_offline_reanalysis_summary.json

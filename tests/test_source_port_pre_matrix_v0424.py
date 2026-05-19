@@ -160,6 +160,10 @@ def _fake_element_with_guard(master, derived, *, element_z, context, dispatcher=
         basis=SimpleNamespace(rows=rows, blocks=blocks),
         # one-based guard followed by the two real LTE entries
         initial_populations=np.array([0.0, 0.8, 0.2]),
+        ion_summaries=[
+            SimpleNamespace(ion_stage=1, second_pass_pirt=111.0, second_pass_rrrt=121.0),
+            SimpleNamespace(ion_stage=2, second_pass_pirt=112.0, second_pass_rrrt=122.0),
+        ],
     )
     solve = SimpleNamespace(
         heating=0.0, cooling=0.0, heating2=0.0, cooling2=0.0,
@@ -191,11 +195,49 @@ def test_fixed_state_mapping_uses_one_based_lte_and_keeps_pre_rates_separate():
     assert result.rnisg[(2, 1, 1)] == pytest.approx(0.8)
     assert result.rnisg[(2, 2, 1)] == pytest.approx(0.2)
     assert result.bilevg[(2, 1, 1)] == pytest.approx(0.7 / 0.8)
-    assert result.pirt[(2, 1)] == pytest.approx(11.0)
-    assert result.rrrt[(2, 2)] == pytest.approx(22.0)
+    assert result.preliminary_pirt[(2, 1)] == pytest.approx(11.0)
+    assert result.preliminary_rrrt[(2, 2)] == pytest.approx(22.0)
+    assert result.pirt[(2, 1)] == pytest.approx(111.0)
+    assert result.rrrt[(2, 2)] == pytest.approx(122.0)
     assert result.stotg[(2, 1)] == pytest.approx(31.0)
     assert result.atotg[(2, 2)] == pytest.approx(42.0)
 
+
+
+
+def test_fixed_state_global_indices_use_source_ordinals_and_element_order():
+    class Master:
+        def record_integers(self, record):
+            assert record == 900
+            return np.array([2, 2])
+
+    npilev = np.zeros((4, 3), dtype=int)
+    npilev[1, 1] = 10
+    npilev[2, 1] = 30  # deliberately non-contiguous packed-label order
+    npilev[1, 2] = 11
+    derived = SimpleNamespace(
+        n_ions=2,
+        ion_records=np.array([0, 101, 102]),
+        ion_element_z=np.array([0, 2, 2]),
+        ion_stage=np.array([0, 1, 2]),
+        nlevs=np.array([0, 2, 1]),
+        npilev=npilev,
+        element_records=np.array([0, 900]),
+    )
+    result = calc_hmc_all(
+        Master(),
+        derived,
+        elements=[FixedStateElementRequest(2, 1, 2, abundance=1.0)],
+        temperature_k=1e6,
+        hydrogen_density_cm3=1e8,
+        electron_fraction_xee=0.4,
+        element_solver=_fake_element_with_guard,
+        pre_matrix_solver=_fake_pre_matrix,
+    )
+    assert result.global_element_index_by_z == {2: 1}
+    assert result.global_level_index_by_key[(2, 1, 1)] == 10
+    assert result.global_level_index_by_key[(2, 1, 2)] == 30
+    assert result.global_level_index_by_key[(2, 2, 1)] == 11
 
 def _write_complete_calc_hmc_probe(tmp_path, *, summary_values="3,1,4,2,0.4,0"):
     (tmp_path / "xstar_calc_hmc_element_pre_matrix_probe.csv").write_text(
@@ -211,8 +253,8 @@ def _write_complete_calc_hmc_probe(tmp_path, *, summary_values="3,1,4,2,0.4,0"):
     (tmp_path / "xstar_calc_hmc_all_pre_continuum_ions_probe.csv").write_text(
         "calc_hmc_all_call_id,global_ion_index,xiin,rrrt,pirt,htt,cll,htt2,cll2,stotg,atotg,xtotg\n"
         "9,2,0,0,0,3,1,4,2,0,0,0\n"
-        "9,4,0.5,21,11,0,0,0,0,31,41,0.5\n"
-        "9,5,0.3,22,12,0,0,0,0,32,42,0.3\n"
+        "9,4,0.5,121,111,0,0,0,0,31,41,0.5\n"
+        "9,5,0.3,122,112,0,0,0,0,32,42,0.3\n"
     )
     (tmp_path / "xstar_calc_hmc_all_pre_continuum_levels_probe.csv").write_text(
         "calc_hmc_all_call_id,global_level_index,xilevg,rnisg,bilevg,gammag,alphag,igammamax_record,ialphamax_record\n"
@@ -227,8 +269,10 @@ def _fake_complete_calc_hmc_result(*, complete_scope=True):
         element_results=[SimpleNamespace(request=request)],
         preliminary_ion_fractions={(2, 1): 0.5, (2, 2): 0.3, (2, 3): 0.2},
         ion_fractions={(2, 1): 0.5, (2, 2): 0.3},
-        pirt={(2, 1): 11.0, (2, 2): 12.0},
-        rrrt={(2, 1): 21.0, (2, 2): 22.0},
+        preliminary_pirt={(2, 1): 11.0, (2, 2): 12.0},
+        preliminary_rrrt={(2, 1): 21.0, (2, 2): 22.0},
+        pirt={(2, 1): 111.0, (2, 2): 112.0},
+        rrrt={(2, 1): 121.0, (2, 2): 122.0},
         stotg={(2, 1): 31.0, (2, 2): 32.0},
         atotg={(2, 1): 41.0, (2, 2): 42.0},
         xtotg={(2, 1): 0.5, (2, 2): 0.3},
@@ -240,6 +284,7 @@ def _fake_complete_calc_hmc_result(*, complete_scope=True):
         alphag={(2, 1, 1): 7.0, (2, 2, 1): 8.0},
         igammamaxg={(2, 1, 1): 101, (2, 2, 1): 102},
         ialphamaxg={(2, 1, 1): 201, (2, 2, 1): 202},
+        global_element_index_by_z={2: 2},
         global_ion_index_by_key={(2, 1): 4, (2, 2): 5},
         global_level_index_by_key={(2, 1, 1): 10, (2, 2, 1): 11},
         mml={2: 1}, mmu={2: 2},

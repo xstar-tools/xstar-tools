@@ -14,6 +14,15 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.26 source-global mapping and second-pass rate separation
+
+v0.4.26 maps global levels through the literal `npilev(local ordinal, ion)`
+pointer, keeps preliminary `calc_ion_rates` values separate from second-pass
+`calc_hmc_ion` `pirt/rrrt`, and resolves element heating/cooling arrays through
+the source element ordinal rather than atomic number.  The production
+acceptance gate is a new example-105 global-array rerun; continuum leaves remain
+next only after that structural parity is confirmed.
+
 ### v0.4.25 scope-aware pre-continuum parity
 
 v0.4.25 uses the XSTAR probe's captured `critf` by default, compares `mml/mmu/critf` once per element, and joins Python ion/level products to the real XSTAR global indices. Oxygen-only runs now compare the oxygen `xiin`, `pirt/rrrt`, `stotg/atotg/xtotg`, level-population/LTE/departure/rate arrays, and per-element heating/cooling while correctly marking all-element totals as `not_comparable_subset_scope`.
