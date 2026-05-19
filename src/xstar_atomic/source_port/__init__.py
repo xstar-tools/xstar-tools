@@ -13,6 +13,9 @@ from .inventory import (
     write_source_inventory,
 )
 from .ledger import (
+    PORT_LEDGER_VERSION,
+    COMPLETED_SOURCE_PORT_MILESTONES,
+    NEXT_COHERENT_SOURCE_PORT_TARGET,
     PortStatus,
     PortLedgerEntry,
     XSTARPortLedger,
@@ -172,6 +175,9 @@ __all__ = [
     "XSTARSourceInventory",
     "build_source_inventory",
     "write_source_inventory",
+    "PORT_LEDGER_VERSION",
+    "COMPLETED_SOURCE_PORT_MILESTONES",
+    "NEXT_COHERENT_SOURCE_PORT_TARGET",
     "PortStatus",
     "PortLedgerEntry",
     "XSTARPortLedger",

@@ -1,0 +1,76 @@
+{
+  "benchmark_id": "oxygen_o3_o8_solve_call_219_milestone3_v0422",
+  "freeze_release": "v0.4.22",
+  "source_run_release": "v0.4.21",
+  "accepted_scope": "Milestone 3 complete element statistical equilibrium and final population parity",
+  "strict_record_matrix_parity_required_for_acceptance": false,
+  "strict_msolvelucy_state_parity_required_for_acceptance": false,
+  "runtime": {
+    "element_z": 8,
+    "min_ion_stage": 3,
+    "max_ion_stage": 8,
+    "solve_call_id": 219,
+    "temperature_k": 76655.18557758832,
+    "hydrogen_density_cm3": 100000000.0,
+    "electron_fraction_xee": 1.2046560563936872,
+    "electron_density_cm3": 120465605.63936873
+  },
+  "topology": {
+    "compact_rows": 607,
+    "ion_blocks": 6,
+    "superlevels": 13,
+    "normalization_row": 607,
+    "shared_alias_rows": 5,
+    "matrix_terms": 26920
+  },
+  "assembly_acceptance": {
+    "records_seen": 7360,
+    "records_evaluated": 6730,
+    "records_skipped": 18,
+    "records_blocked": 0,
+    "unmapped_matrix_endpoints": 0,
+    "source_ipmat_endpoint_clamps": 0,
+    "strict_matrix_assembly_ready": true
+  },
+  "solver_acceptance": {
+    "solver_converged": true,
+    "solver_method": "leqt2f_ludcmp_lubksb_mprove",
+    "outer_iterations": 3,
+    "fixed_point_iterations": 17,
+    "negative_populations": 0,
+    "population_normalization": 1.0
+  },
+  "population_acceptance": {
+    "ready": true,
+    "n_rows": 607,
+    "n_rows_within_tolerance": 607,
+    "n_rows_outside_tolerance": 0,
+    "native_final_vs_xstar_after_l1": 1.997497574083772e-05,
+    "xstar_before_seeded_final_vs_xstar_after_l1": 1.6666275703592354e-05,
+    "l1_tolerance": 0.005,
+    "max_absolute_tolerance": 0.005
+  },
+  "type56_closure_v0422": {
+    "records": [
+      22861,
+      22862,
+      22863
+    ],
+    "source_behavior": "hunt3 edge-interval linear extrapolation followed by cijpp=max(0,cijpp)",
+    "old_python_behavior": "flat clamp to first positive upsilon below the tabulated grid",
+    "solve_temperature_log10_k": 4.884541552,
+    "expected_native_rates": "ans1=ans2=ans5=ans6=0 for all three records",
+    "validation": "focused source-order regression; production rerun required to refresh full matrix products"
+  },
+  "deferred_strict_parity": {
+    "matrix_terms_outside_tolerance_in_source_run": 1895,
+    "first_failing_family_in_source_run": "type56/rate3",
+    "next_after_type56_to_be_measured_by_rerun": true,
+    "raw_msolvelucy_state_ready": false
+  },
+  "frozen_products_sha256": {
+    "v0421_element_equilibrium_summary.json": "dca12748d6d1d1f51c2d7d38fdd54da68290336cf78dd19304434b7717f2a8ec",
+    "v0421_population_parity_summary.json": "630fa3b60014459a7efe5ab17deba246cbb211fcba088f6fe031c55dd0313ac6",
+    "v0421_matrix_parity_families.csv": "0b1a324d3390af581405949f4b95dd5695e0cc5a73851ff7b6ff975a21778670"
+  }
+}

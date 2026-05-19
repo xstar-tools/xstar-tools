@@ -1,0 +1,14 @@
+"""Bundled immutable validation benchmarks for the source-faithful XSTAR port."""
+
+from __future__ import annotations
+
+from importlib.resources import files
+from pathlib import Path
+
+
+def oxygen_milestone3_v0422_path() -> Path:
+    """Return the bundled frozen oxygen Milestone-3 benchmark directory."""
+    return Path(str(files(__package__).joinpath("oxygen_milestone3_v0422")))
+
+
+__all__ = ["oxygen_milestone3_v0422_path"]

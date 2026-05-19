@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--source-root", help="Extracted XSTAR source-tree root")
     group.add_argument("--source-tar", help="XSTAR source tarball")
-    parser.add_argument("--out-dir", default="xstar_python_source_port_inventory_v0400")
+    parser.add_argument("--out-dir", default="xstar_python_source_port_inventory_v0422")
     parser.add_argument("--print-summary", action="store_true")
     return parser
 
@@ -37,7 +37,7 @@ def main() -> int:
     if args.print_summary:
         print("XSTAR source-faithful Python port inventory")
         print("-------------------------------------------")
-        print("port_version=v0.4.0")
+        print("port_version=v0.4.22")
         print(f"source={inventory.source_label}")
         print(f"n_source_files={inventory.n_files}")
         print(f"n_routines={inventory.n_routines}")

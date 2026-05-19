@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.22 type-56 closure and frozen oxygen Milestone 3
+
+The v0.4.21 oxygen run preserves 607/607 population parity and isolates the last immediate Milestone-3 family to three O VIII type-56 records. XSTAR `hunt3` extrapolates with the first tabulated interval below the temperature grid and then applies `cijpp=max(0,cijpp)`; Python previously flat-clamped to the first positive upsilon. At solve call 219 the source extrapolation is negative, so records 22861--22863 are exact zero. v0.4.22 ports that edge behavior, refreshes the source translation ledger to mark Milestones 1--3 complete for their validated scope, and bundles an immutable oxygen O III--O VIII Milestone-3 benchmark. The next coherent source-port target is `calc_hmc_all -> dsec -> calc_emis_all -> xstarcalc`.
+
 ### v0.4.21 exact type-53 pre-parent threshold gate
 
 The v0.4.20 oxygen run retained complete population parity but left 180 type-53/rate-7 terms outside the strict matrix tolerance. All 45 affected O IV records are exact zero in XSTAR. Label 53 tests `rlev(4,idest1)-rlev(1,idest1) <= 0` before adding an excited-parent energy; Python instead clamped the base threshold to zero and then added the parent correction. v0.4.21 preserves the literal source ordering and returns evaluated zero terms for those records. No fitted scale is used.

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.4.22 - 2026-05-18
+
+- Close XSTAR data type 56 / rate type 3 for the solve-call-219 oxygen benchmark by reproducing `hunt3.f90` edge-interval extrapolation instead of flat-clamping temperatures outside the tabulated collision-strength grid.
+- Preserve the source `max(1e-48, ...)` interpolation operands and final `cijpp=max(0,cijpp)` gate, yielding exact zero rates for O VIII records 22861--22863 at the captured temperature.
+- Add focused tests for below-grid, in-grid, above-grid, descending-grid, and single-point type-56 records plus full `SourceFaithfulUCalc` zero-channel behavior.
+- Regenerate the XSTAR source inventory and translation ledger. Milestones 1--3 are recorded as completed for their validated scope; Milestone 4 and `calc_hmc_all -> dsec -> calc_emis_all -> xstarcalc` are the next coherent target.
+- Freeze the accepted 607-row oxygen O III--O VIII Milestone-3 benchmark, including hash-locked v0.4.21 assembly, population-parity, and matrix-family products, and bundle it as package data.
+- No empirical rate scale, probe-derived coefficient, or captured population is inserted into the native operator.
+
 # v0.4.21 - 2026-05-18
 
 v0.4.21 reproduces the label-53 base-threshold gate that occurs before XSTAR applies an excited-parent correction.

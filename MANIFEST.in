@@ -57,3 +57,8 @@ include xstar_atomic_v0.4.20.md
 include xstar_o_element_equilibrium_v0419_diagnosis_v0420.md
 include xstar_atomic_v0.4.21.md
 include xstar_o_element_equilibrium_v0420_diagnosis_v0421.md
+include xstar_atomic_v0.4.22.md
+include xstar_o_element_equilibrium_v0421_diagnosis_v0422.md
+recursive-include xstar_python_source_port_inventory_v0422 *.csv *.json
+recursive-include benchmarks/oxygen_milestone3_v0422 *.md *.json *.csv
+recursive-include src/xstar_atomic/benchmarks/oxygen_milestone3_v0422 *.md *.json *.csv

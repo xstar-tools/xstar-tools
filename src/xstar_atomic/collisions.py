@@ -416,23 +416,52 @@ def calt69_upsilon(reals: Sequence[float], temperature_k: float) -> Optional[flo
 
 
 def interp_type56_upsilon(logT_grid: Sequence[float], ups_grid: Sequence[float], temperature_k: float) -> Optional[float]:
+    """Translate the literal ``ucalc.f90`` label-56 ``hunt3`` path.
+
+    XSTAR does not clamp a temperature outside the tabulated range to the
+    nearest upsilon.  ``hunt3`` returns the first interval below the grid and
+    the last interval above it, so the source linearly *extrapolates* using an
+    edge interval.  The interpolated coefficient is then clipped with
+    ``cijpp=max(0,cijpp)``.  This matters for the three O VIII solve-call-219
+    records: the low-temperature extrapolation is negative and therefore
+    becomes an exact source zero.
+    """
     if len(logT_grid) == 0 or len(logT_grid) != len(ups_grid) or temperature_k <= 0:
         return None
+    xs = [float(v) for v in logT_grid]
+    ys = [float(v) for v in ups_grid]
+    if len(xs) == 1:
+        return max(0.0, ys[0])
+
     x = math.log10(temperature_k)
-    if len(logT_grid) == 1:
-        return float(ups_grid[0])
-    # XSTAR linearly interpolates in logT but not logUpsilon, with max(1e-48,...)
-    pairs = sorted(zip([float(v) for v in logT_grid], [float(v) for v in ups_grid]))
-    xs = [p[0] for p in pairs]
-    ys = [max(1.0e-48, p[1]) for p in pairs]
-    if x <= xs[0]:
-        return ys[0]
-    if x >= xs[-1]:
-        return ys[-1]
-    for i in range(len(xs) - 1):
-        if xs[i] <= x <= xs[i+1]:
-            return ys[i] + (ys[i+1] - ys[i]) * (x - xs[i]) / (xs[i+1] - xs[i] + 1e-300)
-    return ys[-1]
+    ascending = xs[-1] > xs[0]
+    if ascending:
+        if x <= xs[0]:
+            i = 0
+        elif x >= xs[-1]:
+            i = len(xs) - 2
+        else:
+            i = 0
+            for j in range(len(xs) - 1):
+                if xs[j] <= x <= xs[j + 1]:
+                    i = j
+                    break
+    else:
+        if x >= xs[0]:
+            i = 0
+        elif x <= xs[-1]:
+            i = len(xs) - 2
+        else:
+            i = 0
+            for j in range(len(xs) - 1):
+                if xs[j] >= x >= xs[j + 1]:
+                    i = j
+                    break
+
+    y0 = max(1.0e-48, ys[i])
+    y1 = max(1.0e-48, ys[i + 1])
+    value = (y1 - y0) * (x - xs[i]) / (xs[i + 1] - xs[i] + 1.0e-24) + y0
+    return max(0.0, float(value))
 
 
 
