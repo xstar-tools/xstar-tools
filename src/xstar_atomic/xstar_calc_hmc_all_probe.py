@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.29 calc_hmc_all pre-continuum and matrix probe.
+    return r'''! xstar-atomic v0.4.30 calc_hmc_all pre-continuum and matrix probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -121,8 +121,8 @@ subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
     endif
   enddo
   close(lun)
-9001 format(i12,',',i12,',',i12,',',1pe24.16,',',1pe24.16,',', &
-            1pe24.16,',',i12,',',i12,',',1pe24.16)
+9001 format(i12,',',i12,',',i12,',',es26.16e3,',',es26.16e3,',', &
+            es26.16e3,',',i12,',',i12,',',es26.16e3)
 end subroutine xap_hmce_pre_matrix
 
 
@@ -148,7 +148,7 @@ subroutine xap_hmc_element_post(element_index, element_z, abundance, &
   write(lun,9005) xap_hmc_current_call, element_index, element_z, &
     abundance, mml, mmu, htt, cll, htt2, cll2
   close(lun)
-9005 format(i12,',',i12,',',i12,',',1pe24.16,',',i12,',',i12,4(',',1pe24.16))
+9005 format(i12,',',i12,',',i12,',',es26.16e3,',',i12,',',i12,4(',',es26.16e3))
 end subroutine xap_hmc_element_post
 
 subroutine xap_hmc_matrix_terms(element_index, element_z, ipmat, nindb, &
@@ -188,7 +188,7 @@ subroutine xap_hmc_matrix_terms(element_index, element_z, ipmat, nindb, &
       x(row_compact), x(column_compact)
   enddo
   close(lun)
-9006 format(11(i12,','),5(1pe24.16,','),1pe24.16)
+9006 format(11(i12,','),5(es26.16e3,','),es26.16e3)
 end subroutine xap_hmc_matrix_terms
 
 subroutine xap_hmc_thermal_families(ntyp_local, rntpsv, rltpsv)
@@ -238,7 +238,7 @@ subroutine xap_hmc_thermal_families(ntyp_local, rntpsv, rltpsv)
     enddo
     close(lun)
   endif
-9007 format(4(i12,','),3(1pe24.16,','),1pe24.16)
+9007 format(4(i12,','),3(es26.16e3,','),es26.16e3)
 end subroutine xap_hmc_thermal_families
 
 subroutine xap_hmc_pre_continuum(t4, xee, xpx, httot, cltot, httot2, &
@@ -319,9 +319,9 @@ subroutine xap_hmc_pre_continuum(t4, xee, xpx, httot, cltot, httot2, &
     close(lun)
   endif
 
-9002 format(i12,10(',',1pe24.16))
-9003 format(i12,',',i12,10(',',1pe24.16))
-9004 format(i12,',',i12,5(',',1pe24.16),',',i12,',',i12)
+9002 format(i12,10(',',es26.16e3))
+9003 format(i12,',',i12,10(',',es26.16e3))
+9004 format(i12,',',i12,5(',',es26.16e3),',',i12,',',i12)
 end subroutine xap_hmc_pre_continuum
 '''
 

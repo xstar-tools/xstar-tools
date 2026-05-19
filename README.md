@@ -14,6 +14,14 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.30 Fortran probe numeric compatibility
+
+v0.4.30 accepts width-compressed Fortran exponents such as `1.23-107` in the
+calc_hmc_all matrix and thermal probe readers, while newly generated probes
+write explicit `E±ddd` exponents. This is an I/O-only hotfix; the v0.4.29
+physics and acceptance gates are unchanged. Existing six-hook probe CSVs can be
+reused without rebuilding XSTAR.
+
 ### v0.4.29 type-50 thermal closure and same-call matrix parity
 
 v0.4.29 restores the source type-50 `ans3/ans4` bound-bound energy channels, captures XSTAR thermal accumulators by data type and rate type, and compares the exact sparse `aj1/aj2/cj/cj2` term list from the same `msolvelucy` call. Exact topology and active `(A_python-A_XSTAR) @ x_XSTAR` closure form the milestone matrix gate; all coefficient differences remain available through a separate strict gate.

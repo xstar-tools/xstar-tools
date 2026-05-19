@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from .local_zone import FixedStateCalcHMCAllResult
+from .fortran_numbers import parse_fortran_float
 
 
 @dataclass
@@ -72,7 +73,7 @@ def _compact_row_probe_population(
         record = level_by_index.get(int(global_index)) if global_index is not None else None
         if record is None:
             continue
-        candidates.append((float(record["xilevg"]), int(global_index), key))
+        candidates.append((parse_fortran_float(record["xilevg"]), int(global_index), key))
     if not candidates:
         return None, None, None, 0.0, 0
     chosen = max(candidates, key=lambda item: abs(item[0]))
@@ -233,12 +234,12 @@ def build_xstar_vector_matrix_closure(
                 })
 
         probe_record = _captured_element_record(z, element_probe_rows)
-        captured_abundance = None if probe_record is None else float(probe_record["abundance"])
+        captured_abundance = None if probe_record is None else parse_fortran_float(probe_record["abundance"])
         captured_scaled = {
-            "heating": None if probe_record is None else float(probe_record["htt"]),
-            "cooling": None if probe_record is None else float(probe_record["cll"]),
-            "heating2": None if probe_record is None else float(probe_record["htt2"]),
-            "cooling2": None if probe_record is None else float(probe_record["cll2"]),
+            "heating": None if probe_record is None else parse_fortran_float(probe_record["htt"]),
+            "cooling": None if probe_record is None else parse_fortran_float(probe_record["cll"]),
+            "heating2": None if probe_record is None else parse_fortran_float(probe_record["htt2"]),
+            "cooling2": None if probe_record is None else parse_fortran_float(probe_record["cll2"]),
         }
         thermal_summary_rows: List[Dict[str, Any]] = []
         for channel in ("heating", "cooling", "heating2", "cooling2"):

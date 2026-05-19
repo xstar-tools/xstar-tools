@@ -255,3 +255,30 @@ def test_v0429_probe_contains_matrix_and_thermal_hooks() -> None:
     assert "xstar_calc_hmc_all_thermal_rate_type_probe.csv" in helper
     assert "calc_hmc_element_matrix_terms" in snippets
     assert "msolvelucy_thermal_families" in snippets
+
+
+def test_fortran_width_compressed_exponents_are_accepted() -> None:
+    from xstar_atomic.source_port.fortran_numbers import parse_fortran_float
+
+    assert parse_fortran_float(" -3.1564610560130326-107") == pytest.approx(
+        -3.1564610560130326e-107
+    )
+    assert parse_fortran_float("1.2500000000000000+123") == pytest.approx(1.25e123)
+    assert parse_fortran_float("2.5D-09") == pytest.approx(2.5e-9)
+
+    result, closure, rows = _matrix_fixture()
+    rows[0]["cj2"] = " -3.1564610560130326-107"
+    parity = compare_same_call_matrix_terms(
+        result,
+        matrix_probe_rows=rows,
+        closure=closure,
+        rtol=1.0e-12,
+        atol=1.0e-14,
+    )
+    assert parity.n_matched_terms == 4
+
+
+def test_new_probe_formats_emit_explicit_three_digit_exponents() -> None:
+    helper = calc_hmc_all_probe_helper()
+    assert "es26.16e3" in helper.lower()
+    assert "1pe24.16" not in helper.lower()

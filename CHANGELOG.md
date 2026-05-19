@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.4.30 - 2026-05-19
+
+v0.4.30 is a probe-I/O compatibility hotfix for the v0.4.29 oxygen
+pre-continuum acceptance workflow. Some XSTAR Fortran exponential formats
+omit the `E` when the exponent has three digits, for example
+`-3.1564610560130326-107`. Python probe readers now accept standard `E`,
+Fortran `D`, and omitted-`E` representations without changing the captured
+value. Newly generated calc_hmc_all probes use explicit three-digit exponent
+formats (`ES26.16E3`) so future CSVs are directly readable by standard tools.
+The production operator, type-50 thermal correction, same-call matrix gates,
+and all physical acceptance semantics are unchanged from v0.4.29.
+
 ## v0.4.29 - 2026-05-19
 
 v0.4.29 is a bounded Milestone-4 oxygen pre-continuum parity release. It

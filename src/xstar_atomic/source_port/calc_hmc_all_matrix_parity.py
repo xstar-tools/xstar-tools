@@ -13,6 +13,7 @@ import numpy as np
 
 from .local_zone import FixedStateCalcHMCAllResult
 from .calc_hmc_all_closure import XSTARVectorMatrixClosureResult
+from .fortran_numbers import parse_fortran_float
 
 
 @dataclass
@@ -56,7 +57,7 @@ def _float(row: Mapping[str, str], name: str, default: float = 0.0) -> float:
     value = row.get(name)
     if value in (None, ""):
         return float(default)
-    return float(value)
+    return parse_fortran_float(value)
 
 
 def _int(row: Mapping[str, str], name: str, default: int = 0) -> int:

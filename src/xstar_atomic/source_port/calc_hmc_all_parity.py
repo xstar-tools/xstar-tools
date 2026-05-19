@@ -13,6 +13,7 @@ from .calc_hmc_all_closure import (
     XSTARVectorMatrixClosureResult,
     build_xstar_vector_matrix_closure,
 )
+from .fortran_numbers import parse_fortran_float
 from .calc_hmc_all_matrix_parity import (
     SameCallMatrixParityResult,
     ThermalFamilyParityResult,
@@ -139,7 +140,7 @@ def _unique_int(rows: Sequence[Mapping[str, str]], name: str, *, context: str) -
 
 
 def _unique_float(rows: Sequence[Mapping[str, str]], name: str, *, context: str) -> float:
-    values = [float(row[name]) for row in rows]
+    values = [parse_fortran_float(row[name]) for row in rows]
     if not values:
         raise CalcHMCAllParityError(f"missing {name} for {context}")
     reference = values[0]
@@ -888,9 +889,9 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and all(row.within_tolerance for row in rows if row.component in pre_matrix_components)
     )
     summary_gate = summary_ready is not False
-    # v0.4.29 probe products are required as a pair when either new probe is
+    # v0.4.30 probe products are required as a pair when either new probe is
     # present.  Older bounded probe directories remain readable and preserve
-    # their historical acceptance semantics; a partially installed v0.4.29
+    # their historical acceptance semantics; a partially installed v0.4.30
     # probe is intentionally blocking rather than silently skipped.
     v0429_probe_present = bool(
         matrix_rows or thermal_data_type_rows or thermal_rate_type_rows
@@ -901,7 +902,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
     thermal_family_gate = (
         thermal_family_parity.ready is True if v0429_probe_present else True
     )
-    # With a v0.4.29 same-call matrix capture, exact topology plus the active
+    # With a v0.4.30 same-call matrix capture, exact topology plus the active
     # residual of (A_python-A_XSTAR)@x_XSTAR supersedes the
     # older raw A_python@x_XSTAR gate.  The raw closure remains reported: the
     # source msolvelucy path imposes superlevel/nonlinear constraints, so the
@@ -1166,7 +1167,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     _write_rows(active_population_ion_resolution_path, result.active_population_ion_resolution)
 
     payload = {
-        "port_version": "v0.4.29",
+        "port_version": "v0.4.30",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,
