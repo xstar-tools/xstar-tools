@@ -440,7 +440,11 @@ def calc_hmc_all(
         cltot2 += element_cl2
 
         stage_fractions: Dict[int, float] = {}
-        for ion_slot, block in enumerate(equilibrium.assembly.basis.blocks):
+        for selected_slot, block in enumerate(equilibrium.assembly.basis.blocks):
+            # Source ``nionp`` counts every ion of the element before the
+            # active-stage test, so selected blocks may begin at a slot > 0.
+            # The fallback preserves compatibility with synthetic test doubles.
+            ion_slot = int(getattr(block, "ion_counter", selected_slot + 1)) - 1
             fraction = float(solve.ion_population_totals[ion_slot])
             stage = int(block.ion_stage)
             stage_fractions[stage] = fraction
@@ -782,7 +786,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.31",
+    port_version: str = "v0.4.32",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

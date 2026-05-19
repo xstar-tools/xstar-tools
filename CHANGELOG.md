@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.4.32 - 2026-05-19
+
+v0.4.32 is a bounded Milestone-4 correction release based on the production v0.4.31 oxygen probe. It preserves source `nionp` counters across inactive ion stages and repairs source-slot `xtot` aggregation; replaces the over-strict Python/XSTAR iteration-count comparison with an internal synchronized-snapshot gate; corrects type-54 to use the dimensionless `DeltaE/kT` energy channel; and preserves the mutable `leveltemp` higher-column workspace used by type 49, 53, and 99 electron-energy corrections. Focused v0.4.32 tests pass (8); the source-port regression selection passes (112); and the source-port/package/API/documentation selection passes (147 with 2 optional skips). Clean-sdist, wheel, compileall, installed-wheel, and GNU Fortran helper checks pass. The complete historical suite exceeded the 150-second execution limit. A fresh production oxygen rerun remains required before all-element expansion.
+
 ## v0.4.31 - 2026-05-19
 
 v0.4.31 is a bounded Milestone-4 oxygen pre-continuum parity release. It completes the type-71 post-swap energy channels, corrects type-72 packed endpoints from `[-3],[-2]` to `[-4],[-3]`, adds record-resolved rate-7 `cj2` diagnosis with a dedicated type-53 gate, and introduces a synchronized seven-hook XSTAR capture of the final effective `msolvelucy` matrix, returned population vector, and final-outer-start vector.

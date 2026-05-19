@@ -1231,7 +1231,7 @@ Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available
 
 ### `106_prepare_xstar_calc_hmc_all_probe.py`
 
-Write a bounded, diagnostic-only Fortran helper and seven source-local insertion snippets for `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. In addition to the pre-matrix, pre-continuum, same-call matrix, and thermal-family products, v0.4.31 captures the final effective `msolvelucy` matrix together with returned `x` and final-outer-start `xo` at the same internal iteration. The default capture state is the validated oxygen runtime state; `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
+Write the bounded, diagnostic-only seven-hook Fortran helper and source-local insertion snippets for `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix, pre-continuum, same-call matrix, thermal-family, and synchronized final-`msolvelucy` products. v0.4.32 keeps the same insertion layout but interprets final-snapshot readiness from one shared XSTAR iteration tuple, matching compact dimensions, and matrix population columns matching the synchronized population table. `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \

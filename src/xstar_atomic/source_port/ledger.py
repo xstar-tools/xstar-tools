@@ -91,10 +91,10 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.31"
+PORT_LEDGER_VERSION = "v0.4.32"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "v0.4.31 production oxygen synchronized final-msolvelucy/type-53-cj2 acceptance "
+    "v0.4.32 production oxygen synchronized final-msolvelucy/type-53-cj2 acceptance "
     "-> full all-element fixed-state scope -> comp2 -> freef -> bremem -> heatf "
     "-> complete fixed-state calc_hmc_all parity -> dsec"
 )
@@ -193,7 +193,7 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
           "call-73 pre-matrix/runtime parity, source-ordinal npilev mapping, separated second-pass pirt/rrrt, probe-aware abundance, complete type-50/type-71 ans3/ans4 energy channels, corrected type-72 packed endpoints, record-level rate-7 cj2 diagnosis, XSTAR thermal-family probes, exact same-call aj1/aj2/cj/cj2 comparison, and synchronized final msolvelucy matrix/x/xo capture",
-          "A v0.4.31 production rerun with the seven-hook probe is required to apply the strict oxygen O III--O V active-population and O III/O IV ion-total acceptance gate; full all-element parity and comp2/freef/bremem/heatf remain pending."),
+          "A v0.4.32 production rerun with the seven-hook probe is required to apply the strict oxygen O III--O V active-population and O III/O IV ion-total acceptance gate; full all-element parity and comp2/freef/bremem/heatf remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -207,6 +207,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; the v0.4.31 seven-hook synchronized oxygen acceptance run, full all-element scope, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; the v0.4.32 seven-hook synchronized oxygen acceptance run, full all-element scope, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

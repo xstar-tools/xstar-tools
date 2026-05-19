@@ -1077,6 +1077,20 @@ class SourceFaithfulUCalc:
         weight=_finite(gmap.get(idest2) if isinstance(gmap,Mapping) else None, context.levels.weight(context.nlevp)) or 0.0
         return energy,weight
 
+    def _leveltemp_destination_energy(
+        self, context: UCalcContext, idest2: int, fallback: float
+    ) -> float:
+        """Return the mutable source ``leveltemp%rlev(1,idest2)`` value.
+
+        For endpoints above the current ion's ``nlev``, XSTAR does not read
+        the physical parent-level map in the final electron-energy correction.
+        It reads the persistent ``leveltemp`` workspace, whose higher columns
+        may retain values from a previously processed ion.
+        """
+
+        level = context.levels.get(idest2)
+        return float(level.energy_ev) if level is not None else float(fallback)
+
     def _live_type53_state(self, context: UCalcContext) -> Any:
         from xstar_atomic.rates_type53 import Type53LiveRadiationState
         epi,brem,bint=_radiation_arrays(context.radiation)
@@ -1085,8 +1099,11 @@ class SourceFaithfulUCalc:
 
     def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False) -> UCalcResult:
         from xstar_atomic.rates_type53 import evaluate_type53_ucalc_record
-        dest_energy,dest_weight=self._parent_destination_context(context,idest2)
+        physical_dest_energy,dest_weight=self._parent_destination_context(context,idest2)
         continuum=context.levels.require(context.nlevp); bound=context.levels.require(idest1)
+        leveltemp_dest_energy=self._leveltemp_destination_energy(
+            context, idest2, physical_dest_energy
+        )
         decoded={
             "energy_above_threshold_ryd":list(float(x) for x in energy_ryd),
             "cross_section_cm2":list(float(x) for x in sigma_cm2),
@@ -1096,9 +1113,18 @@ class SourceFaithfulUCalc:
             "destination_statistical_weight":dest_weight or continuum.statistical_weight,
             "continuum_energy_eV":continuum.energy_ev,
             "bound_energy_eV":bound.energy_ev,
-            "destination_energy_eV":dest_energy,
+            "destination_energy_eV":leveltemp_dest_energy,
+            "physical_parent_destination_energy_eV":physical_dest_energy,
+            "leveltemp_destination_energy_eV":leveltemp_dest_energy,
+            "leveltemp_workspace_semantics":"persistent_higher_columns",
         }
         ev=evaluate_type53_ucalc_record(decoded,self._live_type53_state(context),temperature_k=context.temperature_k,xpx_cm3=context.hydrogen_density_cm3,electron_fraction_xee=context.electron_fraction_xee,ptmp1=context.ptmp1,ptmp2=context.ptmp2,lfast=context.lfast,abund1=context.abund1,abund2=context.abund2)
+        ev = {
+            **dict(ev),
+            "physical_parent_destination_energy_eV": physical_dest_energy,
+            "leveltemp_destination_energy_eV": leveltemp_dest_energy,
+            "leveltemp_workspace_semantics": "persistent_higher_columns",
+        }
         if ev.get("status")!="evaluated":
             return self._context_blocked(record,spec,str(ev.get("status")),diagnostics=ev)
         ans=[float(ev[f"ans{k}_{name}"]) for k,name in ((1,"photoionization_s^-1"),(2,"milne_recombination_s^-1"),(3,"cooling_signed_erg_s^-1"),(4,"heating_signed_erg_s^-1"),(5,"electron_pov_cooling_signed_erg_s^-1"),(6,"electron_pov_heating_signed_erg_s^-1"))]
@@ -1861,7 +1887,10 @@ class SourceFaithfulUCalc:
                 # For excited parents the map stores excitation above the
                 # parent ground; the physical destination energy includes the
                 # current-ion continuum energy.
-                destination_energy = continuum.energy_ev + (parent_excitation if id2 > c.nlevp else 0.0)
+                physical_destination_energy = continuum.energy_ev + (parent_excitation if id2 > c.nlevp else 0.0)
+                leveltemp_destination_energy = self._leveltemp_destination_energy(
+                    c, id2, physical_destination_energy
+                )
                 threshold = base_threshold + (parent_excitation if id2 > c.nlevp else 0.0)
                 n_pairs = len(r.reals) // 2
                 decoded = {
@@ -1874,7 +1903,10 @@ class SourceFaithfulUCalc:
                     "destination_statistical_weight": destination_g or continuum.statistical_weight,
                     "continuum_energy_eV": continuum.energy_ev,
                     "bound_energy_eV": bound.energy_ev,
-                    "destination_energy_eV": destination_energy,
+                    "destination_energy_eV": leveltemp_destination_energy,
+                    "physical_parent_destination_energy_eV": physical_destination_energy,
+                    "leveltemp_destination_energy_eV": leveltemp_destination_energy,
+                    "leveltemp_workspace_semantics": "persistent_higher_columns",
                     "packed_parent_offset": off,
                     "packed_parent_offset_index": -4,
                     "packed_bound_level_index": -2,
@@ -1885,6 +1917,18 @@ class SourceFaithfulUCalc:
                 return self._context_blocked(r, s, f"type53_decode:{exc}")
         if decoded is None or c.radiation is None:
             return self._context_blocked(r, s, "type53 requires packed cross-section/level context and live epim/bremsam/bremsint")
+        decoded = dict(decoded)
+        physical_destination_energy = float(
+            decoded.get("physical_parent_destination_energy_eV",
+                        decoded.get("destination_energy_eV", c.levels.energy(c.nlevp)))
+        )
+        leveltemp_destination_energy = self._leveltemp_destination_energy(
+            c, id2, physical_destination_energy
+        )
+        decoded["destination_energy_eV"] = leveltemp_destination_energy
+        decoded["physical_parent_destination_energy_eV"] = physical_destination_energy
+        decoded["leveltemp_destination_energy_eV"] = leveltemp_destination_energy
+        decoded["leveltemp_workspace_semantics"] = "persistent_higher_columns"
         ev = evaluate_type53_ucalc_record(
             decoded, self._live_type53_state(c), temperature_k=c.temperature_k,
             xpx_cm3=c.hydrogen_density_cm3, electron_fraction_xee=c.electron_fraction_xee,
@@ -1919,8 +1963,17 @@ class SourceFaithfulUCalc:
         if ni<nf: ni,nf=nf,ni
         iq=r.integers[-2]; alm,alp=anl1_py(ni,nf,lf,iq); rate=alm if li<lf else alp
         de=abs(c.levels.energy(up)-c.levels.energy(lo))
-        return self._ctx_result(r,s,ans2=rate,ans3=-rate*de*ERG_PER_EV,idest1=lo,idest2=up,
-            diagnostics={"alm":alm,"alp":alp,"ni":ni,"nf":nf,"li":li,"lf":lf},context_fields_used=("levels",))
+        delt=de/max(XSTAR_SOURCE_KT_EV_PER_1E4K*c.t,1.0e-300)
+        return self._ctx_result(
+            r,s,ans2=rate,ans3=-rate*delt*XSTAR_SOURCE_ERG_PER_EV,
+            idest1=lo,idest2=up,
+            diagnostics={
+                "alm":alm,"alp":alp,"ni":ni,"nf":nf,"li":li,"lf":lf,
+                "delta_energy_eV":de,"delt_dimensionless":delt,
+                "source_ekt_eV":XSTAR_SOURCE_KT_EV_PER_1E4K*c.t,
+            },
+            context_fields_used=("temperature_k","levels"),
+        )
 
     def _eval_type60(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<3: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type60_short_record")
@@ -2427,10 +2480,13 @@ class SourceFaithfulUCalc:
         parent_excitation, destination_g = self._parent_destination_context(c, id2)
         if id2 > c.nlevp:
             threshold_ev = abs(bound.energy_ev + parent_excitation)
-            destination_energy = continuum.energy_ev + parent_excitation
+            physical_destination_energy = continuum.energy_ev + parent_excitation
         else:
             threshold_ev = abs(bound.energy_ev - continuum.energy_ev)
-            destination_energy = continuum.energy_ev
+            physical_destination_energy = continuum.energy_ev
+        destination_energy = self._leveltemp_destination_energy(
+            c, id2, physical_destination_energy
+        )
         if threshold_ev <= 0.0 or bound.statistical_weight <= 0.0 or destination_g <= 0.0:
             return self._context_blocked(r, s, "type99_missing_or_bad_threshold_or_statistical_weight")
         threshold_ryd = threshold_ev / 13.6
@@ -2482,6 +2538,9 @@ class SourceFaithfulUCalc:
             "type99_parent_level_offset": off,
             "type99_calt99_density_semantics": "hydrogen_density_xpx",
             "type99_phint53hunt_density_semantics": "electron_density_xpx_times_xee",
+            "type99_physical_parent_destination_energy_eV": physical_destination_energy,
+            "type99_leveltemp_destination_energy_eV": destination_energy,
+            "type99_leveltemp_workspace_semantics": "persistent_higher_columns",
         }
         return self._ctx_result(
             r, s, ans1=ans1, ans2=ans2, ans3=ans3, ans4=ans4, ans5=ans5, ans6=ans6,

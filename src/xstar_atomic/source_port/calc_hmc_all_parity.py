@@ -104,6 +104,9 @@ class CalcHMCAllPreContinuumParityResult:
     final_solver_snapshot_ready: Optional[bool]
     final_solver_snapshot_status: str
     final_solver_same_iteration_ready: Optional[bool]
+    final_solver_iteration_tuple_ready: Optional[bool]
+    final_solver_matrix_dimension_ready: Optional[bool]
+    final_solver_population_columns_ready: Optional[bool]
     final_solver_topology_ready: Optional[bool]
     final_solver_coefficient_ready: Optional[bool]
     final_solver_active_population_ready: Optional[bool]
@@ -976,11 +979,17 @@ def compare_calc_hmc_all_pre_continuum_probe(
         if legacy_probe_present
         else matrix_closure_ready is not False
     )
-    # v0.4.31 oxygen acceptance is intentionally stricter than the historical
+    # v0.4.32 oxygen acceptance is intentionally stricter than the historical
     # v0.4.29/v0.4.30 gate.  It requires the synchronized final-solver probe
     # pair, source-order xtot parity, type-53 rate-7 cj2 closure, and no
     # remaining O III--O V/O III--O IV blocker.
-    final_solver_gate = final_solver_snapshot.ready is True
+    final_solver_gate = bool(
+        final_solver_snapshot.ready is True
+        and final_solver_snapshot.topology_ready is True
+        and final_solver_snapshot.active_final_population_ready is True
+        and final_solver_snapshot.active_outer_start_population_ready is True
+        and final_solver_snapshot.source_xtot_ready is True
+    )
     type53_cj2_gate = rate7_cj2_diagnosis.type53_ready is True
     oxygen_reassessment_gate = oxygen_reassessment_ready is True
     legacy_acceptance_ready = bool(
@@ -1000,7 +1009,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and oxygen_reassessment_gate
     )
     # Preserve the historical comparator contract for old five/six-hook probe
-    # directories.  As soon as either v0.4.31 final-snapshot file is present,
+    # directories.  As soon as either v0.4.32 final-snapshot file is present,
     # the public acceptance gate becomes the stricter synchronized oxygen gate.
     acceptance_gate_ready = (
         oxygen_pre_continuum_acceptance_ready
@@ -1057,6 +1066,9 @@ def compare_calc_hmc_all_pre_continuum_probe(
         final_solver_snapshot_ready=final_solver_snapshot.ready,
         final_solver_snapshot_status=final_solver_snapshot.status,
         final_solver_same_iteration_ready=final_solver_snapshot.same_iteration_ready,
+        final_solver_iteration_tuple_ready=final_solver_snapshot.iteration_tuple_ready,
+        final_solver_matrix_dimension_ready=final_solver_snapshot.matrix_dimension_ready,
+        final_solver_population_columns_ready=final_solver_snapshot.matrix_population_columns_ready,
         final_solver_topology_ready=final_solver_snapshot.topology_ready,
         final_solver_coefficient_ready=final_solver_snapshot.coefficient_ready,
         final_solver_active_population_ready=final_solver_snapshot.active_final_population_ready,
@@ -1107,6 +1119,9 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "thermal_family_rows_outside_tolerance": thermal_family_parity.n_outside_tolerance,
             "final_solver_snapshot_status": final_solver_snapshot.status,
             "final_solver_same_iteration_ready": final_solver_snapshot.same_iteration_ready,
+            "final_solver_iteration_tuple_ready": final_solver_snapshot.iteration_tuple_ready,
+            "final_solver_matrix_dimension_ready": final_solver_snapshot.matrix_dimension_ready,
+            "final_solver_population_columns_ready": final_solver_snapshot.matrix_population_columns_ready,
             "final_solver_source_xtot_ready": final_solver_snapshot.source_xtot_ready,
             "rate7_cj2_status": rate7_cj2_diagnosis.status,
             "type53_rate7_cj2_ready": rate7_cj2_diagnosis.type53_ready,
@@ -1292,7 +1307,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     _write_rows(oxygen_reassessment_path, result.oxygen_reassessment)
 
     payload = {
-        "port_version": "v0.4.31",
+        "port_version": "v0.4.32",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,
@@ -1326,6 +1341,9 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "final_solver_snapshot_ready": result.final_solver_snapshot_ready,
         "final_solver_snapshot_status": result.final_solver_snapshot_status,
         "final_solver_same_iteration_ready": result.final_solver_same_iteration_ready,
+        "final_solver_iteration_tuple_ready": result.final_solver_iteration_tuple_ready,
+        "final_solver_matrix_dimension_ready": result.final_solver_matrix_dimension_ready,
+        "final_solver_population_columns_ready": result.final_solver_population_columns_ready,
         "final_solver_topology_ready": result.final_solver_topology_ready,
         "final_solver_coefficient_ready": result.final_solver_coefficient_ready,
         "final_solver_active_population_ready": result.final_solver_active_population_ready,
@@ -1375,7 +1393,10 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Same-call active closure ready: `{result.same_call_matrix_active_closure_ready}`\n"
         f"- XSTAR thermal-family status: `{result.thermal_family_status}`\n"
         f"- Final msolvelucy snapshot status: `{result.final_solver_snapshot_status}`\n"
-        f"- Final snapshot same iteration: `{result.final_solver_same_iteration_ready}`\n"
+        f"- Final snapshot synchronization gate: `{result.final_solver_same_iteration_ready}`\n"
+        f"- Final snapshot iteration tuple: `{result.final_solver_iteration_tuple_ready}`\n"
+        f"- Final snapshot dimensions: `{result.final_solver_matrix_dimension_ready}`\n"
+        f"- Final snapshot population columns: `{result.final_solver_population_columns_ready}`\n"
         f"- Final snapshot topology: `{result.final_solver_topology_ready}`\n"
         f"- Final snapshot active populations: `{result.final_solver_active_population_ready}`\n"
         f"- Final outer-start populations: `{result.final_solver_outer_start_ready}`\n"

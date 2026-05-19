@@ -43,6 +43,9 @@ class MSolveLucyFinalSnapshotParityResult:
     ready: Optional[bool]
     probe_pair_present: bool
     same_iteration_ready: Optional[bool]
+    iteration_tuple_ready: Optional[bool]
+    matrix_dimension_ready: Optional[bool]
+    matrix_population_columns_ready: Optional[bool]
     topology_ready: Optional[bool]
     coefficient_ready: Optional[bool]
     active_final_population_ready: Optional[bool]
@@ -107,6 +110,9 @@ def compare_msolvelucy_final_snapshot(
             ready=None,
             probe_pair_present=False,
             same_iteration_ready=None,
+            iteration_tuple_ready=None,
+            matrix_dimension_ready=None,
+            matrix_population_columns_ready=None,
             topology_ready=None,
             coefficient_ready=None,
             active_final_population_ready=None,
@@ -128,6 +134,9 @@ def compare_msolvelucy_final_snapshot(
             ready=False,
             probe_pair_present=False,
             same_iteration_ready=False,
+            iteration_tuple_ready=False,
+            matrix_dimension_ready=False,
+            matrix_population_columns_ready=False,
             topology_ready=False,
             coefficient_ready=False,
             active_final_population_ready=False,
@@ -151,7 +160,9 @@ def compare_msolvelucy_final_snapshot(
     for row in final_population_rows:
         pop_by_z.setdefault(_int(row, "element_z"), []).append(row)
 
-    same_iteration = True
+    iteration_tuple_consistent = True
+    matrix_dimensions_match = True
+    matrix_population_columns_match = True
     topology = True
     coefficients = True
     active_final = True
@@ -182,29 +193,44 @@ def compare_msolvelucy_final_snapshot(
         prows = pop_by_z.get(z, [])
         if not mrows or not prows:
             unmatched_elements.append(z)
-            same_iteration = topology = active_final = active_outer = source_xtot = False
+            iteration_tuple_consistent = False
+            matrix_dimensions_match = False
+            matrix_population_columns_match = False
+            topology = active_final = active_outer = source_xtot = False
             continue
         compared_elements += 1
         basis = assembly.basis
         n = int(basis.n_rows)
 
-        # Every matrix and population row must describe the exact same final
-        # internal solver state.
-        meta_values: Dict[str, set[Any]] = {name: set() for name in metadata_fields}
-        for row in list(mrows) + list(prows):
-            for name in metadata_fields:
-                if name in ("final_outer_difference", "final_fixed_difference"):
-                    meta_values[name].add(_float(row, name))
-                else:
-                    meta_values[name].add(_int(row, name))
-        element_same_iteration = all(len(values) == 1 for values in meta_values.values())
-        if element_same_iteration:
-            element_same_iteration = (
-                next(iter(meta_values["compact_dimension"])) == n
-                and next(iter(meta_values["outer_iteration"])) == int(solve.outer_iterations)
-                and next(iter(meta_values["global_fixed_iteration"])) == int(solve.fixed_point_iterations)
+        # Snapshot synchronization is an internal XSTAR property.  It does
+        # not require Python and XSTAR to converge in the same number of
+        # iterations.  Require one XSTAR iteration tuple shared by both files.
+        def _iteration_tuple(row: Mapping[str, Any]) -> Tuple[Any, ...]:
+            return (
+                _int(row, "outer_iteration"),
+                _int(row, "fixed_iteration"),
+                _int(row, "global_fixed_iteration"),
+                _float(row, "final_outer_difference"),
+                _float(row, "final_fixed_difference"),
             )
-        same_iteration &= element_same_iteration
+
+        matrix_iteration_tuples = {_iteration_tuple(row) for row in mrows}
+        population_iteration_tuples = {_iteration_tuple(row) for row in prows}
+        element_iteration_tuple_ready = bool(
+            len(matrix_iteration_tuples) == 1
+            and len(population_iteration_tuples) == 1
+            and matrix_iteration_tuples == population_iteration_tuples
+        )
+        iteration_tuple_consistent &= element_iteration_tuple_ready
+
+        matrix_dimensions = {_int(row, "compact_dimension") for row in mrows}
+        population_dimensions = {_int(row, "compact_dimension") for row in prows}
+        element_dimension_ready = bool(
+            matrix_dimensions == {n}
+            and population_dimensions == {n}
+            and len(prows) == n
+        )
+        matrix_dimensions_match &= element_dimension_ready
 
         pmap = {_int(row, "compact_index"): row for row in prows}
         if set(pmap) != set(range(1, n + 1)):
@@ -257,7 +283,11 @@ def compare_msolvelucy_final_snapshot(
                 "outer_start_population_difference": py_outer - xs_outer[compact - 1],
                 "outer_start_population_relative_difference": abs(py_outer - xs_outer[compact - 1]) / max(abs(xs_outer[compact - 1]), 1.0e-300),
                 "outer_start_population_within_tolerance": outer_ok,
-                "same_iteration_metadata_ready": element_same_iteration,
+                "same_iteration_metadata_ready": bool(
+                    element_iteration_tuple_ready and element_dimension_ready
+                ),
+                "iteration_tuple_ready": element_iteration_tuple_ready,
+                "matrix_dimension_ready": element_dimension_ready,
             }
             pop_out.append(outrow)
             stage = int(meta["representative_ion_stage"])
@@ -317,7 +347,7 @@ def compare_msolvelucy_final_snapshot(
                 and _within(_float(xs, "row_outer_start_population"), xs_outer[rowc - 1], 0.0, max(atol, 1.0e-30))
                 and _within(_float(xs, "column_outer_start_population"), xs_outer[colc - 1], 0.0, max(atol, 1.0e-30))
             )
-            same_iteration &= matrix_pop_ok
+            matrix_population_columns_match &= matrix_pop_ok
             term_out.append({
                 "element_z": z,
                 "term_index": index,
@@ -357,7 +387,11 @@ def compare_msolvelucy_final_snapshot(
                 xs_source[slot] += xs_outer[idx]
                 xs_final_totals[slot] += xs_final[idx]
         for slot in range(nions):
-            stage = int(basis.min_ion_stage) + slot
+            stage = int(
+                getattr(basis, "ion_stage_by_counter", {}).get(
+                    slot + 1, int(basis.min_ion_stage) + slot
+                )
+            )
             py_source = float(solve.ion_population_totals[slot])
             py_final_total = float(solve.ion_population_totals_final_vector[slot])
             source_ok = _within(py_source, xs_source[slot], rtol, atol)
@@ -394,24 +428,39 @@ def compare_msolvelucy_final_snapshot(
                 })
 
     if unmatched_elements:
-        source_xtot = active_final = active_outer = topology = same_iteration = False
+        source_xtot = active_final = active_outer = topology = False
+        iteration_tuple_consistent = False
+        matrix_dimensions_match = False
+        matrix_population_columns_match = False
     topology_ready = bool(topology and compared_elements > 0)
     coefficient_ready = bool(topology_ready and coefficients)
-    same_iteration_ready = bool(same_iteration and compared_elements > 0)
+    iteration_tuple_ready = bool(iteration_tuple_consistent and compared_elements > 0)
+    matrix_dimension_ready = bool(matrix_dimensions_match and compared_elements > 0)
+    matrix_population_columns_ready = bool(
+        matrix_population_columns_match and compared_elements > 0
+    )
+    # Public snapshot readiness is limited to synchronization of the XSTAR
+    # pair.  Physical Python/XSTAR topology, population, and xtot parity remain
+    # independent gates in the oxygen acceptance workflow.
+    same_iteration_ready = bool(
+        iteration_tuple_ready
+        and matrix_dimension_ready
+        and matrix_population_columns_ready
+    )
     final_ready = bool(active_final and compared_elements > 0)
     outer_ready = bool(active_outer and compared_elements > 0)
     source_ready = bool(source_xtot and compared_elements > 0)
     final_xtot_ready = bool(final_xtot and compared_elements > 0)
-    ready = bool(
-        pair_present and same_iteration_ready and topology_ready
-        and final_ready and outer_ready and source_ready
-    )
+    ready = bool(pair_present and same_iteration_ready)
     status = "ready" if ready else "failed"
     return MSolveLucyFinalSnapshotParityResult(
         status=status,
         ready=ready,
         probe_pair_present=pair_present,
         same_iteration_ready=same_iteration_ready,
+        iteration_tuple_ready=iteration_tuple_ready,
+        matrix_dimension_ready=matrix_dimension_ready,
+        matrix_population_columns_ready=matrix_population_columns_ready,
         topology_ready=topology_ready,
         coefficient_ready=coefficient_ready,
         active_final_population_ready=final_ready,
@@ -439,6 +488,15 @@ def compare_msolvelucy_final_snapshot(
             "probe_values_enter_solver": False,
             "source_xtot_vector": "xo at start of final Lucy outer iteration",
             "source_xtot_excludes_final_compact_row": True,
+            "snapshot_gate_requirements": [
+                "one_consistent_xstar_iteration_tuple_across_both_files",
+                "matching_matrix_dimensions",
+                "matrix_population_columns_match_population_table",
+            ],
+            "iteration_tuple_ready": iteration_tuple_ready,
+            "matrix_dimension_ready": matrix_dimension_ready,
+            "matrix_population_columns_ready": matrix_population_columns_ready,
+            "python_iteration_count_enters_snapshot_gate": False,
         },
     )
 

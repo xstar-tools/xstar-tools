@@ -14,9 +14,26 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
-### v0.4.31 synchronized final-solver oxygen acceptance
+### v0.4.32 source counters, synchronized snapshot gate, and energy-workspace parity
 
-v0.4.31 completes the type-71 `ans3/ans4` energy channel, corrects type-72 packed endpoints to `[-4],[-3]`, and adds record-resolved rate-7 `cj2` diagnostics beginning with type 53. A seven-hook bounded XSTAR probe now captures the final effective `msolvelucy` matrix, returned `x`, and final-outer-start `xo` at one internal iteration. Python also reproduces the source `xtot` timing and final-row exclusion while retaining final-vector ion totals as a separate diagnostic. The strict oxygen gate reassesses O III--O V active populations and O III/O IV ion totals before any expansion to all elements. Physical acceptance remains pending the production seven-hook rerun.
+v0.4.32 is limited to four source-semantic corrections identified by the
+production v0.4.31 oxygen run. The compact element basis now preserves XSTAR's
+`nionp` counter across inactive lower ion stages, so O III--O VIII retain source
+counters 3--8 and `xtot` is accumulated into the corresponding global element
+slots. The final-`msolvelucy` snapshot gate now tests only internal XSTAR
+synchronization: one iteration tuple across both files, matching compact
+matrix dimensions, and matrix population columns identical to the synchronized
+population table. Python and XSTAR are no longer required to converge in the
+same number of iterations.
+
+The type-54 energy channel now uses the source dimensionless
+`delt = DeltaE/(0.861707*T_1e4)` before conversion to erg. The element second
+pass also preserves the mutable `leveltemp` workspace: current columns
+`1:nlev` are overwritten while higher columns retain the preceding ion's
+values, matching the type-49/type-53/type-99 electron-energy corrections.
+Physical oxygen acceptance still requires a fresh production example-105 rerun;
+all-element expansion remains blocked until
+`oxygen_pre_continuum_acceptance_ready=True`.
 
 ### v0.4.30 Fortran probe numeric compatibility
 

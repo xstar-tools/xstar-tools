@@ -56,6 +56,7 @@ class ElementIonBlock:
     compact_start: int
     compact_stop: int
     first_level_record: int
+    ion_counter: int = 0
     label: str = ""
 
     def compact_index(self, local_level: int) -> int:
@@ -90,6 +91,7 @@ class ElementCompactBasis:
     n_ions: int
     normalization_row: int
     role_to_row: Dict[Tuple[int, int], int] = field(default_factory=dict)
+    ion_stage_by_counter: Dict[int, int] = field(default_factory=dict)
 
     def row(self, compact_index: int) -> ElementBasisRow:
         if compact_index < 1 or compact_index > self.n_rows:
@@ -139,7 +141,11 @@ class ElementCompactBasis:
             if stages:
                 out[row.compact_index] = max(stages)
             elif row.ion_counter > 0:
-                out[row.compact_index] = self.min_ion_stage + row.ion_counter - 1
+                out[row.compact_index] = int(
+                    self.ion_stage_by_counter.get(
+                        row.ion_counter, self.min_ion_stage + row.ion_counter - 1
+                    )
+                )
         return out
 
 
@@ -426,6 +432,36 @@ def build_level_table(
     return UCalcLevelTable(levels=levels, nlev=nlev)
 
 
+def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:
+    """Copy the mutable Fortran ``leveltemp`` workspace state.
+
+    ``calc_rates_level_lte`` overwrites only columns ``1:nlev`` of the shared
+    work array.  Entries above the current ion's ``nlev`` therefore retain
+    values from the previously processed ion.  A shallow copy is sufficient
+    because :class:`UCalcLevel` instances are immutable.
+    """
+
+    return UCalcLevelTable(levels=dict(table.levels), nlev=int(table.nlev))
+
+
+def _overwrite_leveltemp_workspace(
+    workspace: UCalcLevelTable,
+    current: UCalcLevelTable,
+) -> UCalcLevelTable:
+    """Apply one source-faithful ``calc_rates_level_lte`` overwrite.
+
+    The current ion replaces workspace columns ``1:nlev`` while any higher
+    columns remain untouched.  ``workspace.nlev`` still records the current
+    ion dimension, matching the separate Fortran ``nlev`` argument.
+    """
+
+    nlev = int(current.nlev)
+    for index in range(1, nlev + 1):
+        workspace.levels[index] = current.require(index)
+    workspace.nlev = nlev
+    return workspace
+
+
 def build_element_compact_basis(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -435,12 +471,23 @@ def build_element_compact_basis(
     max_ion_stage: int,
 ) -> ElementCompactBasis:
     """Translate the compact ``ipmat/ipmat2/nsup/nion`` basis construction."""
+    # ``calc_hmc_element.f90`` increments ``nionp`` for every ion of the
+    # element before applying the active-stage limits.  Preserve those source
+    # counters even when the compact matrix contains only a selected subset.
+    all_element_ions = sorted(_iter_ion_records(derived, element_z), key=lambda x: x[1])
+    source_counter_by_ion = {
+        int(ion_index): counter
+        for counter, (ion_index, _stage, _record) in enumerate(all_element_ions, start=1)
+    }
+    ion_stage_by_counter = {
+        counter: int(stage)
+        for counter, (_ion_index, stage, _record) in enumerate(all_element_ions, start=1)
+    }
     selected = [
         (idx, stage, rec)
-        for idx, stage, rec in _iter_ion_records(derived, element_z)
+        for idx, stage, rec in all_element_ions
         if min_ion_stage <= stage <= max_ion_stage
     ]
-    selected.sort(key=lambda x: x[1])
     if not selected:
         raise ElementEquilibriumError(
             f"no ions for Z={element_z} in stage range {min_ion_stage}..{max_ion_stage}"
@@ -451,10 +498,10 @@ def build_element_compact_basis(
     role_to_row: Dict[Tuple[int, int], int] = {}
     ipmat2 = 0
     nsp = 1
-    nionp = 0
+    nionp = len(all_element_ions)
 
     for ion_index, stage, ion_record in selected:
-        nionp += 1
+        source_ion_counter = int(source_counter_by_ion[ion_index])
         nlev = int(derived.nlevs[ion_index])
         if nlev <= 0:
             raise ElementEquilibriumError(f"ion index {ion_index} has invalid nlev={nlev}")
@@ -469,6 +516,7 @@ def build_element_compact_basis(
             compact_start=start,
             compact_stop=stop,
             first_level_record=int(derived.npfi[13, ion_index]),
+            ion_counter=source_ion_counter,
             label=_record_label(master, ion_record),
         )
         blocks.append(block)
@@ -477,7 +525,7 @@ def build_element_compact_basis(
         # spectroscopic-ground role determines nsup/nion exactly as in Fortran.
         ground = rows_by_index.setdefault(start, ElementBasisRow(start))
         ground.superlevel = nsp
-        ground.ion_counter = nionp
+        ground.ion_counter = source_ion_counter
 
         if nlev > 2:
             nsp += 1
@@ -485,7 +533,7 @@ def build_element_compact_basis(
                 row_index = start + local - 1
                 row = rows_by_index.setdefault(row_index, ElementBasisRow(row_index))
                 row.superlevel = nsp
-                row.ion_counter = nionp
+                row.ion_counter = source_ion_counter
         nsp += 1
 
         for local in range(1, nlev + 1):
@@ -503,6 +551,7 @@ def build_element_compact_basis(
                     else "spectroscopic_or_superlevel"
                 ),
                 "ion_record": ion_record,
+                "ion_counter": source_ion_counter,
             }
             row.roles.append(role)
             role_to_row[(ion_index, local)] = row_index
@@ -537,6 +586,7 @@ def build_element_compact_basis(
         n_ions=nionp,
         normalization_row=n_rows,
         role_to_row=role_to_row,
+        ion_stage_by_counter=ion_stage_by_counter,
     )
 
 
@@ -792,6 +842,13 @@ def assemble_element_matrix(
             weight_by_destination,
         )
 
+    # ``levwkelement`` leaves the shared Fortran ``leveltemp`` array holding
+    # the last active ion.  The second pass then calls ``calc_hmc_ion`` in
+    # ascending ion order; each call overwrites only columns ``1:nlev``.
+    # Preserve the untouched higher columns because type 49/53/99 use them in
+    # their final electron-energy channel when ``idest2 > nlev``.
+    leveltemp_workspace = _copy_level_table(level_tables[basis.blocks[-1].ion_index])
+
     terms: List[MatrixTerm] = []
     blocked_records: List[Dict[str, Any]] = []
     record_results: List[Dict[str, Any]] = []
@@ -800,7 +857,8 @@ def assemble_element_matrix(
     n_source_clamps = 0
 
     for block in basis.blocks:
-            levels = level_tables[block.ion_index]
+            current_levels = level_tables[block.ion_index]
+            levels = _overwrite_leveltemp_workspace(leveltemp_workspace, current_levels)
             parent_energy_map, parent_weight_map = parent_destination_context[block.ion_index]
             summary = IonAssemblySummary(
                 ion_index=block.ion_index,
@@ -854,6 +912,8 @@ def assemble_element_matrix(
                             "compact_start": block.compact_start,
                             "parent_level_energy_ev_by_destination": parent_energy_map,
                             "parent_level_stat_weight_by_destination": parent_weight_map,
+                            "leveltemp_workspace_persistent": True,
+                            "leveltemp_workspace_retained_max_index": max(levels.levels, default=0),
                         },
                     )
                     if escape_reason is not None:
@@ -1451,7 +1511,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.31",
+    port_version: str = "v0.4.32",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)

@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR fixed-state calc_hmc_all core")
         print("-----------------------------------")
-        print("port_version=v0.4.31")
+        print("port_version=v0.4.32")
         print(f"runtime_context_source={runtime_source}")
         print(f"requested_critf={requested_critf}")
         print(f"effective_critf={effective_critf}")
