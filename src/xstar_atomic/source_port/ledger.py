@@ -91,7 +91,7 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.24"
+PORT_LEDGER_VERSION = "v0.4.25"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
     "XSTAR pre-continuum calc_hmc_all parity -> comp2 -> freef -> "

@@ -22,7 +22,7 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.24"
+    assert PORT_LEDGER_VERSION == "v0.4.25"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
         "XSTAR pre-continuum calc_hmc_all parity -> comp2 -> freef -> "

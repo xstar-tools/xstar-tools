@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.25 scope-aware pre-continuum parity
+
+v0.4.25 uses the XSTAR probe's captured `critf` by default, compares `mml/mmu/critf` once per element, and joins Python ion/level products to the real XSTAR global indices. Oxygen-only runs now compare the oxygen `xiin`, `pirt/rrrt`, `stotg/atotg/xtotg`, level-population/LTE/departure/rate arrays, and per-element heating/cooling while correctly marking all-element totals as `not_comparable_subset_scope`.
+
 ### v0.4.24 pre-matrix ion balance and bounded local-zone probe
 
 v0.4.24 completes the source first pass used before the multilevel element matrix: `calc_ion_rates -> istruc/ioneqm -> mml/mmu`. The fixed-state `calc_hmc_all` path now distinguishes preliminary `pirt/rrrt` from post-solve `stotg/atotg`, uses `istruc`-derived ion limits by default, and fixes the one-based `rnise` level mapping. A bounded diagnostic XSTAR probe captures the first-pass element arrays and the full state immediately before `comp2`; example 105 can compare those products directly. Continuum leaves and `dsec` remain the next coherent work.

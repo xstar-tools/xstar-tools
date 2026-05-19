@@ -197,42 +197,108 @@ def test_fixed_state_mapping_uses_one_based_lte_and_keeps_pre_rates_separate():
     assert result.atotg[(2, 2)] == pytest.approx(42.0)
 
 
-def test_bounded_calc_hmc_all_probe_comparator(tmp_path):
-    from xstar_atomic.source_port import (
-        compare_calc_hmc_all_pre_continuum_probe,
-        write_calc_hmc_all_pre_continuum_parity_products,
-    )
-
+def _write_complete_calc_hmc_probe(tmp_path, *, summary_values="3,1,4,2,0.4,0"):
     (tmp_path / "xstar_calc_hmc_element_pre_matrix_probe.csv").write_text(
         "calc_hmc_all_call_id,element_z,ion_stage,pirt,rrrt,xitp,mml,mmu,critf\n"
-        "9,2,1,11,21,0.5,1,2,1e-8\n"
-        "9,2,2,12,22,0.3,1,2,1e-8\n"
-        "9,2,3,0,0,0.2,1,2,1e-8\n"
+        "9,2,1,11,21,0.5,1,2,1e-7\n"
+        "9,2,2,12,22,0.3,1,2,1e-7\n"
+        "9,2,3,0,0,0.2,1,2,1e-7\n"
     )
     (tmp_path / "xstar_calc_hmc_all_pre_continuum_summary_probe.csv").write_text(
         "calc_hmc_all_call_id,temperature_t4,temperature_k,xee,xpx,httot,cltot,httot2,cltot2,enelec,elcter\n"
-        "9,100,1000000,0.4,100000000,3,1,4,2,0.4,0\n"
+        f"9,100,1000000,0.4,100000000,{summary_values}\n"
     )
-    fake = SimpleNamespace(
+    (tmp_path / "xstar_calc_hmc_all_pre_continuum_ions_probe.csv").write_text(
+        "calc_hmc_all_call_id,global_ion_index,xiin,rrrt,pirt,htt,cll,htt2,cll2,stotg,atotg,xtotg\n"
+        "9,2,0,0,0,3,1,4,2,0,0,0\n"
+        "9,4,0.5,21,11,0,0,0,0,31,41,0.5\n"
+        "9,5,0.3,22,12,0,0,0,0,32,42,0.3\n"
+    )
+    (tmp_path / "xstar_calc_hmc_all_pre_continuum_levels_probe.csv").write_text(
+        "calc_hmc_all_call_id,global_level_index,xilevg,rnisg,bilevg,gammag,alphag,igammamax_record,ialphamax_record\n"
+        "9,10,0.5,0.8,0.625,5,7,101,201\n"
+        "9,11,0.3,0.2,1.5,6,8,102,202\n"
+    )
+
+
+def _fake_complete_calc_hmc_result(*, complete_scope=True):
+    request = SimpleNamespace(element_z=2, critf=1.0e-7)
+    return SimpleNamespace(
+        element_results=[SimpleNamespace(request=request)],
         preliminary_ion_fractions={(2, 1): 0.5, (2, 2): 0.3, (2, 3): 0.2},
+        ion_fractions={(2, 1): 0.5, (2, 2): 0.3},
         pirt={(2, 1): 11.0, (2, 2): 12.0},
         rrrt={(2, 1): 21.0, (2, 2): 22.0},
+        stotg={(2, 1): 31.0, (2, 2): 32.0},
+        atotg={(2, 1): 41.0, (2, 2): 42.0},
+        xtotg={(2, 1): 0.5, (2, 2): 0.3},
+        htt={2: 3.0}, cll={2: 1.0}, htt2={2: 4.0}, cll2={2: 2.0},
+        xilevg={(2, 1, 1): 0.5, (2, 2, 1): 0.3},
+        rnisg={(2, 1, 1): 0.8, (2, 2, 1): 0.2},
+        bilevg={(2, 1, 1): 0.625, (2, 2, 1): 1.5},
+        gammag={(2, 1, 1): 5.0, (2, 2, 1): 6.0},
+        alphag={(2, 1, 1): 7.0, (2, 2, 1): 8.0},
+        igammamaxg={(2, 1, 1): 101, (2, 2, 1): 102},
+        ialphamaxg={(2, 1, 1): 201, (2, 2, 1): 202},
+        global_ion_index_by_key={(2, 1): 4, (2, 2): 5},
+        global_level_index_by_key={(2, 1, 1): 10, (2, 2, 1): 11},
         mml={2: 1}, mmu={2: 2},
         temperature_k=1e6,
         electron_fraction_xee=0.4,
         hydrogen_density_cm3=1e8,
         httot=3.0, cltot=1.0, httot2=4.0, cltot2=2.0,
         electron_contribution=0.4, elcter=0.0,
+        charge_closure_scope_complete=complete_scope,
     )
-    parity = compare_calc_hmc_all_pre_continuum_probe(fake, tmp_path)
+
+
+def test_bounded_calc_hmc_all_probe_comparator(tmp_path):
+    from xstar_atomic.source_port import (
+        compare_calc_hmc_all_pre_continuum_probe,
+        load_calc_hmc_all_probe_critf,
+        write_calc_hmc_all_pre_continuum_parity_products,
+    )
+
+    _write_complete_calc_hmc_probe(tmp_path)
+    ref = load_calc_hmc_all_probe_critf(tmp_path, element_z=2)
+    assert ref.call_id == 9
+    assert ref.critf == pytest.approx(1.0e-7)
+    assert (ref.mml, ref.mmu) == (1, 2)
+
+    parity = compare_calc_hmc_all_pre_continuum_probe(
+        _fake_complete_calc_hmc_result(), tmp_path
+    )
     assert parity.call_id == 9
     assert parity.pre_matrix_ready is True
+    assert parity.pre_continuum_state_ready is True
     assert parity.pre_continuum_summary_ready is True
+    assert parity.pre_continuum_summary_status == "ready"
+    assert parity.global_ion_ready is True
+    assert parity.global_level_ready is True
+    assert parity.global_arrays_ready is True
     assert parity.parity_ready is True
     assert parity.n_outside_tolerance == 0
+    assert sum(row.component == "ion_limit_mml" for row in parity.rows) == 1
+    assert sum(row.component == "ion_limit_mmu" for row in parity.rows) == 1
+    assert sum(row.component == "ion_limit_critf" for row in parity.rows) == 1
     paths = write_calc_hmc_all_pre_continuum_parity_products(parity, tmp_path / "out")
     assert all(Path(path).is_file() for path in paths.values())
 
+
+def test_calc_hmc_all_summary_parity_is_scope_aware(tmp_path):
+    from xstar_atomic.source_port import compare_calc_hmc_all_pre_continuum_probe
+
+    # Deliberately incompatible all-element totals must not fail an element-only
+    # comparison when the charge/abundance scope is incomplete.
+    _write_complete_calc_hmc_probe(tmp_path, summary_values="300,100,400,200,40,-39.6")
+    parity = compare_calc_hmc_all_pre_continuum_probe(
+        _fake_complete_calc_hmc_result(complete_scope=False), tmp_path
+    )
+    assert parity.pre_continuum_summary_ready is None
+    assert parity.pre_continuum_summary_status == "not_comparable_subset_scope"
+    assert parity.global_arrays_ready is True
+    assert parity.parity_ready is True
+    assert not any(row.component == "pre_continuum_summary" for row in parity.rows)
 
 def test_calc_hmc_all_probe_products_are_bounded_and_source_local(tmp_path):
     from xstar_atomic import write_calc_hmc_all_probe_products

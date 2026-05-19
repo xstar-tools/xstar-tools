@@ -171,8 +171,10 @@ from .local_zone import (
 
 from .calc_hmc_all_parity import (
     CalcHMCAllParityError,
+    CalcHMCAllProbeCritfReference,
     CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult,
+    load_calc_hmc_all_probe_critf,
     compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
 )
@@ -337,8 +339,10 @@ __all__ = [
     "register_fixed_state_calc_hmc_all",
     "write_fixed_state_calc_hmc_all_products",
     "CalcHMCAllParityError",
+    "CalcHMCAllProbeCritfReference",
     "CalcHMCAllParityRow",
     "CalcHMCAllPreContinuumParityResult",
+    "load_calc_hmc_all_probe_critf",
     "compare_calc_hmc_all_pre_continuum_probe",
     "write_calc_hmc_all_pre_continuum_parity_products",
     "PopulationParityError",

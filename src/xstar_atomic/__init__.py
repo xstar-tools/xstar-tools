@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.24"
+__version__ = "0.4.25"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -155,8 +155,9 @@ from .source_port import (
     FixedStateElementResult, FixedStateCalcHMCAllResult,
     resolve_calc_hmc_all_density, calc_hmc_all, register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
-    CalcHMCAllParityError, CalcHMCAllParityRow, CalcHMCAllPreContinuumParityResult,
-    compare_calc_hmc_all_pre_continuum_probe,
+    CalcHMCAllParityError, CalcHMCAllProbeCritfReference,
+    CalcHMCAllParityRow, CalcHMCAllPreContinuumParityResult,
+    load_calc_hmc_all_probe_critf, compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError, XSTARPopulationReference, XSTARRuntimeContextReference, PopulationMetrics,
     ElementPopulationParityResult, load_xstar_population_reference, load_xstar_runtime_context_reference,
@@ -424,8 +425,10 @@ from .source_port import (
     register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
     CalcHMCAllParityError,
+    CalcHMCAllProbeCritfReference,
     CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult,
+    load_calc_hmc_all_probe_critf,
     compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError,
@@ -533,6 +536,13 @@ __all__.extend([
     "calc_hmc_all",
     "register_fixed_state_calc_hmc_all",
     "write_fixed_state_calc_hmc_all_products",
+    "CalcHMCAllParityError",
+    "CalcHMCAllProbeCritfReference",
+    "CalcHMCAllParityRow",
+    "CalcHMCAllPreContinuumParityResult",
+    "load_calc_hmc_all_probe_critf",
+    "compare_calc_hmc_all_pre_continuum_probe",
+    "write_calc_hmc_all_pre_continuum_parity_products",
     "PopulationParityError",
     "XSTARPopulationReference",
     "XSTARRuntimeContextReference",

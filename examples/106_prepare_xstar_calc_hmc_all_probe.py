@@ -16,7 +16,7 @@ def main(argv=None) -> int:
     if args.print_summary:
         print("XSTAR calc_hmc_all pre-continuum probe preparation")
         print("----------------------------------------------------")
-        print("port_version=v0.4.24")
+        print("port_version=v0.4.25")
         print("status=calc_hmc_all_probe_products_written")
         for key, path in outputs.items():
             print(f"{key}: {path}")

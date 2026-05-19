@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## v0.4.25 - 2026-05-18
+
+v0.4.25 completes the bounded pre-continuum parity layer for element-subset `calc_hmc_all` validation.
+
+### Corrected
+
+- The source-aligned default ion-selection threshold is now `critf=1e-7`.
+- When an XSTAR `calc_hmc_all` probe directory is supplied and `--critf` is omitted, example 105 reads the captured `critf` and selected call before constructing the Python element request.
+- CLI/runtime provenance now distinguishes `requested_critf`, `effective_critf`, and `critf_source`.
+- `mml`, `mmu`, and `critf` are compared once per element rather than once per ion-stage row.
+- All-element totals (`httot`, `cltot`, `httot2`, `cltot2`, `enelec`, and `elcter`) are no longer treated as failures for a one-element/partial-abundance calculation. Such runs report `not_comparable_subset_scope`.
+
+### Added
+
+- Native global-index maps from `(Z, ion_stage)` and `(Z, ion_stage, local_level)` into the XSTAR `xiin` and `xilevg` array indices.
+- Direct comparison of the XSTAR pre-continuum global ion arrays: `xiin`, `rrrt`, `pirt`, `stotg`, `atotg`, and `xtotg`.
+- Direct comparison of the element-indexed `htt`, `cll`, `htt2`, and `cll2` values carried in the ion probe.
+- Direct comparison of selected global level arrays: `xilevg`, `rnisg`, `bilevg`, `gammag`, `alphag`, `igammamaxg`, and `ialphamaxg`.
+- Separate readiness fields for the runtime state, all-element summary scope, global ion arrays, global level arrays, and the combined global-array gate.
+
+### Production evidence
+
+The user's v0.4.24 rerun with `--critf 1e-7` confirms exact source ion-stage selection (`mml=3`, `mmu=8`) and full pre-matrix readiness. The six remaining v0.4.24 failures are the expected all-element summary quantities compared against an oxygen-only calculation; v0.4.25 marks those quantities as out of scope and evaluates the oxygen ion/level arrays directly.
+
+### Next order
+
+`XSTAR oxygen pre-continuum global-array parity -> full all-element fixed-state driver -> comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec`.
+
 ## v0.4.24 - 2026-05-18
 
 v0.4.24 completes the missing pre-matrix half of the fixed-state `calc_hmc_all` source port.

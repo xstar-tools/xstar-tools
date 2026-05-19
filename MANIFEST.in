@@ -70,3 +70,6 @@ recursive-include xstar_python_source_port_inventory_v0423 *.csv *.json
 include xstar_atomic_v0.4.24.md
 recursive-include xstar_python_source_port_inventory_v0424 *.csv *.json
 include xstar_o_calc_hmc_all_fixed_state_v0423_diagnosis_v0424.md
+
+include xstar_atomic_v0.4.25.md
+include xstar_o_calc_hmc_all_fixed_state_v0424_critf1e7_diagnosis_v0425.md

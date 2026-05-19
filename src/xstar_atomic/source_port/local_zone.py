@@ -54,7 +54,7 @@ class FixedStateElementRequest:
     neutral_h_density_cm3: float = 0.0
     ionized_h_density_cm3: float = 0.0
     lfast: int = 2
-    critf: float = 1.0e-8
+    critf: float = 1.0e-7
     use_source_ion_limits: bool = True
     initial_populations: Optional[np.ndarray] = None
     strict_context: bool = True
@@ -158,6 +158,8 @@ class FixedStateCalcHMCAllResult:
     charge_closure_scope_complete: bool
     complete_fixed_state_ready: bool
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    global_ion_index_by_key: Dict[Tuple[int, int], int] = field(default_factory=dict)
+    global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
 
 
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
@@ -271,6 +273,41 @@ def calc_hmc_all(
     }
     requested_element_z = {int(item.element_z) for item in elements if float(item.abundance) > 1.0e-24}
     charge_scope_complete = bool(available_element_z) and requested_element_z == available_element_z
+
+    # Preserve the native XSTAR global array indices so bounded probe products
+    # can be compared without guessing from element/stage/local-level labels.
+    global_ion_index_by_key: Dict[Tuple[int, int], int] = {}
+    ion_record_to_index: Dict[int, int] = {}
+    n_ions = int(getattr(derived, "n_ions", 0))
+    ion_records = np.asarray(getattr(derived, "ion_records", ()), dtype=int).reshape(-1)
+    ion_stages = np.asarray(getattr(derived, "ion_stage", ()), dtype=int).reshape(-1)
+    ion_elements = np.asarray(getattr(derived, "ion_element_z", ()), dtype=int).reshape(-1)
+    for ion_index in range(1, min(n_ions + 1, ion_records.size, ion_stages.size, ion_elements.size)):
+        ion_record_to_index[int(ion_records[ion_index])] = ion_index
+        key = (int(ion_elements[ion_index]), int(ion_stages[ion_index]))
+        if key[0] in requested_element_z and key[0] > 0 and key[1] > 0:
+            global_ion_index_by_key[key] = ion_index
+
+    global_level_index_by_key: Dict[Tuple[int, int, int], int] = {}
+    level_records = np.asarray(
+        getattr(derived, "level_record_by_global_index", ()), dtype=int
+    ).reshape(-1)
+    n_level_records = int(getattr(derived, "n_level_records", max(0, level_records.size - 1)))
+    npar = np.asarray(getattr(derived, "npar", ()), dtype=int).reshape(-1)
+    for global_level_index in range(1, min(n_level_records + 1, level_records.size)):
+        level_record = int(level_records[global_level_index])
+        if level_record <= 0 or level_record >= npar.size:
+            continue
+        ion_index = ion_record_to_index.get(int(npar[level_record]))
+        if ion_index is None or ion_index >= ion_elements.size or ion_index >= ion_stages.size:
+            continue
+        z = int(ion_elements[ion_index])
+        stage = int(ion_stages[ion_index])
+        if z not in requested_element_z:
+            continue
+        local_level = int(master.local_level_index(level_record))
+        if stage > 0 and local_level > 0:
+            global_level_index_by_key[(z, stage, local_level)] = global_level_index
 
     for request in elements:
         request.validate()
@@ -494,6 +531,8 @@ def calc_hmc_all(
         element_loop_ready=all_ready,
         charge_closure_scope_complete=charge_scope_complete,
         complete_fixed_state_ready=complete,
+        global_ion_index_by_key=global_ion_index_by_key,
+        global_level_index_by_key=global_level_index_by_key,
         diagnostics={
             "source_file": "xstar/xstarlib/src/calc_hmc_all.f90",
             "source_mode": "fixed_temperature_fixed_electron_fraction",
@@ -584,7 +623,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.24",
+    port_version: str = "v0.4.25",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
