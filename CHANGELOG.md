@@ -1,5 +1,132 @@
 # CHANGELOG
 
+## v0.4.23 - 2026-05-18
+
+v0.4.23 begins Milestone 4 after the frozen oxygen Milestone-3 benchmark. It closes the source-obvious type-49 destination bug, prepares an exact source-routine driver for `xstarcalc`, and adds the fixed-temperature/fixed-electron-fraction core of `calc_hmc_all`.
+
+## Type-49 packed-index correction
+
+The v0.4.22 production rerun confirmed type 56/rate 3 at exact parity and selected type 49/rate 7 as the first remaining strict matrix family. The family contained 251 records and 1,004 terms on each side, but only 260 terms matched topologically; 744 terms were Python-only and 744 were XSTAR-only.
+
+XSTAR label 49 uses:
+
+```fortran
+idest1=idat(np1i+nidt-2)
+idest4=idat(np1i+nidt-3)
+idest2=nlevp+max(0,idat(np1i-1+nidt-3))-1
+```
+
+For a zero-based Python packed integer tuple, the destination offset is `integers[-4]`. The adjacent `integers[-3]` field is the separate `idest4`/linked-field value. v0.4.22 incorrectly used `[-3]` for `idest2`, collapsing 251 records onto only four parent destinations.
+
+v0.4.23 corrects both the full evaluator and `indonly` path to use:
+
+```python
+idest1 = integers[-2]
+parent_offset = integers[-4]
+idest2 = nlevp + max(0, parent_offset) - 1
+```
+
+The label-49 `phint53` rate integration, threshold formula, source swaps, and heating/cooling correction remain unchanged. No empirical scale or probe coefficient is introduced.
+
+## Source-driver preparation
+
+The existing coarse `XSTARStage` driver remains backward compatible. A new source-routine layer records and executes the original nested call order:
+
+```text
+xstarcalc:
+    bremsmap
+    dsec
+    calc_hmc_all
+    calc_emisab_all
+    calc_emis_all
+
+zone/pass:
+    step
+    trnfrc
+    xstarcalc
+    heatt
+    stpcut
+    trnfrn
+```
+
+`XSTARPythonDriver.run_xstarcalc(fixed_state=True)` skips `dsec` and executes the captured-state Milestone-4 prefix. Missing source routines fail explicitly through `UnportedXSTARSourceRoutine`.
+
+## Fixed-state calc_hmc_all core
+
+The new `xstar_atomic.source_port.local_zone` module ports the outer fixed-state accounting of `calc_hmc_all.f90` while reusing the validated Milestone-3 element solver.
+
+Implemented source-shaped behavior includes:
+
+- literal `lcdd` entry density mutations;
+- abundance-filtered element requests;
+- one complete element solve per supplied element;
+- abundance-weighted `htt`, `cll`, `htt2`, and `cll2` accumulation;
+- ion fractions, photoionization rates, and recombination rates;
+- global role-keyed level populations, LTE populations, and departure coefficients;
+- `gammag`, `alphag`, fractional rate categories, and dominant-record indices;
+- `stotg`, `atotg`, `fstotg`, `fatotg`, and `xtotg` diagnostics;
+- source charge accounting and `elcter=xee-enelec`;
+- source heating/cooling residual `hmctot=2*(httot-cltot)/(1e-37+httot+cltot)`;
+- explicit readiness flags for element-loop, charge-scope, continuum, and complete fixed-state parity.
+
+The current implementation intentionally does **not** claim complete Milestone-4 parity. The continuum sequence
+
+```text
+comp2 -> freef -> bremem -> heatf
+```
+
+is represented by an explicit callback and defaults to a deferred, incomplete state. Full all-element coverage and an XSTAR fixed-state oracle are also still required. `dsec`, emissivity/opacity, transfer, and outputs remain unported.
+
+## New API and executable
+
+```python
+from xstar_atomic.source_port import (
+    FixedStateElementRequest,
+    calc_hmc_all,
+    write_fixed_state_calc_hmc_all_products,
+)
+```
+
+New executable and example:
+
+```text
+xstar-atomic-port-local-zone
+examples/105_port_xstar_calc_hmc_all_fixed_state.py
+```
+
+The oxygen captured-state development command is:
+
+```bash
+PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --element-z 8 \
+  --min-ion-stage 3 \
+  --max-ion-stage 8 \
+  --temperature-k 1.0e6 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --escape-npz xstar_o7_escape_state_v045.npz \
+  --xstar-population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --xstar-population-solve-call-id 219 \
+  --population-probe-runtime-policy use \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0423 \
+  --print-summary
+```
+
+This first run is expected to report `element_loop_ready=True` but `complete_fixed_state_ready=False`, because the O III--O VIII subset does not cover the complete oxygen charge distribution and the continuum leaves are still deferred.
+
+## Validation
+
+- focused v0.4.23 tests: 7 passed;
+- complete source-port test suite: 78 passed;
+- v0.4.22 freeze/type-56 regression subset: 14 passed;
+- source inventory regenerated: 179 files, 404 routines;
+- translation ledger: 17 validated, 3 partial, 7 unported, 1 scaffold;
+- `compileall` passed.
+
 ## v0.4.22 - 2026-05-18
 
 - Close XSTAR data type 56 / rate type 3 for the solve-call-219 oxygen benchmark by reproducing `hunt3.f90` edge-interval extrapolation instead of flat-clamping temperatures outside the tabulated collision-strength grid.

@@ -941,7 +941,14 @@ class SourceFaithfulUCalc:
             id1 = i[-2] if len(i) >= 2 else 0
             parent_offset = i[-4] if len(i) >= 4 else 1
             id2 = nlev + parent_offset - 1
-        elif dt in {12, 15, 19, 23, 27, 35, 36, 49, 55, 59, 64, 70, 85, 88, 99}:
+        elif dt == 49:
+            # ucalc.f90 label 49 uses idat(np1i-1+nidt-3), i.e. the
+            # fourth packed integer from the end.  The adjacent [-3] field
+            # is idest4 and is overwritten later from the linked line record.
+            id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
+            parent_offset = i[-4] if len(i) >= 4 else 1
+            id2 = nlev + max(0, parent_offset) - 1
+        elif dt in {12, 15, 19, 23, 27, 35, 36, 55, 59, 64, 70, 85, 88, 99}:
             id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
             parent_offset = i[-3] if len(i) >= 3 else 1
             id2 = max(nlev + parent_offset - 1, nlev)
@@ -1469,12 +1476,21 @@ class SourceFaithfulUCalc:
         from .ucalc_leaves import phextrap
         if len(r.integers)<3 or len(r.reals)<4:
             return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type49_short_record")
-        id1=int(r.integers[-2]); off=max(0,int(r.integers[-3])); id2=c.nlevp+off-1
+        # Fortran: idest2=nlevp+max(0,idat(np1i-1+nidt-3))-1.
+        # In the zero-based packed tuple this is integers[-4], not [-3].
+        # integers[-3] is the separate idest4 field.
+        id1=int(r.integers[-2]); off=max(0,int(r.integers[-4])); id2=c.nlevp+off-1
         threshold=self._level_threshold(c,id1)
         e=np.asarray(r.reals[0::2],float); xs=np.maximum(np.asarray(r.reals[1::2],float)*1e-18,0.0); n=min(e.size,xs.size)
         if n<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type49_missing_cross_section_pairs")
         e,xs=phextrap(e[:n],xs[:n],threshold,len(self._mapped_grid(c)))
-        return self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2)
+        out=self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2)
+        return replace(out, diagnostics={**dict(out.diagnostics),
+            "type49_parent_offset_packed_index": -4,
+            "type49_idest4_packed_index": -3,
+            "type49_parent_offset": off,
+            "type49_source_expression": "nlevp+max(0,idat(np1i-1+nidt-3))-1",
+        })
 
     def _eval_type64(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import hphotx,milne

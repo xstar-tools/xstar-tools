@@ -39,7 +39,7 @@ class XSTARPlasmaState:
     xee: float = 0.0
     electron_density: float = 0.0
     populations: Optional[np.ndarray] = None
-    ion_fractions: Optional[np.ndarray] = None
+    ion_fractions: Optional[Any] = None
     abundances: Optional[np.ndarray] = None
 
 
@@ -80,6 +80,18 @@ class XSTARThermalState:
 
 
 @dataclass
+class XSTARLocalZoneState:
+    """Mutable products of ``calc_hmc_all`` and the local ``xstarcalc`` path."""
+
+    calc_hmc_all: Optional[Any] = None
+    fixed_state_ready: bool = False
+    thermal_iteration_ready: bool = False
+    emissivity_ready: bool = False
+    source_arrays: Dict[str, Any] = field(default_factory=dict)
+    provenance: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class XSTARTransferState:
     """Radial zone/pass transfer and optical-depth state."""
 
@@ -101,6 +113,7 @@ class XSTARPythonState:
     radiation: XSTARRadiationState = field(default_factory=XSTARRadiationState)
     matrix: XSTARMatrixState = field(default_factory=XSTARMatrixState)
     thermal: XSTARThermalState = field(default_factory=XSTARThermalState)
+    local_zone: XSTARLocalZoneState = field(default_factory=XSTARLocalZoneState)
     transfer: XSTARTransferState = field(default_factory=XSTARTransferState)
     control: Dict[str, Any] = field(default_factory=dict)
     outputs: Dict[str, Any] = field(default_factory=dict)

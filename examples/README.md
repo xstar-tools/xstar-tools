@@ -1203,3 +1203,33 @@ PYTHONPATH=src python examples/104_prepare_xstar_msolvelucy_state_probe.py \
   --out-dir xstar_msolvelucy_state_probe_v047 \
   --print-summary
 ```
+
+### `105_port_xstar_calc_hmc_all_fixed_state.py`
+
+Run the first Milestone-4 `calc_hmc_all` source port at a fixed captured
+temperature and electron fraction. The driver reuses the validated complete
+element solver, accumulates source-shaped ion fractions, ionization and
+recombination rates, level diagnostics, heating/cooling, and the charge
+residual. It does not yet run `dsec` or the deferred
+`comp2 -> freef -> bremem -> heatf` continuum leaves.
+
+```bash
+PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
+  --atdb /path/to/xstar/data/atdb.fits \
+  --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
+  --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --temperature-k 1.0e6 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv /path/to/xstar_live_rate_grid_probe.csv \
+  --escape-npz /path/to/xstar_o7_escape_state.npz \
+  --xstar-population-probe-csv /path/to/xstar_population_closure_probe.csv \
+  --xstar-population-solve-call-id 219 \
+  --population-probe-runtime-policy use \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0423 \
+  --print-summary
+```
+
+For the O III--O VIII development subset, `element_loop_ready=True` is the
+expected first gate. `complete_fixed_state_ready` remains false until complete
+charge-stage coverage and the continuum leaves are ported and validated.

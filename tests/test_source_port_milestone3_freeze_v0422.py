@@ -22,9 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.22"
+    assert PORT_LEDGER_VERSION == "v0.4.23"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
-    assert NEXT_COHERENT_SOURCE_PORT_TARGET == "calc_hmc_all -> dsec -> calc_emis_all -> xstarcalc"
+    assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
+        "complete fixed-state calc_hmc_all parity -> dsec -> "
+        "calc_emisab_all/calc_emis_all -> xstarcalc"
+    )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",
         "calc_hmc_ion", "calc_hmc_element", "msolvelucy",
@@ -32,7 +35,7 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ):
         assert by_routine[routine].status is PortStatus.VALIDATED
 
-    assert by_routine["calc_hmc_all"].status is PortStatus.UNPORTED
+    assert by_routine["calc_hmc_all"].status is PortStatus.PARTIAL
     assert by_routine["dsec"].status is PortStatus.UNPORTED
     assert by_routine["calc_emis_all"].status is PortStatus.UNPORTED
     assert by_routine["xstar"].status is PortStatus.SCAFFOLD

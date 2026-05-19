@@ -9,6 +9,52 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence
 from .state import XSTARPythonState
 
 
+class XSTARSourceRoutine(str, Enum):
+    """Source-level calls used by the zone and ``xstarcalc`` drivers.
+
+    These are deliberately separate from the older coarse :class:`XSTARStage`
+    groups.  Milestone 4 needs the original nested call order because
+    ``dsec`` repeatedly invokes ``calc_hmc_all`` before the final fixed-state
+    call and the emissivity routines.
+    """
+
+    STEP = "step"
+    TRNFRC = "trnfrc"
+    BREMSMAP = "bremsmap"
+    DSEC = "dsec"
+    CALC_HMC_ALL = "calc_hmc_all"
+    CALC_EMISAB_ALL = "calc_emisab_all"
+    CALC_EMIS_ALL = "calc_emis_all"
+    HEATT = "heatt"
+    STPCUT = "stpcut"
+    TRNFRN = "trnfrn"
+
+
+XSTARCALC_SOURCE_ORDER: Sequence[XSTARSourceRoutine] = (
+    XSTARSourceRoutine.BREMSMAP,
+    XSTARSourceRoutine.DSEC,
+    XSTARSourceRoutine.CALC_HMC_ALL,
+    XSTARSourceRoutine.CALC_EMISAB_ALL,
+    XSTARSourceRoutine.CALC_EMIS_ALL,
+)
+
+XSTARCALC_FIXED_STATE_ORDER: Sequence[XSTARSourceRoutine] = (
+    XSTARSourceRoutine.BREMSMAP,
+    XSTARSourceRoutine.CALC_HMC_ALL,
+    XSTARSourceRoutine.CALC_EMISAB_ALL,
+    XSTARSourceRoutine.CALC_EMIS_ALL,
+)
+
+ZONE_SOURCE_ORDER: Sequence[XSTARSourceRoutine] = (
+    XSTARSourceRoutine.STEP,
+    XSTARSourceRoutine.TRNFRC,
+    *XSTARCALC_SOURCE_ORDER,
+    XSTARSourceRoutine.HEATT,
+    XSTARSourceRoutine.STPCUT,
+    XSTARSourceRoutine.TRNFRN,
+)
+
+
 class XSTARStage(str, Enum):
     SETUP = "setup"
     READ_ATOMIC_DATABASE = "read_atomic_database"
@@ -40,6 +86,17 @@ SOURCE_ORDER: Sequence[XSTARStage] = (
 )
 
 
+class UnportedXSTARSourceRoutine(NotImplementedError):
+    """Raised when a source-level routine is absent from a requested plan."""
+
+    def __init__(self, routine: XSTARSourceRoutine, *, state: XSTARPythonState | None = None):
+        self.routine = routine
+        self.state = state
+        super().__init__(
+            f"XSTAR Python source port has not implemented routine {routine.value!r}"
+        )
+
+
 class UnportedXSTARRoutine(NotImplementedError):
     """Raised at the first untranslated source stage."""
 
@@ -61,6 +118,7 @@ class UnportedXSTARRoutine(NotImplementedError):
 
 
 StageHandler = Callable[[XSTARPythonState], None]
+RoutineHandler = Callable[[XSTARPythonState], None]
 
 
 _DEFAULT_SOURCE_ROUTINES: Dict[XSTARStage, Sequence[str]] = {
@@ -91,6 +149,7 @@ class XSTARPythonDriver:
     """
 
     handlers: Dict[XSTARStage, StageHandler] = field(default_factory=dict)
+    routine_handlers: Dict[XSTARSourceRoutine, RoutineHandler] = field(default_factory=dict)
     source_routines: Dict[XSTARStage, Sequence[str]] = field(
         default_factory=lambda: dict(_DEFAULT_SOURCE_ROUTINES)
     )
@@ -108,6 +167,47 @@ class XSTARPythonDriver:
 
     def implemented_stages(self) -> List[XSTARStage]:
         return [stage for stage in SOURCE_ORDER if stage in self.handlers]
+
+    def register_source_routine(
+        self,
+        routine: XSTARSourceRoutine | str,
+        handler: RoutineHandler,
+    ) -> None:
+        """Register one translated source routine for nested driver plans."""
+        key = routine if isinstance(routine, XSTARSourceRoutine) else XSTARSourceRoutine(str(routine))
+        self.routine_handlers[key] = handler
+
+    def implemented_source_routines(self) -> List[XSTARSourceRoutine]:
+        return [routine for routine in XSTARSourceRoutine if routine in self.routine_handlers]
+
+    def run_source_routines(
+        self,
+        routines: Sequence[XSTARSourceRoutine],
+        state: Optional[XSTARPythonState] = None,
+    ) -> XSTARPythonState:
+        """Execute an explicit source-level call plan in the supplied order."""
+        result = state or XSTARPythonState()
+        for routine in routines:
+            handler = self.routine_handlers.get(routine)
+            if handler is None:
+                raise UnportedXSTARSourceRoutine(routine, state=result)
+            handler(result)
+            result.provenance.setdefault("completed_source_routines", []).append(routine.value)
+        return result
+
+    def run_xstarcalc(
+        self,
+        state: Optional[XSTARPythonState] = None,
+        *,
+        fixed_state: bool = False,
+    ) -> XSTARPythonState:
+        """Run the source-order ``xstarcalc`` plan.
+
+        ``fixed_state=True`` skips ``dsec`` and is the Milestone-4 entry point
+        for captured-temperature/electron-fraction validation.
+        """
+        order = XSTARCALC_FIXED_STATE_ORDER if fixed_state else XSTARCALC_SOURCE_ORDER
+        return self.run_source_routines(order, state=state)
 
     def run(
         self,
