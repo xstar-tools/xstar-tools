@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.4.28 - 2026-05-19
+
+v0.4.28 adds abundance-aware element thermal parity and an XSTAR-vector matrix-closure audit. When `--abundance` is omitted and the bounded element probe is available, example 105 uses the captured XSTAR abundance and records requested/effective/source provenance. Element outputs now include `ht`, `cl`, `ht2`, and `cl2` per unit abundance as well as scaled values.
+
+The new diagnostic closure maps the captured XSTAR global-level populations back to the translated compact basis and evaluates `A_python @ x_XSTAR` without feeding probe values into the production solve. It writes row residuals, dominant matrix contributors, native-versus-XSTAR-vector thermal contributions, channel summaries, and data-type/rate-type family summaries. Each thermal channel is decomposed into the native Python value, the value from XSTAR populations with the same Python coefficients, the captured XSTAR value, the population-vector effect, and the remaining coefficient/source-semantic gap.
+
+The existing primary-strict, active-population, derived-strict, and all-strict level gates are retained. v0.4.28 adds a separate matrix-closure status, an element-thermal diagnostic status, an explicit milestone acceptance gate, and a separate all-strict readiness flag. The acceptance gate requires pre-matrix and runtime-state parity, global-ion parity, active-level parity, element-array parity, XSTAR-vector closure when available, and the applicable all-element summary gate.
+
+Validation: the focused abundance/closure selection passes 16 tests; the complete source-port suite passes 93 tests in both the development tree and clean source distribution; the selected API/CLI/package/documentation suite passes 44 tests with 2 optional skips; and `compileall` passes. Source and wheel builds, installed-wheel API/CLI and bundled-benchmark checks, and standalone Fortran probe-helper compilation pass. The complete historical suite was attempted under a 150-second bound and timed out, so it is not claimed as fully passed. Final archive integrity and SHA-256 verification are recorded in the release handoff.
+
+A fresh v0.4.28 production example-105 run remains the acceptance oracle because the ATDB, live radiation state, escape state, and bounded XSTAR probe directory reside in the user's environment.
+
 ## v0.4.27 - 2026-05-19
 
 v0.4.27 closes the next bounded `calc_hmc_all` parity layer.

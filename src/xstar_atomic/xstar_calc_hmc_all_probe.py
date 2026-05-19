@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.27 calc_hmc_all pre-continuum probe.
+    return r'''! xstar-atomic v0.4.28 calc_hmc_all pre-continuum probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -291,6 +291,7 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_pre_continuum_summary_probe.csv`\n"
         "- `xstar_calc_hmc_all_pre_continuum_ions_probe.csv`\n"
         "- `xstar_calc_hmc_all_pre_continuum_levels_probe.csv`\n"
+        "- `xstar_calc_hmc_all_pre_continuum_elements_probe.csv`\n"
     )
     outputs["readme"] = readme
     return outputs

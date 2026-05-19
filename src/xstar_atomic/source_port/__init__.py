@@ -169,12 +169,20 @@ from .local_zone import (
     write_fixed_state_calc_hmc_all_products,
 )
 
+from .calc_hmc_all_closure import (
+    ElementXSTARVectorClosure,
+    XSTARVectorMatrixClosureResult,
+    build_xstar_vector_matrix_closure,
+)
+
 from .calc_hmc_all_parity import (
     CalcHMCAllParityError,
     CalcHMCAllProbeCritfReference,
+    CalcHMCAllProbeElementReference,
     CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult,
     load_calc_hmc_all_probe_critf,
+    load_calc_hmc_all_probe_element_reference,
     compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
 )
@@ -329,6 +337,9 @@ __all__ = [
     "istruc",
     "select_ion_stage_limits",
     "calc_element_pre_matrix_balance",
+    "ElementXSTARVectorClosure",
+    "XSTARVectorMatrixClosureResult",
+    "build_xstar_vector_matrix_closure",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",
@@ -340,9 +351,11 @@ __all__ = [
     "write_fixed_state_calc_hmc_all_products",
     "CalcHMCAllParityError",
     "CalcHMCAllProbeCritfReference",
+    "CalcHMCAllProbeElementReference",
     "CalcHMCAllParityRow",
     "CalcHMCAllPreContinuumParityResult",
     "load_calc_hmc_all_probe_critf",
+    "load_calc_hmc_all_probe_element_reference",
     "compare_calc_hmc_all_pre_continuum_probe",
     "write_calc_hmc_all_pre_continuum_parity_products",
     "PopulationParityError",

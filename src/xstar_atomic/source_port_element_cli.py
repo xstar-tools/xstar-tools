@@ -248,7 +248,7 @@ def _write_assembly_blocker_summary(assembly: object, out_dir: str | Path) -> di
         writer.writeheader()
         writer.writerows(rows)
     summary = {
-        "port_version": "v0.4.27",
+        "port_version": "v0.4.28",
         "status": "strict_element_assembly_incomplete",
         "n_records_blocked": int(getattr(assembly, "n_records_blocked", len(blocked))),
         "n_unmapped_matrix_endpoints": int(getattr(assembly, "n_unmapped_endpoints", 0)),
@@ -263,7 +263,7 @@ def _write_assembly_blocker_summary(assembly: object, out_dir: str | Path) -> di
     lines = [
         "# XSTAR element strict-assembly blocker summary",
         "",
-        f"- Port version: `v0.4.27`",
+        f"- Port version: `v0.4.28`",
         f"- Blocked records: `{summary['n_records_blocked']}`",
         f"- Unmapped endpoints: `{summary['n_unmapped_matrix_endpoints']}`",
         f"- Grouped reasons: `{summary['n_grouped_blocker_reasons']}`",
@@ -482,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
         if not result.assembly.strict_assembly_ready:
             outputs.update(_write_assembly_blocker_summary(result.assembly, args.out_dir))
         runtime_context_summary = {
-            "port_version": "v0.4.27",
+            "port_version": "v0.4.28",
             "status": "element_runtime_context_selected",
             "runtime_context_source": runtime_context_source,
             "population_probe_runtime_policy": args.population_probe_runtime_policy,
@@ -508,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
         runtime_md = Path(args.out_dir) / "xstar_element_runtime_context.md"
         runtime_md.write_text(
             "# XSTAR element runtime-context selection\n\n"
-            f"- Port version: `v0.4.27`\n"
+            f"- Port version: `v0.4.28`\n"
             f"- Source: `{runtime_context_source}`\n"
             f"- Policy: `{args.population_probe_runtime_policy}`\n"
             f"- Requested T: `{requested_runtime['temperature_k']}` K\n"
@@ -536,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
             s = result.solve
             print("XSTAR complete element statistical-equilibrium subsystem")
             print("------------------------------------------------------")
-            print("port_version=v0.4.27")
+            print("port_version=v0.4.28")
             print("status=element_statistical_equilibrium_subsystem_completed")
             print(f"runtime_context_source={runtime_context_source}")
             print(f"population_probe_runtime_policy={args.population_probe_runtime_policy}")

@@ -13,6 +13,7 @@ from .source_port import (
     write_fixed_state_calc_hmc_all_products,
     compare_calc_hmc_all_pre_continuum_probe,
     load_calc_hmc_all_probe_critf,
+    load_calc_hmc_all_probe_element_reference,
     write_calc_hmc_all_pre_continuum_parity_products,
 )
 from .source_port_element_cli import _load_escape_npz, _select_live_state
@@ -31,7 +32,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--element-z", type=int, default=8)
     parser.add_argument("--min-ion-stage", type=int, default=3)
     parser.add_argument("--max-ion-stage", type=int, default=8)
-    parser.add_argument("--abundance", type=float, default=1.0)
+    parser.add_argument(
+        "--abundance", type=float, default=None,
+        help=(
+            "Element abundance. If omitted and an XSTAR calc_hmc_all element "
+            "probe is supplied, use its captured abundance; otherwise use 1.0."
+        ),
+    )
     parser.add_argument("--temperature-k", type=float, required=True)
     parser.add_argument("--hydrogen-density-cm3", type=float, required=True)
     parser.add_argument("--electron-fraction-xee", type=float, required=True)
@@ -67,6 +74,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--xstar-calc-hmc-call-id", type=int)
     parser.add_argument("--xstar-calc-hmc-parity-rtol", type=float, default=5.0e-3)
     parser.add_argument("--xstar-calc-hmc-parity-atol", type=float, default=1.0e-12)
+    parser.add_argument(
+        "--xstar-calc-hmc-matrix-closure-active-row-scale-threshold",
+        type=float,
+        default=1.0e-12,
+        help=(
+            "Row-scale threshold used by the diagnostic A_python @ x_XSTAR "
+            "matrix-closure acceptance gate."
+        ),
+    )
     parser.add_argument(
         "--xstar-calc-hmc-active-population-threshold",
         type=float,
@@ -137,13 +153,30 @@ def main(argv: list[str] | None = None) -> int:
         effective_critf = 1.0e-7
         critf_source = "package_default"
 
+    requested_abundance = args.abundance
+    if requested_abundance is not None:
+        effective_abundance = float(requested_abundance)
+        abundance_source = "command_line"
+    elif args.xstar_calc_hmc_probe_dir:
+        abundance_reference = load_calc_hmc_all_probe_element_reference(
+            args.xstar_calc_hmc_probe_dir,
+            element_z=args.element_z,
+            call_id=effective_hmc_call_id,
+        )
+        effective_abundance = float(abundance_reference.abundance)
+        effective_hmc_call_id = int(abundance_reference.call_id)
+        abundance_source = "xstar_calc_hmc_element_probe"
+    else:
+        effective_abundance = 1.0
+        abundance_source = "package_default"
+
     radiation = _select_live_state(args.live_rate_grid_probe_csv, args.live_rate_grid_state)
     escape = _load_escape_npz(args.escape_npz, args.assume_optically_thin)
     request = FixedStateElementRequest(
         element_z=args.element_z,
         min_ion_stage=args.min_ion_stage,
         max_ion_stage=args.max_ion_stage,
-        abundance=args.abundance,
+        abundance=effective_abundance,
         radiation=radiation,
         escape=escape,
         covering_fraction=cfrac,
@@ -174,6 +207,9 @@ def main(argv: list[str] | None = None) -> int:
         result.diagnostics["requested_critf"] = requested_critf
         result.diagnostics["effective_critf"] = effective_critf
         result.diagnostics["critf_source"] = critf_source
+        result.diagnostics["requested_abundance"] = requested_abundance
+        result.diagnostics["effective_abundance"] = effective_abundance
+        result.diagnostics["abundance_source"] = abundance_source
         paths = write_fixed_state_calc_hmc_all_products(result, args.out_dir)
         parity = None
         if args.xstar_calc_hmc_probe_dir:
@@ -184,6 +220,9 @@ def main(argv: list[str] | None = None) -> int:
                 rtol=args.xstar_calc_hmc_parity_rtol,
                 atol=args.xstar_calc_hmc_parity_atol,
                 active_population_threshold=args.xstar_calc_hmc_active_population_threshold,
+                matrix_closure_active_row_scale_threshold=(
+                    args.xstar_calc_hmc_matrix_closure_active_row_scale_threshold
+                ),
             )
             paths.update({
                 f"pre_continuum_parity_{key}": value
@@ -197,11 +236,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR fixed-state calc_hmc_all core")
         print("-----------------------------------")
-        print("port_version=v0.4.27")
+        print("port_version=v0.4.28")
         print(f"runtime_context_source={runtime_source}")
         print(f"requested_critf={requested_critf}")
         print(f"effective_critf={effective_critf}")
         print(f"critf_source={critf_source}")
+        print(f"requested_abundance={requested_abundance}")
+        print(f"effective_abundance={effective_abundance}")
+        print(f"abundance_source={abundance_source}")
         print(f"temperature_k={result.temperature_k}")
         print(f"hydrogen_density_cm3={result.hydrogen_density_cm3}")
         print(f"electron_fraction_xee={result.electron_fraction_xee}")
@@ -230,6 +272,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"xstar_global_level_derived_parity_ready={parity.global_level_derived_ready}")
             print(f"xstar_global_level_strict_parity_ready={parity.global_level_ready}")
             print(f"xstar_global_array_parity_ready={parity.global_arrays_ready}")
+            print(f"xstar_vector_matrix_closure_status={parity.matrix_closure_status}")
+            print(f"xstar_vector_matrix_closure_ready={parity.matrix_closure_ready}")
+            print(f"xstar_element_thermal_diagnostic_ready={parity.element_thermal_diagnostic_ready}")
+            print(f"xstar_acceptance_gate_ready={parity.acceptance_gate_ready}")
+            print(f"xstar_strict_parity_ready={parity.strict_parity_ready}")
             print(f"xstar_pre_continuum_parity_ready={parity.parity_ready}")
             print(f"xstar_pre_continuum_parity_outside_tolerance={parity.n_outside_tolerance}")
             print(f"xstar_pre_continuum_parity_blocking_outside_tolerance={parity.n_blocking_outside_tolerance}")

@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.27"
+    assert PORT_LEDGER_VERSION == "v0.4.28"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "production oxygen active/global-array parity -> full all-element fixed-state "
-        "scope -> comp2 -> freef -> bremem -> heatf -> complete fixed-state "
-        "calc_hmc_all parity -> dsec"
+        "production oxygen abundance-aware thermal and XSTAR-vector closure acceptance "
+        "-> full all-element fixed-state scope -> comp2 -> freef -> bremem -> heatf "
+        "-> complete fixed-state calc_hmc_all parity -> dsec"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

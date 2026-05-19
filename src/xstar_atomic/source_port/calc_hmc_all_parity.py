@@ -8,6 +8,10 @@ import csv
 import json
 
 from .local_zone import FixedStateCalcHMCAllResult
+from .calc_hmc_all_closure import (
+    XSTARVectorMatrixClosureResult,
+    build_xstar_vector_matrix_closure,
+)
 
 
 class CalcHMCAllParityError(RuntimeError):
@@ -21,6 +25,18 @@ class CalcHMCAllProbeCritfReference:
     call_id: int
     element_z: int
     critf: float
+    mml: int
+    mmu: int
+
+
+@dataclass(frozen=True)
+class CalcHMCAllProbeElementReference:
+    """Captured element-array context for one bounded calc_hmc_all call."""
+
+    call_id: int
+    element_index: int
+    element_z: int
+    abundance: float
     mml: int
     mmu: int
 
@@ -61,8 +77,14 @@ class CalcHMCAllPreContinuumParityResult:
     global_level_derived_ready: bool
     global_level_ready: bool
     global_arrays_ready: bool
+    matrix_closure_ready: Optional[bool]
+    matrix_closure_status: str
+    element_thermal_diagnostic_ready: bool
+    acceptance_gate_ready: bool
+    strict_parity_ready: bool
     parity_ready: bool
     active_population_threshold: float
+    matrix_closure: Optional[XSTARVectorMatrixClosureResult] = None
     population_weighted_attribution: List[Dict[str, Any]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
@@ -133,6 +155,36 @@ def load_calc_hmc_all_probe_critf(
         call_id=selected_call,
         element_z=int(element_z),
         critf=_unique_float(rows, "critf", context=f"call {selected_call}, Z={element_z}"),
+        mml=_unique_int(rows, "mml", context=f"call {selected_call}, Z={element_z}"),
+        mmu=_unique_int(rows, "mmu", context=f"call {selected_call}, Z={element_z}"),
+    )
+
+
+def load_calc_hmc_all_probe_element_reference(
+    probe_dir: str | Path,
+    *,
+    element_z: int,
+    call_id: Optional[int] = None,
+) -> CalcHMCAllProbeElementReference:
+    """Read the captured XSTAR element abundance and array index."""
+
+    root = Path(probe_dir)
+    rows = _read_csv(root / "xstar_calc_hmc_all_pre_continuum_elements_probe.csv")
+    selected_call = _resolve_call_id(rows, call_id)
+    rows = [
+        row for row in rows
+        if int(row["calc_hmc_all_call_id"]) == selected_call
+        and int(row["element_z"]) == int(element_z)
+    ]
+    if not rows:
+        raise CalcHMCAllParityError(
+            f"no element-array row for call {selected_call}, element Z={element_z}"
+        )
+    return CalcHMCAllProbeElementReference(
+        call_id=selected_call,
+        element_index=_unique_int(rows, "element_index", context=f"call {selected_call}, Z={element_z}"),
+        element_z=int(element_z),
+        abundance=_unique_float(rows, "abundance", context=f"call {selected_call}, Z={element_z}"),
         mml=_unique_int(rows, "mml", context=f"call {selected_call}, Z={element_z}"),
         mmu=_unique_int(rows, "mmu", context=f"call {selected_call}, Z={element_z}"),
     )
@@ -312,6 +364,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
     rtol: float = 5.0e-3,
     atol: float = 1.0e-12,
     active_population_threshold: float = 1.0e-12,
+    matrix_closure_active_row_scale_threshold: float = 1.0e-12,
 ) -> CalcHMCAllPreContinuumParityResult:
     """Compare Python first-pass and pre-``comp2`` products to XSTAR.
 
@@ -321,8 +374,11 @@ def compare_calc_hmc_all_pre_continuum_probe(
     separately rather than silently discarded.
     """
 
-    if rtol < 0.0 or atol < 0.0 or active_population_threshold < 0.0:
-        raise CalcHMCAllParityError("rtol, atol, and active threshold must be nonnegative")
+    if (rtol < 0.0 or atol < 0.0 or active_population_threshold < 0.0
+            or matrix_closure_active_row_scale_threshold < 0.0):
+        raise CalcHMCAllParityError(
+            "rtol, atol, population threshold, and closure row threshold must be nonnegative"
+        )
     root = Path(probe_dir)
     element_rows_all = _read_csv(root / "xstar_calc_hmc_element_pre_matrix_probe.csv")
     summary_rows_all = _read_csv(root / "xstar_calc_hmc_all_pre_continuum_summary_probe.csv")
@@ -486,6 +542,16 @@ def compare_calc_hmc_all_pre_continuum_probe(
                     "element_index", f"Z={z}", expected_index, int(record["element_index"]),
                     rtol=0.0, atol=0.0, parity_class="element_array",
                 ))
+            python_abundance = next(
+                (float(getattr(item.request, "abundance", record["abundance"]))
+                 for item in result.element_results
+                 if int(item.request.element_z) == z),
+                float(record["abundance"]),
+            )
+            rows.append(_metric(
+                "element_abundance", f"Z={z}", python_abundance, float(record["abundance"]),
+                rtol=rtol, atol=atol, parity_class="element_array",
+            ))
             for component, values, field_name in (
                 ("element_htt", result.htt, "htt"),
                 ("element_cll", result.cll, "cll"),
@@ -497,7 +563,10 @@ def compare_calc_hmc_all_pre_continuum_probe(
                     values.get(z, 0.0), float(record[field_name]),
                     rtol=rtol, atol=atol, parity_class="element_array",
                 ))
-        element_components = {"element_index", "element_htt", "element_cll", "element_htt2", "element_cll2"}
+        element_components = {
+            "element_index", "element_abundance", "element_htt",
+            "element_cll", "element_htt2", "element_cll2",
+        }
         element_array_ready = (
             element_missing_python == 0 and element_missing_xstar == 0
             and all(row.within_tolerance for row in rows if row.component in element_components)
@@ -561,6 +630,29 @@ def compare_calc_hmc_all_pre_continuum_probe(
     element_gate = element_array_ready is not False
     global_arrays_ready = bool(global_ion_ready and global_level_active_ready and element_gate)
 
+    closure = build_xstar_vector_matrix_closure(
+        result,
+        level_probe_rows=level_rows,
+        element_probe_rows=element_array_rows,
+        rtol=rtol,
+        atol=atol,
+        active_row_scale_threshold=matrix_closure_active_row_scale_threshold,
+    )
+    matrix_closure_ready: Optional[bool] = closure.ready if closure.elements else None
+    matrix_closure_status = (
+        "ready" if matrix_closure_ready is True
+        else "failed" if matrix_closure_ready is False
+        else "not_comparable_missing_closure_rows"
+    )
+    element_thermal_diagnostic_ready = bool(
+        closure.elements
+        and all(
+            all(row.get("captured_xstar_per_abundance") is not None
+                for row in item.thermal_summary_rows)
+            for item in closure.elements
+        )
+    )
+
     attribution = _build_population_weighted_attribution(
         result=result,
         failed_level_rows=rows,
@@ -583,7 +675,25 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and all(row.within_tolerance for row in rows if row.component in pre_matrix_components)
     )
     summary_gate = summary_ready is not False
-    ready = bool(pre_matrix_ready and state_ready and global_arrays_ready and summary_gate)
+    acceptance_gate_ready = bool(
+        pre_matrix_ready
+        and state_ready
+        and global_ion_ready
+        and global_level_active_ready
+        and element_array_ready is True
+        and matrix_closure_ready is not False
+        and summary_gate
+    )
+    strict_parity_ready = bool(
+        pre_matrix_ready
+        and state_ready
+        and global_ion_ready
+        and global_level_ready
+        and element_array_ready is True
+        and matrix_closure_ready is not False
+        and summary_gate
+    )
+    ready = acceptance_gate_ready
     return CalcHMCAllPreContinuumParityResult(
         call_id=selected_call,
         rows=rows,
@@ -605,14 +715,30 @@ def compare_calc_hmc_all_pre_continuum_probe(
         global_level_derived_ready=global_level_derived_ready,
         global_level_ready=global_level_ready,
         global_arrays_ready=global_arrays_ready,
+        matrix_closure_ready=matrix_closure_ready,
+        matrix_closure_status=matrix_closure_status,
+        element_thermal_diagnostic_ready=element_thermal_diagnostic_ready,
+        acceptance_gate_ready=acceptance_gate_ready,
+        strict_parity_ready=strict_parity_ready,
         parity_ready=ready,
         active_population_threshold=float(active_population_threshold),
+        matrix_closure=closure,
         population_weighted_attribution=attribution,
         diagnostics={
             "probe_dir": str(root),
             "rtol": float(rtol),
             "atol": float(atol),
             "active_population_threshold": float(active_population_threshold),
+            "matrix_closure_active_row_scale_threshold": float(matrix_closure_active_row_scale_threshold),
+            "matrix_closure_status": matrix_closure_status,
+            "matrix_closure_active_rows_outside_tolerance": closure.n_active_rows_outside_tolerance,
+            "matrix_closure_missing_rows": closure.n_missing_rows,
+            "element_thermal_diagnostic_ready": element_thermal_diagnostic_ready,
+            "acceptance_gate_definition": (
+                "pre_matrix && runtime_state && global_ion && global_level_active "
+                "&& element_array && xstar_vector_matrix_closure_when_available "
+                "&& summary_scope_gate"
+            ),
             "summary_scope_complete": summary_comparable,
             "deferred_summary_fields": deferred_summary_fields,
             "element_array_probe_present": bool(element_array_rows_all),
@@ -673,8 +799,76 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         writer.writeheader()
         writer.writerows(result.population_weighted_attribution)
 
+    closure_rows_path = out / "xstar_calc_hmc_all_xstar_vector_matrix_closure_rows.csv"
+    closure_summary_path = out / "xstar_calc_hmc_all_xstar_vector_matrix_closure_summary.csv"
+    thermal_rows_path = out / "xstar_calc_hmc_all_thermal_contribution_audit.csv"
+    thermal_summary_path = out / "xstar_calc_hmc_all_thermal_channel_summary.csv"
+    thermal_family_path = out / "xstar_calc_hmc_all_thermal_family_summary.csv"
+    closure_rows = []
+    closure_summaries = []
+    thermal_rows = []
+    thermal_summaries = []
+    if result.matrix_closure is not None:
+        for item in result.matrix_closure.elements:
+            closure_rows.extend(item.row_rows)
+            thermal_rows.extend(item.thermal_rows)
+            thermal_summaries.extend(item.thermal_summary_rows)
+            closure_summaries.append({
+                "element_z": item.element_z,
+                "abundance": item.abundance,
+                "n_compact_rows": item.n_compact_rows,
+                "n_mapped_rows": item.n_mapped_rows,
+                "n_missing_rows": item.n_missing_rows,
+                "xstar_vector_normalization": item.xstar_vector_normalization,
+                "xstar_vector_normalization_error": item.xstar_vector_normalization_error,
+                "native_l1_residual": item.native_l1_residual,
+                "native_l1_relative_residual": item.native_l1_relative_residual,
+                "xstar_vector_l1_residual": item.xstar_vector_l1_residual,
+                "xstar_vector_l1_relative_residual": item.xstar_vector_l1_relative_residual,
+                "xstar_vector_max_relative_residual": item.xstar_vector_max_relative_residual,
+                "xstar_vector_max_active_relative_residual": item.xstar_vector_max_active_relative_residual,
+                "n_active_rows": item.n_active_rows,
+                "n_active_rows_outside_tolerance": item.n_active_rows_outside_tolerance,
+                "ready": item.ready,
+            })
+
+    def _write_rows(path: Path, data: List[Dict[str, Any]]) -> None:
+        with path.open("w", newline="") as handle:
+            if not data:
+                handle.write("")
+                return
+            fields = list(data[0].keys())
+            writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(data)
+
+    family_accumulator: Dict[tuple[int, str, int, int], Dict[str, Any]] = {}
+    for row in thermal_rows:
+        key = (
+            int(row["element_z"]), str(row["thermal_channel"]),
+            int(row["data_type"]), int(row["rate_type"]),
+        )
+        item = family_accumulator.setdefault(key, {
+            "element_z": key[0], "thermal_channel": key[1],
+            "data_type": key[2], "rate_type": key[3], "n_terms": 0,
+            "python_contribution_per_abundance": 0.0,
+            "xstar_vector_contribution_per_abundance": 0.0,
+            "population_effect_per_abundance": 0.0,
+        })
+        item["n_terms"] += 1
+        item["python_contribution_per_abundance"] += float(row["python_contribution_per_abundance"])
+        item["xstar_vector_contribution_per_abundance"] += float(row["xstar_vector_contribution_per_abundance"])
+        item["population_effect_per_abundance"] += float(row["population_effect_per_abundance"])
+    thermal_family_rows = [family_accumulator[key] for key in sorted(family_accumulator)]
+
+    _write_rows(closure_rows_path, closure_rows)
+    _write_rows(closure_summary_path, closure_summaries)
+    _write_rows(thermal_rows_path, thermal_rows)
+    _write_rows(thermal_summary_path, thermal_summaries)
+    _write_rows(thermal_family_path, thermal_family_rows)
+
     payload = {
-        "port_version": "v0.4.27",
+        "port_version": "v0.4.28",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,
@@ -695,6 +889,11 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "global_level_derived_ready": result.global_level_derived_ready,
         "global_level_ready": result.global_level_ready,
         "global_arrays_ready": result.global_arrays_ready,
+        "matrix_closure_ready": result.matrix_closure_ready,
+        "matrix_closure_status": result.matrix_closure_status,
+        "element_thermal_diagnostic_ready": result.element_thermal_diagnostic_ready,
+        "acceptance_gate_ready": result.acceptance_gate_ready,
+        "strict_parity_ready": result.strict_parity_ready,
         "parity_ready": result.parity_ready,
         "active_population_threshold": result.active_population_threshold,
         "n_population_weighted_attribution_rows": len(result.population_weighted_attribution),
@@ -721,12 +920,21 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Global level derived, strict: `{result.global_level_derived_ready}`\n"
         f"- Global level all strict: `{result.global_level_ready}`\n"
         f"- Global arrays milestone ready: `{result.global_arrays_ready}`\n"
+        f"- XSTAR-vector matrix closure: `{result.matrix_closure_status}`\n"
+        f"- Element thermal diagnostic ready: `{result.element_thermal_diagnostic_ready}`\n"
+        f"- Acceptance gate ready: `{result.acceptance_gate_ready}`\n"
+        f"- All-strict parity ready: `{result.strict_parity_ready}`\n"
         f"- Overall parity ready: `{result.parity_ready}`\n"
         f"- Population-weighted attribution rows: `{len(result.population_weighted_attribution)}`\n"
     )
     return {
         "details_csv": str(details),
         "population_weighted_attribution_csv": str(attribution_path),
+        "xstar_vector_matrix_closure_rows_csv": str(closure_rows_path),
+        "xstar_vector_matrix_closure_summary_csv": str(closure_summary_path),
+        "thermal_contribution_audit_csv": str(thermal_rows_path),
+        "thermal_channel_summary_csv": str(thermal_summary_path),
+        "thermal_family_summary_csv": str(thermal_family_path),
         "json": str(json_path),
         "markdown": str(md),
     }
@@ -735,9 +943,11 @@ def write_calc_hmc_all_pre_continuum_parity_products(
 __all__ = [
     "CalcHMCAllParityError",
     "CalcHMCAllProbeCritfReference",
+    "CalcHMCAllProbeElementReference",
     "CalcHMCAllParityRow",
     "CalcHMCAllPreContinuumParityResult",
     "load_calc_hmc_all_probe_critf",
+    "load_calc_hmc_all_probe_element_reference",
     "compare_calc_hmc_all_pre_continuum_probe",
     "write_calc_hmc_all_pre_continuum_parity_products",
 ]

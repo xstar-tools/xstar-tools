@@ -91,12 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.27"
+PORT_LEDGER_VERSION = "v0.4.28"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "production oxygen active/global-array parity -> full all-element fixed-state "
-    "scope -> comp2 -> freef -> bremem -> heatf -> complete fixed-state "
-    "calc_hmc_all parity -> dsec"
+    "production oxygen abundance-aware thermal and XSTAR-vector closure acceptance "
+    "-> full all-element fixed-state scope -> comp2 -> freef -> bremem -> heatf "
+    "-> complete fixed-state calc_hmc_all parity -> dsec"
 )
 
 
@@ -192,8 +192,8 @@ def default_port_ledger() -> XSTARPortLedger:
           "Validated through istruc for the captured oxygen fixed-state benchmark."),
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
-          "call-73 pre-matrix parity, source-ordinal npilev mapping, second-pass calc_hmc_ion pirt/rrrt, and source element-index aggregation",
-          "Global-array production rerun is required for final oxygen acceptance; full all-element parity and comp2/freef/bremem/heatf remain pending."),
+          "call-73 pre-matrix/runtime parity, source-ordinal npilev mapping, separated second-pass pirt/rrrt, source element indexing, probe-aware abundance, and diagnostic XSTAR-vector matrix/thermal closure",
+          "A v0.4.28 production rerun is required for the oxygen abundance/thermal/active-state acceptance gate; full all-element parity and comp2/freef/bremem/heatf remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -207,6 +207,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; active-level/global-array acceptance, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; the v0.4.28 oxygen abundance/thermal/closure acceptance run, full all-element scope, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

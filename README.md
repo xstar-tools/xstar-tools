@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.28 abundance-aware thermal parity and XSTAR-vector closure
+
+v0.4.28 reads the selected element abundance from the bounded XSTAR element probe unless the CLI explicitly overrides it, exports both scaled and per-abundance thermal products, and evaluates the translated element matrix on the captured XSTAR population vector. New row, record, family, and thermal-channel products separate population-vector effects from remaining coefficient/source-semantic differences. Active and strict level gates remain independent, and an explicit acceptance gate combines pre-matrix state, active levels, global ions, element thermal parity, and matrix closure.
+
 ### v0.4.27 active-level parity and type-77 source closure
 
 v0.4.27 reproduces the two source `bilevg` floors, preserves zero dominant-record IDs on final continuum rows, adds a dedicated element-array XSTAR probe, and splits strict global-level diagnostics from the active-population milestone gate. It also corrects the type-77 temperature floor to use the endpoint-energy wavelength while retaining the record wavelength for detailed balance, with a diagnostic-only fixed-population impact audit.

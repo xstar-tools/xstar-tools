@@ -86,3 +86,7 @@ include xstar_atomic_v0.4.27.md
 include xstar_o_calc_hmc_all_fixed_state_v0426_diagnosis_v0427.md
 include xstar_calc_hmc_all_v0427_offline_parity_reanalysis.csv
 include xstar_calc_hmc_all_v0427_offline_parity_reanalysis_summary.json
+
+include xstar_atomic_v0.4.28.md
+include xstar_o_calc_hmc_all_fixed_state_v0427_diagnosis_v0428.md
+include xstar_atomic_conversation_summary_v0428.md

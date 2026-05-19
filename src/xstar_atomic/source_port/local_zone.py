@@ -111,6 +111,10 @@ class FixedStateElementResult:
     cooling: float
     heating2: float
     cooling2: float
+    heating_per_abundance: float
+    cooling_per_abundance: float
+    heating2_per_abundance: float
+    cooling2_per_abundance: float
     electron_contribution: float
 
 
@@ -513,6 +517,10 @@ def calc_hmc_all(
                 cooling=element_cl,
                 heating2=element_ht2,
                 cooling2=element_cl2,
+                heating_per_abundance=float(solve.heating),
+                cooling_per_abundance=float(solve.cooling),
+                heating2_per_abundance=float(solve.heating2),
+                cooling2_per_abundance=float(solve.cooling2),
                 electron_contribution=sum(
                     value * float(stage - 1) * abundance
                     for stage, value in stage_fractions.items()
@@ -774,7 +782,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.27",
+    port_version: str = "v0.4.28",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -827,9 +835,13 @@ def write_fixed_state_calc_hmc_all_products(
         writer = csv.DictWriter(
             handle,
             fieldnames=(
-                "element_z", "global_element_index", "abundance", "requested_min_ion_stage", "requested_max_ion_stage",
+                "element_z", "global_element_index",
+                "requested_abundance", "effective_abundance", "abundance_source",
+                "abundance", "requested_min_ion_stage", "requested_max_ion_stage",
                 "selected_min_ion_stage", "selected_max_ion_stage", "critf",
                 "ion_stage_selection", "pre_matrix_ready",
+                "heating_per_abundance", "cooling_per_abundance",
+                "heating2_per_abundance", "cooling2_per_abundance",
                 "heating", "cooling", "heating2", "cooling2",
                 "electron_contribution", "fully_stripped_fraction",
                 "element_solver_ready",
@@ -840,6 +852,9 @@ def write_fixed_state_calc_hmc_all_products(
             writer.writerow({
                 "element_z": item.request.element_z,
                 "global_element_index": result.global_element_index_by_z.get(item.request.element_z, 0),
+                "requested_abundance": result.diagnostics.get("requested_abundance"),
+                "effective_abundance": item.request.abundance,
+                "abundance_source": result.diagnostics.get("abundance_source", "fixed_state_request"),
                 "abundance": item.request.abundance,
                 "requested_min_ion_stage": item.request.min_ion_stage,
                 "requested_max_ion_stage": item.request.max_ion_stage,
@@ -848,6 +863,10 @@ def write_fixed_state_calc_hmc_all_products(
                 "critf": item.request.critf,
                 "ion_stage_selection": "source_istruc" if item.request.use_source_ion_limits else "explicit_override",
                 "pre_matrix_ready": all(rate.ready for rate in item.calc_ion_rates.values()),
+                "heating_per_abundance": item.heating_per_abundance,
+                "cooling_per_abundance": item.cooling_per_abundance,
+                "heating2_per_abundance": item.heating2_per_abundance,
+                "cooling2_per_abundance": item.cooling2_per_abundance,
                 "heating": item.heating,
                 "cooling": item.cooling,
                 "heating2": item.heating2,
