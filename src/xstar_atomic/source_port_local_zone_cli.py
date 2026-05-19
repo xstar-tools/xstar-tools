@@ -14,6 +14,7 @@ from .source_port import (
     compare_calc_hmc_all_pre_continuum_probe,
     load_calc_hmc_all_probe_critf,
     load_calc_hmc_all_probe_element_reference,
+    load_msolvelucy_initial_population_reference,
     write_calc_hmc_all_pre_continuum_parity_products,
 )
 from .source_port_element_cli import _load_escape_npz, _select_live_state
@@ -72,6 +73,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--xstar-calc-hmc-probe-dir")
     parser.add_argument("--xstar-calc-hmc-call-id", type=int)
+    parser.add_argument(
+        "--xstar-calc-hmc-initial-population-policy",
+        choices=("use", "check", "ignore"),
+        default="use",
+        help=(
+            "How to treat the same-call compact x vector captured immediately "
+            "before msolvelucy. 'use' replays it as the source xileve input, "
+            "'check' compares without replacing the Python seed, and 'ignore' "
+            "does not load it. This is a fixed-state regression state, not a "
+            "production coefficient dependency."
+        ),
+    )
     parser.add_argument("--xstar-calc-hmc-parity-rtol", type=float, default=5.0e-3)
     parser.add_argument("--xstar-calc-hmc-parity-atol", type=float, default=1.0e-12)
     parser.add_argument(
@@ -170,6 +183,31 @@ def main(argv: list[str] | None = None) -> int:
         effective_abundance = 1.0
         abundance_source = "package_default"
 
+    initial_populations = None
+    initial_population_source = "levwkelement_lte_fallback"
+    initial_population_reference = None
+    if args.xstar_calc_hmc_probe_dir and args.xstar_calc_hmc_initial_population_policy != "ignore":
+        initial_probe_path = (
+            Path(args.xstar_calc_hmc_probe_dir)
+            / "xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv"
+        )
+        if initial_probe_path.exists():
+            initial_population_reference = load_msolvelucy_initial_population_reference(
+                args.xstar_calc_hmc_probe_dir,
+                element_z=args.element_z,
+                call_id=effective_hmc_call_id,
+            )
+            effective_hmc_call_id = int(initial_population_reference.call_id)
+            if args.xstar_calc_hmc_initial_population_policy == "use":
+                initial_populations = initial_population_reference.populations.copy()
+                initial_population_source = "xstar_same_call_xileve_replay"
+            else:
+                initial_population_source = "levwkelement_lte_checked_against_xstar_same_call_xileve"
+        else:
+            initial_population_source = "levwkelement_lte_fallback_missing_same_call_xileve_probe"
+    elif args.xstar_calc_hmc_initial_population_policy == "ignore":
+        initial_population_source = "levwkelement_lte_probe_ignored"
+
     radiation = _select_live_state(args.live_rate_grid_probe_csv, args.live_rate_grid_state)
     escape = _load_escape_npz(args.escape_npz, args.assume_optically_thin)
     request = FixedStateElementRequest(
@@ -184,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         lfast=args.lfast,
         critf=effective_critf,
         use_source_ion_limits=args.ion_stage_selection == "source",
+        initial_populations=initial_populations,
+        initial_population_source=initial_population_source,
         strict_context=True,
     )
 
@@ -210,6 +250,13 @@ def main(argv: list[str] | None = None) -> int:
         result.diagnostics["requested_abundance"] = requested_abundance
         result.diagnostics["effective_abundance"] = effective_abundance
         result.diagnostics["abundance_source"] = abundance_source
+        result.diagnostics["initial_population_source"] = initial_population_source
+        result.diagnostics["initial_population_policy"] = (
+            args.xstar_calc_hmc_initial_population_policy
+        )
+        result.diagnostics["initial_population_probe_present"] = bool(
+            initial_population_reference is not None
+        )
         paths = write_fixed_state_calc_hmc_all_products(result, args.out_dir)
         parity = None
         if args.xstar_calc_hmc_probe_dir:
@@ -236,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR fixed-state calc_hmc_all core")
         print("-----------------------------------")
-        print("port_version=v0.4.32")
+        print("port_version=v0.4.33")
         print(f"runtime_context_source={runtime_source}")
         print(f"requested_critf={requested_critf}")
         print(f"effective_critf={effective_critf}")
@@ -244,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"requested_abundance={requested_abundance}")
         print(f"effective_abundance={effective_abundance}")
         print(f"abundance_source={abundance_source}")
+        print(f"initial_population_policy={args.xstar_calc_hmc_initial_population_policy}")
+        print(f"initial_population_source={initial_population_source}")
         print(f"temperature_k={result.temperature_k}")
         print(f"hydrogen_density_cm3={result.hydrogen_density_cm3}")
         print(f"electron_fraction_xee={result.electron_fraction_xee}")
@@ -282,6 +331,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"xstar_same_call_matrix_active_closure_ready={parity.same_call_matrix_active_closure_ready}")
             print(f"xstar_thermal_family_parity_status={parity.thermal_family_status}")
             print(f"xstar_thermal_family_parity_ready={parity.thermal_family_ready}")
+            print(f"xstar_initial_solver_population_status={parity.initial_solver_population_status}")
+            print(f"xstar_initial_solver_population_ready={parity.initial_solver_population_ready}")
             print(f"xstar_final_solver_snapshot_status={parity.final_solver_snapshot_status}")
             print(f"xstar_final_solver_snapshot_ready={parity.final_solver_snapshot_ready}")
             print(f"xstar_final_solver_same_iteration_ready={parity.final_solver_same_iteration_ready}")
@@ -292,6 +343,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"xstar_rate7_cj2_status={parity.rate7_cj2_status}")
             print(f"xstar_rate7_cj2_ready={parity.rate7_cj2_ready}")
             print(f"xstar_type53_rate7_cj2_ready={parity.type53_rate7_cj2_ready}")
+            print(f"xstar_leveltemp_energy_status={parity.leveltemp_energy_status}")
+            print(f"xstar_leveltemp_energy_ready={parity.leveltemp_energy_ready}")
+            print(f"xstar_type53_leveltemp_energy_ready={parity.type53_leveltemp_energy_ready}")
             print(f"xstar_oxygen_reassessment_status={parity.oxygen_reassessment_status}")
             print(f"xstar_oxygen_reassessment_ready={parity.oxygen_reassessment_ready}")
             print(f"xstar_oxygen_pre_continuum_acceptance_ready={parity.oxygen_pre_continuum_acceptance_ready}")

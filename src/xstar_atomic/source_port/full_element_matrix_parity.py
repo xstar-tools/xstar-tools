@@ -394,7 +394,7 @@ def write_full_element_matrix_parity_products(
     result: FullElementMatrixParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.32",
+    port_version: str = "v0.4.33",
 ) -> Dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

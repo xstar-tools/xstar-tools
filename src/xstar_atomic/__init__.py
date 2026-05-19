@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.32"
+__version__ = "0.4.33"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -159,7 +159,10 @@ from .source_port import (
     CalcHMCAllProbeElementReference, CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult, SameCallMatrixParityResult,
     ThermalFamilyParityResult, Rate7CJ2DiagnosisResult,
-    MSolveLucyFinalSnapshotParityResult, load_calc_hmc_all_probe_critf,
+    MSolveLucyFinalSnapshotParityResult, MSolveLucyInitialStateError,
+    MSolveLucyInitialPopulationReference, MSolveLucyInitialPopulationParityResult,
+    load_msolvelucy_initial_population_reference, compare_msolvelucy_initial_population,
+    load_calc_hmc_all_probe_critf,
     load_calc_hmc_all_probe_element_reference, compare_same_call_matrix_terms,
     compare_thermal_families, diagnose_rate7_cj2_records,
     compare_msolvelucy_final_snapshot, compare_calc_hmc_all_pre_continuum_probe,
@@ -438,6 +441,11 @@ from .source_port import (
     ThermalFamilyParityResult,
     Rate7CJ2DiagnosisResult,
     MSolveLucyFinalSnapshotParityResult,
+    MSolveLucyInitialStateError,
+    MSolveLucyInitialPopulationReference,
+    MSolveLucyInitialPopulationParityResult,
+    load_msolvelucy_initial_population_reference,
+    compare_msolvelucy_initial_population,
     load_calc_hmc_all_probe_critf,
     load_calc_hmc_all_probe_element_reference,
     compare_same_call_matrix_terms,
@@ -560,6 +568,11 @@ __all__.extend([
     "ThermalFamilyParityResult",
     "Rate7CJ2DiagnosisResult",
     "MSolveLucyFinalSnapshotParityResult",
+    "MSolveLucyInitialStateError",
+    "MSolveLucyInitialPopulationReference",
+    "MSolveLucyInitialPopulationParityResult",
+    "load_msolvelucy_initial_population_reference",
+    "compare_msolvelucy_initial_population",
     "load_calc_hmc_all_probe_critf",
     "load_calc_hmc_all_probe_element_reference",
     "compare_same_call_matrix_terms",

@@ -285,7 +285,9 @@ def test_rate7_cj2_diagnosis_is_record_resolved_and_type53_gated():
 
 def test_v0431_probe_has_seven_hooks_and_compiles(tmp_path: Path):
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 7
+    # Later bounded releases may append source-local hooks while preserving
+    # the original v0.4.31 seven-hook set.
+    assert len(snippets) >= 7
     assert "msolvelucy_final_snapshot" in snippets
     helper = calc_hmc_all_probe_helper()
     assert "xstar_calc_hmc_all_msolvelucy_final_matrix_probe.csv" in helper

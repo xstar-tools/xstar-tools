@@ -188,6 +188,19 @@ from .msolvelucy_final_snapshot import (
     compare_msolvelucy_final_snapshot,
 )
 
+from .leveltemp_energy_parity import (
+    LeveltempEnergyParityResult,
+    compare_leveltemp_energy_probe,
+)
+
+from .msolvelucy_initial_state import (
+    MSolveLucyInitialStateError,
+    MSolveLucyInitialPopulationReference,
+    MSolveLucyInitialPopulationParityResult,
+    load_msolvelucy_initial_population_reference,
+    compare_msolvelucy_initial_population,
+)
+
 from .calc_hmc_all_parity import (
     CalcHMCAllParityError,
     CalcHMCAllProbeCritfReference,
@@ -361,6 +374,13 @@ __all__ = [
     "diagnose_rate7_cj2_records",
     "MSolveLucyFinalSnapshotParityResult",
     "compare_msolvelucy_final_snapshot",
+    "LeveltempEnergyParityResult",
+    "compare_leveltemp_energy_probe",
+    "MSolveLucyInitialStateError",
+    "MSolveLucyInitialPopulationReference",
+    "MSolveLucyInitialPopulationParityResult",
+    "load_msolvelucy_initial_population_reference",
+    "compare_msolvelucy_initial_population",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",

@@ -57,6 +57,7 @@ class FixedStateElementRequest:
     critf: float = 1.0e-7
     use_source_ion_limits: bool = True
     initial_populations: Optional[np.ndarray] = None
+    initial_population_source: str = "levwkelement_lte_fallback"
     strict_context: bool = True
     capture_lucy_trace: bool = False
 
@@ -786,7 +787,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.32",
+    port_version: str = "v0.4.33",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

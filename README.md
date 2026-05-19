@@ -14,6 +14,31 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.33 exact mutable-workspace tracing and same-call solver-state replay
+
+v0.4.33 follows the first production v0.4.32 oxygen diagnosis without
+expanding the physical scope. The element-rate translation now reconstructs
+the shared mutable `leveltemp` array by replaying all active-ion writes made by
+`levwkelement`, then preserving higher columns through the second
+`calc_hmc_ion` pass. Every type-49/type-53/type-99 rate-7 record records the
+exact `leveltemp%rlev(1,idest1/idest2)` values and the ion/write that last owned
+each retained column.
+
+The bounded XSTAR helper expands to eight insertion hooks. It captures the
+exact mutable `leveltemp` reads after `ucalc`, and it now writes the complete
+compact `x` vector immediately before `msolvelucy`; matrix term population
+columns alone cannot reconstruct rows that are absent from the sparse operator.
+The fixed-state comparator can replay this same-call `xileve` input state and
+requires exact seed parity before oxygen acceptance. This corrects the source
+semantics: `calc_hmc_element` seeds `msolvelucy` from the incoming global
+`xilevg` state, not from the LTE `rnise` vector returned by `levwkelement`.
+
+A fresh instrumented XSTAR run is required to determine whether the corrected
+workspace and input-state history close the 11 active final populations, 18
+outer-start populations, O III/O IV/O VI `xtot`, eight thermal-family rows, and
+one `cll2` row. No physical oxygen acceptance is claimed until
+`oxygen_pre_continuum_acceptance_ready=True`.
+
 ### v0.4.32 source counters, synchronized snapshot gate, and energy-workspace parity
 
 v0.4.32 is limited to four source-semantic corrections identified by the

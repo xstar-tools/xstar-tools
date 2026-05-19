@@ -26,6 +26,15 @@ from .msolvelucy_final_snapshot import (
     MSolveLucyFinalSnapshotParityResult,
     compare_msolvelucy_final_snapshot,
 )
+from .leveltemp_energy_parity import (
+    LeveltempEnergyParityResult,
+    compare_leveltemp_energy_probe,
+)
+from .msolvelucy_initial_state import (
+    MSolveLucyInitialPopulationParityResult,
+    compare_msolvelucy_initial_population,
+    load_msolvelucy_initial_population_reference,
+)
 
 
 class CalcHMCAllParityError(RuntimeError):
@@ -101,6 +110,8 @@ class CalcHMCAllPreContinuumParityResult:
     same_call_matrix_active_closure_ready: Optional[bool]
     thermal_family_ready: Optional[bool]
     thermal_family_status: str
+    initial_solver_population_ready: Optional[bool]
+    initial_solver_population_status: str
     final_solver_snapshot_ready: Optional[bool]
     final_solver_snapshot_status: str
     final_solver_same_iteration_ready: Optional[bool]
@@ -115,6 +126,9 @@ class CalcHMCAllPreContinuumParityResult:
     rate7_cj2_ready: Optional[bool]
     rate7_cj2_status: str
     type53_rate7_cj2_ready: Optional[bool]
+    leveltemp_energy_ready: Optional[bool]
+    leveltemp_energy_status: str
+    type53_leveltemp_energy_ready: Optional[bool]
     oxygen_reassessment_ready: Optional[bool]
     oxygen_reassessment_status: str
     acceptance_gate_ready: bool
@@ -125,8 +139,10 @@ class CalcHMCAllPreContinuumParityResult:
     matrix_closure: Optional[XSTARVectorMatrixClosureResult] = None
     same_call_matrix: Optional[SameCallMatrixParityResult] = None
     thermal_family_parity: Optional[ThermalFamilyParityResult] = None
+    initial_solver_population: Optional[MSolveLucyInitialPopulationParityResult] = None
     final_solver_snapshot: Optional[MSolveLucyFinalSnapshotParityResult] = None
     rate7_cj2_diagnosis: Optional[Rate7CJ2DiagnosisResult] = None
+    leveltemp_energy_parity: Optional[LeveltempEnergyParityResult] = None
     population_weighted_attribution: List[Dict[str, Any]] = field(default_factory=list)
     active_population_ion_resolution: List[Dict[str, Any]] = field(default_factory=list)
     oxygen_reassessment: List[Dict[str, Any]] = field(default_factory=list)
@@ -571,11 +587,18 @@ def compare_calc_hmc_all_pre_continuum_probe(
     final_population_rows_all = _read_csv_optional(
         root / "xstar_calc_hmc_all_msolvelucy_final_population_probe.csv"
     )
+    initial_population_rows_all = _read_csv_optional(
+        root / "xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv"
+    )
+    leveltemp_energy_rows_all = _read_csv_optional(
+        root / "xstar_calc_hmc_all_leveltemp_energy_probe.csv"
+    )
     all_probe_rows = (
         element_rows_all + summary_rows_all + ion_rows_all + level_rows_all
         + element_array_rows_all + matrix_rows_all
         + thermal_data_type_rows_all + thermal_rate_type_rows_all
         + final_matrix_rows_all + final_population_rows_all
+        + initial_population_rows_all + leveltemp_energy_rows_all
     )
     selected_call = _resolve_call_id(all_probe_rows, call_id)
     element_rows = [r for r in element_rows_all if int(r["calc_hmc_all_call_id"]) == selected_call]
@@ -604,6 +627,14 @@ def compare_calc_hmc_all_pre_continuum_probe(
     ]
     final_population_rows = [
         r for r in final_population_rows_all
+        if int(r["calc_hmc_all_call_id"]) == selected_call
+    ]
+    initial_population_rows = [
+        r for r in initial_population_rows_all
+        if int(r["calc_hmc_all_call_id"]) == selected_call
+    ]
+    leveltemp_energy_rows = [
+        r for r in leveltemp_energy_rows_all
         if int(r["calc_hmc_all_call_id"]) == selected_call
     ]
     if len(summary_rows) != 1:
@@ -871,6 +902,48 @@ def compare_calc_hmc_all_pre_continuum_probe(
         rate_type_probe_rows=thermal_rate_type_rows,
         rtol=rtol, atol=atol,
     )
+    if initial_population_rows:
+        initial_reference = load_msolvelucy_initial_population_reference(
+            root, element_z=8, call_id=selected_call
+        )
+        oxygen_element = next(
+            (item for item in result.element_results if int(item.request.element_z) == 8),
+            None,
+        )
+        if oxygen_element is None:
+            initial_solver_population = MSolveLucyInitialPopulationParityResult(
+                ready=False,
+                status="failed_missing_python_oxygen_element",
+                call_id=selected_call,
+                element_z=8,
+                compact_dimension=initial_reference.compact_dimension,
+                n_rows=0,
+                n_outside_tolerance=initial_reference.compact_dimension,
+                max_absolute_difference=None,
+                max_relative_difference=None,
+                rows=[],
+            )
+        else:
+            initial_solver_population = compare_msolvelucy_initial_population(
+                oxygen_element.equilibrium.assembly.initial_populations,
+                initial_reference,
+                rtol=rtol,
+                atol=atol,
+            )
+    else:
+        initial_solver_population = MSolveLucyInitialPopulationParityResult(
+            ready=False,
+            status="not_comparable_missing_initial_population_probe",
+            call_id=selected_call,
+            element_z=8,
+            compact_dimension=None,
+            n_rows=0,
+            n_outside_tolerance=0,
+            max_absolute_difference=None,
+            max_relative_difference=None,
+            rows=[],
+        )
+
     final_solver_snapshot = compare_msolvelucy_final_snapshot(
         result,
         final_matrix_rows=final_matrix_rows,
@@ -884,6 +957,11 @@ def compare_calc_hmc_all_pre_continuum_probe(
         same_call_matrix=same_call_matrix,
         rtol=rtol,
         atol=atol,
+    )
+    leveltemp_energy_parity = compare_leveltemp_energy_probe(
+        result,
+        probe_rows=leveltemp_energy_rows,
+        element_z=8,
     )
 
     attribution = _build_population_weighted_attribution(
@@ -979,7 +1057,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
         if legacy_probe_present
         else matrix_closure_ready is not False
     )
-    # v0.4.32 oxygen acceptance is intentionally stricter than the historical
+    # v0.4.33 oxygen acceptance is intentionally stricter than the historical
     # v0.4.29/v0.4.30 gate.  It requires the synchronized final-solver probe
     # pair, source-order xtot parity, type-53 rate-7 cj2 closure, and no
     # remaining O III--O V/O III--O IV blocker.
@@ -991,6 +1069,10 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and final_solver_snapshot.source_xtot_ready is True
     )
     type53_cj2_gate = rate7_cj2_diagnosis.type53_ready is True
+    leveltemp_energy_gate = bool(
+        leveltemp_energy_parity.ready is True
+        and leveltemp_energy_parity.type53_ready is True
+    )
     oxygen_reassessment_gate = oxygen_reassessment_ready is True
     legacy_acceptance_ready = bool(
         pre_matrix_ready
@@ -1002,14 +1084,17 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and thermal_family_gate
         and summary_gate
     )
+    initial_solver_population_gate = initial_solver_population.ready is True
     oxygen_pre_continuum_acceptance_ready = bool(
         legacy_acceptance_ready
+        and initial_solver_population_gate
         and final_solver_gate
         and type53_cj2_gate
+        and leveltemp_energy_gate
         and oxygen_reassessment_gate
     )
     # Preserve the historical comparator contract for old five/six-hook probe
-    # directories.  As soon as either v0.4.32 final-snapshot file is present,
+    # directories.  As soon as either v0.4.33 final-snapshot file is present,
     # the public acceptance gate becomes the stricter synchronized oxygen gate.
     acceptance_gate_ready = (
         oxygen_pre_continuum_acceptance_ready
@@ -1063,6 +1148,8 @@ def compare_calc_hmc_all_pre_continuum_probe(
         same_call_matrix_active_closure_ready=same_call_matrix.active_closure_ready,
         thermal_family_ready=thermal_family_parity.ready,
         thermal_family_status=thermal_family_parity.status,
+        initial_solver_population_ready=initial_solver_population.ready,
+        initial_solver_population_status=initial_solver_population.status,
         final_solver_snapshot_ready=final_solver_snapshot.ready,
         final_solver_snapshot_status=final_solver_snapshot.status,
         final_solver_same_iteration_ready=final_solver_snapshot.same_iteration_ready,
@@ -1077,6 +1164,9 @@ def compare_calc_hmc_all_pre_continuum_probe(
         rate7_cj2_ready=rate7_cj2_diagnosis.ready,
         rate7_cj2_status=rate7_cj2_diagnosis.status,
         type53_rate7_cj2_ready=rate7_cj2_diagnosis.type53_ready,
+        leveltemp_energy_ready=leveltemp_energy_parity.ready,
+        leveltemp_energy_status=leveltemp_energy_parity.status,
+        type53_leveltemp_energy_ready=leveltemp_energy_parity.type53_ready,
         oxygen_reassessment_ready=oxygen_reassessment_ready,
         oxygen_reassessment_status=oxygen_reassessment_status,
         acceptance_gate_ready=acceptance_gate_ready,
@@ -1087,8 +1177,10 @@ def compare_calc_hmc_all_pre_continuum_probe(
         matrix_closure=closure,
         same_call_matrix=same_call_matrix,
         thermal_family_parity=thermal_family_parity,
+        initial_solver_population=initial_solver_population,
         final_solver_snapshot=final_solver_snapshot,
         rate7_cj2_diagnosis=rate7_cj2_diagnosis,
+        leveltemp_energy_parity=leveltemp_energy_parity,
         population_weighted_attribution=attribution,
         active_population_ion_resolution=active_population_ion_resolution,
         oxygen_reassessment=oxygen_reassessment_rows,
@@ -1117,6 +1209,14 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "same_call_matrix_active_rows_outside_tolerance": same_call_matrix.n_active_rows_outside_tolerance,
             "thermal_family_status": thermal_family_parity.status,
             "thermal_family_rows_outside_tolerance": thermal_family_parity.n_outside_tolerance,
+            "initial_solver_population_status": initial_solver_population.status,
+            "initial_solver_population_ready": initial_solver_population.ready,
+            "initial_solver_population_probe_present": bool(initial_population_rows),
+            "initial_population_source": next((
+                item.request.initial_population_source
+                for item in result.element_results
+                if int(item.request.element_z) == 8
+            ), None),
             "final_solver_snapshot_status": final_solver_snapshot.status,
             "final_solver_same_iteration_ready": final_solver_snapshot.same_iteration_ready,
             "final_solver_iteration_tuple_ready": final_solver_snapshot.iteration_tuple_ready,
@@ -1130,7 +1230,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "acceptance_gate_definition": (
                 "pre_matrix && runtime_state && global_ion && global_level_active "
                 "&& element_array && matrix_operator_gate && thermal_family_parity "
-                "&& synchronized_final_msolvelucy_snapshot && source_xtot "
+                "&& same_call_initial_xileve && synchronized_final_msolvelucy_snapshot && source_xtot "
                 "&& type53_rate7_cj2 && oxygen_reassessment && summary_scope_gate"
             ),
             "summary_scope_complete": summary_comparable,
@@ -1142,6 +1242,7 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "n_thermal_rate_type_probe_rows": len(thermal_rate_type_rows),
             "n_final_solver_matrix_probe_rows": len(final_matrix_rows),
             "n_final_solver_population_probe_rows": len(final_population_rows),
+            "n_initial_solver_population_probe_rows": len(initial_population_rows),
             "n_active_population_ion_resolution_rows": len(active_population_ion_resolution),
             "n_global_ion_probe_rows": len(ion_rows),
             "global_element_index_by_z": element_index_by_z,
@@ -1214,11 +1315,17 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     active_population_ion_resolution_path = (
         out / "xstar_calc_hmc_all_active_population_ion_matrix_resolution.csv"
     )
+    initial_solver_population_path = (
+        out / "xstar_calc_hmc_all_msolvelucy_initial_population_parity.csv"
+    )
     final_solver_term_path = out / "xstar_calc_hmc_all_msolvelucy_final_term_parity.csv"
     final_solver_population_path = out / "xstar_calc_hmc_all_msolvelucy_final_population_parity.csv"
     final_solver_ion_total_path = out / "xstar_calc_hmc_all_msolvelucy_final_ion_totals.csv"
     rate7_cj2_path = out / "xstar_calc_hmc_all_rate7_cj2_record_terms.csv"
     rate7_cj2_record_path = out / "xstar_calc_hmc_all_rate7_cj2_record_summary.csv"
+    leveltemp_energy_path = out / "xstar_calc_hmc_all_leveltemp_energy_parity.csv"
+    leveltemp_trace_path = out / "xstar_calc_hmc_all_leveltemp_workspace_trace.csv"
+    type53_leveltemp_trace_path = out / "xstar_calc_hmc_all_type53_leveltemp_trace.csv"
     oxygen_reassessment_path = out / "xstar_calc_hmc_all_oxygen_active_population_ion_reassessment.csv"
     closure_rows = []
     closure_summaries = []
@@ -1299,15 +1406,22 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         [] if result.thermal_family_parity is None else result.thermal_family_parity.rows,
     )
     _write_rows(active_population_ion_resolution_path, result.active_population_ion_resolution)
+    _write_rows(
+        initial_solver_population_path,
+        [] if result.initial_solver_population is None else result.initial_solver_population.rows,
+    )
     _write_rows(final_solver_term_path, [] if result.final_solver_snapshot is None else result.final_solver_snapshot.term_rows)
     _write_rows(final_solver_population_path, [] if result.final_solver_snapshot is None else result.final_solver_snapshot.population_rows)
     _write_rows(final_solver_ion_total_path, [] if result.final_solver_snapshot is None else result.final_solver_snapshot.ion_total_rows)
     _write_rows(rate7_cj2_path, [] if result.rate7_cj2_diagnosis is None else result.rate7_cj2_diagnosis.rows)
     _write_rows(rate7_cj2_record_path, [] if result.rate7_cj2_diagnosis is None else result.rate7_cj2_diagnosis.record_rows)
+    _write_rows(leveltemp_energy_path, [] if result.leveltemp_energy_parity is None else result.leveltemp_energy_parity.rows)
+    _write_rows(leveltemp_trace_path, [] if result.leveltemp_energy_parity is None else result.leveltemp_energy_parity.workspace_trace_rows)
+    _write_rows(type53_leveltemp_trace_path, [] if result.leveltemp_energy_parity is None else result.leveltemp_energy_parity.type53_trace_rows)
     _write_rows(oxygen_reassessment_path, result.oxygen_reassessment)
 
     payload = {
-        "port_version": "v0.4.32",
+        "port_version": "v0.4.33",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,
@@ -1338,6 +1452,8 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "same_call_matrix_active_closure_ready": result.same_call_matrix_active_closure_ready,
         "thermal_family_ready": result.thermal_family_ready,
         "thermal_family_status": result.thermal_family_status,
+        "initial_solver_population_ready": result.initial_solver_population_ready,
+        "initial_solver_population_status": result.initial_solver_population_status,
         "final_solver_snapshot_ready": result.final_solver_snapshot_ready,
         "final_solver_snapshot_status": result.final_solver_snapshot_status,
         "final_solver_same_iteration_ready": result.final_solver_same_iteration_ready,
@@ -1352,6 +1468,9 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "rate7_cj2_ready": result.rate7_cj2_ready,
         "rate7_cj2_status": result.rate7_cj2_status,
         "type53_rate7_cj2_ready": result.type53_rate7_cj2_ready,
+        "leveltemp_energy_ready": result.leveltemp_energy_ready,
+        "leveltemp_energy_status": result.leveltemp_energy_status,
+        "type53_leveltemp_energy_ready": result.type53_leveltemp_energy_ready,
         "oxygen_reassessment_ready": result.oxygen_reassessment_ready,
         "oxygen_reassessment_status": result.oxygen_reassessment_status,
         "acceptance_gate_ready": result.acceptance_gate_ready,
@@ -1392,6 +1511,8 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Same-call coefficients, all strict: `{result.same_call_matrix_coefficient_ready}`\n"
         f"- Same-call active closure ready: `{result.same_call_matrix_active_closure_ready}`\n"
         f"- XSTAR thermal-family status: `{result.thermal_family_status}`\n"
+        f"- Same-call initial solver population: `{result.initial_solver_population_status}`\n"
+        f"- Same-call initial solver population ready: `{result.initial_solver_population_ready}`\n"
         f"- Final msolvelucy snapshot status: `{result.final_solver_snapshot_status}`\n"
         f"- Final snapshot synchronization gate: `{result.final_solver_same_iteration_ready}`\n"
         f"- Final snapshot iteration tuple: `{result.final_solver_iteration_tuple_ready}`\n"
@@ -1403,6 +1524,8 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Source-order xtot: `{result.final_solver_source_xtot_ready}`\n"
         f"- Rate-7 cj2 status: `{result.rate7_cj2_status}`\n"
         f"- Type-53/rate-7 cj2 ready: `{result.type53_rate7_cj2_ready}`\n"
+        f"- Exact leveltemp energy status: `{result.leveltemp_energy_status}`\n"
+        f"- Type-53 exact leveltemp energy ready: `{result.type53_leveltemp_energy_ready}`\n"
         f"- Oxygen O III--O V reassessment: `{result.oxygen_reassessment_status}`\n"
         f"- Oxygen pre-continuum acceptance: `{result.oxygen_pre_continuum_acceptance_ready}`\n"
         f"- Acceptance gate ready: `{result.acceptance_gate_ready}`\n"
@@ -1425,11 +1548,15 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "same_call_active_row_attribution_csv": str(same_call_active_rows_path),
         "xstar_thermal_family_parity_csv": str(thermal_family_parity_path),
         "active_population_ion_matrix_resolution_csv": str(active_population_ion_resolution_path),
+        "msolvelucy_initial_population_parity_csv": str(initial_solver_population_path),
         "msolvelucy_final_term_parity_csv": str(final_solver_term_path),
         "msolvelucy_final_population_parity_csv": str(final_solver_population_path),
         "msolvelucy_final_ion_totals_csv": str(final_solver_ion_total_path),
         "rate7_cj2_record_terms_csv": str(rate7_cj2_path),
         "rate7_cj2_record_summary_csv": str(rate7_cj2_record_path),
+        "leveltemp_energy_parity_csv": str(leveltemp_energy_path),
+        "leveltemp_workspace_trace_csv": str(leveltemp_trace_path),
+        "type53_leveltemp_trace_csv": str(type53_leveltemp_trace_path),
         "oxygen_active_population_ion_reassessment_csv": str(oxygen_reassessment_path),
         "json": str(json_path),
         "markdown": str(md),

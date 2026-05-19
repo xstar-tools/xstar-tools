@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## v0.4.33 - 2026-05-19
+
+v0.4.33 is a bounded Milestone-4 state-history and diagnostic release based on
+the production v0.4.32 oxygen result. It corrects the initial population state
+passed to the translated `msolvelucy`: source `calc_hmc_element.f90` maps the
+incoming global `xileve/xilevg` vector into compact `x`, whereas Python had
+used the LTE `rnise` vector from `levwkelement`. The eight-hook bounded XSTAR
+probe now captures the complete same-call compact input vector, and the
+fixed-state parity CLI replays it explicitly as source state while reporting
+that the vector is a regression input rather than a production coefficient.
+
+The mutable `leveltemp` implementation now replays the complete active-ion
+write sequence performed by `levwkelement`, then overwrites only `1:nlev`
+during each second-pass `calc_hmc_ion` call. Diagnostic owner metadata and a
+write/read trace identify which ion last wrote each retained column. A new
+post-`ucalc` XSTAR hook records the exact `leveltemp%rlev(1,idest1)` and
+`leveltemp%rlev(1,idest2)` read by every selected type-49/type-53/type-99
+rate-7 record, together with `ans1..ans6`. The oxygen gate requires exact
+same-call input-state parity, exact mutable-workspace parity including type 53,
+final/xo population parity, source `xtot`, thermal-family closure, and the
+existing O III--O V reassessment.
+
+Validation passed: 6 focused v0.4.33 tests, 118 source-port tests, 127
+source-port/package/API/documentation tests with 2 optional skips, the complete
+historical suite with 431 passed and 22 skipped, and 118 source-port tests from
+a clean source distribution. `compileall`, source/wheel builds, installed-wheel
+checks, and GNU Fortran compilation of the generated helper also passed. A
+fresh production XSTAR run is still required. Closure of the previously
+observed 11 final populations, 18 outer-start populations, O III/O IV/O VI
+`xtot`, eight thermal-family rows, and one `cll2` row is not claimed without
+those new probe products.
+
 ## v0.4.32 - 2026-05-19
 
 v0.4.32 is a bounded Milestone-4 correction release based on the production v0.4.31 oxygen probe. It preserves source `nionp` counters across inactive ion stages and repairs source-slot `xtot` aggregation; replaces the over-strict Python/XSTAR iteration-count comparison with an internal synchronized-snapshot gate; corrects type-54 to use the dimensionless `DeltaE/kT` energy channel; and preserves the mutable `leveltemp` higher-column workspace used by type 49, 53, and 99 electron-energy corrections. Focused v0.4.32 tests pass (8); the source-port regression selection passes (112); and the source-port/package/API/documentation selection passes (147 with 2 optional skips). Clean-sdist, wheel, compileall, installed-wheel, and GNU Fortran helper checks pass. The complete historical suite exceeded the 150-second execution limit. A fresh production oxygen rerun remains required before all-element expansion.

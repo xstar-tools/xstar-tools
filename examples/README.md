@@ -1223,7 +1223,7 @@ PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --xstar-population-solve-call-id 219 \
   --population-probe-runtime-policy use \
   --xstar-calc-hmc-probe-dir /path/to/xstar_probe_run \
-  --out-dir xstar_o_calc_hmc_all_fixed_state_v0431 \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0433 \
   --print-summary
 ```
 
@@ -1231,10 +1231,10 @@ Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available
 
 ### `106_prepare_xstar_calc_hmc_all_probe.py`
 
-Write the bounded, diagnostic-only seven-hook Fortran helper and source-local insertion snippets for `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix, pre-continuum, same-call matrix, thermal-family, and synchronized final-`msolvelucy` products. v0.4.32 keeps the same insertion layout but interprets final-snapshot readiness from one shared XSTAR iteration tuple, matching compact dimensions, and matrix population columns matching the synchronized population table. `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
+Write the bounded, diagnostic-only eight-hook Fortran helper and source-local insertion snippets for `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix and pre-continuum state, complete same-call input `xileve` vector, exact mutable `leveltemp` reads for type 49/53/99 rate-7 records, same-call matrix, thermal families, and synchronized final `msolvelucy` matrix/`x`/`xo` products. `XSTAR_ATOMIC_HMC_TARGET_CALL` selects an exact `calc_hmc_all` invocation; `XSTAR_ATOMIC_HMC_TARGET_RECORD` can bound the exact leveltemp trace to one record.
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
-  --out-dir xstar_calc_hmc_all_probe_v0431 \
+  --out-dir xstar_calc_hmc_all_probe_v0433 \
   --print-summary
 ```

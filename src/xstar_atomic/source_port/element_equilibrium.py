@@ -280,6 +280,7 @@ class ElementMatrixAssembly:
     n_unmapped_endpoints: int
     strict_assembly_ready: bool
     n_source_ipmat_endpoint_clamps: int = 0
+    leveltemp_workspace_trace: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -447,19 +448,80 @@ def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:
 def _overwrite_leveltemp_workspace(
     workspace: UCalcLevelTable,
     current: UCalcLevelTable,
+    *,
+    owner_by_column: Optional[Dict[int, Dict[str, int]]] = None,
+    owner_ion_index: Optional[int] = None,
+    owner_ion_stage: Optional[int] = None,
+    write_sequence: Optional[int] = None,
+    phase: str = "second_pass",
 ) -> UCalcLevelTable:
     """Apply one source-faithful ``calc_rates_level_lte`` overwrite.
 
     The current ion replaces workspace columns ``1:nlev`` while any higher
     columns remain untouched.  ``workspace.nlev`` still records the current
     ion dimension, matching the separate Fortran ``nlev`` argument.
+
+    ``owner_by_column`` is diagnostic-only provenance for the retained work
+    array.  It records which ion most recently wrote each column; it never
+    changes the numerical source semantics.
     """
 
     nlev = int(current.nlev)
     for index in range(1, nlev + 1):
         workspace.levels[index] = current.require(index)
+        if owner_by_column is not None:
+            owner_by_column[index] = {
+                "ion_index": int(owner_ion_index or 0),
+                "ion_stage": int(owner_ion_stage or 0),
+                "nlev": nlev,
+                "write_sequence": int(write_sequence or 0),
+                "phase": str(phase),
+            }
     workspace.nlev = nlev
     return workspace
+
+
+def _initialize_leveltemp_workspace_from_levwkelement(
+    basis: "ElementCompactBasis",
+    level_tables: Mapping[int, UCalcLevelTable],
+) -> tuple[UCalcLevelTable, Dict[int, Dict[str, int]], List[Dict[str, Any]]]:
+    """Replay the mutable ``leveltemp`` writes performed by ``levwkelement``.
+
+    ``levwkelement.f90`` calls ``calc_rates_level_lte`` for every active ion
+    in ascending source order.  That routine overwrites only ``1:nlev`` and
+    does not clear higher columns.  The array entering the second element pass
+    is therefore a composite workspace, not a clean copy of the final ion.
+    """
+
+    if not basis.blocks:
+        raise ElementEquilibriumError("cannot initialize leveltemp without active ion blocks")
+    first = basis.blocks[0]
+    workspace = UCalcLevelTable(levels={}, nlev=0)
+    owner_by_column: Dict[int, Dict[str, int]] = {}
+    trace: List[Dict[str, Any]] = []
+    for sequence, block in enumerate(basis.blocks, start=1):
+        current = level_tables[block.ion_index]
+        previous_max = max(workspace.levels, default=0)
+        _overwrite_leveltemp_workspace(
+            workspace,
+            current,
+            owner_by_column=owner_by_column,
+            owner_ion_index=block.ion_index,
+            owner_ion_stage=block.ion_stage,
+            write_sequence=sequence,
+            phase="levwkelement",
+        )
+        trace.append({
+            "phase": "levwkelement",
+            "write_sequence": sequence,
+            "ion_index": block.ion_index,
+            "ion_stage": block.ion_stage,
+            "nlev_written": current.nlev,
+            "workspace_max_column_before": previous_max,
+            "workspace_max_column_after": max(workspace.levels, default=0),
+            "n_retained_higher_columns": max(0, previous_max - current.nlev),
+        })
+    return workspace, owner_by_column, trace
 
 
 def build_element_compact_basis(
@@ -815,9 +877,14 @@ def assemble_element_matrix(
         rnise = np.zeros(basis.n_rows + 1, dtype=float)
         rnise[1:] = supplied[-basis.n_rows :]
         total = rnise[1:].sum()
-        if total <= 0:
-            raise ElementEquilibriumError("supplied initial populations have non-positive sum")
-        rnise[1:] /= total
+        if total <= 0 or not np.all(np.isfinite(rnise[1:])):
+            raise ElementEquilibriumError(
+                "supplied initial populations have non-positive or non-finite sum"
+            )
+        # calc_hmc_element.f90 maps xileve directly into x immediately before
+        # msolvelucy.  It does not normalize that input vector here.  Preserve
+        # its exact scale; msolvelucy imposes number conservation later in the
+        # translated solve.
 
     # XSTAR addresses excited parent-ion destinations in the current ion-local
     # endpoint space as ``nlevp + parent_local_level - 1``.  Build those maps
@@ -842,12 +909,14 @@ def assemble_element_matrix(
             weight_by_destination,
         )
 
-    # ``levwkelement`` leaves the shared Fortran ``leveltemp`` array holding
-    # the last active ion.  The second pass then calls ``calc_hmc_ion`` in
-    # ascending ion order; each call overwrites only columns ``1:nlev``.
-    # Preserve the untouched higher columns because type 49/53/99 use them in
-    # their final electron-energy channel when ``idest2 > nlev``.
-    leveltemp_workspace = _copy_level_table(level_tables[basis.blocks[-1].ion_index])
+    # Replay every active-ion write made by ``levwkelement``.  The final
+    # pre-second-pass array is a composite retained workspace: later ions
+    # overwrite only ``1:nlev`` while higher columns remain from whichever
+    # earlier ion last wrote them.
+    leveltemp_workspace, leveltemp_owner_by_column, leveltemp_write_trace = (
+        _initialize_leveltemp_workspace_from_levwkelement(basis, level_tables)
+    )
+    second_pass_write_sequence = len(leveltemp_write_trace)
 
     terms: List[MatrixTerm] = []
     blocked_records: List[Dict[str, Any]] = []
@@ -858,7 +927,27 @@ def assemble_element_matrix(
 
     for block in basis.blocks:
             current_levels = level_tables[block.ion_index]
-            levels = _overwrite_leveltemp_workspace(leveltemp_workspace, current_levels)
+            second_pass_write_sequence += 1
+            previous_max_column = max(leveltemp_workspace.levels, default=0)
+            levels = _overwrite_leveltemp_workspace(
+                leveltemp_workspace,
+                current_levels,
+                owner_by_column=leveltemp_owner_by_column,
+                owner_ion_index=block.ion_index,
+                owner_ion_stage=block.ion_stage,
+                write_sequence=second_pass_write_sequence,
+                phase="calc_hmc_ion_second_pass",
+            )
+            leveltemp_write_trace.append({
+                "phase": "calc_hmc_ion_second_pass",
+                "write_sequence": second_pass_write_sequence,
+                "ion_index": block.ion_index,
+                "ion_stage": block.ion_stage,
+                "nlev_written": current_levels.nlev,
+                "workspace_max_column_before": previous_max_column,
+                "workspace_max_column_after": max(levels.levels, default=0),
+                "n_retained_higher_columns": max(0, previous_max_column - current_levels.nlev),
+            })
             parent_energy_map, parent_weight_map = parent_destination_context[block.ion_index]
             summary = IonAssemblySummary(
                 ion_index=block.ion_index,
@@ -913,7 +1002,10 @@ def assemble_element_matrix(
                             "parent_level_energy_ev_by_destination": parent_energy_map,
                             "parent_level_stat_weight_by_destination": parent_weight_map,
                             "leveltemp_workspace_persistent": True,
+                            "leveltemp_workspace_initialization": "replayed_levwkelement_active_ion_order",
                             "leveltemp_workspace_retained_max_index": max(levels.levels, default=0),
+                            "leveltemp_owner_by_column": leveltemp_owner_by_column,
+                            "leveltemp_write_sequence": second_pass_write_sequence,
                         },
                     )
                     if escape_reason is not None:
@@ -949,7 +1041,30 @@ def assemble_element_matrix(
                         strict=False,
                     )
                     row = result.to_dict()
-                    row.update({"ion_index": block.ion_index, "ion_stage": block.ion_stage})
+                    destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
+                    source_leveltemp_destination = levels.get(int(result.idest2))
+                    source_leveltemp_bound = levels.get(int(result.idest1))
+                    row.update({
+                        "ion_index": block.ion_index,
+                        "ion_stage": block.ion_stage,
+                        "nlev": block.nlev,
+                        "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
+                        "leveltemp_workspace_write_sequence": second_pass_write_sequence,
+                        "leveltemp_workspace_max_column": max(levels.levels, default=0),
+                        "leveltemp_idest1_energy_ev": (
+                            float(source_leveltemp_bound.energy_ev)
+                            if source_leveltemp_bound is not None else None
+                        ),
+                        "leveltemp_idest2_energy_ev": (
+                            float(source_leveltemp_destination.energy_ev)
+                            if source_leveltemp_destination is not None else None
+                        ),
+                        "leveltemp_idest2_owner_ion_index": destination_owner.get("ion_index"),
+                        "leveltemp_idest2_owner_ion_stage": destination_owner.get("ion_stage"),
+                        "leveltemp_idest2_owner_nlev": destination_owner.get("nlev"),
+                        "leveltemp_idest2_owner_write_sequence": destination_owner.get("write_sequence"),
+                        "leveltemp_idest2_owner_phase": destination_owner.get("phase"),
+                    })
                     record_results.append(row)
 
                     if result.status is UCalcStatus.SOURCE_NOOP:
@@ -1049,6 +1164,7 @@ def assemble_element_matrix(
         n_unmapped_endpoints=n_unmapped,
         n_source_ipmat_endpoint_clamps=n_source_clamps,
         strict_assembly_ready=strict_ready,
+        leveltemp_workspace_trace=leveltemp_write_trace,
     )
 
 
@@ -1511,7 +1627,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.32",
+    port_version: str = "v0.4.33",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
