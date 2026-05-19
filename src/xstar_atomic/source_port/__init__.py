@@ -142,6 +142,21 @@ from .element_equilibrium import (
 
 
 
+from .ion_balance import (
+    IonBalanceError,
+    CalcIonRatesContext,
+    CalcIonRateContribution,
+    CalcIonRatesResult,
+    IoneqmResult,
+    IstrucResult,
+    IonStageLimitResult,
+    calc_ion_rates,
+    ioneqm,
+    istruc,
+    select_ion_stage_limits,
+    calc_element_pre_matrix_balance,
+)
+
 from .local_zone import (
     CalcHMCAllError,
     FixedStateElementRequest,
@@ -152,6 +167,14 @@ from .local_zone import (
     calc_hmc_all,
     register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
+)
+
+from .calc_hmc_all_parity import (
+    CalcHMCAllParityError,
+    CalcHMCAllParityRow,
+    CalcHMCAllPreContinuumParityResult,
+    compare_calc_hmc_all_pre_continuum_probe,
+    write_calc_hmc_all_pre_continuum_parity_products,
 )
 
 from .population_parity import (
@@ -292,6 +315,18 @@ __all__ = [
     "solve_element_statistical_equilibrium",
     "register_element_equilibrium_stage",
     "write_element_equilibrium_products",
+    "IonBalanceError",
+    "CalcIonRatesContext",
+    "CalcIonRateContribution",
+    "CalcIonRatesResult",
+    "IoneqmResult",
+    "IstrucResult",
+    "IonStageLimitResult",
+    "calc_ion_rates",
+    "ioneqm",
+    "istruc",
+    "select_ion_stage_limits",
+    "calc_element_pre_matrix_balance",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",
@@ -301,6 +336,11 @@ __all__ = [
     "calc_hmc_all",
     "register_fixed_state_calc_hmc_all",
     "write_fixed_state_calc_hmc_all_products",
+    "CalcHMCAllParityError",
+    "CalcHMCAllParityRow",
+    "CalcHMCAllPreContinuumParityResult",
+    "compare_calc_hmc_all_pre_continuum_probe",
+    "write_calc_hmc_all_pre_continuum_parity_products",
     "PopulationParityError",
     "XSTARPopulationReference",
     "XSTARRuntimeContextReference",

@@ -1206,18 +1206,14 @@ PYTHONPATH=src python examples/104_prepare_xstar_msolvelucy_state_probe.py \
 
 ### `105_port_xstar_calc_hmc_all_fixed_state.py`
 
-Run the first Milestone-4 `calc_hmc_all` source port at a fixed captured
-temperature and electron fraction. The driver reuses the validated complete
-element solver, accumulates source-shaped ion fractions, ionization and
-recombination rates, level diagnostics, heating/cooling, and the charge
-residual. It does not yet run `dsec` or the deferred
-`comp2 -> freef -> bremem -> heatf` continuum leaves.
+Run the fixed-temperature/fixed-electron-fraction `calc_hmc_all` path through the translated pre-matrix sequence, source-derived ion limits, and the validated multilevel element solver. The output keeps preliminary `pirt/rrrt` distinct from post-solve `stotg/atotg`, writes per-record first-pass diagnostics, and can compare directly with the bounded XSTAR probe.
 
 ```bash
 PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --atdb /path/to/xstar/data/atdb.fits \
   --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
   --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
+  --ion-stage-selection source --critf 1e-8 \
   --temperature-k 1.0e6 \
   --hydrogen-density-cm3 1.0e8 \
   --electron-fraction-xee 1.0 \
@@ -1226,10 +1222,19 @@ PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --xstar-population-probe-csv /path/to/xstar_population_closure_probe.csv \
   --xstar-population-solve-call-id 219 \
   --population-probe-runtime-policy use \
-  --out-dir xstar_o_calc_hmc_all_fixed_state_v0423 \
+  --xstar-calc-hmc-probe-dir /path/to/xstar_probe_run \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0424 \
   --print-summary
 ```
 
-For the O III--O VIII development subset, `element_loop_ready=True` is the
-expected first gate. `complete_fixed_state_ready` remains false until complete
-charge-stage coverage and the continuum leaves are ported and validated.
+Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available. Use `--ion-stage-selection explicit` only for controlled regression against a fixed stage subset. `complete_fixed_state_ready` remains false until all-element charge closure and `comp2 -> freef -> bremem -> heatf` are complete.
+
+### `106_prepare_xstar_calc_hmc_all_probe.py`
+
+Write a bounded, diagnostic-only Fortran helper and three source-local insertion snippets for `calc_hmc_element.f90` and `calc_hmc_all.f90`. The default capture state is the validated solve-call-219 oxygen runtime state; `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
+
+```bash
+PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
+  --out-dir xstar_calc_hmc_all_probe_v0424 \
+  --print-summary
+```

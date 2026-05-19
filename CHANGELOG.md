@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.4.24 - 2026-05-18
+
+v0.4.24 completes the missing pre-matrix half of the fixed-state `calc_hmc_all` source port.
+
+### Added
+
+- `xstar_atomic.source_port.ion_balance` with source-faithful `calc_ion_rates`, `ioneqm`, `istruc`, and `mml/mmu` selection.
+- Separate preliminary `pirt/rrrt` and post-solve population-weighted `stotg/atotg` products.
+- Source-derived ion-stage selection as the default fixed-state path, with an explicit-range regression override.
+- A bounded `calc_hmc_all` XSTAR probe generator and pre-continuum parity comparator.
+- `examples/106_prepare_xstar_calc_hmc_all_probe.py`.
+- Per-record `calc_ion_rates` diagnostics and preliminary ion-fraction columns in example 105 products.
+
+### Corrected
+
+- Global LTE level populations now use the one-based `rnise` compact index rather than a one-row-shifted zero-based lookup.
+- `pirt/rrrt` no longer incorrectly duplicate `msolvelucy` `stot/atot` flow totals.
+
+### Scope
+
+The pre-matrix translation is covered by source-branch, equilibrium, stage-limit, mapping, probe-generation, and comparator tests. Direct XSTAR pre-continuum parity remains pending until the generated probe is compiled and run. The next coherent sequence is `comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec`.
+
 ## v0.4.23 - 2026-05-18
 
 v0.4.23 begins Milestone 4 after the frozen oxygen Milestone-3 benchmark. It closes the source-obvious type-49 destination bug, prepares an exact source-routine driver for `xstarcalc`, and adds the fixed-temperature/fixed-electron-fraction core of `calc_hmc_all`.

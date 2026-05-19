@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.23"
+__version__ = "0.4.24"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -123,6 +123,12 @@ from .xstar_population_closure_probe import (
     write_population_closure_probe_products,
 )
 
+from .xstar_calc_hmc_all_probe import (
+    calc_hmc_all_probe_helper,
+    calc_hmc_all_insertion_snippets,
+    write_calc_hmc_all_probe_products,
+)
+
 from .xstar_msolvelucy_state_probe import (
     msolvelucy_state_probe_helper,
     msolvelucy_insertion_snippets,
@@ -141,10 +147,17 @@ from .source_port import (
     build_level_table, build_element_compact_basis, levwk, levwkelement,
     assemble_element_matrix, msolvelucy, solve_element_statistical_equilibrium,
     register_element_equilibrium_stage, write_element_equilibrium_products,
+    IonBalanceError, CalcIonRatesContext, CalcIonRateContribution,
+    CalcIonRatesResult, IoneqmResult, IstrucResult, IonStageLimitResult,
+    calc_ion_rates, ioneqm, istruc, select_ion_stage_limits,
+    calc_element_pre_matrix_balance,
     CalcHMCAllError, FixedStateElementRequest, FixedStateContinuumResult,
     FixedStateElementResult, FixedStateCalcHMCAllResult,
     resolve_calc_hmc_all_density, calc_hmc_all, register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
+    CalcHMCAllParityError, CalcHMCAllParityRow, CalcHMCAllPreContinuumParityResult,
+    compare_calc_hmc_all_pre_continuum_probe,
+    write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError, XSTARPopulationReference, XSTARRuntimeContextReference, PopulationMetrics,
     ElementPopulationParityResult, load_xstar_population_reference, load_xstar_runtime_context_reference,
     compare_element_population_parity, write_element_population_parity_products,
@@ -389,6 +402,18 @@ from .source_port import (
     solve_element_statistical_equilibrium,
     register_element_equilibrium_stage,
     write_element_equilibrium_products,
+    IonBalanceError,
+    CalcIonRatesContext,
+    CalcIonRateContribution,
+    CalcIonRatesResult,
+    IoneqmResult,
+    IstrucResult,
+    IonStageLimitResult,
+    calc_ion_rates,
+    ioneqm,
+    istruc,
+    select_ion_stage_limits,
+    calc_element_pre_matrix_balance,
     CalcHMCAllError,
     FixedStateElementRequest,
     FixedStateContinuumResult,
@@ -398,6 +423,11 @@ from .source_port import (
     calc_hmc_all,
     register_fixed_state_calc_hmc_all,
     write_fixed_state_calc_hmc_all_products,
+    CalcHMCAllParityError,
+    CalcHMCAllParityRow,
+    CalcHMCAllPreContinuumParityResult,
+    compare_calc_hmc_all_pre_continuum_probe,
+    write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError,
     XSTARPopulationReference,
     XSTARRuntimeContextReference,
@@ -522,4 +552,10 @@ __all__.extend([
     "FullElementMatrixParityResult",
     "compare_full_element_matrix_probe",
     "write_full_element_matrix_parity_products",
+])
+
+__all__.extend([
+    "calc_hmc_all_probe_helper",
+    "calc_hmc_all_insertion_snippets",
+    "write_calc_hmc_all_probe_products",
 ])

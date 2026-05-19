@@ -6,7 +6,11 @@ import numpy as np
 import pytest
 
 from xstar_atomic.source_port import (
+    CalcIonRatesResult,
     FixedStateContinuumResult,
+    IonStageLimitResult,
+    IoneqmResult,
+    IstrucResult,
     FixedStateElementRequest,
     XSTARCALC_FIXED_STATE_ORDER,
     XSTARPythonDriver,
@@ -74,6 +78,26 @@ def _fake_element_solver(master, derived, *, element_z, context, dispatcher=None
     )
 
 
+
+def _fake_pre_matrix_solver(master, derived, *, element_z, context, critf, dispatcher=None):
+    rates = {
+        1: CalcIonRatesResult(1, 11, element_z, 1, 1, 70.0, 50.0, ready=True),
+        2: CalcIonRatesResult(2, 12, element_z, 2, 1, 80.0, 60.0, ready=True),
+    }
+    solved = IoneqmResult(
+        fractions=np.array([0.4, 0.35, 0.25]),
+        q_ratio=np.array([1.0, 1.0]),
+        jmax=2, mmn=1, mmx=2,
+    )
+    preliminary = IstrucResult(
+        ionization_rates=np.array([0.0, 70.0, 80.0]),
+        recombination_rates=np.array([0.0, 50.0, 60.0]),
+        fractions=np.array([0.0, 0.4, 0.35, 0.25]),
+        ioneqm=solved,
+    )
+    limits = IonStageLimitResult(1, 2, critf, 1, 2, 2)
+    return rates, preliminary, limits
+
 def test_fixed_state_calc_hmc_all_accumulates_source_shaped_products():
     continuum = FixedStateContinuumResult(
         heating=0.5, cooling=0.25, heating2=0.5, cooling2=0.25,
@@ -81,13 +105,14 @@ def test_fixed_state_calc_hmc_all_accumulates_source_shaped_products():
         complete=True,
     )
     result = calc_hmc_all(
-        object(), object(),
+        object(), SimpleNamespace(ion_element_z=np.array([0, 2])),
         elements=[FixedStateElementRequest(2, 1, 2, abundance=0.1)],
         temperature_k=1.0e6,
         hydrogen_density_cm3=1.0e8,
         electron_fraction_xee=0.14,
         continuum_kernel=lambda **kwargs: continuum,
         element_solver=_fake_element_solver,
+        pre_matrix_solver=_fake_pre_matrix_solver,
     )
     assert result.element_loop_ready is True
     assert result.charge_closure_scope_complete is True
@@ -101,8 +126,10 @@ def test_fixed_state_calc_hmc_all_accumulates_source_shaped_products():
     assert result.electron_contribution == pytest.approx(0.03)
     assert result.elcter == pytest.approx(0.11)
     assert result.xilevg[(2, 1, 1)] == pytest.approx(0.75)
-    assert result.rrrt[(2, 1)] == pytest.approx(5.0)
-    assert result.pirt[(2, 2)] == pytest.approx(8.0)
+    assert result.rrrt[(2, 1)] == pytest.approx(50.0)
+    assert result.pirt[(2, 2)] == pytest.approx(80.0)
+    assert result.atotg[(2, 1)] == pytest.approx(5.0)
+    assert result.stotg[(2, 2)] == pytest.approx(8.0)
 
 
 def test_fixed_state_calc_hmc_all_does_not_claim_complete_without_continuum_or_full_charge_scope():
@@ -113,6 +140,7 @@ def test_fixed_state_calc_hmc_all_does_not_claim_complete_without_continuum_or_f
         hydrogen_density_cm3=1.0e8,
         electron_fraction_xee=1.2046560563936872,
         element_solver=_fake_element_solver,
+        pre_matrix_solver=_fake_pre_matrix_solver,
     )
     assert result.element_loop_ready is True
     assert result.charge_closure_scope_complete is False

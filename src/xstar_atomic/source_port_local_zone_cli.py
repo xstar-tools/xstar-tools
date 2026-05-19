@@ -11,6 +11,8 @@ from .source_port import (
     load_atomic_database_state,
     load_xstar_runtime_context_reference,
     write_fixed_state_calc_hmc_all_products,
+    compare_calc_hmc_all_pre_continuum_probe,
+    write_calc_hmc_all_pre_continuum_parity_products,
 )
 from .source_port_element_cli import _load_escape_npz, _select_live_state
 
@@ -37,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pressure", type=float, default=0.0)
     parser.add_argument("--lcdd", type=int, default=1)
     parser.add_argument("--lfast", type=int, default=2)
+    parser.add_argument("--critf", type=float, default=1.0e-8)
+    parser.add_argument(
+        "--ion-stage-selection", choices=("source", "explicit"), default="source",
+        help="Use calc_ion_rates/istruc-derived mml/mmu or the explicit stage range.",
+    )
     parser.add_argument("--live-rate-grid-probe-csv")
     parser.add_argument("--live-rate-grid-state", default="last")
     parser.add_argument("--escape-npz")
@@ -48,6 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("use", "check", "ignore"),
         default="use",
     )
+    parser.add_argument("--xstar-calc-hmc-probe-dir")
+    parser.add_argument("--xstar-calc-hmc-call-id", type=int)
+    parser.add_argument("--xstar-calc-hmc-parity-rtol", type=float, default=5.0e-3)
+    parser.add_argument("--xstar-calc-hmc-parity-atol", type=float, default=1.0e-12)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--print-summary", action="store_true")
     return parser
@@ -103,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         covering_fraction=cfrac,
         turbulent_velocity_km_s=args.turbulent_velocity_km_s,
         lfast=args.lfast,
+        critf=args.critf,
+        use_source_ion_limits=args.ion_stage_selection == "source",
         strict_context=True,
     )
 
@@ -124,18 +137,36 @@ def main(argv: list[str] | None = None) -> int:
         )
         result.diagnostics["runtime_context_source"] = runtime_source
         paths = write_fixed_state_calc_hmc_all_products(result, args.out_dir)
+        parity = None
+        if args.xstar_calc_hmc_probe_dir:
+            parity = compare_calc_hmc_all_pre_continuum_probe(
+                result,
+                args.xstar_calc_hmc_probe_dir,
+                call_id=args.xstar_calc_hmc_call_id,
+                rtol=args.xstar_calc_hmc_parity_rtol,
+                atol=args.xstar_calc_hmc_parity_atol,
+            )
+            paths.update({
+                f"pre_continuum_parity_{key}": value
+                for key, value in write_calc_hmc_all_pre_continuum_parity_products(
+                    parity, args.out_dir
+                ).items()
+            })
     finally:
         built.master.close()
 
     if args.print_summary:
         print("XSTAR fixed-state calc_hmc_all core")
         print("-----------------------------------")
-        print("port_version=v0.4.23")
+        print("port_version=v0.4.24")
         print(f"runtime_context_source={runtime_source}")
         print(f"temperature_k={result.temperature_k}")
         print(f"hydrogen_density_cm3={result.hydrogen_density_cm3}")
         print(f"electron_fraction_xee={result.electron_fraction_xee}")
         print(f"n_elements={len(result.element_results)}")
+        for item in result.element_results:
+            print(f"element_{item.request.element_z}_selected_ion_stage_range={item.selected_min_ion_stage}..{item.selected_max_ion_stage}")
+        print(f"pre_matrix_ready={result.pre_matrix_ready}")
         print(f"element_loop_ready={result.element_loop_ready}")
         print(f"charge_closure_scope_complete={result.charge_closure_scope_complete}")
         print(f"continuum_complete={result.continuum.complete}")
@@ -144,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cltot={result.cltot}")
         print(f"hmctot={result.hmctot}")
         print(f"elcter={result.elcter}")
+        if parity is not None:
+            print(f"xstar_pre_matrix_parity_ready={parity.pre_matrix_ready}")
+            print(f"xstar_pre_continuum_summary_parity_ready={parity.pre_continuum_summary_ready}")
+            print(f"xstar_pre_continuum_parity_ready={parity.parity_ready}")
+            print(f"xstar_pre_continuum_parity_outside_tolerance={parity.n_outside_tolerance}")
         for key, value in paths.items():
             print(f"{key}: {value}")
     return 0

@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.24 pre-matrix ion balance and bounded local-zone probe
+
+v0.4.24 completes the source first pass used before the multilevel element matrix: `calc_ion_rates -> istruc/ioneqm -> mml/mmu`. The fixed-state `calc_hmc_all` path now distinguishes preliminary `pirt/rrrt` from post-solve `stotg/atotg`, uses `istruc`-derived ion limits by default, and fixes the one-based `rnise` level mapping. A bounded diagnostic XSTAR probe captures the first-pass element arrays and the full state immediately before `comp2`; example 105 can compare those products directly. Continuum leaves and `dsec` remain the next coherent work.
+
 ### v0.4.23 type-49 closure and fixed-state local-zone core
 
 v0.4.23 corrects the label-49 packed parent destination from `integers[-3]` to the source-faithful `integers[-4]`, adds exact source-routine execution plans for `xstarcalc` and the zone loop, and begins Milestone 4 with a fixed-temperature/fixed-electron-fraction `calc_hmc_all` core. The new core reuses the validated element solver and accumulates source-shaped ion fractions, ionization/recombination rates, level diagnostics, heating/cooling, and charge residuals. Continuum leaves, full all-element fixed-state parity, `dsec`, emissivity, and transfer remain explicit next work.

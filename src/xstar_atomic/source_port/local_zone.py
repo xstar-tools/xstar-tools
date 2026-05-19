@@ -26,6 +26,13 @@ from .element_equilibrium import (
     solve_element_statistical_equilibrium,
 )
 from .ucalc import SourceFaithfulUCalc
+from .ion_balance import (
+    CalcIonRatesContext,
+    CalcIonRatesResult,
+    IstrucResult,
+    IonStageLimitResult,
+    calc_element_pre_matrix_balance,
+)
 
 
 class CalcHMCAllError(RuntimeError):
@@ -47,6 +54,8 @@ class FixedStateElementRequest:
     neutral_h_density_cm3: float = 0.0
     ionized_h_density_cm3: float = 0.0
     lfast: int = 2
+    critf: float = 1.0e-8
+    use_source_ion_limits: bool = True
     initial_populations: Optional[np.ndarray] = None
     strict_context: bool = True
     capture_lucy_trace: bool = False
@@ -58,6 +67,8 @@ class FixedStateElementRequest:
             raise CalcHMCAllError("invalid ion-stage range")
         if not np.isfinite(self.abundance) or self.abundance < 0.0:
             raise CalcHMCAllError("element abundance must be finite and nonnegative")
+        if not np.isfinite(self.critf) or self.critf < 0.0:
+            raise CalcHMCAllError("critf must be finite and nonnegative")
 
 
 @dataclass(frozen=True)
@@ -84,7 +95,13 @@ class FixedStateElementResult:
 
     request: FixedStateElementRequest
     equilibrium: ElementEquilibriumResult
+    calc_ion_rates: Dict[int, CalcIonRatesResult]
+    preliminary_istruc: IstrucResult
+    source_limits: IonStageLimitResult
+    selected_min_ion_stage: int
+    selected_max_ion_stage: int
     ion_fractions: Dict[int, float]
+    preliminary_ion_fractions: Dict[int, float]
     fully_stripped_fraction: float
     heating: float
     cooling: float
@@ -105,6 +122,7 @@ class FixedStateCalcHMCAllResult:
     lcdd: int
     element_results: List[FixedStateElementResult]
     ion_fractions: Dict[Tuple[int, int], float]
+    preliminary_ion_fractions: Dict[Tuple[int, int], float]
     rrrt: Dict[Tuple[int, int], float]
     pirt: Dict[Tuple[int, int], float]
     htt: Dict[int, float]
@@ -135,6 +153,7 @@ class FixedStateCalcHMCAllResult:
     elcter: float
     electron_contribution: float
     continuum: FixedStateContinuumResult
+    pre_matrix_ready: bool
     element_loop_ready: bool
     charge_closure_scope_complete: bool
     complete_fixed_state_ready: bool
@@ -143,6 +162,7 @@ class FixedStateCalcHMCAllResult:
 
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
 ElementSolver = Callable[..., ElementEquilibriumResult]
+PreMatrixSolver = Callable[..., Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]]
 
 
 def resolve_calc_hmc_all_density(
@@ -188,6 +208,7 @@ def calc_hmc_all(
     continuum_kernel: Optional[ContinuumKernel] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
+    pre_matrix_solver: PreMatrixSolver = calc_element_pre_matrix_balance,
 ) -> FixedStateCalcHMCAllResult:
     """Run the fixed-state element/charge/heating core of ``calc_hmc_all``.
 
@@ -215,6 +236,7 @@ def calc_hmc_all(
         raise CalcHMCAllError("resolved hydrogen density is invalid")
 
     ion_fractions: Dict[Tuple[int, int], float] = {}
+    preliminary_ion_fractions: Dict[Tuple[int, int], float] = {}
     rrrt: Dict[Tuple[int, int], float] = {}
     pirt: Dict[Tuple[int, int], float] = {}
     htt: Dict[int, float] = {}
@@ -242,22 +264,62 @@ def calc_hmc_all(
     httot = cltot = httot2 = cltot2 = 0.0
     enelec = 0.0
     all_ready = True
-    charge_scope_complete = True
+    all_pre_matrix_ready = True
+    ion_element_z = getattr(derived, "ion_element_z", ())
+    available_element_z = {
+        int(z) for z in np.asarray(ion_element_z).reshape(-1) if int(z) > 0
+    }
+    requested_element_z = {int(item.element_z) for item in elements if float(item.abundance) > 1.0e-24}
+    charge_scope_complete = bool(available_element_z) and requested_element_z == available_element_z
 
     for request in elements:
         request.validate()
         z = int(request.element_z)
         abundance = float(request.abundance)
-        mml[z] = int(request.min_ion_stage)
-        mmu[z] = int(request.max_ion_stage)
-        charge_scope_complete &= request.min_ion_stage == 1 and request.max_ion_stage >= z
+
+        ion_rate_context = CalcIonRatesContext(
+            temperature_k=float(temperature_k),
+            hydrogen_density_cm3=xpx,
+            electron_fraction_xee=float(electron_fraction_xee),
+            radiation=request.radiation,
+            covering_fraction=float(request.covering_fraction),
+            turbulent_velocity_km_s=float(request.turbulent_velocity_km_s),
+            neutral_h_density_cm3=float(request.neutral_h_density_cm3),
+            ionized_h_density_cm3=float(request.ionized_h_density_cm3),
+            lfast=int(request.lfast),
+            strict_context=bool(request.strict_context),
+        )
+        calc_rates_by_stage, preliminary, source_limits = pre_matrix_solver(
+            master,
+            derived,
+            element_z=z,
+            context=ion_rate_context,
+            critf=float(request.critf),
+            dispatcher=dispatcher,
+        )
+        pre_matrix_ok = all(item.ready for item in calc_rates_by_stage.values())
+        all_pre_matrix_ready &= pre_matrix_ok
+        if request.use_source_ion_limits:
+            selected_min = int(source_limits.mml)
+            selected_max = int(source_limits.mmu)
+        else:
+            selected_min = int(request.min_ion_stage)
+            selected_max = int(request.max_ion_stage)
+        mml[z] = selected_min
+        mmu[z] = selected_max
+
+        for stage, item in calc_rates_by_stage.items():
+            pirt[(z, int(stage))] = float(item.pirti)
+            rrrt[(z, int(stage))] = float(item.rrrti)
+        for stage in range(1, preliminary.n_rates + 2):
+            preliminary_ion_fractions[(z, stage)] = float(preliminary.fractions[stage])
 
         context = ElementEquilibriumContext(
             temperature_k=float(temperature_k),
             hydrogen_density_cm3=xpx,
             electron_fraction_xee=float(electron_fraction_xee),
-            min_ion_stage=int(request.min_ion_stage),
-            max_ion_stage=int(request.max_ion_stage),
+            min_ion_stage=selected_min,
+            max_ion_stage=selected_max,
             radiation=request.radiation,
             escape=request.escape,
             covering_fraction=float(request.covering_fraction),
@@ -299,8 +361,6 @@ def calc_hmc_all(
             stage = int(block.ion_stage)
             stage_fractions[stage] = fraction
             ion_fractions[(z, stage)] = fraction
-            rrrt[(z, stage)] = float(solve.recombination_totals[ion_slot])
-            pirt[(z, stage)] = float(solve.ionization_totals[ion_slot])
             stotg[(z, stage)] = float(solve.ionization_totals[ion_slot])
             atotg[(z, stage)] = float(solve.recombination_totals[ion_slot])
             fstotg[(z, stage)] = np.asarray(solve.ionization_components[:, ion_slot], dtype=float).copy()
@@ -316,6 +376,7 @@ def calc_hmc_all(
 
         populations = np.asarray(solve.populations, dtype=float)
         lte = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
+        lte_has_guard = lte.size == populations.size + 1
         for row in equilibrium.assembly.basis.rows:
             idx = row.compact_index - 1
             for role in row.roles:
@@ -323,7 +384,8 @@ def calc_hmc_all(
                 if key is None:
                     continue
                 pop = float(populations[idx])
-                rn = float(lte[idx]) if idx < lte.size else 0.0
+                lte_index = row.compact_index if lte_has_guard else idx
+                rn = float(lte[lte_index]) if lte_index < lte.size else 0.0
                 xilevg[key] = pop
                 rnisg[key] = rn
                 bilevg[key] = pop / (rn + 1.0e-48)
@@ -338,7 +400,16 @@ def calc_hmc_all(
             FixedStateElementResult(
                 request=request,
                 equilibrium=equilibrium,
+                calc_ion_rates=calc_rates_by_stage,
+                preliminary_istruc=preliminary,
+                source_limits=source_limits,
+                selected_min_ion_stage=selected_min,
+                selected_max_ion_stage=selected_max,
                 ion_fractions=stage_fractions,
+                preliminary_ion_fractions={
+                    stage: float(preliminary.fractions[stage])
+                    for stage in range(1, preliminary.n_rates + 2)
+                },
                 fully_stripped_fraction=fully_stripped,
                 heating=element_ht,
                 cooling=element_cl,
@@ -377,7 +448,7 @@ def calc_hmc_all(
     cltot2 += float(continuum.cooling2)
     hmctot = 2.0 * (httot - cltot) / (1.0e-37 + httot + cltot)
     elcter = float(electron_fraction_xee) - enelec
-    complete = bool(all_ready and charge_scope_complete and continuum.complete)
+    complete = bool(all_pre_matrix_ready and all_ready and charge_scope_complete and continuum.complete)
 
     return FixedStateCalcHMCAllResult(
         temperature_k=float(temperature_k),
@@ -388,6 +459,7 @@ def calc_hmc_all(
         lcdd=int(lcdd),
         element_results=element_results,
         ion_fractions=ion_fractions,
+        preliminary_ion_fractions=preliminary_ion_fractions,
         rrrt=rrrt,
         pirt=pirt,
         htt=htt,
@@ -418,6 +490,7 @@ def calc_hmc_all(
         elcter=elcter,
         electron_contribution=enelec,
         continuum=continuum,
+        pre_matrix_ready=all_pre_matrix_ready,
         element_loop_ready=all_ready,
         charge_closure_scope_complete=charge_scope_complete,
         complete_fixed_state_ready=complete,
@@ -425,6 +498,9 @@ def calc_hmc_all(
             "source_file": "xstar/xstarlib/src/calc_hmc_all.f90",
             "source_mode": "fixed_temperature_fixed_electron_fraction",
             "n_elements": len(element_results),
+            "pre_matrix_ready": bool(all_pre_matrix_ready),
+            "calc_ion_rates_translated": True,
+            "istruc_ioneqm_translated": True,
             "continuum_complete": bool(continuum.complete),
             "dsec_deferred": True,
         },
@@ -474,6 +550,7 @@ def register_fixed_state_calc_hmc_all(
         state.local_zone.fixed_state_ready = result.complete_fixed_state_ready
         state.local_zone.source_arrays = {
             "xiin": result.ion_fractions,
+            "xitp_preliminary": result.preliminary_ion_fractions,
             "rrrt": result.rrrt,
             "pirt": result.pirt,
             "htt": result.htt,
@@ -507,7 +584,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.23",
+    port_version: str = "v0.4.24",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -521,16 +598,33 @@ def write_fixed_state_calc_hmc_all_products(
     with ion_csv.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=("element_z", "ion_stage", "ion_fraction", "pirt_s_inv", "rrrt_s_inv"),
+            fieldnames=(
+                "element_z", "ion_stage",
+                "preliminary_istruc_fraction", "final_ion_fraction",
+                "pirt_s_inv", "rrrt_s_inv",
+                "stot_flow_s_inv", "atot_flow_s_inv", "xtot",
+            ),
         )
         writer.writeheader()
-        for (z, stage), fraction in sorted(result.ion_fractions.items()):
+        ion_keys = sorted(
+            set(result.preliminary_ion_fractions)
+            | set(result.ion_fractions)
+            | set(result.pirt)
+            | set(result.rrrt)
+            | set(result.stotg)
+            | set(result.atotg)
+        )
+        for z, stage in ion_keys:
             writer.writerow({
                 "element_z": z,
                 "ion_stage": stage,
-                "ion_fraction": fraction,
+                "preliminary_istruc_fraction": result.preliminary_ion_fractions.get((z, stage), 0.0),
+                "final_ion_fraction": result.ion_fractions.get((z, stage), 0.0),
                 "pirt_s_inv": result.pirt.get((z, stage), 0.0),
                 "rrrt_s_inv": result.rrrt.get((z, stage), 0.0),
+                "stot_flow_s_inv": result.stotg.get((z, stage), 0.0),
+                "atot_flow_s_inv": result.atotg.get((z, stage), 0.0),
+                "xtot": result.xtotg.get((z, stage), 0.0),
             })
 
     element_csv = out / "xstar_calc_hmc_all_fixed_state_elements.csv"
@@ -538,7 +632,9 @@ def write_fixed_state_calc_hmc_all_products(
         writer = csv.DictWriter(
             handle,
             fieldnames=(
-                "element_z", "abundance", "min_ion_stage", "max_ion_stage",
+                "element_z", "abundance", "requested_min_ion_stage", "requested_max_ion_stage",
+                "selected_min_ion_stage", "selected_max_ion_stage", "critf",
+                "ion_stage_selection", "pre_matrix_ready",
                 "heating", "cooling", "heating2", "cooling2",
                 "electron_contribution", "fully_stripped_fraction",
                 "element_solver_ready",
@@ -549,8 +645,13 @@ def write_fixed_state_calc_hmc_all_products(
             writer.writerow({
                 "element_z": item.request.element_z,
                 "abundance": item.request.abundance,
-                "min_ion_stage": item.request.min_ion_stage,
-                "max_ion_stage": item.request.max_ion_stage,
+                "requested_min_ion_stage": item.request.min_ion_stage,
+                "requested_max_ion_stage": item.request.max_ion_stage,
+                "selected_min_ion_stage": item.selected_min_ion_stage,
+                "selected_max_ion_stage": item.selected_max_ion_stage,
+                "critf": item.request.critf,
+                "ion_stage_selection": "source_istruc" if item.request.use_source_ion_limits else "explicit_override",
+                "pre_matrix_ready": all(rate.ready for rate in item.calc_ion_rates.values()),
                 "heating": item.heating,
                 "cooling": item.cooling,
                 "heating2": item.heating2,
@@ -559,6 +660,39 @@ def write_fixed_state_calc_hmc_all_products(
                 "fully_stripped_fraction": item.fully_stripped_fraction,
                 "element_solver_ready": item.equilibrium.full_element_direct_solve_ready,
             })
+
+    contribution_csv = out / "xstar_calc_hmc_all_calc_ion_rates_records.csv"
+    with contribution_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=(
+                "element_z", "ion_stage", "ion_index", "record",
+                "data_type", "rate_type", "status",
+                "idest1_packed", "idest1", "idest2",
+                "ans1", "ans2", "added_to_pirti", "added_to_rrrti", "reason",
+            ),
+        )
+        writer.writeheader()
+        for item in result.element_results:
+            for stage, rate_result in sorted(item.calc_ion_rates.items()):
+                for row in rate_result.contributions:
+                    writer.writerow({
+                        "element_z": item.request.element_z,
+                        "ion_stage": stage,
+                        "ion_index": rate_result.ion_index,
+                        "record": row.record,
+                        "data_type": row.data_type,
+                        "rate_type": row.rate_type,
+                        "status": row.status,
+                        "idest1_packed": row.idest1_packed,
+                        "idest1": row.idest1,
+                        "idest2": row.idest2,
+                        "ans1": row.ans1,
+                        "ans2": row.ans2,
+                        "added_to_pirti": row.added_to_pirti,
+                        "added_to_rrrti": row.added_to_rrrti,
+                        "reason": row.reason,
+                    })
 
     level_csv = out / "xstar_calc_hmc_all_fixed_state_levels.csv"
     with level_csv.open("w", newline="") as handle:
@@ -598,7 +732,9 @@ def write_fixed_state_calc_hmc_all_products(
         "lcdd": result.lcdd,
         "n_elements": len(result.element_results),
         "n_ion_entries": len(result.ion_fractions),
+        "n_preliminary_ion_entries": len(result.preliminary_ion_fractions),
         "n_level_entries": len(result.xilevg),
+        "pre_matrix_ready": result.pre_matrix_ready,
         "httot": result.httot,
         "cltot": result.cltot,
         "httot2": result.httot2,
@@ -624,6 +760,7 @@ def write_fixed_state_calc_hmc_all_products(
         f"- Hydrogen density: `{result.hydrogen_density_cm3:.16g} cm^-3`\n"
         f"- Electron fraction: `{result.electron_fraction_xee:.16g}`\n"
         f"- Elements: `{len(result.element_results)}`\n"
+        f"- Pre-matrix calc_ion_rates/istruc ready: `{result.pre_matrix_ready}`\n"
         f"- Element loop ready: `{result.element_loop_ready}`\n"
         f"- Charge-closure scope complete: `{result.charge_closure_scope_complete}`\n"
         f"- Continuum leaves complete: `{result.continuum.complete}`\n"
@@ -634,6 +771,7 @@ def write_fixed_state_calc_hmc_all_products(
     return {
         "ions_csv": str(ion_csv),
         "elements_csv": str(element_csv),
+        "calc_ion_rates_records_csv": str(contribution_csv),
         "levels_csv": str(level_csv),
         "json": str(json_path),
         "markdown": str(md_path),

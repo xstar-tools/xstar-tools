@@ -91,11 +91,11 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.23"
+PORT_LEDGER_VERSION = "v0.4.24"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "complete fixed-state calc_hmc_all parity -> dsec -> "
-    "calc_emisab_all/calc_emis_all -> xstarcalc"
+    "XSTAR pre-continuum calc_hmc_all parity -> comp2 -> freef -> "
+    "bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec"
 )
 
 
@@ -177,14 +177,22 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.linear_algebra.lubksb", "source-order back-substitution tests"),
         E("xstar/xstarlib/src/mprove.f90", "mprove", "milestone3_linear_algebra", V,
           "xstar_atomic.source_port.linear_algebra.mprove", "source-order iterative-refinement tests"),
+        E("xstar/xstarlib/src/calc_ion_rates.f90", "calc_ion_rates", "milestone4_local_zone", T,
+          "xstar_atomic.source_port.ion_balance.calc_ion_rates",
+          "source-family traversal, ans1 accumulation, and selected-record unit tests",
+          "Integrated into the fixed-state element loop; awaiting the bounded XSTAR pre-matrix probe run for direct validation."),
+        E("xstar/xstarlib/src/istruc.f90", "istruc", "milestone4_local_zone", T,
+          "xstar_atomic.source_port.ion_balance.istruc",
+          "one-based guard, final-stage residual, and adjacent-stage equilibrium tests",
+          "Integrated before the multilevel solve; direct XSTAR probe comparison remains pending."),
+        E("xstar/xstarlib/src/ioneqm.f90", "ioneqm", "milestone4_local_zone", T,
+          "xstar_atomic.source_port.ion_balance.ioneqm",
+          "source overflow-avoidance algorithm, normalization, and adjacent-rate ratio tests",
+          "Direct XSTAR probe comparison remains pending."),
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
-          "fixed-state source-shaped element-loop, charge, ion-rate, level-rate, and heating/cooling aggregation tests",
-          "The validated Milestone-3 element kernel is integrated. Full all-element/XSTAR parity and comp2/freef/bremem/heatf continuum closure remain pending."),
-        E("xstar/xstarlib/src/istruc.f90", "istruc", "milestone4_local_zone", U,
-          "xstar_atomic.source_port.local_zone.istruc", "", "Ionization-balance source port not yet integrated."),
-        E("xstar/xstarlib/src/ioneqm.f90", "ioneqm", "milestone4_local_zone", U,
-          "xstar_atomic.source_port.local_zone.ioneqm", "", "Ion/electron closure not yet translated into the source driver."),
+          "fixed-state pre-matrix rates, istruc-derived stage limits, corrected one-based level mapping, and source-shaped aggregation tests",
+          "A bounded pre-continuum XSTAR probe and comparator are included. Full all-element parity and comp2/freef/bremem/heatf continuum closure remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -198,6 +206,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 kernels and the partial fixed-state calc_hmc_all core are callable; dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 and the pre-matrix half of fixed-state calc_hmc_all are callable; pre-continuum validation, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)
