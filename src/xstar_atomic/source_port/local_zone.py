@@ -174,6 +174,22 @@ class FixedStateCalcHMCAllResult:
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
 
 
+def _assembly_lte_population_vector(assembly: Any) -> np.ndarray:
+    """Return source ``rnise`` independently from the msolvelucy seed.
+
+    v0.4.33 correctly replayed incoming ``xileve`` as the compact solver seed,
+    but the same array was also exported as LTE ``rnisg``.  Source
+    ``calc_hmc_element`` retains the two vectors independently.  The fallback
+    is kept only for synthetic/legacy test assemblies that predate the
+    ``lte_populations`` field.
+    """
+
+    source = getattr(assembly, "lte_populations", None)
+    if source is None:
+        source = assembly.initial_populations
+    return np.asarray(source, dtype=float)
+
+
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
 ElementSolver = Callable[..., ElementEquilibriumResult]
 PreMatrixSolver = Callable[..., Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]]
@@ -464,7 +480,7 @@ def calc_hmc_all(
         enelec += fully_stripped * float(z) * abundance
 
         populations = np.asarray(solve.populations, dtype=float)
-        lte = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
+        lte = _assembly_lte_population_vector(equilibrium.assembly)
         lte_has_guard = lte.size == populations.size + 1
         nlev_by_stage = {
             int(block.ion_stage): int(block.nlev)
@@ -787,7 +803,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.33",
+    port_version: str = "v0.4.34",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

@@ -1223,7 +1223,7 @@ PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --xstar-population-solve-call-id 219 \
   --population-probe-runtime-policy use \
   --xstar-calc-hmc-probe-dir /path/to/xstar_probe_run \
-  --out-dir xstar_o_calc_hmc_all_fixed_state_v0433 \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0434 \
   --print-summary
 ```
 
@@ -1235,6 +1235,18 @@ Write the bounded, diagnostic-only eight-hook Fortran helper and source-local in
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
-  --out-dir xstar_calc_hmc_all_probe_v0433 \
+  --out-dir xstar_calc_hmc_all_probe_v0434 \
   --print-summary
+```
+
+### `107_validate_v0434_oxygen_regression.py`
+
+Validate the compact, packaged v0.4.34 oxygen regression oracle without an
+ATDB file or XSTAR executable. The command checks the frozen inventories for
+35 `rnisg` rows, 349 `bilevg` rows, 205 exact type-53 `leveltemp` rows, 196
+type-53 `cj2` records, seven type-99 `ans5` records, and two thermal-family
+rows.
+
+```bash
+PYTHONPATH=src python examples/107_validate_v0434_oxygen_regression.py
 ```

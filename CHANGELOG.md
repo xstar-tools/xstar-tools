@@ -1,5 +1,43 @@
 # CHANGELOG
 
+## v0.4.34 - 2026-05-19
+
+v0.4.34 is a bounded Milestone-4 oxygen-parity correction release. It is
+limited to the three source-semantic differences isolated by the completed
+v0.4.33 call-73 diagnosis and does not expand to all elements, continuum
+leaves, `dsec`, emissivity, transfer, or outputs.
+
+First, the element assembly now preserves the LTE `rnise` vector returned by
+`levwkelement` independently from the incoming same-call `xileve` population
+vector used to seed `msolvelucy`. The solver continues to start from captured
+`xileve`, while global `rnisg` and derived `bilevg` are exported from the
+untouched LTE vector. This targets the 35 remaining `rnisg` rows and 349
+`bilevg` rows.
+
+Second, the shared mutable `leveltemp` work array is now represented with the
+literal source capacity `ndl=5000`. All columns are initialized to zero before
+the ordered `levwkelement` and second-pass `calc_hmc_ion` overwrites. Columns
+never written by any selected ion remain valid zero-valued workspace entries
+with provenance `initial_unwritten_zero`. This targets the 205 exact type-53
+workspace-energy rows and the 196 dependent type-53 `cj2` records.
+
+Third, `_phint53hunt_exact` now preserves the source's stale `atmp22` scalar in
+the cached `luse(kl) != 0` branch. XSTAR restores `sgtmp` and `atmp2`, derives
+`tempi`, and intentionally does not recompute `atmp22`; the preceding loop
+value therefore contributes to `sumc2`. This targets the seven type-99 `ans5`
+records and the two remaining type-99/rate-7 `cooling2` thermal-family rows.
+
+A compact packaged oxygen regression oracle freezes all requested counts, and
+`examples/107_validate_v0434_oxygen_regression.py` validates the inventory
+without ATDB or XSTAR. Focused v0.4.34 regression tests cover all six gates and
+the integrated stale-`atmp22` quadrature path. Probe values remain diagnostic
+only and never enter the production operator.
+
+The v0.4.33 eight-hook XSTAR files are sufficient for the production
+reanalysis; no XSTAR source change or rebuild is required for v0.4.34. Physical
+oxygen acceptance is not claimed until example 105 is rerun and reports
+`xstar_oxygen_pre_continuum_acceptance_ready=True`.
+
 ## v0.4.33 - 2026-05-19
 
 v0.4.33 is a bounded Milestone-4 state-history and diagnostic release based on

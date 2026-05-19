@@ -14,6 +14,22 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.34 bounded oxygen-parity corrections
+
+v0.4.34 preserves the `levwkelement` LTE vector `rnise_lte` separately from
+the same-call `xileve` solver seed, represents the complete zero-initialized
+`leveltemp` workspace through the source capacity `ndl=5000`, and reproduces
+the cached-branch stale-`atmp22` behavior of `phint53hunt.f90`. These changes
+are limited to the exact remaining v0.4.33 oxygen blockers: 35 `rnisg` rows,
+349 `bilevg` rows, 205 type-53 workspace-energy rows, 196 type-53 `cj2`
+records, seven type-99 `ans5` records, and two thermal-family `cooling2` rows.
+
+The compact benchmark under `xstar_atomic.benchmarks.oxygen_v0434` freezes
+those counts, and example 107 validates them without external data. The
+existing v0.4.33 eight-hook XSTAR probe products can be reused; no XSTAR
+source rebuild is required. Final acceptance still requires rerunning example
+105 and obtaining `xstar_oxygen_pre_continuum_acceptance_ready=True`.
+
 ### v0.4.33 exact mutable-workspace tracing and same-call solver-state replay
 
 v0.4.33 follows the first production v0.4.32 oxygen diagnosis without

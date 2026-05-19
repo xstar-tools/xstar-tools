@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.4.33"
+version = "0.4.34"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -59,3 +59,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "xstar_atomic.benchmarks" = ["oxygen_milestone3_v0422/*"]
+"xstar_atomic.benchmarks.oxygen_v0434" = ["*"]

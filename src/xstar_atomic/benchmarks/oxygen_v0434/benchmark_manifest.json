@@ -1,0 +1,28 @@
+{
+  "benchmark": "oxygen_v0434_bounded_regression",
+  "source_run": "xstar-atomic v0.4.33 oxygen diagnosis, calc_hmc_all call 73",
+  "purpose": "Freeze the exact remaining row/record counts addressed by v0.4.34.",
+  "expected_counts": {
+    "rnisg_rows": 35,
+    "bilevg_rows": 349,
+    "type53_leveltemp_rows": 205,
+    "type53_cj2_records": 196,
+    "type99_ans5_records": 7,
+    "thermal_family_rows": 2
+  },
+  "observed_counts": {
+    "global_level_rows": 384,
+    "rnisg_rows": 35,
+    "bilevg_rows": 349,
+    "type53_leveltemp_rows": 205,
+    "type53_cj2_records": 196,
+    "type99_ans5_records": 7,
+    "thermal_family_rows": 2
+  },
+  "production_probe_values_enter_operator": false,
+  "corrections": [
+    "preserve rnise_lte separately from same-call xileve solver seed",
+    "zero-initialize complete leveltemp workspace through ndl=5000",
+    "preserve stale atmp22 in cached phint53hunt luse branch"
+  ]
+}

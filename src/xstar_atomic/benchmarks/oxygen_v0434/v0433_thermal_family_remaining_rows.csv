@@ -1,0 +1,3 @@
+element_z,family_dimension,family_index,thermal_channel,python_per_abundance,xstar_per_abundance,absolute_difference,relative_difference,within_tolerance
+8,data_type,99,cooling2,1.0239063125892356e-06,1.0398801254711498e-06,1.5973812881914202e-08,0.015361206056973897,False
+8,rate_type,7,cooling2,2.0556082366999047e-06,2.0715400606168704e-06,1.593182391696574e-08,0.007690811401552865,False
