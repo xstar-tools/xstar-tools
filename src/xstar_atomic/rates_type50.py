@@ -25,7 +25,10 @@ TYPE50_SOURCE_FORMULA = (
     "ucalc.f90:type50 pre-swap ans1=A*(ptmp1+ptmp2); "
     "sigma=0.02655*flin*lambda_cm/vtherm; "
     "ans2=sigma*bremsa(nb1)*vtherm/c*flinabs(ptmp1)*(1-cfrac); "
-    "post-swap ans1=photoexcitation and ans2=escaped decay"
+    "ener=abs(E_upper-E_lower); pre-swap ans4=ans1*ener*ergsev, "
+    "ans3=ans2*ener*ergsev; post-swap ans1=photoexcitation, "
+    "ans2=escaped decay, ans3=-escaped*ener*ergsev, "
+    "ans4=-photoexcitation*ener*ergsev"
 )
 
 
@@ -235,6 +238,7 @@ __all__ = [
 ]
 
 XSTAR_C_LIGHT_CM_S = 3.0e10
+XSTAR_ERG_PER_EV = 1.602176634e-12
 
 
 def evaluate_type50_ucalc_record(
@@ -247,6 +251,8 @@ def evaluate_type50_ucalc_record(
     flinabs_ptmp1: float | None = 1.0,
     hydrogen_density_cm3: float | None = None,
     high_wavelength_cutoff_A: float = 0.99e9,
+    endpoint_energy_eV: float | None = None,
+    source_erg_per_eV: float = XSTAR_ERG_PER_EV,
 ) -> dict[str, Any]:
     """Evaluate a decoded XSTAR type-50 record in ``ucalc`` branch order.
 
@@ -273,9 +279,10 @@ def evaluate_type50_ucalc_record(
     aij = pick("A_s^-1", "A_s_inv", "aij_s_inv", "rate_s^-1")
     flin = pick("f_osc_from_A", "oscillator_strength", "flin")
     wavelength_a = pick("wavelength_A", "wavelength", "lambda_A")
-    energy_ev = pick("energy_eV", "line_energy_eV")
-    if energy_ev is None and wavelength_a is not None and wavelength_a > 0.0:
-        energy_ev = 12398.4016 / wavelength_a
+    stored_wavelength_energy_ev = pick("energy_eV", "line_energy_eV")
+    if stored_wavelength_energy_ev is None and wavelength_a is not None and wavelength_a > 0.0:
+        stored_wavelength_energy_ev = 12398.4016 / wavelength_a
+    endpoint_energy = _finite_or_none(endpoint_energy_eV)
 
     p1 = _finite_or_none(ptmp1)
     p2 = _finite_or_none(ptmp2)
@@ -344,10 +351,42 @@ def evaluate_type50_ucalc_record(
         if bremsa is None:
             missing.append("bremsa_nb1")
 
-    status = "evaluated" if escaped is not None and photo is not None else "not_evaluated"
+    # Source label 50 re-derives ``ener=abs(eeup-eelo)`` from the actual
+    # endpoint level energies after locating the line record, then forms both
+    # energy channels from that same endpoint difference before the final
+    # ans1/ans2 and ans3/ans4 swaps.  After the swap both returned energy
+    # channels are negative: ans3 is escaped line cooling and ans4 is pumping
+    # heating.  The stored wavelength remains relevant to the oscillator
+    # strength, line-profile, and radiation-grid lookup, but not to ans3/ans4.
+    decay_energy_ev = endpoint_energy
+    decay_energy_source = "endpoint_energy_difference"
+    ans3_cooling = None
+    ans4_heating = None
+    if escaped is not None and decay_energy_ev is not None:
+        ans3_cooling = -escaped * decay_energy_ev * float(source_erg_per_eV)
+    if photo is not None and endpoint_energy is not None:
+        ans4_heating = -photo * endpoint_energy * float(source_erg_per_eV)
+
+    # Preserve the long-standing public evaluator contract: ``status`` reports
+    # whether the population-rate pair ans1/ans2 can be evaluated.  The new
+    # energy-channel status is tracked independently so audit callers that do
+    # not supply endpoint energies remain backward compatible.  The source-port
+    # ucalc path always supplies endpoint energies and explicitly requires both
+    # ans3 and ans4.
+    status = (
+        "evaluated"
+        if escaped is not None and photo is not None
+        else "not_evaluated"
+    )
+    energy_channel_status = (
+        "evaluated"
+        if ans3_cooling is not None and ans4_heating is not None
+        else "not_evaluated_missing_endpoint_energy"
+    )
     return {
         "status": status,
         "reason": "" if status == "evaluated" else "missing_context:" + ",".join(sorted(set(missing))),
+        "energy_channel_status": energy_channel_status,
         "ans1_photoexcitation_s^-1": photo,
         "ans2_escaped_decay_s^-1": escaped,
         "escaped_decay_before_density_floor_s^-1": escaped_raw,
@@ -359,7 +398,16 @@ def evaluate_type50_ucalc_record(
         "aij_s^-1": aij,
         "oscillator_strength": flin,
         "wavelength_A": wavelength_a,
-        "energy_eV": energy_ev,
+        # Backward-compatible stored-wavelength energy.  The source thermal
+        # channels below intentionally use endpoint_energy_eV instead.
+        "energy_eV": stored_wavelength_energy_ev,
+        "endpoint_energy_eV": endpoint_energy,
+        "stored_wavelength_energy_eV": stored_wavelength_energy_ev,
+        "decay_energy_eV": decay_energy_ev,
+        "decay_energy_source": decay_energy_source,
+        "ans3_cooling_signed_erg_s^-1": ans3_cooling,
+        "ans4_heating_signed_erg_s^-1": ans4_heating,
+        "source_erg_per_eV": float(source_erg_per_eV),
         "ptmp1": p1,
         "ptmp2": p2,
         "ptmp_sum": (p1 + p2) if p1 is not None and p2 is not None else None,

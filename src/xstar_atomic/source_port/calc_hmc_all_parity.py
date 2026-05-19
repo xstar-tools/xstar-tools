@@ -6,11 +6,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 import csv
 import json
+import re
 
 from .local_zone import FixedStateCalcHMCAllResult
 from .calc_hmc_all_closure import (
     XSTARVectorMatrixClosureResult,
     build_xstar_vector_matrix_closure,
+)
+from .calc_hmc_all_matrix_parity import (
+    SameCallMatrixParityResult,
+    ThermalFamilyParityResult,
+    compare_same_call_matrix_terms,
+    compare_thermal_families,
 )
 
 
@@ -80,12 +87,22 @@ class CalcHMCAllPreContinuumParityResult:
     matrix_closure_ready: Optional[bool]
     matrix_closure_status: str
     element_thermal_diagnostic_ready: bool
+    same_call_matrix_ready: Optional[bool]
+    same_call_matrix_status: str
+    same_call_matrix_topology_ready: Optional[bool]
+    same_call_matrix_coefficient_ready: Optional[bool]
+    same_call_matrix_active_closure_ready: Optional[bool]
+    thermal_family_ready: Optional[bool]
+    thermal_family_status: str
     acceptance_gate_ready: bool
     strict_parity_ready: bool
     parity_ready: bool
     active_population_threshold: float
     matrix_closure: Optional[XSTARVectorMatrixClosureResult] = None
+    same_call_matrix: Optional[SameCallMatrixParityResult] = None
+    thermal_family_parity: Optional[ThermalFamilyParityResult] = None
     population_weighted_attribution: List[Dict[str, Any]] = field(default_factory=list)
+    active_population_ion_resolution: List[Dict[str, Any]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -356,6 +373,134 @@ def _build_population_weighted_attribution(
     return rows
 
 
+
+def _build_active_population_ion_matrix_resolution(
+    *,
+    result: FixedStateCalcHMCAllResult,
+    parity_rows: Sequence[CalcHMCAllParityRow],
+    same_call_matrix: SameCallMatrixParityResult,
+) -> List[Dict[str, Any]]:
+    """Classify failed active-level and global-ion rows with same-call evidence."""
+
+    elements = {
+        int(item.request.element_z): item
+        for item in getattr(result, "element_results", ())
+        if getattr(item, "equilibrium", None) is not None
+    }
+    active_by_row = {
+        (int(row.get("element_z", 0)), int(row.get("compact_row", 0))): row
+        for row in same_call_matrix.active_row_rows
+    }
+    terms_by_row: Dict[tuple[int, int], List[Mapping[str, Any]]] = {}
+    for row in same_call_matrix.term_rows:
+        if row.get("python_row_compact") in (None, ""):
+            continue
+        key = (int(row.get("element_z", 0)), int(row["python_row_compact"]))
+        terms_by_row.setdefault(key, []).append(row)
+
+    output: List[Dict[str, Any]] = []
+    level_pattern = re.compile(
+        r"global_level=(?P<global>\d+),Z=(?P<z>\d+),stage=(?P<stage>\d+),level=(?P<level>\d+)"
+    )
+    ion_pattern = re.compile(
+        r"global_ion=(?P<global>\d+),Z=(?P<z>\d+),stage=(?P<stage>\d+)"
+    )
+    for metric in parity_rows:
+        if metric.within_tolerance:
+            continue
+        is_active_level = (
+            metric.component in {"global_level_xilevg", "global_level_alphag"}
+            and metric.milestone_blocking
+        )
+        is_global_ion = metric.component.startswith("global_ion_")
+        if not (is_active_level or is_global_ion):
+            continue
+        match = level_pattern.fullmatch(metric.key) if is_active_level else ion_pattern.fullmatch(metric.key)
+        if match is None:
+            continue
+        z = int(match.group("z"))
+        stage = int(match.group("stage"))
+        global_index = int(match.group("global"))
+        element = elements.get(z)
+        if element is None:
+            compact_rows: List[int] = []
+        else:
+            basis = element.equilibrium.assembly.basis
+            if is_active_level:
+                local_level = int(match.group("level"))
+                compact_rows = sorted({
+                    int(row.compact_index)
+                    for row in basis.rows
+                    if any(
+                        int(role.get("ion_stage", 0)) == stage
+                        and int(role.get("local_level", 0)) == local_level
+                        for role in row.roles
+                    )
+                })
+            else:
+                local_level = None
+                compact_rows = sorted({
+                    int(row.compact_index)
+                    for row in basis.rows
+                    if any(int(role.get("ion_stage", 0)) == stage for role in row.roles)
+                })
+
+        active_candidates = [
+            active_by_row[(z, compact)]
+            for compact in compact_rows
+            if (z, compact) in active_by_row
+        ]
+        dominant_active = max(
+            active_candidates,
+            key=lambda row: abs(float(row.get("matrix_difference_xstar_vector_residual", 0.0))),
+            default=None,
+        )
+        term_candidates = [
+            row for compact in compact_rows for row in terms_by_row.get((z, compact), ())
+        ]
+        dominant_term = max(
+            term_candidates,
+            key=lambda row: abs(float(row.get("delta_population_weighted_aj1", 0.0))),
+            default=None,
+        )
+        if dominant_active is not None:
+            classification = str(dominant_active.get("classification", "same_call_matrix_attributed"))
+        elif dominant_term is not None and not bool(dominant_term.get("within_tolerance", True)):
+            classification = "coefficient_driven_nonactive_row"
+        else:
+            classification = "population_propagation_or_ion_aggregation"
+        output.append({
+            "component": metric.component,
+            "key": metric.key,
+            "element_z": z,
+            "ion_stage": stage,
+            "local_level": local_level,
+            "global_index": global_index,
+            "python_value": metric.python_value,
+            "xstar_value": metric.xstar_value,
+            "absolute_difference": metric.absolute_difference,
+            "relative_difference": metric.relative_difference,
+            "compact_rows": ";".join(str(value) for value in compact_rows),
+            "n_compact_rows": len(compact_rows),
+            "classification": classification,
+            "dominant_compact_row": None if dominant_active is None else dominant_active.get("compact_row"),
+            "dominant_python_matrix_residual": None if dominant_active is None else dominant_active.get("python_matrix_xstar_vector_residual"),
+            "dominant_xstar_matrix_residual": None if dominant_active is None else dominant_active.get("xstar_matrix_xstar_vector_residual"),
+            "dominant_matrix_difference_residual": None if dominant_active is None else dominant_active.get("matrix_difference_xstar_vector_residual"),
+            "dominant_term_index": None if dominant_term is None else dominant_term.get("term_index"),
+            "dominant_record": None if dominant_term is None else dominant_term.get("record"),
+            "dominant_data_type": None if dominant_term is None else dominant_term.get("data_type"),
+            "dominant_rate_type": None if dominant_term is None else dominant_term.get("rate_type"),
+            "dominant_role": None if dominant_term is None else dominant_term.get("role"),
+            "dominant_python_aj1": None if dominant_term is None else dominant_term.get("python_aj1"),
+            "dominant_xstar_aj1": None if dominant_term is None else dominant_term.get("xstar_aj1"),
+            "dominant_population_weighted_coefficient_difference": (
+                None if dominant_term is None else dominant_term.get("delta_population_weighted_aj1")
+            ),
+            "diagnostic_role": "same_call_matrix_resolution_of_active_level_or_global_ion_residual",
+        })
+    return output
+
 def compare_calc_hmc_all_pre_continuum_probe(
     result: FixedStateCalcHMCAllResult,
     probe_dir: str | Path,
@@ -386,9 +531,17 @@ def compare_calc_hmc_all_pre_continuum_probe(
     level_rows_all = _read_csv(root / "xstar_calc_hmc_all_pre_continuum_levels_probe.csv")
     element_array_path = root / "xstar_calc_hmc_all_pre_continuum_elements_probe.csv"
     element_array_rows_all = _read_csv_optional(element_array_path)
+    matrix_rows_all = _read_csv_optional(root / "xstar_calc_hmc_all_matrix_terms_probe.csv")
+    thermal_data_type_rows_all = _read_csv_optional(
+        root / "xstar_calc_hmc_all_thermal_data_type_probe.csv"
+    )
+    thermal_rate_type_rows_all = _read_csv_optional(
+        root / "xstar_calc_hmc_all_thermal_rate_type_probe.csv"
+    )
     all_probe_rows = (
         element_rows_all + summary_rows_all + ion_rows_all + level_rows_all
-        + element_array_rows_all
+        + element_array_rows_all + matrix_rows_all
+        + thermal_data_type_rows_all + thermal_rate_type_rows_all
     )
     selected_call = _resolve_call_id(all_probe_rows, call_id)
     element_rows = [r for r in element_rows_all if int(r["calc_hmc_all_call_id"]) == selected_call]
@@ -397,6 +550,18 @@ def compare_calc_hmc_all_pre_continuum_probe(
     level_rows = [r for r in level_rows_all if int(r["calc_hmc_all_call_id"]) == selected_call]
     element_array_rows = [
         r for r in element_array_rows_all
+        if int(r["calc_hmc_all_call_id"]) == selected_call
+    ]
+    matrix_rows = [
+        r for r in matrix_rows_all
+        if int(r["calc_hmc_all_call_id"]) == selected_call
+    ]
+    thermal_data_type_rows = [
+        r for r in thermal_data_type_rows_all
+        if int(r["calc_hmc_all_call_id"]) == selected_call
+    ]
+    thermal_rate_type_rows = [
+        r for r in thermal_rate_type_rows_all
         if int(r["calc_hmc_all_call_id"]) == selected_call
     ]
     if len(summary_rows) != 1:
@@ -653,11 +818,59 @@ def compare_calc_hmc_all_pre_continuum_probe(
         )
     )
 
+    same_call_matrix = compare_same_call_matrix_terms(
+        result, matrix_probe_rows=matrix_rows, closure=closure,
+        rtol=rtol, atol=atol,
+        active_row_scale_threshold=matrix_closure_active_row_scale_threshold,
+    )
+    thermal_family_parity = compare_thermal_families(
+        closure=closure,
+        data_type_probe_rows=thermal_data_type_rows,
+        rate_type_probe_rows=thermal_rate_type_rows,
+        rtol=rtol, atol=atol,
+    )
+
     attribution = _build_population_weighted_attribution(
         result=result,
         failed_level_rows=rows,
         level_by_index=level_by_index,
         level_index_by_key=level_index_by_key,
+    )
+    matrix_term_by_key = {
+        (int(row.get("element_z", 0)), int(row.get("term_index", 0))): row
+        for row in same_call_matrix.term_rows
+        if row.get("term_index") not in (None, "")
+    }
+    for row in attribution:
+        matrix_row = matrix_term_by_key.get((
+            int(row.get("element_z", 0)), int(row.get("dominant_source_row", 0))
+        ))
+        # dominant_source_row is a compact row, not a term index.  Prefer an
+        # exact record/role match when the same-call term probe is available.
+        candidates = [
+            item for item in same_call_matrix.term_rows
+            if int(item.get("element_z", 0)) == int(row.get("element_z", 0))
+            and int(item.get("record", -1)) == int(row.get("dominant_record", -2))
+            and str(item.get("role", "")) == str(row.get("dominant_term_role", ""))
+            and int(item.get("python_row_compact", 0)) == int(row.get("target_compact_row", 0))
+        ]
+        if candidates:
+            matrix_row = max(
+                candidates,
+                key=lambda item: abs(float(item.get("delta_population_weighted_aj1", 0.0))),
+            )
+        if matrix_row is not None:
+            row["xstar_same_call_coefficient_s_inv"] = matrix_row.get("xstar_aj1")
+            row["same_call_coefficient_difference_s_inv"] = matrix_row.get("aj1_difference")
+            row["same_call_matrix_term_index"] = matrix_row.get("term_index")
+            row["rate_difference_status"] = (
+                "same_call_coefficient_outside_tolerance"
+                if not bool(matrix_row.get("within_tolerance", False))
+                else "same_call_coefficient_within_tolerance"
+            )
+
+    active_population_ion_resolution = _build_active_population_ion_matrix_resolution(
+        result=result, parity_rows=rows, same_call_matrix=same_call_matrix
     )
 
     missing_python = pre_matrix_missing_python + ion_missing_python + level_missing_python + element_missing_python
@@ -675,14 +888,42 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and all(row.within_tolerance for row in rows if row.component in pre_matrix_components)
     )
     summary_gate = summary_ready is not False
+    # v0.4.29 probe products are required as a pair when either new probe is
+    # present.  Older bounded probe directories remain readable and preserve
+    # their historical acceptance semantics; a partially installed v0.4.29
+    # probe is intentionally blocking rather than silently skipped.
+    v0429_probe_present = bool(
+        matrix_rows or thermal_data_type_rows or thermal_rate_type_rows
+    )
+    same_call_matrix_gate = (
+        same_call_matrix.ready is True if v0429_probe_present else True
+    )
+    thermal_family_gate = (
+        thermal_family_parity.ready is True if v0429_probe_present else True
+    )
+    # With a v0.4.29 same-call matrix capture, exact topology plus the active
+    # residual of (A_python-A_XSTAR)@x_XSTAR supersedes the
+    # older raw A_python@x_XSTAR gate.  The raw closure remains reported: the
+    # source msolvelucy path imposes superlevel/nonlinear constraints, so the
+    # pre-solve sparse term list need not independently annihilate the final
+    # population vector.
+    matrix_operator_gate = (
+        same_call_matrix_gate
+        if v0429_probe_present
+        else matrix_closure_ready is not False
+    )
     acceptance_gate_ready = bool(
         pre_matrix_ready
         and state_ready
         and global_ion_ready
         and global_level_active_ready
         and element_array_ready is True
-        and matrix_closure_ready is not False
+        and matrix_operator_gate
+        and thermal_family_gate
         and summary_gate
+    )
+    strict_matrix_coefficient_gate = (
+        same_call_matrix.coefficient_ready is True if v0429_probe_present else True
     )
     strict_parity_ready = bool(
         pre_matrix_ready
@@ -690,7 +931,9 @@ def compare_calc_hmc_all_pre_continuum_probe(
         and global_ion_ready
         and global_level_ready
         and element_array_ready is True
-        and matrix_closure_ready is not False
+        and matrix_operator_gate
+        and strict_matrix_coefficient_gate
+        and thermal_family_gate
         and summary_gate
     )
     ready = acceptance_gate_ready
@@ -718,12 +961,22 @@ def compare_calc_hmc_all_pre_continuum_probe(
         matrix_closure_ready=matrix_closure_ready,
         matrix_closure_status=matrix_closure_status,
         element_thermal_diagnostic_ready=element_thermal_diagnostic_ready,
+        same_call_matrix_ready=same_call_matrix.ready,
+        same_call_matrix_status=same_call_matrix.status,
+        same_call_matrix_topology_ready=same_call_matrix.topology_ready,
+        same_call_matrix_coefficient_ready=same_call_matrix.coefficient_ready,
+        same_call_matrix_active_closure_ready=same_call_matrix.active_closure_ready,
+        thermal_family_ready=thermal_family_parity.ready,
+        thermal_family_status=thermal_family_parity.status,
         acceptance_gate_ready=acceptance_gate_ready,
         strict_parity_ready=strict_parity_ready,
         parity_ready=ready,
         active_population_threshold=float(active_population_threshold),
         matrix_closure=closure,
+        same_call_matrix=same_call_matrix,
+        thermal_family_parity=thermal_family_parity,
         population_weighted_attribution=attribution,
+        active_population_ion_resolution=active_population_ion_resolution,
         diagnostics={
             "probe_dir": str(root),
             "rtol": float(rtol),
@@ -734,15 +987,33 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "matrix_closure_active_rows_outside_tolerance": closure.n_active_rows_outside_tolerance,
             "matrix_closure_missing_rows": closure.n_missing_rows,
             "element_thermal_diagnostic_ready": element_thermal_diagnostic_ready,
+            "v0429_probe_present": v0429_probe_present,
+            "matrix_operator_gate": matrix_operator_gate,
+            "matrix_operator_gate_source": (
+                "same_call_matrix_parity" if v0429_probe_present
+                else "legacy_python_xstar_vector_closure"
+            ),
+            "same_call_matrix_status": same_call_matrix.status,
+            "same_call_matrix_topology_ready": same_call_matrix.topology_ready,
+            "same_call_matrix_coefficient_ready": same_call_matrix.coefficient_ready,
+            "same_call_matrix_active_closure_ready": same_call_matrix.active_closure_ready,
+            "same_call_matrix_active_rows_outside_tolerance": same_call_matrix.n_active_rows_outside_tolerance,
+            "thermal_family_status": thermal_family_parity.status,
+            "thermal_family_rows_outside_tolerance": thermal_family_parity.n_outside_tolerance,
             "acceptance_gate_definition": (
                 "pre_matrix && runtime_state && global_ion && global_level_active "
-                "&& element_array && xstar_vector_matrix_closure_when_available "
-                "&& summary_scope_gate"
+                "&& element_array && matrix_operator_gate "
+                "&& same_call_matrix_topology_and_active_residual_difference_when_available "
+                "&& thermal_family_parity && summary_scope_gate"
             ),
             "summary_scope_complete": summary_comparable,
             "deferred_summary_fields": deferred_summary_fields,
             "element_array_probe_present": bool(element_array_rows_all),
             "n_element_array_probe_rows": len(element_array_rows),
+            "n_same_call_matrix_probe_rows": len(matrix_rows),
+            "n_thermal_data_type_probe_rows": len(thermal_data_type_rows),
+            "n_thermal_rate_type_probe_rows": len(thermal_rate_type_rows),
+            "n_active_population_ion_resolution_rows": len(active_population_ion_resolution),
             "n_global_ion_probe_rows": len(ion_rows),
             "global_element_index_by_z": element_index_by_z,
             "n_global_level_probe_rows": len(level_rows),
@@ -791,8 +1062,11 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "xstar_feeding_population", "xstar_feeding_global_level_index",
         "xstar_feeding_physical_key", "python_population_weighted_contribution_s_inv",
         "xstar_population_weighted_contribution_same_coefficient_s_inv",
-        "estimated_population_factor_difference_s_inv", "rate_difference_status",
-        "diagnostic_role",
+        "estimated_population_factor_difference_s_inv",
+        "xstar_same_call_coefficient_s_inv",
+        "same_call_coefficient_difference_s_inv",
+        "same_call_matrix_term_index",
+        "rate_difference_status", "diagnostic_role",
     )
     with attribution_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=attribution_fields, extrasaction="ignore")
@@ -804,6 +1078,13 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     thermal_rows_path = out / "xstar_calc_hmc_all_thermal_contribution_audit.csv"
     thermal_summary_path = out / "xstar_calc_hmc_all_thermal_channel_summary.csv"
     thermal_family_path = out / "xstar_calc_hmc_all_thermal_family_summary.csv"
+    same_call_terms_path = out / "xstar_calc_hmc_all_same_call_matrix_term_parity.csv"
+    same_call_families_path = out / "xstar_calc_hmc_all_same_call_matrix_family_parity.csv"
+    same_call_active_rows_path = out / "xstar_calc_hmc_all_same_call_active_row_attribution.csv"
+    thermal_family_parity_path = out / "xstar_calc_hmc_all_xstar_thermal_family_parity.csv"
+    active_population_ion_resolution_path = (
+        out / "xstar_calc_hmc_all_active_population_ion_matrix_resolution.csv"
+    )
     closure_rows = []
     closure_summaries = []
     thermal_rows = []
@@ -866,9 +1147,26 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     _write_rows(thermal_rows_path, thermal_rows)
     _write_rows(thermal_summary_path, thermal_summaries)
     _write_rows(thermal_family_path, thermal_family_rows)
+    _write_rows(
+        same_call_terms_path,
+        [] if result.same_call_matrix is None else result.same_call_matrix.term_rows,
+    )
+    _write_rows(
+        same_call_families_path,
+        [] if result.same_call_matrix is None else result.same_call_matrix.family_rows,
+    )
+    _write_rows(
+        same_call_active_rows_path,
+        [] if result.same_call_matrix is None else result.same_call_matrix.active_row_rows,
+    )
+    _write_rows(
+        thermal_family_parity_path,
+        [] if result.thermal_family_parity is None else result.thermal_family_parity.rows,
+    )
+    _write_rows(active_population_ion_resolution_path, result.active_population_ion_resolution)
 
     payload = {
-        "port_version": "v0.4.28",
+        "port_version": "v0.4.29",
         "call_id": result.call_id,
         "n_rows": len(result.rows),
         "n_missing_python_keys": result.n_missing_python_keys,
@@ -892,11 +1190,19 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "matrix_closure_ready": result.matrix_closure_ready,
         "matrix_closure_status": result.matrix_closure_status,
         "element_thermal_diagnostic_ready": result.element_thermal_diagnostic_ready,
+        "same_call_matrix_ready": result.same_call_matrix_ready,
+        "same_call_matrix_status": result.same_call_matrix_status,
+        "same_call_matrix_topology_ready": result.same_call_matrix_topology_ready,
+        "same_call_matrix_coefficient_ready": result.same_call_matrix_coefficient_ready,
+        "same_call_matrix_active_closure_ready": result.same_call_matrix_active_closure_ready,
+        "thermal_family_ready": result.thermal_family_ready,
+        "thermal_family_status": result.thermal_family_status,
         "acceptance_gate_ready": result.acceptance_gate_ready,
         "strict_parity_ready": result.strict_parity_ready,
         "parity_ready": result.parity_ready,
         "active_population_threshold": result.active_population_threshold,
         "n_population_weighted_attribution_rows": len(result.population_weighted_attribution),
+        "n_active_population_ion_resolution_rows": len(result.active_population_ion_resolution),
         "diagnostics": result.diagnostics,
     }
     json_path = out / "xstar_calc_hmc_all_pre_continuum_parity_summary.json"
@@ -922,10 +1228,16 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Global arrays milestone ready: `{result.global_arrays_ready}`\n"
         f"- XSTAR-vector matrix closure: `{result.matrix_closure_status}`\n"
         f"- Element thermal diagnostic ready: `{result.element_thermal_diagnostic_ready}`\n"
+        f"- Same-call matrix status: `{result.same_call_matrix_status}`\n"
+        f"- Same-call topology ready: `{result.same_call_matrix_topology_ready}`\n"
+        f"- Same-call coefficients, all strict: `{result.same_call_matrix_coefficient_ready}`\n"
+        f"- Same-call active closure ready: `{result.same_call_matrix_active_closure_ready}`\n"
+        f"- XSTAR thermal-family status: `{result.thermal_family_status}`\n"
         f"- Acceptance gate ready: `{result.acceptance_gate_ready}`\n"
         f"- All-strict parity ready: `{result.strict_parity_ready}`\n"
         f"- Overall parity ready: `{result.parity_ready}`\n"
         f"- Population-weighted attribution rows: `{len(result.population_weighted_attribution)}`\n"
+        f"- Active level/global-ion matrix-resolution rows: `{len(result.active_population_ion_resolution)}`\n"
     )
     return {
         "details_csv": str(details),
@@ -935,6 +1247,11 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "thermal_contribution_audit_csv": str(thermal_rows_path),
         "thermal_channel_summary_csv": str(thermal_summary_path),
         "thermal_family_summary_csv": str(thermal_family_path),
+        "same_call_matrix_term_parity_csv": str(same_call_terms_path),
+        "same_call_matrix_family_parity_csv": str(same_call_families_path),
+        "same_call_active_row_attribution_csv": str(same_call_active_rows_path),
+        "xstar_thermal_family_parity_csv": str(thermal_family_parity_path),
+        "active_population_ion_matrix_resolution_csv": str(active_population_ion_resolution_path),
         "json": str(json_path),
         "markdown": str(md),
     }

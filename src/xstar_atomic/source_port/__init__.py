@@ -175,6 +175,13 @@ from .calc_hmc_all_closure import (
     build_xstar_vector_matrix_closure,
 )
 
+from .calc_hmc_all_matrix_parity import (
+    SameCallMatrixParityResult,
+    ThermalFamilyParityResult,
+    compare_same_call_matrix_terms,
+    compare_thermal_families,
+)
+
 from .calc_hmc_all_parity import (
     CalcHMCAllParityError,
     CalcHMCAllProbeCritfReference,
@@ -340,6 +347,10 @@ __all__ = [
     "ElementXSTARVectorClosure",
     "XSTARVectorMatrixClosureResult",
     "build_xstar_vector_matrix_closure",
+    "SameCallMatrixParityResult",
+    "ThermalFamilyParityResult",
+    "compare_same_call_matrix_terms",
+    "compare_thermal_families",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",

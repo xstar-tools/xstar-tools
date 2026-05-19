@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.29 type-50 thermal closure and same-call matrix parity
+
+v0.4.29 restores the source type-50 `ans3/ans4` bound-bound energy channels, captures XSTAR thermal accumulators by data type and rate type, and compares the exact sparse `aj1/aj2/cj/cj2` term list from the same `msolvelucy` call. Exact topology and active `(A_python-A_XSTAR) @ x_XSTAR` closure form the milestone matrix gate; all coefficient differences remain available through a separate strict gate.
+
 ### v0.4.28 abundance-aware thermal parity and XSTAR-vector closure
 
 v0.4.28 reads the selected element abundance from the bounded XSTAR element probe unless the CLI explicitly overrides it, exports both scaled and per-abundance thermal products, and evaluates the translated element matrix on the captured XSTAR population vector. New row, record, family, and thermal-channel products separate population-vector effects from remaining coefficient/source-semantic differences. Active and strict level gates remain independent, and an explicit acceptance gate combines pre-matrix state, active levels, global ions, element thermal parity, and matrix closure.

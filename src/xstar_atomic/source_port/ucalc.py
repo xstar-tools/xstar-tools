@@ -1623,17 +1623,33 @@ class SourceFaithfulUCalc:
                     bremsa = float(brem[_nbinc(12398.54 / wavelength, epi)])
             except Exception:
                 bremsa = None
+        endpoint_energy_ev = None
+        if id1 > 0 and id2 > 0:
+            upper_energy = c.levels.energy(id1)
+            lower_energy = c.levels.energy(id2)
+            endpoint_energy_ev = abs(float(upper_energy) - float(lower_energy))
         ev = evaluate_type50_ucalc_record(
             decoded, ptmp1=c.ptmp1, ptmp2=c.ptmp2,
             cfrac=c.covering_fraction, bremsa_nb1=bremsa,
             hydrogen_density_cm3=c.hydrogen_density_cm3,
+            endpoint_energy_eV=endpoint_energy_ev,
+            source_erg_per_eV=XSTAR_SOURCE_ERG_PER_EV,
         )
-        if ev.get("status") != "evaluated":
-            return self._base_result(r, s, UCalcStatus.CONTEXT_BLOCKED, reason=str(ev.get("reason")), diagnostics=ev)
+        if (
+            ev.get("status") != "evaluated"
+            or ev.get("energy_channel_status") != "evaluated"
+            or ev.get("ans3_cooling_signed_erg_s^-1") is None
+            or ev.get("ans4_heating_signed_erg_s^-1") is None
+        ):
+            reason = str(ev.get("reason") or ev.get("energy_channel_status") or "missing_type50_energy_context")
+            return self._base_result(r, s, UCalcStatus.CONTEXT_BLOCKED, reason=reason, diagnostics=ev)
         return self._ctx_result(
             r, s, ans1=float(ev["ans1_photoexcitation_s^-1"]),
-            ans2=float(ev["ans2_escaped_decay_s^-1"]), idest1=id1, idest2=id2,
-            diagnostics=ev, context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels"),
+            ans2=float(ev["ans2_escaped_decay_s^-1"]),
+            ans3=float(ev["ans3_cooling_signed_erg_s^-1"]),
+            ans4=float(ev["ans4_heating_signed_erg_s^-1"]),
+            idest1=id1, idest2=id2, diagnostics=ev,
+            context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels"),
         )
 
     def _collision_row(self, r: UCalcRecord, c: UCalcContext) -> tuple[dict, list[dict]]:

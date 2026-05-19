@@ -1,5 +1,178 @@
 # CHANGELOG
 
+## v0.4.29 - 2026-05-19
+
+v0.4.29 is a bounded Milestone-4 oxygen pre-continuum parity release. It
+restores the missing type-50 line-energy channels and adds same-call XSTAR
+thermal-family and matrix-coefficient probes. Probe products remain diagnostic
+only: captured XSTAR values are never substituted into the production Python
+operator or native solve.
+
+## 1. Complete type-50 thermal channels
+
+The source-port type-50 evaluator now reproduces the post-swap XSTAR `ucalc`
+energy channels using the actual endpoint-level energy difference:
+
+```text
+ans1 = lower-to-upper photoexcitation rate
+ans2 = upper-to-lower escaped-decay rate
+ans3 = -ans2 * abs(Eupper-Elower) * 1.602176634e-12
+ans4 = -ans1 * abs(Eupper-Elower) * 1.602176634e-12
+```
+
+The endpoint energy controls `ans3/ans4`; the stored wavelength remains in the
+line-profile, oscillator-strength, and radiation-grid path. This restores the
+bound-bound line-cooling contribution that was absent from the v0.4.28 `cl`
+channel. The exact current XSTAR `constants.f90` eV-to-erg constant is used.
+
+## 2. XSTAR thermal-family probe
+
+The bounded XSTAR helper now captures the `msolvelucy` thermal accumulators for
+the selected element and call:
+
+```text
+xstar_calc_hmc_all_thermal_data_type_probe.csv
+xstar_calc_hmc_all_thermal_rate_type_probe.csv
+```
+
+The files record heating, cooling, heating2, and cooling2 by XSTAR data type
+(`rntpsv`) and rate type (`rltpsv`). Python compares these rows against its
+per-abundance family sums. This directly identifies the family responsible for
+any remaining `cl/cl2` discrepancy instead of inferring it from four element
+totals.
+
+## 3. Same-call matrix-coefficient probe and comparison
+
+The helper also captures the exact sparse term list passed to the selected
+`msolvelucy` call:
+
+```text
+xstar_calc_hmc_all_matrix_terms_probe.csv
+```
+
+Each row includes term index, source record, raw and compact endpoints, and
+`aj1`, `aj2`, `cj`, and `cj2`. The Python comparator checks:
+
+- exact term-count and topology parity;
+- all-strict coefficient parity;
+- `(A_python-A_XSTAR) @ x_XSTAR` on active compact rows;
+- family-level coefficient differences;
+- the dominant population-weighted coefficient difference on every failing
+  active row.
+
+New products include:
+
+```text
+xstar_calc_hmc_all_same_call_matrix_term_parity.csv
+xstar_calc_hmc_all_same_call_matrix_family_parity.csv
+xstar_calc_hmc_all_same_call_active_row_attribution.csv
+```
+
+## 4. Active population and ion residual classification
+
+The existing population-weighted attribution is extended with the captured
+same-call XSTAR coefficient. A dedicated table joins the remaining active
+`xilevg/alphag` and global-ion failures to the matrix comparison:
+
+```text
+xstar_calc_hmc_all_active_population_ion_matrix_resolution.csv
+```
+
+Rows are classified using coefficient, topology, active closure, solver,
+superlevel, normalization, and population-propagation evidence. The comparison
+is diagnostic only and does not alter the source-faithful operator.
+
+## 5. Acceptance and strict gates
+
+v0.4.29 deliberately separates three matrix results:
+
+```text
+xstar_same_call_matrix_topology_ready
+xstar_same_call_matrix_coefficient_ready
+xstar_same_call_matrix_active_closure_ready
+```
+
+The oxygen milestone matrix gate requires exact topology and zero
+out-of-tolerance active rows in:
+
+```text
+(A_python-A_XSTAR) @ x_XSTAR
+```
+
+All tiny coefficient differences remain visible through the independent strict
+coefficient gate. The overall milestone acceptance gate requires:
+
+```text
+pre-matrix parity
+runtime-state parity
+global-ion parity
+active-level parity
+element-array parity
+same-call topology and active operator closure
+thermal-family parity
+applicable all-element summary parity
+```
+
+The all-strict gate additionally requires every compared matrix coefficient and
+all strict level products to pass.
+
+## 6. Probe installation
+
+The v0.4.29 helper uses six bounded insertion hooks:
+
+1. start of `calc_hmc_all`;
+2. element pre-matrix state in `calc_hmc_element`;
+3. element post-solve thermal arrays in `calc_hmc_all`;
+4. matrix-term capture immediately before `msolvelucy`;
+5. thermal-family capture after the `msolvelucy` thermal accumulation loop;
+6. all-element pre-continuum state immediately before `comp2`.
+
+The resulting probe directory contains seven CSV products: summary, ion, level,
+element, matrix-term, thermal-data-type, and thermal-rate-type tables.
+
+## 7. Validation
+
+Completed before packaging:
+
+```text
+focused v0.4.29 tests                 5 passed
+complete source-port suite           95 passed
+API/CLI/package/documentation suite  35 passed, 2 skipped
+compileall                            passed
+```
+
+The clean source distribution repeats the complete 95-test source-port pass.
+The source distribution and wheel build successfully. An isolated wheel install
+confirms v0.4.29, the same-call matrix and thermal-family APIs, both local-zone
+and probe CLIs, and access to the bundled oxygen benchmark. The generated
+helper and the complete patched `calc_hmc_all.f90`, `calc_hmc_element.f90`, and
+`msolvelucy.f90` compile with GNU Fortran 14.2; only the two pre-existing
+single-precision `1.e-48` underflow warnings are emitted.
+
+The complete historical suite was attempted under a 150-second bound and did
+not complete, so it is not claimed as fully passed. Final archive integrity and
+SHA-256 verification are part of the release handoff.
+
+A production example-105 run with a newly rebuilt six-hook XSTAR executable is
+the scientific acceptance oracle.
+
+## 8. Next order
+
+```text
+v0.4.29 production oxygen rerun
+-> verify restored type-50 cooling and identify any residual cl2 family
+-> verify same-call topology, coefficient, and active-closure products
+-> close active level/global-ion residuals
+-> accept oxygen pre-continuum parity
+-> full all-element fixed-state scope
+-> comp2
+-> freef
+-> bremem
+-> heatf
+-> complete fixed-state calc_hmc_all parity
+-> dsec
+```
+
 ## v0.4.28 - 2026-05-19
 
 v0.4.28 adds abundance-aware element thermal parity and an XSTAR-vector matrix-closure audit. When `--abundance` is omitted and the bounded element probe is available, example 105 uses the captured XSTAR abundance and records requested/effective/source provenance. Element outputs now include `ht`, `cl`, `ht2`, and `cl2` per unit abundance as well as scaled values.
