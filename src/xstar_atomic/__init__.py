@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.30"
+__version__ = "0.4.31"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -158,9 +158,11 @@ from .source_port import (
     CalcHMCAllParityError, CalcHMCAllProbeCritfReference,
     CalcHMCAllProbeElementReference, CalcHMCAllParityRow,
     CalcHMCAllPreContinuumParityResult, SameCallMatrixParityResult,
-    ThermalFamilyParityResult, load_calc_hmc_all_probe_critf,
+    ThermalFamilyParityResult, Rate7CJ2DiagnosisResult,
+    MSolveLucyFinalSnapshotParityResult, load_calc_hmc_all_probe_critf,
     load_calc_hmc_all_probe_element_reference, compare_same_call_matrix_terms,
-    compare_thermal_families, compare_calc_hmc_all_pre_continuum_probe,
+    compare_thermal_families, diagnose_rate7_cj2_records,
+    compare_msolvelucy_final_snapshot, compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError, XSTARPopulationReference, XSTARRuntimeContextReference, PopulationMetrics,
     ElementPopulationParityResult, load_xstar_population_reference, load_xstar_runtime_context_reference,
@@ -434,10 +436,14 @@ from .source_port import (
     CalcHMCAllPreContinuumParityResult,
     SameCallMatrixParityResult,
     ThermalFamilyParityResult,
+    Rate7CJ2DiagnosisResult,
+    MSolveLucyFinalSnapshotParityResult,
     load_calc_hmc_all_probe_critf,
     load_calc_hmc_all_probe_element_reference,
     compare_same_call_matrix_terms,
     compare_thermal_families,
+    diagnose_rate7_cj2_records,
+    compare_msolvelucy_final_snapshot,
     compare_calc_hmc_all_pre_continuum_probe,
     write_calc_hmc_all_pre_continuum_parity_products,
     PopulationParityError,
@@ -552,10 +558,14 @@ __all__.extend([
     "CalcHMCAllPreContinuumParityResult",
     "SameCallMatrixParityResult",
     "ThermalFamilyParityResult",
+    "Rate7CJ2DiagnosisResult",
+    "MSolveLucyFinalSnapshotParityResult",
     "load_calc_hmc_all_probe_critf",
     "load_calc_hmc_all_probe_element_reference",
     "compare_same_call_matrix_terms",
     "compare_thermal_families",
+    "diagnose_rate7_cj2_records",
+    "compare_msolvelucy_final_snapshot",
     "compare_calc_hmc_all_pre_continuum_probe",
     "write_calc_hmc_all_pre_continuum_parity_products",
     "PopulationParityError",

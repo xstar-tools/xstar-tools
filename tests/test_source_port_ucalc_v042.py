@@ -205,7 +205,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.30"
+    assert xa.__version__ == "0.4.31"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 

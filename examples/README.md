@@ -1213,7 +1213,7 @@ PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --atdb /path/to/xstar/data/atdb.fits \
   --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
   --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
-  --ion-stage-selection source --critf 1e-8 \
+  --ion-stage-selection source \
   --temperature-k 1.0e6 \
   --hydrogen-density-cm3 1.0e8 \
   --electron-fraction-xee 1.0 \
@@ -1223,7 +1223,7 @@ PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
   --xstar-population-solve-call-id 219 \
   --population-probe-runtime-policy use \
   --xstar-calc-hmc-probe-dir /path/to/xstar_probe_run \
-  --out-dir xstar_o_calc_hmc_all_fixed_state_v0424 \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0431 \
   --print-summary
 ```
 
@@ -1231,10 +1231,10 @@ Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available
 
 ### `106_prepare_xstar_calc_hmc_all_probe.py`
 
-Write a bounded, diagnostic-only Fortran helper and three source-local insertion snippets for `calc_hmc_element.f90` and `calc_hmc_all.f90`. The default capture state is the validated solve-call-219 oxygen runtime state; `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
+Write a bounded, diagnostic-only Fortran helper and seven source-local insertion snippets for `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. In addition to the pre-matrix, pre-continuum, same-call matrix, and thermal-family products, v0.4.31 captures the final effective `msolvelucy` matrix together with returned `x` and final-outer-start `xo` at the same internal iteration. The default capture state is the validated oxygen runtime state; `XSTAR_ATOMIC_HMC_TARGET_CALL` can select an exact `calc_hmc_all` invocation.
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
-  --out-dir xstar_calc_hmc_all_probe_v0424 \
+  --out-dir xstar_calc_hmc_all_probe_v0431 \
   --print-summary
 ```

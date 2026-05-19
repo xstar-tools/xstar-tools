@@ -39,6 +39,27 @@ class SameCallMatrixParityResult:
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
 
+
+
+@dataclass
+class Rate7CJ2DiagnosisResult:
+    """Record-resolved diagnosis of rate-type-7 ``cj2`` terms."""
+
+    status: str
+    ready: Optional[bool]
+    type53_ready: Optional[bool]
+    n_rate7_rows: int
+    n_rate7_records: int
+    n_type53_rows: int
+    n_type53_records: int
+    n_rate7_rows_outside_tolerance: int
+    n_type53_rows_outside_tolerance: int
+    n_type53_records_outside_tolerance: int
+    rows: List[Dict[str, Any]] = field(default_factory=list)
+    record_rows: List[Dict[str, Any]] = field(default_factory=list)
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class ThermalFamilyParityResult:
     status: str
@@ -421,6 +442,166 @@ def compare_same_call_matrix_terms(
     )
 
 
+
+def diagnose_rate7_cj2_records(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    same_call_matrix: SameCallMatrixParityResult,
+    rtol: float = 5.0e-3,
+    atol: float = 1.0e-12,
+) -> Rate7CJ2DiagnosisResult:
+    """Resolve rate-7 ``cj2`` discrepancies by source record.
+
+    ``calc_hmc_ion`` stores ``ans6*xpx`` on the forward diagonal and
+    ``-ans5*xpx`` on the reverse diagonal.  This diagnostic joins those exact
+    matrix terms to the native record result, beginning with data type 53, so
+    a remaining ``cl2`` discrepancy can be separated into the underlying
+    ``ucalc`` energy channel rather than treated as an aggregate thermal gap.
+    """
+
+    if same_call_matrix.ready is None and not same_call_matrix.term_rows:
+        return Rate7CJ2DiagnosisResult(
+            status="not_comparable_missing_same_call_matrix_probe", ready=None,
+            type53_ready=None, n_rate7_rows=0, n_rate7_records=0,
+            n_type53_rows=0, n_type53_records=0,
+            n_rate7_rows_outside_tolerance=0,
+            n_type53_rows_outside_tolerance=0,
+            n_type53_records_outside_tolerance=0,
+            diagnostics={"diagnostic_only": True, "probe_values_enter_operator": False},
+        )
+
+    record_map: Dict[Tuple[int, int], Mapping[str, Any]] = {}
+    for element in getattr(result, "element_results", ()):
+        equilibrium = getattr(element, "equilibrium", None)
+        assembly = getattr(equilibrium, "assembly", None)
+        if assembly is None:
+            continue
+        z = int(element.request.element_z)
+        for rec in getattr(assembly, "record_results", ()):
+            try:
+                record_map[(z, int(rec.get("record", 0)))] = rec
+            except Exception:
+                continue
+
+    rows: List[Dict[str, Any]] = []
+    grouped: Dict[Tuple[int, int, int], Dict[str, Any]] = {}
+    for term in same_call_matrix.term_rows:
+        if int(term.get("rate_type", -1)) != 7:
+            continue
+        role = str(term.get("role", ""))
+        if role not in {"forward_diag_loss", "reverse_diag_loss"}:
+            continue
+        z = int(term.get("element_z", 0))
+        record = int(term.get("record", 0))
+        dtype = int(term.get("data_type", 0))
+        py = float(term.get("python_cj2", 0.0))
+        xs = float(term.get("xstar_cj2", 0.0))
+        ok = _within(py, xs, rtol, atol) and bool(term.get("topology_match", True))
+        source_channel = "ans6_forward_electron_pov" if role == "forward_diag_loss" else "minus_ans5_reverse_electron_pov"
+        rec = record_map.get((z, record), {})
+        expected_from_record = None
+        if rec:
+            channel = "ans6" if role == "forward_diag_loss" else "ans5"
+            value = rec.get(channel)
+            if value not in (None, ""):
+                xpx = float(getattr(result, "hydrogen_density_cm3", 0.0))
+                expected_from_record = float(value) * xpx
+                if role == "reverse_diag_loss":
+                    expected_from_record = -expected_from_record
+        out = {
+            "element_z": z,
+            "record": record,
+            "data_type": dtype,
+            "rate_type": 7,
+            "term_index": int(term.get("term_index", 0)),
+            "role": role,
+            "source_energy_channel": source_channel,
+            "python_row_compact": term.get("python_row_compact"),
+            "xstar_row_compact": term.get("xstar_row_compact"),
+            "topology_match": bool(term.get("topology_match", False)),
+            "python_cj2": py,
+            "xstar_cj2": xs,
+            "cj2_difference": py - xs,
+            "absolute_cj2_difference": abs(py - xs),
+            "relative_cj2_difference": abs(py - xs) / max(abs(xs), 1.0e-300),
+            "within_tolerance": ok,
+            "python_cj2_reconstructed_from_record": expected_from_record,
+            "record_channel_reconstruction_matches_matrix": (
+                None if expected_from_record is None
+                else _within(py, expected_from_record, 1.0e-12, 1.0e-30)
+            ),
+            "python_ans5": rec.get("ans5"),
+            "python_ans6": rec.get("ans6"),
+            "python_ans1": rec.get("ans1"),
+            "python_ans2": rec.get("ans2"),
+            "ucalc_status": rec.get("status"),
+            "ion_stage": rec.get("ion_stage"),
+        }
+        # Preserve source-first type-53 quadrature context without hard-coding
+        # one historical diagnostic spelling.
+        for key, value in rec.items():
+            text = str(key)
+            if dtype == 53 and (
+                text.startswith("diag_")
+                or text in {"ans5_after_calc_hmc_ion_filter", "ans6_after_calc_hmc_ion_filter"}
+            ):
+                out[text] = value
+        rows.append(out)
+        key = (z, record, dtype)
+        item = grouped.setdefault(key, {
+            "element_z": z, "record": record, "data_type": dtype,
+            "rate_type": 7, "n_cj2_diagonal_terms": 0,
+            "n_cj2_terms_outside_tolerance": 0,
+            "l1_abs_cj2_difference": 0.0,
+            "max_abs_cj2_difference": 0.0,
+            "forward_python_cj2": None, "forward_xstar_cj2": None,
+            "reverse_python_cj2": None, "reverse_xstar_cj2": None,
+        })
+        item["n_cj2_diagonal_terms"] += 1
+        item["n_cj2_terms_outside_tolerance"] += int(not ok)
+        item["l1_abs_cj2_difference"] += abs(py - xs)
+        item["max_abs_cj2_difference"] = max(item["max_abs_cj2_difference"], abs(py - xs))
+        prefix = "forward" if role == "forward_diag_loss" else "reverse"
+        item[f"{prefix}_python_cj2"] = py
+        item[f"{prefix}_xstar_cj2"] = xs
+
+    record_rows = []
+    for key in sorted(grouped):
+        item = grouped[key]
+        item["within_tolerance"] = item["n_cj2_terms_outside_tolerance"] == 0
+        item["diagnosis"] = (
+            "cj2_parity" if item["within_tolerance"]
+            else "type53_ans5_ans6_or_phint53_energy_quadrature"
+            if item["data_type"] == 53
+            else "rate7_energy_channel_difference"
+        )
+        record_rows.append(item)
+
+    type53_rows = [row for row in rows if int(row["data_type"]) == 53]
+    type53_records = [row for row in record_rows if int(row["data_type"]) == 53]
+    n_bad = sum(not bool(row["within_tolerance"]) for row in rows)
+    n_type53_bad = sum(not bool(row["within_tolerance"]) for row in type53_rows)
+    n_type53_records_bad = sum(not bool(row["within_tolerance"]) for row in type53_records)
+    ready = n_bad == 0 if rows else None
+    type53_ready = n_type53_bad == 0 if type53_rows else None
+    status = "ready" if ready is True else "failed" if ready is False else "not_comparable_no_rate7_cj2_rows"
+    return Rate7CJ2DiagnosisResult(
+        status=status, ready=ready, type53_ready=type53_ready,
+        n_rate7_rows=len(rows), n_rate7_records=len(record_rows),
+        n_type53_rows=len(type53_rows), n_type53_records=len(type53_records),
+        n_rate7_rows_outside_tolerance=n_bad,
+        n_type53_rows_outside_tolerance=n_type53_bad,
+        n_type53_records_outside_tolerance=n_type53_records_bad,
+        rows=rows, record_rows=record_rows,
+        diagnostics={
+            "rtol": float(rtol), "atol": float(atol),
+            "matrix_mapping_forward": "cj2=ans6*xpx",
+            "matrix_mapping_reverse": "cj2=-ans5*xpx",
+            "diagnostic_only": True, "probe_values_enter_operator": False,
+        },
+    )
+
+
 def compare_thermal_families(
     *,
     closure: Optional[XSTARVectorMatrixClosureResult],
@@ -507,6 +688,8 @@ def compare_thermal_families(
 __all__ = [
     "SameCallMatrixParityResult",
     "ThermalFamilyParityResult",
+    "Rate7CJ2DiagnosisResult",
     "compare_same_call_matrix_terms",
+    "diagnose_rate7_cj2_records",
     "compare_thermal_families",
 ]

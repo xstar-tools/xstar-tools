@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.30 calc_hmc_all pre-continuum and matrix probe.
+    return r'''! xstar-atomic v0.4.31 calc_hmc_all pre-continuum, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -191,6 +191,79 @@ subroutine xap_hmc_matrix_terms(element_index, element_z, ipmat, nindb, &
 9006 format(11(i12,','),5(es26.16e3,','),es26.16e3)
 end subroutine xap_hmc_matrix_terms
 
+subroutine xap_hmc_msolvelucy_final_snapshot(ipmat, nindb, ajisb, &
+    cjisb, cjisb2, indb, ltpsv, x, xo, nsup, nion, niter, nit2, nit3, &
+    diff, diff2)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: ipmat, nindb, niter, nit2, nit3
+  real(8), intent(in) :: ajisb(2,*), cjisb(*), cjisb2(*), x(*), xo(*)
+  real(8), intent(in) :: diff, diff2
+  integer, intent(in) :: indb(2,*), ltpsv(*), nsup(*), nion(*)
+  integer :: lun, ios, ll, mm, row_raw, column_raw
+  integer :: row_compact, column_compact
+  logical :: exists
+
+  if (xap_hmc_capture .ne. 1) return
+  if (xap_hmc_current_element_z .ne. xap_hmc_target_element) return
+
+  inquire(file='xstar_calc_hmc_all_msolvelucy_final_matrix_probe.csv', &
+          exist=exists)
+  open(newunit=lun, &
+       file='xstar_calc_hmc_all_msolvelucy_final_matrix_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,element_index,element_z,outer_iteration,'// &
+      'fixed_iteration,global_fixed_iteration,final_outer_difference,'// &
+      'final_fixed_difference,compact_dimension,n_matrix_terms,'// &
+      'term_index,source_record,row_raw,column_raw,row_compact,'// &
+      'column_compact,operator_coefficient,aj1,aj2,cj,cj2,'// &
+      'row_population,column_population,row_outer_start_population,'// &
+      'column_outer_start_population'
+    do ll=1,nindb
+      row_raw=indb(1,ll)
+      column_raw=indb(2,ll)
+      row_compact=min(ipmat,row_raw)
+      column_compact=min(ipmat,column_raw)
+      write(lun,9008) xap_hmc_current_call, &
+        xap_hmc_current_element_index, xap_hmc_current_element_z, &
+        niter, nit2, nit3, diff, diff2, ipmat, nindb, ll, ltpsv(ll), &
+        row_raw, column_raw, row_compact, column_compact, &
+        ajisb(1,ll), ajisb(1,ll), ajisb(2,ll), cjisb(ll), cjisb2(ll), &
+        x(row_compact), x(column_compact), xo(row_compact), &
+        xo(column_compact)
+    enddo
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_msolvelucy_final_population_probe.csv', &
+          exist=exists)
+  open(newunit=lun, &
+       file='xstar_calc_hmc_all_msolvelucy_final_population_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,element_index,element_z,outer_iteration,'// &
+      'fixed_iteration,global_fixed_iteration,compact_dimension,'// &
+      'compact_index,population,final_outer_start_population,'// &
+      'superlevel,ion_counter,'// &
+      'final_outer_difference,final_fixed_difference'
+    do mm=1,ipmat
+      write(lun,9009) xap_hmc_current_call, &
+        xap_hmc_current_element_index, xap_hmc_current_element_z, &
+        niter, nit2, nit3, ipmat, mm, x(mm), xo(mm), nsup(mm), &
+        nion(mm), diff, diff2
+    enddo
+    close(lun)
+  endif
+
+9008 format(6(i12,','),2(es26.16e3,','),8(i12,','),8(es26.16e3,','), &
+            es26.16e3)
+9009 format(8(i12,','),2(es26.16e3,','),2(i12,','),es26.16e3,',', &
+            es26.16e3)
+end subroutine xap_hmc_msolvelucy_final_snapshot
+
 subroutine xap_hmc_thermal_families(ntyp_local, rntpsv, rltpsv)
   use xap_calc_hmc_probe_state
   implicit none
@@ -344,6 +417,11 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
       call xap_hmc_matrix_terms(jk,nnz,ipmat2,nindbe,ajise,cjise,    &
      &     cjise2,indbe,ltpsve,x)
 """,
+        "msolvelucy_final_snapshot": """! Insert after the outer Lucy loop enddo and before heating-cooling accumulation.
+      call xap_hmc_msolvelucy_final_snapshot(ipmat,nindb,ajisb,      &
+     &     cjisb,cjisb2,indb,ltpsv,x,xo,nsup,nion,niter,nit2,nit3,  &
+     &     diff,diff2)
+""",
         "msolvelucy_thermal_families": """! Insert after the thermal accumulation loop and before the lpri print block.
       call xap_hmc_thermal_families(ntyp,rntpsv,rltpsv)
 """,
@@ -379,7 +457,7 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
         "`calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the six insertion snippets at their documented locations.\n"
+        "2. Apply the seven insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
@@ -393,6 +471,8 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_pre_continuum_levels_probe.csv`\n"
         "- `xstar_calc_hmc_all_pre_continuum_elements_probe.csv`\n"
         "- `xstar_calc_hmc_all_matrix_terms_probe.csv`\n"
+        "- `xstar_calc_hmc_all_msolvelucy_final_matrix_probe.csv`\n"
+        "- `xstar_calc_hmc_all_msolvelucy_final_population_probe.csv`\n"
         "- `xstar_calc_hmc_all_thermal_data_type_probe.csv`\n"
         "- `xstar_calc_hmc_all_thermal_rate_type_probe.csv`\n"
     )

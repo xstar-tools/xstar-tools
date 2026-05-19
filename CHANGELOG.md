@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.4.31 - 2026-05-19
+
+v0.4.31 is a bounded Milestone-4 oxygen pre-continuum parity release. It completes the type-71 post-swap energy channels, corrects type-72 packed endpoints from `[-3],[-2]` to `[-4],[-3]`, adds record-resolved rate-7 `cj2` diagnosis with a dedicated type-53 gate, and introduces a synchronized seven-hook XSTAR capture of the final effective `msolvelucy` matrix, returned population vector, and final-outer-start vector.
+
+Source review also corrected the returned ion totals: XSTAR `xtot` is formed from the population vector at the start of the final Lucy outer iteration and excludes the final compact row. Python now exports that source value separately from totals reconstructed from the returned final vector. The strict oxygen acceptance gate combines the synchronized final-solver checks with the existing active-level, global-ion, thermal-family, and matrix-closure gates and emits an explicit O III--O V/O III--O IV reassessment CSV. Probe values remain diagnostic-only. Production oxygen acceptance is not claimed until the new instrumented XSTAR run is supplied.
+
 ## v0.4.30 - 2026-05-19
 
 v0.4.30 is a probe-I/O compatibility hotfix for the v0.4.29 oxygen

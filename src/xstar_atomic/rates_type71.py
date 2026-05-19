@@ -152,8 +152,21 @@ def evaluate_type71_ucalc_record(
     electron_density_cm3: float,
     ptmp1: float,
     ptmp2: float,
+    endpoint1_energy_ev: float | None = None,
+    endpoint2_energy_ev: float | None = None,
 ) -> dict[str, Any]:
-    """Evaluate the complete XSTAR type-71 ``ucalc`` rate pair."""
+    """Evaluate the complete XSTAR type-71 ``ucalc`` channels.
+
+    ``ucalc.f90`` first forms the escaped superlevel decay in ``ans1`` and
+    a disabled photoexcitation branch in ``ans2``.  It then forms the energy
+    channels, and finally performs the universal post-branch swap.  Therefore
+    the public/source-port result is ``ans1=0``, ``ans2=escaped_decay``,
+    ``ans3=-escaped_decay*E_gamma``, and ``ans4=0``.  For ordinary records
+    (stored wavelength greater than 0.1 Angstrom), XSTAR deliberately uses the
+    wavelength-derived photon energy and the historical literal
+    ``1.602197e-12`` erg/eV.  Only the tiny/fake-wavelength branch uses the
+    endpoint-level energy difference with the module ``ergsev`` constant.
+    """
     calt = evaluate_calt71_record(
         decoded_record,
         temperature_k=temperature_k,
@@ -166,10 +179,32 @@ def evaluate_type71_ucalc_record(
     ca_low_ion_code = ints[5] if len(ints) >= 6 else None
     special_ca_cap = ca_low_ion_code in {96, 97}
     ans2 = min(ans2_uncapped, 1.0e10) if ans2_uncapped is not None and special_ca_cap else ans2_uncapped
+
+    wavelength = calt.get("wavelength_A")
+    endpoint_energy = None
+    if endpoint1_energy_ev is not None and endpoint2_energy_ev is not None:
+        endpoint_energy = abs(float(endpoint1_energy_ev) - float(endpoint2_energy_ev))
+    photon_energy_ev = endpoint_energy
+    energy_source = "endpoint_energy_difference"
+    erg_per_ev = 1.602176634e-12
+    if wavelength is not None and float(wavelength) > 0.1:
+        photon_energy_ev = 12398.4016 / (float(wavelength) + 1.0e-24)
+        energy_source = "stored_wavelength"
+        erg_per_ev = 1.602197e-12
+    ans3 = None if ans2 is None or photon_energy_ev is None else -ans2 * photon_energy_ev * erg_per_ev
+    ans4 = 0.0 if ans2 is not None else None
+
     return {
         **calt,
         "ans1_upward_s^-1": 0.0 if ans2 is not None else None,
         "ans2_downward_s^-1": ans2,
+        "ans3_cooling_signed_erg_s^-1": ans3,
+        "ans4_heating_signed_erg_s^-1": ans4,
+        # Backward-compatible aliases retained for the one development
+        # snapshot that introduced this channel before the conventional
+        # XSTAR ans3/ans4 thermal names were restored.
+        "ans3_heating_erg_s^-1": ans3,
+        "ans4_cooling_erg_s^-1": ans4,
         "ans2_before_special_ca_cap_s^-1": ans2_uncapped,
         "special_ca_i_ca_ii_cap_applied": bool(special_ca_cap and ans2_uncapped is not None and ans2 < ans2_uncapped),
         "type71_idat6_code": ca_low_ion_code,
@@ -177,7 +212,16 @@ def evaluate_type71_ucalc_record(
         "ptmp1": p1,
         "ptmp2": p2,
         "ptmp_sum": p1 + p2,
-        "source_formula": "calt71.f90 A(ne,T); ucalc.f90 type71 ans1=0, ans2=A*(ptmp1+ptmp2)",
+        "endpoint1_energy_ev": endpoint1_energy_ev,
+        "endpoint2_energy_ev": endpoint2_energy_ev,
+        "endpoint_energy_difference_ev": endpoint_energy,
+        "energy_channel_photon_energy_ev": photon_energy_ev,
+        "energy_channel_source": energy_source,
+        "energy_channel_erg_per_ev": erg_per_ev,
+        "source_formula": (
+            "calt71.f90 A(ne,T); ucalc.f90 type71 post-swap "
+            "ans1=0, ans2=A*(ptmp1+ptmp2), ans3=-ans2*Egamma, ans4=0"
+        ),
     }
 
 

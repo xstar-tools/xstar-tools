@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.31 synchronized final-solver oxygen acceptance
+
+v0.4.31 completes the type-71 `ans3/ans4` energy channel, corrects type-72 packed endpoints to `[-4],[-3]`, and adds record-resolved rate-7 `cj2` diagnostics beginning with type 53. A seven-hook bounded XSTAR probe now captures the final effective `msolvelucy` matrix, returned `x`, and final-outer-start `xo` at one internal iteration. Python also reproduces the source `xtot` timing and final-row exclusion while retaining final-vector ion totals as a separate diagnostic. The strict oxygen gate reassesses O III--O V active populations and O III/O IV ion totals before any expansion to all elements. Physical acceptance remains pending the production seven-hook rerun.
+
 ### v0.4.30 Fortran probe numeric compatibility
 
 v0.4.30 accepts width-compressed Fortran exponents such as `1.23-107` in the

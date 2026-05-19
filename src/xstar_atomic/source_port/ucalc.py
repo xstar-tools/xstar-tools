@@ -2095,14 +2095,26 @@ class SourceFaithfulUCalc:
     def _eval_type71(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.rates_type71 import evaluate_type71_ucalc_record
         decoded={"reals":list(r.reals),"ints":list(r.integers)}
-        ev=evaluate_type71_ucalc_record(decoded,temperature_k=c.temperature_k,
-                                         electron_density_cm3=c.hydrogen_density_cm3,ptmp1=c.ptmp1,ptmp2=c.ptmp2)
-        ans2=_finite(ev.get("ans2_downward_s^-1"))
-        if ans2 is None:
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("reason") or ev.get("status")),diagnostics=ev)
         i=r.integers; id1=i[-4] if len(i)>=4 else 0; id2=i[-3] if len(i)>=3 else 0
-        return self._ctx_result(r,s,ans1=0.0,ans2=ans2,idest1=id1,idest2=id2,diagnostics=ev,
-                                context_fields_used=("temperature_k","xpx","ptmp1","ptmp2"))
+        level1 = c.levels.get(id1) if id1 > 0 else None
+        level2 = c.levels.get(id2) if id2 > 0 else None
+        ev=evaluate_type71_ucalc_record(
+            decoded, temperature_k=c.temperature_k,
+            electron_density_cm3=c.hydrogen_density_cm3,
+            ptmp1=c.ptmp1, ptmp2=c.ptmp2,
+            endpoint1_energy_ev=None if level1 is None else level1.energy_ev,
+            endpoint2_energy_ev=None if level2 is None else level2.energy_ev,
+        )
+        ans2=_finite(ev.get("ans2_downward_s^-1"))
+        ans3=_finite(ev.get("ans3_cooling_signed_erg_s^-1"))
+        ans4=_finite(ev.get("ans4_heating_signed_erg_s^-1"))
+        if ans2 is None or ans3 is None or ans4 is None:
+            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("reason") or ev.get("status")),diagnostics=ev)
+        return self._ctx_result(
+            r,s,ans1=0.0,ans2=ans2,ans3=ans3,ans4=ans4,
+            idest1=id1,idest2=id2,diagnostics=ev,
+            context_fields_used=("temperature_k","xpx","ptmp1","ptmp2","levels"),
+        )
 
     def _calt72_rate(self, r: UCalcRecord, c: UCalcContext) -> float:
         if len(r.reals) < 2: return 0.0
@@ -2112,7 +2124,7 @@ class SourceFaithfulUCalc:
 
     def _eval_type72(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         rate=self._calt72_rate(r,c); ne=c.electron_density_cm3; i=r.integers
-        id1=i[-3] if len(i)>=3 else 1; id2=i[-2] if len(i)>=2 else c.nlevp
+        id1=i[-4] if len(i)>=4 else 1; id2=i[-3] if len(i)>=3 else c.nlevp
         gu=c.levels.weight(c.nlevp); gl=c.levels.weight(1); rinf=2.08e-22*gl/max(gu,1e-48)/max(c.t*c.tsq,1e-48)
         de=r.reals[1] if len(r.reals)>1 else 0.0
         return self._ctx_result(r,s,ans1=rate*ne*rinf*ne*_expo(de/c.temperature_k),ans2=rate*ne,idest1=id1,idest2=id2,

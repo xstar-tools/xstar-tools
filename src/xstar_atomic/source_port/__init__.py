@@ -178,8 +178,14 @@ from .calc_hmc_all_closure import (
 from .calc_hmc_all_matrix_parity import (
     SameCallMatrixParityResult,
     ThermalFamilyParityResult,
+    Rate7CJ2DiagnosisResult,
     compare_same_call_matrix_terms,
     compare_thermal_families,
+    diagnose_rate7_cj2_records,
+)
+from .msolvelucy_final_snapshot import (
+    MSolveLucyFinalSnapshotParityResult,
+    compare_msolvelucy_final_snapshot,
 )
 
 from .calc_hmc_all_parity import (
@@ -349,8 +355,12 @@ __all__ = [
     "build_xstar_vector_matrix_closure",
     "SameCallMatrixParityResult",
     "ThermalFamilyParityResult",
+    "Rate7CJ2DiagnosisResult",
     "compare_same_call_matrix_terms",
     "compare_thermal_families",
+    "diagnose_rate7_cj2_records",
+    "MSolveLucyFinalSnapshotParityResult",
+    "compare_msolvelucy_final_snapshot",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",

@@ -323,6 +323,9 @@ class LucySolveResult:
     igammamax_record: np.ndarray
     ialphamax_record: np.ndarray
     ion_population_totals: np.ndarray
+    ion_population_totals_final_vector: np.ndarray
+    ion_population_totals_source: str
+    final_outer_start_populations: np.ndarray
     ionization_totals: np.ndarray
     recombination_totals: np.ndarray
     ionization_components: np.ndarray
@@ -1040,11 +1043,16 @@ def msolvelucy(
     condensed_rank = 0
     used_dense_fallback = False
     trace = LucyIterationTrace() if context.capture_lucy_trace else None
+    # XSTAR computes ``xtot`` at the start of each Lucy outer iteration and
+    # does not recompute it after the final fixed-point update.  Preserve that
+    # execution-order-dependent vector separately from the returned final x.
+    final_outer_start = x.copy()
 
     while outer_diff > context.lucy_tolerance and outer < context.max_lucy_iterations:
         outer += 1
         xo = x.copy()
         outer_start = x.copy()
+        final_outer_start = outer_start.copy()
         p = np.zeros(nspmx, dtype=float)
         for i in range(n):
             sp = int(nsup[i]) - 1
@@ -1229,17 +1237,22 @@ def msolvelucy(
     igammamax = np.zeros(n, dtype=np.int64)
     ialphamax = np.zeros(n, dtype=np.int64)
     ion_population_totals = np.zeros(basis.n_ions, dtype=float)
+    ion_population_totals_final_vector = np.zeros(basis.n_ions, dtype=float)
     ionization_totals = np.zeros(basis.n_ions, dtype=float)
     recombination_totals = np.zeros(basis.n_ions, dtype=float)
     ionization_components = np.zeros((3, basis.n_ions), dtype=float)
     recombination_components = np.zeros((3, basis.n_ions), dtype=float)
 
-    # msolvelucy excludes the final fully stripped continuum row when
-    # accumulating xtot by ion.
+    # Literal msolvelucy ordering: ``xtot`` is accumulated from the vector at
+    # the *start* of the final outer iteration, and the final fully stripped
+    # continuum row is excluded.  The final-vector totals are retained only as
+    # a diagnostic so population propagation can be separated from source
+    # execution-order semantics.
     for i in range(max(0, n - 1)):
         ion_slot = int(nion[i]) - 1
         if 0 <= ion_slot < basis.n_ions:
-            ion_population_totals[ion_slot] += x[i]
+            ion_population_totals[ion_slot] += final_outer_start[i]
+            ion_population_totals_final_vector[ion_slot] += x[i]
 
     rate_category = {3: 0, 4: 1, 5: 2, 7: 3}
     for term in terms:
@@ -1322,6 +1335,9 @@ def msolvelucy(
         igammamax_record=igammamax,
         ialphamax_record=ialphamax,
         ion_population_totals=ion_population_totals,
+        ion_population_totals_final_vector=ion_population_totals_final_vector,
+        ion_population_totals_source="final_outer_iteration_start_vector",
+        final_outer_start_populations=final_outer_start.copy(),
         ionization_totals=ionization_totals,
         recombination_totals=recombination_totals,
         ionization_components=ionization_components,
@@ -1435,7 +1451,7 @@ def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.30",
+    port_version: str = "v0.4.31",
 ) -> Dict[str, Path]:
     """Write basis, matrix, population, blocker, and summary products."""
     out = Path(out_dir)
@@ -1482,6 +1498,7 @@ def write_element_equilibrium_products(
                 "compact_index": i,
                 "initial_population": float(assembly.initial_populations[i]),
                 "solved_population": "" if solve is None else float(solve.populations[i - 1]),
+                "final_outer_start_population": "" if solve is None else float(solve.final_outer_start_populations[i - 1]),
                 "superlevel": row.superlevel,
                 "ion_counter": row.ion_counter,
                 "roles_json": json.dumps(row.roles, sort_keys=True),
@@ -1537,11 +1554,14 @@ def write_element_equilibrium_products(
         heating_matrix2=assembly.heating_matrix2,
         initial_populations=assembly.initial_populations[1:],
         solved_populations=np.asarray([] if solve is None else solve.populations),
+        final_outer_start_populations=np.asarray([] if solve is None else solve.final_outer_start_populations),
         gamma=np.asarray([] if solve is None else solve.gamma),
         alpha=np.asarray([] if solve is None else solve.alpha),
         fgamma=np.asarray([] if solve is None else solve.fgamma),
         falpha=np.asarray([] if solve is None else solve.falpha),
         ion_population_totals=np.asarray([] if solve is None else solve.ion_population_totals),
+        ion_population_totals_final_vector=np.asarray([] if solve is None else solve.ion_population_totals_final_vector),
+        ion_population_totals_source=np.asarray("" if solve is None else solve.ion_population_totals_source),
         ionization_totals=np.asarray([] if solve is None else solve.ionization_totals),
         recombination_totals=np.asarray([] if solve is None else solve.recombination_totals),
         ionization_components=np.asarray([] if solve is None else solve.ionization_components),
@@ -1577,6 +1597,9 @@ def write_element_equilibrium_products(
         "full_element_direct_solve_ready": result.full_element_direct_solve_ready,
         "six_row_and_119_row_products_role": "regression_subsets_only",
         "production_acceptance_target": f"full_{basis.n_rows}_row_element_matrix_and_population_vector",
+        "ion_population_totals_source": None if solve is None else solve.ion_population_totals_source,
+        "source_xtot_uses_final_outer_start": bool(solve is not None),
+        "source_xtot_excludes_final_compact_row": bool(solve is not None),
     }
     parity = result.population_parity
     matrix_parity = result.full_element_matrix_parity

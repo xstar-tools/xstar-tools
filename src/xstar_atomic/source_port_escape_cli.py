@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.print_summary:
             print("XSTAR source-faithful line/RRC escape-state builder")
             print("----------------------------------------------------")
-            print("port_version=v0.4.30")
+            print("port_version=v0.4.31")
             print("status=escape_state_built")
             print(f"xstar_run_dir={result.run_dir}")
             print(f"zone_selector={result.zone_selector}")
