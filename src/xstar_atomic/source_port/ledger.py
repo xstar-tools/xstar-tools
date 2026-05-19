@@ -91,10 +91,10 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.26"
+PORT_LEDGER_VERSION = "v0.4.27"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "production oxygen global-array parity -> full all-element fixed-state "
+    "production oxygen active/global-array parity -> full all-element fixed-state "
     "scope -> comp2 -> freef -> bremem -> heatf -> complete fixed-state "
     "calc_hmc_all parity -> dsec"
 )
@@ -207,6 +207,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; global-array acceptance, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 and the source-shaped fixed-state calc_hmc_all element loop are callable; active-level/global-array acceptance, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

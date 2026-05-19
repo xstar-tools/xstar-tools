@@ -2250,14 +2250,68 @@ class SourceFaithfulUCalc:
 
     def _eval_type77(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.xstar_element_solver import _xstar_calt77_rates
-        ev=_xstar_calt77_rates(temperature=float(c.temperature_k), electron_density=float(c.hydrogen_density_cm3), ion_charge=c.extras.get("ion_charge"), reals=list(r.reals), ints=list(r.integers))
-        ans1=_finite(ev.get("type77_calt77_clu_s^-1")); ans2=_finite(ev.get("type77_calt77_cul_s^-1"))
+        i = r.integers
+        id1 = i[-4] if len(i) >= 4 else 0
+        id2 = i[-3] if len(i) >= 3 else 0
+        e1 = c.levels.energy(id1)
+        e2 = c.levels.energy(id2)
+        signed_de = float(e2) - float(e1)
+        de = abs(signed_de)
+        endpoint_wav = 12398.4016 / (signed_de + 1.0e-24)
+
+        ev = _xstar_calt77_rates(
+            temperature=float(c.temperature_k),
+            electron_density=float(c.hydrogen_density_cm3),
+            ion_charge=c.extras.get("ion_charge"),
+            reals=list(r.reals),
+            ints=list(r.integers),
+            temperature_floor_wavelength_a=endpoint_wav,
+        )
+        # Bounded diagnostic only: reproduce the pre-v0.4.27 record-tail floor
+        # so the fixed-population effect can be audited without feeding probe or
+        # legacy values back into the production operator.
+        legacy = _xstar_calt77_rates(
+            temperature=float(c.temperature_k),
+            electron_density=float(c.hydrogen_density_cm3),
+            ion_charge=c.extras.get("ion_charge"),
+            reals=list(r.reals),
+            ints=list(r.integers),
+        )
+        ans1 = _finite(ev.get("type77_calt77_clu_s^-1"))
+        ans2 = _finite(ev.get("type77_calt77_cul_s^-1"))
         if ans1 is None or ans2 is None:
-            return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason=str(ev.get("type77_calt77_status") or "calt77_failed"),diagnostics=ev)
-        i=r.integers; id1=i[-4] if len(i)>=4 else 0; id2=i[-3] if len(i)>=3 else 0
-        de=abs(c.levels.energy(id1)-c.levels.energy(id2))
-        return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*de*ERG_PER_EV,ans6=ans1*de*ERG_PER_EV,
-                                idest1=id1,idest2=id2,diagnostics=ev,context_fields_used=("temperature_k","xpx","levels"))
+            return self._base_result(
+                r, s, UCalcStatus.SOURCE_REJECTED,
+                reason=str(ev.get("type77_calt77_status") or "calt77_failed"),
+                diagnostics=ev,
+            )
+        diagnostics = dict(ev)
+        diagnostics.update({
+            "type77_endpoint_energy_difference_eV": de,
+            "type77_endpoint_signed_energy_difference_eV": signed_de,
+            "type77_source_floor_wavelength_A": endpoint_wav,
+            "type77_legacy_record_floor_clu_s^-1": legacy.get("type77_calt77_clu_s^-1"),
+            "type77_legacy_record_floor_cul_s^-1": legacy.get("type77_calt77_cul_s^-1"),
+            "type77_legacy_record_floor_log10_temperature_used": legacy.get("type77_calt77_log10_temperature_used"),
+            "type77_source_minus_legacy_clu_s^-1": (
+                float(ans1) - float(legacy.get("type77_calt77_clu_s^-1"))
+                if legacy.get("type77_calt77_clu_s^-1") is not None else None
+            ),
+            "type77_source_minus_legacy_cul_s^-1": (
+                float(ans2) - float(legacy.get("type77_calt77_cul_s^-1"))
+                if legacy.get("type77_calt77_cul_s^-1") is not None else None
+            ),
+            "type77_impact_audit_role": "diagnostic_fixed_population_source_vs_legacy_floor",
+        })
+        return self._ctx_result(
+            r, s,
+            ans1=ans1, ans2=ans2,
+            ans5=ans2 * de * ERG_PER_EV,
+            ans6=ans1 * de * ERG_PER_EV,
+            idest1=id1, idest2=id2,
+            diagnostics=diagnostics,
+            context_fields_used=("temperature_k", "xpx", "levels"),
+        )
 
     def _eval_type95(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.xstar_element_solver import _xstar_eint

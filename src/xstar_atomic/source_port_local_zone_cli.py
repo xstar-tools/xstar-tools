@@ -67,6 +67,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--xstar-calc-hmc-call-id", type=int)
     parser.add_argument("--xstar-calc-hmc-parity-rtol", type=float, default=5.0e-3)
     parser.add_argument("--xstar-calc-hmc-parity-atol", type=float, default=1.0e-12)
+    parser.add_argument(
+        "--xstar-calc-hmc-active-population-threshold",
+        type=float,
+        default=1.0e-12,
+        help=(
+            "Population threshold used by the milestone global-level gate. "
+            "Strict comparisons for all mapped levels are still written."
+        ),
+    )
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--print-summary", action="store_true")
     return parser
@@ -174,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
                 call_id=effective_hmc_call_id,
                 rtol=args.xstar_calc_hmc_parity_rtol,
                 atol=args.xstar_calc_hmc_parity_atol,
+                active_population_threshold=args.xstar_calc_hmc_active_population_threshold,
             )
             paths.update({
                 f"pre_continuum_parity_{key}": value
@@ -187,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR fixed-state calc_hmc_all core")
         print("-----------------------------------")
-        print("port_version=v0.4.26")
+        print("port_version=v0.4.27")
         print(f"runtime_context_source={runtime_source}")
         print(f"requested_critf={requested_critf}")
         print(f"effective_critf={effective_critf}")
@@ -212,11 +222,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"xstar_pre_continuum_state_parity_ready={parity.pre_continuum_state_ready}")
             print(f"xstar_pre_continuum_summary_parity_status={parity.pre_continuum_summary_status}")
             print(f"xstar_pre_continuum_summary_parity_ready={parity.pre_continuum_summary_ready}")
+            print(f"xstar_element_array_parity_status={parity.element_array_status}")
+            print(f"xstar_element_array_parity_ready={parity.element_array_ready}")
             print(f"xstar_global_ion_parity_ready={parity.global_ion_ready}")
-            print(f"xstar_global_level_parity_ready={parity.global_level_ready}")
+            print(f"xstar_global_level_primary_parity_ready={parity.global_level_primary_ready}")
+            print(f"xstar_global_level_active_parity_ready={parity.global_level_active_ready}")
+            print(f"xstar_global_level_derived_parity_ready={parity.global_level_derived_ready}")
+            print(f"xstar_global_level_strict_parity_ready={parity.global_level_ready}")
             print(f"xstar_global_array_parity_ready={parity.global_arrays_ready}")
             print(f"xstar_pre_continuum_parity_ready={parity.parity_ready}")
             print(f"xstar_pre_continuum_parity_outside_tolerance={parity.n_outside_tolerance}")
+            print(f"xstar_pre_continuum_parity_blocking_outside_tolerance={parity.n_blocking_outside_tolerance}")
         for key, value in paths.items():
             print(f"{key}: {value}")
     return 0

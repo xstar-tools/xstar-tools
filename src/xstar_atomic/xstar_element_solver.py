@@ -2151,6 +2151,7 @@ def _xstar_calt77_rates(
     ion_charge: Optional[int],
     reals: Sequence[float],
     ints: Sequence[int],
+    temperature_floor_wavelength_a: Optional[float] = None,
 ) -> dict:
     """Evaluate XSTAR ``calt77.f90`` for a type-77 superlevel collision row.
 
@@ -2168,8 +2169,12 @@ def _xstar_calt77_rates(
         ans2 = cul   ! superlevel -> spectroscopic
 
     The caller should assemble both directions as ordinary two-rate matrix
-    terms.  As in ``ucalc.f90``, the temperature passed to ``calt77`` is floored
-    to ``max(T, 2.8777e6 / wav)`` using the record wavelength.
+    terms.  ``ucalc.f90`` floors the temperature using a wavelength derived
+    from the actual endpoint energy difference, while ``calt77.f90`` retains
+    the wavelength stored in the type-77 record for detailed balance.  The
+    optional ``temperature_floor_wavelength_a`` carries that distinct source
+    wavelength; diagnostic callers without endpoint state fall back to the
+    record wavelength.
     """
     rd = [float(x) for x in reals]
     it = [int(x) for x in ints]
@@ -2178,6 +2183,8 @@ def _xstar_calt77_rates(
         "type77_calt77_cul_s^-1": None,
         "type77_calt77_clu_s^-1": None,
         "type77_calt77_wavelength_A": None,
+        "type77_ucalc_floor_wavelength_A": None,
+        "type77_temperature_floor_wavelength_source": None,
         "type77_calt77_log10_cul": None,
         "type77_calt77_nden": None,
         "type77_calt77_ntem": None,
@@ -2222,17 +2229,24 @@ def _xstar_calt77_rates(
         out["type77_calt77_status"] = "not_evaluated_nonpositive_wavelength"
         return out
 
-    # ucalc.f90 applies this floor before calling calt77.  It prevents very
-    # low-temperature extrapolation for high-energy superlevel collisions.
+    # ucalc.f90 derives a separate wavelength from rlev endpoint energies for
+    # this floor. calt77 then uses the record-tail wavelength ``wav`` for xt.
+    floor_wav = float(temperature_floor_wavelength_a) if temperature_floor_wavelength_a is not None else wav
+    out["type77_ucalc_floor_wavelength_A"] = floor_wav
+    out["type77_temperature_floor_wavelength_source"] = (
+        "ucalc_endpoint_energy_difference" if temperature_floor_wavelength_a is not None
+        else "record_tail_legacy_fallback"
+    )
     temperature_input = float(temperature)
-    temperature_used = max(temperature_input, 2.8777e6 / wav)
+    floor_temperature = 2.8777e6 / floor_wav if floor_wav != 0.0 and math.isfinite(floor_wav) else float("-inf")
+    temperature_used = max(temperature_input, floor_temperature)
     rne_orig = math.log10(float(electron_density))
     rte_orig = math.log10(temperature_input)
     rne = rne_orig
     rte = math.log10(temperature_used)
     notes = []
     if temperature_used > temperature_input:
-        notes.append("temperature_floored_by_ucalc_2.8777e6_over_wav")
+        notes.append("temperature_floored_by_ucalc_2.8777e6_over_endpoint_wav")
     if rne > dens_grid[-1]:
         rne = dens_grid[-1]
         notes.append("logne_clipped_to_grid_max")

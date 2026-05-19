@@ -155,14 +155,14 @@ def _fake_element_with_guard(master, derived, *, element_z, context, dispatcher=
         SimpleNamespace(compact_index=1, roles=[{"ion_stage": 1, "local_level": 1}]),
         SimpleNamespace(compact_index=2, roles=[{"ion_stage": 2, "local_level": 1}]),
     ]
-    blocks = [SimpleNamespace(ion_stage=1), SimpleNamespace(ion_stage=2)]
+    blocks = [SimpleNamespace(ion_stage=1, nlev=1), SimpleNamespace(ion_stage=2, nlev=1)]
     assembly = SimpleNamespace(
         basis=SimpleNamespace(rows=rows, blocks=blocks),
         # one-based guard followed by the two real LTE entries
         initial_populations=np.array([0.0, 0.8, 0.2]),
         ion_summaries=[
-            SimpleNamespace(ion_stage=1, second_pass_pirt=111.0, second_pass_rrrt=121.0),
-            SimpleNamespace(ion_stage=2, second_pass_pirt=112.0, second_pass_rrrt=122.0),
+            SimpleNamespace(ion_stage=1, nlev=1, second_pass_pirt=111.0, second_pass_rrrt=121.0),
+            SimpleNamespace(ion_stage=2, nlev=1, second_pass_pirt=112.0, second_pass_rrrt=122.0),
         ],
     )
     solve = SimpleNamespace(
@@ -261,6 +261,10 @@ def _write_complete_calc_hmc_probe(tmp_path, *, summary_values="3,1,4,2,0.4,0"):
         "9,10,0.5,0.8,0.625,5,7,101,201\n"
         "9,11,0.3,0.2,1.5,6,8,102,202\n"
     )
+    (tmp_path / "xstar_calc_hmc_all_pre_continuum_elements_probe.csv").write_text(
+        "calc_hmc_all_call_id,element_index,element_z,abundance,mml,mmu,htt,cll,htt2,cll2\n"
+        "9,2,2,1.0,1,2,3,1,4,2\n"
+    )
 
 
 def _fake_complete_calc_hmc_result(*, complete_scope=True):
@@ -319,6 +323,10 @@ def test_bounded_calc_hmc_all_probe_comparator(tmp_path):
     assert parity.pre_continuum_summary_ready is True
     assert parity.pre_continuum_summary_status == "ready"
     assert parity.global_ion_ready is True
+    assert parity.element_array_ready is True
+    assert parity.global_level_primary_ready is True
+    assert parity.global_level_active_ready is True
+    assert parity.global_level_derived_ready is True
     assert parity.global_level_ready is True
     assert parity.global_arrays_ready is True
     assert parity.parity_ready is True
@@ -355,5 +363,8 @@ def test_calc_hmc_all_probe_products_are_bounded_and_source_local(tmp_path):
     assert "xstar_calc_hmc_element_pre_matrix_probe.csv" in helper
     assert "xstar_calc_hmc_all_pre_continuum_summary_probe.csv" in helper
     assert "xstar_calc_hmc_all_pre_continuum_levels_probe.csv" in helper
+    assert "xstar_calc_hmc_all_pre_continuum_elements_probe.csv" in helper
+    assert "subroutine xap_hmc_element_post" in helper
     assert "call xap_hmc_begin_call" in Path(outputs["calc_hmc_all_begin_call_insertion"]).read_text()
     assert "before call comp2" in Path(outputs["calc_hmc_all_pre_continuum_insertion"]).read_text()
+    assert "xap_hmc_element_post" in Path(outputs["calc_hmc_all_element_post_insertion"]).read_text()

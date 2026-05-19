@@ -14,6 +14,10 @@ subsystems.
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
 
+### v0.4.27 active-level parity and type-77 source closure
+
+v0.4.27 reproduces the two source `bilevg` floors, preserves zero dominant-record IDs on final continuum rows, adds a dedicated element-array XSTAR probe, and splits strict global-level diagnostics from the active-population milestone gate. It also corrects the type-77 temperature floor to use the endpoint-energy wavelength while retaining the record wavelength for detailed balance, with a diagnostic-only fixed-population impact audit.
+
 ### v0.4.26 source-global mapping and second-pass rate separation
 
 v0.4.26 maps global levels through the literal `npilev(local ordinal, ion)`

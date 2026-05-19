@@ -457,6 +457,10 @@ def calc_hmc_all(
         populations = np.asarray(solve.populations, dtype=float)
         lte = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
         lte_has_guard = lte.size == populations.size + 1
+        nlev_by_stage = {
+            int(block.ion_stage): int(block.nlev)
+            for block in equilibrium.assembly.basis.blocks
+        }
         for row in equilibrium.assembly.basis.rows:
             idx = row.compact_index - 1
             for role in row.roles:
@@ -466,15 +470,25 @@ def calc_hmc_all(
                 pop = float(populations[idx])
                 lte_index = row.compact_index if lte_has_guard else idx
                 rn = float(lte[lte_index]) if lte_index < lte.size else 0.0
+                local_level = int(key[2])
+                ion_nlev = int(nlev_by_stage.get(int(key[1]), 0))
+                is_final_continuum = bool(ion_nlev > 0 and local_level == ion_nlev)
+
                 xilevg[key] = pop
                 rnisg[key] = rn
-                bilevg[key] = pop / (rn + 1.0e-48)
+                # calc_hmc_element writes bileve for spectroscopic rows using
+                # 1e-37. calc_hmc_all recomputes only the final continuum row
+                # with 1e-48. Preserve the literal two-floor source rule.
+                bilevg[key] = pop / (rn + (1.0e-48 if is_final_continuum else 1.0e-37))
                 gammag[key] = float(solve.gamma[idx])
                 alphag[key] = float(solve.alpha[idx])
                 fgammag[key] = np.asarray(solve.fgamma[:, idx], dtype=float).copy()
                 falphag[key] = np.asarray(solve.falpha[:, idx], dtype=float).copy()
-                igammamaxg[key] = int(solve.igammamax_record[idx])
-                ialphamaxg[key] = int(solve.ialphamax_record[idx])
+                # calc_hmc_all copies the dominant-record indices only for
+                # mm=1..nlev-1. The final continuum row retains its zeroed
+                # global-array value even though gamma/alpha are copied.
+                igammamaxg[key] = 0 if is_final_continuum else int(solve.igammamax_record[idx])
+                ialphamaxg[key] = 0 if is_final_continuum else int(solve.ialphamax_record[idx])
 
         element_results.append(
             FixedStateElementResult(
@@ -672,11 +686,95 @@ def register_fixed_state_calc_hmc_all(
     driver.register_source_routine(XSTARSourceRoutine.CALC_HMC_ALL, _handler)
 
 
+def _type77_floor_impact_rows(result: FixedStateCalcHMCAllResult) -> List[Dict[str, Any]]:
+    """Build a fixed-population source-vs-legacy type-77 floor audit.
+
+    The legacy branch reproduces the pre-v0.4.27 record-wavelength temperature
+    floor. It is diagnostic only and never modifies the production matrix.
+    """
+
+    rows: List[Dict[str, Any]] = []
+
+    def as_float(value: Any) -> Optional[float]:
+        try:
+            out = float(value)
+        except (TypeError, ValueError):
+            return None
+        return out if np.isfinite(out) else None
+
+    for element in result.element_results:
+        equilibrium = element.equilibrium
+        solve = getattr(equilibrium, "solve", None)
+        if solve is None:
+            continue
+        populations = np.asarray(solve.populations, dtype=float)
+        block_by_ion = {
+            int(block.ion_index): block for block in equilibrium.assembly.basis.blocks
+        }
+        for record in getattr(equilibrium.assembly, "record_results", ()):
+            if int(record.get("data_type", 0) or 0) != 77:
+                continue
+            if str(record.get("status", "")) != "evaluated":
+                continue
+            ion_index = int(record.get("ion_index", 0) or 0)
+            block = block_by_ion.get(ion_index)
+            if block is None:
+                continue
+            idest1 = int(record.get("idest1", 0) or 0)
+            idest2 = int(record.get("idest2", 0) or 0)
+            if idest1 <= 0 or idest2 <= 0:
+                continue
+            row1 = min(len(populations), int(block.compact_index(idest1)))
+            row2 = min(len(populations), int(block.compact_index(idest2)))
+            pop1 = float(populations[row1 - 1])
+            pop2 = float(populations[row2 - 1])
+            source_clu = as_float(record.get("ans1_after_calc_hmc_ion_filter", record.get("ans1")))
+            source_cul = as_float(record.get("ans2_after_calc_hmc_ion_filter", record.get("ans2")))
+            legacy_clu = as_float(record.get("diag_type77_legacy_record_floor_clu_s^-1"))
+            legacy_cul = as_float(record.get("diag_type77_legacy_record_floor_cul_s^-1"))
+            if None in {source_clu, source_cul, legacy_clu, legacy_cul}:
+                continue
+            source_net = float(source_clu) * pop1 - float(source_cul) * pop2
+            legacy_net = float(legacy_clu) * pop1 - float(legacy_cul) * pop2
+            delta_clu = float(source_clu) - float(legacy_clu)
+            delta_cul = float(source_cul) - float(legacy_cul)
+            rows.append({
+                "element_z": int(element.request.element_z),
+                "ion_stage": int(record.get("ion_stage", block.ion_stage) or block.ion_stage),
+                "ion_index": ion_index,
+                "record": int(record.get("record", 0) or 0),
+                "idest1": idest1,
+                "idest2": idest2,
+                "compact_row_idest1": row1,
+                "compact_row_idest2": row2,
+                "population_idest1": pop1,
+                "population_idest2": pop2,
+                "endpoint_energy_difference_eV": record.get("diag_type77_endpoint_energy_difference_eV"),
+                "source_floor_wavelength_A": record.get("diag_type77_source_floor_wavelength_A"),
+                "record_wavelength_A": record.get("diag_type77_calt77_wavelength_A"),
+                "source_log10_temperature_used": record.get("diag_type77_calt77_log10_temperature_used"),
+                "legacy_log10_temperature_used": record.get("diag_type77_legacy_record_floor_log10_temperature_used"),
+                "source_clu_s_inv": source_clu,
+                "source_cul_s_inv": source_cul,
+                "legacy_clu_s_inv": legacy_clu,
+                "legacy_cul_s_inv": legacy_cul,
+                "source_minus_legacy_clu_s_inv": delta_clu,
+                "source_minus_legacy_cul_s_inv": delta_cul,
+                "source_net_population_flux_s_inv": source_net,
+                "legacy_net_population_flux_s_inv": legacy_net,
+                "source_minus_legacy_net_population_flux_s_inv": source_net - legacy_net,
+                "fixed_population_l1_impact_s_inv": abs(delta_clu * pop1) + abs(delta_cul * pop2),
+                "production_operator_uses": "source_endpoint_floor",
+                "legacy_branch_role": "diagnostic_only",
+            })
+    return rows
+
+
 def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.26",
+    port_version: str = "v0.4.27",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -819,6 +917,55 @@ def write_fixed_state_calc_hmc_all_products(
                 "ialphamax_record": result.ialphamaxg.get(key, 0),
             })
 
+    type77_rows = _type77_floor_impact_rows(result)
+    type77_csv = out / "xstar_calc_hmc_all_type77_floor_impact.csv"
+    type77_fields = (
+        "element_z", "ion_stage", "ion_index", "record", "idest1", "idest2",
+        "compact_row_idest1", "compact_row_idest2", "population_idest1",
+        "population_idest2", "endpoint_energy_difference_eV",
+        "source_floor_wavelength_A", "record_wavelength_A",
+        "source_log10_temperature_used", "legacy_log10_temperature_used",
+        "source_clu_s_inv", "source_cul_s_inv", "legacy_clu_s_inv",
+        "legacy_cul_s_inv", "source_minus_legacy_clu_s_inv",
+        "source_minus_legacy_cul_s_inv", "source_net_population_flux_s_inv",
+        "legacy_net_population_flux_s_inv",
+        "source_minus_legacy_net_population_flux_s_inv",
+        "fixed_population_l1_impact_s_inv", "production_operator_uses",
+        "legacy_branch_role",
+    )
+    with type77_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=type77_fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(type77_rows)
+    type77_summary = {
+        "mode": "diagnostic_fixed_population_source_endpoint_floor_vs_legacy_record_floor",
+        "production_operator_uses": "source_endpoint_floor",
+        "legacy_values_enter_operator": False,
+        "n_records": len(type77_rows),
+        "n_records_with_rate_change": sum(
+            abs(float(row["source_minus_legacy_clu_s_inv"])) > 0.0
+            or abs(float(row["source_minus_legacy_cul_s_inv"])) > 0.0
+            for row in type77_rows
+        ),
+        "max_absolute_rate_change_s_inv": max((
+            max(abs(float(row["source_minus_legacy_clu_s_inv"])),
+                abs(float(row["source_minus_legacy_cul_s_inv"])))
+            for row in type77_rows
+        ), default=0.0),
+        "sum_fixed_population_l1_impact_s_inv": sum(
+            float(row["fixed_population_l1_impact_s_inv"]) for row in type77_rows
+        ),
+        "max_fixed_population_l1_impact_s_inv": max((
+            float(row["fixed_population_l1_impact_s_inv"]) for row in type77_rows
+        ), default=0.0),
+        "max_absolute_net_flux_change_s_inv": max((
+            abs(float(row["source_minus_legacy_net_population_flux_s_inv"]))
+            for row in type77_rows
+        ), default=0.0),
+    }
+    type77_json = out / "xstar_calc_hmc_all_type77_floor_impact_summary.json"
+    type77_json.write_text(json.dumps(type77_summary, indent=2) + "\n")
+
     summary = {
         "port_version": port_version,
         "source_routine": "calc_hmc_all",
@@ -852,6 +999,7 @@ def write_fixed_state_calc_hmc_all_products(
         "complete_fixed_state_ready": result.complete_fixed_state_ready,
         "diagnostics": dict(result.diagnostics),
         "continuum_diagnostics": dict(result.continuum.diagnostics),
+        "type77_floor_impact": type77_summary,
     }
     json_path = out / "xstar_calc_hmc_all_fixed_state_summary.json"
     json_path.write_text(json.dumps(summary, indent=2) + "\n")
@@ -879,6 +1027,8 @@ def write_fixed_state_calc_hmc_all_products(
         "elements_csv": str(element_csv),
         "calc_ion_rates_records_csv": str(contribution_csv),
         "levels_csv": str(level_csv),
+        "type77_floor_impact_csv": str(type77_csv),
+        "type77_floor_impact_json": str(type77_json),
         "json": str(json_path),
         "markdown": str(md_path),
     }

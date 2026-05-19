@@ -44,8 +44,8 @@ def test_calc_hmc_all_density_preserves_literal_lcdd_branches():
 
 def _fake_element_solver(master, derived, *, element_z, context, dispatcher=None):
     blocks = [
-        SimpleNamespace(ion_stage=1),
-        SimpleNamespace(ion_stage=2),
+        SimpleNamespace(ion_stage=1, nlev=1),
+        SimpleNamespace(ion_stage=2, nlev=1),
     ]
     rows = [
         SimpleNamespace(compact_index=1, roles=[{"ion_stage": 1, "local_level": 1}]),

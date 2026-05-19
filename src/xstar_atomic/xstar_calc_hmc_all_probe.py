@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.26 calc_hmc_all pre-continuum probe.
+    return r'''! xstar-atomic v0.4.27 calc_hmc_all pre-continuum probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -123,6 +123,32 @@ subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
             1pe24.16,',',i12,',',i12,',',1pe24.16)
 end subroutine xap_hmce_pre_matrix
 
+
+subroutine xap_hmc_element_post(element_index, element_z, abundance, &
+    mml, mmu, htt, cll, htt2, cll2)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: element_index, element_z, mml, mmu
+  real(8), intent(in) :: abundance, htt, cll, htt2, cll2
+  integer :: lun, ios
+  logical :: exists
+
+  if (xap_hmc_capture .ne. 1) return
+  inquire(file='xstar_calc_hmc_all_pre_continuum_elements_probe.csv', &
+          exist=exists)
+  open(newunit=lun, &
+       file='xstar_calc_hmc_all_pre_continuum_elements_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .ne. 0) return
+  if (.not. exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,element_index,element_z,abundance,mml,mmu,'// &
+    'htt,cll,htt2,cll2'
+  write(lun,9005) xap_hmc_current_call, element_index, element_z, &
+    abundance, mml, mmu, htt, cll, htt2, cll2
+  close(lun)
+9005 format(i12,',',i12,',',i12,',',1pe24.16,',',i12,',',i12,4(',',1pe24.16))
+end subroutine xap_hmc_element_post
+
 subroutine xap_hmc_pre_continuum(t4, xee, xpx, httot, cltot, httot2, &
     cltot2, enelec, elcter, nion, nlevel, xiin, rrrt, pirt, htt, cll, &
     htt2, cll2, stotg, atotg, xtotg, xilevg, rnisg, bilevg, gammag, &
@@ -218,6 +244,10 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
       call xap_hmce_pre_matrix(jk,nnz,pirti,rrrti,xitp,                &
      &                         mml(jk),mmu(jk),critf)
 """,
+        "calc_hmc_all_element_post": """! Insert after htt(jk),cll(jk),htt2(jk),cll2(jk) are assigned.
+      call xap_hmc_element_post(jk,nnz,xeltp,mml(jk),mmu(jk),        &
+     &     htt(jk),cll(jk),htt2(jk),cll2(jk))
+""",
         "calc_hmc_all_pre_continuum": """! Insert after elcter=-enelec+xee and before call comp2.
       call xap_hmc_pre_continuum(t,xee,xpx,httot,cltot,httot2,cltot2, &
      &     enelec,elcter,nni,nnml,xiin,rrrt,pirt,htt,cll,htt2,cll2,  &
@@ -249,7 +279,7 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "the state immediately before `comp2`; it never changes rates or populations.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
         "`calc_hmc_element.f90` and `calc_hmc_all.f90` in the XSTAR build source list.\n"
-        "2. Apply the three insertion snippets at their documented locations.\n"
+        "2. Apply the four insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"

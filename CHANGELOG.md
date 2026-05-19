@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.4.27 - 2026-05-19
+
+v0.4.27 closes the next bounded `calc_hmc_all` parity layer.
+
+### Corrected
+
+- Reproduced XSTAR's two departure-coefficient floors: `1e-37` for spectroscopic `calc_hmc_element` rows and `1e-48` only for each ion's final continuum row.
+- Zeroed `igammamaxg/ialphamaxg` on final continuum rows, matching the source copy bounds.
+- Corrected type-77/rate-23 temperature flooring to use the actual endpoint-energy wavelength before `calt77`, while retaining the record-tail wavelength for detailed balance.
+
+### Added
+
+- A dedicated XSTAR element-array probe for `htt/cll/htt2/cll2`, abundance, and source element ordinal.
+- Separate strict-primary, active-level, derived, and all-level parity readiness fields.
+- `--xstar-calc-hmc-active-population-threshold` for the milestone gate; strict rows remain fully reported.
+- Population-weighted attribution for failing `xilevg/alphag` rows.
+- Diagnostic-only type-77 source-endpoint-floor versus legacy-record-floor impact CSV/JSON products.
+
+### Evidence and validation
+
+Offline application of the direct level-export semantics to the archived v0.4.26 run reduces strict failures from 301 to an estimated 268, including `bilevg` 180 to 160 and dominant-record IDs 14 to 1. The remaining milestone-blocking estimate is 32 rows before the type-77-corrected production re-solve. A fresh instrumented XSTAR run remains required for acceptance. The focused v0.4.27 tests pass 3/3, the complete source-port suite passes 90 tests, and the selected API/package/documentation suite passes 34 tests. The full historical suite exceeded the 150-second execution limit and is not claimed as fully passed.
+
 ## v0.4.26 - 2026-05-19
 
 v0.4.26 corrects the structural global-array mappings exposed by the first
