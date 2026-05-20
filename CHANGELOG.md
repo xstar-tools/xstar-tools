@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## v0.4.46 - 2026-05-20
+
+v0.4.46 adds the missing physical example-119 runner needed to exercise the
+translated `dsec` algorithm with the real source-faithful `calc_hmc_all`
+evaluator. It does not claim physical acceptance by itself and adds no
+emissivity, transfer, or radial-zone physics.
+
+- Adds `PhysicalDsecInitialState`, `PhysicalDsecContinuumTemplate`, and
+  `PhysicalDsecCalcKwargsFactory`.
+- Adds `examples/119_validate_xstar_dsec_complete.py` and the
+  `xstar-atomic-validate-dsec-physical` console entry point.
+- Resolves the initial temperature, electron fraction, hydrogen density,
+  `nlim`, and `tinf` from the selected XSTAR `begin` trajectory row by default,
+  with checked and explicit override modes.
+- Builds the H/He/O source-order element requests from the accepted call-73
+  plan and carries compact populations plus the shared `leveltemp` workspace
+  from one physical `calc_hmc_all` trial to the next.
+- Recomputes `comp2 -> freef -> bremem -> heatf` contexts at every trial using
+  the current temperature, density, and electron fraction. The incident
+  continuum and geometry remain fixed same-zone inputs.
+- Carries caller-visible `opakc`/`brcems` scratch workspaces between trials,
+  with explicit zero or call-73-probe first-call policies.
+- Runs the Python trajectory, compares it directly with one instrumented XSTAR
+  `dsec` call, performs the source-order post-`dsec` `calc_hmc_all` call,
+  compares that Python fixed state with the accepted call-73 final-state probe, and writes the complete bounded acceptance products in the
+  same process so the final `FixedStateCalcHMCAllResult` is retained.
+- Strengthens the bounded acceptance gate with
+  `final_fixed_state_parity_ready`.
+- Adds a `--prepare-only` mode for validating all input/provenance resolution
+  before the expensive physical run.
+- Physical `v0445_bounded_dsec_acceptance_ready=True` remains pending the
+  user's production execution of example 119.
+
 ## v0.4.45 - 2026-05-20
 
 v0.4.45 starts the stateful local-equilibrium stage after the accepted v0.4.44

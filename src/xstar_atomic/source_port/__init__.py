@@ -421,6 +421,15 @@ from .dsec import (
     write_dsec_acceptance_products,
 )
 
+from .dsec_physical import (
+    PhysicalDsecInitialState,
+    PhysicalDsecContinuumTemplate,
+    PhysicalDsecCalcKwargsFactory,
+    initial_state_from_xstar_trajectory,
+    build_physical_dsec_runtime_state,
+    clone_physical_dsec_runtime_state,
+)
+
 __all__ = [
     "FortranSourceFile",
     "FortranRoutine",
@@ -692,5 +701,11 @@ __all__ = [
     "DsecAcceptanceResult",
     "build_dsec_acceptance",
     "write_dsec_acceptance_products",
+    "PhysicalDsecInitialState",
+    "PhysicalDsecContinuumTemplate",
+    "PhysicalDsecCalcKwargsFactory",
+    "initial_state_from_xstar_trajectory",
+    "build_physical_dsec_runtime_state",
+    "clone_physical_dsec_runtime_state",
 
 ]

@@ -1517,3 +1517,40 @@ CSV files, set `XSTAR_ATOMIC_DSEC_TARGET_CALL`, and rebuild XSTAR. The physical
 v0.4.45 acceptance flag must remain false until the resulting trajectory and
 the final complete `calc_hmc_all` state pass parity while the frozen v0.4.44
 gate remains true.
+
+### `119_validate_xstar_dsec_complete.py`
+
+Runs the real translated `calc_hmc_all` inside every stateful `dsec` trial,
+compares the complete Python branch trajectory with one instrumented XSTAR
+`dsec` call, then performs the additional post-`dsec` `calc_hmc_all` call made
+by `xstarcalc.f90` and compares it with the accepted call-73 fixed-state
+reference.
+
+```bash
+PYTHONPATH=src python examples/119_validate_xstar_dsec_complete.py \
+  --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --live-rate-grid-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --escape-npz xstar_o7_escape_state_v045.npz \
+  --xstar-calc-hmc-probe-dir xstar_runs/helike_type69/o7_ne1e8_all_elements_v0443_complete \
+  --xstar-calc-hmc-call-id 73 \
+  --oxygen-call73-regression-dir oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434 \
+  --xstar-dsec-trajectory xstar_runs/helike_type69/o7_ne1e8_dsec_v0445/xstar_dsec_trajectory_probe.csv \
+  --xstar-dsec-call-id 1 \
+  --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat \
+  --initial-population-policy require-all \
+  --out-dir xstar_dsec_complete_v0446 \
+  --print-summary
+```
+
+Use `--prepare-only` first to resolve and validate all input products without
+running the expensive atomic calculation. The required physical gate is:
+
+```text
+v0445_bounded_dsec_acceptance_ready=True
+```
+
+A false gate is a diagnostic result. Inspect the first failure in
+`xstar_dsec_trajectory_parity.csv`; do not compare the synthetic example-117
+trajectory with the physical XSTAR trajectory.

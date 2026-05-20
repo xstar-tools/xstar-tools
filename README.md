@@ -13,6 +13,17 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.46 adds the physical `dsec` acceptance runner
+
+`examples/119_validate_xstar_dsec_complete.py` now connects the mutable
+`DsecMutableRuntimeState` to the real translated `calc_hmc_all` evaluator. It
+uses the selected XSTAR `dsec` begin row for the initial/control state,
+recomputes `comp2 -> freef -> bremem -> heatf` at every trial, preserves compact
+populations and shared `leveltemp` state across trials, compares the complete
+trajectory with the instrumented XSTAR reference, and writes the final bounded
+acceptance products in the same process. The release does not add emissivity or
+transfer physics and does not claim acceptance until the production run passes.
+
 ### v0.4.45 translates the stateful `dsec` control algorithm
 
 The accepted fixed-state `calc_hmc_all` result is now wrapped by a literal

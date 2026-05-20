@@ -22,10 +22,10 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.45"
+    assert PORT_LEDGER_VERSION == "v0.4.46"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "production bounded dsec trajectory capture and v0.4.45 acceptance while "
+        "execute the new physical dsec runner, diagnose the first trajectory differences, and close the bounded v0.4.45 acceptance while "
         "preserving the frozen v0.4.44 complete fixed-state regression -> "
         "bremsmap -> calc_emisab_all -> calc_emis_all -> complete xstarcalc -> "
         "radial transfer and outputs -> optional C++ backend"

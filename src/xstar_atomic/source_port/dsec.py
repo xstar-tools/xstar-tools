@@ -1619,6 +1619,7 @@ class DsecAcceptanceResult:
     trajectory_probe_ready: bool
     strengthened_residual_validation_ready: bool
     final_calc_hmc_all_ready: bool
+    final_fixed_state_parity_ready: bool = True
 
     @property
     def ready(self) -> bool:
@@ -1629,6 +1630,7 @@ class DsecAcceptanceResult:
             and self.trajectory_probe_ready
             and self.strengthened_residual_validation_ready
             and self.final_calc_hmc_all_ready
+            and self.final_fixed_state_parity_ready
             and self.parity.ready
         )
 
@@ -1637,6 +1639,7 @@ def build_dsec_acceptance(
     parity: DsecTrajectoryParityResult,
     *,
     frozen_v0444: Optional[V0444CompleteFixedStateRegressionGate] = None,
+    final_fixed_state_parity_ready: bool = True,
 ) -> DsecAcceptanceResult:
     frozen = frozen_v0444 or validate_v0444_complete_fixed_state_regression()
     state = parity.python_result.state
@@ -1659,6 +1662,7 @@ def build_dsec_acceptance(
         final_calc_hmc_all_ready=bool(
             final is not None and final.complete_fixed_state_ready
         ),
+        final_fixed_state_parity_ready=bool(final_fixed_state_parity_ready),
     )
 
 
@@ -1679,6 +1683,7 @@ def write_dsec_acceptance_products(
         "strengthened_residual_validation_ready": acceptance.strengthened_residual_validation_ready,
         "dsec_trajectory_parity_ready": acceptance.parity.ready,
         "final_calc_hmc_all_ready": acceptance.final_calc_hmc_all_ready,
+        "final_fixed_state_parity_ready": acceptance.final_fixed_state_parity_ready,
         "frozen_v0444_complete_fixed_state_regression": acceptance.frozen_v0444.ready,
         "frozen_v0444_source": acceptance.frozen_v0444.source_path,
         "v0445_bounded_dsec_acceptance_ready": acceptance.ready,
