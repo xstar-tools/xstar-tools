@@ -207,6 +207,13 @@ class ElementEquilibriumContext:
     fixed_point_tolerance: float = 1.0e-2
     allow_lstsq_fallback: bool = True
     capture_lucy_trace: bool = False
+    # Shared mutable ``leveltemp`` workspace entering this element.  XSTAR
+    # passes one work array through elements and repeated ``calc_hmc_all``
+    # calls; columns above the current ion's ``nlev`` retain their previous
+    # owners.  ``None`` preserves the historical bounded fixed-state zero
+    # initialization.
+    initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
+    initial_leveltemp_owner_by_column: Optional[Mapping[int, Mapping[str, Any]]] = None
 
     @property
     def electron_density_cm3(self) -> float:
@@ -288,6 +295,12 @@ class ElementMatrixAssembly:
     # ``initial_populations``, which is the incoming ``xileve`` vector mapped
     # to compact ``x`` immediately before ``msolvelucy``.
     lte_populations: Optional[np.ndarray] = None
+    # Final shared workspace after the complete active-ion write history.
+    # These fields allow ``calc_hmc_all`` and ``dsec`` to carry the exact
+    # mutable state into the next element/call instead of reconstructing a
+    # clean workspace.
+    leveltemp_workspace_final: Optional[UCalcLevelTable] = None
+    leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -491,6 +504,9 @@ def _overwrite_leveltemp_workspace(
 def _initialize_leveltemp_workspace_from_levwkelement(
     basis: "ElementCompactBasis",
     level_tables: Mapping[int, UCalcLevelTable],
+    *,
+    initial_workspace: Optional[UCalcLevelTable] = None,
+    initial_owner_by_column: Optional[Mapping[int, Mapping[str, Any]]] = None,
 ) -> tuple[UCalcLevelTable, Dict[int, Dict[str, Any]], List[Dict[str, Any]]]:
     """Replay the mutable ``leveltemp`` writes performed by ``levwkelement``.
 
@@ -506,24 +522,57 @@ def _initialize_leveltemp_workspace_from_levwkelement(
     # zero-initialized before the active-ion writes used by this bounded
     # fixed-state replay.  Columns never touched by ``calc_rates_level_lte``
     # therefore remain addressable zeros rather than absent Python entries.
-    workspace = UCalcLevelTable(
-        levels={
-            index: UCalcLevel(index=index)
-            for index in range(1, XSTAR_LEVELTEMP_NDL + 1)
-        },
-        nlev=0,
-    )
-    owner_by_column: Dict[int, Dict[str, Any]] = {
-        index: {
+    if initial_workspace is None:
+        workspace = UCalcLevelTable(
+            levels={
+                index: UCalcLevel(index=index)
+                for index in range(1, XSTAR_LEVELTEMP_NDL + 1)
+            },
+            nlev=0,
+        )
+    else:
+        workspace = _copy_level_table(initial_workspace)
+        # The Fortran array is always addressable through ``ndl``.  Populate
+        # absent Python columns with source-zero entries without disturbing
+        # retained columns supplied by the caller.
+        for index in range(1, XSTAR_LEVELTEMP_NDL + 1):
+            workspace.levels.setdefault(index, UCalcLevel(index=index))
+
+    owner_by_column: Dict[int, Dict[str, Any]] = {}
+    for index in range(1, XSTAR_LEVELTEMP_NDL + 1):
+        supplied = None if initial_owner_by_column is None else initial_owner_by_column.get(index)
+        if supplied is None:
+            owner_by_column[index] = {
+                "ion_index": 0,
+                "ion_stage": 0,
+                "nlev": 0,
+                "write_sequence": 0,
+                "phase": (
+                    "initial_unwritten_zero"
+                    if initial_workspace is None
+                    else "incoming_workspace_unattributed"
+                ),
+            }
+        else:
+            owner_by_column[index] = dict(supplied)
+
+    trace: List[Dict[str, Any]] = []
+    if initial_workspace is not None:
+        trace.append({
+            "phase": "incoming_leveltemp_workspace",
+            "write_sequence": 0,
             "ion_index": 0,
             "ion_stage": 0,
-            "nlev": 0,
-            "write_sequence": 0,
-            "phase": "initial_unwritten_zero",
-        }
-        for index in range(1, XSTAR_LEVELTEMP_NDL + 1)
-    }
-    trace: List[Dict[str, Any]] = []
+            "nlev_written": 0,
+            "workspace_max_column_before": max(workspace.levels, default=0),
+            "workspace_max_column_after": max(workspace.levels, default=0),
+            "n_retained_higher_columns": sum(
+                1 for value in owner_by_column.values()
+                if int(value.get("write_sequence", 0)) > 0
+                or str(value.get("phase", "")).startswith("incoming")
+            ),
+            "incoming_workspace_present": True,
+        })
     for sequence, block in enumerate(basis.blocks, start=1):
         current = level_tables[block.ion_index]
         previous_max = max(workspace.levels, default=0)
@@ -944,7 +993,12 @@ def assemble_element_matrix(
     # overwrite only ``1:nlev`` while higher columns remain from whichever
     # earlier ion last wrote them.
     leveltemp_workspace, leveltemp_owner_by_column, leveltemp_write_trace = (
-        _initialize_leveltemp_workspace_from_levwkelement(basis, level_tables)
+        _initialize_leveltemp_workspace_from_levwkelement(
+            basis,
+            level_tables,
+            initial_workspace=context.initial_leveltemp_workspace,
+            initial_owner_by_column=context.initial_leveltemp_owner_by_column,
+        )
     )
     second_pass_write_sequence = len(leveltemp_write_trace)
 
@@ -1196,6 +1250,11 @@ def assemble_element_matrix(
         strict_assembly_ready=strict_ready,
         leveltemp_workspace_trace=leveltemp_write_trace,
         lte_populations=rnise_lte,
+        leveltemp_workspace_final=_copy_level_table(leveltemp_workspace),
+        leveltemp_owner_by_column={
+            int(index): dict(owner)
+            for index, owner in leveltemp_owner_by_column.items()
+        },
     )
 
 

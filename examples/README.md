@@ -1478,3 +1478,42 @@ v0444_complete_fixed_state_acceptance_ready=True
 ```
 
 Only after this gate passes should development proceed to `dsec`.
+
+### `117_port_xstar_dsec.py`
+
+Runs the translated `dsec.f90` control path on a deterministic synthetic
+heating/charge function, or compares a saved Python trajectory with an
+instrumented XSTAR trajectory. The synthetic mode validates branch semantics;
+it is not a physical XSTAR acceptance run.
+
+```bash
+PYTHONPATH=src python examples/117_port_xstar_dsec.py synthetic \
+  --out-dir dsec_synthetic_v0445
+```
+
+After an instrumented physical run and a Python run using the same dynamic
+local state:
+
+```bash
+PYTHONPATH=src python examples/117_port_xstar_dsec.py compare \
+  --python-trajectory /path/to/python_dsec_products \
+  --xstar-trajectory /path/to/xstar_dsec_trajectory_probe.csv \
+  --xstar-dsec-call-id 1 \
+  --out-dir dsec_trajectory_parity_v0445
+```
+
+### `118_prepare_xstar_dsec_probe.py`
+
+Writes the diagnostic-only Fortran helper and twelve insertion snippets for
+`dsec.f90`:
+
+```bash
+PYTHONPATH=src python examples/118_prepare_xstar_dsec_probe.py \
+  --out-dir xstar_dsec_probe_v0445
+```
+
+Compile the helper before `dsec.f90`, apply the snippets, remove stale probe
+CSV files, set `XSTAR_ATOMIC_DSEC_TARGET_CALL`, and rebuild XSTAR. The physical
+v0.4.45 acceptance flag must remain false until the resulting trajectory and
+the final complete `calc_hmc_all` state pass parity while the frozen v0.4.44
+gate remains true.

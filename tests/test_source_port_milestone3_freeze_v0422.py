@@ -22,14 +22,13 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.44"
+    assert PORT_LEDGER_VERSION == "v0.4.45"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "v0.4.44 rerun the existing seventeen-hook call-73 products with explicit "
-        "pre-continuum thermal-state ownership and require complete fixed-state "
-        "calc_hmc_all acceptance while preserving the frozen oxygen, H/He/O, "
-        "comp2, freef, bremem, and heatf regressions -> dsec -> calc_emisab_all "
-        "-> calc_emis_all -> complete xstarcalc -> transfer/outputs -> optional C++"
+        "production bounded dsec trajectory capture and v0.4.45 acceptance while "
+        "preserving the frozen v0.4.44 complete fixed-state regression -> "
+        "bremsmap -> calc_emisab_all -> calc_emis_all -> complete xstarcalc -> "
+        "radial transfer and outputs -> optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",
@@ -47,7 +46,7 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     assert by_routine["bremem"].status is PortStatus.VALIDATED
     assert by_routine["heatf"].status is PortStatus.VALIDATED
     assert by_routine["calc_hmc_all"].status is PortStatus.TRANSLATED
-    assert by_routine["dsec"].status is PortStatus.UNPORTED
+    assert by_routine["dsec"].status is PortStatus.TRANSLATED
     assert by_routine["calc_emis_all"].status is PortStatus.UNPORTED
     assert by_routine["xstar"].status is PortStatus.SCAFFOLD
 

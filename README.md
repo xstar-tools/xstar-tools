@@ -13,6 +13,45 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.45 translates the stateful `dsec` control algorithm
+
+The accepted fixed-state `calc_hmc_all` result is now wrapped by a literal
+translation of XSTAR's nested electron-fraction and temperature iteration:
+
+```text
+mutable local-zone state
+-> repeated calc_hmc_all trials
+-> charge bracket/secant
+-> thermal bracket/secant
+-> trajectory-level parity
+```
+
+`DsecMutableRuntimeState` carries the final compact populations for every active
+element and the complete shared `leveltemp` workspace from one trial into the
+next. This is essential: XSTAR does not restart each `dsec` evaluation from the
+original fixed-state seed.
+
+The exact `dsec.f90` branch order is preserved, including positive and negative
+`nlim`, the `tinf` proximity gate, source default-real constants, multiplicative
+bracketing, far-from-equilibrium double steps, secant updates, convergence
+limits, and `lnerr` behavior. A diagnostic-only Fortran helper records every
+branch-relevant event, and the Python validator checks event order, integer
+control state, runtime state, residual values, and residual signs. Near zero,
+absolute residual gates are used instead of unstable relative-only comparisons.
+
+```text
+xstar-atomic-port-dsec synthetic --out-dir dsec_synthetic_v0445
+xstar-atomic-prepare-dsec-probe --out-dir dsec_probe_v0445
+examples/117_port_xstar_dsec.py
+examples/118_prepare_xstar_dsec_probe.py
+```
+
+The algorithm, mutable-state plumbing, probe, parity tools, and synthetic branch
+tests are complete. Physical bounded `dsec` acceptance remains pending the first
+instrumented XSTAR run. No emissivity or transfer physics is added in v0.4.45.
+After that production gate, source order is `bremsmap -> calc_emisab_all ->
+calc_emis_all -> complete xstarcalc`.
+
 ### v0.4.44 corrects complete fixed-state thermal-state ownership
 
 The complete fixed-state Python path remains:

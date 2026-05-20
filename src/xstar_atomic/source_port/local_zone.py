@@ -185,6 +185,10 @@ class FixedStateCalcHMCAllResult:
     charge_closure_scope_complete: bool
     complete_fixed_state_ready: bool
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    # Shared mutable ``leveltemp`` state after the final element in this
+    # ``calc_hmc_all`` call.  ``dsec`` feeds these objects into the next call.
+    leveltemp_workspace: Optional[Any] = None
+    leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
     global_element_index_by_z: Dict[int, int] = field(default_factory=dict)
     global_ion_index_by_key: Dict[Tuple[int, int], int] = field(default_factory=dict)
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
@@ -244,6 +248,8 @@ def calc_hmc_all(
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
     pre_matrix_solver: PreMatrixSolver = calc_element_pre_matrix_balance,
+    initial_leveltemp_workspace: Optional[Any] = None,
+    initial_leveltemp_owner_by_column: Optional[Mapping[int, Mapping[str, Any]]] = None,
 ) -> FixedStateCalcHMCAllResult:
     """Run the fixed-state element/charge/heating core of ``calc_hmc_all``.
 
@@ -307,6 +313,11 @@ def calc_hmc_all(
         int(z) for z in np.asarray(ion_element_z).reshape(-1) if int(z) > 0
     }
     requested_element_z = {int(item.element_z) for item in elements if float(item.abundance) > 1.0e-24}
+    leveltemp_workspace = initial_leveltemp_workspace
+    leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = {
+        int(index): dict(owner)
+        for index, owner in (initial_leveltemp_owner_by_column or {}).items()
+    }
     if required_element_z is None:
         charge_scope_reference = "all_atdb_elements_legacy_default"
         required_element_z_set = set(available_element_z)
@@ -440,6 +451,8 @@ def calc_hmc_all(
             initial_populations=request.initial_populations,
             strict_context=bool(request.strict_context),
             capture_lucy_trace=bool(request.capture_lucy_trace),
+            initial_leveltemp_workspace=leveltemp_workspace,
+            initial_leveltemp_owner_by_column=leveltemp_owner_by_column,
         )
         equilibrium = element_solver(
             master,
@@ -451,6 +464,17 @@ def calc_hmc_all(
         solve = equilibrium.solve
         ready = bool(equilibrium.full_element_direct_solve_ready and solve is not None)
         all_ready &= ready
+        final_leveltemp_workspace = getattr(
+            equilibrium.assembly, "leveltemp_workspace_final", None
+        )
+        if final_leveltemp_workspace is not None:
+            leveltemp_workspace = final_leveltemp_workspace
+            leveltemp_owner_by_column = {
+                int(index): dict(owner)
+                for index, owner in getattr(
+                    equilibrium.assembly, "leveltemp_owner_by_column", {}
+                ).items()
+            }
         if solve is None:
             raise CalcHMCAllError(f"element Z={z} did not produce a population solution")
 
@@ -882,6 +906,8 @@ def calc_hmc_all(
         element_loop_ready=all_ready,
         charge_closure_scope_complete=charge_scope_complete,
         complete_fixed_state_ready=complete,
+        leveltemp_workspace=leveltemp_workspace,
+        leveltemp_owner_by_column=leveltemp_owner_by_column,
         global_element_index_by_z=global_element_index_by_z,
         global_ion_index_by_key=global_ion_index_by_key,
         global_level_index_by_key=global_level_index_by_key,
@@ -904,7 +930,9 @@ def calc_hmc_all(
             "calc_hmc_all_fixed_state_thermal_complete": bool(continuum.complete),
             "calc_hmc_all_fixed_state_charge_complete": bool(charge_scope_complete),
             "remaining_source_sequence": "dsec" if complete else "complete fixed-state calc_hmc_all closure",
-            "dsec_deferred": True,
+            "dsec_available_as_stateful_outer_iteration": True,
+            "leveltemp_mutable_state_carried_between_elements": True,
+            "incoming_leveltemp_workspace_present": initial_leveltemp_workspace is not None,
         },
     )
 

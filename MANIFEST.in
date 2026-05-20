@@ -161,3 +161,9 @@ include xstar_atomic_conversation_summary_v0444.md
 include XSTAR_SOURCE_CHANGES_v0.4.44.md
 include src_v0444_update_report.md
 recursive-include src/xstar_atomic/benchmarks/complete_fixed_state_v0443_state_ownership *.md *.json
+
+include xstar_atomic_v0.4.45.md
+include xstar_atomic_conversation_summary_v0445.md
+include XSTAR_SOURCE_CHANGES_v0.4.45.md
+include src_v0445_update_report.md
+recursive-include src/xstar_atomic/benchmarks/complete_fixed_state_v0444_acceptance *.md *.json SHA256

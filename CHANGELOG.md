@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## v0.4.45 - 2026-05-20
+
+v0.4.45 starts the stateful local-equilibrium stage after the accepted v0.4.44
+complete fixed-state `calc_hmc_all` milestone. It translates the exact
+`dsec.f90` nested charge/thermal control algorithm and adds the mutable state
+needed to carry one `calc_hmc_all` trial into the next. No emissivity, transfer,
+or radial-zone physics is added.
+
+- Adds `DsecMutableRuntimeState`, which owns native XSTAR `T/1e4`, `xee`, the
+  resolved hydrogen density, source-order element request templates, the final
+  compact population vector for every active element, the shared mutable
+  `leveltemp` workspace with per-column ownership, and caller-visible global
+  arrays/work arrays.
+- Extends `ElementEquilibriumContext`, `ElementMatrixAssembly`,
+  `FixedStateCalcHMCAllResult`, and `calc_hmc_all` so the complete shared
+  `leveltemp` state may be supplied, overwritten in source order, returned, and
+  replayed in the next element or `dsec` trial. Legacy one-call behavior remains
+  unchanged when no incoming workspace is supplied.
+- Translates the literal `dsec.f90` double-secant/bracketing path, including
+  positive/negative/zero `nlim`, the `tinf*1.01` gate, default-real rounding of
+  `1.e-4`, `2.e-9`, `1.2`, `0.9`, and `1.e30`, source branch order, doubled
+  far-from-equilibrium temperature steps, charge and temperature secants,
+  stagnation handling, iteration counters, and `lnerr` semantics.
+- Adds `CalcHMCAllDsecEvaluator`; every trial rebuilds its element requests from
+  the previous final compact populations and reuses the same dispatcher and
+  mutable workspace rather than restarting from the original call-73 seed.
+- Adds a diagnostic-only XSTAR trajectory helper and twelve documented
+  insertion hooks covering entry, each post-`calc_hmc_all` state, charge
+  multiply/divide/secant branches, charge-loop exit, temperature
+  multiply/divide/secant/stagnation branches, iteration exhaustion, and return.
+- Adds trajectory CSV/JSON/Markdown writers, XSTAR and Python trajectory
+  loaders, exact event/integer-state comparison, strict runtime-state parity,
+  and residual validation that requires both value agreement and sign parity.
+  Near equilibrium, absolute tolerances replace ill-conditioned relative-only
+  tests.
+- Bundles the accepted v0.4.44 complete fixed-state summary as an immutable
+  prerequisite gate.
+- Adds `xstar-atomic-port-dsec`, `xstar-atomic-prepare-dsec-probe`, examples 117
+  and 118, and synthetic branch tests.
+- The physical `v0445_bounded_dsec_acceptance_ready=True` claim is deliberately
+  deferred until the new XSTAR trajectory is captured and compared. The next
+  source sequence after that gate is `bremsmap -> calc_emisab_all ->
+  calc_emis_all -> complete xstarcalc`.
+
 ## v0.4.44 - 2026-05-20
 
 v0.4.44 is a bounded state-ownership and validator correction for the complete

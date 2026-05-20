@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.44"
+__version__ = "0.4.45"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -129,6 +129,13 @@ from .xstar_calc_hmc_all_probe import (
     write_calc_hmc_all_probe_products,
 )
 
+
+from .xstar_dsec_probe import (
+    dsec_probe_helper,
+    dsec_insertion_snippets,
+    write_dsec_probe_products,
+)
+
 from .xstar_msolvelucy_state_probe import (
     msolvelucy_state_probe_helper,
     msolvelucy_insertion_snippets,
@@ -182,6 +189,16 @@ from .source_port import (
     write_full_element_matrix_parity_products,
     EscapeStateError, EscapeStateBuildResult, load_escape_state_from_xstar_run,
     write_escape_state_npz, write_escape_state_summary,
+    DsecPortError, DSEC_CHARGE_TOLERANCE, DSEC_THERMAL_TOLERANCE,
+    DSEC_TEMPERATURE_STAGNATION_TOLERANCE, DSEC_TEMPERATURE_FACTOR,
+    DSEC_ELECTRON_FACTOR, DsecMutableRuntimeState, DsecEvaluation,
+    DsecEvaluator, CalcHMCAllDsecEvaluator, DsecTrajectoryEvent,
+    DsecResult, dsec, write_dsec_trajectory_products, load_python_dsec_trajectory, DsecProbeTrajectory,
+    load_xstar_dsec_trajectory, DsecTrajectoryParityRow,
+    DsecTrajectoryParityResult, compare_dsec_trajectory,
+    write_dsec_trajectory_parity_products, V0444CompleteFixedStateRegressionGate,
+    validate_v0444_complete_fixed_state_regression, DsecAcceptanceResult,
+    build_dsec_acceptance, write_dsec_acceptance_products,
 )
 
 
@@ -671,4 +688,37 @@ __all__.extend([
     "calc_hmc_all_probe_helper",
     "calc_hmc_all_insertion_snippets",
     "write_calc_hmc_all_probe_products",
+])
+
+
+__all__.extend([
+    "dsec_probe_helper",
+    "dsec_insertion_snippets",
+    "write_dsec_probe_products",
+    "DsecPortError",
+    "DSEC_CHARGE_TOLERANCE",
+    "DSEC_THERMAL_TOLERANCE",
+    "DSEC_TEMPERATURE_STAGNATION_TOLERANCE",
+    "DSEC_TEMPERATURE_FACTOR",
+    "DSEC_ELECTRON_FACTOR",
+    "DsecMutableRuntimeState",
+    "DsecEvaluation",
+    "DsecEvaluator",
+    "CalcHMCAllDsecEvaluator",
+    "DsecTrajectoryEvent",
+    "DsecResult",
+    "dsec",
+    "write_dsec_trajectory_products",
+    "load_python_dsec_trajectory",
+    "DsecProbeTrajectory",
+    "load_xstar_dsec_trajectory",
+    "DsecTrajectoryParityRow",
+    "DsecTrajectoryParityResult",
+    "compare_dsec_trajectory",
+    "write_dsec_trajectory_parity_products",
+    "V0444CompleteFixedStateRegressionGate",
+    "validate_v0444_complete_fixed_state_regression",
+    "DsecAcceptanceResult",
+    "build_dsec_acceptance",
+    "write_dsec_acceptance_products",
 ])
