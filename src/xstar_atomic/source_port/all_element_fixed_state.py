@@ -508,7 +508,8 @@ def write_all_element_fixed_state_products(
     run: AllElementFixedStateRun,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.35",
+    port_version: str = "v0.4.36",
+    parity: Optional[Any] = None,
 ) -> Dict[str, Path]:
     """Write source-scope and detailed-probe coverage products."""
 
@@ -531,9 +532,22 @@ def write_all_element_fixed_state_products(
         "leveltemp_probe_present",
         "initial_population_source",
         "element_solver_ready",
+        "initial_population_parity_ready",
+        "matrix_topology_ready",
+        "matrix_active_closure_ready",
+        "active_final_population_ready",
+        "active_outer_start_population_ready",
+        "source_xtot_ready",
+        "thermal_family_parity_ready",
+        "milestone_blocking_rows",
+        "detailed_parity_ready",
     )
     result_by_z = {
         int(item.request.element_z): item for item in run.result.element_results
+    }
+    parity_by_z = {
+        int(item.get("element_z", 0)): item
+        for item in getattr(parity, "all_element_element_readiness", [])
     }
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -579,6 +593,15 @@ def write_all_element_fixed_state_products(
                         if result is None
                         else result.equilibrium.full_element_direct_solve_ready
                     ),
+                    "initial_population_parity_ready": parity_by_z.get(item.element_z, {}).get("initial_population_ready"),
+                    "matrix_topology_ready": parity_by_z.get(item.element_z, {}).get("matrix_topology_ready"),
+                    "matrix_active_closure_ready": parity_by_z.get(item.element_z, {}).get("matrix_active_closure_ready"),
+                    "active_final_population_ready": parity_by_z.get(item.element_z, {}).get("active_final_population_ready"),
+                    "active_outer_start_population_ready": parity_by_z.get(item.element_z, {}).get("active_outer_start_population_ready"),
+                    "source_xtot_ready": parity_by_z.get(item.element_z, {}).get("source_xtot_ready"),
+                    "thermal_family_parity_ready": parity_by_z.get(item.element_z, {}).get("thermal_family_ready"),
+                    "milestone_blocking_rows": parity_by_z.get(item.element_z, {}).get("n_milestone_blocking_rows"),
+                    "detailed_parity_ready": parity_by_z.get(item.element_z, {}).get("detailed_parity_ready"),
                 }
             )
 
@@ -608,6 +631,18 @@ def write_all_element_fixed_state_products(
         "leveltemp_probe_elements": list(run.plan.leveltemp_elements),
         "all_element_detailed_parity_probe_ready": (
             run.all_element_detailed_parity_probe_ready
+        ),
+        "all_element_pre_continuum_acceptance_ready": getattr(
+            parity, "all_element_pre_continuum_acceptance_ready", None
+        ),
+        "all_element_active_solver_ready": getattr(
+            parity, "all_element_active_solver_ready", None
+        ),
+        "all_element_thermal_ready": getattr(
+            parity, "all_element_thermal_ready", None
+        ),
+        "all_element_element_readiness": getattr(
+            parity, "all_element_element_readiness", []
         ),
         "continuum_complete": run.result.continuum.complete,
         "complete_fixed_state_ready": run.result.complete_fixed_state_ready,

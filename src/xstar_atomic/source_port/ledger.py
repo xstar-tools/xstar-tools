@@ -91,13 +91,14 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.35"
+PORT_LEDGER_VERSION = "v0.4.36"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "v0.4.35 start the full positive-abundance fixed-state calc_hmc_all element loop, "
-    "retain the accepted oxygen call-73 result as a mandatory regression gate, "
-    "and add all-element detailed-probe capture mode "
-    "-> production all-element pre-continuum run "
+    "v0.4.36 close the H/He/O positive-abundance pre-continuum gate with native "
+    "hydrogen type-62 records 488-491, record-keyed matrix parity, and complete "
+    "H/He/O same-call initial-state validation "
+    "-> production all-element pre-continuum rerun and require "
+    "all_element_pre_continuum_acceptance_ready=True "
     "-> comp2 -> freef -> bremem -> heatf "
     "-> complete fixed-state calc_hmc_all parity -> dsec -> calc_emisab_all "
     "-> calc_emis_all -> complete xstarcalc -> transfer/outputs -> optional C++"
@@ -197,7 +198,7 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
           "call-73 pre-matrix/runtime parity, source-ordinal npilev mapping, separated second-pass pirt/rrrt, probe-aware abundance, exact same-call xileve input capture/replay, complete type-50/type-71 ans3/ans4 energy channels, corrected type-72 packed endpoints, record-level rate-7 cj2 diagnosis, exact mutable-leveltemp reads for types 49/53/99, XSTAR thermal-family probes, exact same-call aj1/aj2/cj/cj2 comparison, and synchronized final msolvelucy matrix/x/xo capture",
-          "The accepted v0.4.34 oxygen call-73 result is frozen as a mandatory gate. v0.4.35 adds source-order construction of every positive-abundance element request, explicit charge-scope accounting, per-element same-call probe coverage, and XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0 all-element detailed capture. Continuum leaves remain pending."),
+          "The accepted v0.4.34 oxygen call-73 result remains mandatory. v0.4.36 translates native H I type-62/calt6062 records 488-491, compares matrix terms by source-record role rather than shifted term position, validates all 718 H/He/O same-call initial rows independently, and defines the bounded all-element pre-continuum acceptance gate. Continuum leaves remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -211,6 +212,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 are complete. The accepted oxygen pre-continuum gate is frozen, and v0.4.35 begins the full positive-abundance fixed-state element scope. Production all-element parity, continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 are complete. The accepted oxygen pre-continuum gate is frozen, and v0.4.36 targets closure of the H/He/O positive-abundance fixed-state pre-continuum scope. Production acceptance still requires a rerun; continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

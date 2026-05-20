@@ -13,6 +13,23 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.36 closes the bounded H/He/O pre-continuum differences
+
+v0.4.36 translates the four omitted H I data-type 62/rate-type 3 records
+488--491 through the native `calt6062` source branch. Their endpoint pairs are
+1--4, 1--7, 1--8, and 1--9, restoring the 16 missing hydrogen matrix terms.
+A focused diagnostic product records their packed endpoints, quantum metadata,
+evaluated rates, and matrix insertions.
+
+Same-call matrix parity is now keyed by `(element_z, source_record, role)` rather
+than shifted term position. Initial-population parity validates all 718 H/He/O
+compact rows independently. The new bounded gate is
+`all_element_pre_continuum_acceptance_ready=True`, which requires the accepted
+oxygen call-73 regression, complete H/He/O detailed solver and thermal parity,
+and zero milestone-blocking rows. No XSTAR rebuild is required; reuse the
+v0.4.35 all-element call-73 probe products. Physical acceptance still requires
+a production rerun of example 108.
+
 ### v0.4.35 starts the full positive-abundance fixed-state element loop
 
 v0.4.35 begins the source-order expansion beyond the accepted oxygen-only

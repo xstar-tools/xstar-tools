@@ -96,6 +96,70 @@ def _closure_by_z(
     return {int(item.element_z): item for item in closure.elements}
 
 
+_SOURCE_MATRIX_ROLE_ORDER: Tuple[str, ...] = (
+    "forward_offdiag",
+    "reverse_offdiag",
+    "forward_diag_loss",
+    "reverse_diag_loss",
+)
+
+
+def _xstar_rows_by_record_role(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    python_roles_by_record: Optional[Mapping[int, Sequence[str]]] = None,
+) -> Tuple[Dict[Tuple[int, str], Mapping[str, str]], List[Dict[str, Any]]]:
+    """Index matrix-probe rows by the source identity of the term.
+
+    ``xap_hmc_matrix_terms`` captures the source record and insertion order,
+    but the historical CSV does not contain a role string.  ``calc_hmc_ion``
+    always appends the same four terms for one accepted two-endpoint record,
+    so the role is recovered from the within-record source order.  The term
+    index is retained only as an execution-order diagnostic and is no longer
+    used as the parity join key.
+    """
+
+    grouped: Dict[int, List[Mapping[str, str]]] = {}
+    for row in rows:
+        grouped.setdefault(_int(row, "source_record"), []).append(row)
+
+    indexed: Dict[Tuple[int, str], Mapping[str, str]] = {}
+    diagnostics: List[Dict[str, Any]] = []
+    for record in sorted(grouped):
+        ordered = sorted(grouped[record], key=lambda item: _int(item, "term_index"))
+        python_roles = list((python_roles_by_record or {}).get(record, ()))
+        if len(ordered) == 4:
+            inferred_roles = list(_SOURCE_MATRIX_ROLE_ORDER)
+            inference = "source_four_term_order"
+        elif len(python_roles) == len(ordered) and len(set(python_roles)) == len(python_roles):
+            inferred_roles = python_roles
+            inference = "record_local_python_role_order_compatibility"
+        else:
+            inferred_roles = [
+                f"extra_source_term_{offset + 1}" for offset in range(len(ordered))
+            ]
+            inference = "unresolved_nonstandard_term_count"
+        if len(ordered) != 4:
+            diagnostics.append({
+                "source_record": record,
+                "n_rows": len(ordered),
+                "status": "unexpected_source_record_term_count",
+                "role_inference": inference,
+                "term_indices": ";".join(str(_int(item, "term_index")) for item in ordered),
+            })
+        for offset, row in enumerate(ordered):
+            role = inferred_roles[offset]
+            key = (record, role)
+            if key in indexed:
+                diagnostics.append({
+                    "source_record": record,
+                    "role": role,
+                    "status": "duplicate_source_record_role",
+                })
+            indexed[key] = row
+    return indexed, diagnostics
+
+
 def compare_same_call_matrix_terms(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -139,7 +203,9 @@ def compare_same_call_matrix_terms(
     n_python_source_active_bad = 0
     n_xstar_source_active_bad = 0
     n_closure_elements_evaluated = 0
+    closure_elements_evaluated: List[int] = []
     max_diffs = {name: 0.0 for name in ("aj1", "aj2", "cj", "cj2")}
+    xstar_record_role_diagnostics: List[Dict[str, Any]] = []
 
     rows_by_z: Dict[int, List[Mapping[str, str]]] = {}
     for row in matrix_probe_rows:
@@ -152,11 +218,34 @@ def compare_same_call_matrix_terms(
         assembly = element.equilibrium.assembly
         py_terms = list(assembly.terms)
         xs_rows = rows_by_z.get(z, [])
-        py_by_index = {int(term.term_index): term for term in py_terms}
-        xs_by_index = {_int(row, "term_index"): row for row in xs_rows}
+        py_by_key = {
+            (int(term.record), str(term.role)): term for term in py_terms
+        }
+        python_roles_by_record: Dict[int, List[str]] = {}
+        for term in sorted(py_terms, key=lambda item: int(item.term_index)):
+            python_roles_by_record.setdefault(int(term.record), []).append(str(term.role))
+        xs_by_key, xstar_role_diagnostics = _xstar_rows_by_record_role(
+            xs_rows, python_roles_by_record=python_roles_by_record
+        )
+        for diagnostic in xstar_role_diagnostics:
+            xstar_record_role_diagnostics.append({"element_z": z, **diagnostic})
         n_py += len(py_terms)
         n_xs += len(xs_rows)
-        all_indices = sorted(set(py_by_index) | set(xs_by_index))
+        all_keys = sorted(
+            set(py_by_key) | set(xs_by_key),
+            key=lambda item: (int(item[0]), _SOURCE_MATRIX_ROLE_ORDER.index(item[1])
+                              if item[1] in _SOURCE_MATRIX_ROLE_ORDER else 99, item[1]),
+        )
+
+        # Record metadata remains available even for a record that did not
+        # produce Python matrix terms.  Use it to report XSTAR data/rate type
+        # and decoded endpoints without relying on term-index alignment.
+        record_metadata: Dict[int, Mapping[str, Any]] = {}
+        for item in getattr(assembly, "record_results", ()):
+            try:
+                record_metadata[int(item.get("record", 0))] = item
+            except Exception:
+                continue
 
         n = int(assembly.basis.n_rows)
         a_xstar = np.zeros((n, n), dtype=float)
@@ -172,20 +261,90 @@ def compare_same_call_matrix_terms(
                 if 1 <= compact <= n:
                     xstar_vector[compact - 1] = float(row["xstar_population"])
 
+        # Build the captured source matrix independently of whether Python has
+        # the corresponding term.  This prevents a missing Python record from
+        # disappearing from the active-closure diagnostic.
+        for xs in xs_rows:
+            xs_row = _int(xs, "row_compact")
+            xs_col = _int(xs, "column_compact")
+            if 1 <= xs_row <= n and 1 <= xs_col <= n:
+                a_xstar[xs_row - 1, xs_col - 1] += _float(xs, "aj1")
+
         delta_terms_by_row: Dict[int, List[Dict[str, Any]]] = {}
-        for index in all_indices:
-            py = py_by_index.get(index)
-            xs = xs_by_index.get(index)
+        for record_role in all_keys:
+            source_record, source_role = record_role
+            py = py_by_key.get(record_role)
+            xs = xs_by_key.get(record_role)
+            metadata = record_metadata.get(int(source_record), {})
+            python_term_index = None if py is None else int(py.term_index)
+            xstar_term_index = None if xs is None else _int(xs, "term_index")
+            data_type = (
+                int(py.data_type) if py is not None
+                else int(metadata.get("data_type", 0) or 0)
+            )
+            rate_type = (
+                int(py.rate_type) if py is not None
+                else int(metadata.get("rate_type", 0) or 0)
+            )
             if py is None or xs is None:
-                term_rows.append({
+                xs_row = None if xs is None else _int(xs, "row_compact")
+                xs_col = None if xs is None else _int(xs, "column_compact")
+                xs_row_raw = None if xs is None else _int(xs, "row_raw")
+                xs_col_raw = None if xs is None else _int(xs, "column_raw")
+                row = {
                     "element_z": z,
-                    "term_index": index,
-                    "match_status": "missing_python" if py is None else "missing_xstar",
+                    "term_index": xstar_term_index if xstar_term_index is not None else python_term_index,
+                    "python_term_index": python_term_index,
+                    "xstar_term_index": xstar_term_index,
+                    "record": int(source_record),
+                    "python_source_record": None if py is None else int(py.record),
+                    "xstar_source_record": None if xs is None else _int(xs, "source_record"),
+                    "data_type": data_type,
+                    "python_data_type": None if py is None else int(py.data_type),
+                    "xstar_data_type": data_type if xs is not None else None,
+                    "rate_type": rate_type,
+                    "python_rate_type": None if py is None else int(py.rate_type),
+                    "xstar_rate_type": rate_type if xs is not None else None,
+                    "role": source_role,
+                    "python_role": None if py is None else str(py.role),
+                    "xstar_role": source_role if xs is not None else None,
+                    "python_row_raw": None if py is None else int(py.source_row_unclamped),
+                    "xstar_row_raw": xs_row_raw,
+                    "python_column_raw": None if py is None else int(py.source_column_unclamped),
+                    "xstar_column_raw": xs_col_raw,
+                    "python_row_compact": None if py is None else int(py.row),
+                    "xstar_row_compact": xs_row,
+                    "python_column_compact": None if py is None else int(py.column),
+                    "xstar_column_compact": xs_col,
+                    "python_idest1": metadata.get("idest1"),
+                    "python_idest2": metadata.get("idest2"),
                     "topology_match": False,
                     "within_tolerance": False,
-                })
+                    "match_status": "missing_python" if py is None else "missing_xstar",
+                    "record_key": f"{z}:{source_record}:{source_role}",
+                }
+                term_rows.append(row)
                 n_bad += 1
+                n_top += 1
+                key = (z, data_type, rate_type)
+                fam = family_acc.setdefault(key, {
+                    "element_z": z,
+                    "data_type": data_type,
+                    "rate_type": rate_type,
+                    "n_terms": 0,
+                    "n_topology_mismatches": 0,
+                    "n_outside_tolerance": 0,
+                    "l1_abs_aj1_difference": 0.0,
+                    "l1_abs_aj2_difference": 0.0,
+                    "l1_abs_cj_difference": 0.0,
+                    "l1_abs_cj2_difference": 0.0,
+                    "l1_abs_population_weighted_aj1_difference": 0.0,
+                })
+                fam["n_terms"] += 1
+                fam["n_topology_mismatches"] += 1
+                fam["n_outside_tolerance"] += 1
                 continue
+
             n_match += 1
             xs_row = _int(xs, "row_compact")
             xs_col = _int(xs, "column_compact")
@@ -198,6 +357,7 @@ def compare_same_call_matrix_terms(
                 and int(py.source_row_unclamped) == xs_row_raw
                 and int(py.source_column_unclamped) == xs_col_raw
                 and int(py.record) == xs_record
+                and str(py.role) == source_role
             )
             if not topology:
                 n_top += 1
@@ -227,12 +387,12 @@ def compare_same_call_matrix_terms(
                 n_bad += 1
             if not coefficient_fields_ok:
                 n_field_bad += 1
-            if 1 <= xs_row <= n and 1 <= xs_col <= n:
-                a_xstar[xs_row - 1, xs_col - 1] += xs_values["aj1"]
             xcol = xstar_vector[min(n, max(1, int(py.column))) - 1]
             delta_contribution = (py_values["aj1"] - xs_values["aj1"]) * xcol
             delta_terms_by_row.setdefault(int(py.row), []).append({
-                "term_index": index,
+                "term_index": xstar_term_index,
+                "python_term_index": python_term_index,
+                "xstar_term_index": xstar_term_index,
                 "record": int(py.record),
                 "data_type": int(py.data_type),
                 "rate_type": int(py.rate_type),
@@ -245,11 +405,22 @@ def compare_same_call_matrix_terms(
             })
             row = {
                 "element_z": z,
-                "term_index": index,
+                "term_index": xstar_term_index,
+                "python_term_index": python_term_index,
+                "xstar_term_index": xstar_term_index,
                 "record": int(py.record),
+                "python_source_record": int(py.record),
+                "xstar_source_record": xs_record,
                 "data_type": int(py.data_type),
+                "python_data_type": int(py.data_type),
+                "xstar_data_type": int(py.data_type),
                 "rate_type": int(py.rate_type),
+                "python_rate_type": int(py.rate_type),
+                "xstar_rate_type": int(py.rate_type),
                 "role": str(py.role),
+                "python_role": str(py.role),
+                "xstar_role": source_role,
+                "record_key": f"{z}:{py.record}:{py.role}",
                 "python_row_raw": int(py.source_row_unclamped),
                 "xstar_row_raw": xs_row_raw,
                 "python_column_raw": int(py.source_column_unclamped),
@@ -258,6 +429,8 @@ def compare_same_call_matrix_terms(
                 "xstar_row_compact": xs_row,
                 "python_column_compact": int(py.column),
                 "xstar_column_compact": xs_col,
+                "python_idest1": metadata.get("idest1"),
+                "python_idest2": metadata.get("idest2"),
                 "topology_match": topology,
                 "python_aj1": py_values["aj1"],
                 "xstar_aj1": xs_values["aj1"],
@@ -302,6 +475,7 @@ def compare_same_call_matrix_terms(
 
         if closure_item is not None and np.any(xstar_vector):
             n_closure_elements_evaluated += 1
+            closure_elements_evaluated.append(z)
             py_residual = a_python @ xstar_vector
             xs_residual = a_xstar @ xstar_vector
             delta_residual = py_residual - xs_residual
@@ -426,6 +600,7 @@ def compare_same_call_matrix_terms(
             "n_xstar_matrix_active_rows_outside_tolerance": n_xstar_source_active_bad,
             "n_matrix_difference_active_rows_outside_tolerance": n_active_bad,
             "n_closure_elements_evaluated": n_closure_elements_evaluated,
+            "closure_elements_evaluated": sorted(set(closure_elements_evaluated)),
             "milestone_ready_definition": (
                 "topology_ready && (A_python-A_xstar)@x_xstar within tolerance on active rows"
             ),
@@ -436,6 +611,10 @@ def compare_same_call_matrix_terms(
                 "(A_python-A_xstar)@x_xstar within tolerance on active rows"
             ),
             "xstar_source_matrix_closure_is_diagnostic": True,
+            "join_key": "(element_z,source_record,role)",
+            "term_index_role": "execution_order_diagnostic_only",
+            "xstar_role_inference": "within_source_record_four_term_insertion_order",
+            "xstar_record_role_diagnostics": xstar_record_role_diagnostics,
             "diagnostic_only": True,
             "probe_values_enter_operator": False,
         },

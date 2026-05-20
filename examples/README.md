@@ -1283,8 +1283,8 @@ PYTHONPATH=src python \
   --print-summary
 ```
 
-For complete detailed all-element parity, rebuild the v0.4.35 helper and rerun
-XSTAR with:
+For a fresh complete detailed all-element capture, use the v0.4.36-packaged
+eight-hook helper (functionally unchanged from v0.4.35) and run XSTAR with:
 
 ```bash
 export XSTAR_ATOMIC_HMC_TARGET_CALL=73
@@ -1294,3 +1294,21 @@ export XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0
 Then rerun example 108 with `--initial-population-policy require-all`. Require
 `all_element_detailed_parity_probe_ready=True` and close all-element summary,
 global-array, matrix, final-solver, and thermal parity before beginning `comp2`.
+
+### `109_validate_v0436_hydrogen_all_element.py`
+
+After rerunning example 108 with v0.4.36, validate the four H I type-62
+records, the 16 restored matrix terms, all 718 initial populations, the H I
+active solver rows, thermal families, and the new all-element acceptance gate:
+
+```bash
+PYTHONPATH=src python examples/109_validate_v0436_hydrogen_all_element.py \
+  xstar_all_calc_hmc_all_fixed_state_v0436_allprobe \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0436_hydrogen_all_element_validation_ready=True
+```

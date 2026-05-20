@@ -812,7 +812,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.35",
+    port_version: str = "v0.4.36",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -859,6 +859,44 @@ def write_fixed_state_calc_hmc_all_products(
                 "atot_flow_s_inv": result.atotg.get((z, stage), 0.0),
                 "xtot": result.xtotg.get((z, stage), 0.0),
             })
+
+    hydrogen_target_csv = out / "xstar_calc_hmc_all_hydrogen_records_488_491.csv"
+    hydrogen_target_fields = (
+        "element_z", "ion_stage", "ion_index", "record", "data_type", "rate_type",
+        "status", "ready", "reason", "idest1", "idest2",
+        "diag_packed_endpoint_1", "diag_packed_endpoint_2",
+        "diag_lower_endpoint", "diag_upper_endpoint",
+        "diag_lower_principal_n", "diag_lower_orbital_l", "diag_lower_label",
+        "diag_upper_principal_n", "diag_upper_orbital_l", "diag_upper_label",
+        "diag_lower_energy_eV", "diag_upper_energy_eV", "diag_delta_energy_eV",
+        "diag_lower_statistical_weight", "diag_upper_statistical_weight",
+        "diag_fit_form", "diag_polynomial_coefficients",
+        "diag_logarithmic_amplitude", "diag_logarithmic_scale",
+        "diag_exponential_scale", "diag_upsilon",
+        "ans1", "ans2", "ans5", "ans6",
+        "ans1_after_calc_hmc_ion_filter", "ans2_after_calc_hmc_ion_filter",
+        "matrix_insertion_status", "n_matrix_terms",
+    )
+    with hydrogen_target_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=hydrogen_target_fields, extrasaction="ignore")
+        writer.writeheader()
+        for element in result.element_results:
+            if int(element.request.element_z) != 1:
+                continue
+            assembly = getattr(getattr(element, "equilibrium", None), "assembly", None)
+            if assembly is None:
+                continue
+            term_count = {}
+            for term in assembly.terms:
+                term_count[int(term.record)] = term_count.get(int(term.record), 0) + 1
+            for record_row in assembly.record_results:
+                record_number = int(record_row.get("record", 0) or 0)
+                if record_number not in {488, 489, 490, 491}:
+                    continue
+                row = dict(record_row)
+                row["element_z"] = 1
+                row["n_matrix_terms"] = term_count.get(record_number, 0)
+                writer.writerow(row)
 
     element_csv = out / "xstar_calc_hmc_all_fixed_state_elements.csv"
     with element_csv.open("w", newline="") as handle:
@@ -1074,6 +1112,7 @@ def write_fixed_state_calc_hmc_all_products(
     return {
         "ions_csv": str(ion_csv),
         "elements_csv": str(element_csv),
+        "hydrogen_records_488_491_csv": str(hydrogen_target_csv),
         "calc_ion_rates_records_csv": str(contribution_csv),
         "levels_csv": str(level_csv),
         "type77_floor_impact_csv": str(type77_csv),

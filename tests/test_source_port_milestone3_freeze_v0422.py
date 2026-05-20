@@ -22,13 +22,14 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.35"
+    assert PORT_LEDGER_VERSION == "v0.4.36"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "v0.4.35 start the full positive-abundance fixed-state calc_hmc_all element loop, "
-        "retain the accepted oxygen call-73 result as a mandatory regression gate, "
-        "and add all-element detailed-probe capture mode "
-        "-> production all-element pre-continuum run "
+        "v0.4.36 close the H/He/O positive-abundance pre-continuum gate with native "
+        "hydrogen type-62 records 488-491, record-keyed matrix parity, and complete "
+        "H/He/O same-call initial-state validation "
+        "-> production all-element pre-continuum rerun and require "
+        "all_element_pre_continuum_acceptance_ready=True "
         "-> comp2 -> freef -> bremem -> heatf "
         "-> complete fixed-state calc_hmc_all parity -> dsec -> calc_emisab_all "
         "-> calc_emis_all -> complete xstarcalc -> transfer/outputs -> optional C++"

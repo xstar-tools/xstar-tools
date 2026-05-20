@@ -16,4 +16,9 @@ def oxygen_call73_v0434_acceptance_path() -> Path:
     return Path(str(files(__package__).joinpath("oxygen_call73_v0434_acceptance")))
 
 
-__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path"]
+def hydrogen_v0436_targets_path() -> Path:
+    """Return the bounded H I v0.4.36 correction-target inventory."""
+    return Path(str(files(__package__).joinpath("hydrogen_v0436_targets")))
+
+
+__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path"]

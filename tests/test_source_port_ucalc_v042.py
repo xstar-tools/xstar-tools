@@ -91,8 +91,8 @@ def test_complete_catalog_has_every_source_label_and_no_untranslated_branch():
     ucalc = SourceFaithfulUCalc()
     coverage = ucalc.coverage()
     assert ucalc.registered_data_types == tuple(range(1, 103))
-    assert len(ucalc.native_data_types) == 75
-    assert len(ucalc.source_noop_data_types) == 27
+    assert len(ucalc.native_data_types) == 76
+    assert len(ucalc.source_noop_data_types) == 26
     assert ucalc.untranslated_data_types == ()
     assert coverage["complete_source_branch_translation_ready"] is True
     assert coverage["n_untranslated"] == 0
@@ -205,7 +205,7 @@ def test_ucalc_cli_writes_products_and_public_api(tmp_path: Path, capsys):
     assert "complete_ucalc_control_flow_ready=True" in text
     assert (out / "xstar_ucalc_branch_catalog.csv").is_file()
     assert (out / "xstar_ucalc_subsystem_summary.json").is_file()
-    assert xa.__version__ == "0.4.35"
+    assert xa.__version__ == "0.4.36"
     assert xa.SourceFaithfulUCalc is SourceFaithfulUCalc
     assert "SourceFaithfulUCalc" in xa.__all__
 

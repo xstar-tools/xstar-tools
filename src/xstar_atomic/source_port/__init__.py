@@ -213,6 +213,7 @@ from .msolvelucy_initial_state import (
     MSolveLucyInitialPopulationParityResult,
     load_msolvelucy_initial_population_reference,
     compare_msolvelucy_initial_population,
+    compare_msolvelucy_initial_populations,
 )
 
 from .calc_hmc_all_parity import (
@@ -403,6 +404,7 @@ __all__ = [
     "MSolveLucyInitialPopulationParityResult",
     "load_msolvelucy_initial_population_reference",
     "compare_msolvelucy_initial_population",
+    "compare_msolvelucy_initial_populations",
     "CalcHMCAllError",
     "FixedStateElementRequest",
     "FixedStateContinuumResult",

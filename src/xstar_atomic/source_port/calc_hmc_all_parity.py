@@ -33,6 +33,7 @@ from .leveltemp_energy_parity import (
 from .msolvelucy_initial_state import (
     MSolveLucyInitialPopulationParityResult,
     compare_msolvelucy_initial_population,
+    compare_msolvelucy_initial_populations,
     load_msolvelucy_initial_population_reference,
 )
 
@@ -133,6 +134,10 @@ class CalcHMCAllPreContinuumParityResult:
     oxygen_reassessment_status: str
     acceptance_gate_ready: bool
     oxygen_pre_continuum_acceptance_ready: bool
+    all_element_pre_continuum_acceptance_ready: Optional[bool]
+    all_element_active_solver_ready: Optional[bool]
+    all_element_thermal_ready: Optional[bool]
+    all_element_element_readiness: List[Dict[str, Any]]
     strict_parity_ready: bool
     parity_ready: bool
     active_population_threshold: float
@@ -544,6 +549,143 @@ def _build_active_population_ion_matrix_resolution(
         })
     return output
 
+def _parity_row_element_z(row: CalcHMCAllParityRow) -> Optional[int]:
+    """Extract a source element from the stable diagnostic key."""
+
+    match = re.search(r"(?:^|,)Z=(\d+)", str(row.key))
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _all_element_acceptance_summary(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    rows: Sequence[CalcHMCAllParityRow],
+    blocking_outside: int,
+    initial: MSolveLucyInitialPopulationParityResult,
+    matrix: SameCallMatrixParityResult,
+    thermal: ThermalFamilyParityResult,
+    final: MSolveLucyFinalSnapshotParityResult,
+) -> tuple[Optional[bool], Optional[bool], Optional[bool], List[Dict[str, Any]]]:
+    """Build the v0.4.36 H/He/O all-element acceptance gate.
+
+    The gate is defined only for the complete positive-abundance element mode.
+    It keeps the accepted oxygen call-73 product as an independent mandatory
+    regression and requires each captured element to pass initial state,
+    record-keyed matrix topology/active closure, active final and outer-start
+    populations, source ``xtot``, and thermal-family parity.
+    """
+
+    if getattr(result, "diagnostics", {}).get("element_scope") != "all_positive_abundance_elements_from_xstar_probe":
+        return None, None, None, []
+
+    element_zs = sorted(int(item.request.element_z) for item in result.element_results)
+    initial_by_z = {
+        int(item.get("element_z", 0)): item
+        for item in initial.element_results
+    }
+    matrix_rows_by_z: Dict[int, List[Dict[str, Any]]] = {}
+    for row in matrix.term_rows:
+        matrix_rows_by_z.setdefault(int(row.get("element_z", 0)), []).append(row)
+    matrix_active_bad_by_z: Dict[int, int] = {z: 0 for z in element_zs}
+    matrix_active_seen = {
+        int(z) for z in matrix.diagnostics.get("closure_elements_evaluated", [])
+    }
+    for row in matrix.active_row_rows:
+        z = int(row.get("element_z", 0))
+        if not bool(row.get("matrix_difference_within_tolerance", False)):
+            matrix_active_bad_by_z[z] = matrix_active_bad_by_z.get(z, 0) + 1
+
+    final_rows_by_z: Dict[int, List[Dict[str, Any]]] = {}
+    for row in final.population_rows:
+        final_rows_by_z.setdefault(int(row.get("element_z", 0)), []).append(row)
+    xtot_rows_by_z: Dict[int, List[Dict[str, Any]]] = {}
+    for row in final.ion_total_rows:
+        xtot_rows_by_z.setdefault(int(row.get("element_z", 0)), []).append(row)
+    thermal_rows_by_z: Dict[int, List[Dict[str, Any]]] = {}
+    for row in thermal.rows:
+        thermal_rows_by_z.setdefault(int(row.get("element_z", 0)), []).append(row)
+
+    blocker_by_z: Dict[int, int] = {z: 0 for z in element_zs}
+    for row in rows:
+        z = _parity_row_element_z(row)
+        if z in blocker_by_z and row.milestone_blocking and not row.within_tolerance:
+            blocker_by_z[z] += 1
+
+    summaries: List[Dict[str, Any]] = []
+    for z in element_zs:
+        irow = initial_by_z.get(z, {})
+        mrows = matrix_rows_by_z.get(z, [])
+        frows = final_rows_by_z.get(z, [])
+        xrows = xtot_rows_by_z.get(z, [])
+        trows = thermal_rows_by_z.get(z, [])
+        initial_ready = bool(irow and irow.get("ready") is True)
+        topology_ready = bool(mrows and all(bool(row.get("topology_match", False)) for row in mrows))
+        active_matrix_ready = bool(
+            z in matrix_active_seen and matrix_active_bad_by_z.get(z, 0) == 0
+        )
+        active_final_rows = [row for row in frows if bool(row.get("active_population", False))]
+        final_ready = bool(
+            active_final_rows
+            and all(bool(row.get("final_population_within_tolerance", False))
+                    for row in active_final_rows)
+        )
+        outer_ready = bool(
+            active_final_rows
+            and all(bool(row.get("outer_start_population_within_tolerance", False))
+                    for row in active_final_rows)
+        )
+        xtot_ready = bool(
+            xrows and all(bool(row.get("source_xtot_within_tolerance", False)) for row in xrows)
+        )
+        thermal_ready = bool(
+            trows and all(bool(row.get("within_tolerance", False)) for row in trows)
+        )
+        no_blockers = blocker_by_z.get(z, 0) == 0
+        detailed_ready = bool(
+            initial_ready and topology_ready and active_matrix_ready
+            and final_ready and outer_ready and xtot_ready and thermal_ready
+            and no_blockers
+        )
+        summaries.append({
+            "element_z": z,
+            "initial_population_ready": initial_ready,
+            "matrix_topology_ready": topology_ready,
+            "matrix_active_closure_ready": active_matrix_ready,
+            "active_final_population_ready": final_ready,
+            "active_outer_start_population_ready": outer_ready,
+            "source_xtot_ready": xtot_ready,
+            "thermal_family_ready": thermal_ready,
+            "n_milestone_blocking_rows": blocker_by_z.get(z, 0),
+            "detailed_parity_ready": detailed_ready,
+            "n_initial_population_rows": int(irow.get("n_rows", 0) or 0),
+            "n_matrix_term_rows": len(mrows),
+            "n_active_final_population_rows": len(active_final_rows),
+            "n_thermal_family_rows": len(trows),
+        })
+
+    active_solver_ready = bool(
+        summaries and all(
+            row["active_final_population_ready"]
+            and row["active_outer_start_population_ready"]
+            and row["source_xtot_ready"]
+            for row in summaries
+        )
+    )
+    all_thermal_ready = bool(summaries and all(row["thermal_family_ready"] for row in summaries))
+    oxygen_regression_ready = result.diagnostics.get("oxygen_call73_regression_ready") is True
+    ready = bool(
+        oxygen_regression_ready
+        and summaries
+        and all(row["detailed_parity_ready"] for row in summaries)
+        and active_solver_ready
+        and all_thermal_ready
+        and blocking_outside == 0
+    )
+    return ready, active_solver_ready, all_thermal_ready, summaries
+
+
 def compare_calc_hmc_all_pre_continuum_probe(
     result: FixedStateCalcHMCAllResult,
     probe_dir: str | Path,
@@ -902,47 +1044,42 @@ def compare_calc_hmc_all_pre_continuum_probe(
         rate_type_probe_rows=thermal_rate_type_rows,
         rtol=rtol, atol=atol,
     )
+    initial_element_zs = sorted({int(item.request.element_z) for item in result.element_results})
     if initial_population_rows:
-        initial_reference = load_msolvelucy_initial_population_reference(
-            root, element_z=8, call_id=selected_call
+        initial_solver_population = compare_msolvelucy_initial_populations(
+            {
+                int(item.request.element_z): item.equilibrium.assembly.initial_populations
+                for item in result.element_results
+                if getattr(item, "equilibrium", None) is not None
+            },
+            root,
+            element_zs=initial_element_zs,
+            call_id=selected_call,
+            rtol=rtol,
+            atol=atol,
         )
-        oxygen_element = next(
-            (item for item in result.element_results if int(item.request.element_z) == 8),
-            None,
-        )
-        if oxygen_element is None:
-            initial_solver_population = MSolveLucyInitialPopulationParityResult(
-                ready=False,
-                status="failed_missing_python_oxygen_element",
-                call_id=selected_call,
-                element_z=8,
-                compact_dimension=initial_reference.compact_dimension,
-                n_rows=0,
-                n_outside_tolerance=initial_reference.compact_dimension,
-                max_absolute_difference=None,
-                max_relative_difference=None,
-                rows=[],
-            )
-        else:
-            initial_solver_population = compare_msolvelucy_initial_population(
-                oxygen_element.equilibrium.assembly.initial_populations,
-                initial_reference,
-                rtol=rtol,
-                atol=atol,
-            )
     else:
         initial_solver_population = MSolveLucyInitialPopulationParityResult(
             ready=False,
             status="not_comparable_missing_initial_population_probe",
             call_id=selected_call,
-            element_z=8,
+            element_z=0,
             compact_dimension=None,
             n_rows=0,
             n_outside_tolerance=0,
             max_absolute_difference=None,
             max_relative_difference=None,
             rows=[],
+            element_results=[
+                {
+                    "element_z": z,
+                    "ready": False,
+                    "status": "not_comparable_missing_initial_population_probe",
+                }
+                for z in initial_element_zs
+            ],
         )
+
 
     final_solver_snapshot = compare_msolvelucy_final_snapshot(
         result,
@@ -1033,6 +1170,20 @@ def compare_calc_hmc_all_pre_continuum_probe(
     blocking_outside = sum((not row.within_tolerance) and row.milestone_blocking for row in rows)
     max_abs = max((row.absolute_difference for row in rows), default=0.0)
     max_rel = max((row.relative_difference for row in rows), default=0.0)
+    (
+        all_element_pre_continuum_acceptance_ready,
+        all_element_active_solver_ready,
+        all_element_thermal_ready,
+        all_element_element_readiness,
+    ) = _all_element_acceptance_summary(
+        result,
+        rows=rows,
+        blocking_outside=blocking_outside,
+        initial=initial_solver_population,
+        matrix=same_call_matrix,
+        thermal=thermal_family_parity,
+        final=final_solver_snapshot,
+    )
     pre_matrix_components = {
         "istruc_fraction", "calc_ion_rates_pirt", "calc_ion_rates_rrrt",
         "ion_limit_mml", "ion_limit_mmu", "ion_limit_critf",
@@ -1171,6 +1322,10 @@ def compare_calc_hmc_all_pre_continuum_probe(
         oxygen_reassessment_status=oxygen_reassessment_status,
         acceptance_gate_ready=acceptance_gate_ready,
         oxygen_pre_continuum_acceptance_ready=oxygen_pre_continuum_acceptance_ready,
+        all_element_pre_continuum_acceptance_ready=all_element_pre_continuum_acceptance_ready,
+        all_element_active_solver_ready=all_element_active_solver_ready,
+        all_element_thermal_ready=all_element_thermal_ready,
+        all_element_element_readiness=all_element_element_readiness,
         strict_parity_ready=strict_parity_ready,
         parity_ready=ready,
         active_population_threshold=float(active_population_threshold),
@@ -1212,11 +1367,11 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "initial_solver_population_status": initial_solver_population.status,
             "initial_solver_population_ready": initial_solver_population.ready,
             "initial_solver_population_probe_present": bool(initial_population_rows),
-            "initial_population_source": next((
-                item.request.initial_population_source
+            "initial_population_sources_by_element": {
+                str(int(item.request.element_z)): getattr(item.request, "initial_population_source", None)
                 for item in result.element_results
-                if int(item.request.element_z) == 8
-            ), None),
+            },
+            "initial_solver_population_element_results": initial_solver_population.element_results,
             "final_solver_snapshot_status": final_solver_snapshot.status,
             "final_solver_same_iteration_ready": final_solver_snapshot.same_iteration_ready,
             "final_solver_iteration_tuple_ready": final_solver_snapshot.iteration_tuple_ready,
@@ -1227,6 +1382,14 @@ def compare_calc_hmc_all_pre_continuum_probe(
             "type53_rate7_cj2_ready": rate7_cj2_diagnosis.type53_ready,
             "oxygen_reassessment_status": oxygen_reassessment_status,
             "n_oxygen_reassessment_rows": len(oxygen_reassessment_rows),
+            "all_element_pre_continuum_acceptance_ready": all_element_pre_continuum_acceptance_ready,
+            "all_element_active_solver_ready": all_element_active_solver_ready,
+            "all_element_thermal_ready": all_element_thermal_ready,
+            "all_element_element_readiness": all_element_element_readiness,
+            "all_element_acceptance_definition": (
+                "oxygen_call73_regression && H/He/O detailed parity && all active final/xo "
+                "&& source_xtot && all thermal families && zero milestone blockers"
+            ),
             "acceptance_gate_definition": (
                 "pre_matrix && runtime_state && global_ion && global_level_active "
                 "&& element_array && matrix_operator_gate && thermal_family_parity "
@@ -1266,7 +1429,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     result: CalcHMCAllPreContinuumParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.35",
+    port_version: str = "v0.4.36",
 ) -> Dict[str, str]:
     """Write row-level, attribution, JSON, and Markdown products."""
 
@@ -1477,6 +1640,10 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         "oxygen_reassessment_status": result.oxygen_reassessment_status,
         "acceptance_gate_ready": result.acceptance_gate_ready,
         "oxygen_pre_continuum_acceptance_ready": result.oxygen_pre_continuum_acceptance_ready,
+        "all_element_pre_continuum_acceptance_ready": result.all_element_pre_continuum_acceptance_ready,
+        "all_element_active_solver_ready": result.all_element_active_solver_ready,
+        "all_element_thermal_ready": result.all_element_thermal_ready,
+        "all_element_element_readiness": result.all_element_element_readiness,
         "strict_parity_ready": result.strict_parity_ready,
         "parity_ready": result.parity_ready,
         "active_population_threshold": result.active_population_threshold,
@@ -1530,6 +1697,9 @@ def write_calc_hmc_all_pre_continuum_parity_products(
         f"- Type-53 exact leveltemp energy ready: `{result.type53_leveltemp_energy_ready}`\n"
         f"- Oxygen O III--O V reassessment: `{result.oxygen_reassessment_status}`\n"
         f"- Oxygen pre-continuum acceptance: `{result.oxygen_pre_continuum_acceptance_ready}`\n"
+        f"- All-element pre-continuum acceptance: `{result.all_element_pre_continuum_acceptance_ready}`\n"
+        f"- All-element active solver ready: `{result.all_element_active_solver_ready}`\n"
+        f"- All-element thermal ready: `{result.all_element_thermal_ready}`\n"
         f"- Acceptance gate ready: `{result.acceptance_gate_ready}`\n"
         f"- All-strict parity ready: `{result.strict_parity_ready}`\n"
         f"- Overall parity ready: `{result.parity_ready}`\n"

@@ -181,15 +181,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         paths = write_fixed_state_calc_hmc_all_products(
-            result, args.out_dir, port_version="v0.4.35"
-        )
-        paths.update(
-            {
-                f"all_element_scope_{key}": str(value)
-                for key, value in write_all_element_fixed_state_products(
-                    run, args.out_dir
-                ).items()
-            }
+            result, args.out_dir, port_version="v0.4.36"
         )
         parity = compare_calc_hmc_all_pre_continuum_probe(
             result,
@@ -206,7 +198,15 @@ def main(argv: list[str] | None = None) -> int:
             {
                 f"pre_continuum_parity_{key}": str(value)
                 for key, value in write_calc_hmc_all_pre_continuum_parity_products(
-                    parity, args.out_dir, port_version="v0.4.35"
+                    parity, args.out_dir, port_version="v0.4.36"
+                ).items()
+            }
+        )
+        paths.update(
+            {
+                f"all_element_scope_{key}": str(value)
+                for key, value in write_all_element_fixed_state_products(
+                    run, args.out_dir, port_version="v0.4.36", parity=parity
                 ).items()
             }
         )
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR full abundant-element fixed-state calc_hmc_all")
         print("-------------------------------------------------")
-        print("port_version=v0.4.35")
+        print("port_version=v0.4.36")
         print(f"runtime_context_source={runtime_source}")
         print(f"calc_hmc_all_call_id={plan.call_id}")
         print(f"oxygen_call73_regression_ready={plan.oxygen_regression.ready}")
@@ -236,6 +236,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"xstar_pre_continuum_summary_ready={parity.pre_continuum_summary_ready}")
         print(f"xstar_global_array_parity_ready={parity.global_arrays_ready}")
         print(f"xstar_oxygen_pre_continuum_acceptance_ready={parity.oxygen_pre_continuum_acceptance_ready}")
+        print(f"xstar_all_element_active_solver_ready={parity.all_element_active_solver_ready}")
+        print(f"xstar_all_element_thermal_ready={parity.all_element_thermal_ready}")
+        for item in parity.all_element_element_readiness:
+            print(f"xstar_element_{item['element_z']}_detailed_parity_ready={item['detailed_parity_ready']}")
+        print(f"xstar_all_element_pre_continuum_acceptance_ready={parity.all_element_pre_continuum_acceptance_ready}")
         print(f"xstar_pre_continuum_parity_ready={parity.parity_ready}")
         for key, value in paths.items():
             print(f"{key}: {value}")

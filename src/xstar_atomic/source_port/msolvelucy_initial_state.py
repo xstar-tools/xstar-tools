@@ -10,7 +10,7 @@ source distinction for fixed-state regression runs.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence
 
@@ -153,6 +153,7 @@ class MSolveLucyInitialPopulationParityResult:
     max_absolute_difference: Optional[float]
     max_relative_difference: Optional[float]
     rows: List[Dict[str, object]]
+    element_results: List[Dict[str, object]] = field(default_factory=list)
 
 
 def compare_msolvelucy_initial_population(
@@ -221,10 +222,110 @@ def compare_msolvelucy_initial_population(
     )
 
 
+def compare_msolvelucy_initial_populations(
+    python_populations_by_element: Mapping[int, Sequence[float]],
+    probe_dir: str | Path,
+    *,
+    element_zs: Sequence[int],
+    call_id: Optional[int],
+    rtol: float,
+    atol: float,
+) -> MSolveLucyInitialPopulationParityResult:
+    """Compare all requested element solver seeds against one probe call.
+
+    The returned row table is the concatenation of the element-local compact
+    vectors.  ``element_results`` preserves independent H/He/O readiness so
+    an oxygen-only success cannot mask a missing or failed H/He seed.
+    """
+
+    rows: List[Dict[str, object]] = []
+    summaries: List[Dict[str, object]] = []
+    total_dimension = 0
+    total_outside = 0
+    max_abs: Optional[float] = 0.0
+    max_rel: Optional[float] = 0.0
+    resolved_call: Optional[int] = call_id
+    all_ready = True
+
+    for element_z in sorted({int(z) for z in element_zs}):
+        try:
+            reference = load_msolvelucy_initial_population_reference(
+                probe_dir, element_z=element_z, call_id=call_id
+            )
+        except MSolveLucyInitialStateError as exc:
+            all_ready = False
+            summaries.append({
+                "element_z": element_z,
+                "ready": False,
+                "status": "failed_missing_or_invalid_reference",
+                "compact_dimension": None,
+                "n_rows": 0,
+                "n_outside_tolerance": 0,
+                "reason": str(exc),
+            })
+            continue
+        resolved_call = reference.call_id
+        total_dimension += reference.compact_dimension
+        populations = python_populations_by_element.get(element_z)
+        if populations is None:
+            compared = MSolveLucyInitialPopulationParityResult(
+                ready=False,
+                status="failed_missing_python_element",
+                call_id=reference.call_id,
+                element_z=element_z,
+                compact_dimension=reference.compact_dimension,
+                n_rows=0,
+                n_outside_tolerance=reference.compact_dimension,
+                max_absolute_difference=None,
+                max_relative_difference=None,
+                rows=[],
+            )
+        else:
+            compared = compare_msolvelucy_initial_population(
+                populations, reference, rtol=rtol, atol=atol
+            )
+        rows.extend(compared.rows)
+        total_outside += compared.n_outside_tolerance
+        if compared.max_absolute_difference is not None:
+            max_abs = max(float(max_abs or 0.0), compared.max_absolute_difference)
+        if compared.max_relative_difference is not None:
+            max_rel = max(float(max_rel or 0.0), compared.max_relative_difference)
+        all_ready = all_ready and compared.ready
+        summaries.append({
+            "element_z": element_z,
+            "ready": compared.ready,
+            "status": compared.status,
+            "compact_dimension": compared.compact_dimension,
+            "n_rows": compared.n_rows,
+            "n_outside_tolerance": compared.n_outside_tolerance,
+            "max_absolute_difference": compared.max_absolute_difference,
+            "max_relative_difference": compared.max_relative_difference,
+            "reference_source_path": reference.source_path,
+        })
+
+    requested = sorted({int(z) for z in element_zs})
+    present = {int(item["element_z"]) for item in summaries}
+    all_ready = bool(all_ready and len(summaries) == len(requested) and present == set(requested))
+    return MSolveLucyInitialPopulationParityResult(
+        ready=all_ready,
+        status="ready" if all_ready else "failed",
+        call_id=resolved_call,
+        element_z=0,
+        compact_dimension=total_dimension if total_dimension else None,
+        n_rows=len(rows),
+        n_outside_tolerance=total_outside,
+        max_absolute_difference=max_abs,
+        max_relative_difference=max_rel,
+        rows=rows,
+        element_results=summaries,
+    )
+
+
 __all__ = [
     "MSolveLucyInitialStateError",
     "MSolveLucyInitialPopulationReference",
     "MSolveLucyInitialPopulationParityResult",
     "load_msolvelucy_initial_population_reference",
     "compare_msolvelucy_initial_population",
+    "compare_msolvelucy_initial_populations",
 ]

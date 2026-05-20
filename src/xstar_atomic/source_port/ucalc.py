@@ -612,7 +612,7 @@ class UCalcBranchSpec:
 # the supplied ucalc.f90.  Returning zeros for these is source behavior, not a
 # fallback approximation.
 _SOURCE_NOOP_TYPES = {
-    13, 14, 24, 29, 40, 41, 42, 43, 44, 45, 46, 47, 48, 52, 58, 61, 62,
+    13, 14, 24, 29, 40, 41, 42, 43, 44, 45, 46, 47, 48, 52, 58, 61,
     78, 80, 83, 84, 87, 90, 91, 93, 94, 100,
 }
 
@@ -714,7 +714,8 @@ _SOURCE_CALLS: Dict[int, Tuple[str, ...]] = {
     49: ("dprinto", "drd", "phextrap", "phint53"),
     50: ("deleafnd", "drd", "enxt", "linopac"), 53: ("dprinto", "drd", "milne", "phextrap", "phint53"),
     54: ("anl1",), 55: ("drd", "enxt", "phintfo"), 56: ("hunt3",),
-    57: ("calt57",), 59: ("drd", "enxt", "phintfo"), 60: ("calt6062",),
+    57: ("calt57",), 59: ("drd", "enxt", "phintfo"),
+    60: ("calt6062",), 62: ("calt6062",),
     63: ("amcrs", "anl1", "erc"), 64: ("enxt", "hphotx", "milne", "phintfo"),
     65: ("szirco",), 66: ("calt66",), 67: ("calt67",), 68: ("calt68",), 69: ("calt69",),
     70: ("calt70", "drd", "phint53hunt"), 71: ("calt71", "drd"), 72: ("calt72",),
@@ -753,7 +754,8 @@ def complete_ucalc_branch_catalog() -> Dict[int, UCalcBranchSpec]:
         33: "translated_formula", 34: "translated_formula", 35: "translated_formula", 36: "translated_formula",
         37: "translated_formula", 38: "translated_formula",
         39: "translated_formula", 49: "translated_formula", 50: "validated_selected_system", 51: "validated_selected_system",
-        54: "translated_formula", 55: "translated_formula", 59: "translated_formula", 60: "translated_formula", 64: "translated_formula",
+        54: "translated_formula", 55: "translated_formula", 59: "translated_formula",
+        60: "translated_formula", 62: "translated_formula", 64: "translated_formula",
         65: "translated_formula", 66: "translated_formula",
         53: "translated_pending_real_context_parity", 56: "translated_formula",
         57: "translated_formula", 63: "translated_formula", 67: "translated_formula",
@@ -966,7 +968,7 @@ class SourceFaithfulUCalc:
                 id2 = nlev + (i[1] - 1 if len(i) >= 3 else 0)
             else:
                 id1 = id2 = 1
-        elif dt in {17, 18, 28, 33, 54, 60, 63, 73, 77, 102} and len(i) >= 2:
+        elif dt in {17, 18, 28, 33, 54, 60, 62, 63, 73, 77, 102} and len(i) >= 2:
             id1, id2 = i[-4], i[-3] if len(i) >= 4 else (i[0], i[1])
         elif dt == 20 and len(i) >= 2:
             id1, id2 = i[0], nlev + i[1] - 1
@@ -998,6 +1000,7 @@ class SourceFaithfulUCalc:
             56: self._eval_collision_generic,
             57: self._eval_type57,
             60: self._eval_type60,
+            62: self._eval_type60,
             63: self._eval_collision_generic,
             65: self._eval_type65,
             66: self._eval_type66,
@@ -1984,15 +1987,213 @@ class SourceFaithfulUCalc:
         )
 
     def _eval_type60(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        if len(r.integers)<2 or len(r.reals)<3: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type60_short_record")
-        a,b=r.integers[0],r.integers[1]; lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a)
-        t1=min(c.temperature_k,1e9)*6.33652e-6; tt=min(t1,1.0)
-        rat=sum(r.reals[k]*tt**(k-2) for k in range(2,len(r.reals)))
-        ups=rat*(1.0+math.log(t1)/(math.log(t1)+1.0)) if t1>1.0 else rat
-        gu=c.levels.weight(up); gl=c.levels.weight(lo); de=abs(c.levels.energy(up)-c.levels.energy(lo)); ne=c.electron_density_cm3
-        ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t)); qd=8.626e-8*ups/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
-        return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
-            diagnostics={"upsilon":ups},context_fields_used=("temperature_k","xpx","xee","levels"))
+        """Translate the shared XSTAR labels 60 and 62.
+
+        Both branches enter label 60 in ``ucalc.f90`` and call
+        ``calt6062.f90``.  Data type 60 is a pure polynomial in the reduced
+        temperature.  Data type 62 adds the Callaway logarithmic/exponential
+        tail carried by the final three real coefficients.  Earlier package
+        versions incorrectly classified data type 62 as a source no-op; that
+        omitted four H I records (488--491) and therefore sixteen matrix
+        terms in the accepted call-73 all-element benchmark.
+        """
+
+        minimum_reals = 3 if int(r.data_type) == 60 else 6
+        if len(r.integers) < 2 or len(r.reals) < minimum_reals:
+            return self._base_result(
+                r,
+                s,
+                UCalcStatus.INVALID_RECORD,
+                reason=f"type{r.data_type}_short_record",
+                diagnostics={
+                    "n_integers": len(r.integers),
+                    "n_reals": len(r.reals),
+                    "minimum_reals": minimum_reals,
+                },
+            )
+
+        packed_endpoint_1 = int(r.integers[0])
+        packed_endpoint_2 = int(r.integers[1])
+        endpoint_1 = c.levels.get(packed_endpoint_1)
+        endpoint_2 = c.levels.get(packed_endpoint_2)
+        if (
+            packed_endpoint_1 <= 0
+            or packed_endpoint_2 <= 0
+            or packed_endpoint_1 > c.nlevp
+            or packed_endpoint_2 > c.nlevp
+            or endpoint_1 is None
+            or endpoint_2 is None
+        ):
+            return self._base_result(
+                r,
+                s,
+                UCalcStatus.SOURCE_REJECTED,
+                reason="type6062_endpoint_outside_level_table",
+                diagnostics={
+                    "packed_endpoint_1": packed_endpoint_1,
+                    "packed_endpoint_2": packed_endpoint_2,
+                    "nlev": c.nlevp,
+                },
+            )
+
+        lo, up = (
+            (packed_endpoint_1, packed_endpoint_2)
+            if float(endpoint_1.energy_ev) <= float(endpoint_2.energy_ev)
+            else (packed_endpoint_2, packed_endpoint_1)
+        )
+        lower = c.levels.require(lo)
+        upper = c.levels.require(up)
+        de = abs(float(upper.energy_ev) - float(lower.energy_ev))
+        if de <= 1.0e-24:
+            return self._base_result(
+                r,
+                s,
+                UCalcStatus.SOURCE_REJECTED,
+                reason="type6062_zero_transition_energy",
+                diagnostics={
+                    "packed_endpoint_1": packed_endpoint_1,
+                    "packed_endpoint_2": packed_endpoint_2,
+                    "idest1": lo,
+                    "idest2": up,
+                    "delta_energy_eV": de,
+                },
+            )
+
+        # ucalc.f90 label 60 raises the temperature only when required by the
+        # source's 0.02*DeltaE floor, then calt6062 converts it to the reduced
+        # Callaway temperature t1.  calt6062 sets tmax=1 unconditionally.
+        source_temperature_floor_k = (
+            0.02 * de * 1.0e4 / XSTAR_KT_EV_PER_1E4K
+        )
+        effective_temperature_k = max(
+            float(c.temperature_k), source_temperature_floor_k
+        )
+        if effective_temperature_k > 1.0e9:
+            t1 = 6.33652e3
+        else:
+            t1 = effective_temperature_k * 6.33652e-6
+        tt = min(t1, 1.0)
+
+        if int(r.data_type) == 60:
+            polynomial_coefficients = tuple(float(value) for value in r.reals[2:])
+            logarithmic_amplitude = None
+            logarithmic_scale = None
+            exponential_scale = None
+            upsilon = sum(
+                coefficient * tt**power
+                for power, coefficient in enumerate(polynomial_coefficients)
+            )
+            fit_form = "callaway_type60_polynomial"
+        else:
+            polynomial_coefficients = tuple(float(value) for value in r.reals[2:-3])
+            logarithmic_amplitude = float(r.reals[-3])
+            logarithmic_scale = float(r.reals[-2])
+            exponential_scale = float(r.reals[-1])
+            log_argument = logarithmic_scale * tt
+            if log_argument <= 0.0:
+                return self._base_result(
+                    r,
+                    s,
+                    UCalcStatus.SOURCE_REJECTED,
+                    reason="type62_nonpositive_log_argument",
+                    diagnostics={
+                        "packed_endpoint_1": packed_endpoint_1,
+                        "packed_endpoint_2": packed_endpoint_2,
+                        "reduced_temperature_t1": t1,
+                        "clamped_reduced_temperature_tt": tt,
+                        "logarithmic_scale": logarithmic_scale,
+                        "log_argument": log_argument,
+                    },
+                )
+            polynomial = sum(
+                coefficient * tt**power
+                for power, coefficient in enumerate(polynomial_coefficients)
+            )
+            tail = (
+                logarithmic_amplitude
+                * math.log(log_argument)
+                * math.exp(-exponential_scale * tt)
+            )
+            upsilon = polynomial + tail
+            fit_form = "callaway_type62_polynomial_plus_log_exp_tail"
+
+        if t1 > tt:
+            logarithm = math.log(t1)
+            upsilon *= 1.0 + logarithm / (logarithm + 1.0)
+
+        gu = float(upper.statistical_weight)
+        gl = float(lower.statistical_weight)
+        if gu <= 1.0e-24 or gl <= 1.0e-24:
+            return self._base_result(
+                r,
+                s,
+                UCalcStatus.SOURCE_REJECTED,
+                reason="type6062_nonpositive_statistical_weight",
+                diagnostics={
+                    "lower_statistical_weight": gl,
+                    "upper_statistical_weight": gu,
+                },
+            )
+
+        delt = de / max(
+            XSTAR_KT_EV_PER_1E4K * c.t,
+            1.0e-300,
+        )
+        exptmp = _expo(-delt)
+        cji = 8.626e-8 * upsilon / c.tsq / (1.0e-16 + gu)
+        cij = cji * gu * exptmp / (1.0e-16 + gl)
+        ne = c.electron_density_cm3
+        ans1 = cij * ne
+        ans2 = cji * ne
+        ans6 = ans1 * de * XSTAR_SOURCE_ERG_PER_EV
+        ans5 = ans2 * de * XSTAR_SOURCE_ERG_PER_EV
+
+        diagnostics = {
+            "source_branch": f"ucalc_label_{r.data_type}_goto_60",
+            "source_leaf": "calt6062",
+            "fit_form": fit_form,
+            "packed_endpoint_1": packed_endpoint_1,
+            "packed_endpoint_2": packed_endpoint_2,
+            "lower_endpoint": lo,
+            "upper_endpoint": up,
+            "lower_principal_n": lower.principal_n,
+            "lower_orbital_l": lower.orbital_l,
+            "lower_label": lower.label,
+            "upper_principal_n": upper.principal_n,
+            "upper_orbital_l": upper.orbital_l,
+            "upper_label": upper.label,
+            "lower_statistical_weight": gl,
+            "upper_statistical_weight": gu,
+            "lower_energy_eV": float(lower.energy_ev),
+            "upper_energy_eV": float(upper.energy_ev),
+            "delta_energy_eV": de,
+            "delt_dimensionless": delt,
+            "source_temperature_floor_K": source_temperature_floor_k,
+            "effective_temperature_K": effective_temperature_k,
+            "reduced_temperature_t1": t1,
+            "clamped_reduced_temperature_tt": tt,
+            "polynomial_coefficients": polynomial_coefficients,
+            "logarithmic_amplitude": logarithmic_amplitude,
+            "logarithmic_scale": logarithmic_scale,
+            "exponential_scale": exponential_scale,
+            "upsilon": upsilon,
+            "cij_excitation_cm3_s": cij,
+            "cji_deexcitation_cm3_s": cji,
+            "exponential_boltzmann_factor": exptmp,
+            "hydrogen_v0436_target_record": int(r.record) in {488, 489, 490, 491},
+        }
+        return self._ctx_result(
+            r,
+            s,
+            ans1=ans1,
+            ans2=ans2,
+            ans5=ans5,
+            ans6=ans6,
+            idest1=lo,
+            idest2=up,
+            diagnostics=diagnostics,
+            context_fields_used=("temperature_k", "xpx", "xee", "levels"),
+        )
 
     def _eval_type65(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_atomic.xstar_element_solver import _xstar_szirc

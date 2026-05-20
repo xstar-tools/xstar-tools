@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.4.36 - 2026-05-19
+
+v0.4.36 is narrowly bounded to the hydrogen and all-element differences exposed
+by the complete v0.4.35 H/He/O call-73 probe. It translates XSTAR data type 62
+through the native label-60/`calt6062` path, restoring H I records 488--491 and
+their 16 four-role matrix terms. It adds a source diagnostic for their packed
+endpoints, quantum numbers, fit coefficients, rates, and insertion status.
+
+Matrix parity now joins terms by `(element_z, source_record, role)` and retains
+Python/XSTAR term indexes only as call-order diagnostics, preventing one omitted
+record from shifting the rest of an element. Same-call initial-population parity
+is generalized to H, He, and O, covering 718 compact rows with per-element
+readiness. The all-element reports add solver, `xtot`, thermal, blocker, and
+detailed-readiness fields for each selected element.
+
+The release defines `all_element_pre_continuum_acceptance_ready`, requiring the
+frozen oxygen call-73 regression, complete detailed H/He/O state and active
+solver parity, all thermal families, and zero milestone-blocking rows. A packaged
+hydrogen target manifest and example 109 validate the exact 4-record/16-term/
+718-row/33-H-row/9-blocker/4-thermal inventory. No XSTAR rebuild is required; physical acceptance still requires rerunning example 108 with the existing v0.4.35 all-element raw probes. Validation passed with 8 focused tests, 137 source-port tests, and the complete suite with 450 passed and 22 skipped.
+
 ## v0.4.35 - 2026-05-19
 
 v0.4.35 starts the full source-order, positive-abundance fixed-state
