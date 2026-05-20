@@ -18,6 +18,7 @@ def test_data_path_roundtrip(tmp_path, monkeypatch):
     # of XSTAR_ATDB_FITS. In normal runtime use the environment variable
     # intentionally takes precedence over the saved datapath.
     monkeypatch.delenv("XSTAR_ATDB_FITS", raising=False)
+    monkeypatch.delenv("XSTAR_ATDB", raising=False)
 
     fake_pkg = tmp_path / "pkg"
     fake_pkg.mkdir()

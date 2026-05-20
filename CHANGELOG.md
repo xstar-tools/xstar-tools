@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## v0.4.37 - 2026-05-19
+
+v0.4.37 closes the single source-semantic blocker isolated by the complete
+v0.4.36 H/He/O production rerun. XSTAR `ucalc.f90` label 77 returns exact
+zero before `calt77` when the mutable endpoint energy separation is below
+1 eV. Python now applies that gate in source order while retaining valid
+endpoints and the normal four zero-valued matrix roles. The correction targets
+22 H records/88 terms and 26 He records/104 terms; the hydrogen `xiin` blocker
+was traced specifically to record 572.
+
+The data-path round-trip test now removes both supported environment aliases,
+`XSTAR_ATDB_FITS` and `XSTAR_ATDB`, so a configured user shell no longer
+invalidates the isolated test. Runtime path precedence is unchanged. A new
+example 110 validates type-77 parity and the complete all-element gate. No
+XSTAR rebuild is required.
+
 ## v0.4.36 - 2026-05-19
 
 v0.4.36 is narrowly bounded to the hydrogen and all-element differences exposed

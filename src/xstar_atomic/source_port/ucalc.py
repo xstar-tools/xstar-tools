@@ -2543,10 +2543,48 @@ class SourceFaithfulUCalc:
         i = r.integers
         id1 = i[-4] if len(i) >= 4 else 0
         id2 = i[-3] if len(i) >= 3 else 0
+
+        # ucalc.f90 label 77 applies these gates before calling calt77.  A
+        # source-zero result must remain EVALUATED with the valid endpoints so
+        # calc_hmc_ion still emits the normal four zero-valued matrix roles.
+        nlev = int(c.nlevp)
+        if id1 <= 0 or id1 > nlev or id2 <= 0 or id2 > nlev:
+            return self._base_result(
+                r, s, UCalcStatus.SOURCE_REJECTED,
+                reason="type77_endpoint_outside_active_level_range",
+                idest1=id1, idest2=id2,
+                diagnostics={
+                    "type77_source_gate": "endpoint_outside_active_level_range",
+                    "type77_nlev": nlev,
+                },
+            )
+        if id1 == id2:
+            return self._ctx_result(
+                r, s, idest1=id1, idest2=id2,
+                diagnostics={
+                    "type77_source_gate": "identical_endpoints_zero",
+                    "type77_endpoint_energy_difference_eV": 0.0,
+                    "type77_calt77_status": "not_called_source_identical_endpoint_gate",
+                },
+                context_fields_used=("levels",),
+            )
+
         e1 = c.levels.energy(id1)
         e2 = c.levels.energy(id2)
         signed_de = float(e2) - float(e1)
         de = abs(signed_de)
+        if de < 1.0:
+            return self._ctx_result(
+                r, s, idest1=id1, idest2=id2,
+                diagnostics={
+                    "type77_source_gate": "endpoint_energy_separation_below_1_eV_zero",
+                    "type77_endpoint_energy_difference_eV": de,
+                    "type77_endpoint_signed_energy_difference_eV": signed_de,
+                    "type77_calt77_status": "not_called_source_abs_delta_e_lt_1_eV_gate",
+                },
+                context_fields_used=("levels",),
+            )
+
         endpoint_wav = 12398.4016 / (signed_de + 1.0e-24)
 
         ev = _xstar_calt77_rates(

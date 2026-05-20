@@ -1312,3 +1312,22 @@ The required final line is:
 ```text
 v0436_hydrogen_all_element_validation_ready=True
 ```
+
+### `110_validate_v0437_type77_all_element.py`
+
+Validate the v0.4.37 type-77 all-element acceptance.
+
+After rerunning example 108 with v0.4.37, validate the literal H/He type-77
+sub-eV source-zero gate and the complete H/He/O pre-continuum acceptance:
+
+```bash
+PYTHONPATH=src python examples/110_validate_v0437_type77_all_element.py \
+  xstar_all_calc_hmc_all_fixed_state_v0437_allprobe \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0437_type77_all_element_validation_ready=True
+```

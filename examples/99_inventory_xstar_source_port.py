@@ -37,7 +37,7 @@ def main() -> int:
     if args.print_summary:
         print("XSTAR source-faithful Python port inventory")
         print("-------------------------------------------")
-        print("port_version=v0.4.36")
+        print("port_version=v0.4.37")
         print(f"source={inventory.source_label}")
         print(f"n_source_files={inventory.n_files}")
         print(f"n_routines={inventory.n_routines}")

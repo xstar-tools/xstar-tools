@@ -719,3 +719,11 @@ The v0.4.5 production rerun left 531 blockers. These were not missing runtime st
 The first v0.4.7 state comparison showed that all 607 `nsup` assignments and the first-iteration `rr` fractions agree with XSTAR. Two apparent earlier failures were comparison artifacts: compact ion counters were compared with physical ion stages, and the captured pre-solve vector was normalized before the controlled seeded solve. v0.4.8 corrects both.
 
 The first physical mismatch was then traced to type-86 Auger endpoint decoding. XSTAR label 86 reads packed integer fields `[-4]` and `[-5]`; the previous Python translation used `[-3]` and `[-4]`. The correction restores source-faithful compact placement of these large rates. Rerun the same example 102 command with the existing XSTAR state probes; no new XSTAR instrumentation run is required.
+
+### v0.4.37 H/He type-77 source gate
+
+The complete H/He/O call-73 rerun isolated the remaining hydrogen blocker to
+`ucalc.f90` type 77. XSTAR skips `calt77` and returns exact zero when the mutable
+endpoint energy separation is below 1 eV. v0.4.37 reproduces that source gate,
+retains the four zero matrix roles, and adds example 110 for the final
+all-element pre-continuum acceptance check.
