@@ -368,3 +368,29 @@ def test_calc_hmc_all_probe_products_are_bounded_and_source_local(tmp_path):
     assert "call xap_hmc_begin_call" in Path(outputs["calc_hmc_all_begin_call_insertion"]).read_text()
     assert "before call comp2" in Path(outputs["calc_hmc_all_pre_continuum_insertion"]).read_text()
     assert "xap_hmc_element_post" in Path(outputs["calc_hmc_all_element_post_insertion"]).read_text()
+
+
+def test_v0444_pre_continuum_comparator_uses_explicit_snapshot_not_final_totals(tmp_path):
+    from xstar_atomic.source_port import compare_calc_hmc_all_pre_continuum_probe
+
+    _write_complete_calc_hmc_probe(tmp_path)
+    result = _fake_complete_calc_hmc_result()
+    result.httot_pre_continuum = 3.0
+    result.cltot_pre_continuum = 1.0
+    result.httot2_pre_continuum = 4.0
+    result.cltot2_pre_continuum = 2.0
+    result.httot = 300.0
+    result.cltot = 100.0
+    result.httot2 = 400.0
+    result.cltot2 = 200.0
+    result.continuum = SimpleNamespace(complete=True, diagnostics={})
+
+    parity = compare_calc_hmc_all_pre_continuum_probe(result, tmp_path)
+    assert parity.pre_continuum_summary_ready is True
+    summary_rows = {
+        row.key: row for row in parity.rows if row.component == "pre_continuum_summary"
+    }
+    assert summary_rows["httot"].python_value == 3.0
+    assert summary_rows["cltot"].python_value == 1.0
+    assert summary_rows["httot2"].python_value == 4.0
+    assert summary_rows["cltot2"].python_value == 2.0

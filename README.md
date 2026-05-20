@@ -13,6 +13,39 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.44 corrects complete fixed-state thermal-state ownership
+
+The complete fixed-state Python path remains:
+
+```text
+positive-abundance H/He/O element loop
+-> comp2 -> freef -> bremem -> heatf
+-> final calc_hmc_all thermal/charge state
+```
+
+v0.4.44 does not change any physical rate, matrix, solver, continuum kernel, or
+XSTAR probe. It separates the pre-continuum element-loop totals from the final
+post-`heatf` totals on `FixedStateCalcHMCAllResult` and makes the pre-continuum
+validator consume the correct snapshot. The four explicit fields are:
+
+```text
+httot_pre_continuum
+cltot_pre_continuum
+httot2_pre_continuum
+cltot2_pre_continuum
+```
+
+The final public `httot`, `cltot`, `httot2`, and `cltot2` fields retain their
+post-`heatf` meaning. Regression tests enforce:
+
+```text
+final - pre-continuum = translated continuum contribution
+```
+
+Example 116 reuses the existing v0.4.43 seventeen-hook XSTAR products; no XSTAR
+rebuild is required. The next source target remains `dsec`, but only after the
+corrected complete fixed-state acceptance gate passes.
+
 ### v0.4.43 completes fixed-state `calc_hmc_all` closure
 
 The translated fixed-state local-zone path now reaches the return from

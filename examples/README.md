@@ -1461,19 +1461,20 @@ After this gate passes, the next bounded target is complete fixed-state
 ### `116_validate_xstar_calc_hmc_all_complete_fixed_state.py`
 
 Executes the complete translated fixed-state `calc_hmc_all` chain and compares
-its final thermal and charge state against the seventeen-hook call-73 XSTAR
-probe. It also reruns the current same-call pre-continuum, `comp2`, `freef`,
-`bremem`, and `heatf` comparisons and requires every frozen regression through
-v0.4.42.
+its final thermal and charge state against the existing seventeen-hook
+v0.4.43 call-73 XSTAR probe. v0.4.44 gives the pre-continuum element-loop
+totals explicit ownership and reruns the current same-call pre-continuum,
+`comp2`, `freef`, `bremem`, and `heatf` comparisons while requiring every
+frozen regression through v0.4.42. No XSTAR rebuild is required.
 
 ```bash
-PYTHONPATH=src python   examples/116_validate_xstar_calc_hmc_all_complete_fixed_state.py   --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits   --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz   --temperature-k 76655.18557758832   --hydrogen-density-cm3 1.0e8   --electron-fraction-xee 1.2046560563936872   --live-rate-grid-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv   --live-rate-grid-state last   --escape-npz xstar_o7_escape_state_v045.npz   --xstar-population-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv   --xstar-population-solve-call-id 219   --population-probe-runtime-policy use   --xstar-calc-hmc-probe-dir     xstar_runs/helike_type69/o7_ne1e8_all_elements_v0443_complete   --xstar-calc-hmc-call-id 73   --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat   --oxygen-call73-regression-dir     oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434   --all-element-v0438-regression-dir     xstar_all_calc_hmc_all_fixed_state_v0438_allprobe   --comp2-v0439-regression-dir xstar_comp2_call73_v0439   --freef-v0440-regression-dir xstar_freef_call73_v0440   --bremem-v0441-regression-dir xstar_bremem_call73_v0441   --heatf-v0442-regression-dir xstar_heatf_call73_v0442   --initial-population-policy require-all   --out-dir xstar_calc_hmc_all_complete_call73_v0443   --print-summary
+PYTHONPATH=src python   examples/116_validate_xstar_calc_hmc_all_complete_fixed_state.py   --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits   --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz   --temperature-k 76655.18557758832   --hydrogen-density-cm3 1.0e8   --electron-fraction-xee 1.2046560563936872   --live-rate-grid-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv   --live-rate-grid-state last   --escape-npz xstar_o7_escape_state_v045.npz   --xstar-population-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv   --xstar-population-solve-call-id 219   --population-probe-runtime-policy use   --xstar-calc-hmc-probe-dir     xstar_runs/helike_type69/o7_ne1e8_all_elements_v0443_complete   --xstar-calc-hmc-call-id 73   --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat   --oxygen-call73-regression-dir     oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434   --all-element-v0438-regression-dir     xstar_all_calc_hmc_all_fixed_state_v0438_allprobe   --comp2-v0439-regression-dir xstar_comp2_call73_v0439   --freef-v0440-regression-dir xstar_freef_call73_v0440   --bremem-v0441-regression-dir xstar_bremem_call73_v0441   --heatf-v0442-regression-dir xstar_heatf_call73_v0442   --initial-population-policy require-all   --out-dir xstar_calc_hmc_all_complete_call73_v0444   --print-summary
 ```
 
 The required final line is:
 
 ```text
-v0443_complete_fixed_state_acceptance_ready=True
+v0444_complete_fixed_state_acceptance_ready=True
 ```
 
 Only after this gate passes should development proceed to `dsec`.

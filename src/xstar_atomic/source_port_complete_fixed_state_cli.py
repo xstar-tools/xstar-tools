@@ -200,7 +200,9 @@ def main(argv: list[str] | None = None) -> int:
                 "runtime_context_source": runtime_source,
                 "effective_critf": critf,
                 "critf_source": critf_source,
-                "v0443_complete_fixed_state_execution": True,
+                "v0444_complete_fixed_state_execution": True,
+                "v0444_pre_continuum_state_ownership_correction": True,
+                "v0443_probe_products_reused": True,
             }
         )
         pre = compare_calc_hmc_all_pre_continuum_probe(
@@ -271,23 +273,23 @@ def main(argv: list[str] | None = None) -> int:
     paths = {
         f"fixed_state_{key}": str(value)
         for key, value in write_fixed_state_calc_hmc_all_products(
-            result, out, port_version="v0.4.43"
+            result, out, port_version="v0.4.44"
         ).items()
     }
     writers = (
-        ("pre_continuum", write_calc_hmc_all_pre_continuum_parity_products(pre, out, port_version="v0.4.43")),
-        ("comp2", write_comp2_parity_products(comp2, out, port_version="v0.4.43")),
-        ("freef", write_freef_parity_products(freef, out, port_version="v0.4.43")),
-        ("bremem", write_bremem_parity_products(bremem, out, port_version="v0.4.43")),
-        ("heatf", write_heatf_parity_products(heatf, out, port_version="v0.4.43")),
-        ("complete", write_complete_fixed_state_parity_products(final, out, port_version="v0.4.43")),
+        ("pre_continuum", write_calc_hmc_all_pre_continuum_parity_products(pre, out, port_version="v0.4.44")),
+        ("comp2", write_comp2_parity_products(comp2, out, port_version="v0.4.44")),
+        ("freef", write_freef_parity_products(freef, out, port_version="v0.4.44")),
+        ("bremem", write_bremem_parity_products(bremem, out, port_version="v0.4.44")),
+        ("heatf", write_heatf_parity_products(heatf, out, port_version="v0.4.44")),
+        ("complete", write_complete_fixed_state_parity_products(final, out, port_version="v0.4.44")),
     )
     for prefix, product_paths in writers:
         for key, value in product_paths.items():
             paths[f"{prefix}_{key}"] = str(value)
 
     summary = {
-        "port_version": "v0.4.43",
+        "port_version": "v0.4.44",
         "calc_hmc_all_call_id": call_id,
         "fixed_state_calc_hmc_all_translated": final.fixed_state_calc_hmc_all_translated,
         "pre_matrix_ready": final.pre_matrix_ready,
@@ -314,7 +316,9 @@ def main(argv: list[str] | None = None) -> int:
         "frozen_freef_regression": freef_frozen.ready,
         "frozen_bremem_regression": bremem_frozen.ready,
         "frozen_heatf_regression": heatf_frozen.ready,
-        "v0443_complete_fixed_state_acceptance_ready": acceptance,
+        "pre_continuum_state_owned_explicitly": True,
+        "v0443_probe_products_reused": True,
+        "v0444_complete_fixed_state_acceptance_ready": acceptance,
         "final_probe_source": final_ref.summary_path,
         "oxygen_regression_source": oxygen.source_path,
         "all_element_regression_source": all_element_frozen.source_path,
@@ -324,11 +328,11 @@ def main(argv: list[str] | None = None) -> int:
         "heatf_regression_source": heatf_frozen.source_path,
         "remaining_source_sequence": "dsec",
     }
-    acceptance_json = out / "xstar_calc_hmc_all_v0443_acceptance_summary.json"
+    acceptance_json = out / "xstar_calc_hmc_all_v0444_acceptance_summary.json"
     acceptance_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    acceptance_md = out / "xstar_calc_hmc_all_v0443_acceptance_summary.md"
+    acceptance_md = out / "xstar_calc_hmc_all_v0444_acceptance_summary.md"
     acceptance_md.write_text(
-        "# xstar-atomic v0.4.43 complete fixed-state acceptance\n\n"
+        "# xstar-atomic v0.4.44 complete fixed-state acceptance\n\n"
         + "\n".join(f"- {key}: `{value}`" for key, value in summary.items())
         + "\n",
         encoding="utf-8",
@@ -367,7 +371,9 @@ def main(argv: list[str] | None = None) -> int:
             "frozen_freef_regression",
             "frozen_bremem_regression",
             "frozen_heatf_regression",
-            "v0443_complete_fixed_state_acceptance_ready",
+            "pre_continuum_state_owned_explicitly",
+            "v0443_probe_products_reused",
+            "v0444_complete_fixed_state_acceptance_ready",
             "remaining_source_sequence",
         ):
             print(f"{key}={summary[key]}")

@@ -1,0 +1,39 @@
+{
+  "calc_hmc_all_call_id": 73,
+  "continuum_components": {
+    "clbrems": 7.894371129545434e-09,
+    "clcomp": 7.419979777409376e-09,
+    "htcomp": 9.053122244593738e-09,
+    "htfreef": 5.216305486253912e-13
+  },
+  "correction_release": "v0.4.44",
+  "expected_acceptance": {
+    "current_all_element_pre_continuum_parity": true,
+    "v0444_complete_fixed_state_acceptance_ready": true
+  },
+  "final": {
+    "python": {
+      "cltot": 2.1641570068025583e-07,
+      "cltot2": 6.223375738553197e-08,
+      "httot": 2.175860405261651e-07,
+      "httot2": 6.248227418994319e-08
+    }
+  },
+  "pre_continuum": {
+    "python": {
+      "cltot": 2.0110134977330102e-07,
+      "cltot2": 4.6919406478577164e-08,
+      "httot": 2.0853239665102273e-07,
+      "httot2": 5.342863031480083e-08
+    },
+    "xstar": {
+      "cltot": 2.010993394077783e-07,
+      "cltot2": 4.691937640464963e-08,
+      "httot": 2.0853530037004194e-07,
+      "httot2": 5.3430731347469724e-08
+    }
+  },
+  "purpose": "v0.4.44 source-state ownership correction target from the v0.4.43 physical call-73 run",
+  "rtol": 0.005,
+  "source_run_release": "v0.4.43"
+}

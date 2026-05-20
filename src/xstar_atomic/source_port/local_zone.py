@@ -168,6 +168,10 @@ class FixedStateCalcHMCAllResult:
     xtotg: Dict[Tuple[int, int], float]
     mml: Dict[int, int]
     mmu: Dict[int, int]
+    httot_pre_continuum: float
+    cltot_pre_continuum: float
+    httot2_pre_continuum: float
+    cltot2_pre_continuum: float
     httot: float
     cltot: float
     httot2: float
@@ -577,6 +581,14 @@ def calc_hmc_all(
             )
         )
 
+    # v0.4.44: own the pre-continuum thermal snapshot explicitly.  These
+    # values belong to the completed positive-abundance element loop and are
+    # captured before comp2/freef/bremem/heatf mutate the final return totals.
+    httot_pre_continuum = float(httot)
+    cltot_pre_continuum = float(cltot)
+    httot2_pre_continuum = float(httot2)
+    cltot2_pre_continuum = float(cltot2)
+
     if continuum_kernel is not None and (
         compton_context is not None
         or free_free_context is not None
@@ -688,10 +700,11 @@ def calc_hmc_all(
                 )
             diagnostics.update(
                 {
-                    "calc_hmc_all_httot_before_heatf": float(httot),
-                    "calc_hmc_all_cltot_before_heatf": float(cltot),
-                    "calc_hmc_all_httot2_before_heatf": float(httot2),
-                    "calc_hmc_all_cltot2_before_heatf": float(cltot2),
+                    "calc_hmc_all_httot_before_heatf": httot_pre_continuum,
+                    "calc_hmc_all_cltot_before_heatf": cltot_pre_continuum,
+                    "calc_hmc_all_httot2_before_heatf": httot2_pre_continuum,
+                    "calc_hmc_all_cltot2_before_heatf": cltot2_pre_continuum,
+                    "calc_hmc_all_pre_continuum_state_owned_explicitly": True,
                 }
             )
             heatf_result = heatf(
@@ -853,6 +866,10 @@ def calc_hmc_all(
         xtotg=xtotg,
         mml=mml,
         mmu=mmu,
+        httot_pre_continuum=httot_pre_continuum,
+        cltot_pre_continuum=cltot_pre_continuum,
+        httot2_pre_continuum=httot2_pre_continuum,
+        cltot2_pre_continuum=cltot2_pre_continuum,
         httot=httot,
         cltot=cltot,
         httot2=httot2,
@@ -1063,7 +1080,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.43",
+    port_version: str = "v0.4.44",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -1324,6 +1341,10 @@ def write_fixed_state_calc_hmc_all_products(
         "n_global_ion_mappings": len(result.global_ion_index_by_key),
         "n_global_level_mappings": len(result.global_level_index_by_key),
         "pre_matrix_ready": result.pre_matrix_ready,
+        "httot_pre_continuum": result.httot_pre_continuum,
+        "cltot_pre_continuum": result.cltot_pre_continuum,
+        "httot2_pre_continuum": result.httot2_pre_continuum,
+        "cltot2_pre_continuum": result.cltot2_pre_continuum,
         "httot": result.httot,
         "cltot": result.cltot,
         "httot2": result.httot2,
@@ -1367,6 +1388,7 @@ def write_fixed_state_calc_hmc_all_products(
         f"- Element loop ready: `{result.element_loop_ready}`\n"
         f"- Charge-closure scope complete: `{result.charge_closure_scope_complete}`\n"
         f"- Continuum leaves complete: `{result.continuum.complete}`\n"
+        f"- Pre-continuum thermal snapshot explicit: `True`\n"
         f"- Complete fixed-state ready: `{result.complete_fixed_state_ready}`\n"
         f"- Heating/cooling residual: `{result.hmctot:.16g}`\n"
         f"- Charge residual: `{result.elcter:.16g}`\n"

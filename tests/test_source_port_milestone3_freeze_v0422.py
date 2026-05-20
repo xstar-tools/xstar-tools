@@ -22,14 +22,14 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.43"
+    assert PORT_LEDGER_VERSION == "v0.4.44"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "v0.4.43 run the seventeen-hook call-73 production capture and require "
-        "complete fixed-state calc_hmc_all thermal/charge parity while preserving "
-        "the frozen oxygen, H/He/O, comp2, freef, bremem, and heatf regressions "
-        "-> dsec -> calc_emisab_all -> calc_emis_all -> complete xstarcalc "
-        "-> transfer/outputs -> optional C++"
+        "v0.4.44 rerun the existing seventeen-hook call-73 products with explicit "
+        "pre-continuum thermal-state ownership and require complete fixed-state "
+        "calc_hmc_all acceptance while preserving the frozen oxygen, H/He/O, "
+        "comp2, freef, bremem, and heatf regressions -> dsec -> calc_emisab_all "
+        "-> calc_emis_all -> complete xstarcalc -> transfer/outputs -> optional C++"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

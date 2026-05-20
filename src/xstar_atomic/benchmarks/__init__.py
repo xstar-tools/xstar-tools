@@ -36,4 +36,9 @@ def freef_call73_v0440_acceptance_path() -> Path:
     return Path(str(files(__package__).joinpath("freef_call73_v0440_acceptance")))
 
 
-__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path", "all_element_call73_v0438_acceptance_path", "comp2_call73_v0439_acceptance_path", "freef_call73_v0440_acceptance_path"]
+def complete_fixed_state_v0443_state_ownership_path() -> Path:
+    """Return the v0.4.43 physical state-ownership correction target."""
+    return Path(str(files(__package__).joinpath("complete_fixed_state_v0443_state_ownership")))
+
+
+__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path", "all_element_call73_v0438_acceptance_path", "comp2_call73_v0439_acceptance_path", "freef_call73_v0440_acceptance_path", "complete_fixed_state_v0443_state_ownership_path"]

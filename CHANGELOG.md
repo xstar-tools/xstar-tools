@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## v0.4.44 - 2026-05-20
+
+v0.4.44 is a bounded state-ownership and validator correction for the complete
+fixed-state `calc_hmc_all` milestone. No XSTAR physics routine or probe hook is
+changed. The existing seventeen-hook v0.4.43 production capture remains the
+physical oracle.
+
+- Adds explicit `httot_pre_continuum`, `cltot_pre_continuum`,
+  `httot2_pre_continuum`, and `cltot2_pre_continuum` fields to
+  `FixedStateCalcHMCAllResult`.
+- Captures those values immediately after the positive-abundance H/He/O element
+  loop and before `comp2 -> freef -> bremem -> heatf`.
+- Retains `httot`, `cltot`, `httot2`, and `cltot2` as the final post-`heatf`
+  caller-visible state.
+- Corrects `compare_calc_hmc_all_pre_continuum_probe` to compare the explicit
+  pre-continuum snapshot against XSTAR's pre-continuum probe. A compatibility
+  fallback may use the older `*_before_heatf` diagnostics, but a complete
+  continuum result never falls back to final totals.
+- Adds synthetic and physical call-73 regression tests proving that each final
+  total minus its pre-continuum owner equals the translated continuum increment.
+- Updates example 116 and the complete-fixed-state CLI to report v0.4.44
+  acceptance while reusing the existing v0.4.43 XSTAR probe directory.
+- No XSTAR rebuild is required. `dsec` remains deferred until the corrected
+  complete fixed-state acceptance gate passes.
+
 ## v0.4.43 - 2026-05-20
 
 v0.4.43 closes the translated fixed-state `calc_hmc_all` source sequence

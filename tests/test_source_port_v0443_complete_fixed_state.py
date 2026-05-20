@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from xstar_atomic.source_port import (
     CalcIonRatesResult,
@@ -168,3 +169,25 @@ def test_v0443_probe_is_seventeen_hook_and_captures_final_state():
     helper = calc_hmc_all_probe_helper()
     assert "subroutine xap_hmc_final_state" in helper
     assert "xstar_calc_hmc_all_final_state_probe.csv" in helper
+
+
+def test_v0444_pre_continuum_state_is_owned_separately_from_final_heatf_state():
+    result = _result()
+
+    assert result.httot_pre_continuum == pytest.approx(0.3)
+    assert result.cltot_pre_continuum == pytest.approx(0.1)
+    assert result.httot2_pre_continuum == pytest.approx(0.4)
+    assert result.cltot2_pre_continuum == pytest.approx(0.2)
+
+    assert result.httot - result.httot_pre_continuum == pytest.approx(
+        result.continuum.htcomp + result.continuum.htfreef
+    )
+    assert result.cltot - result.cltot_pre_continuum == pytest.approx(
+        result.continuum.clcomp + result.continuum.clbrems
+    )
+    assert result.httot2 - result.httot2_pre_continuum == pytest.approx(
+        result.continuum.htcomp + result.continuum.htfreef
+    )
+    assert result.cltot2 - result.cltot2_pre_continuum == pytest.approx(
+        result.continuum.clcomp + result.continuum.clbrems
+    )

@@ -686,6 +686,36 @@ def _all_element_acceptance_summary(
     return ready, active_solver_ready, all_thermal_ready, summaries
 
 
+def _pre_continuum_total(result: FixedStateCalcHMCAllResult, name: str) -> float:
+    """Return the source-owned pre-continuum total for ``name``.
+
+    v0.4.44 gives these four values explicit ownership on
+    :class:`FixedStateCalcHMCAllResult`.  Older result objects may still carry
+    the same snapshot in the v0.4.42 continuum diagnostics.  A completed
+    continuum sequence must never fall back to the final post-``heatf`` total.
+    """
+
+    explicit_name = f"{name}_pre_continuum"
+    explicit_value = getattr(result, explicit_name, None)
+    if explicit_value is not None:
+        return float(explicit_value)
+
+    diagnostic_key = f"calc_hmc_all_{name}_before_heatf"
+    continuum = getattr(result, "continuum", None)
+    diagnostics = getattr(continuum, "diagnostics", {}) if continuum is not None else {}
+    if diagnostic_key in diagnostics:
+        return float(diagnostics[diagnostic_key])
+
+    if bool(getattr(continuum, "complete", False)):
+        raise CalcHMCAllParityError(
+            f"complete continuum result lacks explicit pre-continuum state {explicit_name!r}"
+        )
+
+    # For an incomplete/deferred continuum, the public total is still the
+    # element-loop total and therefore remains a valid compatibility fallback.
+    return float(getattr(result, name))
+
+
 def compare_calc_hmc_all_pre_continuum_probe(
     result: FixedStateCalcHMCAllResult,
     probe_dir: str | Path,
@@ -853,10 +883,10 @@ def compare_calc_hmc_all_pre_continuum_probe(
     deferred_summary_fields: List[str] = []
     if summary_comparable:
         for name, python_value, xstar_value in (
-            ("httot", result.httot, float(summary["httot"])),
-            ("cltot", result.cltot, float(summary["cltot"])),
-            ("httot2", result.httot2, float(summary["httot2"])),
-            ("cltot2", result.cltot2, float(summary["cltot2"])),
+            ("httot", _pre_continuum_total(result, "httot"), float(summary["httot"])),
+            ("cltot", _pre_continuum_total(result, "cltot"), float(summary["cltot"])),
+            ("httot2", _pre_continuum_total(result, "httot2"), float(summary["httot2"])),
+            ("cltot2", _pre_continuum_total(result, "cltot2"), float(summary["cltot2"])),
             ("enelec", result.electron_contribution, float(summary["enelec"])),
             ("elcter", result.elcter, float(summary["elcter"])),
         ):

@@ -1,6 +1,6 @@
 """Complete fixed-state ``calc_hmc_all`` thermal and charge parity.
 
-This v0.4.43 closure layer does not translate a new physical leaf.  It executes
+This v0.4.44 state-ownership correction does not translate a new physical leaf.  It executes
 all previously translated source routines in literal order::
 
     element loop -> comp2 -> freef -> bremem -> heatf
@@ -277,7 +277,7 @@ def write_complete_fixed_state_parity_products(
     parity: CompleteFixedStateParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.43",
+    port_version: str = "v0.4.44",
 ) -> Dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
