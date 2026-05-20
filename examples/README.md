@@ -1378,3 +1378,21 @@ The same comparison can be executed as part of example 108 by adding
 `--xstar-comp2-probe-dir` and `--coheat-data`. `freef`, `bremem`, and `heatf`
 remain deferred until this Compton gate passes.
 
+
+### `113_port_xstar_freef.py`
+
+Validates the source-faithful `freef.f90` translation against the eleven-hook
+call-73 XSTAR probe. It compares the exact per-bin free--free opacity increment,
+the in-place `opakc` mutation, and source-order `htfreef`, while requiring the
+frozen oxygen, H/He/O, and v0.4.39 Compton regressions.
+
+```bash
+PYTHONPATH=src python examples/113_port_xstar_freef.py \
+  --xstar-calc-hmc-probe-dir /path/to/v0440_call73_probe \
+  --xstar-calc-hmc-call-id 73 \
+  --oxygen-call73-regression-dir /path/to/v0434_oxygen \
+  --all-element-v0438-regression-dir /path/to/v0438_all_elements \
+  --comp2-v0439-regression-dir /path/to/v0439_comp2 \
+  --out-dir xstar_freef_call73_v0440 \
+  --print-summary
+```

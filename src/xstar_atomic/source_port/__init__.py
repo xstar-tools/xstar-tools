@@ -183,9 +183,33 @@ from .compton import (
     write_comp2_parity_products,
 )
 
+from .free_free import (
+    XSTAR_FREEF_CC,
+    XSTAR_FREEF_KT_EV_PER_T4,
+    XSTAR_FREEF_ION_Z2_FACTOR,
+    XSTAR_FREEF_GAMMA_FACTOR,
+    XSTAR_FREEF_GAUNT_FACTOR,
+    FreeFreePortError,
+    FreeFreeContext,
+    FreeFreeResult,
+    FreeFreeProbeReference,
+    FreeFreeParityResult,
+    freef,
+    freef_continuum_result,
+    load_freef_probe_reference,
+    compare_freef_probe,
+    write_freef_parity_products,
+)
+
 from .v0438_regression import (
     V0438AllElementRegressionGate,
     validate_v0438_all_element_regression,
+)
+
+from .v0439_regression import (
+    V0439_COMP2_REQUIRED_TRUE_FIELDS,
+    V0439Comp2RegressionGate,
+    validate_v0439_comp2_regression,
 )
 
 from .local_zone import (
@@ -488,6 +512,24 @@ __all__ = [
     "V0434RegressionGateResult",
     "assess_v0434_oxygen_correction_gates",
     "write_v0434_regression_gate_summary",
+    "XSTAR_FREEF_CC",
+    "XSTAR_FREEF_KT_EV_PER_T4",
+    "XSTAR_FREEF_ION_Z2_FACTOR",
+    "XSTAR_FREEF_GAMMA_FACTOR",
+    "XSTAR_FREEF_GAUNT_FACTOR",
+    "FreeFreePortError",
+    "FreeFreeContext",
+    "FreeFreeResult",
+    "FreeFreeProbeReference",
+    "FreeFreeParityResult",
+    "freef",
+    "freef_continuum_result",
+    "load_freef_probe_reference",
+    "compare_freef_probe",
+    "write_freef_parity_products",
+    "V0439_COMP2_REQUIRED_TRUE_FIELDS",
+    "V0439Comp2RegressionGate",
+    "validate_v0439_comp2_regression",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",

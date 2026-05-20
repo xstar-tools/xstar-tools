@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## v0.4.40 - 2026-05-20
+
+v0.4.40 translates XSTAR `freef.f90` as the next bounded Milestone-4 source
+subsystem after the accepted v0.4.39 Compton gate. The implementation preserves
+default-real literal rounding, the source `t`/`t6` temperature conventions,
+`xnx=xpx*xee`, `enz2=1.4*xnx`, the current unity Gaunt factor, stimulated
+free--free absorption, in-place mutation of the caller-owned `opakc` array, and
+the source-order trapezoidal accumulation of `htfreef` over `epi` and `bremsa`.
+The incoming opacity is explicit state and is never assumed to be zero.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2` followed by `freef`,
+exporting `cmp1`, `cmp2`, `htcomp`, `clcomp`, `htfreef`, and the updated
+continuum opacity workspace. None of these terms is accumulated into complete
+thermal totals until `heatf` is translated. `bremem` and `heatf` remain
+explicitly deferred.
+
+The bounded XSTAR helper expands from nine to eleven hooks. A pre-`freef` hook
+captures the incoming opacity array, and a loop-local hook in `freef.f90`
+captures the exact source `opaff`, updated `opakc`, and cumulative `htfreef`
+without reconstructing small increments by subtraction. Example 113 and CLI
+`xstar-atomic-port-freef` require exact opacity-increment, opacity-mutation, and
+`htfreef` parity while preserving the frozen v0.4.34 oxygen, v0.4.38 H/He/O,
+and accepted v0.4.39 Compton regressions. Physical call-73 acceptance requires
+a rebuilt eleven-hook XSTAR production run.
+
 ## v0.4.39 - 2026-05-20
 
 v0.4.39 translates the coherent relativistic Compton subsystem in source order:

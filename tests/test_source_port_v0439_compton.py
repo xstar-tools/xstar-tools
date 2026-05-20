@@ -141,7 +141,7 @@ def test_v0439_frozen_h_he_o_regression_is_packaged_and_ready():
 
 def test_v0439_probe_is_nine_hook_and_captures_comp2():
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 9
+    assert len(snippets) == 11
     assert "calc_hmc_all_comp2" in snippets
     assert "xap_hmc_comp2" in snippets["calc_hmc_all_comp2"]
     helper = calc_hmc_all_probe_helper()

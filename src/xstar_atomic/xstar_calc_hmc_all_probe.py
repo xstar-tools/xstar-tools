@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.39 calc_hmc_all pre-continuum, Compton, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.40 calc_hmc_all pre-continuum, Compton, free-free, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -25,6 +25,11 @@ module xap_calc_hmc_probe_state
   integer, save :: xap_hmc_target_record = 0
   integer, save :: xap_hmc_current_element_index = 0
   integer, save :: xap_hmc_current_element_z = 0
+  integer, save :: xap_hmc_freef_ncn2 = 0
+  real(8), save :: xap_hmc_freef_t4 = 0.d0
+  real(8), save :: xap_hmc_freef_xee = 0.d0
+  real(8), save :: xap_hmc_freef_xpx = 0.d0
+  real(8), allocatable, save :: xap_hmc_freef_opakc_before(:)
 contains
   subroutine xap_read_int_env(name, value)
     character(len=*), intent(in) :: name
@@ -137,6 +142,83 @@ subroutine xap_hmc_comp2(t4, xee, xpx, ncn2, epi, bremsa, cmp1, cmp2)
 9012 format(i12,',',i12,8(',',es26.16e3))
 9013 format(i12,',',i12,',',i12,2(',',es26.16e3))
 end subroutine xap_hmc_comp2
+
+subroutine xap_hmc_freef_pre(t4, xee, xpx, ncn2, opakc)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: ncn2
+  real(8), intent(in) :: t4, xee, xpx, opakc(*)
+  integer :: idx, ios
+
+  if (xap_hmc_capture .ne. 1) return
+  if (allocated(xap_hmc_freef_opakc_before)) &
+    deallocate(xap_hmc_freef_opakc_before)
+  allocate(xap_hmc_freef_opakc_before(ncn2), stat=ios)
+  if (ios .ne. 0) then
+    xap_hmc_freef_ncn2 = 0
+    return
+  endif
+  xap_hmc_freef_ncn2 = ncn2
+  xap_hmc_freef_t4 = t4
+  xap_hmc_freef_xee = xee
+  xap_hmc_freef_xpx = xpx
+  do idx=1,ncn2
+    xap_hmc_freef_opakc_before(idx) = opakc(idx)
+  enddo
+end subroutine xap_hmc_freef_pre
+
+subroutine xap_hmc_freef_bin(kk, ncn2, epi, bremsa, temp, gam, gau, &
+    opaff, opakc_after, htfreef)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: kk, ncn2
+  real(8), intent(in) :: epi, bremsa, temp, gam, gau
+  real(8), intent(in) :: opaff, opakc_after, htfreef
+  integer :: lun, ios
+  logical :: exists
+  real(8) :: opakc_before, ekt, t6, xnx, enz2, cc
+
+  if (xap_hmc_capture .ne. 1) return
+  if (.not. allocated(xap_hmc_freef_opakc_before)) return
+  if (ncn2 .ne. xap_hmc_freef_ncn2) return
+  if (kk .lt. 1 .or. kk .gt. ncn2) return
+  opakc_before = xap_hmc_freef_opakc_before(kk)
+
+  inquire(file='xstar_calc_hmc_all_freef_grid_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_freef_grid_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,grid_index,ncn2,epi_eV,bremsa,temp,gam,'// &
+      'gau,opakc_before,opaff,opakc_after,cumulative_htfreef'
+    write(lun,9015) xap_hmc_current_call, kk, ncn2, epi, bremsa, &
+      temp, gam, gau, opakc_before, opaff, opakc_after, htfreef
+    close(lun)
+  endif
+
+  if (kk .eq. ncn2) then
+    ekt = xap_hmc_freef_t4*0.861707
+    t6 = xap_hmc_freef_t4/100.
+    xnx = xap_hmc_freef_xpx*xap_hmc_freef_xee
+    enz2 = 1.4*xnx
+    cc = 2.614e-37
+    inquire(file='xstar_calc_hmc_all_freef_summary_probe.csv', exist=exists)
+    open(newunit=lun, file='xstar_calc_hmc_all_freef_summary_probe.csv', &
+         status='unknown', position='append', action='write', iostat=ios)
+    if (ios .eq. 0) then
+      if (.not. exists) write(lun,'(A)') &
+        'calc_hmc_all_call_id,ncn2,temperature_t4,electron_fraction_xee,'// &
+        'hydrogen_density_cm3,ekt_ev,t6,electron_density_cm3,enz2_cm3,'// &
+        'cc,htfreef'
+      write(lun,9014) xap_hmc_current_call, ncn2, xap_hmc_freef_t4, &
+        xap_hmc_freef_xee, xap_hmc_freef_xpx, ekt, t6, xnx, enz2, cc, &
+        htfreef
+      close(lun)
+    endif
+  endif
+9014 format(i12,',',i12,9(',',es26.16e3))
+9015 format(i12,',',i12,',',i12,9(',',es26.16e3))
+end subroutine xap_hmc_freef_bin
 
 subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
                                mml, mmu, critf)
@@ -545,6 +627,13 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
         "calc_hmc_all_comp2": """! Insert immediately after call comp2 and before call freef.
       call xap_hmc_comp2(t,xee,xpx,ncn2,epi,bremsa,cmp1,cmp2)
 """,
+        "calc_hmc_all_freef_pre": """! Insert immediately before call freef.
+      call xap_hmc_freef_pre(t,xee,xpx,ncn2,opakc)
+""",
+        "freef_bin": """! Insert in freef after opakc(kk)=opakc(kk)+opaff and before enddo.
+         call xap_hmc_freef_bin(kk,numcon,epi(kk),bremsa(kk),temp,    &
+     &        gam,gau,opaff,opakc(kk),htfreef)
+""",
     }
 
 
@@ -567,11 +656,11 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     readme.write_text(
         "# Bounded XSTAR `calc_hmc_all` pre-continuum probe\n\n"
         "This diagnostic instrumentation captures the source first pass and "
-        "the state immediately before `comp2` and the exact same-call Compton inputs/outputs; it never changes rates or populations.\n\n"
+        "the state immediately before `comp2` and the exact same-call Compton and free-free inputs/outputs; it never changes rates, populations, or continuum state.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
-        "`calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
+        "`freef.f90`, `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the nine insertion snippets at their documented locations.\n"
+        "2. Apply the eleven insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
@@ -588,6 +677,8 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_pre_continuum_elements_probe.csv`\n"
         "- `xstar_calc_hmc_all_comp2_summary_probe.csv`\n"
         "- `xstar_calc_hmc_all_comp2_grid_probe.csv`\n"
+        "- `xstar_calc_hmc_all_freef_summary_probe.csv`\n"
+        "- `xstar_calc_hmc_all_freef_grid_probe.csv`\n"
         "- `xstar_calc_hmc_all_matrix_terms_probe.csv`\n"
         "- `xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv`\n"
         "- `xstar_calc_hmc_all_leveltemp_energy_probe.csv`\n"

@@ -27,6 +27,7 @@ from .element_equilibrium import (
 )
 from .ucalc import SourceFaithfulUCalc
 from .compton import Comp2Context, comp2_continuum_result
+from .free_free import FreeFreeContext, freef_continuum_result
 from .ion_balance import (
     CalcIonRatesContext,
     CalcIonRatesResult,
@@ -222,6 +223,7 @@ def calc_hmc_all(
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
     compton_context: Optional[Comp2Context] = None,
+    free_free_context: Optional[FreeFreeContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
@@ -563,33 +565,64 @@ def calc_hmc_all(
             )
         )
 
-    if continuum_kernel is not None and compton_context is not None:
+    if continuum_kernel is not None and (
+        compton_context is not None or free_free_context is not None
+    ):
         raise CalcHMCAllError(
-            "continuum_kernel and compton_context are mutually exclusive"
+            "continuum_kernel is mutually exclusive with translated continuum contexts"
         )
-    if compton_context is not None:
-        comp2_result, comp2_diagnostics = comp2_continuum_result(
-            compton_context,
-            temperature_k=float(temperature_k),
-            hydrogen_density_cm3=xpx,
-            electron_fraction_xee=float(electron_fraction_xee),
-        )
+    if compton_context is not None or free_free_context is not None:
+        diagnostics: Dict[str, Any] = {}
+        htcomp = 0.0
+        clcomp = 0.0
+        htfreef = 0.0
+        opakc = None
+        if compton_context is not None:
+            comp2_result, comp2_diagnostics = comp2_continuum_result(
+                compton_context,
+                temperature_k=float(temperature_k),
+                hydrogen_density_cm3=xpx,
+                electron_fraction_xee=float(electron_fraction_xee),
+            )
+            htcomp = float(comp2_diagnostics["htcomp"])
+            clcomp = float(comp2_diagnostics["clcomp"])
+            diagnostics.update(comp2_diagnostics)
+            diagnostics["cmp1"] = float(comp2_result.cmp1)
+            diagnostics["cmp2"] = float(comp2_result.cmp2)
+        else:
+            diagnostics["comp2_translated"] = False
+        if free_free_context is not None:
+            freef_result, freef_diagnostics = freef_continuum_result(
+                free_free_context,
+                temperature_k=float(temperature_k),
+                hydrogen_density_cm3=xpx,
+                electron_fraction_xee=float(electron_fraction_xee),
+            )
+            htfreef = float(freef_result.htfreef_erg_cm3_s)
+            opakc = np.asarray(freef_result.opakc_after_cm_inv, dtype=float)
+            diagnostics.update(freef_diagnostics)
+        else:
+            diagnostics["freef_translated"] = False
+        missing = []
+        if compton_context is None:
+            missing.append("comp2")
+        if free_free_context is None:
+            missing.append("freef")
+        missing.extend(["bremem", "heatf"])
+        diagnostics["missing_source_sequence"] = " -> ".join(missing)
         continuum = FixedStateContinuumResult(
-            # ``comp2`` produces coefficients only.  ``heatf`` performs the
-            # source accumulation into httot/cltot, so do not add these rates
-            # to the totals before that routine is translated.
+            # ``comp2`` and ``freef`` produce coefficients/workspace only.
+            # ``heatf`` performs the source accumulation into httot/cltot.
             heating=0.0,
             cooling=0.0,
             heating2=0.0,
             cooling2=0.0,
-            htcomp=float(comp2_diagnostics["htcomp"]),
-            clcomp=float(comp2_diagnostics["clcomp"]),
+            htcomp=htcomp,
+            clcomp=clcomp,
+            htfreef=htfreef,
+            opakc=opakc,
             complete=False,
-            diagnostics={
-                **comp2_diagnostics,
-                "cmp1": float(comp2_result.cmp1),
-                "cmp2": float(comp2_result.cmp2),
-            },
+            diagnostics=diagnostics,
         )
     elif continuum_kernel is None:
         continuum = FixedStateContinuumResult(
@@ -597,6 +630,7 @@ def calc_hmc_all(
             diagnostics={
                 "status": "deferred",
                 "comp2_translated": False,
+                "freef_translated": False,
                 "missing_source_sequence": "comp2 -> freef -> bremem -> heatf",
             },
         )
@@ -701,6 +735,7 @@ def register_fixed_state_calc_hmc_all(
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
     compton_context: Optional[Comp2Context] = None,
+    free_free_context: Optional[FreeFreeContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
@@ -721,6 +756,7 @@ def register_fixed_state_calc_hmc_all(
             lcdd=lcdd,
             continuum_kernel=continuum_kernel,
             compton_context=compton_context,
+            free_free_context=free_free_context,
             required_element_z=required_element_z,
             dispatcher=dispatcher,
         )
@@ -855,7 +891,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.39",
+    port_version: str = "v0.4.40",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

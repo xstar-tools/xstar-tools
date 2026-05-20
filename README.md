@@ -13,6 +13,33 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.40 translates the free--free absorption subsystem
+
+The source-faithful local-zone path now continues in literal order through:
+
+```text
+calc_hmc_all -> comp2 -> freef
+```
+
+`freef` preserves the source-rounded constants, unity Gaunt factor, stimulated
+absorption factor, in-place `opakc` mutation, and trapezoidal `htfreef`
+integration. The incoming opacity workspace is explicit state rather than an
+assumed zero array. `bremem` and `heatf` remain deferred, so continuum terms are
+reported but are not yet accumulated into complete heating/cooling totals.
+
+The bounded helper now has eleven hooks: one captures `opakc` immediately before
+`freef`, and one captures exact per-bin `opaff`, updated `opakc`, and cumulative
+`htfreef` inside the source loop. The new CLI and example are:
+
+```text
+xstar-atomic-port-freef
+examples/113_port_xstar_freef.py
+```
+
+Acceptance requires exact free--free opacity and `htfreef` parity plus the
+frozen oxygen, H/He/O, and v0.4.39 Compton regressions. After acceptance, source
+order continues with `bremem`, then `heatf`.
+
 ### v0.4.39 translates the relativistic Compton subsystem
 
 The source-faithful local-zone path now continues beyond the accepted H/He/O
