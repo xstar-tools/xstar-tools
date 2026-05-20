@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.41 calc_hmc_all pre-continuum, Compton, free-free, bremsstrahlung, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.42 calc_hmc_all pre-continuum, Compton, free-free, bremsstrahlung, heatf, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -36,6 +36,19 @@ module xap_calc_hmc_probe_state
   real(8), save :: xap_hmc_bremem_xpx = 0.d0
   real(8), allocatable, save :: xap_hmc_bremem_opakc_before(:)
   real(8), allocatable, save :: xap_hmc_bremem_brcems_before(:)
+  integer, save :: xap_hmc_heatf_ncn2 = 0
+  real(8), save :: xap_hmc_heatf_t4 = 0.d0
+  real(8), save :: xap_hmc_heatf_r = 0.d0
+  real(8), save :: xap_hmc_heatf_delr = 0.d0
+  real(8), save :: xap_hmc_heatf_xee = 0.d0
+  real(8), save :: xap_hmc_heatf_xpx = 0.d0
+  real(8), save :: xap_hmc_heatf_htfreef = 0.d0
+  real(8), save :: xap_hmc_heatf_cmp1 = 0.d0
+  real(8), save :: xap_hmc_heatf_cmp2 = 0.d0
+  real(8), save :: xap_hmc_heatf_httot_before = 0.d0
+  real(8), save :: xap_hmc_heatf_cltot_before = 0.d0
+  real(8), save :: xap_hmc_heatf_httot2_before = 0.d0
+  real(8), save :: xap_hmc_heatf_cltot2_before = 0.d0
 contains
   subroutine xap_read_int_env(name, value)
     character(len=*), intent(in) :: name
@@ -309,6 +322,92 @@ subroutine xap_hmc_bremem_bin(kk, ncn2, epi, temp, gam, gau, brtmp, &
 9016 format(i12,',',i12,9(',',es26.16e3))
 9017 format(i12,',',i12,',',i12,10(',',es26.16e3))
 end subroutine xap_hmc_bremem_bin
+
+subroutine xap_hmc_heatf_pre(t4, r, delr, xee, xpx, ncn2, htfreef, &
+    cmp1, cmp2, httot, cltot, httot2, cltot2)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: ncn2
+  real(8), intent(in) :: t4, r, delr, xee, xpx, htfreef
+  real(8), intent(in) :: cmp1, cmp2, httot, cltot, httot2, cltot2
+
+  if (xap_hmc_capture .ne. 1) return
+  xap_hmc_heatf_ncn2 = ncn2
+  xap_hmc_heatf_t4 = t4
+  xap_hmc_heatf_r = r
+  xap_hmc_heatf_delr = delr
+  xap_hmc_heatf_xee = xee
+  xap_hmc_heatf_xpx = xpx
+  xap_hmc_heatf_htfreef = htfreef
+  xap_hmc_heatf_cmp1 = cmp1
+  xap_hmc_heatf_cmp2 = cmp2
+  xap_hmc_heatf_httot_before = httot
+  xap_hmc_heatf_cltot_before = cltot
+  xap_hmc_heatf_httot2_before = httot2
+  xap_hmc_heatf_cltot2_before = cltot2
+end subroutine xap_hmc_heatf_pre
+
+subroutine xap_hmc_heatf_bin(kl, ncn2, epi, brcems, tmp2o, tmp2, clbrems)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: kl, ncn2
+  real(8), intent(in) :: epi, brcems, tmp2o, tmp2, clbrems
+  integer :: lun, ios
+  logical :: exists
+
+  if (xap_hmc_capture .ne. 1) return
+  if (ncn2 .ne. xap_hmc_heatf_ncn2) return
+  if (kl .lt. 1 .or. kl .gt. ncn2) return
+  inquire(file='xstar_calc_hmc_all_heatf_grid_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_heatf_grid_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,grid_index,ncn2,epi_eV,brcems,'// &
+      'previous_brcems,current_brcems,cumulative_clbrems'
+    write(lun,9019) xap_hmc_current_call, kl, ncn2, epi, brcems, &
+      tmp2o, tmp2, clbrems
+    close(lun)
+  endif
+9019 format(i12,',',i12,',',i12,5(',',es26.16e3))
+end subroutine xap_hmc_heatf_bin
+
+subroutine xap_hmc_heatf_post(ncn2, httot, cltot, httot2, cltot2, &
+    hmctot, htcomp, clcomp, clbrems)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: ncn2
+  real(8), intent(in) :: httot, cltot, httot2, cltot2
+  real(8), intent(in) :: hmctot, htcomp, clcomp, clbrems
+  integer :: lun, ios
+  logical :: exists
+  real(8) :: xnx, ekt
+
+  if (xap_hmc_capture .ne. 1) return
+  if (ncn2 .ne. xap_hmc_heatf_ncn2) return
+  xnx = xap_hmc_heatf_xpx*xap_hmc_heatf_xee
+  ekt = xap_hmc_heatf_t4*0.861707
+  inquire(file='xstar_calc_hmc_all_heatf_summary_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_heatf_summary_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,ncn2,temperature_t4,radius_cm,'// &
+      'zone_thickness_cm,electron_fraction_xee,hydrogen_density_cm3,'// &
+      'electron_density_cm3,ekt_ev,htfreef,cmp1,cmp2,httot_before,'// &
+      'cltot_before,httot2_before,cltot2_before,htcomp,clcomp,clbrems,'// &
+      'httot_after,cltot_after,httot2_after,cltot2_after,hmctot'
+    write(lun,9018) xap_hmc_current_call, ncn2, xap_hmc_heatf_t4, &
+      xap_hmc_heatf_r, xap_hmc_heatf_delr, xap_hmc_heatf_xee, &
+      xap_hmc_heatf_xpx, xnx, ekt, xap_hmc_heatf_htfreef, &
+      xap_hmc_heatf_cmp1, xap_hmc_heatf_cmp2, &
+      xap_hmc_heatf_httot_before, xap_hmc_heatf_cltot_before, &
+      xap_hmc_heatf_httot2_before, xap_hmc_heatf_cltot2_before, &
+      htcomp, clcomp, clbrems, httot, cltot, httot2, cltot2, hmctot
+    close(lun)
+  endif
+9018 format(i12,',',i12,22(',',es26.16e3))
+end subroutine xap_hmc_heatf_post
 
 subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
                                mml, mmu, critf)
@@ -731,6 +830,18 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
          call xap_hmc_bremem_bin(kk,numcon,epi(kk),temp,gam,gau,     &
      &        brtmp,bbee,brcems(kk),opakc(kk))
 """,
+        "calc_hmc_all_heatf_pre": """! Insert immediately after call bremem and before call heatf.
+      call xap_hmc_heatf_pre(t,r,delr,xee,xpx,ncn2,htfreef,cmp1,    &
+     &     cmp2,httot,cltot,httot2,cltot2)
+""",
+        "heatf_bin": """! Insert in heatf inside the clbrems loop immediately before enddo.
+        call xap_hmc_heatf_bin(kl,numcon,epi(kl),brcems(kl),tmp2o,  &
+     &       tmp2,clbrems)
+""",
+        "calc_hmc_all_heatf_post": """! Insert immediately after call heatf.
+      call xap_hmc_heatf_post(ncn2,httot,cltot,httot2,cltot2,      &
+     &     hmctot,htcomp,clcomp,clbrems)
+""",
     }
 
 
@@ -753,11 +864,11 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     readme.write_text(
         "# Bounded XSTAR `calc_hmc_all` pre-continuum probe\n\n"
         "This diagnostic instrumentation captures the source first pass and "
-        "the state immediately before `comp2` and the exact same-call Compton, free-free, and bremsstrahlung inputs/outputs; it never changes rates, populations, or continuum state.\n\n"
+        "the state immediately before `comp2` and the exact same-call Compton, free-free, bremsstrahlung, and heatf inputs/outputs; it never changes rates, populations, or continuum state.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
-        "`freef.f90`, `bremem.f90`, `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
+        "`freef.f90`, `bremem.f90`, `heatf.f90`, `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the thirteen insertion snippets at their documented locations.\n"
+        "2. Apply the sixteen insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
@@ -778,6 +889,8 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_freef_grid_probe.csv`\n"
         "- `xstar_calc_hmc_all_bremem_summary_probe.csv`\n"
         "- `xstar_calc_hmc_all_bremem_grid_probe.csv`\n"
+        "- `xstar_calc_hmc_all_heatf_summary_probe.csv`\n"
+        "- `xstar_calc_hmc_all_heatf_grid_probe.csv`\n"
         "- `xstar_calc_hmc_all_matrix_terms_probe.csv`\n"
         "- `xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv`\n"
         "- `xstar_calc_hmc_all_leveltemp_energy_probe.csv`\n"

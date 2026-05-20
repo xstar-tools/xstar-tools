@@ -1,0 +1,26 @@
+{
+  "brcems_reset_semantics_ready": true,
+  "bremem_parity_ready": true,
+  "bremem_translated": true,
+  "bremsstrahlung_emissivity_parity_ready": true,
+  "calc_hmc_all_call_id": 73,
+  "continuum_grid_parity_ready": true,
+  "continuum_opacity_preserved_parity_ready": true,
+  "diagnostics": {
+    "atol": 1e-40,
+    "heatf_deferred": true,
+    "reference_grid_path": "xstar_runs/helike_type69/o7_ne1e8_all_elements_v0441_bremem/xstar_calc_hmc_all_bremem_grid_probe.csv",
+    "reference_summary_path": "xstar_runs/helike_type69/o7_ne1e8_all_elements_v0441_bremem/xstar_calc_hmc_all_bremem_summary_probe.csv",
+    "rtol": 5e-12,
+    "source_constant_cc": 1.0320000062846724e-13,
+    "source_opacity_branch": "commented_out"
+  },
+  "gaunt_factor_mode_unity": true,
+  "max_brcems_absolute_difference": 0.0,
+  "max_brcems_relative_difference": 0.0,
+  "max_opacity_absolute_difference": 0.0,
+  "max_opacity_relative_difference": 0.0,
+  "ncn2": 999,
+  "port_version": "v0.4.41",
+  "temperature_t4": 7.665518557758832
+}

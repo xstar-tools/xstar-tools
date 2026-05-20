@@ -269,7 +269,7 @@ def test_probe_helper_supports_zero_as_all_element_capture():
     helper = calc_hmc_all_probe_helper()
     assert "XSTAR_ATOMIC_HMC_TARGET_ELEMENT" in helper
     assert helper.count("xap_hmc_target_element .gt. 0") >= 5
-    assert "xstar-atomic v0.4.41" in helper
+    assert "xstar-atomic v0.4.42" in helper
 
 
 def test_all_element_scope_products_record_missing_detailed_probes(tmp_path: Path):

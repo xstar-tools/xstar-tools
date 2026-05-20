@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.41"
+__version__ = "0.4.42"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -182,6 +182,17 @@ from .source_port import (
     write_full_element_matrix_parity_products,
     EscapeStateError, EscapeStateBuildResult, load_escape_state_from_xstar_run,
     write_escape_state_npz, write_escape_state_summary,
+)
+
+
+from .source_port import (
+    XSTAR_HEATF_KT_EV_PER_T4, XSTAR_HEATF_ERG_PER_EV,
+    XSTAR_HEATF_RESIDUAL_FLOOR, XSTAR_HEATF_RESIDUAL_FACTOR,
+    HeatFPortError, HeatFContext, HeatFResult, HeatFProbeReference,
+    HeatFParityResult, heatf, heatf_continuum_result,
+    load_heatf_probe_reference, compare_heatf_probe,
+    write_heatf_parity_products, V0441_BREMEM_REQUIRED_TRUE_FIELDS,
+    V0441BremsstrahlungRegressionGate, validate_v0441_bremem_regression,
 )
 
 from .workflow import (

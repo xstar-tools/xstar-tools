@@ -220,6 +220,24 @@ from .bremsstrahlung import (
     write_bremem_parity_products,
 )
 
+from .thermal_balance import (
+    XSTAR_HEATF_KT_EV_PER_T4,
+    XSTAR_HEATF_ERG_PER_EV,
+    XSTAR_HEATF_RESIDUAL_FLOOR,
+    XSTAR_HEATF_RESIDUAL_FACTOR,
+    HeatFPortError,
+    HeatFContext,
+    HeatFResult,
+    HeatFProbeReference,
+    HeatFParityResult,
+    heatf,
+    heatf_continuum_result,
+    load_heatf_probe_reference,
+    compare_heatf_probe,
+    write_heatf_parity_products,
+)
+
+
 
 from .v0438_regression import (
     V0438AllElementRegressionGate,
@@ -236,6 +254,12 @@ from .v0440_regression import (
     V0440_FREEF_REQUIRED_TRUE_FIELDS,
     V0440FreeFreeRegressionGate,
     validate_v0440_freef_regression,
+)
+
+from .v0441_regression import (
+    V0441_BREMEM_REQUIRED_TRUE_FIELDS,
+    V0441BremsstrahlungRegressionGate,
+    validate_v0441_bremem_regression,
 )
 
 from .local_zone import (
@@ -575,6 +599,23 @@ __all__ = [
     "V0440_FREEF_REQUIRED_TRUE_FIELDS",
     "V0440FreeFreeRegressionGate",
     "validate_v0440_freef_regression",
+    "V0441_BREMEM_REQUIRED_TRUE_FIELDS",
+    "V0441BremsstrahlungRegressionGate",
+    "validate_v0441_bremem_regression",
+    "XSTAR_HEATF_KT_EV_PER_T4",
+    "XSTAR_HEATF_ERG_PER_EV",
+    "XSTAR_HEATF_RESIDUAL_FLOOR",
+    "XSTAR_HEATF_RESIDUAL_FACTOR",
+    "HeatFPortError",
+    "HeatFContext",
+    "HeatFResult",
+    "HeatFProbeReference",
+    "HeatFParityResult",
+    "heatf",
+    "heatf_continuum_result",
+    "load_heatf_probe_reference",
+    "compare_heatf_probe",
+    "write_heatf_parity_products",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",

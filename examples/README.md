@@ -1426,3 +1426,34 @@ v0441_bremem_acceptance_ready=True
 ```
 
 `heatf` remains deferred until this gate passes.
+
+### `115_port_xstar_heatf.py`
+
+Validates the source-faithful `heatf.f90` translation against the sixteen-hook
+call-73 XSTAR probe. It compares the source-order trapezoidal bremsstrahlung
+cooling integral, Compton heating/cooling conversion, free--free heating and
+bremsstrahlung cooling accumulation, both primary and secondary thermal totals,
+and `hmctot`. Acceptance also requires the frozen oxygen, H/He/O, v0.4.39
+Compton, v0.4.40 free--free, and v0.4.41 bremsstrahlung regressions.
+
+```bash
+PYTHONPATH=src python examples/115_port_xstar_heatf.py \
+  --xstar-calc-hmc-probe-dir /path/to/v0442_call73_probe \
+  --xstar-calc-hmc-call-id 73 \
+  --oxygen-call73-regression-dir /path/to/v0434_oxygen \
+  --all-element-v0438-regression-dir /path/to/v0438_all_elements \
+  --comp2-v0439-regression-dir /path/to/v0439_comp2 \
+  --freef-v0440-regression-dir /path/to/v0440_freef \
+  --bremem-v0441-regression-dir /path/to/v0441_bremem \
+  --out-dir xstar_heatf_call73_v0442 \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0442_heatf_acceptance_ready=True
+```
+
+After this gate passes, the next bounded target is complete fixed-state
+`calc_hmc_all` thermal/charge parity, followed by `dsec`.

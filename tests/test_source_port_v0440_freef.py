@@ -124,7 +124,7 @@ def test_v0440_frozen_comp2_regression_is_packaged_and_ready():
 
 def test_v0440_probe_is_eleven_hook_and_captures_freef_exact_bin_state():
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 13
+    assert len(snippets) == 16
     assert "calc_hmc_all_freef_pre" in snippets
     assert "freef_bin" in snippets
     assert "xap_hmc_freef_pre" in snippets["calc_hmc_all_freef_pre"]

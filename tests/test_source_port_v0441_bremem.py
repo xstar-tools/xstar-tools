@@ -169,7 +169,7 @@ def test_v0441_frozen_freef_regression_is_packaged_and_ready():
 
 def test_v0441_probe_is_thirteen_hook_and_captures_bremem_state():
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 13
+    assert len(snippets) == 16
     assert "calc_hmc_all_bremem_pre" in snippets
     assert "bremem_bin" in snippets
     assert "xap_hmc_bremem_pre" in snippets["calc_hmc_all_bremem_pre"]

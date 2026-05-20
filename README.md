@@ -13,6 +13,35 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.42 translates local thermal accumulation
+
+The source-faithful fixed-state local-zone path now reaches:
+
+```text
+calc_hmc_all -> comp2 -> freef -> bremem -> heatf
+```
+
+`heatf` integrates the translated bremsstrahlung emissivity over the continuum,
+converts `cmp1` and `cmp2` into volumetric Compton heating/cooling, adds
+`htfreef`, and mutates `httot`, `cltot`, `httot2`, and `cltot2` in literal source
+order before evaluating `hmctot`. The incoming element heating/cooling totals are
+therefore retained and augmented rather than replaced.
+
+The bounded helper now has sixteen hooks. The three new hooks snapshot incoming
+thermal totals, capture the exact per-bin cumulative bremsstrahlung cooling
+integral, and record the final primary/secondary totals and `hmctot`. The new CLI
+and example are:
+
+```text
+xstar-atomic-port-heatf
+examples/115_port_xstar_heatf.py
+```
+
+Acceptance requires exact `heatf` parity plus the frozen oxygen, H/He/O,
+v0.4.39 Compton, v0.4.40 free--free, and v0.4.41 bremsstrahlung regressions.
+After acceptance, the next bounded target is complete fixed-state
+`calc_hmc_all` thermal/charge parity, followed by `dsec`.
+
 ### v0.4.41 translates thermal bremsstrahlung emissivity
 
 The source-faithful local-zone path now continues in literal order through:

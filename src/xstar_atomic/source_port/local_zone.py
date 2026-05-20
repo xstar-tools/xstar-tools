@@ -32,6 +32,7 @@ from .bremsstrahlung import (
     BremsstrahlungContext,
     bremem_continuum_result,
 )
+from .thermal_balance import HeatFContext, heatf
 from .ion_balance import (
     CalcIonRatesContext,
     CalcIonRatesResult,
@@ -92,6 +93,11 @@ class FixedStateContinuumResult:
     htfreef: float = 0.0
     brcems: Optional[np.ndarray] = None
     opakc: Optional[np.ndarray] = None
+    httot_after: Optional[float] = None
+    cltot_after: Optional[float] = None
+    httot2_after: Optional[float] = None
+    cltot2_after: Optional[float] = None
+    hmctot_after: Optional[float] = None
     complete: bool = False
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
@@ -229,6 +235,7 @@ def calc_hmc_all(
     compton_context: Optional[Comp2Context] = None,
     free_free_context: Optional[FreeFreeContext] = None,
     bremem_context: Optional[BremsstrahlungContext] = None,
+    heatf_context: Optional[HeatFContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
@@ -574,6 +581,7 @@ def calc_hmc_all(
         compton_context is not None
         or free_free_context is not None
         or bremem_context is not None
+        or heatf_context is not None
     ):
         raise CalcHMCAllError(
             "continuum_kernel is mutually exclusive with translated continuum contexts"
@@ -582,13 +590,19 @@ def calc_hmc_all(
         compton_context is not None
         or free_free_context is not None
         or bremem_context is not None
+        or heatf_context is not None
     ):
         diagnostics: Dict[str, Any] = {}
         htcomp = 0.0
         clcomp = 0.0
         htfreef = 0.0
+        clbrems = 0.0
         brcems = None
         opakc = None
+        comp2_result = None
+        freef_result = None
+        bremem_result = None
+        heatf_result = None
         if compton_context is not None:
             comp2_result, comp2_diagnostics = comp2_continuum_result(
                 compton_context,
@@ -647,30 +661,106 @@ def calc_hmc_all(
             diagnostics.update(bremem_diagnostics)
         else:
             diagnostics["bremem_translated"] = False
-        missing = []
-        if compton_context is None:
-            missing.append("comp2")
-        if free_free_context is None:
-            missing.append("freef")
-        if bremem_context is None:
-            missing.append("bremem")
-        missing.append("heatf")
-        diagnostics["missing_source_sequence"] = " -> ".join(missing)
-        continuum = FixedStateContinuumResult(
-            # ``comp2`` and ``freef`` produce coefficients/workspace only.
-            # ``heatf`` performs the source accumulation into httot/cltot.
-            heating=0.0,
-            cooling=0.0,
-            heating2=0.0,
-            cooling2=0.0,
-            htcomp=htcomp,
-            clcomp=clcomp,
-            htfreef=htfreef,
-            brcems=brcems,
-            opakc=opakc,
-            complete=False,
-            diagnostics=diagnostics,
-        )
+
+        if heatf_context is not None:
+            if comp2_result is None or freef_result is None or bremem_result is None:
+                raise CalcHMCAllError(
+                    "heatf requires translated comp2, freef, and bremem state"
+                )
+            heatf_n = int(
+                heatf_context.ncn2
+                if heatf_context.ncn2 is not None
+                else len(heatf_context.epi_eV)
+            )
+            if not np.array_equal(
+                np.asarray(heatf_context.epi_eV, dtype=float)[:heatf_n],
+                np.asarray(bremem_result.epi_eV, dtype=float),
+            ):
+                raise CalcHMCAllError(
+                    "heatf continuum grid does not match preceding bremem state"
+                )
+            if not np.array_equal(
+                np.asarray(heatf_context.brcems, dtype=float)[:heatf_n],
+                np.asarray(bremem_result.brcems_after, dtype=float),
+            ):
+                raise CalcHMCAllError(
+                    "heatf brcems does not match preceding bremem output"
+                )
+            heatf_result = heatf(
+                bremem_result.epi_eV,
+                bremem_result.brcems_after,
+                temperature_k=float(temperature_k),
+                radius_cm=float(heatf_context.radius_cm),
+                zone_thickness_cm=float(heatf_context.zone_thickness_cm),
+                hydrogen_density_cm3=xpx,
+                electron_fraction_xee=float(electron_fraction_xee),
+                htfreef_erg_cm3_s=htfreef,
+                cmp1=float(comp2_result.cmp1),
+                cmp2=float(comp2_result.cmp2),
+                httot_before=httot,
+                cltot_before=cltot,
+                httot2_before=httot2,
+                cltot2_before=cltot2,
+                ncn2=heatf_n,
+            )
+            htcomp = float(heatf_result.htcomp_erg_cm3_s)
+            clcomp = float(heatf_result.clcomp_erg_cm3_s)
+            clbrems = float(heatf_result.clbrems_erg_cm3_s)
+            diagnostics.update(
+                {
+                    "heatf_translated": True,
+                    "heatf_source_file": heatf_result.source_file,
+                    "heatf_context_source": heatf_context.source,
+                    "heatf_source_order_accumulation": True,
+                    "missing_source_sequence": "",
+                }
+            )
+            continuum = FixedStateContinuumResult(
+                heating=float(htcomp + htfreef),
+                cooling=float(clcomp + clbrems),
+                heating2=float(htcomp + htfreef),
+                cooling2=float(clcomp + clbrems),
+                htcomp=htcomp,
+                clcomp=clcomp,
+                clbrems=clbrems,
+                htfreef=htfreef,
+                brcems=brcems,
+                opakc=opakc,
+                httot_after=float(heatf_result.httot_after),
+                cltot_after=float(heatf_result.cltot_after),
+                httot2_after=float(heatf_result.httot2_after),
+                cltot2_after=float(heatf_result.cltot2_after),
+                hmctot_after=float(heatf_result.hmctot),
+                complete=True,
+                diagnostics=diagnostics,
+            )
+        else:
+            diagnostics["heatf_translated"] = False
+            missing = []
+            if compton_context is None:
+                missing.append("comp2")
+            if free_free_context is None:
+                missing.append("freef")
+            if bremem_context is None:
+                missing.append("bremem")
+            missing.append("heatf")
+            diagnostics["missing_source_sequence"] = " -> ".join(missing)
+            continuum = FixedStateContinuumResult(
+                # ``comp2``, ``freef``, and ``bremem`` produce coefficients
+                # and workspaces. ``heatf`` performs source accumulation.
+                heating=0.0,
+                cooling=0.0,
+                heating2=0.0,
+                cooling2=0.0,
+                htcomp=htcomp,
+                clcomp=clcomp,
+                clbrems=clbrems,
+                htfreef=htfreef,
+                brcems=brcems,
+                opakc=opakc,
+                complete=False,
+                diagnostics=diagnostics,
+            )
     elif continuum_kernel is None:
         continuum = FixedStateContinuumResult(
             complete=False,
@@ -679,6 +769,7 @@ def calc_hmc_all(
                 "comp2_translated": False,
                 "freef_translated": False,
                 "bremem_translated": False,
+                "heatf_translated": False,
                 "missing_source_sequence": "comp2 -> freef -> bremem -> heatf",
             },
         )
@@ -694,11 +785,27 @@ def calc_hmc_all(
         if not isinstance(continuum, FixedStateContinuumResult):
             raise CalcHMCAllError("continuum_kernel must return FixedStateContinuumResult")
 
-    httot += float(continuum.heating)
-    cltot += float(continuum.cooling)
-    httot2 += float(continuum.heating2)
-    cltot2 += float(continuum.cooling2)
-    hmctot = 2.0 * (httot - cltot) / (1.0e-37 + httot + cltot)
+    if continuum.complete and all(
+        value is not None
+        for value in (
+            continuum.httot_after,
+            continuum.cltot_after,
+            continuum.httot2_after,
+            continuum.cltot2_after,
+            continuum.hmctot_after,
+        )
+    ):
+        httot = float(continuum.httot_after)
+        cltot = float(continuum.cltot_after)
+        httot2 = float(continuum.httot2_after)
+        cltot2 = float(continuum.cltot2_after)
+        hmctot = float(continuum.hmctot_after)
+    else:
+        httot += float(continuum.heating)
+        cltot += float(continuum.cooling)
+        httot2 += float(continuum.heating2)
+        cltot2 += float(continuum.cooling2)
+        hmctot = 2.0 * (httot - cltot) / (1.0e-37 + httot + cltot)
     elcter = float(electron_fraction_xee) - enelec
     complete = bool(all_pre_matrix_ready and all_ready and charge_scope_complete and continuum.complete)
 
@@ -785,6 +892,7 @@ def register_fixed_state_calc_hmc_all(
     compton_context: Optional[Comp2Context] = None,
     free_free_context: Optional[FreeFreeContext] = None,
     bremem_context: Optional[BremsstrahlungContext] = None,
+    heatf_context: Optional[HeatFContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
@@ -941,7 +1049,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.41",
+    port_version: str = "v0.4.42",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -1218,6 +1326,11 @@ def write_fixed_state_calc_hmc_all_products(
         "cmp2": result.continuum.diagnostics.get("cmp2"),
         "htcomp": result.continuum.htcomp,
         "clcomp": result.continuum.clcomp,
+        "htfreef": result.continuum.htfreef,
+        "clbrems": result.continuum.clbrems,
+        "freef_translated": bool(result.continuum.diagnostics.get("freef_translated", False)),
+        "bremem_translated": bool(result.continuum.diagnostics.get("bremem_translated", False)),
+        "heatf_translated": bool(result.continuum.diagnostics.get("heatf_translated", False)),
         "complete_fixed_state_ready": result.complete_fixed_state_ready,
         "diagnostics": dict(result.diagnostics),
         "continuum_diagnostics": dict(result.continuum.diagnostics),

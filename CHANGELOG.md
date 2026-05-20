@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## v0.4.42 - 2026-05-20
+
+v0.4.42 translates XSTAR `heatf.f90` as the first bounded Milestone-4
+subsystem that accumulates the translated continuum terms into local thermal
+totals. The implementation preserves default-real literal rounding, the
+source-order trapezoidal integration of `brcems` into `clbrems`,
+`htcomp=cmp1*(xpx*xee)*ergsev`, `clcomp=ekt*cmp2*(xpx*xee)*ergsev`, the
+left-to-right updates of `httot`, `cltot`, `httot2`, and `cltot2`, and the
+source `hmctot` normalization floor. Incoming element heating/cooling totals
+are explicit and retained.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2 -> freef -> bremem
+-> heatf` and return complete continuum accumulation. The result is marked
+continuum-complete only when all four translated contexts are present, and the
+exact final totals from `heatf` are committed without re-associating floating
+point additions.
+
+The bounded XSTAR helper expands from thirteen to sixteen hooks. A pre-`heatf`
+hook captures incoming thermal totals and continuum coefficients; a loop-local
+hook captures exact cumulative `clbrems`; and a post-`heatf` hook records
+`htcomp`, `clcomp`, `clbrems`, both final total pairs, and `hmctot`. Example 115
+and CLI `xstar-atomic-port-heatf` require exact integral and accumulation parity
+while preserving the frozen v0.4.34 oxygen, v0.4.38 H/He/O, v0.4.39 Compton,
+v0.4.40 free--free, and v0.4.41 bremsstrahlung regressions. Physical call-73
+acceptance requires a rebuilt sixteen-hook XSTAR production run.
+
 ## v0.4.41 - 2026-05-20
 
 v0.4.41 translates XSTAR `bremem.f90` as the next bounded Milestone-4
