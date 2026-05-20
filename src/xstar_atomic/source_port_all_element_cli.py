@@ -14,6 +14,11 @@ from .source_port import (
     write_all_element_fixed_state_products,
     write_calc_hmc_all_pre_continuum_parity_products,
     write_fixed_state_calc_hmc_all_products,
+    Comp2Context,
+    load_compton_table,
+    load_comp2_probe_reference,
+    compare_comp2_probe,
+    write_comp2_parity_products,
 )
 from .source_port_element_cli import _load_escape_npz, _select_live_state
 
@@ -81,6 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0e-12,
     )
+    parser.add_argument(
+        "--xstar-comp2-probe-dir",
+        help=(
+            "Directory containing v0.4.39 same-call Comp2 summary/grid probes. "
+            "When supplied, calc_hmc_all executes the translated Comp2 subsystem."
+        ),
+    )
+    parser.add_argument("--coheat-data", help="Explicit coheat.dat; default resolves beside atdb.fits")
+    parser.add_argument("--xstar-comp2-rtol", type=float, default=5.0e-12)
+    parser.add_argument("--xstar-comp2-atol", type=float, default=1.0e-30)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--print-summary", action="store_true")
     return parser
@@ -149,6 +164,23 @@ def main(argv: list[str] | None = None) -> int:
     radiation = _select_live_state(args.live_rate_grid_probe_csv, args.live_rate_grid_state)
     escape = _load_escape_npz(args.escape_npz, args.assume_optically_thin)
 
+    comp2_reference = None
+    comp2_table = None
+    comp2_context = None
+    if args.xstar_comp2_probe_dir:
+        comp2_table = load_compton_table(args.coheat_data, atdb_path=args.atdb)
+        comp2_reference = load_comp2_probe_reference(
+            args.xstar_comp2_probe_dir, call_id=plan.call_id
+        )
+        comp2_context = Comp2Context(
+            epi_eV=comp2_reference.epi_eV,
+            bremsa=comp2_reference.bremsa,
+            table=comp2_table,
+            ncn2=comp2_reference.ncn2,
+            source="xstar_comp2_same_call_probe",
+        )
+
+    comp2_parity = None
     built = load_atomic_database_state(
         args.atdb,
         pointer_cache=args.pointer_cache,
@@ -171,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
             lfast=args.lfast,
             critf=critf,
             initial_population_policy=args.initial_population_policy,
+            compton_context=comp2_context,
         )
         result = run.result
         result.diagnostics.update(
@@ -181,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         paths = write_fixed_state_calc_hmc_all_products(
-            result, args.out_dir, port_version="v0.4.38"
+            result, args.out_dir, port_version="v0.4.39"
         )
         parity = compare_calc_hmc_all_pre_continuum_probe(
             result,
@@ -198,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 f"pre_continuum_parity_{key}": str(value)
                 for key, value in write_calc_hmc_all_pre_continuum_parity_products(
-                    parity, args.out_dir, port_version="v0.4.38"
+                    parity, args.out_dir, port_version="v0.4.39"
                 ).items()
             }
         )
@@ -206,17 +239,33 @@ def main(argv: list[str] | None = None) -> int:
             {
                 f"all_element_scope_{key}": str(value)
                 for key, value in write_all_element_fixed_state_products(
-                    run, args.out_dir, port_version="v0.4.38", parity=parity
+                    run, args.out_dir, port_version="v0.4.39", parity=parity
                 ).items()
             }
         )
+        comp2_parity = None
+        if comp2_reference is not None and comp2_table is not None:
+            comp2_parity = compare_comp2_probe(
+                comp2_reference,
+                table=comp2_table,
+                rtol=args.xstar_comp2_rtol,
+                atol=args.xstar_comp2_atol,
+            )
+            paths.update(
+                {
+                    f"comp2_parity_{key}": str(value)
+                    for key, value in write_comp2_parity_products(
+                        comp2_parity, args.out_dir, port_version="v0.4.39"
+                    ).items()
+                }
+            )
     finally:
         built.master.close()
 
     if args.print_summary:
         print("XSTAR full abundant-element fixed-state calc_hmc_all")
         print("-------------------------------------------------")
-        print("port_version=v0.4.38")
+        print("port_version=v0.4.39")
         print(f"runtime_context_source={runtime_source}")
         print(f"calc_hmc_all_call_id={plan.call_id}")
         print(f"oxygen_call73_regression_ready={plan.oxygen_regression.ready}")
@@ -242,6 +291,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"xstar_element_{item['element_z']}_detailed_parity_ready={item['detailed_parity_ready']}")
         print(f"xstar_all_element_pre_continuum_acceptance_ready={parity.all_element_pre_continuum_acceptance_ready}")
         print(f"xstar_pre_continuum_parity_ready={parity.parity_ready}")
+        print(f"comp2_translated={bool(result.continuum.diagnostics.get('comp2_translated', False))}")
+        print(f"cmpfnc_table_loaded={bool(result.continuum.diagnostics.get('cmpfnc_table_loaded', False))}")
+        print(f"xstar_comp2_parity_ready={bool(comp2_parity and comp2_parity.ready)}")
+        print(
+            "xstar_v0439_comp2_acceptance_ready="
+            f"{bool(plan.oxygen_regression.ready and parity.all_element_pre_continuum_acceptance_ready and comp2_parity and comp2_parity.ready)}"
+        )
         for key, value in paths.items():
             print(f"{key}: {value}")
     return 0

@@ -22,16 +22,15 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.38"
+    assert PORT_LEDGER_VERSION == "v0.4.39"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "v0.4.38 preserve the distinct calc_hmc_element final-x ion fractions "
-        "and msolvelucy final-outer-start xtot diagnostics, then rerun the existing "
-        "H/He/O call-73 oracle and require "
-        "all_element_pre_continuum_acceptance_ready=True "
-        "-> comp2 -> freef -> bremem -> heatf "
-        "-> complete fixed-state calc_hmc_all parity -> dsec -> calc_emisab_all "
-        "-> calc_emis_all -> complete xstarcalc -> transfer/outputs -> optional C++"
+        "v0.4.39 run the nine-hook call-73 production capture and require exact "
+        "calc_hmc_all -> comp2 -> cmpfnc -> hunt3 coefficient/rate parity while "
+        "preserving the frozen v0.4.34 oxygen and v0.4.38 H/He/O regressions "
+        "-> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity "
+        "-> dsec -> calc_emisab_all -> calc_emis_all -> complete xstarcalc "
+        "-> transfer/outputs -> optional C++"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",
@@ -43,6 +42,8 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     assert by_routine["calc_ion_rates"].status is PortStatus.VALIDATED
     assert by_routine["istruc"].status is PortStatus.VALIDATED
     assert by_routine["ioneqm"].status is PortStatus.VALIDATED
+    assert by_routine["cmpfnc"].status is PortStatus.TRANSLATED
+    assert by_routine["comp2"].status is PortStatus.TRANSLATED
     assert by_routine["calc_hmc_all"].status is PortStatus.PARTIAL
     assert by_routine["dsec"].status is PortStatus.UNPORTED
     assert by_routine["calc_emis_all"].status is PortStatus.UNPORTED

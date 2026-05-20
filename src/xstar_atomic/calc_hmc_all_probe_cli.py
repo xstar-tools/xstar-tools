@@ -8,7 +8,7 @@ from .xstar_calc_hmc_all_probe import write_calc_hmc_all_probe_products
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Write diagnostic-only XSTAR calc_hmc_all pre-continuum probe instrumentation."
+        description="Write diagnostic-only XSTAR calc_hmc_all pre-continuum and Comp2 probe instrumentation."
     )
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--print-summary", action="store_true")
@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR calc_hmc_all pre-continuum probe preparation")
         print("----------------------------------------------------")
-        print("port_version=v0.4.38")
+        print("port_version=v0.4.39")
         print("status=calc_hmc_all_probe_products_written")
         for key, path in outputs.items():
             print(f"{key}: {path}")

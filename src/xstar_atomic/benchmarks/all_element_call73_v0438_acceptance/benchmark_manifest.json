@@ -1,0 +1,25 @@
+{
+  "benchmark_version": "v0.4.38",
+  "call_id": 73,
+  "n_elements": 3,
+  "n_rows": 5206,
+  "required_element_detailed_parity_ready": true,
+  "required_elements": [
+    1,
+    2,
+    8
+  ],
+  "required_true_fields": [
+    "all_element_pre_continuum_acceptance_ready",
+    "all_element_active_solver_ready",
+    "all_element_thermal_ready",
+    "global_arrays_ready",
+    "pre_matrix_ready",
+    "pre_continuum_state_ready"
+  ],
+  "required_zero_fields": [
+    "n_outside_tolerance",
+    "n_blocking_outside_tolerance"
+  ],
+  "source_summary_sha256": "8b4f47dd504e3fd61a5a93e7ec34b6d5e7b0f8087802b13b5dbbc20838ddbd16"
+}

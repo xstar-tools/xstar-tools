@@ -157,6 +157,37 @@ from .ion_balance import (
     calc_element_pre_matrix_balance,
 )
 
+
+from .compton import (
+    XSTAR_COMPTON_NCOMP,
+    XSTAR_COMPTON_EMC2_EV,
+    XSTAR_COMPTON_KT_EV_PER_T4,
+    XSTAR_THOMSON_CROSS_SECTION_CM2,
+    XSTAR_ERG_PER_EV,
+    ComptonPortError,
+    ComptonTableState,
+    CmpFncResult,
+    Comp2Result,
+    Comp2Context,
+    Comp2ProbeReference,
+    Comp2ParityResult,
+    packaged_coheat_path,
+    resolve_coheat_path,
+    load_compton_table,
+    hunt3_one_based,
+    cmpfnc,
+    comp2,
+    comp2_continuum_result,
+    load_comp2_probe_reference,
+    compare_comp2_probe,
+    write_comp2_parity_products,
+)
+
+from .v0438_regression import (
+    V0438AllElementRegressionGate,
+    validate_v0438_all_element_regression,
+)
+
 from .local_zone import (
     CalcHMCAllError,
     FixedStateElementRequest,

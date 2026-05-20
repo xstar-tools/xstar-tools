@@ -508,7 +508,7 @@ def write_all_element_fixed_state_products(
     run: AllElementFixedStateRun,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.38",
+    port_version: str = "v0.4.39",
     parity: Optional[Any] = None,
 ) -> Dict[str, Path]:
     """Write source-scope and detailed-probe coverage products."""

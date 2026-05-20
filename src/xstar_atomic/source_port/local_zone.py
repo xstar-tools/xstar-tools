@@ -26,6 +26,7 @@ from .element_equilibrium import (
     solve_element_statistical_equilibrium,
 )
 from .ucalc import SourceFaithfulUCalc
+from .compton import Comp2Context, comp2_continuum_result
 from .ion_balance import (
     CalcIonRatesContext,
     CalcIonRatesResult,
@@ -220,6 +221,7 @@ def calc_hmc_all(
     pressure: float = 0.0,
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
+    compton_context: Optional[Comp2Context] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
@@ -561,11 +563,40 @@ def calc_hmc_all(
             )
         )
 
-    if continuum_kernel is None:
+    if continuum_kernel is not None and compton_context is not None:
+        raise CalcHMCAllError(
+            "continuum_kernel and compton_context are mutually exclusive"
+        )
+    if compton_context is not None:
+        comp2_result, comp2_diagnostics = comp2_continuum_result(
+            compton_context,
+            temperature_k=float(temperature_k),
+            hydrogen_density_cm3=xpx,
+            electron_fraction_xee=float(electron_fraction_xee),
+        )
+        continuum = FixedStateContinuumResult(
+            # ``comp2`` produces coefficients only.  ``heatf`` performs the
+            # source accumulation into httot/cltot, so do not add these rates
+            # to the totals before that routine is translated.
+            heating=0.0,
+            cooling=0.0,
+            heating2=0.0,
+            cooling2=0.0,
+            htcomp=float(comp2_diagnostics["htcomp"]),
+            clcomp=float(comp2_diagnostics["clcomp"]),
+            complete=False,
+            diagnostics={
+                **comp2_diagnostics,
+                "cmp1": float(comp2_result.cmp1),
+                "cmp2": float(comp2_result.cmp2),
+            },
+        )
+    elif continuum_kernel is None:
         continuum = FixedStateContinuumResult(
             complete=False,
             diagnostics={
                 "status": "deferred",
+                "comp2_translated": False,
                 "missing_source_sequence": "comp2 -> freef -> bremem -> heatf",
             },
         )
@@ -669,6 +700,7 @@ def register_fixed_state_calc_hmc_all(
     pressure: float = 0.0,
     lcdd: int = 1,
     continuum_kernel: Optional[ContinuumKernel] = None,
+    compton_context: Optional[Comp2Context] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
@@ -688,6 +720,7 @@ def register_fixed_state_calc_hmc_all(
             pressure=pressure,
             lcdd=lcdd,
             continuum_kernel=continuum_kernel,
+            compton_context=compton_context,
             required_element_z=required_element_z,
             dispatcher=dispatcher,
         )
@@ -822,7 +855,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.38",
+    port_version: str = "v0.4.39",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv
@@ -1093,6 +1126,12 @@ def write_fixed_state_calc_hmc_all_products(
         "element_loop_ready": result.element_loop_ready,
         "charge_closure_scope_complete": result.charge_closure_scope_complete,
         "continuum_complete": result.continuum.complete,
+        "comp2_translated": bool(result.continuum.diagnostics.get("comp2_translated", False)),
+        "cmpfnc_table_loaded": bool(result.continuum.diagnostics.get("cmpfnc_table_loaded", False)),
+        "cmp1": result.continuum.diagnostics.get("cmp1"),
+        "cmp2": result.continuum.diagnostics.get("cmp2"),
+        "htcomp": result.continuum.htcomp,
+        "clcomp": result.continuum.clcomp,
         "complete_fixed_state_ready": result.complete_fixed_state_ready,
         "diagnostics": dict(result.diagnostics),
         "continuum_diagnostics": dict(result.continuum.diagnostics),

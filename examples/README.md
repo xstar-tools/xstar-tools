@@ -1231,7 +1231,7 @@ Omit `--xstar-calc-hmc-probe-dir` before the instrumented XSTAR run is available
 
 ### `106_prepare_xstar_calc_hmc_all_probe.py`
 
-Write the bounded, diagnostic-only eight-hook Fortran helper and source-local insertion snippets for `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix and pre-continuum state, complete same-call input `xileve` vector, exact mutable `leveltemp` reads for type 49/53/99 rate-7 records, same-call matrix, thermal families, and synchronized final `msolvelucy` matrix/`x`/`xo` products. `XSTAR_ATOMIC_HMC_TARGET_CALL` selects an exact `calc_hmc_all` invocation; `XSTAR_ATOMIC_HMC_TARGET_RECORD` can bound the exact leveltemp trace to one record. The default detailed target is oxygen (`XSTAR_ATOMIC_HMC_TARGET_ELEMENT=8`); set `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` to capture every positive-abundance element for the selected call.
+Write the bounded, diagnostic-only nine-hook Fortran helper and source-local insertion snippets for `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90`. The helper captures the pre-matrix and pre-continuum state, complete same-call input `xileve` vector, exact mutable `leveltemp` reads for type 49/53/99 rate-7 records, same-call matrix, thermal families, synchronized final `msolvelucy` matrix/`x`/`xo` products, and the exact post-`comp2` continuum grid and Compton outputs. `XSTAR_ATOMIC_HMC_TARGET_CALL` selects an exact `calc_hmc_all` invocation; `XSTAR_ATOMIC_HMC_TARGET_RECORD` can bound the exact leveltemp trace to one record. The default detailed target is oxygen (`XSTAR_ATOMIC_HMC_TARGET_ELEMENT=8`); set `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` to capture every positive-abundance element for the selected call.
 
 ```bash
 PYTHONPATH=src python examples/106_prepare_xstar_calc_hmc_all_probe.py \
@@ -1348,3 +1348,33 @@ The required final line is:
 ```text
 v0438_xiin_final_vector_validation_ready=True
 ```
+
+### `112_port_xstar_comp2.py`
+
+Validate the source-faithful `comp2 -> cmpfnc -> hunt3` translation against the
+new same-call XSTAR post-`comp2` probe. The command also requires the frozen
+oxygen and H/He/O pre-continuum regression gates:
+
+```bash
+PYTHONPATH=src python examples/112_port_xstar_comp2.py \
+  --xstar-comp2-probe-dir /path/to/new_call73_nine_hook_probe \
+  --xstar-calc-hmc-call-id 73 \
+  --coheat-data /path/to/xstar/data/coheat.dat \
+  --oxygen-call73-regression-dir \
+    /path/to/oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434 \
+  --all-element-v0438-regression-dir \
+    /path/to/xstar_all_calc_hmc_all_fixed_state_v0438_allprobe \
+  --out-dir xstar_comp2_call73_v0439 \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0439_comp2_acceptance_ready=True
+```
+
+The same comparison can be executed as part of example 108 by adding
+`--xstar-comp2-probe-dir` and `--coheat-data`. `freef`, `bremem`, and `heatf`
+remain deferred until this Compton gate passes.
+

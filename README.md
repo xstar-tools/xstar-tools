@@ -13,6 +13,36 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.39 translates the relativistic Compton subsystem
+
+The source-faithful local-zone path now continues beyond the accepted H/He/O
+element loop through:
+
+```text
+calc_hmc_all -> comp2 -> cmpfnc -> hunt3 -> global coheat.dat state
+```
+
+The implementation preserves the 101-by-101 XSTAR Compton table, its source
+array orientation, one-based interpolation semantics, default-real rounded
+constants, and source-order trapezoidal integrations over `epi` and `bremsa`.
+The fixed-state result exports `cmp1`, `cmp2`, `htcomp`, and `clcomp`, while
+leaving them unaccumulated until the source `heatf` routine is translated.
+
+A ninth bounded XSTAR hook, inserted immediately after `call comp2`, captures
+the exact same-call continuum and Compton outputs. The new CLI and example are:
+
+```text
+xstar-atomic-port-compton
+examples/112_port_xstar_comp2.py
+```
+
+The accepted v0.4.34 oxygen and v0.4.38 H/He/O pre-continuum gates are packaged
+as mandatory regressions. Package and direct original-Fortran tests validate
+the translation; physical call-73 Compton acceptance requires rebuilding XSTAR
+with the nine-hook helper and obtaining `v0439_comp2_acceptance_ready=True`.
+After acceptance, source order continues with `freef`, then `bremem`, then
+`heatf`.
+
 ### v0.4.36 closes the bounded H/He/O pre-continuum differences
 
 v0.4.36 translates the four omitted H I data-type 62/rate-type 3 records

@@ -21,4 +21,9 @@ def hydrogen_v0436_targets_path() -> Path:
     return Path(str(files(__package__).joinpath("hydrogen_v0436_targets")))
 
 
-__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path"]
+def all_element_call73_v0438_acceptance_path() -> Path:
+    """Return the frozen accepted H/He/O call-73 regression directory."""
+    return Path(str(files(__package__).joinpath("all_element_call73_v0438_acceptance")))
+
+
+__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path", "all_element_call73_v0438_acceptance_path"]

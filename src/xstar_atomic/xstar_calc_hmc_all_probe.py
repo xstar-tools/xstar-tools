@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.38 calc_hmc_all pre-continuum, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.39 calc_hmc_all pre-continuum, Compton, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -95,6 +95,48 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
     endif
   endif
 end subroutine xap_hmc_begin_call
+
+subroutine xap_hmc_comp2(t4, xee, xpx, ncn2, epi, bremsa, cmp1, cmp2)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: ncn2
+  real(8), intent(in) :: t4, xee, xpx, epi(*), bremsa(*), cmp1, cmp2
+  integer :: lun, ios, idx
+  logical :: exists
+  real(8) :: ekt, xnx, htcomp, clcomp
+
+  if (xap_hmc_capture .ne. 1) return
+  ekt = t4*0.861707
+  xnx = xpx*xee
+  htcomp = cmp1*xnx*1.602176634e-12
+  clcomp = ekt*cmp2*xnx*1.602176634e-12
+
+  inquire(file='xstar_calc_hmc_all_comp2_summary_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_comp2_summary_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,ncn2,temperature_t4,electron_fraction_xee,'// &
+      'hydrogen_density_cm3,ekt_ev,cmp1,cmp2,htcomp,clcomp'
+    write(lun,9012) xap_hmc_current_call, ncn2, t4, xee, xpx, ekt, &
+      cmp1, cmp2, htcomp, clcomp
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_comp2_grid_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_comp2_grid_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,grid_index,ncn2,epi_eV,bremsa'
+    do idx=1,ncn2
+      write(lun,9013) xap_hmc_current_call, idx, ncn2, epi(idx), bremsa(idx)
+    enddo
+    close(lun)
+  endif
+9012 format(i12,',',i12,8(',',es26.16e3))
+9013 format(i12,',',i12,',',i12,2(',',es26.16e3))
+end subroutine xap_hmc_comp2
 
 subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
                                mml, mmu, critf)
@@ -500,6 +542,9 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
      &     stotg,atotg,xtotg,xilevg,rnisg,bilevg,gammag,alphag,      &
      &     igammamaxg,ialphamaxg)
 """,
+        "calc_hmc_all_comp2": """! Insert immediately after call comp2 and before call freef.
+      call xap_hmc_comp2(t,xee,xpx,ncn2,epi,bremsa,cmp1,cmp2)
+""",
     }
 
 
@@ -522,11 +567,11 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     readme.write_text(
         "# Bounded XSTAR `calc_hmc_all` pre-continuum probe\n\n"
         "This diagnostic instrumentation captures the source first pass and "
-        "the state immediately before `comp2`; it never changes rates or populations.\n\n"
+        "the state immediately before `comp2` and the exact same-call Compton inputs/outputs; it never changes rates or populations.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
         "`calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the eight insertion snippets at their documented locations.\n"
+        "2. Apply the nine insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
@@ -541,6 +586,8 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_pre_continuum_ions_probe.csv`\n"
         "- `xstar_calc_hmc_all_pre_continuum_levels_probe.csv`\n"
         "- `xstar_calc_hmc_all_pre_continuum_elements_probe.csv`\n"
+        "- `xstar_calc_hmc_all_comp2_summary_probe.csv`\n"
+        "- `xstar_calc_hmc_all_comp2_grid_probe.csv`\n"
         "- `xstar_calc_hmc_all_matrix_terms_probe.csv`\n"
         "- `xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv`\n"
         "- `xstar_calc_hmc_all_leveltemp_energy_probe.csv`\n"

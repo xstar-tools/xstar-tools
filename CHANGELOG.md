@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v0.4.39 - 2026-05-20
+
+v0.4.39 translates the coherent relativistic Compton subsystem in source order:
+`calc_hmc_all -> comp2 -> cmpfnc -> hunt3`, together with the global
+`coheat.dat` table state initialized by `xstarsetup.f90`. The implementation
+preserves the source `ncomp=101` grids, `decomp(sx_index,energy_index)` table
+orientation, one-based `hunt3` boundary behavior, bilinear `cmpfnc`
+interpolation, low-energy analytic branch, source-rounded default-real
+constants, and the `comp2` trapezoidal continuum integrations over `epi` and
+`bremsa`.
+
+The translated fixed-state `calc_hmc_all` path can now execute `comp2` and
+export `cmp1`, `cmp2`, and the corresponding `heatf` Compton heating/cooling
+coefficients without yet accumulating them into complete thermal totals;
+`freef`, `bremem`, and `heatf` remain untranslated. The exact source
+`coheat.dat` table is packaged as runtime data, and the accepted v0.4.34 oxygen
+and v0.4.38 H/He/O pre-continuum results are frozen as mandatory regression
+gates.
+
+The bounded XSTAR helper expands from eight to nine hooks. A new insertion
+immediately after `call comp2` captures the exact same-call continuum grid,
+`cmp1`, `cmp2`, `ekt`, and derived Compton heating/cooling coefficients.
+Example 112 and CLI `xstar-atomic-port-compton` validate the requested v0.4.39
+gates. Package tests and an independent original-Fortran driver validate the
+translation, but physical call-73 acceptance is intentionally pending a rebuilt
+nine-hook XSTAR production run.
+
 ## v0.4.38 - 2026-05-20
 
 v0.4.38 closes the single blocker isolated by the complete v0.4.37 H/He/O
