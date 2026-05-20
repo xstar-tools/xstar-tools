@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.42 calc_hmc_all pre-continuum, Compton, free-free, bremsstrahlung, heatf, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.43 complete fixed-state calc_hmc_all thermal/charge, continuum, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -408,6 +408,36 @@ subroutine xap_hmc_heatf_post(ncn2, httot, cltot, httot2, cltot2, &
   endif
 9018 format(i12,',',i12,22(',',es26.16e3))
 end subroutine xap_hmc_heatf_post
+
+subroutine xap_hmc_final_state(t4, xee, xpx, enelec, elcter, htfreef, &
+    cmp1, cmp2, htcomp, clcomp, clbrems, httot, cltot, httot2, cltot2, &
+    hmctot)
+  use xap_calc_hmc_probe_state
+  implicit none
+  real(8), intent(in) :: t4, xee, xpx, enelec, elcter, htfreef
+  real(8), intent(in) :: cmp1, cmp2, htcomp, clcomp, clbrems
+  real(8), intent(in) :: httot, cltot, httot2, cltot2, hmctot
+  integer :: lun, ios
+  logical :: exists
+  real(8) :: xnx
+
+  if (xap_hmc_capture .ne. 1) return
+  xnx = xpx*xee
+  inquire(file='xstar_calc_hmc_all_final_state_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_final_state_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .ne. 0) return
+  if (.not. exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,temperature_t4,temperature_k,'// &
+    'electron_fraction_xee,hydrogen_density_cm3,electron_density_cm3,'// &
+    'enelec,elcter,htfreef,cmp1,cmp2,htcomp,clcomp,clbrems,httot,cltot,'// &
+    'httot2,cltot2,hmctot'
+  write(lun,9020) xap_hmc_current_call, t4, 1.d4*t4, xee, xpx, xnx, &
+    enelec, elcter, htfreef, cmp1, cmp2, htcomp, clcomp, clbrems, &
+    httot, cltot, httot2, cltot2, hmctot
+  close(lun)
+9020 format(i12,18(',',es26.16e3))
+end subroutine xap_hmc_final_state
 
 subroutine xap_hmce_pre_matrix(element_z, nnz, pirt, rrrt, xitp, &
                                mml, mmu, critf)
@@ -842,6 +872,11 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
       call xap_hmc_heatf_post(ncn2,httot,cltot,httot2,cltot2,      &
      &     hmctot,htcomp,clcomp,clbrems)
 """,
+        "calc_hmc_all_final_state": """! Insert after the heatf post probe and before the final lpri block.
+      call xap_hmc_final_state(t,xee,xpx,enelec,elcter,htfreef,    &
+     &     cmp1,cmp2,htcomp,clcomp,clbrems,httot,cltot,httot2,    &
+     &     cltot2,hmctot)
+""",
     }
 
 
@@ -862,13 +897,13 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
 
     readme = out / "README_calc_hmc_all_probe.md"
     readme.write_text(
-        "# Bounded XSTAR `calc_hmc_all` pre-continuum probe\n\n"
+        "# Bounded XSTAR complete fixed-state `calc_hmc_all` probe\n\n"
         "This diagnostic instrumentation captures the source first pass and "
-        "the state immediately before `comp2` and the exact same-call Compton, free-free, bremsstrahlung, and heatf inputs/outputs; it never changes rates, populations, or continuum state.\n\n"
+        "the pre-continuum element state, exact same-call Compton, free-free, bremsstrahlung, and heatf inputs/outputs, and the final thermal/charge return state; it never changes rates, populations, or continuum state.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
         "`freef.f90`, `bremem.f90`, `heatf.f90`, `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the sixteen insertion snippets at their documented locations.\n"
+        "2. Apply the seventeen insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
@@ -891,6 +926,7 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "- `xstar_calc_hmc_all_bremem_grid_probe.csv`\n"
         "- `xstar_calc_hmc_all_heatf_summary_probe.csv`\n"
         "- `xstar_calc_hmc_all_heatf_grid_probe.csv`\n"
+        "- `xstar_calc_hmc_all_final_state_probe.csv`\n"
         "- `xstar_calc_hmc_all_matrix_terms_probe.csv`\n"
         "- `xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv`\n"
         "- `xstar_calc_hmc_all_leveltemp_energy_probe.csv`\n"

@@ -686,6 +686,14 @@ def calc_hmc_all(
                 raise CalcHMCAllError(
                     "heatf brcems does not match preceding bremem output"
                 )
+            diagnostics.update(
+                {
+                    "calc_hmc_all_httot_before_heatf": float(httot),
+                    "calc_hmc_all_cltot_before_heatf": float(cltot),
+                    "calc_hmc_all_httot2_before_heatf": float(httot2),
+                    "calc_hmc_all_cltot2_before_heatf": float(cltot2),
+                }
+            )
             heatf_result = heatf(
                 bremem_result.epi_eV,
                 bremem_result.brcems_after,
@@ -713,6 +721,8 @@ def calc_hmc_all(
                     "heatf_context_source": heatf_context.source,
                     "heatf_source_order_accumulation": True,
                     "missing_source_sequence": "",
+                    "calc_hmc_all_continuum_source_sequence_complete": True,
+                    "calc_hmc_all_fixed_state_thermal_complete": True,
                 }
             )
             continuum = FixedStateContinuumResult(
@@ -874,6 +884,9 @@ def calc_hmc_all(
             "requested_element_z": sorted(requested_element_z),
             "missing_required_element_z": sorted(required_element_z_set - requested_element_z),
             "extra_requested_element_z": sorted(requested_element_z - required_element_z_set),
+            "calc_hmc_all_fixed_state_thermal_complete": bool(continuum.complete),
+            "calc_hmc_all_fixed_state_charge_complete": bool(charge_scope_complete),
+            "remaining_source_sequence": "dsec" if complete else "complete fixed-state calc_hmc_all closure",
             "dsec_deferred": True,
         },
     )
@@ -915,6 +928,7 @@ def register_fixed_state_calc_hmc_all(
             compton_context=compton_context,
             free_free_context=free_free_context,
             bremem_context=bremem_context,
+            heatf_context=heatf_context,
             required_element_z=required_element_z,
             dispatcher=dispatcher,
         )
@@ -1049,7 +1063,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.42",
+    port_version: str = "v0.4.43",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

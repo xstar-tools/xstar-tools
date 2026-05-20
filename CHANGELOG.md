@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.43 - 2026-05-20
+
+v0.4.43 closes the translated fixed-state `calc_hmc_all` source sequence
+without adding a new physical leaf. It executes the accepted element loop and
+`comp2 -> freef -> bremem -> heatf` chain in literal source order, commits the
+final primary and secondary heating/cooling totals, and validates the
+caller-visible electron contribution and charge residual before return.
+
+A new final-state parity layer compares one same-call XSTAR row containing
+`enelec`, `elcter`, `htfreef`, `cmp1`, `cmp2`, `htcomp`, `clcomp`, `clbrems`,
+`httot`, `cltot`, `httot2`, `cltot2`, and `hmctot`. Runtime and continuum
+components use strict source-level tolerances; final thermal and charge totals
+use the established all-element acceptance tolerance because the translated
+pre-continuum element totals are already accepted at that tolerance.
+
+The bounded helper expands from sixteen to seventeen hooks with a final
+post-`heatf`, pre-return `xap_hmc_final_state` call. Example 116 and CLI
+`xstar-atomic-port-complete-fixed-state` execute the full H/He/O fixed-state
+calculation and require current same-call pre-continuum, Compton, free--free,
+bremsstrahlung, heatf, final thermal, and charge parity, while preserving the
+frozen v0.4.34, v0.4.38, v0.4.39, v0.4.40, v0.4.41, and v0.4.42 regressions.
+Physical call-73 acceptance requires a rebuilt seventeen-hook XSTAR run.
+`dsec` remains untranslated until that gate passes.
+
 ## v0.4.42 - 2026-05-20
 
 v0.4.42 translates XSTAR `heatf.f90` as the first bounded Milestone-4

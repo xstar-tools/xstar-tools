@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         paths = write_fixed_state_calc_hmc_all_products(
-            result, args.out_dir, port_version="v0.4.42"
+            result, args.out_dir, port_version="v0.4.43"
         )
         parity = compare_calc_hmc_all_pre_continuum_probe(
             result,
@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 f"pre_continuum_parity_{key}": str(value)
                 for key, value in write_calc_hmc_all_pre_continuum_parity_products(
-                    parity, args.out_dir, port_version="v0.4.42"
+                    parity, args.out_dir, port_version="v0.4.43"
                 ).items()
             }
         )
@@ -239,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 f"all_element_scope_{key}": str(value)
                 for key, value in write_all_element_fixed_state_products(
-                    run, args.out_dir, port_version="v0.4.42", parity=parity
+                    run, args.out_dir, port_version="v0.4.43", parity=parity
                 ).items()
             }
         )
@@ -255,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     f"comp2_parity_{key}": str(value)
                     for key, value in write_comp2_parity_products(
-                        comp2_parity, args.out_dir, port_version="v0.4.42"
+                        comp2_parity, args.out_dir, port_version="v0.4.43"
                     ).items()
                 }
             )
@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_summary:
         print("XSTAR full abundant-element fixed-state calc_hmc_all")
         print("-------------------------------------------------")
-        print("port_version=v0.4.42")
+        print("port_version=v0.4.43")
         print(f"runtime_context_source={runtime_source}")
         print(f"calc_hmc_all_call_id={plan.call_id}")
         print(f"oxygen_call73_regression_ready={plan.oxygen_regression.ready}")

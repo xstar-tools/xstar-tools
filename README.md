@@ -13,6 +13,32 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.43 completes fixed-state `calc_hmc_all` closure
+
+The translated fixed-state local-zone path now reaches the return from
+`calc_hmc_all`:
+
+```text
+all positive-abundance elements
+  -> comp2 -> freef -> bremem -> heatf
+  -> final thermal and charge state
+```
+
+The new complete-state validator executes the full translated chain, compares
+current same-call pre-continuum and continuum products, and then validates
+`enelec`, `elcter`, both heating/cooling total pairs, and `hmctot` against a
+single final XSTAR probe row. The helper now has seventeen hooks; the added hook
+is after `heatf` and immediately before `calc_hmc_all` returns.
+
+```text
+xstar-atomic-port-complete-fixed-state
+examples/116_validate_xstar_calc_hmc_all_complete_fixed_state.py
+```
+
+Acceptance preserves the frozen oxygen, H/He/O, Compton, free--free,
+bremsstrahlung, and heatf gates. After physical call-73 acceptance, the next
+source target is `dsec`.
+
 ### v0.4.42 translates local thermal accumulation
 
 The source-faithful fixed-state local-zone path now reaches:

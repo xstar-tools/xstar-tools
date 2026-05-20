@@ -177,7 +177,7 @@ def test_v0442_frozen_bremem_regression_is_packaged_and_ready():
 
 def test_v0442_probe_is_sixteen_hook_and_captures_heatf_state():
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 16
+    assert len(snippets) == 17
     for key in ("calc_hmc_all_heatf_pre", "heatf_bin", "calc_hmc_all_heatf_post"):
         assert key in snippets
     helper = calc_hmc_all_probe_helper()

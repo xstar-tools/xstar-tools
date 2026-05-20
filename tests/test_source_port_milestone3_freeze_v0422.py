@@ -22,14 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.42"
+    assert PORT_LEDGER_VERSION == "v0.4.43"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "v0.4.42 run the sixteen-hook call-73 production capture and require exact "
-        "calc_hmc_all -> heatf bremsstrahlung integral, Compton/free-free accumulation, "
-        "primary/secondary total, and hmctot parity while preserving the frozen v0.4.34 "
-        "oxygen, v0.4.38 H/He/O, v0.4.39 comp2, v0.4.40 freef, and v0.4.41 bremem "
-        "regressions -> complete fixed-state calc_hmc_all thermal/charge parity "
+        "v0.4.43 run the seventeen-hook call-73 production capture and require "
+        "complete fixed-state calc_hmc_all thermal/charge parity while preserving "
+        "the frozen oxygen, H/He/O, comp2, freef, bremem, and heatf regressions "
         "-> dsec -> calc_emisab_all -> calc_emis_all -> complete xstarcalc "
         "-> transfer/outputs -> optional C++"
     )
@@ -47,8 +45,8 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     assert by_routine["comp2"].status is PortStatus.VALIDATED
     assert by_routine["freef"].status is PortStatus.VALIDATED
     assert by_routine["bremem"].status is PortStatus.VALIDATED
-    assert by_routine["heatf"].status is PortStatus.TRANSLATED
-    assert by_routine["calc_hmc_all"].status is PortStatus.PARTIAL
+    assert by_routine["heatf"].status is PortStatus.VALIDATED
+    assert by_routine["calc_hmc_all"].status is PortStatus.TRANSLATED
     assert by_routine["dsec"].status is PortStatus.UNPORTED
     assert by_routine["calc_emis_all"].status is PortStatus.UNPORTED
     assert by_routine["xstar"].status is PortStatus.SCAFFOLD

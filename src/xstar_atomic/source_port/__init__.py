@@ -262,6 +262,22 @@ from .v0441_regression import (
     validate_v0441_bremem_regression,
 )
 
+from .v0442_regression import (
+    V0442_HEATF_REQUIRED_TRUE_FIELDS,
+    V0442HeatFRegressionGate,
+    validate_v0442_heatf_regression,
+)
+
+from .complete_fixed_state import (
+    CompleteFixedStateParityError,
+    CalcHMCAllFinalStateReference,
+    CompleteFixedStateParityRow,
+    CompleteFixedStateParityResult,
+    load_calc_hmc_all_final_state_reference,
+    compare_complete_fixed_state_calc_hmc_all,
+    write_complete_fixed_state_parity_products,
+)
+
 from .local_zone import (
     CalcHMCAllError,
     FixedStateElementRequest,

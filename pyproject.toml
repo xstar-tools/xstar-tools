@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.4.42"
+version = "0.4.43"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -56,6 +56,7 @@ xstar-atomic-port-compton = "xstar_atomic.source_port_compton_cli:main"
 xstar-atomic-port-freef = "xstar_atomic.source_port_free_free_cli:main"
 xstar-atomic-port-bremem = "xstar_atomic.source_port_bremem_cli:main"
 xstar-atomic-port-heatf = "xstar_atomic.source_port_heatf_cli:main"
+xstar-atomic-port-complete-fixed-state = "xstar_atomic.source_port_complete_fixed_state_cli:main"
 xstar-atomic-prepare-calc-hmc-all-probe = "xstar_atomic.calc_hmc_all_probe_cli:main"
 
 [tool.setuptools.packages.find]
@@ -63,5 +64,5 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-"xstar_atomic.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*"]
+"xstar_atomic.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*"]
 "xstar_atomic.source_port" = ["data/coheat.dat"]
