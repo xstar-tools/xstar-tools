@@ -13,6 +13,14 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.49 accepts the exact source-zero first `dsec` population probe
+
+v0.4.49 fixes the call-correlated example-119 startup path.  The first
+internal `dsec` call legitimately enters with an all-zero global `xilevg`; the
+matching compact population probes are now accepted only in that explicitly
+verified context.  Ordinary fixed-state references still require a positive
+population sum.
+
 ### v0.4.48 correlates `dsec` with its exact `calc_hmc_all` states
 
 The first v0.4.47 physical run showed correct branch order through XSTAR event

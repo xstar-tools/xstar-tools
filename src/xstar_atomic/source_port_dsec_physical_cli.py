@@ -379,11 +379,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("matching input state is not the first internal dsec evaluation")
     _check_matching_runtime(initial, matching_input, rtol=args.runtime_rtol, atol=args.runtime_atol)
 
+    # The first internal dsec call is entered from init.f90's exact zero
+    # global xilevg workspace.  The matching compact pre-msolvelucy probes are
+    # therefore legitimately all zero.  Keep the general fixed-state loader
+    # strict and opt into zero-sum acceptance only for this correlated state.
     plan = load_all_element_fixed_state_plan(
         input_probe_dir,
         oxygen_regression_dir=args.oxygen_call73_regression_dir,
         call_id=input_call_id,
         abundance_floor=args.abundance_floor,
+        allow_zero_initial_population_sum=matching_input.global_xilevg_is_zero,
     )
     critf = float(matching_input.critf if args.critf is None else args.critf)
     critf_source = "xstar_correlated_input_probe" if args.critf is None else "command_line"

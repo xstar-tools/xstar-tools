@@ -275,6 +275,7 @@ def load_all_element_fixed_state_plan(
     oxygen_regression_dir: str | Path,
     call_id: Optional[int] = None,
     abundance_floor: float = 1.0e-24,
+    allow_zero_initial_population_sum: bool = False,
 ) -> AllElementFixedStatePlan:
     """Load the source positive-abundance element loop for one XSTAR call."""
 
@@ -326,7 +327,10 @@ def load_all_element_fixed_state_plan(
     for z in initial_elements:
         try:
             initial_refs[z] = load_msolvelucy_initial_population_reference(
-                root, element_z=z, call_id=selected_call
+                root,
+                element_z=z,
+                call_id=selected_call,
+                allow_zero_sum=bool(allow_zero_initial_population_sum),
             )
         except MSolveLucyInitialStateError as exc:
             raise AllElementFixedStateError(str(exc)) from exc

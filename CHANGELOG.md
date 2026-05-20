@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.4.49 - 2026-05-20
+
+v0.4.49 is a Python-only hotfix for the call-correlated physical `dsec`
+runner.  The exact first internal `dsec` state has a source-valid all-zero
+`xilevg` population vector.  v0.4.48 correctly taught the matrix solver to
+accept that state, but the same-call population probe loader still rejected it
+before example 119 could start.
+
+The general fixed-state loader remains strict by default.  A new explicit
+`allow_zero_sum`/`allow_zero_initial_population_sum` path is enabled only by
+example 119 when the correlated matching input proves that incoming global
+`xilevg` is exactly zero.  No XSTAR source, probe helper, rates, matrices,
+thermal physics, or control-flow semantics changed.
+
 ## v0.4.48 - 2026-05-20
 
 v0.4.48 is a bounded call-correlation and matching-state correction for the

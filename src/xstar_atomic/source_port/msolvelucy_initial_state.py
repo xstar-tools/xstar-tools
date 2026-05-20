@@ -65,12 +65,15 @@ def load_msolvelucy_initial_population_reference(
     *,
     element_z: int,
     call_id: Optional[int] = None,
+    allow_zero_sum: bool = False,
 ) -> MSolveLucyInitialPopulationReference:
     """Load and validate the exact compact ``x`` vector entering ``msolvelucy``.
 
     The returned vector is zero-based and has exactly ``compact_dimension``
     entries.  No normalization or replacement is performed here: the source
-    values are preserved as captured.
+    values are preserved as captured.  Fixed-state references require a
+    positive sum by default.  ``allow_zero_sum`` is reserved for the exact
+    source-zero ``xilevg`` state entering the first internal ``dsec`` solve.
     """
 
     path = Path(probe_dir) / "xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv"
@@ -126,7 +129,8 @@ def load_msolvelucy_initial_population_reference(
             f"initial-population probe misses {len(missing)} compact rows; first={preview}"
         )
     populations = np.asarray([by_index[index] for index in range(1, dimension + 1)], dtype=float)
-    if float(np.sum(populations)) <= 0.0:
+    population_sum = float(np.sum(populations))
+    if population_sum <= 0.0 and not (allow_zero_sum and population_sum == 0.0):
         raise MSolveLucyInitialStateError("captured initial population vector has non-positive sum")
 
     return MSolveLucyInitialPopulationReference(

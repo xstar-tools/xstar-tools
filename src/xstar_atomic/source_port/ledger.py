@@ -91,7 +91,7 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.48"
+PORT_LEDGER_VERSION = "v0.4.49"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
     "run the call-correlated matching-state dsec prefix/full validation and close the bounded dsec acceptance while "
