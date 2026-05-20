@@ -250,6 +250,8 @@ class CalcHMCAllDsecEvaluator:
     dispatcher: Optional[Any] = None
     element_solver: Optional[Any] = None
     pre_matrix_solver: Optional[Any] = None
+    progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
+    evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         # Reuse one source-faithful dispatcher across every ion, element, and
@@ -287,7 +289,9 @@ class CalcHMCAllDsecEvaluator:
             **kwargs,
         )
         state.commit_calc_hmc_all(result)
-        return DsecEvaluation(
+        if self.progress_callback is not None:
+            self.progress_callback(state.calc_hmc_all_call_count, state, result)
+        evaluation = DsecEvaluation(
             hmctot=float(result.hmctot),
             elcter=float(result.elcter),
             fixed_state_result=result,
@@ -296,6 +300,8 @@ class CalcHMCAllDsecEvaluator:
                 "leveltemp_workspace_carried": True,
             },
         )
+        self.evaluations.append(evaluation)
+        return evaluation
 
 
 @dataclass(frozen=True)
@@ -354,9 +360,13 @@ class DsecResult:
     thermal_converged: bool
     requested_thermal_iteration: bool
     source_returned: bool = True
+    prefix_terminated: bool = False
+    maximum_evaluations: Optional[int] = None
 
     @property
     def converged(self) -> bool:
+        if self.prefix_terminated:
+            return False
         thermal_ok = self.thermal_converged if self.requested_thermal_iteration else True
         return bool(self.lnerr == 0 and self.charge_converged and thermal_ok)
 
@@ -489,6 +499,7 @@ def dsec(
     charge_tolerance: float = DSEC_CHARGE_TOLERANCE,
     thermal_tolerance: float = DSEC_THERMAL_TOLERANCE,
     temperature_stagnation_tolerance: float = DSEC_TEMPERATURE_STAGNATION_TOLERANCE,
+    maximum_evaluations: Optional[int] = None,
 ) -> DsecResult:
     """Translate ``dsec.f90`` in its original branch and update order.
 
@@ -500,6 +511,10 @@ def dsec(
 
     nlim = int(nlim)
     tinf_t4 = float(tinf_t4)
+    if maximum_evaluations is not None:
+        maximum_evaluations = int(maximum_evaluations)
+        if maximum_evaluations <= 0:
+            raise DsecPortError("maximum_evaluations must be positive")
     if not math.isfinite(tinf_t4) or tinf_t4 < 0.0:
         raise DsecPortError("tinf_t4 must be finite and nonnegative")
 
@@ -539,6 +554,7 @@ def dsec(
     last_tst: Optional[float] = None
     testt: Optional[float] = None
     recorder = _TrajectoryRecorder()
+    prefix_terminated = False
 
     recorder.add(
         "begin",
@@ -643,6 +659,10 @@ def dsec(
                 ihx=ihx,
                 ilx=ilx,
             )
+
+            if maximum_evaluations is not None and evaluation_index >= maximum_evaluations:
+                prefix_terminated = True
+                break
 
             if nnxx >= nlimxx or last_tst < epsx:
                 break
@@ -774,6 +794,9 @@ def dsec(
                 ihx=ihx,
                 ilx=ilx,
             )
+
+        if prefix_terminated:
+            break
 
         # label 300
         nntt += 1
@@ -1043,42 +1066,43 @@ def dsec(
         )
         break
 
-    recorder.add(
-        "finish",
-        evaluation_index=evaluation_index,
-        ntotit=ntotit,
-        nnx=nnx,
-        nnxx=nnxx,
-        nnt=nnt,
-        nntt=nntt,
-        nlim=nlim,
-        nlimt=nlimt,
-        nlimx=nlimx,
-        nlimtt=nlimtt,
-        nlimxx=nlimxx,
-        state=state,
-        tinf_t4=tinf_t4,
-        tl=tl,
-        th=th,
-        xeel=xeel,
-        xeeh=xeeh,
-        elcter=last_elcter,
-        elctrl=elctrl,
-        elctrh=elctrh,
-        hmctot=last_hmctot,
-        hmcttl=hmcttl,
-        hmctth=hmctth,
-        previous_temperature_t4=to,
-        normalized_charge_residual=last_tst,
-        temperature_stagnation_metric=testt,
-        lnerr=lnerr,
-        iht=iht,
-        ilt=ilt,
-        iuht=iuht,
-        iult=iult,
-        ihx=ihx,
-        ilx=ilx,
-    )
+    if not prefix_terminated:
+        recorder.add(
+            "finish",
+            evaluation_index=evaluation_index,
+            ntotit=ntotit,
+            nnx=nnx,
+            nnxx=nnxx,
+            nnt=nnt,
+            nntt=nntt,
+            nlim=nlim,
+            nlimt=nlimt,
+            nlimx=nlimx,
+            nlimtt=nlimtt,
+            nlimxx=nlimxx,
+            state=state,
+            tinf_t4=tinf_t4,
+            tl=tl,
+            th=th,
+            xeel=xeel,
+            xeeh=xeeh,
+            elcter=last_elcter,
+            elctrl=elctrl,
+            elctrh=elctrh,
+            hmctot=last_hmctot,
+            hmcttl=hmcttl,
+            hmctth=hmctth,
+            previous_temperature_t4=to,
+            normalized_charge_residual=last_tst,
+            temperature_stagnation_metric=testt,
+            lnerr=lnerr,
+            iht=iht,
+            ilt=ilt,
+            iuht=iuht,
+            iult=iult,
+            ihx=ihx,
+            ilx=ilx,
+        )
 
     charge_converged = bool(last_tst is not None and last_tst < epsx)
     thermal_converged = bool(last_hmctot is not None and abs(last_hmctot) <= epst)
@@ -1089,6 +1113,8 @@ def dsec(
             "dsec_nlim": nlim,
             "dsec_ntotit": ntotit,
             "dsec_lnerr": lnerr,
+            "dsec_prefix_terminated": prefix_terminated,
+            "dsec_maximum_evaluations": maximum_evaluations,
         }
     )
     return DsecResult(
@@ -1103,6 +1129,9 @@ def dsec(
         charge_converged=charge_converged,
         thermal_converged=thermal_converged,
         requested_thermal_iteration=nlim > 0,
+        source_returned=not prefix_terminated,
+        prefix_terminated=prefix_terminated,
+        maximum_evaluations=maximum_evaluations,
     )
 
 
@@ -1149,6 +1178,8 @@ def write_dsec_trajectory_products(
         "thermal_converged": result.thermal_converged,
         "requested_thermal_iteration": result.requested_thermal_iteration,
         "dsec_converged": result.converged,
+        "prefix_terminated": result.prefix_terminated,
+        "maximum_evaluations": result.maximum_evaluations,
         "mutable_population_state_present": bool(result.state.element_populations),
         "mutable_leveltemp_state_present": result.state.leveltemp_workspace is not None,
         "exact_source_control_flow": True,
@@ -1415,12 +1446,20 @@ def compare_dsec_trajectory(
     charge_residual_atol: float = 1.0e-10,
     near_zero_thermal_threshold: float = DSEC_THERMAL_TOLERANCE,
     near_zero_charge_threshold: float = DSEC_CHARGE_TOLERANCE,
+    prefix_mode: Optional[bool] = None,
 ) -> DsecTrajectoryParityResult:
     py_events = python_result.trajectory
     xs_events = reference.events
-    event_sequence_ready = len(py_events) == len(xs_events) and all(
-        py.event == xs.event for py, xs in zip(py_events, xs_events)
-    )
+    if prefix_mode is None:
+        prefix_mode = bool(python_result.prefix_terminated)
+    if prefix_mode:
+        event_sequence_ready = len(py_events) <= len(xs_events) and all(
+            py.event == xs.event for py, xs in zip(py_events, xs_events)
+        )
+    else:
+        event_sequence_ready = len(py_events) == len(xs_events) and all(
+            py.event == xs.event for py, xs in zip(py_events, xs_events)
+        )
     rows: List[DsecTrajectoryParityRow] = []
 
     integer_fields = (
@@ -1512,15 +1551,18 @@ def compare_dsec_trajectory(
 
     py_final = py_events[-1] if py_events else None
     xs_final = xs_events[-1] if xs_events else None
-    final_state_ready = bool(
-        py_final is not None
-        and xs_final is not None
-        and py_final.event == "finish"
-        and xs_final.event == "finish"
-        and py_final.lnerr == xs_final.lnerr
-        and math.isclose(py_final.temperature_t4, xs_final.temperature_t4, rel_tol=runtime_rtol, abs_tol=runtime_atol)
-        and math.isclose(py_final.electron_fraction_xee, xs_final.electron_fraction_xee, rel_tol=runtime_rtol, abs_tol=runtime_atol)
-    )
+    if prefix_mode:
+        final_state_ready = event_sequence_ready
+    else:
+        final_state_ready = bool(
+            py_final is not None
+            and xs_final is not None
+            and py_final.event == "finish"
+            and xs_final.event == "finish"
+            and py_final.lnerr == xs_final.lnerr
+            and math.isclose(py_final.temperature_t4, xs_final.temperature_t4, rel_tol=runtime_rtol, abs_tol=runtime_atol)
+            and math.isclose(py_final.electron_fraction_xee, xs_final.electron_fraction_xee, rel_tol=runtime_rtol, abs_tol=runtime_atol)
+        )
     finite_abs = [row.absolute_difference for row in rows if row.absolute_difference is not None and math.isfinite(row.absolute_difference)]
     finite_rel = [row.relative_difference for row in rows if row.relative_difference is not None and math.isfinite(row.relative_difference)]
     return DsecTrajectoryParityResult(

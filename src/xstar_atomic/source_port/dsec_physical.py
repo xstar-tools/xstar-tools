@@ -34,6 +34,7 @@ from .compton import (
     comp2_continuum_result,
 )
 from .dsec import DsecMutableRuntimeState, DsecPortError, DsecProbeTrajectory
+from .dsec_correlation import DsecMatchingInputState
 from .element_equilibrium import EscapeProbabilityContext
 from .free_free import FreeFreeContext, freef_continuum_result
 from .thermal_balance import HeatFContext
@@ -104,9 +105,10 @@ class PhysicalDsecContinuumTemplate:
         ):
             if np.any(~np.isfinite(values[:n])):
                 raise DsecPortError(f"physical dsec {name} contains non-finite values")
-        if self.first_workspace_policy not in {"zero", "call73-probe"}:
+        if self.first_workspace_policy not in {"zero", "probe", "call73-probe"}:
             raise DsecPortError(
-                "first_workspace_policy must be 'zero' or 'call73-probe'"
+                "first_workspace_policy must be 'zero', 'probe', or the "
+                "legacy alias 'call73-probe'"
             )
         if not np.isfinite(float(self.radius_cm)):
             raise DsecPortError("radius_cm must be finite")
@@ -366,8 +368,16 @@ def build_physical_dsec_runtime_state(
     initial_population_policy: str,
     pressure: float,
     lcdd: int,
+    matching_input: Optional[DsecMatchingInputState] = None,
 ) -> DsecMutableRuntimeState:
-    """Build the mutable source-order element state for a physical run."""
+    """Build the mutable source-order element state for a physical run.
+
+    When ``matching_input`` is supplied, v0.4.48 restores the exact XSTAR
+    state entering the correlated first internal ``calc_hmc_all`` call.
+    The current bounded call-1 workflow requires the captured global xilevg
+    array to be identically zero; later calls need a derived-pointer mapping
+    from global indices to physical level keys.
+    """
 
     requests = build_all_element_fixed_state_requests(
         plan,
@@ -380,6 +390,17 @@ def build_physical_dsec_runtime_state(
         initial_population_policy=initial_population_policy,
         strict_context=True,
     )
+    global_populations: Dict[Tuple[int, int, int], float] = {}
+    leveltemp_workspace = None
+    initial_global_source = "xstar_init_f90_zero_xilevg"
+    if matching_input is not None:
+        if not matching_input.global_xilevg_is_zero:
+            raise DsecPortError(
+                "v0.4.48 bounded call-1 runner captured nonzero incoming global "
+                "xilevg but cannot yet map global indices onto physical level keys"
+            )
+        leveltemp_workspace = matching_input.leveltemp_workspace
+        initial_global_source = "xstar_correlated_dsec_input_global_xilevg"
     return DsecMutableRuntimeState(
         temperature_t4=initial.temperature_t4,
         electron_fraction_xee=initial.electron_fraction_xee,
@@ -388,17 +409,22 @@ def build_physical_dsec_runtime_state(
         required_element_z=plan.abundant_element_z,
         pressure=float(pressure),
         lcdd=int(lcdd),
-        # XSTAR init.f90 clears xilevg before the first xstarcalc/dsec call.
-        # An explicit empty mapping means exact zero global populations and
-        # triggers dynamic remapping onto the first 367-row oxygen basis.
-        global_level_populations={},
+        global_level_populations=global_populations,
+        leveltemp_workspace=leveltemp_workspace,
         provenance={
             "physical_dsec_runner": True,
             "initial_runtime_source": initial.source,
             "element_scope_probe_call_id": plan.call_id,
             "element_scope_probe_dir": plan.probe_dir,
             "initial_population_policy": initial_population_policy,
-            "initial_global_population_source": "xstar_init_f90_zero_xilevg",
+            "initial_global_population_source": initial_global_source,
+            "matching_input_call_id": (
+                None if matching_input is None
+                else matching_input.calc_hmc_all_call_id
+            ),
+            "matching_input_probe_dir": (
+                None if matching_input is None else matching_input.source_dir
+            ),
         },
     )
 

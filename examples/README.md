@@ -1554,3 +1554,12 @@ v0445_bounded_dsec_acceptance_ready=True
 A false gate is a diagnostic result. Inspect the first failure in
 `xstar_dsec_trajectory_parity.csv`; do not compare the synthetic example-117
 trajectory with the physical XSTAR trajectory.
+
+## v0.4.48 call-correlated dsec validation
+
+- `119_validate_xstar_dsec_complete.py` now consumes distinct correlated input
+  and post-dsec `calc_hmc_all` states and supports `--maximum-evaluations` and
+  `--progress`.
+- `120_prepare_xstar_dsec_matching_probe.py` writes the shared call-correlation,
+  complete matching-state `calc_hmc_all`, and dsec trajectory/thermal probe
+  bundle required for the production rerun.

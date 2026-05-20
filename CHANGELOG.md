@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## v0.4.48 - 2026-05-20
+
+v0.4.48 is a bounded call-correlation and matching-state correction for the
+physical `dsec` runner. The v0.4.47 production run proved that the translated
+control sequence agreed with XSTAR through event 88, but it mixed `dsec` call 1
+with the unrelated historical `calc_hmc_all` call-73 radiation/escape/workspace
+state. This release removes that ambiguity rather than relaxing tolerances.
+
+- Adds a shared diagnostic Fortran correlation module linking every global
+  `calc_hmc_all` call to `dsec_call_id`, internal evaluation index, and phase
+  (`dsec_internal`, `post_dsec`, or `outside_dsec`).
+- Captures the exact state entering the correlated first internal
+  `calc_hmc_all` call: continuum grid and radiation arrays, line/continuum
+  optical depths, global `xilevg/bilevg/rnisg`, complete `leveltemp`, geometry,
+  density mode, pressure, covering fraction, turbulence, and `critf`.
+- Separates the input and post-`dsec` probe directories/call IDs in example 119.
+  Call IDs may be resolved automatically from the correlation CSV.
+- Adds an XSTAR thermal-decomposition row after every internal `calc_hmc_all`
+  evaluation, including pre-continuum totals, Compton, free-free, bremsstrahlung,
+  final totals, `hmctot`, and `elcter`. Python writes the same owned quantities
+  and compares them evaluation by evaluation.
+- Adds `--maximum-evaluations N` fast prefix mode and `--progress`. Prefix mode
+  validates the first N physical evaluations against the corresponding XSTAR
+  trajectory/thermal prefix without waiting for the full nonlinear solve.
+- Adds `examples/120_prepare_xstar_dsec_matching_probe.py` and the
+  `xstar-atomic-prepare-dsec-matching-probe` console command.
+- Keeps v0.4.44 fixed-state acceptance frozen and keeps v0.4.45 bounded dsec
+  acceptance pending the new instrumented production rerun.
+- No emissivity, transfer, radial-zone, or atomic-rate physics is added.
+
 ## v0.4.47 - 2026-05-20
 
 v0.4.47 is a bounded physical-`dsec` state-ownership correction after the

@@ -10,10 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict
 
+from .xstar_call_correlation_probe import write_call_correlation_probe_products
+
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.43 complete fixed-state calc_hmc_all thermal/charge, continuum, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.48 correlated complete fixed-state calc_hmc_all probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -25,6 +27,9 @@ module xap_calc_hmc_probe_state
   integer, save :: xap_hmc_target_record = 0
   integer, save :: xap_hmc_current_element_index = 0
   integer, save :: xap_hmc_current_element_z = 0
+  integer, save :: xap_hmc_current_dsec_call = 0
+  integer, save :: xap_hmc_current_dsec_evaluation = 0
+  character(len=32), save :: xap_hmc_current_phase = 'outside_dsec'
   integer, save :: xap_hmc_freef_ncn2 = 0
   real(8), save :: xap_hmc_freef_t4 = 0.d0
   real(8), save :: xap_hmc_freef_xee = 0.d0
@@ -76,21 +81,57 @@ contains
       if (ios .eq. 0) value = trial
     endif
   end subroutine xap_read_real_env
+
+
+  subroutine xap_read_string_env(name, value)
+    character(len=*), intent(in) :: name
+    character(len=*), intent(inout) :: value
+    character(len=128) :: env
+    integer :: stat
+    env = ''
+    call get_environment_variable(name, value=env, status=stat)
+    if (stat .eq. 0 .and. len_trim(env) .gt. 0) value = adjustl(trim(env))
+  end subroutine xap_read_string_env
 end module xap_calc_hmc_probe_state
 
 subroutine xap_hmc_begin_call(t4, xee, xpx)
   use xap_calc_hmc_probe_state
+  use xap_call_correlation_state
   implicit none
   real(8), intent(in) :: t4, xee, xpx
-  integer :: target_call
+  integer :: target_call, target_dsec_call, target_dsec_evaluation
+  integer :: lun, ios
+  logical :: exists, dsec_match
+  character(len=32) :: target_phase
   real(8) :: target_t4, target_xee, target_xpx
   real(8) :: rtol, atol
 
   xap_hmc_call_counter = xap_hmc_call_counter + 1
   xap_hmc_current_call = xap_hmc_call_counter
   xap_hmc_capture = 0
+  call xap_corr_classify_calc_hmc(xap_hmc_current_call, &
+    xap_hmc_current_dsec_call, xap_hmc_current_dsec_evaluation, &
+    xap_hmc_current_phase)
+
+  inquire(file='xstar_dsec_calc_hmc_all_call_correlation.csv', exist=exists)
+  open(newunit=lun, file='xstar_dsec_calc_hmc_all_call_correlation.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,dsec_call_id,dsec_evaluation_index,phase,'// &
+      'temperature_t4,temperature_k,electron_fraction_xee,'// &
+      'hydrogen_density_cm3'
+    write(lun,9021) xap_hmc_current_call, xap_hmc_current_dsec_call, &
+      xap_hmc_current_dsec_evaluation, trim(xap_hmc_current_phase), &
+      t4, t4*1.d4, xee, xpx
+    close(lun)
+  endif
+9021 format(i12,',',i12,',',i12,',',a,4(',',es26.16e3))
 
   target_call = 0
+  target_dsec_call = 0
+  target_dsec_evaluation = 1
+  target_phase = 'dsec_input_and_post'
   target_t4 = 7.665518557758832d0
   target_xee = 1.2046560563936872d0
   target_xpx = 1.d8
@@ -99,6 +140,10 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
   xap_hmc_target_element = 8
 
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_CALL', target_call)
+  call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_DSEC_CALL', target_dsec_call)
+  call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION', &
+       target_dsec_evaluation)
+  call xap_read_string_env('XSTAR_ATOMIC_HMC_TARGET_DSEC_PHASE', target_phase)
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_ELEMENT', &
        xap_hmc_target_element)
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_RECORD', &
@@ -109,7 +154,22 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
   call xap_read_real_env('XSTAR_ATOMIC_HMC_TARGET_RTOL', rtol)
   call xap_read_real_env('XSTAR_ATOMIC_HMC_TARGET_ATOL', atol)
 
-  if (target_call .gt. 0) then
+  if (target_dsec_call .gt. 0) then
+    dsec_match = xap_hmc_current_dsec_call .eq. target_dsec_call
+    if (trim(target_phase) .eq. 'dsec_input_and_post' .or. &
+        trim(target_phase) .eq. 'both') then
+      if (dsec_match .and. ((trim(xap_hmc_current_phase) .eq. 'dsec_internal' .and. &
+          xap_hmc_current_dsec_evaluation .eq. target_dsec_evaluation) .or. &
+          trim(xap_hmc_current_phase) .eq. 'post_dsec')) xap_hmc_capture = 1
+    else if (trim(target_phase) .eq. trim(xap_hmc_current_phase)) then
+      if (dsec_match) then
+        if (trim(xap_hmc_current_phase) .ne. 'dsec_internal' .or. &
+            target_dsec_evaluation .le. 0 .or. &
+            xap_hmc_current_dsec_evaluation .eq. target_dsec_evaluation) &
+          xap_hmc_capture = 1
+      endif
+    endif
+  else if (target_call .gt. 0) then
     if (xap_hmc_current_call .eq. target_call) xap_hmc_capture = 1
   else
     if (abs(t4-target_t4) .le. atol+rtol*abs(target_t4) .and. &
@@ -119,6 +179,113 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
     endif
   endif
 end subroutine xap_hmc_begin_call
+
+subroutine xap_hmc_input_state(t4, trad, r, delr, xee, xpx, cfrac, p, &
+    lcdd, zeta, vturbi, critf, ncn2, line_count, continuum_count, &
+    level_count, epi, bremsa, bremsint, tau0, tauc, xilevg, bilevg, &
+    rnisg, level_rlev, level_ilev, level_nlpt, level_iltp)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: lcdd, ncn2, line_count, continuum_count, level_count
+  real(8), intent(in) :: t4, trad, r, delr, xee, xpx, cfrac, p, zeta
+  real(8), intent(in) :: vturbi, critf
+  real(8), intent(in) :: epi(*), bremsa(*), bremsint(*)
+  real(8), intent(in) :: tau0(2,*), tauc(2,*)
+  real(8), intent(in) :: xilevg(*), bilevg(*), rnisg(*)
+  real(8), intent(in) :: level_rlev(10,*)
+  integer, intent(in) :: level_ilev(10,*), level_nlpt(*), level_iltp(*)
+  integer :: lun, ios, idx, slot
+  logical :: exists
+  real(8) :: scale
+
+  if (xap_hmc_capture .ne. 1) return
+  inquire(file='xstar_calc_hmc_all_input_summary_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_summary_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,dsec_call_id,dsec_evaluation_index,phase,'// &
+      'temperature_t4,temperature_k,trad,radius_cm,zone_thickness_cm,'// &
+      'electron_fraction_xee,hydrogen_density_cm3,covering_fraction,'// &
+      'pressure,lcdd,zeta,turbulent_velocity_km_s,critf,ncn2'
+    write(lun,9022) xap_hmc_current_call, xap_hmc_current_dsec_call, &
+      xap_hmc_current_dsec_evaluation, trim(xap_hmc_current_phase), &
+      t4, t4*1.d4, trad, r, delr, xee, xpx, cfrac, p, lcdd, zeta, &
+      vturbi, critf, ncn2
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_input_continuum_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_continuum_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,grid_index,ncn2,epi_eV,bremsa,bremsint'
+    do idx=1,ncn2
+      write(lun,9023) xap_hmc_current_call, idx, ncn2, epi(idx), &
+        bremsa(idx), bremsint(idx)
+    enddo
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_input_tau0_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_tau0_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,line_index,tau_in,tau_out'
+    do idx=1,line_count
+      write(lun,9024) xap_hmc_current_call, idx, tau0(1,idx), tau0(2,idx)
+    enddo
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_input_tauc_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_tauc_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,continuum_index,tau_in,tau_out'
+    do idx=1,continuum_count
+      write(lun,9024) xap_hmc_current_call, idx, tauc(1,idx), tauc(2,idx)
+    enddo
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_input_global_levels_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_global_levels_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,global_level_index,xilevg,bilevg,rnisg'
+    do idx=1,continuum_count
+      write(lun,9025) xap_hmc_current_call, idx, xilevg(idx), bilevg(idx), rnisg(idx)
+    enddo
+    close(lun)
+  endif
+
+  inquire(file='xstar_calc_hmc_all_input_leveltemp_probe.csv', exist=exists)
+  open(newunit=lun, file='xstar_calc_hmc_all_input_leveltemp_probe.csv', &
+       status='unknown', position='append', action='write', iostat=ios)
+  if (ios .eq. 0) then
+    if (.not. exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,column_index,slot,rlev,ilev,nlpt,iltp'
+    do idx=1,level_count
+      do slot=1,10
+        write(lun,9026) xap_hmc_current_call, idx, slot, &
+          level_rlev(slot,idx), level_ilev(slot,idx), &
+          level_nlpt(idx), level_iltp(idx)
+      enddo
+    enddo
+    close(lun)
+  endif
+9022 format(i12,',',i12,',',i12,',',a,9(',',es26.16e3),',',i12, &
+  3(',',es26.16e3),',',i12)
+9023 format(i12,',',i12,',',i12,3(',',es26.16e3))
+9024 format(i12,',',i12,2(',',es26.16e3))
+9025 format(i12,',',i12,3(',',es26.16e3))
+9026 format(i12,',',i12,',',i12,',',es26.16e3,3(',',i12))
+end subroutine xap_hmc_input_state
 
 subroutine xap_hmc_comp2(t4, xee, xpx, ncn2, epi, bremsa, cmp1, cmp2)
   use xap_calc_hmc_probe_state
@@ -808,6 +975,10 @@ def calc_hmc_all_insertion_snippets() -> Dict[str, str]:
     return {
         "calc_hmc_all_begin_call": """! Insert after the lcdd density branches and before xh0/xh1.
       call xap_hmc_begin_call(t,xee,xpx)
+      call xap_hmc_input_state(t,trad,r,delr,xee,xpx,cfrac,p,lcdd,    &
+     & zeta,vturbi,critf,ncn2,nnnl,nnml,ndl,epi,bremsa,bremsint,     &
+     & tau0,tauc,xilevg,bilevg,rnisg,leveltemp%rlev,leveltemp%ilev, &
+     & leveltemp%nlpt,leveltemp%iltp)
 """,
         "calc_hmc_element_pre_matrix": """! Insert immediately after mml/mmu are finalized, before levwkelement.
       call xap_hmce_pre_matrix(jk,nnz,pirti,rrrti,xitp,                &
@@ -885,6 +1056,7 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     outputs: Dict[str, Path] = {}
+    outputs.update(write_call_correlation_probe_products(out))
 
     helper = out / "xstar_atomic_calc_hmc_all_probe_helpers.f90"
     helper.write_text(calc_hmc_all_probe_helper())
@@ -898,16 +1070,16 @@ def write_calc_hmc_all_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     readme = out / "README_calc_hmc_all_probe.md"
     readme.write_text(
         "# Bounded XSTAR complete fixed-state `calc_hmc_all` probe\n\n"
-        "This diagnostic instrumentation captures the source first pass and "
+        "This v0.4.48 diagnostic instrumentation correlates dsec and calc_hmc_all calls, captures exact matching input state, the source first pass, and "
         "the pre-continuum element state, exact same-call Compton, free-free, bremsstrahlung, and heatf inputs/outputs, and the final thermal/charge return state; it never changes rates, populations, or continuum state.\n\n"
         "1. Add `xstar_atomic_calc_hmc_all_probe_helpers.f90` before "
         "`freef.f90`, `bremem.f90`, `heatf.f90`, `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90`, and `calc_hmc_all.f90` "
         "in the XSTAR build source list.\n"
-        "2. Apply the seventeen insertion snippets at their documented locations.\n"
+        "2. Compile the correlation helper first, then apply the seventeen insertion snippets at their documented locations.\n"
         "3. Delete prior `xstar_calc_hmc_*_probe.csv` files before the run.\n"
         "4. By default the helper captures the call at `T=76655.18557758832 K`, "
         "`xpx=1e8 cm^-3`, `xee=1.2046560563936872`, and element Z=8.\n"
-        "5. To select by call number, set `XSTAR_ATOMIC_HMC_TARGET_CALL`. "
+        "5. To select by call number, set `XSTAR_ATOMIC_HMC_TARGET_CALL`. For dsec matching, set `XSTAR_ATOMIC_HMC_TARGET_DSEC_CALL`, `XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION`, and `XSTAR_ATOMIC_HMC_TARGET_DSEC_PHASE=dsec_input_and_post`. "
         "Set `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` to capture detailed products "
         "for every positive-abundance element in the selected call. Other "
         "controls are `_T4`, `_XEE`, "

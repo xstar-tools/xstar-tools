@@ -17,7 +17,7 @@ def test_dsec_probe_has_all_control_flow_hooks() -> None:
     assert "xstar_dsec_trajectory_probe.csv" in helper
     assert "XSTAR_ATOMIC_DSEC_TARGET_CALL" in helper
     assert set(snippets) == {
-        "dsec_begin", "after_calc_hmc_all", "charge_multiply",
+        "dsec_begin", "before_calc_hmc_all", "after_calc_hmc_all", "charge_multiply",
         "charge_divide", "charge_secant", "charge_loop_exit",
         "temperature_divide", "temperature_multiply",
         "temperature_stagnation", "temperature_secant",
@@ -29,13 +29,14 @@ def test_generated_dsec_probe_helper_compiles(tmp_path: Path) -> None:
     products = write_dsec_probe_products(tmp_path)
     helper = products["helper_fortran"]
     completed = subprocess.run(
-        ["gfortran", "-c", "-ffree-line-length-none", str(helper), "-o", str(tmp_path / "helper.o")],
+        ["gfortran", "-c", "-ffree-line-length-none", str(products["correlation_helper_fortran"]), str(helper)],
+        cwd=tmp_path,
         check=False,
         capture_output=True,
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
-    assert (tmp_path / "helper.o").is_file()
+    assert (tmp_path / "xstar_atomic_dsec_probe_helpers.o").is_file()
 
 
 
@@ -59,6 +60,7 @@ end program
         [
             "gfortran",
             "-ffree-line-length-none",
+            str(products["correlation_helper_fortran"]),
             str(products["helper_fortran"]),
             str(driver),
             "-o",

@@ -26,6 +26,7 @@ from xstar_atomic.source_port import (
     msolvelucy,
 )
 from xstar_atomic.source_port.element_equilibrium import ElementMatrixAssembly
+from xstar_atomic.xstar_call_correlation_probe import call_correlation_probe_helper
 from xstar_atomic.xstar_calc_hmc_all_probe import (
     calc_hmc_all_insertion_snippets,
     calc_hmc_all_probe_helper,
@@ -298,7 +299,7 @@ def test_v0431_probe_has_seven_hooks_and_compiles(tmp_path: Path):
     if gfortran is None:
         pytest.skip("gfortran not installed")
     source = tmp_path / "probe.f90"
-    source.write_text(helper)
+    source.write_text(call_correlation_probe_helper() + "\n" + helper)
     subprocess.run(
         [gfortran, "-c", "-ffree-line-length-none", str(source)],
         cwd=tmp_path,

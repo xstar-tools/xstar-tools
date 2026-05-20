@@ -198,7 +198,8 @@ def test_v0433_probe_adds_calc_hmc_ion_exact_leveltemp_hook_and_compiles(tmp_pat
     compiler = shutil.which("gfortran")
     if compiler:
         subprocess.run(
-            [compiler, "-c", str(paths["helper_fortran"]), "-o", str(tmp_path / "probe.o")],
+            [compiler, "-c", str(paths["correlation_helper_fortran"]), str(paths["helper_fortran"])],
+            cwd=tmp_path,
             check=True,
         )
 

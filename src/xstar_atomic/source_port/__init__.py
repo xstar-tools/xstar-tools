@@ -422,6 +422,22 @@ from .dsec import (
     write_dsec_acceptance_products,
 )
 
+
+from .dsec_correlation import (
+    CalcHMCAllCallCorrelation,
+    DsecCallCorrelation,
+    DsecMatchingInputState,
+    DsecThermalDecompositionRow,
+    DsecThermalParityRow,
+    DsecThermalParityResult,
+    load_calc_hmc_all_call_correlation,
+    resolve_dsec_calc_hmc_all_calls,
+    load_dsec_matching_input_state,
+    load_xstar_dsec_thermal_decomposition,
+    compare_dsec_thermal_decomposition,
+    write_dsec_thermal_parity_products,
+)
+
 from .dsec_physical import (
     PhysicalDsecInitialState,
     PhysicalDsecContinuumTemplate,
@@ -710,4 +726,16 @@ __all__ = [
     "build_physical_dsec_runtime_state",
     "clone_physical_dsec_runtime_state",
 
+    "CalcHMCAllCallCorrelation",
+    "DsecCallCorrelation",
+    "DsecMatchingInputState",
+    "DsecThermalDecompositionRow",
+    "DsecThermalParityRow",
+    "DsecThermalParityResult",
+    "load_calc_hmc_all_call_correlation",
+    "resolve_dsec_calc_hmc_all_calls",
+    "load_dsec_matching_input_state",
+    "load_xstar_dsec_thermal_decomposition",
+    "compare_dsec_thermal_decomposition",
+    "write_dsec_thermal_parity_products",
 ]

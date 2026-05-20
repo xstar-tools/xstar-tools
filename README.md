@@ -13,6 +13,27 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.48 correlates `dsec` with its exact `calc_hmc_all` states
+
+The first v0.4.47 physical run showed correct branch order through XSTAR event
+88 but used the historical call-73 continuum/escape context for `dsec` call 1.
+v0.4.48 adds a shared Fortran call-correlation module, captures the exact first
+internal input state and the distinct post-`dsec` reference, and records a full
+thermal decomposition for every evaluation. Example 119 now accepts separate
+input/final references or resolves them automatically from the correlation CSV.
+
+For faster diagnosis, `--maximum-evaluations 1` runs and compares only the first
+physical evaluation; `--progress` prints T4, xee, residuals, and compact-basis
+sizes as the full run proceeds. Generate the required combined probe with:
+
+```text
+examples/120_prepare_xstar_dsec_matching_probe.py
+xstar-atomic-prepare-dsec-matching-probe
+```
+
+A new XSTAR rebuild is required because both `dsec.f90` and `calc_hmc_all.f90`
+receive additional diagnostic hooks. No scientific XSTAR state is modified.
+
 ### v0.4.47 fixes dynamic `dsec` population remapping
 
 The first production execution of example 119 exposed a source-state bug in
