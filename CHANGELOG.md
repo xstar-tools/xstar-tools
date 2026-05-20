@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## v0.4.47 - 2026-05-20
+
+v0.4.47 is a bounded physical-`dsec` state-ownership correction after the
+first production execution of example 119. The v0.4.46 runner incorrectly
+replayed the converged 607-row oxygen compact vector at the initial `T4=100`
+trial, where `istruc` selected a 367-row oxygen basis. XSTAR does not carry a
+basis-sized vector between trials: it carries the global `xilevg` workspace and
+remaps that workspace after every new active-ion selection.
+
+- Adds explicit mutable global-level population state keyed by
+  `(element_z, ion_stage, local_level)`.
+- Initializes the first physical `dsec` call from the exact `init.f90` state:
+  all global `xilevg` entries are zero.
+- Remaps global populations onto each current compact basis in literal
+  `calc_hmc_all.f90` ion/level order, including overwrite of each shared
+  parent-continuum/next-ion-ground alias by the later ion ground state.
+- Preserves inactive global rows across trials so a later expanding ion range
+  sees the same stale global values as Fortran.
+- Allows the source-valid all-zero first `msolvelucy` seed; the translated Lucy
+  solver then uses the original `rr=1` zero-superlevel fallback and imposes
+  number conservation in the condensed solve.
+- Retains compact population vectors only as diagnostics; they are no longer
+  reused across dynamic `dsec` basis changes.
+- Adds focused regressions for shared-alias remapping, zero initialization,
+  zero-seed Lucy behavior, stale inactive-row retention, and suppression of the
+  invalid 607-to-367 compact replay.
+- Bounds the zero-initialized physical runner to `dsec_call_id=1`; later calls
+  require a captured/restored incoming global population workspace.
+- No XSTAR rebuild or probe change is required. Reuse the v0.4.45 twelve-hook
+  `dsec` build and rerun example 119.
+
 ## v0.4.46 - 2026-05-20
 
 v0.4.46 adds the missing physical example-119 runner needed to exercise the

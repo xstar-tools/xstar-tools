@@ -51,11 +51,12 @@ DSEC_CHARGE_DENOMINATOR_FLOOR = 1.0e-48
 class DsecMutableRuntimeState:
     """Mutable local-zone state passed through repeated ``calc_hmc_all`` calls.
 
-    ``temperature_t4`` uses XSTAR's native unit of :math:`10^4` K.  Compact
-    populations are stored by atomic number and replace each element request's
-    seed on the next trial.  The shared ``leveltemp`` workspace is carried
-    across elements and across calls, including retained higher columns and
-    owner provenance.
+    ``temperature_t4`` uses XSTAR's native unit of :math:`10^4` K.  The
+    mutable global ``xilevg`` population workspace is carried between trials
+    and remapped onto each newly selected compact element basis.  Compact
+    population vectors are retained only as diagnostics.  The shared
+    ``leveltemp`` workspace is carried across elements and across calls,
+    including retained higher columns and owner provenance.
     """
 
     temperature_t4: float
@@ -66,6 +67,11 @@ class DsecMutableRuntimeState:
     pressure: float = 0.0
     lcdd: int = 1
     element_populations: Dict[int, np.ndarray] = field(default_factory=dict)
+    # ``None`` preserves legacy compact-seed behavior.  An explicit mapping,
+    # including an empty mapping, means to use the source global ``xilevg``
+    # workspace.  The empty mapping is the exact first-zone state from
+    # init.f90, which clears every global level population to zero.
+    global_level_populations: Optional[Dict[Tuple[int, int, int], float]] = None
     leveltemp_workspace: Optional[Any] = None
     leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
     source_arrays: Dict[str, Any] = field(default_factory=dict)
@@ -86,6 +92,11 @@ class DsecMutableRuntimeState:
             int(z): np.asarray(values, dtype=float).copy()
             for z, values in self.element_populations.items()
         }
+        if self.global_level_populations is not None:
+            self.global_level_populations = {
+                (int(key[0]), int(key[1]), int(key[2])): float(value)
+                for key, value in self.global_level_populations.items()
+            }
         self.leveltemp_owner_by_column = {
             int(index): dict(owner)
             for index, owner in self.leveltemp_owner_by_column.items()
@@ -101,20 +112,34 @@ class DsecMutableRuntimeState:
         requests: List[FixedStateElementRequest] = []
         for request in self.element_requests:
             z = int(request.element_z)
-            if z in self.element_populations:
-                populations = self.element_populations[z].copy()
-                source = "dsec_previous_calc_hmc_all_final_population"
-            else:
-                populations = (
-                    None
-                    if request.initial_populations is None
-                    else np.asarray(request.initial_populations, dtype=float).copy()
+            if self.global_level_populations is not None:
+                # Source calc_hmc_all remaps global xilevg after each dynamic
+                # istruc ion-range selection.  Never reuse a compact vector
+                # across a basis change.
+                global_populations = dict(self.global_level_populations)
+                populations = None
+                source = (
+                    "xstar_init_zero_global_xilevg"
+                    if self.calc_hmc_all_call_count == 0
+                    else "dsec_previous_calc_hmc_all_global_xilevg"
                 )
-                source = request.initial_population_source
+            else:
+                global_populations = request.initial_global_populations
+                if z in self.element_populations:
+                    populations = self.element_populations[z].copy()
+                    source = "dsec_previous_calc_hmc_all_final_population"
+                else:
+                    populations = (
+                        None
+                        if request.initial_populations is None
+                        else np.asarray(request.initial_populations, dtype=float).copy()
+                    )
+                    source = request.initial_population_source
             requests.append(
                 replace(
                     request,
                     initial_populations=populations,
+                    initial_global_populations=global_populations,
                     initial_population_source=source,
                 )
             )
@@ -135,6 +160,17 @@ class DsecMutableRuntimeState:
                 self.element_populations[int(item.request.element_z)] = np.asarray(
                     solve.populations, dtype=float
                 ).copy()
+        # calc_hmc_all writes the solved populations back to the global
+        # xilevg workspace.  This global state, not a compact vector tied to
+        # the old basis, is the source input to the next dsec trial.
+        if self.global_level_populations is None:
+            self.global_level_populations = {}
+        self.global_level_populations.update(
+            {
+                (int(key[0]), int(key[1]), int(key[2])): float(value)
+                for key, value in result.xilevg.items()
+            }
+        )
 
         self.leveltemp_workspace = result.leveltemp_workspace
         self.leveltemp_owner_by_column = {

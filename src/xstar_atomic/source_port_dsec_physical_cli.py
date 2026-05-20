@@ -158,7 +158,7 @@ def _write_runner_summary(
     paths: Dict[str, str],
 ) -> Dict[str, Path]:
     summary = {
-        "port_version": "v0.4.46",
+        "port_version": "v0.4.47",
         "purpose": "physical runner for bounded v0.4.45 dsec acceptance",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "xstar_calc_hmc_all_call_id": int(args.xstar_calc_hmc_call_id),
@@ -170,6 +170,8 @@ def _write_runner_summary(
         "tinf_t4": initial.tinf_t4,
         "abundant_element_z": list(plan.abundant_element_z),
         "initial_population_policy": args.initial_population_policy,
+        "population_state_mode": "global_xilevg_dynamic_compact_remap",
+        "initial_global_population_source": "xstar_init_f90_zero_xilevg",
         "first_continuum_workspace_policy": args.first_continuum_workspace_policy,
         "carry_continuum_workspace": not args.reset_continuum_workspace,
         "continuum_context_build_count": continuum_factory.build_count,
@@ -204,6 +206,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+
+    if int(args.xstar_dsec_call_id) != 1:
+        raise ValueError(
+            "v0.4.47 physical dsec population initialization is bounded to "
+            "dsec_call_id=1, whose incoming global xilevg is the init.f90 "
+            "all-zero workspace; later calls require a captured/restored "
+            "incoming global population state"
+        )
 
     xstar_reference = load_xstar_dsec_trajectory(
         args.xstar_dsec_trajectory,
@@ -313,6 +323,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"abundant_element_z={','.join(map(str, plan.abundant_element_z))}")
             print(f"effective_critf={critf:.17g}")
             print(f"critf_source={critf_source}")
+            print("population_state_mode=global_xilevg_dynamic_compact_remap")
+            print("initial_global_population_source=xstar_init_f90_zero_xilevg")
             for key, value in runner_products.items():
                 print(f"{key}={value}")
         return 0 if frozen.ready else 2
@@ -405,20 +417,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             final_fixed_state_parity_ready=final_parity.ready,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.46")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.47")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.46")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.47")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         fixed_products = write_fixed_state_calc_hmc_all_products(
-            final_result, out, port_version="v0.4.46"
+            final_result, out, port_version="v0.4.47"
         )
         paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
         final_parity_products = write_complete_fixed_state_parity_products(
-            final_parity, out, port_version="v0.4.46"
+            final_parity, out, port_version="v0.4.47"
         )
         paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
         acceptance_products = write_dsec_acceptance_products(
-            acceptance, out, port_version="v0.4.46"
+            acceptance, out, port_version="v0.4.47"
         )
         paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(result, out))
@@ -443,7 +455,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Physical XSTAR/Python dsec acceptance")
         print("--------------------------------------")
-        print("port_version=v0.4.46")
+        print("port_version=v0.4.47")
         print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
         print(f"xstar_calc_hmc_all_call_id={args.xstar_calc_hmc_call_id}")
         print(f"initial_runtime_source={initial.source}")

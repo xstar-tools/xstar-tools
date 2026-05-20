@@ -91,7 +91,7 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.46"
+PORT_LEDGER_VERSION = "v0.4.47"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
     "execute the new physical dsec runner, diagnose the first trajectory differences, and close the bounded v0.4.45 acceptance while "
@@ -218,7 +218,7 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", T,
           "xstar_atomic.source_port.dsec.dsec",
           "exact source-order nested charge/thermal control flow, mutable population/leveltemp replay, synthetic branch tests, and trajectory-probe tooling",
-          "The Fortran control algorithm is translated in v0.4.45. v0.4.46 adds the turnkey physical calc_hmc_all-backed runner; physical acceptance remains pending its production trajectory comparison."),
+          "The Fortran control algorithm is translated in v0.4.45. v0.4.46 adds the turnkey physical calc_hmc_all-backed runner. v0.4.47 corrects dsec population-state ownership by carrying the global xilevg workspace and remapping it after each dynamic istruc basis selection; physical acceptance remains pending its production trajectory comparison."),
         E("xstar/xstarlib/src/bremsmap.f90", "bremsmap", "milestone4_local_zone", U,
           "xstar_atomic.source_port.radiation.bremsmap", "",
           "The bounded dsec path may use an externally constructed radiation state; autonomous xstarcalc requires this source stage."),
@@ -239,6 +239,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products; production dsec acceptance, bremsmap, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products. v0.4.47 replaces invalid compact-vector replay with source-faithful global xilevg carry/remapping across changing dsec bases; production dsec acceptance, bremsmap, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

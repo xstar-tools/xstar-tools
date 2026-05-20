@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.46"
+__version__ = "0.4.47"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -151,7 +151,7 @@ from .source_port import (
     ElementEquilibriumError, ElementIonBlock, ElementBasisRow, ElementCompactBasis,
     EscapeProbabilityContext, ElementEquilibriumContext, MatrixTerm, IonAssemblySummary,
     ElementMatrixAssembly, LucyIterationTrace, LucySolveResult, ElementEquilibriumResult,
-    build_level_table, build_element_compact_basis, levwk, levwkelement,
+    build_level_table, build_element_compact_basis, map_global_populations_to_compact_basis, levwk, levwkelement,
     assemble_element_matrix, msolvelucy, solve_element_statistical_equilibrium,
     register_element_equilibrium_stage, write_element_equilibrium_products,
     IonBalanceError, CalcIonRatesContext, CalcIonRateContribution,
@@ -441,6 +441,7 @@ from .source_port import (
     ElementEquilibriumResult,
     build_level_table,
     build_element_compact_basis,
+    map_global_populations_to_compact_basis,
     levwk,
     levwkelement,
     assemble_element_matrix,
@@ -599,6 +600,7 @@ __all__.extend([
     "ElementEquilibriumResult",
     "build_level_table",
     "build_element_compact_basis",
+    "map_global_populations_to_compact_basis",
     "levwk",
     "levwkelement",
     "assemble_element_matrix",

@@ -64,6 +64,11 @@ class FixedStateElementRequest:
     critf: float = 1.0e-7
     use_source_ion_limits: bool = True
     initial_populations: Optional[np.ndarray] = None
+    # Optional global XSTAR ``xilevg`` state.  When supplied, the element
+    # solver remaps it onto the *current* compact basis after ``istruc`` has
+    # selected the active ion range.  This is required by ``dsec`` because the
+    # compact dimension can change from one thermal/charge trial to the next.
+    initial_global_populations: Optional[Mapping[Tuple[int, int, int], float]] = None
     initial_population_source: str = "levwkelement_lte_fallback"
     strict_context: bool = True
     capture_lucy_trace: bool = False
@@ -449,6 +454,7 @@ def calc_hmc_all(
             abundance=abundance,
             lfast=int(request.lfast),
             initial_populations=request.initial_populations,
+            initial_global_populations=request.initial_global_populations,
             strict_context=bool(request.strict_context),
             capture_lucy_trace=bool(request.capture_lucy_trace),
             initial_leveltemp_workspace=leveltemp_workspace,

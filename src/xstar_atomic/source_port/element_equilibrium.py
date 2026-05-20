@@ -200,6 +200,13 @@ class ElementEquilibriumContext:
     abundance: float = 1.0
     lfast: int = 2
     initial_populations: Optional[np.ndarray] = None
+    # Global source population workspace keyed by
+    # ``(element_z, ion_stage, local_level)``.  ``calc_hmc_all.f90`` remaps
+    # this mutable ``xilevg`` array into the compact ``xileve`` vector after
+    # each new active-ion basis is selected.  An empty mapping is meaningful:
+    # XSTAR ``init.f90`` initializes the first-zone global population array to
+    # exact zero.
+    initial_global_populations: Optional[Mapping[Tuple[int, int, int], float]] = None
     strict_context: bool = True
     max_lucy_iterations: int = 200
     max_fixed_point_iterations: int = 200
@@ -726,6 +733,33 @@ def build_element_compact_basis(
     )
 
 
+
+
+def map_global_populations_to_compact_basis(
+    basis: ElementCompactBasis,
+    global_populations: Mapping[Tuple[int, int, int], float],
+) -> np.ndarray:
+    """Map source global ``xilevg`` state onto one current compact basis.
+
+    The loop order is the literal ``calc_hmc_all.f90`` order: every selected
+    ion writes all of its levels and advances by ``nlev-1``.  Consequently the
+    next-ion ground state overwrites the shared previous-ion continuum row.
+    Missing global entries are exact zero, matching the initialized XSTAR
+    workspace.  The returned array includes the one-based guard at index zero.
+    """
+
+    mapped = np.zeros(basis.n_rows + 1, dtype=float)
+    for block in basis.blocks:
+        for local_level in range(1, block.nlev + 1):
+            key = (int(basis.element_z), int(block.ion_stage), int(local_level))
+            value = float(global_populations.get(key, 0.0))
+            if not math.isfinite(value) or value < 0.0:
+                raise ElementEquilibriumError(
+                    f"invalid global initial population for {key}: {value}"
+                )
+            mapped[block.compact_index(local_level)] = value
+    return mapped
+
 def levwk(levels: UCalcLevelTable, context: ElementEquilibriumContext) -> np.ndarray:
     """Translate ``levwk.f90`` for one ion."""
     nlev = levels.nlev
@@ -947,7 +981,21 @@ def assemble_element_matrix(
     # ``calc_hmc_element`` maps the incoming global ``xileve`` state into
     # compact ``x`` immediately before ``msolvelucy``.
     solver_initial = rnise_lte.copy()
-    if context.initial_populations is not None:
+    if context.initial_global_populations is not None:
+        # Literal calc_hmc_all.f90 mapping order.  Each selected ion writes
+        # all ``nlev`` entries and advances by ``nlev-1``.  Therefore the
+        # ground state of the next ion overwrites the shared previous-ion
+        # continuum row.  This remapping must be repeated after every dynamic
+        # ``istruc`` ion-range selection because the compact dimension can
+        # change during dsec.
+        solver_initial = map_global_populations_to_compact_basis(
+            basis, context.initial_global_populations
+        )
+        # An all-zero vector is source-valid on the first dsec call because
+        # init.f90 clears xilevg.  msolvelucy handles zero-population
+        # superlevels through its rr=1 fallback before imposing number
+        # conservation in the condensed solve.
+    elif context.initial_populations is not None:
         supplied = np.asarray(context.initial_populations, dtype=float).reshape(-1)
         if supplied.size not in {basis.n_rows, basis.n_rows + 1}:
             raise ElementEquilibriumError(
@@ -1292,8 +1340,10 @@ def msolvelucy(
     # ``x`` until the fixed-point update.  Preserving the input scale is
     # essential for iteration-state parity with the captured pre-solve vector;
     # the condensed solve itself subsequently imposes number conservation.
-    if not np.all(np.isfinite(x)) or float(np.sum(x)) <= 0.0:
-        raise ElementEquilibriumError("msolvelucy received a non-positive or non-finite population seed")
+    if not np.all(np.isfinite(x)) or np.any(x < 0.0):
+        raise ElementEquilibriumError(
+            "msolvelucy received a negative or non-finite population seed"
+        )
     nsup = basis.nsup[1:]
     nion = basis.nion[1:]
     nspmx = basis.n_superlevels

@@ -13,13 +13,29 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.47 fixes dynamic `dsec` population remapping
+
+The first production execution of example 119 exposed a source-state bug in
+v0.4.46: the runner replayed the converged 607-row oxygen compact vector at the
+initial `T4=100` trial, where `istruc` selected a 367-row basis. XSTAR instead
+carries one global `xilevg` workspace and remaps it after every active-ion
+selection. v0.4.47 now preserves that global state, starts call 1 from the exact
+`init.f90` all-zero population workspace, remaps in literal source order with
+shared-alias overwrite semantics, and preserves stale inactive rows if a later
+trial expands the ion range. Compact vectors remain diagnostics only.
+
+No XSTAR rebuild is required; reuse the v0.4.45 twelve-hook trajectory build
+and rerun `examples/119_validate_xstar_dsec_complete.py`.
+
 ### v0.4.46 adds the physical `dsec` acceptance runner
 
 `examples/119_validate_xstar_dsec_complete.py` now connects the mutable
 `DsecMutableRuntimeState` to the real translated `calc_hmc_all` evaluator. It
 uses the selected XSTAR `dsec` begin row for the initial/control state,
-recomputes `comp2 -> freef -> bremem -> heatf` at every trial, preserves compact
-populations and shared `leveltemp` state across trials, compares the complete
+recomputes `comp2 -> freef -> bremem -> heatf` at every trial. In
+v0.4.47 the runner preserves global `xilevg` and shared `leveltemp` state across
+trials, remapping the global populations onto each current compact basis before
+it compares the complete
 trajectory with the instrumented XSTAR reference, and writes the final bounded
 acceptance products in the same process. The release does not add emissivity or
 transfer physics and does not claim acceptance until the production run passes.

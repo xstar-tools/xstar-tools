@@ -330,6 +330,14 @@ def clone_physical_dsec_runtime_state(
             int(z): np.asarray(values, dtype=float).copy()
             for z, values in state.element_populations.items()
         },
+        global_level_populations=(
+            None
+            if state.global_level_populations is None
+            else {
+                (int(key[0]), int(key[1]), int(key[2])): float(value)
+                for key, value in state.global_level_populations.items()
+            }
+        ),
         leveltemp_workspace=copy.deepcopy(state.leveltemp_workspace),
         leveltemp_owner_by_column={
             int(index): dict(owner)
@@ -380,12 +388,17 @@ def build_physical_dsec_runtime_state(
         required_element_z=plan.abundant_element_z,
         pressure=float(pressure),
         lcdd=int(lcdd),
+        # XSTAR init.f90 clears xilevg before the first xstarcalc/dsec call.
+        # An explicit empty mapping means exact zero global populations and
+        # triggers dynamic remapping onto the first 367-row oxygen basis.
+        global_level_populations={},
         provenance={
             "physical_dsec_runner": True,
             "initial_runtime_source": initial.source,
             "element_scope_probe_call_id": plan.call_id,
             "element_scope_probe_dir": plan.probe_dir,
             "initial_population_policy": initial_population_policy,
+            "initial_global_population_source": "xstar_init_f90_zero_xilevg",
         },
     )
 
