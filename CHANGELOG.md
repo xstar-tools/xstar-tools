@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## v0.4.38 - 2026-05-20
+
+v0.4.38 closes the single blocker isolated by the complete v0.4.37 H/He/O
+call-73 rerun. The type-77 source gate is confirmed correct: all H/He type-77
+terms pass, all active final and outer-start populations pass, all source
+`xtot` rows pass, and every thermal family passes. The remaining row was H I
+`global_ion_xiin`, where Python exported the final-outer-start `xo` total
+(`3.1712826766e-6`) while XSTAR exports the returned final `x` total
+(`3.2072205404e-6`).
+
+The fixed-state `calc_hmc_all` loop now preserves both source vectors with their
+literal roles: `xiin`, charge accounting, and the fully stripped residual use
+`calc_hmc_element`'s returned final-`x` ion total; `xtotg` remains the separate
+`msolvelucy` diagnostic accumulated from `xo` at the start of the final outer
+iteration. A compatibility fallback is retained only for synthetic test doubles
+that predate the explicit final-vector total. Example 111 validates the split
+semantics and the complete H/He/O pre-continuum gate. No XSTAR source change,
+helper replacement, or rebuild is required.
+
 ## v0.4.37 - 2026-05-19
 
 v0.4.37 closes the single source-semantic blocker isolated by the complete

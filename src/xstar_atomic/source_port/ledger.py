@@ -91,12 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.37"
+PORT_LEDGER_VERSION = "v0.4.38"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "v0.4.37 reproduce the literal ucalc type-77 pre-calt77 source-zero gate "
-    "abs(leveltemp endpoint energy separation) < 1 eV for H and He, then rerun "
-    "the existing H/He/O call-73 oracle and require "
+    "v0.4.38 preserve the distinct calc_hmc_element final-x ion fractions "
+    "and msolvelucy final-outer-start xtot diagnostics, then rerun the existing "
+    "H/He/O call-73 oracle and require "
     "all_element_pre_continuum_acceptance_ready=True "
     "-> comp2 -> freef -> bremem -> heatf "
     "-> complete fixed-state calc_hmc_all parity -> dsec -> calc_emisab_all "
@@ -197,7 +197,7 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
           "call-73 pre-matrix/runtime parity, source-ordinal npilev mapping, separated second-pass pirt/rrrt, probe-aware abundance, exact same-call xileve input capture/replay, complete type-50/type-71 ans3/ans4 energy channels, corrected type-72 packed endpoints, record-level rate-7 cj2 diagnosis, exact mutable-leveltemp reads for types 49/53/99, XSTAR thermal-family probes, exact same-call aj1/aj2/cj/cj2 comparison, and synchronized final msolvelucy matrix/x/xo capture",
-          "The accepted v0.4.34 oxygen call-73 result remains mandatory. v0.4.36 translated native H I type-62/calt6062 records 488-491 and established the H/He/O gate. v0.4.37 adds the literal ucalc type-77 pre-calt77 source-zero condition for endpoint separations below 1 eV, targeting 88 H and 104 He matrix terms isolated by the production rerun. Continuum leaves remain pending."),
+          "The accepted v0.4.34 oxygen call-73 result remains mandatory. v0.4.36 translated native H I type-62/calt6062 records 488-491 and established the H/He/O gate. v0.4.37 closed the literal type-77 sub-eV source-zero gate. v0.4.38 separates the returned final-x ion fractions (`xii`/`xiin`) from the final-outer-start `xtot` diagnostics, closing the last H I global-ion export discrepancy. Continuum leaves remain pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -211,6 +211,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 are complete. The accepted oxygen pre-continuum gate is frozen, and v0.4.37 targets the single remaining H/He/O source-semantic blocker: the type-77 endpoint-separation source-zero gate. Production acceptance still requires a rerun; continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 are complete. The accepted oxygen pre-continuum gate is frozen, and v0.4.38 targets the single remaining H/He/O export-semantic blocker: `xiin` must use returned final `x`, while `xtotg` retains final-outer-start `xo`. Production acceptance still requires a rerun; continuum leaves, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

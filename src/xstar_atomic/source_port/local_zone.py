@@ -454,12 +454,22 @@ def calc_hmc_all(
         cltot2 += element_cl2
 
         stage_fractions: Dict[int, float] = {}
+        source_xtot = np.asarray(solve.ion_population_totals, dtype=float)
+        final_xii = np.asarray(
+            getattr(solve, "ion_population_totals_final_vector", source_xtot),
+            dtype=float,
+        )
         for selected_slot, block in enumerate(equilibrium.assembly.basis.blocks):
             # Source ``nionp`` counts every ion of the element before the
             # active-stage test, so selected blocks may begin at a slot > 0.
-            # The fallback preserves compatibility with synthetic test doubles.
+            # ``calc_hmc_element`` maps returned ``x`` into ``xii`` after the
+            # solve, while ``msolvelucy`` accumulates diagnostic ``xtot`` from
+            # ``xo`` at the start of the final outer iteration.  These vectors
+            # are intentionally distinct and must not share one Python array.
+            # The fallback preserves compatibility with synthetic test doubles
+            # that predate the explicit final-vector total.
             ion_slot = int(getattr(block, "ion_counter", selected_slot + 1)) - 1
-            fraction = float(solve.ion_population_totals[ion_slot])
+            fraction = float(final_xii[ion_slot])
             stage = int(block.ion_stage)
             stage_fractions[stage] = fraction
             ion_fractions[(z, stage)] = fraction
@@ -467,7 +477,7 @@ def calc_hmc_all(
             atotg[(z, stage)] = float(solve.recombination_totals[ion_slot])
             fstotg[(z, stage)] = np.asarray(solve.ionization_components[:, ion_slot], dtype=float).copy()
             fatotg[(z, stage)] = np.asarray(solve.recombination_components[:, ion_slot], dtype=float).copy()
-            xtotg[(z, stage)] = fraction
+            xtotg[(z, stage)] = float(source_xtot[ion_slot])
             enelec += fraction * float(stage - 1) * abundance
 
         xisum = float(sum(stage_fractions.values()))
@@ -812,7 +822,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.37",
+    port_version: str = "v0.4.38",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

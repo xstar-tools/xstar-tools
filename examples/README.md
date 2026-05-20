@@ -1331,3 +1331,20 @@ The required final line is:
 ```text
 v0437_type77_all_element_validation_ready=True
 ```
+
+### `111_validate_v0438_xiin_final_vector.py`
+
+Validate the v0.4.38 distinction between returned final-`x` ion fractions and
+final-outer-start `xtot` diagnostics after rerunning example 108:
+
+```bash
+PYTHONPATH=src python examples/111_validate_v0438_xiin_final_vector.py \
+  xstar_all_calc_hmc_all_fixed_state_v0438_allprobe \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0438_xiin_final_vector_validation_ready=True
+```

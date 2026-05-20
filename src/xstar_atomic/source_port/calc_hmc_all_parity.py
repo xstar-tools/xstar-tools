@@ -568,7 +568,7 @@ def _all_element_acceptance_summary(
     thermal: ThermalFamilyParityResult,
     final: MSolveLucyFinalSnapshotParityResult,
 ) -> tuple[Optional[bool], Optional[bool], Optional[bool], List[Dict[str, Any]]]:
-    """Build the v0.4.37 H/He/O all-element acceptance gate.
+    """Build the v0.4.38 H/He/O all-element acceptance gate.
 
     The gate is defined only for the complete positive-abundance element mode.
     It keeps the accepted oxygen call-73 product as an independent mandatory
@@ -1429,7 +1429,7 @@ def write_calc_hmc_all_pre_continuum_parity_products(
     result: CalcHMCAllPreContinuumParityResult,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.37",
+    port_version: str = "v0.4.38",
 ) -> Dict[str, str]:
     """Write row-level, attribution, JSON, and Markdown products."""
 

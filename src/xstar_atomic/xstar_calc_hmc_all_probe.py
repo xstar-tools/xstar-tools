@@ -13,7 +13,7 @@ from typing import Dict
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.37 calc_hmc_all pre-continuum, leveltemp, matrix, and final-solve probe.
+    return r'''! xstar-atomic v0.4.38 calc_hmc_all pre-continuum, leveltemp, matrix, and final-solve probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state

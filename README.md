@@ -727,3 +727,14 @@ The complete H/He/O call-73 rerun isolated the remaining hydrogen blocker to
 endpoint energy separation is below 1 eV. v0.4.37 reproduces that source gate,
 retains the four zero matrix roles, and adds example 110 for the final
 all-element pre-continuum acceptance check.
+
+### v0.4.38 final-x `xiin` versus outer-start `xtot`
+
+The v0.4.37 rerun confirmed the type-77 correction and left one H I global-ion
+row. XSTAR `calc_hmc_element` constructs `xii` from the returned final compact
+population vector `x`, and `calc_hmc_all` copies that value to `xiin`. In
+contrast, `msolvelucy` accumulates diagnostic `xtot` from `xo`, the population
+vector at the start of the final Lucy outer iteration. v0.4.38 keeps these
+vectors separate: final `x` drives `xiin`, charge conservation, and the fully
+stripped residual; final-outer-start `xo` remains the source of `xtotg`.
+Example 111 validates the split and the all-element pre-continuum acceptance.
