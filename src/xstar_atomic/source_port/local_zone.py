@@ -28,6 +28,10 @@ from .element_equilibrium import (
 from .ucalc import SourceFaithfulUCalc
 from .compton import Comp2Context, comp2_continuum_result
 from .free_free import FreeFreeContext, freef_continuum_result
+from .bremsstrahlung import (
+    BremsstrahlungContext,
+    bremem_continuum_result,
+)
 from .ion_balance import (
     CalcIonRatesContext,
     CalcIonRatesResult,
@@ -224,6 +228,7 @@ def calc_hmc_all(
     continuum_kernel: Optional[ContinuumKernel] = None,
     compton_context: Optional[Comp2Context] = None,
     free_free_context: Optional[FreeFreeContext] = None,
+    bremem_context: Optional[BremsstrahlungContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
     element_solver: ElementSolver = solve_element_statistical_equilibrium,
@@ -566,16 +571,23 @@ def calc_hmc_all(
         )
 
     if continuum_kernel is not None and (
-        compton_context is not None or free_free_context is not None
+        compton_context is not None
+        or free_free_context is not None
+        or bremem_context is not None
     ):
         raise CalcHMCAllError(
             "continuum_kernel is mutually exclusive with translated continuum contexts"
         )
-    if compton_context is not None or free_free_context is not None:
+    if (
+        compton_context is not None
+        or free_free_context is not None
+        or bremem_context is not None
+    ):
         diagnostics: Dict[str, Any] = {}
         htcomp = 0.0
         clcomp = 0.0
         htfreef = 0.0
+        brcems = None
         opakc = None
         if compton_context is not None:
             comp2_result, comp2_diagnostics = comp2_continuum_result(
@@ -603,12 +615,46 @@ def calc_hmc_all(
             diagnostics.update(freef_diagnostics)
         else:
             diagnostics["freef_translated"] = False
+        if bremem_context is not None:
+            if free_free_context is not None:
+                if not np.array_equal(
+                    np.asarray(bremem_context.epi_eV, dtype=float)[: int(bremem_context.ncn2 or len(bremem_context.epi_eV))],
+                    np.asarray(freef_result.epi_eV, dtype=float),
+                ):
+                    raise CalcHMCAllError(
+                        "bremem continuum grid does not match preceding freef state"
+                    )
+                bremem_n = int(
+                    bremem_context.ncn2
+                    if bremem_context.ncn2 is not None
+                    else len(bremem_context.opakc_before_cm_inv)
+                )
+                if not np.array_equal(
+                    np.asarray(bremem_context.opakc_before_cm_inv, dtype=float)[:bremem_n],
+                    np.asarray(freef_result.opakc_after_cm_inv, dtype=float),
+                ):
+                    raise CalcHMCAllError(
+                        "bremem incoming opakc does not match preceding freef output"
+                    )
+            bremem_result, bremem_diagnostics = bremem_continuum_result(
+                bremem_context,
+                temperature_k=float(temperature_k),
+                hydrogen_density_cm3=xpx,
+                electron_fraction_xee=float(electron_fraction_xee),
+            )
+            brcems = np.asarray(bremem_result.brcems_after, dtype=float)
+            opakc = np.asarray(bremem_result.opakc_after_cm_inv, dtype=float)
+            diagnostics.update(bremem_diagnostics)
+        else:
+            diagnostics["bremem_translated"] = False
         missing = []
         if compton_context is None:
             missing.append("comp2")
         if free_free_context is None:
             missing.append("freef")
-        missing.extend(["bremem", "heatf"])
+        if bremem_context is None:
+            missing.append("bremem")
+        missing.append("heatf")
         diagnostics["missing_source_sequence"] = " -> ".join(missing)
         continuum = FixedStateContinuumResult(
             # ``comp2`` and ``freef`` produce coefficients/workspace only.
@@ -620,6 +666,7 @@ def calc_hmc_all(
             htcomp=htcomp,
             clcomp=clcomp,
             htfreef=htfreef,
+            brcems=brcems,
             opakc=opakc,
             complete=False,
             diagnostics=diagnostics,
@@ -631,6 +678,7 @@ def calc_hmc_all(
                 "status": "deferred",
                 "comp2_translated": False,
                 "freef_translated": False,
+                "bremem_translated": False,
                 "missing_source_sequence": "comp2 -> freef -> bremem -> heatf",
             },
         )
@@ -736,6 +784,7 @@ def register_fixed_state_calc_hmc_all(
     continuum_kernel: Optional[ContinuumKernel] = None,
     compton_context: Optional[Comp2Context] = None,
     free_free_context: Optional[FreeFreeContext] = None,
+    bremem_context: Optional[BremsstrahlungContext] = None,
     required_element_z: Optional[Sequence[int]] = None,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
@@ -757,6 +806,7 @@ def register_fixed_state_calc_hmc_all(
             continuum_kernel=continuum_kernel,
             compton_context=compton_context,
             free_free_context=free_free_context,
+            bremem_context=bremem_context,
             required_element_z=required_element_z,
             dispatcher=dispatcher,
         )
@@ -891,7 +941,7 @@ def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,
     *,
-    port_version: str = "v0.4.40",
+    port_version: str = "v0.4.41",
 ) -> Dict[str, str]:
     """Write compact fixed-state ``calc_hmc_all`` diagnostics."""
     import csv

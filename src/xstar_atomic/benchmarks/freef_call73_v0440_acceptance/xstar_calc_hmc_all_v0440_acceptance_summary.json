@@ -1,0 +1,20 @@
+{
+  "all_element_regression_source": "xstar_all_calc_hmc_all_fixed_state_v0438_allprobe/xstar_calc_hmc_all_pre_continuum_parity_summary.json",
+  "calc_hmc_all_call_id": 73,
+  "comp2_regression_source": "xstar_comp2_call73_v0439/xstar_calc_hmc_all_v0439_acceptance_summary.json",
+  "continuum_grid_parity": true,
+  "free_free_opacity_increment_parity": true,
+  "free_free_opacity_mutation_parity": true,
+  "freef_probe_grid": "xstar_runs/helike_type69/o7_ne1e8_all_elements_v0440_freef/xstar_calc_hmc_all_freef_grid_probe.csv",
+  "freef_probe_summary": "xstar_runs/helike_type69/o7_ne1e8_all_elements_v0440_freef/xstar_calc_hmc_all_freef_summary_probe.csv",
+  "freef_translated": true,
+  "frozen_comp2_regression": true,
+  "frozen_h_he_o_pre_continuum_regression": true,
+  "frozen_oxygen_regression": true,
+  "gaunt_factor_mode_unity": true,
+  "htfreef_parity": true,
+  "oxygen_regression_source": "oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434/xstar_calc_hmc_all_pre_continuum_parity_summary.json",
+  "port_version": "v0.4.40",
+  "remaining_source_sequence": "bremem -> heatf",
+  "v0440_freef_acceptance_ready": true
+}

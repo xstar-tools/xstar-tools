@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.40"
+__version__ = "0.4.41"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -473,6 +473,25 @@ from .source_port import (
     MSolveStateParityResult,
     compare_msolvelucy_state_probe,
     write_msolvelucy_state_parity_products,
+    XSTAR_BREMEM_CC,
+    XSTAR_BREMEM_KT_EV_PER_T4,
+    XSTAR_BREMEM_ION_Z2_FACTOR,
+    XSTAR_BREMEM_GAMMA_FACTOR,
+    XSTAR_BREMEM_ION_CHARGE,
+    XSTAR_BREMEM_GAUNT_FACTOR,
+    BremsstrahlungPortError,
+    BremsstrahlungContext,
+    BremsstrahlungResult,
+    BremsstrahlungProbeReference,
+    BremsstrahlungParityResult,
+    bremem,
+    bremem_continuum_result,
+    load_bremem_probe_reference,
+    compare_bremem_probe,
+    write_bremem_parity_products,
+    V0440_FREEF_REQUIRED_TRUE_FIELDS,
+    V0440FreeFreeRegressionGate,
+    validate_v0440_freef_regression,
 )
 
 __all__.extend([
@@ -611,6 +630,25 @@ __all__.extend([
     "MSolveStateParityResult",
     "compare_msolvelucy_state_probe",
     "write_msolvelucy_state_parity_products",
+    "XSTAR_BREMEM_CC",
+    "XSTAR_BREMEM_KT_EV_PER_T4",
+    "XSTAR_BREMEM_ION_Z2_FACTOR",
+    "XSTAR_BREMEM_GAMMA_FACTOR",
+    "XSTAR_BREMEM_ION_CHARGE",
+    "XSTAR_BREMEM_GAUNT_FACTOR",
+    "BremsstrahlungPortError",
+    "BremsstrahlungContext",
+    "BremsstrahlungResult",
+    "BremsstrahlungProbeReference",
+    "BremsstrahlungParityResult",
+    "bremem",
+    "bremem_continuum_result",
+    "load_bremem_probe_reference",
+    "compare_bremem_probe",
+    "write_bremem_parity_products",
+    "V0440_FREEF_REQUIRED_TRUE_FIELDS",
+    "V0440FreeFreeRegressionGate",
+    "validate_v0440_freef_regression",
     "FullElementMatrixParityError",
     "MatrixFamilyParityMetrics",
     "FullElementMatrixParityResult",

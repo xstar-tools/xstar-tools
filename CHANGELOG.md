@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.41 - 2026-05-20
+
+v0.4.41 translates XSTAR `bremem.f90` as the next bounded Milestone-4
+subsystem after the accepted v0.4.40 free--free gate. The implementation
+preserves default-real literal rounding, source temperature conventions,
+`xnx=xpx*xee`, `enz2=1.4*xnx`, `cc=1.032e-13`, `zz=1`, the current unity Gaunt
+factor, complete clearing of `brcems(1:ncn2)`, source-order emissivity
+construction, `bbee=0`, and the inactive/commented opacity branch. The incoming
+`opakc` workspace is preserved exactly.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2`, `freef`, and
+`bremem` in source order, exporting Compton coefficients, `htfreef`, final
+`brcems`, and final `opakc`. These remain unaccumulated until `heatf` is
+translated.
+
+The bounded XSTAR helper expands from eleven to thirteen hooks. A post-`freef`,
+pre-`bremem` hook captures incoming `brcems` and `opakc`; a loop-local hook in
+`bremem.f90` captures exact `brtmp`, final `brcems`, `bbee`, and unchanged
+`opakc`. Example 114 and CLI `xstar-atomic-port-bremem` require exact
+emissivity, reset, and opacity-preservation parity while preserving the frozen
+v0.4.34 oxygen, v0.4.38 H/He/O, v0.4.39 Compton, and v0.4.40 free--free
+regressions. Physical call-73 acceptance requires a rebuilt thirteen-hook XSTAR
+production run. `heatf` remains deferred.
+
 ## v0.4.40 - 2026-05-20
 
 v0.4.40 translates XSTAR `freef.f90` as the next bounded Milestone-4 source

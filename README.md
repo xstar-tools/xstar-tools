@@ -13,6 +13,35 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.41 translates thermal bremsstrahlung emissivity
+
+The source-faithful local-zone path now continues in literal order through:
+
+```text
+calc_hmc_all -> comp2 -> freef -> bremem
+```
+
+`bremem` preserves source-rounded constants, the unity Gaunt factor, complete
+clearing of the caller-owned `brcems` workspace, per-bin thermal
+bremsstrahlung emissivity, and the currently inactive Kirchhoff-opacity
+branch. The post-`freef` `opakc` array is therefore preserved exactly. `heatf`
+remains deferred, so Compton, free--free, and bremsstrahlung terms are exported
+but are not yet accumulated into complete heating/cooling totals.
+
+The bounded helper now has thirteen hooks. The two new hooks snapshot the
+incoming `brcems`/`opakc` workspaces before `bremem` and capture exact per-bin
+`brtmp`, final `brcems`, `bbee`, and unchanged `opakc` inside the source loop.
+The new CLI and example are:
+
+```text
+xstar-atomic-port-bremem
+examples/114_port_xstar_bremem.py
+```
+
+Acceptance requires exact emissivity, workspace-reset, and opacity-preservation
+parity plus the frozen oxygen, H/He/O, v0.4.39 Compton, and v0.4.40 free-free
+regressions. After acceptance, source order continues with `heatf`.
+
 ### v0.4.40 translates the free--free absorption subsystem
 
 The source-faithful local-zone path now continues in literal order through:

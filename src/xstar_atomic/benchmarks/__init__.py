@@ -26,4 +26,14 @@ def all_element_call73_v0438_acceptance_path() -> Path:
     return Path(str(files(__package__).joinpath("all_element_call73_v0438_acceptance")))
 
 
-__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path", "all_element_call73_v0438_acceptance_path"]
+def comp2_call73_v0439_acceptance_path() -> Path:
+    """Return the frozen accepted v0.4.39 Compton regression directory."""
+    return Path(str(files(__package__).joinpath("comp2_call73_v0439_acceptance")))
+
+
+def freef_call73_v0440_acceptance_path() -> Path:
+    """Return the frozen accepted v0.4.40 freef regression directory."""
+    return Path(str(files(__package__).joinpath("freef_call73_v0440_acceptance")))
+
+
+__all__ = ["oxygen_milestone3_v0422_path", "oxygen_call73_v0434_acceptance_path", "hydrogen_v0436_targets_path", "all_element_call73_v0438_acceptance_path", "comp2_call73_v0439_acceptance_path", "freef_call73_v0440_acceptance_path"]

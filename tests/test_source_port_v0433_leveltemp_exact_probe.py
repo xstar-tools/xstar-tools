@@ -184,7 +184,7 @@ def test_missing_exact_leveltemp_probe_is_not_accepted():
 
 def test_v0433_probe_adds_calc_hmc_ion_exact_leveltemp_hook_and_compiles(tmp_path: Path):
     snippets = calc_hmc_all_insertion_snippets()
-    assert len(snippets) == 11
+    assert len(snippets) == 13
     snippet = snippets["calc_hmc_ion_leveltemp_energy"]
     assert "after call ucalc" in snippet
     assert "leveltemp%rlev(1,idest2)" in snippet

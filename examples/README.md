@@ -1396,3 +1396,33 @@ PYTHONPATH=src python examples/113_port_xstar_freef.py \
   --out-dir xstar_freef_call73_v0440 \
   --print-summary
 ```
+
+
+### `114_port_xstar_bremem.py`
+
+Validates the source-faithful `bremem.f90` translation against the thirteen-hook
+call-73 XSTAR probe. It compares the exact per-bin bremsstrahlung emissivity,
+verifies that the incoming `brcems` workspace is cleared before population,
+and confirms that the post-`freef` `opakc` workspace is unchanged. Acceptance
+also requires the frozen oxygen, H/He/O, v0.4.39 Compton, and v0.4.40 free--free
+regressions.
+
+```bash
+PYTHONPATH=src python examples/114_port_xstar_bremem.py \
+  --xstar-calc-hmc-probe-dir /path/to/v0441_call73_probe \
+  --xstar-calc-hmc-call-id 73 \
+  --oxygen-call73-regression-dir /path/to/v0434_oxygen \
+  --all-element-v0438-regression-dir /path/to/v0438_all_elements \
+  --comp2-v0439-regression-dir /path/to/v0439_comp2 \
+  --freef-v0440-regression-dir /path/to/v0440_freef \
+  --out-dir xstar_bremem_call73_v0441 \
+  --print-summary
+```
+
+The required final line is:
+
+```text
+v0441_bremem_acceptance_ready=True
+```
+
+`heatf` remains deferred until this gate passes.

@@ -91,13 +91,13 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.40"
+PORT_LEDGER_VERSION = "v0.4.41"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "v0.4.40 run the eleven-hook call-73 production capture and require exact "
-    "calc_hmc_all -> freef opacity-mutation and htfreef parity while preserving "
-    "the frozen v0.4.34 oxygen, v0.4.38 H/He/O, and v0.4.39 comp2 regressions "
-    "-> bremem -> heatf -> complete fixed-state calc_hmc_all parity "
+    "v0.4.41 run the thirteen-hook call-73 production capture and require exact "
+    "calc_hmc_all -> bremem emissivity/reset/opacity-preservation parity while preserving "
+    "the frozen v0.4.34 oxygen, v0.4.38 H/He/O, v0.4.39 comp2, and v0.4.40 freef regressions "
+    "-> heatf -> complete fixed-state calc_hmc_all parity "
     "-> dsec -> calc_emisab_all -> calc_emis_all -> complete xstarcalc "
     "-> transfer/outputs -> optional C++"
 )
@@ -201,14 +201,20 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.compton.comp2",
           "direct original-Fortran comparison and exact call-73 cmp1/cmp2/htcomp/clcomp parity",
           "Accepted in the frozen v0.4.39 Compton regression."),
-        E("xstar/xstarlib/src/freef.f90", "freef", "milestone4_local_zone", T,
+        E("xstar/xstarlib/src/freef.f90", "freef", "milestone4_local_zone", V,
           "xstar_atomic.source_port.free_free.freef",
-          "direct original-Fortran synthetic-continuum comparison plus pre/post opacity and per-bin call-73 probe tooling",
-          "Translated and integrated into calc_hmc_all; physical call-73 acceptance requires the v0.4.40 eleven-hook production run."),
+          "direct original-Fortran comparison and exact call-73 opacity-increment/mutation/htfreef parity",
+          "Accepted in the frozen v0.4.40 freef regression."),
+        E("xstar/xstarlib/src/bremem.f90", "bremem", "milestone4_local_zone", T,
+          "xstar_atomic.source_port.bremsstrahlung.bremem",
+          "direct original-Fortran synthetic-continuum comparison plus pre/post brcems and opacity call-73 probe tooling",
+          "Translated and integrated into calc_hmc_all; physical call-73 acceptance requires the v0.4.41 thirteen-hook production run."),
+        E("xstar/xstarlib/src/heatf.f90", "heatf", "milestone4_local_zone", U,
+          "xstar_atomic.source_port.thermal.heatf", "", "Deferred until bremem is independently accepted."),
         E("xstar/xstarlib/src/calc_hmc_all.f90", "calc_hmc_all", "milestone4_local_zone", P,
           "xstar_atomic.source_port.local_zone.calc_hmc_all",
           "call-73 pre-matrix/runtime parity, source-ordinal npilev mapping, separated second-pass pirt/rrrt, probe-aware abundance, exact same-call xileve input capture/replay, complete type-50/type-71 ans3/ans4 energy channels, corrected type-72 packed endpoints, record-level rate-7 cj2 diagnosis, exact mutable-leveltemp reads for types 49/53/99, XSTAR thermal-family probes, exact same-call aj1/aj2/cj/cj2 comparison, and synchronized final msolvelucy matrix/x/xo capture",
-          "The accepted v0.4.34 oxygen call-73 result remains mandatory. v0.4.36 translated native H I type-62/calt6062 records 488-491 and established the H/He/O gate. v0.4.37 closed the literal type-77 sub-eV source-zero gate. v0.4.38 separates the returned final-x ion fractions (`xii`/`xiin`) from the final-outer-start `xtot` diagnostics, closing the last H I global-ion export discrepancy. v0.4.39 accepted `comp2 -> cmpfnc -> hunt3` plus the global `coheat.dat` state. v0.4.40 translates and integrates `freef`; `bremem -> heatf` remain pending."),
+          "The accepted v0.4.34 oxygen call-73 result remains mandatory. v0.4.36 translated native H I type-62/calt6062 records 488-491 and established the H/He/O gate. v0.4.37 closed the literal type-77 sub-eV source-zero gate. v0.4.38 separates the returned final-x ion fractions (`xii`/`xiin`) from the final-outer-start `xtot` diagnostics, closing the last H I global-ion export discrepancy. v0.4.39 accepted `comp2 -> cmpfnc -> hunt3` plus the global `coheat.dat` state. v0.4.40 accepted `freef`. v0.4.41 translates and integrates `bremem`; `heatf` remains pending."),
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", U,
           "xstar_atomic.source_port.local_zone.dsec", "", "Temperature/electron-fraction iteration is the next nonlinear milestone."),
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
@@ -222,6 +228,6 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-3 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem. v0.4.40 translates `freef` and adds exact incoming/updated opacity and htfreef probes. `bremem`, `heatf`, dsec, emissivity, transfer, and outputs remain pending."),
+          "Milestones 1-3 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 translates `bremem` and adds exact brcems reset/emissivity and opacity-preservation probes. `heatf`, dsec, emissivity, transfer, and outputs remain pending."),
     ]
     return XSTARPortLedger(entries)

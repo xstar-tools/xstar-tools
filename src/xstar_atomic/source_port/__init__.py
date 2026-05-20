@@ -201,6 +201,26 @@ from .free_free import (
     write_freef_parity_products,
 )
 
+from .bremsstrahlung import (
+    XSTAR_BREMEM_CC,
+    XSTAR_BREMEM_KT_EV_PER_T4,
+    XSTAR_BREMEM_ION_Z2_FACTOR,
+    XSTAR_BREMEM_GAMMA_FACTOR,
+    XSTAR_BREMEM_ION_CHARGE,
+    XSTAR_BREMEM_GAUNT_FACTOR,
+    BremsstrahlungPortError,
+    BremsstrahlungContext,
+    BremsstrahlungResult,
+    BremsstrahlungProbeReference,
+    BremsstrahlungParityResult,
+    bremem,
+    bremem_continuum_result,
+    load_bremem_probe_reference,
+    compare_bremem_probe,
+    write_bremem_parity_products,
+)
+
+
 from .v0438_regression import (
     V0438AllElementRegressionGate,
     validate_v0438_all_element_regression,
@@ -210,6 +230,12 @@ from .v0439_regression import (
     V0439_COMP2_REQUIRED_TRUE_FIELDS,
     V0439Comp2RegressionGate,
     validate_v0439_comp2_regression,
+)
+
+from .v0440_regression import (
+    V0440_FREEF_REQUIRED_TRUE_FIELDS,
+    V0440FreeFreeRegressionGate,
+    validate_v0440_freef_regression,
 )
 
 from .local_zone import (
@@ -527,9 +553,28 @@ __all__ = [
     "load_freef_probe_reference",
     "compare_freef_probe",
     "write_freef_parity_products",
+    "XSTAR_BREMEM_CC",
+    "XSTAR_BREMEM_KT_EV_PER_T4",
+    "XSTAR_BREMEM_ION_Z2_FACTOR",
+    "XSTAR_BREMEM_GAMMA_FACTOR",
+    "XSTAR_BREMEM_ION_CHARGE",
+    "XSTAR_BREMEM_GAUNT_FACTOR",
+    "BremsstrahlungPortError",
+    "BremsstrahlungContext",
+    "BremsstrahlungResult",
+    "BremsstrahlungProbeReference",
+    "BremsstrahlungParityResult",
+    "bremem",
+    "bremem_continuum_result",
+    "load_bremem_probe_reference",
+    "compare_bremem_probe",
+    "write_bremem_parity_products",
     "V0439_COMP2_REQUIRED_TRUE_FIELDS",
     "V0439Comp2RegressionGate",
     "validate_v0439_comp2_regression",
+    "V0440_FREEF_REQUIRED_TRUE_FIELDS",
+    "V0440FreeFreeRegressionGate",
+    "validate_v0440_freef_regression",
     "EscapeStateError",
     "EscapeStateBuildResult",
     "load_escape_state_from_xstar_run",
