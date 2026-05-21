@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import copy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
@@ -219,6 +220,37 @@ class DsecMutableRuntimeState:
 
 
 @dataclass(frozen=True)
+class DsecCalcHMCAllInputSnapshot:
+    """Exact Python state immediately before one ``calc_hmc_all`` call.
+
+    v0.4.51 records these snapshots so the state written by one physical
+    ``dsec`` evaluation can be compared directly with the XSTAR state entering
+    the next correlated evaluation.  Values are copied before the call; later
+    mutation of the runtime state cannot alter the diagnostic record.
+    """
+
+    evaluation_index: int
+    temperature_t4: float
+    temperature_k: float
+    electron_fraction_xee: float
+    hydrogen_density_cm3: float
+    pressure: float
+    lcdd: int
+    covering_fraction: float
+    turbulent_velocity_km_s: float
+    critf: float
+    global_level_populations: Mapping[Tuple[int, int, int], float]
+    global_bilev_values: Mapping[Tuple[int, int, int], float]
+    global_rnist_values: Mapping[Tuple[int, int, int], float]
+    global_level_index_by_key: Mapping[Tuple[int, int, int], int]
+    leveltemp_workspace: Optional[Any]
+    leveltemp_owner_by_column: Mapping[int, Mapping[str, Any]]
+    radiation: Optional[Any]
+    escape: Optional[Any]
+    calc_kwargs: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
 class DsecEvaluation:
     """The two residuals returned by one ``calc_hmc_all`` trial."""
 
@@ -251,7 +283,9 @@ class CalcHMCAllDsecEvaluator:
     element_solver: Optional[Any] = None
     pre_matrix_solver: Optional[Any] = None
     progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
+    capture_input_snapshot_indices: Tuple[int, ...] = ()
     evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
+    input_snapshots: List[DsecCalcHMCAllInputSnapshot] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         # Reuse one source-faithful dispatcher across every ion, element, and
@@ -274,10 +308,50 @@ class CalcHMCAllDsecEvaluator:
         if self.pre_matrix_solver is not None:
             kwargs["pre_matrix_solver"] = self.pre_matrix_solver
 
+        requests = state.requests_for_next_call()
+        evaluation_index = len(self.evaluations) + 1
+        if evaluation_index in set(self.capture_input_snapshot_indices):
+            prior = state.last_calc_hmc_all
+            radiation = requests[0].radiation if requests else None
+            escape = requests[0].escape if requests else None
+            snapshot = DsecCalcHMCAllInputSnapshot(
+                evaluation_index=evaluation_index,
+                temperature_t4=float(state.temperature_t4),
+                temperature_k=float(state.temperature_k),
+                electron_fraction_xee=float(state.electron_fraction_xee),
+                hydrogen_density_cm3=float(state.hydrogen_density_cm3),
+                pressure=float(state.pressure),
+                lcdd=int(state.lcdd),
+                covering_fraction=(float(requests[0].covering_fraction) if requests else 0.0),
+                turbulent_velocity_km_s=(
+                    float(requests[0].turbulent_velocity_km_s) if requests else 0.0
+                ),
+                critf=(float(requests[0].critf) if requests else 0.0),
+                global_level_populations=dict(state.global_level_populations or {}),
+                global_bilev_values=dict(state.source_arrays.get("bilevg", {})),
+                global_rnist_values=dict(state.source_arrays.get("rnisg", {})),
+                global_level_index_by_key=(
+                    {} if prior is None else dict(prior.global_level_index_by_key)
+                ),
+                leveltemp_workspace=copy.deepcopy(state.leveltemp_workspace),
+                leveltemp_owner_by_column={
+                    int(index): dict(owner)
+                    for index, owner in state.leveltemp_owner_by_column.items()
+                },
+                radiation=copy.deepcopy(radiation),
+                escape=copy.deepcopy(escape),
+                calc_kwargs={
+                    key: copy.deepcopy(value)
+                    for key, value in kwargs.items()
+                    if key not in {"dispatcher", "element_solver", "pre_matrix_solver"}
+                },
+            )
+            self.input_snapshots.append(snapshot)
+
         result = calc_hmc_all(
             self.master,
             self.derived,
-            elements=state.requests_for_next_call(),
+            elements=requests,
             temperature_k=state.temperature_k,
             hydrogen_density_cm3=state.hydrogen_density_cm3,
             electron_fraction_xee=state.electron_fraction_xee,

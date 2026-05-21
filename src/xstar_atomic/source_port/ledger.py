@@ -91,10 +91,10 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.50"
+PORT_LEDGER_VERSION = "v0.4.51"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "run the call-correlated matching-state dsec prefix/full validation and close the bounded dsec acceptance while "
+    "capture and compare the XSTAR evaluation-2 input state against Python post-evaluation-1 mutable state, correct the first transition mismatch, then close the bounded dsec acceptance while "
     "preserving the frozen v0.4.44 complete fixed-state regression -> "
     "bremsmap -> calc_emisab_all -> calc_emis_all -> complete xstarcalc -> "
     "radial transfer and outputs -> optional C++ backend"
@@ -218,7 +218,7 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/dsec.f90", "dsec", "milestone4_local_zone", T,
           "xstar_atomic.source_port.dsec.dsec",
           "exact source-order nested charge/thermal control flow, mutable population/leveltemp replay, synthetic branch tests, and trajectory-probe tooling",
-          "The Fortran control algorithm is translated in v0.4.45. v0.4.46 adds the turnkey physical calc_hmc_all-backed runner. v0.4.47 corrects population-state ownership by carrying global xilevg and remapping it after each dynamic istruc basis selection. v0.4.48 correlates every dsec evaluation with its exact calc_hmc_all call, captures the matching input state, separates the post-dsec reference, records thermal decomposition, and adds fast prefix validation; physical acceptance remains pending a production rerun with the new probes."),
+          "The Fortran control algorithm is translated in v0.4.45. v0.4.46 adds the turnkey physical calc_hmc_all-backed runner. v0.4.47 corrects population-state ownership by carrying global xilevg and remapping it after each dynamic istruc basis selection. v0.4.48 correlates every dsec evaluation with its exact calc_hmc_all call, captures the matching input state, separates the post-dsec reference, records thermal decomposition, and adds fast prefix validation. v0.4.49 permits the source-valid zero first seed only for the correlated first call, and v0.4.50 repairs progress reporting. v0.4.51 captures a selected Python pre-call transition snapshot and compares it with the exact XSTAR entry state for evaluation 2, including runtime, continuum, escape arrays, xilevg/bilevg/rnisg, and source-used leveltemp slots; physical acceptance remains pending correction of the first mutable-state transition mismatch."),
         E("xstar/xstarlib/src/bremsmap.f90", "bremsmap", "milestone4_local_zone", U,
           "xstar_atomic.source_port.radiation.bremsmap", "",
           "The bounded dsec path may use an externally constructed radiation state; autonomous xstarcalc requires this source stage."),

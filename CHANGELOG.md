@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.51 - 2026-05-21
+
+v0.4.51 adds a bounded evaluation-transition diagnostic for the physical
+`dsec` workflow. The call-correlated evaluation-1 state and thermal
+decomposition pass, but the v0.4.50 prefix first exceeds the thermal tolerance
+at evaluation 2. The new path captures the Python state immediately before a
+selected `calc_hmc_all` evaluation and compares it with the exact XSTAR entry
+state captured for that same `dsec_call_id`, evaluation index, phase, and global
+`calc_hmc_all` call ID.
+
+New coverage includes runtime and geometry scalars, continuum/radiation arrays,
+line and continuum optical-depth arrays, carried `opakc`/`brcems` workspaces, global `xilevg`/`bilevg`/`rnisg`, and
+the `leveltemp` slots actually read by `ucalc.f90`. Raw all-slot `leveltemp`,
+`nlpt`, and `iltp` values are retained in diagnostic products. The matching
+loader now maps orbital angular momentum from source `ilev(3)` and preserves
+source threshold `rlev(4)`. Snapshots are opt-in and restricted to requested
+evaluation indices to avoid deep-copy overhead during ordinary full runs.
+
+Added `examples/121_validate_xstar_dsec_transition_state.py` and the
+`xstar-atomic-validate-dsec-transition` command. No scientific XSTAR source or
+helper change is required; the v0.4.48 instrumented executable can capture
+evaluation 2 through its existing environment selection. Physical bounded
+`dsec` acceptance remains open.
+
 ## v0.4.50 - 2026-05-21
 
 v0.4.50 is a Python-only progress-reporting hotfix for the call-correlated

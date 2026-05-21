@@ -401,6 +401,7 @@ from .dsec import (
     DSEC_TEMPERATURE_FACTOR,
     DSEC_ELECTRON_FACTOR,
     DsecMutableRuntimeState,
+    DsecCalcHMCAllInputSnapshot,
     DsecEvaluation,
     DsecEvaluator,
     CalcHMCAllDsecEvaluator,
@@ -426,6 +427,7 @@ from .dsec import (
 from .dsec_correlation import (
     CalcHMCAllCallCorrelation,
     DsecCallCorrelation,
+    DsecLevelTempSnapshot,
     DsecMatchingInputState,
     DsecThermalDecompositionRow,
     DsecThermalParityRow,
@@ -436,6 +438,15 @@ from .dsec_correlation import (
     load_xstar_dsec_thermal_decomposition,
     compare_dsec_thermal_decomposition,
     write_dsec_thermal_parity_products,
+)
+
+
+from .dsec_transition import (
+    DsecTransitionParityRow,
+    DsecTransitionStateParity,
+    compare_dsec_transition_state,
+    write_dsec_transition_state_products,
+    write_dsec_input_snapshot_products,
 )
 
 from .dsec_physical import (
@@ -700,6 +711,7 @@ __all__ = [
     "DSEC_TEMPERATURE_FACTOR",
     "DSEC_ELECTRON_FACTOR",
     "DsecMutableRuntimeState",
+    "DsecCalcHMCAllInputSnapshot",
     "DsecEvaluation",
     "DsecEvaluator",
     "CalcHMCAllDsecEvaluator",
@@ -728,6 +740,7 @@ __all__ = [
 
     "CalcHMCAllCallCorrelation",
     "DsecCallCorrelation",
+    "DsecLevelTempSnapshot",
     "DsecMatchingInputState",
     "DsecThermalDecompositionRow",
     "DsecThermalParityRow",
@@ -738,4 +751,9 @@ __all__ = [
     "load_xstar_dsec_thermal_decomposition",
     "compare_dsec_thermal_decomposition",
     "write_dsec_thermal_parity_products",
+    "DsecTransitionParityRow",
+    "DsecTransitionStateParity",
+    "compare_dsec_transition_state",
+    "write_dsec_transition_state_products",
+    "write_dsec_input_snapshot_products",
 ]

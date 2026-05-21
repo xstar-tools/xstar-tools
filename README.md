@@ -13,6 +13,26 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.51 captures the evaluation-2 `dsec` transition state
+
+The first call-correlated physical evaluation now matches XSTAR, but the
+v0.4.50 four-evaluation prefix first diverges in the pre-continuum cooling
+state entering evaluation 2. v0.4.51 adds a diagnostic-only transition-state
+comparison between the Python state immediately after evaluation 1/control
+update and the exact XSTAR state immediately before evaluation 2.
+
+The comparison covers runtime scalars, incident/attenuated continuum arrays,
+line and continuum optical-depth arrays, carried `opakc`/`brcems` workspaces,
+complete global `xilevg`, `bilevg`, and `rnisg`, and the `leveltemp` slots read by `ucalc.f90`. Raw all-slot
+`leveltemp` values plus `nlpt`/`iltp` are also written for diagnosis. Python
+snapshots are captured only for requested evaluation indices, so normal full
+`dsec` runs do not deep-copy these large states at every call.
+
+Use `examples/121_validate_xstar_dsec_transition_state.py` or the
+`xstar-atomic-validate-dsec-transition` entry point. The existing v0.4.48
+instrumented XSTAR executable already supports selecting evaluation 2; no
+Fortran rebuild is required.
+
 ### v0.4.50 fixes optional physical-`dsec` progress reporting
 
 The call-correlated example-119 runner now reports compact-basis sizes from

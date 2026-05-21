@@ -42,6 +42,26 @@ class DsecCallCorrelation:
 
 
 @dataclass(frozen=True)
+class DsecLevelTempSnapshot:
+    """Complete raw XSTAR ``leveltemp`` work array at one call boundary.
+
+    The production Python evaluator currently exposes the source-used subset
+    through :class:`UCalcLevelTable`.  v0.4.51 also preserves all ten real and
+    integer slots plus ``nlpt``/``iltp`` so transition diagnostics never lose
+    captured XSTAR state.
+    """
+
+    rlev: np.ndarray
+    ilev: np.ndarray
+    nlpt: np.ndarray
+    iltp: np.ndarray
+
+    @property
+    def n_columns(self) -> int:
+        return int(self.rlev.shape[1]) if self.rlev.ndim == 2 else 0
+
+
+@dataclass(frozen=True)
 class DsecMatchingInputState:
     calc_hmc_all_call_id: int
     dsec_call_id: int
@@ -66,6 +86,7 @@ class DsecMatchingInputState:
     global_bilev_values_by_index: np.ndarray
     global_rnist_values_by_index: np.ndarray
     leveltemp_workspace: Optional[UCalcLevelTable]
+    leveltemp_snapshot: Optional[DsecLevelTempSnapshot]
     source_dir: str
 
     @property
@@ -196,12 +217,36 @@ def _load_leveltemp(rows: Sequence[Mapping[str, str]]) -> Optional[UCalcLevelTab
             index=column,
             energy_ev=float(r.get(1, 0.0)),
             statistical_weight=float(r.get(2, 0.0)),
-            ionization_potential_ev=float(r.get(3, 0.0)),
+            # ucalc.f90 reads rlev(4) for the bound/continuum energy.
+            # rlev(3) is preserved only in the raw v0.4.51 snapshot.
+            ionization_potential_ev=float(r.get(4, 0.0)),
             continuum_energy_ev=float(r.get(4, 0.0)),
             principal_n=(None if i.get(1, 0) == 0 else int(i[1])),
-            orbital_l=(None if i.get(2, 0) == 0 else int(i[2])),
+            orbital_l=(None if i.get(3, 0) == 0 else int(i[3])),
         )
     return UCalcLevelTable(levels=levels, nlev=max(levels, default=0))
+
+
+def _load_leveltemp_snapshot(
+    rows: Sequence[Mapping[str, str]],
+) -> Optional[DsecLevelTempSnapshot]:
+    if not rows:
+        return None
+    n = max(int(row["column_index"]) for row in rows)
+    rlev = np.zeros((10, n), dtype=float)
+    ilev = np.zeros((10, n), dtype=int)
+    nlpt = np.zeros(n, dtype=int)
+    iltp = np.zeros(n, dtype=int)
+    for row in rows:
+        column = int(row["column_index"]) - 1
+        slot = int(row["slot"]) - 1
+        if not (0 <= slot < 10):
+            raise DsecPortError(f"invalid leveltemp slot {slot + 1}")
+        rlev[slot, column] = parse_fortran_float(row["rlev"])
+        ilev[slot, column] = int(row["ilev"])
+        nlpt[column] = int(row["nlpt"])
+        iltp[column] = int(row["iltp"])
+    return DsecLevelTempSnapshot(rlev=rlev, ilev=ilev, nlpt=nlpt, iltp=iltp)
 
 
 def load_dsec_matching_input_state(
@@ -318,6 +363,7 @@ def load_dsec_matching_input_state(
         global_bilev_values_by_index=bilev,
         global_rnist_values_by_index=rnist,
         leveltemp_workspace=_load_leveltemp(leveltemp_rows),
+        leveltemp_snapshot=_load_leveltemp_snapshot(leveltemp_rows),
         source_dir=str(root),
     )
 
@@ -531,6 +577,7 @@ def write_dsec_thermal_parity_products(
 __all__ = [
     "CalcHMCAllCallCorrelation",
     "DsecCallCorrelation",
+    "DsecLevelTempSnapshot",
     "DsecMatchingInputState",
     "DsecThermalDecompositionRow",
     "DsecThermalParityRow",

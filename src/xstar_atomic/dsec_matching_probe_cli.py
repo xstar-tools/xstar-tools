@@ -17,6 +17,13 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--target-dsec-call", type=int, default=1)
+    parser.add_argument("--target-evaluation", type=int, default=1)
+    parser.add_argument(
+        "--target-phase",
+        choices=("dsec_internal", "dsec_input_and_post", "both"),
+        default="dsec_input_and_post",
+    )
     return parser
 
 
@@ -36,14 +43,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         "4. the instrumented XSTAR source files.\n\n"
         "Set:\n\n"
         "```bash\n"
-        "export XSTAR_ATOMIC_DSEC_TARGET_CALL=1\n"
-        "export XSTAR_ATOMIC_HMC_TARGET_DSEC_CALL=1\n"
-        "export XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION=1\n"
-        "export XSTAR_ATOMIC_HMC_TARGET_DSEC_PHASE=dsec_input_and_post\n"
+        f"export XSTAR_ATOMIC_DSEC_TARGET_CALL={args.target_dsec_call}\n"
+        f"export XSTAR_ATOMIC_HMC_TARGET_DSEC_CALL={args.target_dsec_call}\n"
+        f"export XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION={args.target_evaluation}\n"
+        f"export XSTAR_ATOMIC_HMC_TARGET_DSEC_PHASE={args.target_phase}\n"
         "export XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0\n"
         "```\n\n"
         "Delete old probe CSVs before the run. The correlation file identifies "
-        "the exact first internal and post-dsec `calc_hmc_all` call IDs.\n",
+        "the exact internal and post-dsec `calc_hmc_all` call IDs. For the v0.4.51 "
+        "evaluation-2 transition diagnostic use `--target-evaluation 2 "
+        "--target-phase dsec_internal`; the helper source is unchanged and an "
+        "already instrumented v0.4.48 executable only needs to be rerun.\n",
         encoding="utf-8",
     )
     seen = set()

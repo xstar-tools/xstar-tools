@@ -19,6 +19,7 @@ from .source_port import (
     compare_complete_fixed_state_calc_hmc_all,
     compare_dsec_thermal_decomposition,
     compare_dsec_trajectory,
+    compare_dsec_transition_state,
     dsec,
     initial_state_from_xstar_trajectory,
     load_all_element_fixed_state_plan,
@@ -38,6 +39,8 @@ from .source_port import (
     write_dsec_acceptance_products,
     write_dsec_thermal_parity_products,
     write_dsec_trajectory_parity_products,
+    write_dsec_transition_state_products,
+    write_dsec_input_snapshot_products,
     write_dsec_trajectory_products,
     write_fixed_state_calc_hmc_all_products,
 )
@@ -74,6 +77,22 @@ def build_parser() -> argparse.ArgumentParser:
             "defaults to the directory containing --xstar-dsec-trajectory"
         ),
     )
+    parser.add_argument(
+        "--xstar-transition-input-probe-dir",
+        help=(
+            "optional probe directory containing the XSTAR state entering a later "
+            "internal dsec evaluation; v0.4.51 initially targets evaluation 2"
+        ),
+    )
+    parser.add_argument(
+        "--xstar-transition-call-correlation",
+        help=(
+            "correlation CSV for the transition-state probe run; defaults to the "
+            "correlation CSV in --xstar-transition-input-probe-dir or the main one"
+        ),
+    )
+    parser.add_argument("--xstar-transition-calc-hmc-call-id", type=int)
+    parser.add_argument("--xstar-transition-evaluation-index", type=int, default=2)
 
     # Deprecated compatibility spelling.  It may provide a probe directory,
     # but v0.4.48 never assumes that one call ID represents both input and
@@ -130,6 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--final-atol", type=float, default=1.0e-12)
     parser.add_argument("--continuum-rtol", type=float, default=5.0e-12)
     parser.add_argument("--continuum-atol", type=float, default=1.0e-30)
+    parser.add_argument("--transition-runtime-rtol", type=float, default=5.0e-12)
+    parser.add_argument("--transition-runtime-atol", type=float, default=1.0e-30)
+    parser.add_argument("--transition-array-rtol", type=float, default=5.0e-12)
+    parser.add_argument("--transition-array-atol", type=float, default=1.0e-30)
+    parser.add_argument("--transition-population-rtol", type=float, default=5.0e-12)
+    parser.add_argument("--transition-population-atol", type=float, default=1.0e-30)
+    parser.add_argument("--transition-leveltemp-rtol", type=float, default=5.0e-12)
+    parser.add_argument("--transition-leveltemp-atol", type=float, default=1.0e-30)
     parser.add_argument("--v0444-regression")
 
     parser.add_argument(
@@ -181,6 +208,49 @@ def _resolve_probe_inputs(args: argparse.Namespace) -> tuple[Path, Path, int, in
                 "--xstar-input-calc-hmc-call-id and --xstar-post-dsec-calc-hmc-call-id"
             )
     return input_dir, post_dir, int(input_call), int(post_call), correlation_source
+
+
+def _resolve_transition_input(args: argparse.Namespace) -> tuple[Optional[Path], Optional[int], Optional[Any], Optional[str]]:
+    value = args.xstar_transition_input_probe_dir
+    if value is None:
+        return None, None, None, None
+    probe_dir = Path(value)
+    evaluation_index = int(args.xstar_transition_evaluation_index)
+    if evaluation_index <= 1:
+        raise ValueError("--xstar-transition-evaluation-index must be at least 2")
+
+    call_id = args.xstar_transition_calc_hmc_call_id
+    source = args.xstar_transition_call_correlation
+    if source is None:
+        local = probe_dir / "xstar_dsec_calc_hmc_all_call_correlation.csv"
+        if local.is_file():
+            source = str(local)
+        elif args.xstar_call_correlation:
+            source = args.xstar_call_correlation
+    if call_id is None:
+        if source is None:
+            raise ValueError(
+                "transition-state capture requires --xstar-transition-call-correlation "
+                "or --xstar-transition-calc-hmc-call-id"
+            )
+        correlation = resolve_dsec_calc_hmc_all_calls(
+            source,
+            dsec_call_id=args.xstar_dsec_call_id,
+            input_evaluation_index=evaluation_index,
+        )
+        call_id = correlation.input_calc_hmc_all_call_id
+        source = correlation.source_path
+    matching = load_dsec_matching_input_state(probe_dir, call_id=int(call_id))
+    if matching.dsec_call_id != int(args.xstar_dsec_call_id):
+        raise ValueError("transition input state belongs to a different dsec call")
+    if matching.dsec_evaluation_index != evaluation_index:
+        raise ValueError(
+            "transition input state evaluation mismatch: "
+            f"requested={evaluation_index}, captured={matching.dsec_evaluation_index}"
+        )
+    if matching.phase != "dsec_internal":
+        raise ValueError("transition input state is not an internal dsec evaluation")
+    return probe_dir, int(call_id), matching, source
 
 
 def _check_matching_runtime(initial: Any, matching: Any, *, rtol: float, atol: float) -> None:
@@ -265,6 +335,8 @@ def _write_runner_summary(
     result: Optional[Any],
     parity: Optional[Any],
     thermal_parity: Optional[Any],
+    transition_input: Optional[Any],
+    transition_parity: Optional[Any],
     final_parity: Optional[Any],
     acceptance: Optional[Any],
     frozen: Any,
@@ -288,8 +360,8 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.48",
-        "purpose": "call-correlated matching-state physical dsec validation",
+        "port_version": "v0.4.51",
+        "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
         "xstar_input_probe_dir": str(input_probe_dir),
@@ -323,9 +395,50 @@ def _write_runner_summary(
         "python_final_elcter": None if result is None else result.final_elcter,
         "dsec_trajectory_parity_ready": None if parity is None else parity.ready,
         "dsec_thermal_parity_ready": None if thermal_parity is None else thermal_parity.ready,
+        "transition_evaluation_index": (
+            None if transition_input is None else transition_input.dsec_evaluation_index
+        ),
+        "transition_calc_hmc_all_call_id": (
+            None if transition_input is None else transition_input.calc_hmc_all_call_id
+        ),
+        "dsec_transition_state_ready": (
+            None if transition_parity is None else transition_parity.ready
+        ),
+        "transition_runtime_state_ready": (
+            None if transition_parity is None else transition_parity.runtime_state_ready
+        ),
+        "transition_radiation_state_ready": (
+            None if transition_parity is None else transition_parity.radiation_state_ready
+        ),
+        "transition_escape_state_ready": (
+            None if transition_parity is None else transition_parity.escape_state_ready
+        ),
+        "transition_continuum_workspace_ready": (
+            None if transition_parity is None else transition_parity.continuum_workspace_ready
+        ),
+        "transition_global_mapping_ready": (
+            None if transition_parity is None else transition_parity.global_mapping_ready
+        ),
+        "transition_global_xilevg_ready": (
+            None if transition_parity is None else transition_parity.global_xilevg_ready
+        ),
+        "transition_global_bilevg_ready": (
+            None if transition_parity is None else transition_parity.global_bilevg_ready
+        ),
+        "transition_global_rnisg_ready": (
+            None if transition_parity is None else transition_parity.global_rnisg_ready
+        ),
+        "transition_leveltemp_source_used_slots_ready": (
+            None
+            if transition_parity is None
+            else transition_parity.leveltemp_source_used_slots_ready
+        ),
         "final_fixed_state_parity_ready": None if final_parity is None else final_parity.ready,
         "v0445_bounded_dsec_acceptance_ready": None if acceptance is None else acceptance.ready,
         "v0448_call_correlated_matching_state_ready": v0448_ready,
+        "v0451_evaluation_transition_diagnostic_ready": (
+            None if transition_parity is None else transition_parity.ready
+        ),
         "products": paths,
     }
     json_path = out_dir / "xstar_dsec_physical_runner_summary.json"
@@ -358,7 +471,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.48 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.51 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -381,11 +494,28 @@ def main(argv: Optional[list[str]] = None) -> int:
         absolute_tolerance=args.runtime_atol,
     )
     matching_input = load_dsec_matching_input_state(input_probe_dir, call_id=input_call_id)
+    transition_probe_dir, transition_call_id, transition_input, transition_correlation_source = (
+        _resolve_transition_input(args)
+    )
+    transition_freef_ref = transition_bremem_ref = None
+    if transition_input is not None:
+        transition_freef_ref = load_freef_probe_reference(
+            transition_probe_dir, call_id=int(transition_call_id)
+        )
+        transition_bremem_ref = load_bremem_probe_reference(
+            transition_probe_dir, call_id=int(transition_call_id)
+        )
     if matching_input.dsec_call_id != int(args.xstar_dsec_call_id):
         raise ValueError("matching input state belongs to a different dsec call")
     if matching_input.dsec_evaluation_index != 1 or matching_input.phase != "dsec_internal":
         raise ValueError("matching input state is not the first internal dsec evaluation")
     _check_matching_runtime(initial, matching_input, rtol=args.runtime_rtol, atol=args.runtime_atol)
+    if transition_input is not None and args.maximum_evaluations is not None:
+        if int(args.maximum_evaluations) < int(transition_input.dsec_evaluation_index):
+            raise ValueError(
+                "--maximum-evaluations must reach the requested transition evaluation "
+                f"{transition_input.dsec_evaluation_index}"
+            )
 
     # The first internal dsec call is entered from init.f90's exact zero
     # global xilevg workspace.  The matching compact pre-msolvelucy probes are
@@ -475,6 +605,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             result=None,
             parity=None,
             thermal_parity=None,
+            transition_input=transition_input,
+            transition_parity=None,
             final_parity=None,
             acceptance=None,
             frozen=frozen,
@@ -486,6 +618,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
             print(f"xstar_input_calc_hmc_all_call_id={input_call_id}")
             print(f"xstar_post_dsec_calc_hmc_all_call_id={post_call_id}")
+            if transition_input is not None:
+                print(f"xstar_transition_evaluation_index={transition_input.dsec_evaluation_index}")
+                print(f"xstar_transition_calc_hmc_all_call_id={transition_input.calc_hmc_all_call_id}")
             print(f"initial_temperature_t4={initial.temperature_t4:.17g}")
             print(f"initial_electron_fraction_xee={initial.electron_fraction_xee:.17g}")
             print(f"initial_hydrogen_density_cm3={initial.hydrogen_density_cm3:.17g}")
@@ -549,13 +684,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         pointer_cache=args.pointer_cache,
         use_pointer_cache=True,
     )
-    result = parity = thermal_parity = final_parity = acceptance = None
+    result = parity = thermal_parity = transition_parity = final_parity = acceptance = None
     try:
         evaluator = CalcHMCAllDsecEvaluator(
             master=built.master,
             derived=built.derived,
             calc_kwargs_factory=continuum_factory,
             progress_callback=progress,
+            capture_input_snapshot_indices=(
+                ()
+                if transition_input is None
+                else (int(transition_input.dsec_evaluation_index),)
+            ),
         )
         result = dsec(
             state,
@@ -583,15 +723,60 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.48")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.51")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.48")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.51")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.48"
+            thermal_parity, out, port_version="v0.4.51"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
+
+        if transition_input is not None:
+            target = int(transition_input.dsec_evaluation_index)
+            transition_snapshot = next(
+                (
+                    item
+                    for item in evaluator.input_snapshots
+                    if int(item.evaluation_index) == target
+                ),
+                None,
+            )
+            if transition_snapshot is None:
+                captured = ",".join(
+                    str(item.evaluation_index) for item in evaluator.input_snapshots
+                ) or "none"
+                raise RuntimeError(
+                    f"Python run did not capture transition evaluation {target}; "
+                    f"captured={captured}"
+                )
+            transition_parity = compare_dsec_transition_state(
+                transition_snapshot,
+                transition_input,
+                runtime_rtol=args.transition_runtime_rtol,
+                runtime_atol=args.transition_runtime_atol,
+                array_rtol=args.transition_array_rtol,
+                array_atol=args.transition_array_atol,
+                population_rtol=args.transition_population_rtol,
+                population_atol=args.transition_population_atol,
+                leveltemp_rtol=args.transition_leveltemp_rtol,
+                leveltemp_atol=args.transition_leveltemp_atol,
+                xstar_opakc_before_cm_inv=transition_freef_ref.opakc_before_cm_inv,
+                xstar_brcems_before=transition_bremem_ref.brcems_before,
+            )
+            transition_products = write_dsec_transition_state_products(
+                transition_parity, out, port_version="v0.4.51"
+            )
+            paths.update(
+                {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
+            )
+            transition_state_products = write_dsec_input_snapshot_products(
+                transition_snapshot, transition_input, out
+            )
+            paths.update(
+                {f"transition_state_{key}": str(value) for key, value in transition_state_products.items()}
+            )
 
         if not prefix_mode:
             dsec_final_result = result.state.last_calc_hmc_all
@@ -628,15 +813,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
             fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.48"
+                final_result, out, port_version="v0.4.51"
             )
             paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
             final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.48"
+                final_parity, out, port_version="v0.4.51"
             )
             paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.48"
+                acceptance, out, port_version="v0.4.51"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -655,6 +840,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             result=result,
             parity=parity,
             thermal_parity=thermal_parity,
+            transition_input=transition_input,
+            transition_parity=transition_parity,
             final_parity=final_parity,
             acceptance=acceptance,
             frozen=frozen,
@@ -667,7 +854,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.48")
+        print("port_version=v0.4.51")
         print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
         print(f"xstar_input_calc_hmc_all_call_id={input_call_id}")
         print(f"xstar_post_dsec_calc_hmc_all_call_id={post_call_id}")
@@ -681,6 +868,23 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"event_sequence_ready={parity.event_sequence_ready}")
         print(f"dsec_trajectory_parity_ready={parity.ready}")
         print(f"dsec_thermal_parity_ready={thermal_parity.ready}")
+        if transition_parity is not None:
+            print(f"dsec_transition_state_ready={transition_parity.ready}")
+            print(f"transition_runtime_state_ready={transition_parity.runtime_state_ready}")
+            print(f"transition_radiation_state_ready={transition_parity.radiation_state_ready}")
+            print(f"transition_escape_state_ready={transition_parity.escape_state_ready}")
+            print(
+                "transition_continuum_workspace_ready="
+                f"{transition_parity.continuum_workspace_ready}"
+            )
+            print(f"transition_global_mapping_ready={transition_parity.global_mapping_ready}")
+            print(f"transition_global_xilevg_ready={transition_parity.global_xilevg_ready}")
+            print(f"transition_global_bilevg_ready={transition_parity.global_bilevg_ready}")
+            print(f"transition_global_rnisg_ready={transition_parity.global_rnisg_ready}")
+            print(
+                "transition_leveltemp_source_used_slots_ready="
+                f"{transition_parity.leveltemp_source_used_slots_ready}"
+            )
         if final_parity is not None:
             print("post_dsec_calc_hmc_all_executed=True")
             print(f"final_fixed_state_parity_ready={final_parity.ready}")
