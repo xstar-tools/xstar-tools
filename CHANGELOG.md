@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.57 - 2026-05-21
+
+v0.4.57 consumes the user-side v0.4.56 natural source-zero four-evaluation
+prefix.  The bounded source-semantic gate passes: all four thermal evaluations,
+source event and integer-control branches, thermal/charge residual decisions,
+evaluation-2 Lucy entry and active final populations, source-order `xtot`,
+thermal families, and element arrays agree with XSTAR within the established
+acceptance tolerances.
+
+Strict trajectory parity remains false because ten carried charge-workspace rows
+differ by about `2.0e-11`; the differences propagate from `elctrh` into the
+charge secant `xee`/`elctrl` values without changing any source branch or
+residual decision.  The natural evaluation-2 dense global arrays also remain
+outside the intentionally extreme `5e-12` transition tolerance, while the
+source-used `leveltemp`, complete solver path, and thermal result pass.
+
+New example 127 and `xstar-atomic-validate-dsec-source-zero-unrestricted` run the
+natural source-zero physical solve without a prefix limit, compare every
+captured XSTAR evaluation, execute the correlated post-`dsec` `calc_hmc_all`
+call, and report strict floating-point parity separately from source-semantic
+local-zone acceptance.  A successful result is the gate for advancing in source
+order to `bremsmap`.  No physical formula, rate, matrix, tolerance, XSTAR source,
+or probe capture changes in this release.
+
 ## v0.4.56 - 2026-05-21
 
 v0.4.56 consumes the user-side v0.4.55 terminal-seed causality result.  The

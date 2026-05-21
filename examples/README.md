@@ -1770,3 +1770,37 @@ state and same-call internals with XSTAR while validating the first four thermal
 and charge-balance trajectory events.  Its summary reports strict runtime parity
 separately from source branch/residual parity so tiny carried work-bound roundoff
 cannot be mistaken for a changed source branch.
+
+## v0.4.57 unrestricted source-zero `dsec` acceptance
+
+### `127_validate_xstar_dsec_source_zero_unrestricted.py`
+
+Use the same physical/probe arguments as example 126 and change only the wrapper
+and output directory:
+
+```bash
+PYTHONPATH=src python examples/127_validate_xstar_dsec_source_zero_unrestricted.py \
+  [the example-126 ATDB, trajectory, transition, and regression options] \
+  --out-dir xstar_dsec_source_zero_unrestricted_v0457 \
+  --print-summary
+```
+
+The wrapper removes any `--maximum-evaluations` option and runs natural `dsec`
+convergence with production `dense-source`, `reset-per-call`, and `source-zero`
+semantics.  It compares every captured thermal/charge evaluation, retains the
+evaluation-2 internal audit, executes the correlated post-`dsec`
+`calc_hmc_all`, and writes:
+
+```text
+xstar_dsec_source_zero_unrestricted_evaluations.csv
+xstar_dsec_source_zero_unrestricted_runtime_failures.csv
+xstar_dsec_source_zero_unrestricted_summary.json
+xstar_dsec_source_zero_unrestricted_summary.md
+```
+
+`unrestricted_source_semantic_acceptance_ready=True` and
+`ready_to_advance_to_bremsmap=True` require natural convergence, full evaluation
+count, source branch/residual parity, all-evaluation thermal parity,
+evaluation-2 active solver parity, final fixed-state parity, and the frozen
+v0.4.44 regression.  Strict floating-point trajectory and transition-array
+results remain separate fields and are never silently relaxed.

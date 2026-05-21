@@ -1,3 +1,34 @@
+## v0.4.57 unrestricted source-zero `dsec` acceptance
+
+The v0.4.56 user run passes the bounded four-evaluation source-semantic gate.
+All four thermal decompositions and source branch/residual decisions pass, and
+the natural evaluation-2 initial/final Lucy populations, source-order `xtot`,
+thermal families, and element arrays agree with XSTAR.  Strict runtime parity
+remains false only because approximately `2e-11` charge-workspace roundoff is
+carried into later secant variables; it does not change a branch or residual
+sign/value decision.
+
+v0.4.57 adds the unrestricted convergence and final-state wrapper:
+
+```text
+examples/127_validate_xstar_dsec_source_zero_unrestricted.py
+xstar-atomic-validate-dsec-source-zero-unrestricted
+```
+
+It forces the accepted production state semantics:
+
+```text
+--global-writeback-mode dense-source
+--leveltemp-lifecycle reset-per-call
+--terminal-continuum-seed-mode source-zero
+```
+
+The wrapper removes the four-evaluation limit, compares all captured XSTAR
+`dsec` evaluations, executes the correlated post-`dsec` `calc_hmc_all` call,
+and reports both strict and source-semantic acceptance.  `bremsmap` remains
+blocked until this unrestricted user-side run converges and its final fixed
+state passes.
+
 ## v0.4.56 natural source-zero `dsec` prefix
 
 The user-side v0.4.55 causality run confirms that XSTAR's literal terminal
