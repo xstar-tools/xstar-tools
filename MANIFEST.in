@@ -187,3 +187,8 @@ include xstar_atomic_v0.4.49.md
 include xstar_atomic_conversation_summary_v0449.md
 include XSTAR_SOURCE_CHANGES_v0.4.49.md
 include src_v0449_update_report.md
+
+include xstar_atomic_v0.4.50.md
+include xstar_atomic_conversation_summary_v0450.md
+include XSTAR_SOURCE_CHANGES_v0.4.50.md
+include src_v0450_update_report.md

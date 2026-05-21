@@ -13,6 +13,14 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.50 fixes optional physical-`dsec` progress reporting
+
+The call-correlated example-119 runner now reports compact-basis sizes from
+`ElementEquilibriumResult.assembly.basis`.  In v0.4.49, `--progress` referenced
+a nonexistent direct `basis` attribute and aborted after the expensive first
+physical evaluation.  The correction is Python-only; reuse the v0.4.48 XSTAR
+probe build and products.
+
 ### v0.4.49 accepts the exact source-zero first `dsec` population probe
 
 v0.4.49 fixes the call-correlated example-119 startup path.  The first

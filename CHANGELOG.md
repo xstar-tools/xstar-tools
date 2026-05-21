@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v0.4.50 - 2026-05-21
+
+v0.4.50 is a Python-only progress-reporting hotfix for the call-correlated
+physical `dsec` runner.  With `--progress`, example 119 incorrectly tried to
+read `item.equilibrium.basis.n_rows`; the actual source-owned basis is at
+`item.equilibrium.assembly.basis.n_rows`.  The physical calculation completed
+its first evaluation, but the optional callback raised `AttributeError` before
+prefix products could be written.
+
+The reporter now reads the assembly basis through a small tested formatter.
+No solver state, rates, matrices, thermal decomposition, call correlation,
+trajectory data, acceptance tolerance, or XSTAR source changed.
+
 ## v0.4.49 - 2026-05-20
 
 v0.4.49 is a Python-only hotfix for the call-correlated physical `dsec`

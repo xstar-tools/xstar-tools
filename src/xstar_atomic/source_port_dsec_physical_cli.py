@@ -342,6 +342,14 @@ def _write_runner_summary(
     return {"json": json_path, "markdown": md_path}
 
 
+def _format_element_basis_sizes(result: Any) -> str:
+    """Return source-order element compact-basis sizes for progress output."""
+    return ",".join(
+        f"Z{item.request.element_z}:{item.equilibrium.assembly.basis.n_rows}"
+        for item in result.element_results
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     out = Path(args.out_dir)
@@ -519,10 +527,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     def progress(index: int, runtime_state: Any, result: Any) -> None:
         if args.progress:
-            bases = ",".join(
-                f"Z{item.request.element_z}:{item.equilibrium.basis.n_rows}"
-                for item in result.element_results
-            )
+            bases = _format_element_basis_sizes(result)
             print(
                 f"evaluation={index} T4={runtime_state.temperature_t4:.10g} "
                 f"xee={runtime_state.electron_fraction_xee:.10g} "
