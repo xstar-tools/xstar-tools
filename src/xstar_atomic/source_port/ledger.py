@@ -91,7 +91,7 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.53"
+PORT_LEDGER_VERSION = "v0.4.54"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
     "run the exact XSTAR-seeded evaluation-2 replay, localize the cooling deficit by element, then close the bounded dsec acceptance while "

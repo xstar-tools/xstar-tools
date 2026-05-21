@@ -1,3 +1,21 @@
+## v0.4.54 exact evaluation-2 internal parity
+
+The user-side v0.4.53 exact replay passed every captured evaluation-2 call-entry
+state gate, but changed the pre-continuum cooling deficit by only about
+`2.2e-6` of its XSTAR discrepancy.  The remaining error is therefore inside
+the translated evaluation-2 calculation rather than in evaluation-1 state
+writeback.
+
+v0.4.54 reuses the existing detailed same-call XSTAR probe and applies the
+complete pre-continuum parity audit directly to the exact-replayed Python
+evaluation 2.  It compares pre-matrix ion rates and selection, matrix topology
+and coefficients, Lucy entry and final populations, source-order `xtot`, thermal
+data/rate families, and element heating/cooling arrays.  Run
+`examples/124_validate_xstar_dsec_evaluation2_internals.py` or
+`xstar-atomic-validate-dsec-eval2-internals`.  No XSTAR rebuild or new XSTAR run
+is required when the v0.4.51 evaluation-2 directory contains the detailed
+probe products.  Production defaults remain unchanged.
+
 ## v0.4.53 exact evaluation-transition replay
 
 The v0.4.52 four-mode physical run proved that dense native global alias

@@ -1678,3 +1678,46 @@ The wrapper writes aggregate P-versus-X thermal products and
 change in element cooling.  No XSTAR rebuild or new XSTAR run is required.
 `replay-exact` is diagnostic-only; production retains dense native writeback
 and per-call `leveltemp` reset.
+
+## v0.4.54 exact evaluation-2 internal parity
+
+### `124_validate_xstar_dsec_evaluation2_internals.py`
+
+The v0.4.53 exact replay verified the complete captured evaluation-2 call-entry
+state but retained essentially the entire XSTAR cooling discrepancy.  Example
+124 therefore runs the existing detailed same-call `calc_hmc_all` parity audit
+on the exact-replayed Python evaluation 2.
+
+The audit compares, in source order:
+
+```text
+active ion selection and pre-matrix rates
+full matrix topology and coefficients
+active-row matrix closure
+initial Lucy population vector
+final Lucy matrix and active populations
+outer-iteration entry populations and source-order xtot
+thermal data-type and rate-type families
+element heating/cooling arrays and pre-continuum summary
+```
+
+Use the same arguments and probe directories as example 123:
+
+```bash
+PYTHONPATH=src python examples/124_validate_xstar_dsec_evaluation2_internals.py \
+  [the example-123 physical/probe arguments] \
+  --out-dir xstar_dsec_eval2_internals_v0454 \
+  --print-summary
+```
+
+The wrapper forces two evaluations, production dense writeback, per-call
+`leveltemp` reset, exact XSTAR evaluation-2 input replay, and the internal
+comparison.  It writes the detailed audit under
+`evaluation_internal_parity/` and the aggregate
+`xstar_dsec_evaluation2_internal_parity_summary.json/.md`.  The first failed
+layer is classified without allowing tiny inactive matrix-coefficient
+differences to preempt an otherwise passing active matrix closure.
+
+No XSTAR rebuild or new XSTAR execution is required when the existing
+`o7_ne1e8_dsec_v0451_eval2` directory contains the same-call matrix, Lucy, and
+thermal-family probe CSVs.

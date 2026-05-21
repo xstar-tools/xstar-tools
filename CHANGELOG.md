@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.4.54 - 2026-05-21
+
+v0.4.54 consumes the user-side v0.4.53 exact-replay result.  Exact XSTAR
+evaluation-2 call-entry state passes, but it removes only about `2.2e-6` of the
+pre-continuum cooling discrepancy, which rules out evaluation-1 population
+writeback and transition-state ownership as the cause of the remaining error.
+
+The physical runner can now apply the existing complete same-call
+`calc_hmc_all` parity audit to a selected internal `dsec` evaluation through
+`--compare-transition-internals`.  The audit covers pre-matrix ion rates and
+selection, full and active matrix topology/coefficient closure, initial and
+final Lucy populations, outer-iteration entry, source-order `xtot`, thermal
+data/rate families, and element heating/cooling arrays.
+
+New example 124 and `xstar-atomic-validate-dsec-eval2-internals` force exact
+evaluation-2 replay, run the internal audit, and classify the first failed
+source layer.  The diagnostic reuses the v0.4.51 evaluation-2 probe directory;
+no XSTAR source change, rebuild, or new XSTAR run is required when its detailed
+products are present.  Production physics, dense native writeback, per-call
+`leveltemp` reset, and all frozen acceptance gates are unchanged.
+
 ## v0.4.53 - 2026-05-21
 
 v0.4.53 adds a diagnostic-only exact XSTAR-seeded replay for a selected later

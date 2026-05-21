@@ -17,6 +17,7 @@ from .source_port import (
     build_dsec_acceptance,
     build_physical_dsec_runtime_state,
     clone_physical_dsec_runtime_state,
+    compare_calc_hmc_all_pre_continuum_probe,
     compare_complete_fixed_state_calc_hmc_all,
     compare_dsec_thermal_decomposition,
     compare_dsec_trajectory,
@@ -37,6 +38,7 @@ from .source_port import (
     resolve_dsec_calc_hmc_all_calls,
     validate_v0444_complete_fixed_state_regression,
     write_complete_fixed_state_parity_products,
+    write_calc_hmc_all_pre_continuum_parity_products,
     write_dsec_acceptance_products,
     write_dsec_thermal_parity_products,
     write_dsec_trajectory_parity_products,
@@ -104,6 +106,49 @@ def build_parser() -> argparse.ArgumentParser:
             "XSTAR runtime, radiation, escape, continuum workspace, global arrays, "
             "and leveltemp state before Python recomputes rates, matrices, and cooling"
         ),
+    )
+    parser.add_argument(
+        "--xstar-transition-internal-probe-dir",
+        help=(
+            "optional same-call calc_hmc_all probe directory for a selected dsec "
+            "evaluation; defaults to --xstar-transition-input-probe-dir when "
+            "--compare-transition-internals is requested"
+        ),
+    )
+    parser.add_argument(
+        "--xstar-transition-internal-call-id",
+        type=int,
+        help=(
+            "calc_hmc_all call ID in the detailed matrix/population/thermal probe; "
+            "defaults to the resolved transition call ID"
+        ),
+    )
+    parser.add_argument(
+        "--transition-internal-evaluation-index",
+        type=int,
+        help=(
+            "Python evaluation whose exact rates, matrix, Lucy populations, and "
+            "thermal channels are compared; defaults to the transition evaluation"
+        ),
+    )
+    parser.add_argument(
+        "--compare-transition-internals",
+        action="store_true",
+        help=(
+            "run the existing complete same-call calc_hmc_all parity audit on the "
+            "selected dsec evaluation, including matrix terms, initial/final Lucy "
+            "populations, and thermal families"
+        ),
+    )
+    parser.add_argument(
+        "--transition-internal-active-population-threshold",
+        type=float,
+        default=1.0e-12,
+    )
+    parser.add_argument(
+        "--transition-internal-row-scale-threshold",
+        type=float,
+        default=1.0e-12,
     )
 
     # Deprecated compatibility spelling.  It may provide a probe directory,
@@ -488,6 +533,7 @@ def _write_runner_summary(
     thermal_parity: Optional[Any],
     transition_input: Optional[Any],
     transition_parity: Optional[Any],
+    transition_internal_parity: Optional[Any],
     final_parity: Optional[Any],
     acceptance: Optional[Any],
     frozen: Any,
@@ -511,7 +557,7 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.53",
+        "port_version": "v0.4.54",
         "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
@@ -564,6 +610,36 @@ def _write_runner_summary(
         "dsec_transition_state_ready": (
             None if transition_parity is None else transition_parity.ready
         ),
+        "transition_internal_parity_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.parity_ready
+        ),
+        "transition_internal_pre_matrix_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.pre_matrix_ready
+        ),
+        "transition_internal_same_call_matrix_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.same_call_matrix_ready
+        ),
+        "transition_internal_initial_solver_population_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.initial_solver_population_ready
+        ),
+        "transition_internal_final_solver_snapshot_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.final_solver_snapshot_ready
+        ),
+        "transition_internal_thermal_family_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.thermal_family_ready
+        ),
         "transition_runtime_state_ready": (
             None if transition_parity is None else transition_parity.runtime_state_ready
         ),
@@ -599,6 +675,11 @@ def _write_runner_summary(
         "v0451_evaluation_transition_diagnostic_ready": (
             None if transition_parity is None else transition_parity.ready
         ),
+        "v0454_evaluation_internal_parity_diagnostic_ready": (
+            None
+            if transition_internal_parity is None
+            else transition_internal_parity.parity_ready
+        ),
         "products": paths,
     }
     json_path = out_dir / "xstar_dsec_physical_runner_summary.json"
@@ -631,7 +712,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.53 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.54 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -657,6 +738,29 @@ def main(argv: Optional[list[str]] = None) -> int:
     transition_probe_dir, transition_call_id, transition_input, transition_correlation_source = (
         _resolve_transition_input(args)
     )
+    transition_internal_probe_dir: Optional[Path] = None
+    transition_internal_call_id: Optional[int] = None
+    transition_internal_evaluation_index: Optional[int] = None
+    if args.compare_transition_internals:
+        if transition_input is None or transition_probe_dir is None or transition_call_id is None:
+            raise ValueError(
+                "--compare-transition-internals requires a resolved "
+                "--xstar-transition-input-probe-dir"
+            )
+        transition_internal_probe_dir = Path(
+            args.xstar_transition_internal_probe_dir or transition_probe_dir
+        )
+        transition_internal_call_id = int(
+            args.xstar_transition_internal_call_id or transition_call_id
+        )
+        transition_internal_evaluation_index = int(
+            args.transition_internal_evaluation_index
+            or transition_input.dsec_evaluation_index
+        )
+        if transition_internal_evaluation_index < 1:
+            raise ValueError(
+                "--transition-internal-evaluation-index must be positive"
+            )
     transition_freef_ref = transition_bremem_ref = None
     if transition_input is not None:
         transition_freef_ref = load_freef_probe_reference(
@@ -772,6 +876,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             thermal_parity=None,
             transition_input=transition_input,
             transition_parity=None,
+            transition_internal_parity=None,
             final_parity=None,
             acceptance=None,
             frozen=frozen,
@@ -875,7 +980,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         pointer_cache=args.pointer_cache,
         use_pointer_cache=True,
     )
-    result = parity = thermal_parity = transition_parity = final_parity = acceptance = None
+    result = parity = thermal_parity = transition_parity = None
+    transition_internal_parity = final_parity = acceptance = None
     try:
         evaluator = CalcHMCAllDsecEvaluator(
             master=built.master,
@@ -915,12 +1021,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.53")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.54")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.53")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.54")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.53"
+            thermal_parity, out, port_version="v0.4.54"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
@@ -968,7 +1074,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 xstar_brcems_before=transition_bremem_ref.brcems_before,
             )
             transition_products = write_dsec_transition_state_products(
-                transition_parity, out, port_version="v0.4.53"
+                transition_parity, out, port_version="v0.4.54"
             )
             paths.update(
                 {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
@@ -978,6 +1084,50 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
             paths.update(
                 {f"transition_state_{key}": str(value) for key, value in transition_state_products.items()}
+            )
+
+        if args.compare_transition_internals:
+            assert transition_internal_probe_dir is not None
+            assert transition_internal_call_id is not None
+            assert transition_internal_evaluation_index is not None
+            if transition_internal_evaluation_index > len(evaluator.evaluations):
+                raise RuntimeError(
+                    "requested internal-parity evaluation was not executed: "
+                    f"requested={transition_internal_evaluation_index}, "
+                    f"executed={len(evaluator.evaluations)}"
+                )
+            internal_evaluation = evaluator.evaluations[
+                transition_internal_evaluation_index - 1
+            ]
+            internal_result = internal_evaluation.fixed_state_result
+            if internal_result is None:
+                raise RuntimeError(
+                    "selected dsec evaluation did not return a fixed-state result"
+                )
+            transition_internal_parity = compare_calc_hmc_all_pre_continuum_probe(
+                internal_result,
+                transition_internal_probe_dir,
+                call_id=transition_internal_call_id,
+                rtol=args.thermal_component_rtol,
+                atol=args.thermal_component_atol,
+                active_population_threshold=(
+                    args.transition_internal_active_population_threshold
+                ),
+                matrix_closure_active_row_scale_threshold=(
+                    args.transition_internal_row_scale_threshold
+                ),
+            )
+            internal_out = out / "evaluation_internal_parity"
+            internal_products = write_calc_hmc_all_pre_continuum_parity_products(
+                transition_internal_parity,
+                internal_out,
+                port_version="v0.4.54",
+            )
+            paths.update(
+                {
+                    f"transition_internal_{key}": str(value)
+                    for key, value in internal_products.items()
+                }
             )
 
         if not prefix_mode:
@@ -1015,15 +1165,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
             fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.53"
+                final_result, out, port_version="v0.4.54"
             )
             paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
             final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.53"
+                final_parity, out, port_version="v0.4.54"
             )
             paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.53"
+                acceptance, out, port_version="v0.4.54"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -1044,6 +1194,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             thermal_parity=thermal_parity,
             transition_input=transition_input,
             transition_parity=transition_parity,
+            transition_internal_parity=transition_internal_parity,
             final_parity=final_parity,
             acceptance=acceptance,
             frozen=frozen,
@@ -1056,7 +1207,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.53")
+        print("port_version=v0.4.54")
         print(f"global_writeback_mode={args.global_writeback_mode}")
         print(f"leveltemp_lifecycle={args.leveltemp_lifecycle}")
         print(f"transition_input_mode={args.transition_input_mode}")
@@ -1089,6 +1240,27 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(
                 "transition_leveltemp_source_used_slots_ready="
                 f"{transition_parity.leveltemp_source_used_slots_ready}"
+            )
+        if transition_internal_parity is not None:
+            print(
+                "transition_internal_parity_ready="
+                f"{transition_internal_parity.parity_ready}"
+            )
+            print(
+                "transition_internal_same_call_matrix_ready="
+                f"{transition_internal_parity.same_call_matrix_ready}"
+            )
+            print(
+                "transition_internal_initial_solver_population_ready="
+                f"{transition_internal_parity.initial_solver_population_ready}"
+            )
+            print(
+                "transition_internal_final_solver_snapshot_ready="
+                f"{transition_internal_parity.final_solver_snapshot_ready}"
+            )
+            print(
+                "transition_internal_thermal_family_ready="
+                f"{transition_internal_parity.thermal_family_ready}"
             )
         if final_parity is not None:
             print("post_dsec_calc_hmc_all_executed=True")
