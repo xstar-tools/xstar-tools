@@ -577,7 +577,7 @@ def write_dsec_transition_state_products(
     parity: DsecTransitionStateParity,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.52",
+    port_version: str = "v0.4.53",
 ) -> Mapping[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

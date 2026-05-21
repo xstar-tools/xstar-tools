@@ -13,6 +13,7 @@ from .source_port import (
     CalcHMCAllDsecEvaluator,
     PhysicalDsecCalcKwargsFactory,
     PhysicalDsecContinuumTemplate,
+    apply_dsec_matching_input_state,
     build_dsec_acceptance,
     build_physical_dsec_runtime_state,
     clone_physical_dsec_runtime_state,
@@ -93,6 +94,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--xstar-transition-calc-hmc-call-id", type=int)
     parser.add_argument("--xstar-transition-evaluation-index", type=int, default=2)
+    parser.add_argument(
+        "--transition-input-mode",
+        choices=("compare-only", "replay-exact"),
+        default="compare-only",
+        help=(
+            "compare-only records the Python state entering the selected later "
+            "evaluation; replay-exact replaces that call entry with the captured "
+            "XSTAR runtime, radiation, escape, continuum workspace, global arrays, "
+            "and leveltemp state before Python recomputes rates, matrices, and cooling"
+        ),
+    )
 
     # Deprecated compatibility spelling.  It may provide a probe directory,
     # but v0.4.48 never assumes that one call ID represents both input and
@@ -337,6 +349,127 @@ def _write_evaluation_summary(evaluations: Sequence[Any], out_dir: Path) -> Path
     return path
 
 
+def _write_element_evaluation_summary(
+    evaluations: Sequence[Any], out_dir: Path
+) -> Path:
+    """Write source-order element thermal and solver diagnostics per trial."""
+
+    path = out_dir / "xstar_dsec_element_thermal_decomposition.csv"
+    fieldnames = (
+        "evaluation_index",
+        "element_order",
+        "element_z",
+        "abundance",
+        "selected_min_ion_stage",
+        "selected_max_ion_stage",
+        "basis_size",
+        "n_superlevels",
+        "heating_per_abundance",
+        "cooling_per_abundance",
+        "heating2_per_abundance",
+        "cooling2_per_abundance",
+        "heating",
+        "cooling",
+        "heating2",
+        "cooling2",
+        "electron_contribution",
+        "solver_converged",
+        "solver_method",
+        "outer_iterations",
+        "fixed_point_iterations",
+        "final_outer_difference",
+        "final_fixed_point_difference",
+        "normalization",
+        "normalization_error",
+        "max_active_relative_row_residual",
+        "dense_condition_number",
+        "used_dense_fallback",
+    )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for evaluation_index, evaluation in enumerate(evaluations, start=1):
+            result = evaluation.fixed_state_result
+            if result is None:
+                continue
+            for element_order, item in enumerate(result.element_results, start=1):
+                equilibrium = item.equilibrium
+                assembly = getattr(equilibrium, "assembly", None)
+                basis = getattr(assembly, "basis", None)
+                solve = getattr(equilibrium, "solve", None)
+                notes = list(getattr(solve, "notes", ()) or ()) if solve is not None else []
+                writer.writerow(
+                    {
+                        "evaluation_index": evaluation_index,
+                        "element_order": element_order,
+                        "element_z": int(item.request.element_z),
+                        "abundance": float(item.request.abundance),
+                        "selected_min_ion_stage": int(item.selected_min_ion_stage),
+                        "selected_max_ion_stage": int(item.selected_max_ion_stage),
+                        "basis_size": int(getattr(basis, "n_rows", 0) or 0),
+                        "n_superlevels": int(
+                            getattr(basis, "n_superlevels", 0) or 0
+                        ),
+                        "heating_per_abundance": float(item.heating_per_abundance),
+                        "cooling_per_abundance": float(item.cooling_per_abundance),
+                        "heating2_per_abundance": float(item.heating2_per_abundance),
+                        "cooling2_per_abundance": float(item.cooling2_per_abundance),
+                        "heating": float(item.heating),
+                        "cooling": float(item.cooling),
+                        "heating2": float(item.heating2),
+                        "cooling2": float(item.cooling2),
+                        "electron_contribution": float(item.electron_contribution),
+                        "solver_converged": (
+                            None if solve is None else bool(solve.converged)
+                        ),
+                        "solver_method": (
+                            "" if solve is None else str(solve.solver_method)
+                        ),
+                        "outer_iterations": (
+                            0 if solve is None else int(solve.outer_iterations)
+                        ),
+                        "fixed_point_iterations": (
+                            0 if solve is None else int(solve.fixed_point_iterations)
+                        ),
+                        "final_outer_difference": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.final_outer_difference)
+                        ),
+                        "final_fixed_point_difference": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.final_fixed_point_difference)
+                        ),
+                        "normalization": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.normalization)
+                        ),
+                        "normalization_error": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.normalization_error)
+                        ),
+                        "max_active_relative_row_residual": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.max_active_relative_row_residual)
+                        ),
+                        "dense_condition_number": (
+                            float("nan")
+                            if solve is None
+                            else float(solve.dense_condition_number)
+                        ),
+                        "used_dense_fallback": any(
+                            "dense" in note.lower() and "fallback" in note.lower()
+                            for note in notes
+                        ),
+                    }
+                )
+    return path
+
+
 def _write_runner_summary(
     *,
     out_dir: Path,
@@ -378,7 +511,7 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.52",
+        "port_version": "v0.4.53",
         "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
@@ -402,6 +535,7 @@ def _write_runner_summary(
         "continuum_context_build_count": continuum_factory.build_count,
         "global_writeback_mode": args.global_writeback_mode,
         "leveltemp_lifecycle": args.leveltemp_lifecycle,
+        "transition_input_mode": args.transition_input_mode,
         "v0452_dense_native_global_alias_writeback_ready": (
             args.global_writeback_mode == "dense-source"
         ),
@@ -497,7 +631,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.52 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.53 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -530,6 +664,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         transition_bremem_ref = load_bremem_probe_reference(
             transition_probe_dir, call_id=int(transition_call_id)
+        )
+    if args.transition_input_mode == "replay-exact" and transition_input is None:
+        raise ValueError(
+            "--transition-input-mode replay-exact requires "
+            "--xstar-transition-input-probe-dir"
         )
     if matching_input.dsec_call_id != int(args.xstar_dsec_call_id):
         raise ValueError("matching input state belongs to a different dsec call")
@@ -694,6 +833,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         }
     )
 
+    transition_replay_diagnostics: Dict[str, Any] = {}
+
+    def pre_evaluation(index: int, runtime_state: Any) -> None:
+        if (
+            args.transition_input_mode == "replay-exact"
+            and transition_input is not None
+            and int(index) == int(transition_input.dsec_evaluation_index)
+        ):
+            transition_replay_diagnostics.update(
+                apply_dsec_matching_input_state(
+                    runtime_state,
+                    transition_input,
+                    opakc_before_cm_inv=transition_freef_ref.opakc_before_cm_inv,
+                    brcems_before=transition_bremem_ref.brcems_before,
+                    continuum_factory=continuum_factory,
+                )
+            )
+
     def progress(index: int, runtime_state: Any, result: Any) -> None:
         if args.progress:
             bases = _format_element_basis_sizes(result)
@@ -724,6 +881,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             master=built.master,
             derived=built.derived,
             calc_kwargs_factory=continuum_factory,
+            pre_evaluation_callback=pre_evaluation,
             progress_callback=progress,
             capture_input_snapshot_indices=(
                 ()
@@ -757,15 +915,25 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.52")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.53")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.52")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.53")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.52"
+            thermal_parity, out, port_version="v0.4.53"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
+        paths["element_thermal_decomposition_csv"] = str(
+            _write_element_evaluation_summary(evaluator.evaluations, out)
+        )
+        if transition_replay_diagnostics:
+            replay_path = out / "xstar_dsec_transition_replay_applied.json"
+            replay_path.write_text(
+                json.dumps(transition_replay_diagnostics, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            paths["transition_replay_applied_json"] = str(replay_path)
 
         if transition_input is not None:
             target = int(transition_input.dsec_evaluation_index)
@@ -800,7 +968,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 xstar_brcems_before=transition_bremem_ref.brcems_before,
             )
             transition_products = write_dsec_transition_state_products(
-                transition_parity, out, port_version="v0.4.52"
+                transition_parity, out, port_version="v0.4.53"
             )
             paths.update(
                 {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
@@ -847,15 +1015,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
             fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.52"
+                final_result, out, port_version="v0.4.53"
             )
             paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
             final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.52"
+                final_parity, out, port_version="v0.4.53"
             )
             paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.52"
+                acceptance, out, port_version="v0.4.53"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -888,9 +1056,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.52")
+        print("port_version=v0.4.53")
         print(f"global_writeback_mode={args.global_writeback_mode}")
         print(f"leveltemp_lifecycle={args.leveltemp_lifecycle}")
+        print(f"transition_input_mode={args.transition_input_mode}")
         print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
         print(f"xstar_input_calc_hmc_all_call_id={input_call_id}")
         print(f"xstar_post_dsec_calc_hmc_all_call_id={post_call_id}")

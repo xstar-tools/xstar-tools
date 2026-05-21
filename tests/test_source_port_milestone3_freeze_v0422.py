@@ -22,14 +22,13 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.52"
+    assert PORT_LEDGER_VERSION == "v0.4.53"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "run the four-mode evaluation-2 causality scan, validate dense native global alias writeback and "
-        "per-call leveltemp reset, then close the bounded dsec acceptance while "
-        "preserving the frozen v0.4.44 complete fixed-state regression -> "
-        "bremsmap -> calc_emisab_all -> calc_emis_all -> complete xstarcalc -> "
-        "radial transfer and outputs -> optional C++ backend"
+        "run the exact XSTAR-seeded evaluation-2 replay, localize the cooling deficit by element, "
+        "then close the bounded dsec acceptance while preserving the frozen v0.4.44 complete "
+        "fixed-state regression -> bremsmap -> calc_emisab_all -> calc_emis_all -> complete "
+        "xstarcalc -> radial transfer and outputs -> optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

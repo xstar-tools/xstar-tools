@@ -455,6 +455,7 @@ from .dsec_physical import (
     PhysicalDsecCalcKwargsFactory,
     initial_state_from_xstar_trajectory,
     build_physical_dsec_runtime_state,
+    apply_dsec_matching_input_state,
     clone_physical_dsec_runtime_state,
 )
 
@@ -736,6 +737,7 @@ __all__ = [
     "PhysicalDsecCalcKwargsFactory",
     "initial_state_from_xstar_trajectory",
     "build_physical_dsec_runtime_state",
+    "apply_dsec_matching_input_state",
     "clone_physical_dsec_runtime_state",
 
     "CalcHMCAllCallCorrelation",

@@ -1564,6 +1564,50 @@ trajectory with the physical XSTAR trajectory.
   complete matching-state `calc_hmc_all`, and dsec trajectory/thermal probe
   bundle required for the production rerun.
 
+
+## v0.4.48-v0.4.51 matching and transition probes
+
+### `120_prepare_xstar_dsec_matching_probe.py`
+
+Generates the shared call-correlation helper, the complete `calc_hmc_all`
+matching-state probe, the `dsec` trajectory/thermal probe, and the required
+Fortran insertion snippets:
+
+```bash
+PYTHONPATH=src python examples/120_prepare_xstar_dsec_matching_probe.py \
+  --target-dsec-call 1 \
+  --target-evaluation 1 \
+  --target-phase dsec_input_and_post \
+  --out-dir xstar_dsec_matching_probe_v0448
+```
+
+Use a separate generated/captured probe directory for a later selected
+evaluation such as evaluation 2.
+
+### `121_validate_xstar_dsec_transition_state.py`
+
+Runs the physical translated `dsec` prefix and compares the complete Python
+state entering a selected later evaluation with the corresponding captured
+XSTAR state:
+
+```bash
+PYTHONPATH=src python examples/121_validate_xstar_dsec_transition_state.py \
+  --atdb /path/to/atdb.fits \
+  --xstar-dsec-trajectory /path/to/xstar_dsec_trajectory_probe.csv \
+  --xstar-call-correlation /path/to/main/xstar_dsec_calc_hmc_all_call_correlation.csv \
+  --xstar-dsec-input-probe-dir /path/to/main \
+  --xstar-post-dsec-probe-dir /path/to/main \
+  --xstar-transition-input-probe-dir /path/to/evaluation2 \
+  --xstar-transition-call-correlation /path/to/evaluation2/xstar_dsec_calc_hmc_all_call_correlation.csv \
+  --xstar-transition-evaluation-index 2 \
+  --xstar-dsec-thermal-decomposition /path/to/main/xstar_dsec_thermal_decomposition_probe.csv \
+  --oxygen-call73-regression-dir /path/to/oxygen_call73_reference \
+  --coheat-data /path/to/coheat.dat \
+  --maximum-evaluations 2 \
+  --out-dir xstar_dsec_transition_v0451_eval2 \
+  --print-summary
+```
+
 ## v0.4.52 repeated-`dsec` state ownership and causality scan
 
 ### `122_validate_xstar_dsec_transition_causality.py`
@@ -1590,3 +1634,47 @@ runner defaults to mode D through:
 
 No XSTAR rebuild is required; reuse the v0.4.48 instrumented executable and the
 v0.4.51 evaluation-2 input-state probe products.
+
+```bash
+PYTHONPATH=src python examples/122_validate_xstar_dsec_transition_causality.py \
+  [the example-121 physical/probe arguments] \
+  --out-dir xstar_dsec_causality_v0452 \
+  --print-summary
+```
+
+
+## v0.4.53 exact XSTAR-seeded evaluation-2 replay
+
+### `123_validate_xstar_dsec_exact_transition_replay.py`
+
+Runs the selected later `dsec` evaluation twice while Python continues to
+compute all rates, matrices, level populations, and thermal totals:
+
+```text
+P_python_transition
+    Python evaluation-1 output -> Python evaluation 2
+
+X_xstar_seeded_transition
+    exact captured XSTAR evaluation-2 call-entry state -> Python evaluation 2
+```
+
+The second mode replaces only the call-entry runtime and mutable state:
+`xilevg`, `bilevg`, `rnisg`, `leveltemp`, radiation, escape arrays, continuum
+scratch workspaces, and geometry.  It never injects an XSTAR matrix, solved
+population vector, rate, or cooling coefficient.
+
+Use the same physical/probe arguments as example 122 and change only the
+wrapper and output directory:
+
+```bash
+PYTHONPATH=src python examples/123_validate_xstar_dsec_exact_transition_replay.py \
+  [the example-122 physical/probe arguments] \
+  --out-dir xstar_dsec_exact_replay_v0453 \
+  --print-summary
+```
+
+The wrapper writes aggregate P-versus-X thermal products and
+`xstar_dsec_transition_exact_replay_elements.csv`, sorted by the absolute
+change in element cooling.  No XSTAR rebuild or new XSTAR run is required.
+`replay-exact` is diagnostic-only; production retains dense native writeback
+and per-call `leveltemp` reset.

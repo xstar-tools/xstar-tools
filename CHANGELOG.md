@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## v0.4.53 - 2026-05-21
+
+v0.4.53 adds a diagnostic-only exact XSTAR-seeded replay for a selected later
+internal `dsec` evaluation.  The physical runner can now replace evaluation-2
+call-entry runtime, radiation, escape arrays, continuum workspaces, dense
+`xilevg`/`bilevg`/`rnisg`, and `leveltemp` with the captured XSTAR state while
+Python still computes all rates, matrices, Lucy populations, cooling, and
+residuals.  Use `--transition-input-mode replay-exact`.
+
+New example 123 and `xstar-atomic-validate-dsec-exact-replay` run the normal
+Python transition and exact XSTAR-seeded transition side by side.  Every
+physical run now writes per-evaluation, per-element thermal and Lucy-solver
+diagnostics.  The wrapper classifies whether the remaining evaluation-2
+cooling discrepancy was produced by evaluation 1 or lies inside evaluation 2.
+No XSTAR rebuild or production physics change is required.
+
 ## v0.4.52 - 2026-05-21
 
 v0.4.52 corrects the two mutable-state ownership failures isolated by the

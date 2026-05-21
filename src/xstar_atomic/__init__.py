@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.52"
+__version__ = "0.4.53"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -202,6 +202,7 @@ from .source_port import (
     PhysicalDsecInitialState, PhysicalDsecContinuumTemplate,
     PhysicalDsecCalcKwargsFactory, initial_state_from_xstar_trajectory,
     build_physical_dsec_runtime_state,
+    apply_dsec_matching_input_state,
     clone_physical_dsec_runtime_state,
 )
 
@@ -732,5 +733,6 @@ __all__.extend([
     "PhysicalDsecCalcKwargsFactory",
     "initial_state_from_xstar_trajectory",
     "build_physical_dsec_runtime_state",
+    "apply_dsec_matching_input_state",
     "clone_physical_dsec_runtime_state",
 ])

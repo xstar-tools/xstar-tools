@@ -369,6 +369,7 @@ class CalcHMCAllDsecEvaluator:
     dispatcher: Optional[Any] = None
     element_solver: Optional[Any] = None
     pre_matrix_solver: Optional[Any] = None
+    pre_evaluation_callback: Optional[Callable[[int, DsecMutableRuntimeState], None]] = None
     progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
     capture_input_snapshot_indices: Tuple[int, ...] = ()
     evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
@@ -385,6 +386,10 @@ class CalcHMCAllDsecEvaluator:
             self.dispatcher = default_source_faithful_ucalc()
 
     def __call__(self, state: DsecMutableRuntimeState) -> DsecEvaluation:
+        evaluation_index = len(self.evaluations) + 1
+        if self.pre_evaluation_callback is not None:
+            self.pre_evaluation_callback(evaluation_index, state)
+
         kwargs: Dict[str, Any] = {}
         if self.calc_kwargs_factory is not None:
             kwargs.update(dict(self.calc_kwargs_factory(state)))
@@ -396,7 +401,6 @@ class CalcHMCAllDsecEvaluator:
             kwargs["pre_matrix_solver"] = self.pre_matrix_solver
 
         requests = state.requests_for_next_call()
-        evaluation_index = len(self.evaluations) + 1
         if evaluation_index in set(self.capture_input_snapshot_indices):
             prior = state.last_calc_hmc_all
             radiation = requests[0].radiation if requests else None

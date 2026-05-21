@@ -14,7 +14,7 @@ initial/control state and later as a regression oracle.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import copy
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
@@ -305,6 +305,152 @@ def initial_state_from_xstar_trajectory(
 
 
 
+
+def apply_dsec_matching_input_state(
+    state: DsecMutableRuntimeState,
+    matching_input: DsecMatchingInputState,
+    *,
+    opakc_before_cm_inv: Optional[Sequence[float]] = None,
+    brcems_before: Optional[Sequence[float]] = None,
+    continuum_factory: Optional[PhysicalDsecCalcKwargsFactory] = None,
+) -> Dict[str, Any]:
+    """Replace one pending ``calc_hmc_all`` entry with a captured XSTAR state.
+
+    This is a diagnostic replay hook, not a production input path.  It is used
+    to decide whether a later ``dsec`` discrepancy was produced by the previous
+    Python evaluation or is generated inside the selected evaluation itself.
+    Rates, matrices, and thermal residuals are still computed by Python.
+    """
+
+    dense_x = np.asarray(
+        matching_input.global_level_values_by_index, dtype=float
+    ).reshape(-1).copy()
+    dense_b = np.asarray(
+        matching_input.global_bilev_values_by_index, dtype=float
+    ).reshape(-1).copy()
+    dense_r = np.asarray(
+        matching_input.global_rnist_values_by_index, dtype=float
+    ).reshape(-1).copy()
+    if not (dense_x.size == dense_b.size == dense_r.size):
+        raise DsecPortError(
+            "captured XSTAR global xilevg/bilevg/rnisg arrays have unequal lengths"
+        )
+    if np.any(~np.isfinite(dense_x)) or np.any(dense_x < 0.0):
+        raise DsecPortError("captured XSTAR xilevg must be finite and nonnegative")
+    if np.any(~np.isfinite(dense_b)) or np.any(dense_b < 0.0):
+        raise DsecPortError("captured XSTAR bilevg must be finite and nonnegative")
+    if np.any(~np.isfinite(dense_r)) or np.any(dense_r < 0.0):
+        raise DsecPortError("captured XSTAR rnisg must be finite and nonnegative")
+
+    mapping = {
+        (int(key[0]), int(key[1]), int(key[2])): int(index)
+        for key, index in state.global_level_index_by_key.items()
+    }
+    if np.count_nonzero(dense_x) and not mapping:
+        raise DsecPortError(
+            "exact transition replay requires the global-index mapping produced "
+            "by the preceding Python calc_hmc_all evaluation"
+        )
+    invalid = [index for index in mapping.values() if index <= 0 or index > dense_x.size]
+    if invalid:
+        raise DsecPortError(
+            "global-index mapping exceeds the captured XSTAR level array: "
+            f"first invalid index={invalid[0]}, n_global={dense_x.size}"
+        )
+
+    state.temperature_t4 = float(matching_input.temperature_t4)
+    state.electron_fraction_xee = float(matching_input.electron_fraction_xee)
+    state.hydrogen_density_cm3 = float(matching_input.hydrogen_density_cm3)
+    state.pressure = float(matching_input.pressure)
+    state.lcdd = int(matching_input.lcdd)
+    state.global_xilevg_by_index = dense_x
+    state.global_bilevg_by_index = dense_b
+    state.global_rnisg_by_index = dense_r
+    state.global_level_populations = {
+        key: float(dense_x[index - 1]) for key, index in mapping.items()
+    }
+    state.leveltemp_workspace = copy.deepcopy(matching_input.leveltemp_workspace)
+    state.leveltemp_owner_by_column = {}
+
+    requests = []
+    for request in state.element_requests:
+        requests.append(
+            replace(
+                request,
+                radiation=copy.deepcopy(matching_input.radiation),
+                escape=copy.deepcopy(matching_input.escape),
+                covering_fraction=float(matching_input.covering_fraction),
+                turbulent_velocity_km_s=float(
+                    matching_input.turbulent_velocity_km_s
+                ),
+                critf=float(matching_input.critf),
+            )
+        )
+    state.element_requests = tuple(requests)
+
+    if opakc_before_cm_inv is not None:
+        opakc = np.asarray(opakc_before_cm_inv, dtype=float).reshape(-1).copy()
+        if np.any(~np.isfinite(opakc)):
+            raise DsecPortError("captured XSTAR opakc workspace contains non-finite values")
+        state.work_arrays["opakc"] = opakc
+    if brcems_before is not None:
+        brcems = np.asarray(brcems_before, dtype=float).reshape(-1).copy()
+        if np.any(~np.isfinite(brcems)):
+            raise DsecPortError("captured XSTAR brcems workspace contains non-finite values")
+        state.work_arrays["brcems"] = brcems
+
+    if continuum_factory is not None:
+        template = continuum_factory.template
+        opakc_template = (
+            np.asarray(opakc_before_cm_inv, dtype=float).reshape(-1).copy()
+            if opakc_before_cm_inv is not None
+            else np.asarray(template.initial_opakc_cm_inv, dtype=float).copy()
+        )
+        brcems_template = (
+            np.asarray(brcems_before, dtype=float).reshape(-1).copy()
+            if brcems_before is not None
+            else np.asarray(template.initial_brcems, dtype=float).copy()
+        )
+        continuum_factory.template = replace(
+            template,
+            epi_eV=np.asarray(matching_input.radiation.epim_eV, dtype=float).copy(),
+            bremsa=np.asarray(matching_input.radiation.bremsam, dtype=float).copy(),
+            radius_cm=float(matching_input.radius_cm),
+            zone_thickness_cm=float(matching_input.zone_thickness_cm),
+            ncn2=int(matching_input.ncn2),
+            initial_opakc_cm_inv=opakc_template,
+            initial_brcems=brcems_template,
+            source=(
+                f"exact_xstar_dsec_transition_evaluation_"
+                f"{matching_input.dsec_evaluation_index}"
+            ),
+        )
+
+    state.provenance.update(
+        {
+            "diagnostic_exact_xstar_transition_replay": True,
+            "replayed_dsec_evaluation_index": int(
+                matching_input.dsec_evaluation_index
+            ),
+            "replayed_calc_hmc_all_call_id": int(
+                matching_input.calc_hmc_all_call_id
+            ),
+            "replayed_state_source_dir": matching_input.source_dir,
+        }
+    )
+    return {
+        "evaluation_index": int(matching_input.dsec_evaluation_index),
+        "calc_hmc_all_call_id": int(matching_input.calc_hmc_all_call_id),
+        "n_global_levels": int(dense_x.size),
+        "n_nonzero_xilevg": int(np.count_nonzero(dense_x)),
+        "n_global_mappings": int(len(mapping)),
+        "leveltemp_nonzero_columns": int(
+            len(getattr(matching_input.leveltemp_workspace, "levels", {}) or {})
+        ),
+        "opakc_replayed": opakc_before_cm_inv is not None,
+        "brcems_replayed": brcems_before is not None,
+    }
+
 def clone_physical_dsec_runtime_state(
     state: DsecMutableRuntimeState,
 ) -> DsecMutableRuntimeState:
@@ -483,5 +629,6 @@ __all__ = [
     "PhysicalDsecCalcKwargsFactory",
     "initial_state_from_xstar_trajectory",
     "build_physical_dsec_runtime_state",
+    "apply_dsec_matching_input_state",
     "clone_physical_dsec_runtime_state",
 ]

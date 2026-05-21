@@ -1,3 +1,21 @@
+## v0.4.53 exact evaluation-transition replay
+
+The v0.4.52 four-mode physical run proved that dense native global alias
+writeback and per-call `leveltemp` reset are source-correct but do not cause the
+remaining evaluation-2 primary cooling discrepancy.  v0.4.53 adds a decisive
+diagnostic-only replay:
+
+```text
+P: Python evaluation-1 output -> Python evaluation 2
+X: exact captured XSTAR evaluation-2 entry state -> Python evaluation 2
+```
+
+Python still computes all rates, matrices, populations, and thermal totals.
+Run `examples/123_validate_xstar_dsec_exact_transition_replay.py` or the
+`xstar-atomic-validate-dsec-exact-replay` entry point.  The physical runner
+also writes `xstar_dsec_element_thermal_decomposition.csv` for every evaluation.
+No XSTAR rebuild is required.
+
 # xstar-atomic
 
 
