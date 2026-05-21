@@ -13,6 +13,27 @@ subsystems.
 
 See [`XSTAR_PYTHON_PORT.md`](XSTAR_PYTHON_PORT.md).
 
+### v0.4.52 corrects repeated-`dsec` mutable-state ownership
+
+The v0.4.51 evaluation-2 transition diagnostic proved that runtime, radiation,
+escape arrays, continuum workspaces, and global mapping already matched XSTAR.
+The remaining structural differences were the native global population arrays
+and the lifecycle of `leveltemp` between consecutive `calc_hmc_all` calls.
+
+v0.4.52 makes dense native-index `xilevg`, `bilevg`, and `rnisg` arrays the
+authoritative repeated-call state.  It replays the full Fortran ion-order
+writeback, including inactive boundary ions and the shared lower-continuum /
+next-ion-ground workspace position, while preserving the distinct `1d-48` and
+`1e-37` `bilevg` floors.  It also restores `leveltemp` to the captured call-entry
+state before each physical evaluation; source-ordered sharing and partial
+writes remain unchanged within each call.
+
+`examples/122_validate_xstar_dsec_transition_causality.py` runs four controlled
+two-evaluation modes to measure the independent and combined effects of these
+corrections.  The production runner defaults to both corrections.  No new
+Fortran probe is required; use the v0.4.48 instrumented XSTAR executable and
+v0.4.51 evaluation-2 capture.
+
 ### v0.4.51 captures the evaluation-2 `dsec` transition state
 
 The first call-correlated physical evaluation now matches XSTAR, but the

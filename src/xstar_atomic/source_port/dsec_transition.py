@@ -139,6 +139,27 @@ def _dense_global(
     return dense, tuple(sorted(set(unmapped)))
 
 
+def _dense_snapshot_global(
+    direct_values: Optional[Sequence[float]],
+    logical_values: Mapping[Tuple[int, int, int], float],
+    index_by_key: Mapping[Tuple[int, int, int], int],
+    n: int,
+) -> tuple[np.ndarray, tuple[Tuple[int, int, int], ...]]:
+    """Return the authoritative dense state when available.
+
+    v0.4.52 makes the native-index arrays the owner of repeated-``dsec``
+    state.  Older/synthetic snapshots may still provide only logical keys, so
+    retain the v0.4.51 reconstruction as a compatibility fallback.
+    """
+
+    if direct_values is not None:
+        supplied = np.asarray(direct_values, dtype=float).reshape(-1)
+        dense = np.zeros(int(n), dtype=float)
+        dense[: min(dense.size, supplied.size)] = supplied[: dense.size]
+        return dense, ()
+    return _dense_global(logical_values, index_by_key, n)
+
+
 def _leveltemp_python_value(workspace: Any, *, column: int, quantity: str) -> float:
     if workspace is None:
         return 0.0
@@ -445,17 +466,20 @@ def compare_dsec_transition_state(
         xstar.global_bilev_values_by_index.size,
         xstar.global_rnist_values_by_index.size,
     )
-    py_xilev, unmapped_x = _dense_global(
+    py_xilev, unmapped_x = _dense_snapshot_global(
+        snapshot.global_xilevg_by_index,
         snapshot.global_level_populations,
         snapshot.global_level_index_by_key,
         n_global,
     )
-    py_bilev, unmapped_b = _dense_global(
+    py_bilev, unmapped_b = _dense_snapshot_global(
+        snapshot.global_bilevg_by_index,
         snapshot.global_bilev_values,
         snapshot.global_level_index_by_key,
         n_global,
     )
-    py_rnist, unmapped_r = _dense_global(
+    py_rnist, unmapped_r = _dense_snapshot_global(
+        snapshot.global_rnisg_by_index,
         snapshot.global_rnist_values,
         snapshot.global_level_index_by_key,
         n_global,
@@ -553,7 +577,7 @@ def write_dsec_transition_state_products(
     parity: DsecTransitionStateParity,
     out_dir: str | Path,
     *,
-    port_version: str = "v0.4.51",
+    port_version: str = "v0.4.52",
 ) -> Mapping[str, Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

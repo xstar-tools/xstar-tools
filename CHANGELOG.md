@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## v0.4.52 - 2026-05-21
+
+v0.4.52 corrects the two mutable-state ownership failures isolated by the
+call-correlated evaluation-2 diagnostic.
+
+First, repeated physical `dsec` calls now carry authoritative dense native
+`xilevg`, `bilevg`, and `rnisg` arrays indexed by the original XSTAR global
+level index.  `calc_hmc_all` reconstructs the full source-order element
+workspace for every ion, including inactive boundary ions, applies the
+`ipmat += nlev - 1` continuum/next-ground overlap, and replays both distinct
+global writes.  The lower-ion continuum retains the literal `1d-48`
+departure-coefficient floor while ordinary/ground rows use `1e-37`.  Logical
+`(Z, stage, local_level)` maps remain diagnostic views rather than owners of
+mutable state.
+
+Second, the physical `dsec` path now resets the shared `leveltemp` workspace to
+the exact correlated `calc_hmc_all` entry state before every new evaluation.
+Within one call, all source-order writes from `levwkelement` and the second
+`calc_hmc_ion` pass, partial overwrites, retained higher columns, and owner
+provenance are unchanged.  The final within-call workspace is retained as a
+diagnostic snapshot but is not carried into the next evaluation.
+
+A controlled four-mode causality scan was added:
+
+- A: legacy selected-role writeback plus cross-call `leveltemp` carry;
+- B: per-call `leveltemp` reset only;
+- C: dense native alias writeback only;
+- D: both production corrections.
+
+Use `examples/122_validate_xstar_dsec_transition_causality.py` or
+`xstar-atomic-validate-dsec-causality`.  The ordinary physical runner defaults
+to mode D and exposes `--global-writeback-mode` and `--leveltemp-lifecycle` for
+bounded diagnosis.  No XSTAR rebuild is required; reuse the v0.4.48
+instrumented executable and the evaluation-2 probe products.
+
+The frozen v0.4.44 complete fixed-state regression remains mandatory.  Full
+physical `dsec` acceptance is not claimed until the user runs the four-mode
+scan and the corrected complete trajectory against XSTAR.
+
 ## v0.4.51 - 2026-05-21
 
 v0.4.51 adds a bounded evaluation-transition diagnostic for the physical

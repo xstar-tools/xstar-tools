@@ -197,6 +197,19 @@ class FixedStateCalcHMCAllResult:
     global_element_index_by_z: Dict[int, int] = field(default_factory=dict)
     global_ion_index_by_key: Dict[Tuple[int, int], int] = field(default_factory=dict)
     global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
+    # Dense native XSTAR global arrays.  Array position ``i-1`` corresponds
+    # to Fortran global level index ``i``.  These are the authoritative
+    # mutable state for repeated ``dsec`` calls; the logical dictionaries
+    # above remain diagnostic views.
+    global_xilevg_by_index: np.ndarray = field(
+        default_factory=lambda: np.zeros(0, dtype=float)
+    )
+    global_bilevg_by_index: np.ndarray = field(
+        default_factory=lambda: np.zeros(0, dtype=float)
+    )
+    global_rnisg_by_index: np.ndarray = field(
+        default_factory=lambda: np.zeros(0, dtype=float)
+    )
 
 
 ContinuumKernel = Callable[..., FixedStateContinuumResult]
@@ -255,6 +268,10 @@ def calc_hmc_all(
     pre_matrix_solver: PreMatrixSolver = calc_element_pre_matrix_balance,
     initial_leveltemp_workspace: Optional[Any] = None,
     initial_leveltemp_owner_by_column: Optional[Mapping[int, Mapping[str, Any]]] = None,
+    initial_global_xilevg_by_index: Optional[Sequence[float]] = None,
+    initial_global_bilevg_by_index: Optional[Sequence[float]] = None,
+    initial_global_rnisg_by_index: Optional[Sequence[float]] = None,
+    source_global_alias_writeback: bool = False,
 ) -> FixedStateCalcHMCAllResult:
     """Run the fixed-state element/charge/heating core of ``calc_hmc_all``.
 
@@ -390,6 +407,50 @@ def calc_hmc_all(
                 global_level_index = int(npilev[local_ordinal, ion_index])
                 if global_level_index > 0:
                     global_level_index_by_key[(z, stage, local_ordinal)] = global_level_index
+
+    n_global_levels = max(
+        [
+            0,
+            *global_level_index_by_key.values(),
+            (
+                len(np.asarray(initial_global_xilevg_by_index).reshape(-1))
+                if initial_global_xilevg_by_index is not None
+                else 0
+            ),
+            (
+                len(np.asarray(initial_global_bilevg_by_index).reshape(-1))
+                if initial_global_bilevg_by_index is not None
+                else 0
+            ),
+            (
+                len(np.asarray(initial_global_rnisg_by_index).reshape(-1))
+                if initial_global_rnisg_by_index is not None
+                else 0
+            ),
+        ]
+    )
+
+    def _dense_seed(values: Optional[Sequence[float]], *, name: str) -> np.ndarray:
+        dense = np.zeros(n_global_levels, dtype=float)
+        if values is None:
+            return dense
+        supplied = np.asarray(values, dtype=float).reshape(-1)
+        if np.any(~np.isfinite(supplied)):
+            raise CalcHMCAllError(f"{name} contains non-finite values")
+        if np.any(supplied < 0.0):
+            raise CalcHMCAllError(f"{name} contains negative values")
+        dense[: min(dense.size, supplied.size)] = supplied[: dense.size]
+        return dense
+
+    global_xilevg_by_index = _dense_seed(
+        initial_global_xilevg_by_index, name="initial_global_xilevg_by_index"
+    )
+    global_bilevg_by_index = _dense_seed(
+        initial_global_bilevg_by_index, name="initial_global_bilevg_by_index"
+    )
+    global_rnisg_by_index = _dense_seed(
+        initial_global_rnisg_by_index, name="initial_global_rnisg_by_index"
+    )
 
     for request in elements:
         request.validate()
@@ -561,12 +622,15 @@ def calc_hmc_all(
                 ion_nlev = int(nlev_by_stage.get(int(key[1]), 0))
                 is_final_continuum = bool(ion_nlev > 0 and local_level == ion_nlev)
 
-                xilevg[key] = pop
-                rnisg[key] = rn
-                # calc_hmc_element writes bileve for spectroscopic rows using
-                # 1e-37. calc_hmc_all recomputes only the final continuum row
-                # with 1e-48. Preserve the literal two-floor source rule.
-                bilevg[key] = pop / (rn + (1.0e-48 if is_final_continuum else 1.0e-37))
+                if not source_global_alias_writeback:
+                    xilevg[key] = pop
+                    rnisg[key] = rn
+                    # calc_hmc_element writes bileve for spectroscopic rows using
+                    # 1e-37. calc_hmc_all recomputes only the final continuum row
+                    # with 1e-48. Preserve the literal two-floor source rule.
+                    bilevg[key] = pop / (
+                        rn + (1.0e-48 if is_final_continuum else 1.0e-37)
+                    )
                 gammag[key] = float(solve.gamma[idx])
                 alphag[key] = float(solve.alpha[idx])
                 fgammag[key] = np.asarray(solve.fgamma[:, idx], dtype=float).copy()
@@ -576,6 +640,86 @@ def calc_hmc_all(
                 # global-array value even though gamma/alpha are copied.
                 igammamaxg[key] = 0 if is_final_continuum else int(solve.igammamax_record[idx])
                 ialphamaxg[key] = 0 if is_final_continuum else int(solve.ialphamax_record[idx])
+
+        if source_global_alias_writeback:
+            # Reproduce the two distinct source loops exactly:
+            #
+            # 1. ``calc_hmc_element`` maps the selected compact solution back
+            #    into a full-element ``xileve/rnise/bileve`` workspace while
+            #    zeroing every inactive ion.  Adjacent ion blocks overlap by
+            #    one position because ``ipmat = ipmat + nlev - 1``.
+            # 2. ``calc_hmc_all`` then writes every native ion level to its
+            #    distinct global ``npilev`` index.  A shared element-workspace
+            #    position is therefore copied to both the lower-ion continuum
+            #    and next-ion ground rows.  The continuum copy recomputes
+            #    ``bilevg`` with the literal 1d-48 floor; all other rows retain
+            #    the 1e-37 ``calc_hmc_element`` rule.
+            all_ions = [
+                (
+                    int(ion_index),
+                    int(ion_stages[ion_index]),
+                    int(nlevs[ion_index]),
+                )
+                for ion_index in range(
+                    1,
+                    min(n_ions + 1, ion_stages.size, ion_elements.size, nlevs.size),
+                )
+                if int(ion_elements[ion_index]) == z
+            ]
+            full_nrows = 1 + sum(max(0, nlev - 1) for _, _, nlev in all_ions)
+            full_x = np.zeros(full_nrows + 1, dtype=float)
+            full_rn = np.zeros(full_nrows + 1, dtype=float)
+            full_bile = np.zeros(full_nrows + 1, dtype=float)
+            block_by_ion = {
+                int(block.ion_index): block
+                for block in equilibrium.assembly.basis.blocks
+            }
+
+            ipmat = 0
+            for ion_index, _stage, nlev in all_ions:
+                block = block_by_ion.get(ion_index)
+                if block is not None:
+                    for local_level in range(1, nlev + 1):
+                        compact_index = int(block.compact_index(local_level))
+                        compact_zero = compact_index - 1
+                        full_index = ipmat + local_level
+                        pop = float(populations[compact_zero])
+                        lte_index = compact_index if lte_has_guard else compact_zero
+                        rn = float(lte[lte_index]) if lte_index < lte.size else 0.0
+                        full_x[full_index] = pop
+                        full_rn[full_index] = rn
+                        full_bile[full_index] = pop / (rn + 1.0e-37)
+                else:
+                    # Literal inactive-ion branch in calc_hmc_element.f90.
+                    for local_level in range(1, nlev + 1):
+                        full_index = ipmat + local_level
+                        full_x[full_index] = 0.0
+                        full_rn[full_index] = 0.0
+                        full_bile[full_index] = 0.0
+                ipmat += nlev - 1
+
+            ipmat = 0
+            for ion_index, stage, nlev in all_ions:
+                for local_level in range(1, nlev + 1):
+                    key = (z, stage, local_level)
+                    global_index = int(global_level_index_by_key.get(key, 0))
+                    if global_index <= 0 or global_index > n_global_levels:
+                        continue
+                    full_index = ipmat + local_level
+                    pop = float(full_x[full_index])
+                    rn = float(full_rn[full_index])
+                    bile = (
+                        pop / (rn + 1.0e-48)
+                        if local_level == nlev
+                        else float(full_bile[full_index])
+                    )
+                    global_xilevg_by_index[global_index - 1] = pop
+                    global_rnisg_by_index[global_index - 1] = rn
+                    global_bilevg_by_index[global_index - 1] = bile
+                    xilevg[key] = pop
+                    rnisg[key] = rn
+                    bilevg[key] = bile
+                ipmat += nlev - 1
 
         element_results.append(
             FixedStateElementResult(
@@ -610,6 +754,17 @@ def calc_hmc_all(
                 ) + fully_stripped * float(z) * abundance,
             )
         )
+
+    if not source_global_alias_writeback:
+        # Backward-compatible logical selected-role writeback.  Populate the
+        # dense views so callers can transition to native-index ownership
+        # without changing fixed-state numerical behavior.
+        for key, pop in xilevg.items():
+            global_index = int(global_level_index_by_key.get(key, 0))
+            if 1 <= global_index <= n_global_levels:
+                global_xilevg_by_index[global_index - 1] = float(pop)
+                global_rnisg_by_index[global_index - 1] = float(rnisg.get(key, 0.0))
+                global_bilevg_by_index[global_index - 1] = float(bilevg.get(key, 0.0))
 
     # v0.4.44: own the pre-continuum thermal snapshot explicitly.  These
     # values belong to the completed positive-abundance element loop and are
@@ -917,6 +1072,9 @@ def calc_hmc_all(
         global_element_index_by_z=global_element_index_by_z,
         global_ion_index_by_key=global_ion_index_by_key,
         global_level_index_by_key=global_level_index_by_key,
+        global_xilevg_by_index=global_xilevg_by_index,
+        global_bilevg_by_index=global_bilevg_by_index,
+        global_rnisg_by_index=global_rnisg_by_index,
         diagnostics={
             "source_file": "xstar/xstarlib/src/calc_hmc_all.f90",
             "source_mode": "fixed_temperature_fixed_electron_fraction",
@@ -939,6 +1097,8 @@ def calc_hmc_all(
             "dsec_available_as_stateful_outer_iteration": True,
             "leveltemp_mutable_state_carried_between_elements": True,
             "incoming_leveltemp_workspace_present": initial_leveltemp_workspace is not None,
+            "source_global_alias_writeback": bool(source_global_alias_writeback),
+            "dense_global_state_ready": bool(n_global_levels > 0),
         },
     )
 

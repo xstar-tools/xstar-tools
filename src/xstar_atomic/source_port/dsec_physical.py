@@ -340,11 +340,39 @@ def clone_physical_dsec_runtime_state(
                 for key, value in state.global_level_populations.items()
             }
         ),
+        global_xilevg_by_index=(
+            None
+            if state.global_xilevg_by_index is None
+            else np.asarray(state.global_xilevg_by_index, dtype=float).copy()
+        ),
+        global_bilevg_by_index=(
+            None
+            if state.global_bilevg_by_index is None
+            else np.asarray(state.global_bilevg_by_index, dtype=float).copy()
+        ),
+        global_rnisg_by_index=(
+            None
+            if state.global_rnisg_by_index is None
+            else np.asarray(state.global_rnisg_by_index, dtype=float).copy()
+        ),
+        global_level_index_by_key={
+            (int(key[0]), int(key[1]), int(key[2])): int(value)
+            for key, value in state.global_level_index_by_key.items()
+        },
         leveltemp_workspace=copy.deepcopy(state.leveltemp_workspace),
         leveltemp_owner_by_column={
             int(index): dict(owner)
             for index, owner in state.leveltemp_owner_by_column.items()
         },
+        last_leveltemp_workspace=copy.deepcopy(state.last_leveltemp_workspace),
+        last_leveltemp_owner_by_column={
+            int(index): dict(owner)
+            for index, owner in state.last_leveltemp_owner_by_column.items()
+        },
+        source_global_alias_writeback=bool(state.source_global_alias_writeback),
+        reset_leveltemp_each_calc_hmc_all=bool(
+            state.reset_leveltemp_each_calc_hmc_all
+        ),
         source_arrays=copy.deepcopy(state.source_arrays),
         work_arrays=copy.deepcopy(state.work_arrays),
         last_calc_hmc_all=None,
@@ -391,6 +419,9 @@ def build_physical_dsec_runtime_state(
         strict_context=True,
     )
     global_populations: Dict[Tuple[int, int, int], float] = {}
+    global_xilevg_by_index: Optional[np.ndarray] = None
+    global_bilevg_by_index: Optional[np.ndarray] = None
+    global_rnisg_by_index: Optional[np.ndarray] = None
     leveltemp_workspace = None
     initial_global_source = "xstar_init_f90_zero_xilevg"
     if matching_input is not None:
@@ -400,6 +431,15 @@ def build_physical_dsec_runtime_state(
                 "xilevg but cannot yet map global indices onto physical level keys"
             )
         leveltemp_workspace = matching_input.leveltemp_workspace
+        global_xilevg_by_index = np.asarray(
+            matching_input.global_level_values_by_index, dtype=float
+        ).copy()
+        global_bilevg_by_index = np.asarray(
+            matching_input.global_bilev_values_by_index, dtype=float
+        ).copy()
+        global_rnisg_by_index = np.asarray(
+            matching_input.global_rnist_values_by_index, dtype=float
+        ).copy()
         initial_global_source = "xstar_correlated_dsec_input_global_xilevg"
     return DsecMutableRuntimeState(
         temperature_t4=initial.temperature_t4,
@@ -410,7 +450,12 @@ def build_physical_dsec_runtime_state(
         pressure=float(pressure),
         lcdd=int(lcdd),
         global_level_populations=global_populations,
+        global_xilevg_by_index=global_xilevg_by_index,
+        global_bilevg_by_index=global_bilevg_by_index,
+        global_rnisg_by_index=global_rnisg_by_index,
         leveltemp_workspace=leveltemp_workspace,
+        source_global_alias_writeback=True,
+        reset_leveltemp_each_calc_hmc_all=True,
         provenance={
             "physical_dsec_runner": True,
             "initial_runtime_source": initial.source,
@@ -425,6 +470,9 @@ def build_physical_dsec_runtime_state(
             "matching_input_probe_dir": (
                 None if matching_input is None else matching_input.source_dir
             ),
+            "dense_native_global_state": True,
+            "source_global_alias_writeback": True,
+            "leveltemp_lifecycle": "reset_to_call_entry_state_each_calc_hmc_all",
         },
     )
 

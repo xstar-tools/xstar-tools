@@ -2,10 +2,13 @@
 
 ``dsec`` solves charge conservation and, for positive ``nlim``, thermal
 balance by a nested double-secant/bracketing iteration.  The source routine is
-stateful: every trial calls ``calc_hmc_all`` with the level populations and
-shared ``leveltemp`` workspace left by the previous trial.  This module keeps
-that mutable state explicit and records a trajectory suitable for direct
-comparison with a diagnostic-only XSTAR probe.
+stateful: every trial calls ``calc_hmc_all`` with the native global level
+population arrays left by the previous trial.  The internal ``leveltemp``
+workspace remains source ordered within one ``calc_hmc_all`` invocation; the
+bounded call-correlated workflow resets it to the captured call-entry state
+before the next trial.  This module keeps those ownership rules explicit and
+records a trajectory suitable for direct comparison with a diagnostic-only
+XSTAR probe.
 
 The numerical control flow intentionally follows the Fortran labels and branch
 order.  It does not replace the source algorithm with a generic root finder.
@@ -53,11 +56,11 @@ class DsecMutableRuntimeState:
     """Mutable local-zone state passed through repeated ``calc_hmc_all`` calls.
 
     ``temperature_t4`` uses XSTAR's native unit of :math:`10^4` K.  The
-    mutable global ``xilevg`` population workspace is carried between trials
-    and remapped onto each newly selected compact element basis.  Compact
-    population vectors are retained only as diagnostics.  The shared
-    ``leveltemp`` workspace is carried across elements and across calls,
-    including retained higher columns and owner provenance.
+    mutable native-index ``xilevg/bilevg/rnisg`` arrays are carried between
+    trials and remapped onto each newly selected compact element basis.
+    Compact population vectors and logical level keys are retained only as
+    diagnostics.  ``leveltemp`` is shared across elements within one call;
+    the physical call-correlated path can reset it before each new trial.
     """
 
     temperature_t4: float
@@ -73,8 +76,16 @@ class DsecMutableRuntimeState:
     # workspace.  The empty mapping is the exact first-zone state from
     # init.f90, which clears every global level population to zero.
     global_level_populations: Optional[Dict[Tuple[int, int, int], float]] = None
+    global_xilevg_by_index: Optional[np.ndarray] = None
+    global_bilevg_by_index: Optional[np.ndarray] = None
+    global_rnisg_by_index: Optional[np.ndarray] = None
+    global_level_index_by_key: Dict[Tuple[int, int, int], int] = field(default_factory=dict)
     leveltemp_workspace: Optional[Any] = None
     leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+    last_leveltemp_workspace: Optional[Any] = None
+    last_leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+    source_global_alias_writeback: bool = False
+    reset_leveltemp_each_calc_hmc_all: bool = False
     source_arrays: Dict[str, Any] = field(default_factory=dict)
     work_arrays: Dict[str, Any] = field(default_factory=dict)
     last_calc_hmc_all: Optional[FixedStateCalcHMCAllResult] = None
@@ -98,9 +109,28 @@ class DsecMutableRuntimeState:
                 (int(key[0]), int(key[1]), int(key[2])): float(value)
                 for key, value in self.global_level_populations.items()
             }
+        for name in (
+            "global_xilevg_by_index",
+            "global_bilevg_by_index",
+            "global_rnisg_by_index",
+        ):
+            values = getattr(self, name)
+            if values is not None:
+                array = np.asarray(values, dtype=float).reshape(-1).copy()
+                if np.any(~np.isfinite(array)) or np.any(array < 0.0):
+                    raise DsecPortError(f"{name} must be finite and nonnegative")
+                setattr(self, name, array)
+        self.global_level_index_by_key = {
+            (int(key[0]), int(key[1]), int(key[2])): int(value)
+            for key, value in self.global_level_index_by_key.items()
+        }
         self.leveltemp_owner_by_column = {
             int(index): dict(owner)
             for index, owner in self.leveltemp_owner_by_column.items()
+        }
+        self.last_leveltemp_owner_by_column = {
+            int(index): dict(owner)
+            for index, owner in self.last_leveltemp_owner_by_column.items()
         }
 
     @property
@@ -113,7 +143,20 @@ class DsecMutableRuntimeState:
         requests: List[FixedStateElementRequest] = []
         for request in self.element_requests:
             z = int(request.element_z)
-            if self.global_level_populations is not None:
+            if self.global_xilevg_by_index is not None:
+                dense = np.asarray(self.global_xilevg_by_index, dtype=float).reshape(-1)
+                global_populations = {
+                    key: float(dense[index - 1])
+                    for key, index in self.global_level_index_by_key.items()
+                    if 1 <= int(index) <= dense.size
+                }
+                populations = None
+                source = (
+                    "xstar_init_zero_dense_global_xilevg"
+                    if self.calc_hmc_all_call_count == 0
+                    else "dsec_previous_calc_hmc_all_dense_global_xilevg"
+                )
+            elif self.global_level_populations is not None:
                 # Source calc_hmc_all remaps global xilevg after each dynamic
                 # istruc ion-range selection.  Never reuse a compact vector
                 # across a basis change.
@@ -161,23 +204,55 @@ class DsecMutableRuntimeState:
                 self.element_populations[int(item.request.element_z)] = np.asarray(
                     solve.populations, dtype=float
                 ).copy()
-        # calc_hmc_all writes the solved populations back to the global
-        # xilevg workspace.  This global state, not a compact vector tied to
-        # the old basis, is the source input to the next dsec trial.
-        if self.global_level_populations is None:
-            self.global_level_populations = {}
-        self.global_level_populations.update(
-            {
-                (int(key[0]), int(key[1]), int(key[2])): float(value)
-                for key, value in result.xilevg.items()
+        # calc_hmc_all writes the solved state back to native global arrays.
+        # Dense arrays own the repeated-dsec state; logical dictionaries are
+        # reconstructed views used by the current compact-basis mapper.
+        dense_x = np.asarray(
+            getattr(result, "global_xilevg_by_index", ()), dtype=float
+        ).reshape(-1)
+        dense_b = np.asarray(
+            getattr(result, "global_bilevg_by_index", ()), dtype=float
+        ).reshape(-1)
+        dense_r = np.asarray(
+            getattr(result, "global_rnisg_by_index", ()), dtype=float
+        ).reshape(-1)
+        result_mapping = getattr(result, "global_level_index_by_key", {})
+        if dense_x.size and result_mapping:
+            self.global_xilevg_by_index = dense_x.copy()
+            self.global_bilevg_by_index = dense_b.copy()
+            self.global_rnisg_by_index = dense_r.copy()
+            self.global_level_index_by_key = {
+                (int(key[0]), int(key[1]), int(key[2])): int(value)
+                for key, value in result_mapping.items()
             }
-        )
+            self.global_level_populations = {
+                key: float(self.global_xilevg_by_index[index - 1])
+                for key, index in self.global_level_index_by_key.items()
+                if 1 <= int(index) <= self.global_xilevg_by_index.size
+            }
+        else:
+            # Compatibility for lightweight test doubles and legacy callers
+            # that predate native-index ownership.
+            if self.global_level_populations is None:
+                self.global_level_populations = {}
+            self.global_level_populations.update(
+                {
+                    (int(key[0]), int(key[1]), int(key[2])): float(value)
+                    for key, value in result.xilevg.items()
+                }
+            )
 
-        self.leveltemp_workspace = result.leveltemp_workspace
-        self.leveltemp_owner_by_column = {
+        self.last_leveltemp_workspace = result.leveltemp_workspace
+        self.last_leveltemp_owner_by_column = {
             int(index): dict(owner)
             for index, owner in result.leveltemp_owner_by_column.items()
         }
+        if not self.reset_leveltemp_each_calc_hmc_all:
+            self.leveltemp_workspace = result.leveltemp_workspace
+            self.leveltemp_owner_by_column = {
+                int(index): dict(owner)
+                for index, owner in result.leveltemp_owner_by_column.items()
+            }
         self.source_arrays = {
             "xiin": dict(result.ion_fractions),
             "rrrt": dict(result.rrrt),
@@ -206,14 +281,23 @@ class DsecMutableRuntimeState:
                 if result.continuum.brcems is None
                 else np.asarray(result.continuum.brcems, dtype=float).copy()
             ),
-            "leveltemp_workspace": self.leveltemp_workspace,
-            "leveltemp_owner_by_column": self.leveltemp_owner_by_column,
+            "leveltemp_workspace": self.last_leveltemp_workspace,
+            "leveltemp_owner_by_column": self.last_leveltemp_owner_by_column,
         }
         self.provenance.update(
             {
                 "last_source_routine": "calc_hmc_all",
                 "mutable_population_replay": True,
-                "mutable_leveltemp_replay": True,
+                "mutable_leveltemp_replay_within_call": True,
+                "leveltemp_reset_between_calc_hmc_all_calls": bool(
+                    self.reset_leveltemp_each_calc_hmc_all
+                ),
+                "dense_native_global_state": bool(
+                    self.global_xilevg_by_index is not None
+                ),
+                "source_global_alias_writeback": bool(
+                    self.source_global_alias_writeback
+                ),
                 "calc_hmc_all_call_count": self.calc_hmc_all_call_count,
             }
         )
@@ -248,6 +332,9 @@ class DsecCalcHMCAllInputSnapshot:
     radiation: Optional[Any]
     escape: Optional[Any]
     calc_kwargs: Mapping[str, Any]
+    global_xilevg_by_index: Optional[np.ndarray] = None
+    global_bilevg_by_index: Optional[np.ndarray] = None
+    global_rnisg_by_index: Optional[np.ndarray] = None
 
 
 @dataclass(frozen=True)
@@ -345,6 +432,27 @@ class CalcHMCAllDsecEvaluator:
                     for key, value in kwargs.items()
                     if key not in {"dispatcher", "element_solver", "pre_matrix_solver"}
                 },
+                global_xilevg_by_index=(
+                    None
+                    if getattr(state, "global_xilevg_by_index", None) is None
+                    else np.asarray(
+                        getattr(state, "global_xilevg_by_index"), dtype=float
+                    ).copy()
+                ),
+                global_bilevg_by_index=(
+                    None
+                    if getattr(state, "global_bilevg_by_index", None) is None
+                    else np.asarray(
+                        getattr(state, "global_bilevg_by_index"), dtype=float
+                    ).copy()
+                ),
+                global_rnisg_by_index=(
+                    None
+                    if getattr(state, "global_rnisg_by_index", None) is None
+                    else np.asarray(
+                        getattr(state, "global_rnisg_by_index"), dtype=float
+                    ).copy()
+                ),
             )
             self.input_snapshots.append(snapshot)
 
@@ -360,6 +468,18 @@ class CalcHMCAllDsecEvaluator:
             required_element_z=state.required_element_z,
             initial_leveltemp_workspace=state.leveltemp_workspace,
             initial_leveltemp_owner_by_column=state.leveltemp_owner_by_column,
+            initial_global_xilevg_by_index=getattr(
+                state, "global_xilevg_by_index", None
+            ),
+            initial_global_bilevg_by_index=getattr(
+                state, "global_bilevg_by_index", None
+            ),
+            initial_global_rnisg_by_index=getattr(
+                state, "global_rnisg_by_index", None
+            ),
+            source_global_alias_writeback=bool(
+                getattr(state, "source_global_alias_writeback", False)
+            ),
             **kwargs,
         )
         state.commit_calc_hmc_all(result)
@@ -371,7 +491,15 @@ class CalcHMCAllDsecEvaluator:
             fixed_state_result=result,
             diagnostics={
                 "complete_fixed_state_ready": bool(result.complete_fixed_state_ready),
-                "leveltemp_workspace_carried": True,
+                "leveltemp_workspace_carried": bool(
+                    not bool(getattr(state, "reset_leveltemp_each_calc_hmc_all", False))
+                ),
+                "leveltemp_reset_between_calls": bool(
+                    getattr(state, "reset_leveltemp_each_calc_hmc_all", False)
+                ),
+                "source_global_alias_writeback": bool(
+                    getattr(state, "source_global_alias_writeback", False)
+                ),
             },
         )
         self.evaluations.append(evaluation)

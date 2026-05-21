@@ -1563,3 +1563,30 @@ trajectory with the physical XSTAR trajectory.
 - `120_prepare_xstar_dsec_matching_probe.py` writes the shared call-correlation,
   complete matching-state `calc_hmc_all`, and dsec trajectory/thermal probe
   bundle required for the production rerun.
+
+## v0.4.52 repeated-`dsec` state ownership and causality scan
+
+### `122_validate_xstar_dsec_transition_causality.py`
+
+Runs four controlled two-evaluation calculations against the same correlated
+XSTAR evaluation-2 entry state:
+
+```text
+A_current_v0451        legacy selected writeback + carried leveltemp
+B_zero_leveltemp_only  legacy selected writeback + per-call leveltemp reset
+C_dense_alias_only     dense native alias writeback + carried leveltemp
+D_production_both      dense native alias writeback + per-call leveltemp reset
+```
+
+All physical/probe arguments accepted by examples 119/121 are passed through.
+The wrapper owns `--out-dir`, forces `--maximum-evaluations 2`, and writes
+`xstar_dsec_transition_causality_scan.csv/.json/.md`.  The ordinary physical
+runner defaults to mode D through:
+
+```text
+--global-writeback-mode dense-source
+--leveltemp-lifecycle reset-per-call
+```
+
+No XSTAR rebuild is required; reuse the v0.4.48 instrumented executable and the
+v0.4.51 evaluation-2 input-state probe products.
