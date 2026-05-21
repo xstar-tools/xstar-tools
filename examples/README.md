@@ -1750,3 +1750,23 @@ populations, iteration history, source `xtot`, thermal families, element
 accumulation, or complete primary thermal parity.  No XSTAR rebuild or new run
 is required.
 
+
+## v0.4.56 natural source-zero four-evaluation prefix
+
+### `126_validate_xstar_dsec_source_zero_prefix.py`
+
+```bash
+PYTHONPATH=src python examples/126_validate_xstar_dsec_source_zero_prefix.py \
+  [the same ATDB, dsec trajectory, transition, and oxygen regression options \
+   used by example 125] \
+  --out-dir xstar_dsec_source_zero_prefix_v0456 \
+  --print-summary
+```
+
+The wrapper forces production state semantics (`dense-source`, `reset-per-call`,
+`source-zero`), disables exact transition replay, and runs four natural
+`calc_hmc_all` evaluations.  It compares the natural evaluation-2 call-entry
+state and same-call internals with XSTAR while validating the first four thermal
+and charge-balance trajectory events.  Its summary reports strict runtime parity
+separately from source branch/residual parity so tiny carried work-bound roundoff
+cannot be mistaken for a changed source branch.

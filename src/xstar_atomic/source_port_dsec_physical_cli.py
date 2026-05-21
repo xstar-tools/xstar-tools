@@ -567,7 +567,7 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.55",
+        "port_version": "v0.4.56",
         "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
@@ -726,7 +726,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.55 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.56 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -1037,12 +1037,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.55")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.56")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.55")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.56")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.55"
+            thermal_parity, out, port_version="v0.4.56"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
@@ -1090,7 +1090,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 xstar_brcems_before=transition_bremem_ref.brcems_before,
             )
             transition_products = write_dsec_transition_state_products(
-                transition_parity, out, port_version="v0.4.55"
+                transition_parity, out, port_version="v0.4.56"
             )
             paths.update(
                 {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
@@ -1137,7 +1137,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             internal_products = write_calc_hmc_all_pre_continuum_parity_products(
                 transition_internal_parity,
                 internal_out,
-                port_version="v0.4.55",
+                port_version="v0.4.56",
             )
             paths.update(
                 {
@@ -1181,15 +1181,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
             fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.55"
+                final_result, out, port_version="v0.4.56"
             )
             paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
             final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.55"
+                final_parity, out, port_version="v0.4.56"
             )
             paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.55"
+                acceptance, out, port_version="v0.4.56"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -1223,7 +1223,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.55")
+        print("port_version=v0.4.56")
         print(f"global_writeback_mode={args.global_writeback_mode}")
         print(f"leveltemp_lifecycle={args.leveltemp_lifecycle}")
         print(

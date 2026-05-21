@@ -91,7 +91,7 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.55"
+PORT_LEDGER_VERSION = "v0.4.56"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
     "run the source-zero terminal-continuum evaluation-2 causality scan, then "

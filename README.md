@@ -1,3 +1,38 @@
+## v0.4.56 natural source-zero `dsec` prefix
+
+The user-side v0.4.55 causality run confirms that XSTAR's literal terminal
+compact-row initialization
+
+```fortran
+x(ipmat2+1)=0.
+```
+
+was the primary evaluation-2 discrepancy.  With the production `source-zero`
+seed, the exact-replay evaluation-2 cooling and residual now agree with XSTAR at
+roughly the `10^-6` relative level, and all active Lucy-population and thermal
+family gates pass.
+
+v0.4.56 adds a natural four-evaluation prefix check:
+
+```text
+examples/126_validate_xstar_dsec_source_zero_prefix.py
+xstar-atomic-validate-dsec-source-zero-prefix
+```
+
+It runs without exact transition-state substitution and keeps the production
+state semantics:
+
+```text
+--global-writeback-mode dense-source
+--leveltemp-lifecycle reset-per-call
+--terminal-continuum-seed-mode source-zero
+```
+
+The report distinguishes strict floating-point workspace equality from
+source-control equivalence (event sequence, integer branch state, residual
+sign/value, and final prefix state).  Full unrestricted `dsec`, emissivity, and
+transfer acceptance remain later gates.
+
 ## v0.4.55 terminal compact-continuum solver seed
 
 The v0.4.54 exact evaluation-2 internal audit isolated the first failure to the

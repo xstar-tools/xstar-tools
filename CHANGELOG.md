@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.56 - 2026-05-21
+
+v0.4.56 consumes the user-side v0.4.55 terminal-seed causality result.  The
+literal `calc_hmc_element.f90` terminal write `x(ipmat2+1)=0.` is confirmed as
+the primary cause of the evaluation-2 cooling discrepancy.  Under exact XSTAR
+transition replay, `source-zero` makes the initial Lucy vector, final active
+populations, outer-iteration entry, source-order `xtot`, thermal families, and
+element heating/cooling arrays pass.  The evaluation-2 pre-continuum cooling
+relative difference falls from `9.60070043e-3` to `5.69511833e-7`, and the
+`hmctot` relative difference falls from `8.35736580e-3` to `1.29364826e-6`.
+
+The remaining physical-run exit code is not a thermal or branch failure.  The
+strict trajectory gate rejects only the carried `elctrh` work bound at two
+events, with an absolute difference of about `2.03e-11`; event order, integer
+control state, residual signs/values, and final prefix state pass.
+
+New example 126 and `xstar-atomic-validate-dsec-source-zero-prefix` run four
+natural evaluations without exact transition replay.  They compare the natural
+evaluation-2 entry and internals against XSTAR and report strict runtime parity
+separately from source branch/residual parity.  This is a bounded diagnostic and
+acceptance step before the unrestricted 33-evaluation `dsec` run.  Production
+physics remains `dense-source`, `reset-per-call`, and `source-zero`; no XSTAR
+source change or rebuild is required.
+
 ## v0.4.55 - 2026-05-21
 
 v0.4.55 corrects the terminal compact-continuum population seed passed into
