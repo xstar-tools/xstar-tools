@@ -540,6 +540,7 @@ def build_physical_dsec_runtime_state(
     lfast: int,
     critf: float,
     initial_population_policy: str,
+    terminal_continuum_seed_mode: str = "source-zero",
     pressure: float,
     lcdd: int,
     matching_input: Optional[DsecMatchingInputState] = None,
@@ -562,6 +563,7 @@ def build_physical_dsec_runtime_state(
         lfast=lfast,
         critf=critf,
         initial_population_policy=initial_population_policy,
+        terminal_continuum_seed_mode=terminal_continuum_seed_mode,
         strict_context=True,
     )
     global_populations: Dict[Tuple[int, int, int], float] = {}
@@ -608,6 +610,7 @@ def build_physical_dsec_runtime_state(
             "element_scope_probe_call_id": plan.call_id,
             "element_scope_probe_dir": plan.probe_dir,
             "initial_population_policy": initial_population_policy,
+            "terminal_continuum_seed_mode": terminal_continuum_seed_mode,
             "initial_global_population_source": initial_global_source,
             "matching_input_call_id": (
                 None if matching_input is None

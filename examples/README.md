@@ -1721,3 +1721,32 @@ differences to preempt an otherwise passing active matrix closure.
 No XSTAR rebuild or new XSTAR execution is required when the existing
 `o7_ne1e8_dsec_v0451_eval2` directory contains the same-call matrix, Lucy, and
 thermal-family probe CSVs.
+## v0.4.55 terminal compact-continuum seed causality
+
+### `125_validate_xstar_dsec_terminal_continuum_seed.py`
+
+The v0.4.54 audit found that the only pre-`msolvelucy` population mismatch for
+each of H, He, and O is the final compact continuum/normalization row.  XSTAR
+sets this row to exact zero immediately before the solve.  Example 125 runs two
+exact-replay evaluation-2 modes:
+
+```text
+A_legacy_global_terminal_seed
+B_source_zero_terminal_seed
+```
+
+Use the same arguments and probe directories as example 124:
+
+```bash
+PYTHONPATH=src python examples/125_validate_xstar_dsec_terminal_continuum_seed.py \
+  [the example-124 physical/probe arguments] \
+  --out-dir xstar_dsec_terminal_seed_v0455 \
+  --print-summary
+```
+
+The wrapper writes `xstar_dsec_terminal_continuum_seed_scan.csv/.json/.md` and
+advances the first-failure diagnosis from solver entry through final Lucy
+populations, iteration history, source `xtot`, thermal families, element
+accumulation, or complete primary thermal parity.  No XSTAR rebuild or new run
+is required.
+

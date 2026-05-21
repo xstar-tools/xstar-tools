@@ -40,6 +40,7 @@ def _clean_passthrough(args: Sequence[str]) -> List[str]:
         ("--maximum-evaluations", True),
         ("--global-writeback-mode", True),
         ("--leveltemp-lifecycle", True),
+        ("--terminal-continuum-seed-mode", True),
         ("--transition-input-mode", True),
         ("--print-summary", False),
     ):
@@ -264,6 +265,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "dense-source",
             "--leveltemp-lifecycle",
             "reset-per-call",
+            "--terminal-continuum-seed-mode",
+            "legacy-global",
             "--transition-input-mode",
             input_mode,
         ]

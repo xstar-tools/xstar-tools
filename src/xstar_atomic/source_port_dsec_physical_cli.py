@@ -213,6 +213,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    parser.add_argument(
+        "--terminal-continuum-seed-mode",
+        choices=("legacy-global", "source-zero"),
+        default="source-zero",
+        help=(
+            "source-zero reproduces calc_hmc_element.f90 x(ipmat2+1)=0 before "
+            "msolvelucy; legacy-global retains the pre-v0.4.55 diagnostic seed"
+        ),
+    )
+
     parser.add_argument("--runtime-rtol", type=float, default=5.0e-12)
     parser.add_argument("--runtime-atol", type=float, default=1.0e-30)
     parser.add_argument("--residual-rtol", type=float, default=5.0e-3)
@@ -557,7 +567,7 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.54",
+        "port_version": "v0.4.55",
         "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
@@ -581,12 +591,16 @@ def _write_runner_summary(
         "continuum_context_build_count": continuum_factory.build_count,
         "global_writeback_mode": args.global_writeback_mode,
         "leveltemp_lifecycle": args.leveltemp_lifecycle,
+        "terminal_continuum_seed_mode": args.terminal_continuum_seed_mode,
         "transition_input_mode": args.transition_input_mode,
         "v0452_dense_native_global_alias_writeback_ready": (
             args.global_writeback_mode == "dense-source"
         ),
         "v0452_leveltemp_per_call_reset_ready": (
             args.leveltemp_lifecycle == "reset-per-call"
+        ),
+        "v0455_terminal_continuum_zero_seed_ready": (
+            args.terminal_continuum_seed_mode == "source-zero"
         ),
         "prepare_only": bool(args.prepare_only),
         "prefix_mode": prefix_mode,
@@ -712,7 +726,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.54 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.55 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -915,6 +929,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         lfast=args.lfast,
         critf=critf,
         initial_population_policy=args.initial_population_policy,
+        terminal_continuum_seed_mode=args.terminal_continuum_seed_mode,
         pressure=pressure,
         lcdd=lcdd,
         matching_input=matching_input,
@@ -935,6 +950,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         {
             "global_writeback_mode": args.global_writeback_mode,
             "leveltemp_lifecycle": args.leveltemp_lifecycle,
+            "terminal_continuum_seed_mode": args.terminal_continuum_seed_mode,
         }
     )
 
@@ -1021,12 +1037,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.54")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.55")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.54")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.55")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.54"
+            thermal_parity, out, port_version="v0.4.55"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
@@ -1074,7 +1090,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 xstar_brcems_before=transition_bremem_ref.brcems_before,
             )
             transition_products = write_dsec_transition_state_products(
-                transition_parity, out, port_version="v0.4.54"
+                transition_parity, out, port_version="v0.4.55"
             )
             paths.update(
                 {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
@@ -1121,7 +1137,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             internal_products = write_calc_hmc_all_pre_continuum_parity_products(
                 transition_internal_parity,
                 internal_out,
-                port_version="v0.4.54",
+                port_version="v0.4.55",
             )
             paths.update(
                 {
@@ -1165,15 +1181,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
             fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.54"
+                final_result, out, port_version="v0.4.55"
             )
             paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
             final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.54"
+                final_parity, out, port_version="v0.4.55"
             )
             paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.54"
+                acceptance, out, port_version="v0.4.55"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -1207,9 +1223,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.54")
+        print("port_version=v0.4.55")
         print(f"global_writeback_mode={args.global_writeback_mode}")
         print(f"leveltemp_lifecycle={args.leveltemp_lifecycle}")
+        print(
+            f"terminal_continuum_seed_mode={args.terminal_continuum_seed_mode}"
+        )
         print(f"transition_input_mode={args.transition_input_mode}")
         print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
         print(f"xstar_input_calc_hmc_all_call_id={input_call_id}")

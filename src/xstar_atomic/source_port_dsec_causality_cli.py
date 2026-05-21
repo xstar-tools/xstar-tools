@@ -42,6 +42,7 @@ def _clean_passthrough(args: Sequence[str]) -> List[str]:
         ("--maximum-evaluations", True),
         ("--global-writeback-mode", True),
         ("--leveltemp-lifecycle", True),
+        ("--terminal-continuum-seed-mode", True),
         ("--print-summary", False),
     ):
         cleaned = _strip_option(cleaned, option, takes_value=takes_value)
@@ -165,6 +166,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "--maximum-evaluations", "2",
             "--global-writeback-mode", global_mode,
             "--leveltemp-lifecycle", leveltemp_mode,
+            "--terminal-continuum-seed-mode", "legacy-global",
         ]
         exit_code = int(physical_main(mode_args))
         py_values = _read_eval2(mode_out / "xstar_dsec_physical_evaluations.csv")

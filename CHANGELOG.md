@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.4.55 - 2026-05-21
+
+v0.4.55 corrects the terminal compact-continuum population seed passed into
+`msolvelucy`.  The user-side v0.4.54 internal comparison found exactly one
+failed solver-entry row for each of H, He, and O: the final compact row.  XSTAR
+has exact zero there, while Python retained the incoming global continuum or
+next-ion-ground population.
+
+The source performs all selected-ion `xileve -> x` mappings first and then
+executes `x(ipmat2+1)=0.` immediately before `msolvelucy`.  Python now mirrors
+that order through the production default `--terminal-continuum-seed-mode
+source-zero`; `legacy-global` remains available only for causality and
+historical diagnostic reproduction.
+
+New example 125 and `xstar-atomic-validate-dsec-terminal-seed` compare both
+seeds under exact evaluation-2 replay and the complete same-call internal
+audit.  No XSTAR source change, rebuild, or new run is required.  Dense native
+writeback, per-call `leveltemp` reset, rates, matrices, thermal formulas, and
+frozen acceptance gates are otherwise unchanged.
+
 ## v0.4.54 - 2026-05-21
 
 v0.4.54 consumes the user-side v0.4.53 exact-replay result.  Exact XSTAR

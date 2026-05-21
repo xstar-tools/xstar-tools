@@ -73,6 +73,7 @@ def test_eval2_internal_passthrough_strips_owned_options() -> None:
         "--xstar-transition-internal-call-id=22",
         "--global-writeback-mode", "legacy-selected",
         "--leveltemp-lifecycle", "carry",
+        "--terminal-continuum-seed-mode", "legacy-global",
         "--print-summary",
         "--progress",
     ]

@@ -70,6 +70,11 @@ class FixedStateElementRequest:
     # compact dimension can change from one thermal/charge trial to the next.
     initial_global_populations: Optional[Mapping[Tuple[int, int, int], float]] = None
     initial_population_source: str = "levwkelement_lte_fallback"
+    # Source ``calc_hmc_element.f90`` explicitly resets the final compact
+    # continuum/normalization row to zero after mapping all selected ions and
+    # immediately before ``msolvelucy``.  ``legacy-global`` preserves the
+    # pre-v0.4.55 diagnostic behavior for controlled causality scans only.
+    terminal_continuum_seed_mode: str = "source-zero"
     strict_context: bool = True
     capture_lucy_trace: bool = False
 
@@ -82,6 +87,11 @@ class FixedStateElementRequest:
             raise CalcHMCAllError("element abundance must be finite and nonnegative")
         if not np.isfinite(self.critf) or self.critf < 0.0:
             raise CalcHMCAllError("critf must be finite and nonnegative")
+        if self.terminal_continuum_seed_mode not in {"source-zero", "legacy-global"}:
+            raise CalcHMCAllError(
+                "terminal_continuum_seed_mode must be 'source-zero' or "
+                "'legacy-global'"
+            )
 
 
 @dataclass(frozen=True)
@@ -516,6 +526,7 @@ def calc_hmc_all(
             lfast=int(request.lfast),
             initial_populations=request.initial_populations,
             initial_global_populations=request.initial_global_populations,
+            terminal_continuum_seed_mode=request.terminal_continuum_seed_mode,
             strict_context=bool(request.strict_context),
             capture_lucy_trace=bool(request.capture_lucy_trace),
             initial_leveltemp_workspace=leveltemp_workspace,

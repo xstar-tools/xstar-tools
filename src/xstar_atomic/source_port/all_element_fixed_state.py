@@ -381,6 +381,7 @@ def build_all_element_fixed_state_requests(
     lfast: int,
     critf: float,
     initial_population_policy: str = "use-available",
+    terminal_continuum_seed_mode: str = "source-zero",
     strict_context: bool = True,
 ) -> Tuple[FixedStateElementRequest, ...]:
     """Build source-order requests for every positive-abundance element.
@@ -431,6 +432,7 @@ def build_all_element_fixed_state_requests(
                 use_source_ion_limits=True,
                 initial_populations=populations,
                 initial_population_source=source,
+                terminal_continuum_seed_mode=terminal_continuum_seed_mode,
                 strict_context=bool(strict_context),
             )
         )
@@ -454,6 +456,7 @@ def run_all_element_fixed_state(
     lfast: int = 2,
     critf: float = 1.0e-7,
     initial_population_policy: str = "use-available",
+    terminal_continuum_seed_mode: str = "source-zero",
     **calc_kwargs: Any,
 ) -> AllElementFixedStateRun:
     """Execute the complete positive-abundance element loop before continuum."""
@@ -469,6 +472,7 @@ def run_all_element_fixed_state(
         lfast=lfast,
         critf=critf,
         initial_population_policy=initial_population_policy,
+        terminal_continuum_seed_mode=terminal_continuum_seed_mode,
     )
     result = calc_hmc_all(
         master,

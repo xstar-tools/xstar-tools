@@ -1,3 +1,30 @@
+## v0.4.55 terminal compact-continuum solver seed
+
+The v0.4.54 exact evaluation-2 internal audit isolated the first failure to the
+pre-`msolvelucy` population vector.  For H, He, and O, every compact row passed
+except the final continuum/normalization row.  XSTAR explicitly writes that
+row to zero after all selected-ion population mappings:
+
+```fortran
+x(ipmat2+1)=0.
+ipmat2=ipmat2+1
+call msolvelucy(...)
+```
+
+v0.4.55 mirrors this source order by default:
+
+```text
+--global-writeback-mode dense-source
+--leveltemp-lifecycle reset-per-call
+--terminal-continuum-seed-mode source-zero
+```
+
+Use `examples/125_validate_xstar_dsec_terminal_continuum_seed.py` or
+`xstar-atomic-validate-dsec-terminal-seed` to compare the corrected seed with
+the historical `legacy-global` behavior under exact evaluation-2 replay and
+full internal parity.  No XSTAR rebuild or new probe capture is required.
+Physical `dsec` parity remains open until that user-side scan is evaluated.
+
 ## v0.4.54 exact evaluation-2 internal parity
 
 The user-side v0.4.53 exact replay passed every captured evaluation-2 call-entry

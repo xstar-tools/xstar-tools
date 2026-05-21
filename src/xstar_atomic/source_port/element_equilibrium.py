@@ -207,6 +207,9 @@ class ElementEquilibriumContext:
     # XSTAR ``init.f90`` initializes the first-zone global population array to
     # exact zero.
     initial_global_populations: Optional[Mapping[Tuple[int, int, int], float]] = None
+    # ``calc_hmc_element.f90`` maps the selected-ion ``xileve`` values and
+    # then executes ``x(ipmat2+1)=0.`` before entering ``msolvelucy``.
+    terminal_continuum_seed_mode: str = "source-zero"
     strict_context: bool = True
     max_lucy_iterations: int = 200
     max_fixed_point_iterations: int = 200
@@ -308,6 +311,9 @@ class ElementMatrixAssembly:
     # clean workspace.
     leveltemp_workspace_final: Optional[UCalcLevelTable] = None
     leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+    terminal_continuum_seed_mode: str = "source-zero"
+    terminal_continuum_global_population: float = 0.0
+    terminal_continuum_solver_population: float = 0.0
 
 
 @dataclass
@@ -738,16 +744,28 @@ def build_element_compact_basis(
 def map_global_populations_to_compact_basis(
     basis: ElementCompactBasis,
     global_populations: Mapping[Tuple[int, int, int], float],
+    *,
+    terminal_continuum_seed_mode: str = "source-zero",
 ) -> np.ndarray:
     """Map source global ``xilevg`` state onto one current compact basis.
 
-    The loop order is the literal ``calc_hmc_all.f90`` order: every selected
-    ion writes all of its levels and advances by ``nlev-1``.  Consequently the
-    next-ion ground state overwrites the shared previous-ion continuum row.
+    The selected-ion mapping follows the literal ``calc_hmc_element.f90``
+    order: each ion writes all ``nlev`` values and advances by ``nlev-1``, so
+    the next-ion ground overwrites the shared previous-ion continuum row.
+    After that loop the source executes ``x(ipmat2+1)=0.``; therefore the
+    final compact continuum/normalization row is *not* seeded from global
+    ``xilevg``.  ``legacy-global`` is retained only to reproduce the
+    pre-v0.4.55 diagnostic behavior.
+
     Missing global entries are exact zero, matching the initialized XSTAR
     workspace.  The returned array includes the one-based guard at index zero.
     """
 
+    if terminal_continuum_seed_mode not in {"source-zero", "legacy-global"}:
+        raise ElementEquilibriumError(
+            "terminal_continuum_seed_mode must be 'source-zero' or "
+            "'legacy-global'"
+        )
     mapped = np.zeros(basis.n_rows + 1, dtype=float)
     for block in basis.blocks:
         for local_level in range(1, block.nlev + 1):
@@ -758,6 +776,8 @@ def map_global_populations_to_compact_basis(
                     f"invalid global initial population for {key}: {value}"
                 )
             mapped[block.compact_index(local_level)] = value
+    if terminal_continuum_seed_mode == "source-zero":
+        mapped[basis.normalization_row] = 0.0
     return mapped
 
 def levwk(levels: UCalcLevelTable, context: ElementEquilibriumContext) -> np.ndarray:
@@ -989,7 +1009,9 @@ def assemble_element_matrix(
         # ``istruc`` ion-range selection because the compact dimension can
         # change during dsec.
         solver_initial = map_global_populations_to_compact_basis(
-            basis, context.initial_global_populations
+            basis,
+            context.initial_global_populations,
+            terminal_continuum_seed_mode=context.terminal_continuum_seed_mode,
         )
         # An all-zero vector is source-valid on the first dsec call because
         # init.f90 clears xilevg.  msolvelucy handles zero-population
@@ -1276,6 +1298,18 @@ def assemble_element_matrix(
     rhs[basis.normalization_row - 1] = 1.0
 
     strict_ready = n_blocked == 0 and n_unmapped == 0 and len(terms) > 0
+    terminal_global_population = 0.0
+    if context.initial_global_populations is not None and basis.blocks:
+        last_block = basis.blocks[-1]
+        terminal_key = (
+            int(basis.element_z),
+            int(last_block.ion_stage),
+            int(last_block.nlev),
+        )
+        terminal_global_population = float(
+            context.initial_global_populations.get(terminal_key, 0.0)
+        )
+
     return ElementMatrixAssembly(
         basis=basis,
         initial_populations=solver_initial,
@@ -1303,6 +1337,11 @@ def assemble_element_matrix(
             int(index): dict(owner)
             for index, owner in leveltemp_owner_by_column.items()
         },
+        terminal_continuum_seed_mode=context.terminal_continuum_seed_mode,
+        terminal_continuum_global_population=terminal_global_population,
+        terminal_continuum_solver_population=float(
+            solver_initial[basis.normalization_row]
+        ),
     )
 
 
@@ -1926,6 +1965,17 @@ def write_element_equilibrium_products(
         "ion_population_totals_source": None if solve is None else solve.ion_population_totals_source,
         "source_xtot_uses_final_outer_start": bool(solve is not None),
         "source_xtot_excludes_final_compact_row": bool(solve is not None),
+        "terminal_continuum_seed_mode": assembly.terminal_continuum_seed_mode,
+        "terminal_continuum_global_population": (
+            assembly.terminal_continuum_global_population
+        ),
+        "terminal_continuum_solver_population": (
+            assembly.terminal_continuum_solver_population
+        ),
+        "source_terminal_continuum_zero_ready": bool(
+            assembly.terminal_continuum_seed_mode == "source-zero"
+            and assembly.terminal_continuum_solver_population == 0.0
+        ),
     }
     parity = result.population_parity
     matrix_parity = result.full_element_matrix_parity

@@ -61,7 +61,14 @@ def test_global_xilevg_mapping_overwrites_shared_alias_in_source_order() -> None
         (8, 4, 2): 0.5,
     }
     mapped = map_global_populations_to_compact_basis(basis, global_populations)
-    assert mapped.tolist() == pytest.approx([0.0, 0.1, 0.2, 0.4, 0.5])
+    assert mapped.tolist() == pytest.approx([0.0, 0.1, 0.2, 0.4, 0.0])
+
+    legacy = map_global_populations_to_compact_basis(
+        basis,
+        global_populations,
+        terminal_continuum_seed_mode="legacy-global",
+    )
+    assert legacy.tolist() == pytest.approx([0.0, 0.1, 0.2, 0.4, 0.5])
 
 
 def test_empty_global_xilevg_maps_to_exact_zero_for_first_dsec_call() -> None:
