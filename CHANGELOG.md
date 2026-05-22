@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## v0.4.65 translated `heatt` and bounded radial composition - 2026-05-22
+
+v0.4.65 translates `heatt.f90`, validates its caller-visible continuum, line,
+RRC, and mutable-level-workspace outputs against the unmodified original
+Fortran, and replaces the v0.4.64 handler at the same radial source slot:
+
+```text
+[first-pass zones > 1: step]
+-> trnfrc
+-> xstarcalc
+-> [gsmooth when vturbi > 1.e-34]
+-> heatt
+-> inline radius/density/column update
+-> stpcut
+-> trnfrn
+```
+
+The translation preserves active-range mutation and caller-owned tails, old
+versus current luminosity-array ownership, the source's retained final
+continuum-only `optp2` value in the first inward line term, packed
+source-order RRC traversal, and partial `leveltemp` overwrite. The original
+routine's local `cmp1` and `cmp2` are uninitialized and affect only local
+Compton diagnostic totals; the Python result marks that diagnostic as
+source-uninitialized instead of inventing values.
+
+`gsmooth`, `unsavd`, reverse/multipass restoration, and output writers remain
+explicitly unported. Nonzero turbulent velocity and reverse passes continue to
+fail at their exact source boundaries.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0465 \
+  --print-summary
+```
+
 ## v0.4.64 bounded radial-shell caller and transfer kernels - 2026-05-22
 
 v0.4.64 begins Milestone 5 without opening output writers. It translates the

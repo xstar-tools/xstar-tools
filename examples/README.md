@@ -1972,3 +1972,22 @@ The caller gate requires zone 1 to skip `step`, later first-pass zones to run
 it, exact `trnfrc -> xstarcalc -> heatt -> stpcut -> trnfrn` ordering, shared
 caller-owned radial arrays, explicit failure at missing reverse-pass `unsavd`,
 explicit failure at missing turbulent `gsmooth`, and no output-writer calls.
+
+## v0.4.65 translated `heatt` radial validation
+
+### `135_validate_xstar_heatt_radial_shell.py`
+
+Validates `heatt.f90` directly against frozen outputs generated from the
+unmodified original Fortran and reruns the complete bounded first-pass radial
+call-order/ownership fixture with the translated routine installed.
+
+```bash
+PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0465 \
+  --print-summary
+```
+
+A passing run reports
+`heatt_direct_original_fortran_reference_ready=True`,
+`heatt_translated_in_radial_sequence_ready=True`, and
+`bounded_radial_shell_source_acceptance_ready=True`.

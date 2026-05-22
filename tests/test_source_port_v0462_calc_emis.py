@@ -65,4 +65,4 @@ def test_v0462_driver_registration():
 
 
 def test_v0462_version():
-    assert xa.__version__ == "0.4.64"
+    assert xa.__version__ == "0.4.65"

@@ -1364,3 +1364,32 @@ This release intentionally stops before three unresolved paths:
   `xstarcalc` and before `heatt`.
 
 No detail or final spectrum writer is called by the bounded radial driver.
+
+
+## 15. Translated radial `heatt` (v0.4.65)
+
+The bounded radial caller now executes the translated `heatt.f90` routine at
+its literal source position:
+
+```text
+step (zones > 1) -> trnfrc -> local xstarcalc -> heatt
+-> radius/density/column update -> stpcut -> trnfrn
+```
+
+`heatt` updates only active continuum, line, and RRC ranges and preserves
+higher caller-owned capacity. It constructs new luminosities from the old
+`zremso`, `elumo`, and `elumabo` arrays, preserves the source's stale final
+continuum-only opacity in the first inward line expression, and traverses RRC
+records through the packed pointer hierarchy while partially overwriting the
+shared `leveltemp` workspace. The source-local `cmp1` and `cmp2` values are
+uninitialized and affect only diagnostic totals, so no numerical value is
+invented for them.
+
+```bash
+PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0465 \
+  --print-summary
+```
+
+Turbulent smoothing, reverse/multipass saved-state restoration, and output
+writers are still excluded.

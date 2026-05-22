@@ -1,14 +1,14 @@
 """Bounded radial-shell translation from ``xstar.f90``.
 
-This module translates the four radial kernels that have no unresolved atomic
-physics dependency in the first bounded Milestone-5 release::
+This module translates the bounded first-pass Milestone-5 sequence::
 
     step -> trnfrc -> [accepted local xstarcalc] -> heatt -> stpcut -> trnfrn
 
-``heatt`` remains an explicit caller-supplied state handler.  The optional
-``gsmooth`` branch and reverse-pass ``unsavd`` restoration are deliberately not
-approximated: the driver raises at those source routines until they are ported.
-Output writers are outside this bounded shell contract.
+``heatt`` is now a translated source routine operating on the same caller-owned
+continuum, line, RRC, and mutable ``leveltemp`` state left by ``xstarcalc``.
+The optional ``gsmooth`` branch and reverse-pass ``unsavd`` restoration are
+deliberately not approximated: the driver raises at those source routines until
+they are ported.  Output writers are outside this bounded shell contract.
 
 The low-level kernels preserve the source's active-range mutation and caller-
 owned tail semantics.  Default-real constants that participate in mixed
@@ -30,6 +30,11 @@ from .driver import (
     UnportedXSTARSourceRoutine,
 )
 from .emergent_emissivity import CalcEmisWorkspace
+from .heatt import (
+    HeattResult,
+    heatt,
+    run_direct_fortran_heatt_validation,
+)
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .xstarcalc import register_complete_local_xstarcalc_source_routines
@@ -47,9 +52,6 @@ XSTAR_TRNFRC_ERG_PER_EV = float(np.float32(1.602197e-12))
 
 class RadialTransferPortError(RuntimeError):
     """Raised when a translated radial source contract is invalid."""
-
-
-RadialStateHandler = Callable[[XSTARPythonState], Any]
 
 
 @dataclass(frozen=True)
@@ -200,6 +202,14 @@ class RadialTransferWorkspace:
     @property
     def fline_physical(self) -> np.ndarray:
         return self.emissivity.fline[:, 1:]
+
+    @property
+    def rcem_physical(self) -> np.ndarray:
+        return self.emissivity.base.rcem[:, 1:]
+
+    @property
+    def cemab_physical(self) -> np.ndarray:
+        return self.emissivity.base.cemab[:, 1:]
 
 
 @dataclass(frozen=True)
@@ -620,20 +630,70 @@ def apply_trnfrc_to_state(state: XSTARPythonState) -> TrnfrcResult:
     return result
 
 
-def apply_heatt_to_state(state: XSTARPythonState) -> Any:
-    """Invoke the explicit translated-state placeholder for ``heatt.f90``."""
-    handler = state.control.get("heatt_source_handler")
-    if not callable(handler):
+def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
+    """Apply translated ``heatt.f90`` to the radial caller-owned state."""
+    workspace = _workspace_from_state(state)
+    context = state.control.get("calc_emis_context")
+    if context is None:
         raise RadialTransferPortError(
-            "state.control['heatt_source_handler'] must be a callable; heatt "
-            "is intentionally not approximated in this release"
+            "translated heatt requires state.control['calc_emis_context']"
         )
-    result = handler(state)
+    master = getattr(context, "master", None)
+    derived = getattr(context, "derived", None)
+    ncn2 = int(state.control["ncn2"])
+    n_lines = int(state.control.get("nlsvn", workspace.elum.shape[1]))
+    n_continua = int(state.control.get("ncsvn", workspace.elumab.shape[1]))
+    calc_emis_result = state.local_zone.source_arrays.get("calc_emis_all")
+    leveltemp = getattr(calc_emis_result, "leveltemp_workspace", None)
+    if leveltemp is None:
+        calc_emisab_result = state.local_zone.source_arrays.get("calc_emisab_all")
+        leveltemp = getattr(calc_emisab_result, "leveltemp_workspace", None)
+
+    result = heatt(
+        temperature_1e4K=float(getattr(context, "temperature_1e4K")),
+        radius_cm=float(state.transfer.radius),
+        covering_fraction=float(getattr(context, "covering_fraction", state.control.get("cfrac", 1.0))),
+        zone_thickness_cm=float(state.transfer.step_size),
+        electron_fraction_xee=float(state.plasma.xee),
+        hydrogen_density_cm3=float(state.plasma.xpx),
+        abundances_by_z=getattr(context, "abundances_by_z"),
+        epi_eV=state.radiation.epi,
+        bremsa=state.radiation.bremsa,
+        leveltemp_workspace=leveltemp,
+        zrems_before=workspace.zrems,
+        zremso=workspace.zremso,
+        elumab_before=workspace.elumab,
+        elumabo=workspace.elumabo,
+        elum_before=workspace.elum,
+        elumo=workspace.elumo,
+        rcem=workspace.rcem_physical[:, :n_lines],
+        rccemis=workspace.rccemis,
+        opakc=workspace.opakc,
+        opakcont=workspace.opakcont,
+        cemab=workspace.cemab_physical[:, :n_continua],
+        flinel=workspace.emissivity.flinel,
+        brcems=workspace.emissivity.base.brcems,
+        master=master,
+        derived=derived,
+        ncn2=ncn2,
+        n_lines=n_lines,
+        n_continua=n_continua,
+    )
+    workspace.zrems[:, :] = result.zrems_after
+    workspace.elum[:, :] = result.elum_after
+    workspace.elumab[:, :] = result.elumab_after
+    if leveltemp is not None:
+        leveltemp.levels.clear()
+        leveltemp.levels.update(result.leveltemp_workspace.levels)
+        leveltemp.nlev = int(result.leveltemp_workspace.nlev)
     state.transfer.source_arrays["heatt"] = result
     state.transfer.provenance["heatt"] = {
-        "source_file": "xstar/xstarlib/src/heatt.f90",
-        "handler": "state.control['heatt_source_handler']",
-        "translated_physics": False,
+        "source_file": result.source_file,
+        "translated_physics": True,
+        "active_ncn2": result.ncn2,
+        "n_lines": result.n_lines,
+        "n_continua": result.n_continua,
+        "compton_coefficients_source_initialized": result.compton_coefficients_source_initialized,
     }
     return result
 
@@ -840,7 +900,7 @@ def _direct_reference_inputs() -> Mapping[str, Any]:
 def run_direct_fortran_radial_validation(
     *, rtol: float = 2.0e-15, atol: float = 0.0
 ) -> Mapping[str, Any]:
-    """Compare all four Python kernels with frozen direct-Fortran cases."""
+    """Compare radial kernels and ``heatt`` with frozen direct-Fortran cases."""
     refs = direct_fortran_radial_reference_cases()
     inp = _direct_reference_inputs()
     step_result = step(
@@ -954,8 +1014,10 @@ def run_direct_fortran_radial_validation(
         and np.all(commit_result.elumabo_after[:, 3:] == -3.0)
     )
 
+    heatt_direct = dict(run_direct_fortran_heatt_validation(rtol=rtol, atol=atol))
     summary = {
-        "port_version": "v0.4.64",
+        "port_version": "v0.4.65",
+        **heatt_direct,
         "step_translated": True,
         "trnfrc_translated": True,
         "stpcut_translated": True,
@@ -1064,23 +1126,23 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
         runtime.control["calc_emisab_context"].workspace = caller.base
         runtime.control["calc_emis_context"].workspace = caller
         runtime.control["shared_emissivity_workspace"] = caller
+        # The reusable emissivity fixture predates heatt and omitted the direct
+        # line pointer array.  Production setptrs always supplies it.
+        for key in ("calc_emisab_context", "calc_emis_context"):
+            ctx = runtime.control[key]
+            derived = ctx.derived
+            if not hasattr(derived, "nplin"):
+                derived.nplin = np.zeros(int(runtime.control["nlsvn"]) + 1, dtype=int)
+            derived.nplin[1] = 10
+            if int(runtime.control["nlsvn"]) >= 2:
+                derived.nplin[2] = 11
+            if hasattr(ctx.master, "_reals"):
+                ctx.master._reals[10] = np.asarray([10.0])
         return result
 
     state.control["calc_hmc_all_source_handler"] = hmc_with_caller_workspace
 
-    call_trace: list[str] = []
-
-    def heatt_handler(runtime: XSTARPythonState) -> Mapping[str, Any]:
-        call_trace.append("heatt")
-        ws = runtime.control["radial_transfer_workspace"]
-        ws.zrems[:, :] += 100.0
-        ws.elum[:, :] = np.asarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-        ws.elumab[:, :] = np.asarray([[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]])
-        runtime.control["heatt_saw_local_emissivity"] = bool(runtime.local_zone.emissivity_ready)
-        return {"source_state_only": True, "zone_index": int(zone_index)}
-
-    state.control["heatt_source_handler"] = heatt_handler
-    state.control["radial_call_trace"] = call_trace
+    state.control["cfrac"] = 0.25
     return state
 
 
@@ -1139,11 +1201,13 @@ def run_bounded_radial_shell_validation(
         and np.any(ws2.dpthc[1, :] != 0.0)
         and np.any(ws2.dpthcont[1, :] != 0.0)
     )
+    heatt_result = zone2_state.transfer.source_arrays.get("heatt")
     heatt_boundary_ready = bool(
-        zone2_state.control.get("heatt_saw_local_emissivity")
-        and zone2_state.control["radial_call_trace"] == ["heatt"]
+        isinstance(heatt_result, HeattResult)
         and zone2.source_order.index("calc_emis_all") < zone2.source_order.index("heatt")
         < zone2.source_order.index("stpcut")
+        and zone2_state.transfer.provenance["heatt"]["translated_physics"] is True
+        and heatt_result.compton_coefficients_source_initialized is False
     )
 
     reverse_state = _build_radial_validation_state(zone_index=1)
@@ -1183,7 +1247,7 @@ def run_bounded_radial_shell_validation(
 
     summary: dict[str, Any] = {
         **direct,
-        "port_version": "v0.4.64",
+        "port_version": "v0.4.65",
         "bounded_radial_shell_translated": True,
         "zone1_step_skip_ready": zone1_skip_ready,
         "zone1_first_pass_call_order_ready": zone1_order_ready,
@@ -1192,7 +1256,7 @@ def run_bounded_radial_shell_validation(
         "later_first_pass_call_order_ready": zone2_order_ready,
         "later_zone_source_order": list(zone2.source_order),
         "shared_radial_array_ownership_ready": ownership_ready,
-        "heatt_explicit_source_state_handler_ready": heatt_boundary_ready,
+        "heatt_translated_in_radial_sequence_ready": heatt_boundary_ready,
         "reverse_pass_unsavd_explicit_failure_ready": reverse_failure_ready,
         "reverse_pass_completed_before_failure": list(reverse_completed),
         "turbulent_gsmooth_explicit_failure_ready": turbulent_failure_ready,
@@ -1207,7 +1271,7 @@ def run_bounded_radial_shell_validation(
     summary["bounded_radial_shell_source_acceptance_ready"] = bool(
         all(value for key, value in summary.items() if key.endswith("_ready"))
     )
-    summary["next_source_target"] = "heatt"
+    summary["next_source_target"] = "gsmooth"
     return summary
 
 
@@ -1240,6 +1304,9 @@ __all__ = [
     "XSTAR_TRNFRC_GEOMETRY_FACTOR",
     "XSTAR_TRNFRC_ERG_PER_EV",
     "RadialTransferPortError",
+    "HeattResult",
+    "heatt",
+    "run_direct_fortran_heatt_validation",
     "StepResult",
     "TrnfrcResult",
     "StpcutResult",

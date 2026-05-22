@@ -32,7 +32,7 @@ def test_v0464_direct_original_fortran_kernel_gate():
 def test_v0464_bounded_radial_acceptance():
     summary = run_bounded_radial_shell_validation()
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "heatt"
+    assert summary["next_source_target"] == "gsmooth"
 
 
 def test_v0464_zone1_skips_step_and_preserves_order():
@@ -79,7 +79,7 @@ def test_v0464_intentional_unported_boundaries():
 
 def test_v0464_heatt_handler_and_no_outputs():
     summary = run_bounded_radial_shell_validation()
-    assert summary["heatt_explicit_source_state_handler_ready"] is True
+    assert summary["heatt_translated_in_radial_sequence_ready"] is True
     assert summary["output_writers_excluded_ready"] is True
     assert summary["shared_radial_array_ownership_ready"] is True
 
@@ -195,4 +195,4 @@ def test_v0464_registration_excludes_unsavd_and_gsmooth():
 
 
 def test_v0464_version():
-    assert xa.__version__ == "0.4.64"
+    assert xa.__version__ == "0.4.65"

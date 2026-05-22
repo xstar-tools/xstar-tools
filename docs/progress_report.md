@@ -1,3 +1,5 @@
+
+> **v0.4.65 update:** translated `heatt.f90`, validated continuum, line, RRC, caller-tail, stale-`optp2`, and partial-`leveltemp` semantics against the unmodified original Fortran, and replaced the former handler in the accepted first-pass radial sequence. `gsmooth`, `unsavd`, multipass restoration, and all output writers remain explicitly unported.
 # XSTAR `atdb.fits` Python Reader Progress Report
 
 > **v0.4.64 update:** translated `step`, `trnfrc`, `stpcut`, and `trnfrn`, validated them against direct compilation of the original Fortran, and composed the bounded first-pass radial shell around the accepted local `xstarcalc`. Zone 1 skips `step`; later first-pass zones execute it. `heatt` remains an explicit source-state handler. Reverse passes fail at missing `unsavd`, turbulent runs fail at missing `gsmooth`, and output writers remain blocked.

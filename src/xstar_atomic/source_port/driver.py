@@ -302,7 +302,7 @@ class XSTARPythonDriver:
         * later first-pass zones execute ``step``;
         * ``trnfrc`` precedes the complete accepted local ``xstarcalc``;
         * nonzero turbulent velocity requires ``gsmooth`` before ``heatt``;
-        * ``heatt`` remains an explicitly registered state handler;
+        * translated ``heatt`` updates continuum, line, and RRC transfer state;
         * the inline radius/column update precedes ``stpcut`` and ``trnfrn``.
 
         Output calls (``pprint``, ``savd``, and spectrum writers) are

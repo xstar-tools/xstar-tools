@@ -12,7 +12,7 @@ from .source_port.radial_transfer import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate step/trnfrc/stpcut/trnfrn against direct original-Fortran "
+            "Validate step/trnfrc/heatt/stpcut/trnfrn against direct original-Fortran "
             "references and exercise the bounded first-pass radial shell around "
             "the accepted local xstarcalc."
         )
@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--atol", type=float, default=1.0e-30)
     parser.add_argument(
         "--out-dir",
-        default="xstar_bounded_radial_shell_source_validation_v0464",
+        default="xstar_bounded_radial_shell_source_validation_v0465",
     )
     parser.add_argument("--print-summary", action="store_true")
     return parser

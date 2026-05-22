@@ -1340,3 +1340,31 @@ shell work, while nonzero turbulent velocity fails at untranslated
 No output writer is called by the bounded radial driver.
 
 \end{document}
+
+
+\section{Translated radial \texttt{heatt} (v0.4.65)}
+
+The bounded radial caller now executes the translated \texttt{heatt.f90} at
+its literal source position:
+
+\begin{verbatim}
+step (zones > 1) -> trnfrc -> local xstarcalc -> heatt
+-> radius/density/column update -> stpcut -> trnfrn
+\end{verbatim}
+
+Only active continuum, line, and RRC ranges are mutated; higher caller-owned
+capacity is retained. The translation uses the old luminosity arrays as the
+source does, retains the final continuum-only opacity in the first inward line
+term, follows packed RRC pointer order, and partially overwrites the shared
+\texttt{leveltemp} workspace. The source-local \texttt{cmp1} and \texttt{cmp2}
+variables are uninitialized and affect only diagnostic totals, so the Python
+port marks that diagnostic undefined instead of inventing a value.
+
+\begin{verbatim}
+PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0465 \
+  --print-summary
+\end{verbatim}
+
+\texttt{gsmooth}, \texttt{unsavd}, multipass restoration, and output writers
+remain excluded.
