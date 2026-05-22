@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 from pathlib import Path
@@ -220,6 +221,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "source-zero reproduces calc_hmc_element.f90 x(ipmat2+1)=0 before "
             "msolvelucy; legacy-global retains the pre-v0.4.55 diagnostic seed"
+        ),
+    )
+
+    parser.add_argument(
+        "--post-dsec-input-mode",
+        choices=("natural", "compare-both"),
+        default="natural",
+        help=(
+            "natural evaluates the post-dsec calc_hmc_all at the naturally converged "
+            "Python state; compare-both also replays the complete captured XSTAR "
+            "call-entry state for the correlated post-dsec call and recomputes it in Python"
         ),
     )
 
@@ -545,6 +557,7 @@ def _write_runner_summary(
     transition_parity: Optional[Any],
     transition_internal_parity: Optional[Any],
     final_parity: Optional[Any],
+    exact_final_parity: Optional[Any],
     acceptance: Optional[Any],
     frozen: Any,
     paths: Dict[str, str],
@@ -567,7 +580,7 @@ def _write_runner_summary(
         )
     )
     summary = {
-        "port_version": "v0.4.57",
+        "port_version": "v0.4.58",
         "purpose": "call-correlated physical dsec and evaluation-transition validation",
         "xstar_dsec_call_id": int(args.xstar_dsec_call_id),
         "correlation_source": correlation_source,
@@ -593,6 +606,7 @@ def _write_runner_summary(
         "leveltemp_lifecycle": args.leveltemp_lifecycle,
         "terminal_continuum_seed_mode": args.terminal_continuum_seed_mode,
         "transition_input_mode": args.transition_input_mode,
+        "post_dsec_input_mode": args.post_dsec_input_mode,
         "v0452_dense_native_global_alias_writeback_ready": (
             args.global_writeback_mode == "dense-source"
         ),
@@ -684,6 +698,9 @@ def _write_runner_summary(
             else transition_parity.leveltemp_source_used_slots_ready
         ),
         "final_fixed_state_parity_ready": None if final_parity is None else final_parity.ready,
+        "exact_post_dsec_fixed_state_parity_ready": (
+            None if exact_final_parity is None else exact_final_parity.ready
+        ),
         "v0445_bounded_dsec_acceptance_ready": None if acceptance is None else acceptance.ready,
         "v0448_call_correlated_matching_state_ready": v0448_ready,
         "v0451_evaluation_transition_diagnostic_ready": (
@@ -726,7 +743,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("--maximum-evaluations must be positive")
     if int(args.xstar_dsec_call_id) != 1:
         raise ValueError(
-            "v0.4.57 remains bounded to dsec_call_id=1; later calls require "
+            "v0.4.58 remains bounded to dsec_call_id=1; later calls require "
             "mapping a captured nonzero global xilevg array onto physical level keys"
         )
 
@@ -831,6 +848,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     input_bremem_ref = load_bremem_probe_reference(input_probe_dir, call_id=input_call_id)
     input_heatf_ref = load_heatf_probe_reference(input_probe_dir, call_id=input_call_id)
     final_ref = load_calc_hmc_all_final_state_reference(post_probe_dir, call_id=post_call_id)
+    post_matching_input = post_freef_ref = post_bremem_ref = None
+    if args.post_dsec_input_mode == "compare-both":
+        post_matching_input = load_dsec_matching_input_state(
+            post_probe_dir, call_id=post_call_id
+        )
+        if post_matching_input.phase != "post_dsec":
+            raise ValueError(
+                "correlated post-dsec matching input does not have phase=post_dsec"
+            )
+        post_freef_ref = load_freef_probe_reference(
+            post_probe_dir, call_id=post_call_id
+        )
+        post_bremem_ref = load_bremem_probe_reference(
+            post_probe_dir, call_id=post_call_id
+        )
     table = load_compton_table(args.coheat_data, atdb_path=args.atdb)
 
     ncn2 = int(matching_input.ncn2)
@@ -892,6 +924,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             transition_parity=None,
             transition_internal_parity=None,
             final_parity=None,
+            exact_final_parity=None,
             acceptance=None,
             frozen=frozen,
             paths=paths,
@@ -997,7 +1030,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         use_pointer_cache=True,
     )
     result = parity = thermal_parity = transition_parity = None
-    transition_internal_parity = final_parity = acceptance = None
+    transition_internal_parity = final_parity = exact_final_parity = acceptance = None
     try:
         evaluator = CalcHMCAllDsecEvaluator(
             master=built.master,
@@ -1037,12 +1070,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             prefix_mode=prefix_mode,
         )
 
-        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.57")
+        trajectory_products = write_dsec_trajectory_products(result, out, port_version="v0.4.58")
         paths.update({f"python_trajectory_{key}": str(value) for key, value in trajectory_products.items()})
-        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.57")
+        parity_products = write_dsec_trajectory_parity_products(parity, out, port_version="v0.4.58")
         paths.update({f"trajectory_parity_{key}": str(value) for key, value in parity_products.items()})
         thermal_products = write_dsec_thermal_parity_products(
-            thermal_parity, out, port_version="v0.4.57"
+            thermal_parity, out, port_version="v0.4.58"
         )
         paths.update({f"thermal_parity_{key}": str(value) for key, value in thermal_products.items()})
         paths["physical_evaluations_csv"] = str(_write_evaluation_summary(evaluator.evaluations, out))
@@ -1090,7 +1123,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 xstar_brcems_before=transition_bremem_ref.brcems_before,
             )
             transition_products = write_dsec_transition_state_products(
-                transition_parity, out, port_version="v0.4.57"
+                transition_parity, out, port_version="v0.4.58"
             )
             paths.update(
                 {f"transition_parity_{key}": str(value) for key, value in transition_products.items()}
@@ -1137,7 +1170,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             internal_products = write_calc_hmc_all_pre_continuum_parity_products(
                 transition_internal_parity,
                 internal_out,
-                port_version="v0.4.57",
+                port_version="v0.4.58",
             )
             paths.update(
                 {
@@ -1159,6 +1192,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 {
                     "physical_dsec_runner": True,
                     "post_dsec_xstarcalc_evaluation": True,
+                    "post_dsec_input_mode": "natural",
                     "xstar_dsec_call_id": args.xstar_dsec_call_id,
                     "xstar_input_calc_hmc_all_call_id": input_call_id,
                     "xstar_post_dsec_calc_hmc_all_call_id": post_call_id,
@@ -1175,21 +1209,93 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continuum_rtol=args.continuum_rtol,
                 continuum_atol=args.continuum_atol,
             )
+            fixed_products = write_fixed_state_calc_hmc_all_products(
+                final_result, out, port_version="v0.4.58"
+            )
+            paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
+            final_parity_products = write_complete_fixed_state_parity_products(
+                final_parity, out, port_version="v0.4.58"
+            )
+            paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
+
+            if args.post_dsec_input_mode == "compare-both":
+                assert post_matching_input is not None
+                assert post_freef_ref is not None
+                assert post_bremem_ref is not None
+                exact_state = clone_physical_dsec_runtime_state(result.state)
+                exact_factory = PhysicalDsecCalcKwargsFactory(
+                    copy.deepcopy(continuum_template)
+                )
+                replay_details = apply_dsec_matching_input_state(
+                    exact_state,
+                    post_matching_input,
+                    opakc_before_cm_inv=post_freef_ref.opakc_before_cm_inv,
+                    brcems_before=post_bremem_ref.brcems_before,
+                    continuum_factory=exact_factory,
+                )
+                exact_evaluator = CalcHMCAllDsecEvaluator(
+                    master=built.master,
+                    derived=built.derived,
+                    calc_kwargs_factory=exact_factory,
+                )
+                exact_evaluation = exact_evaluator(exact_state)
+                exact_final_result = exact_evaluation.fixed_state_result
+                if exact_final_result is None:
+                    raise RuntimeError(
+                        "exact post-dsec replay did not return a fixed-state result"
+                    )
+                exact_final_result.diagnostics.update(
+                    {
+                        "physical_dsec_runner": True,
+                        "post_dsec_xstarcalc_evaluation": True,
+                        "post_dsec_input_mode": "replay-exact",
+                        "xstar_dsec_call_id": args.xstar_dsec_call_id,
+                        "xstar_post_dsec_calc_hmc_all_call_id": post_call_id,
+                        "dsec_ntotit": result.ntotit,
+                        "exact_post_dsec_replay": True,
+                    }
+                )
+                exact_final_parity = compare_complete_fixed_state_calc_hmc_all(
+                    exact_final_result,
+                    final_ref,
+                    rtol=args.final_rtol,
+                    atol=args.final_atol,
+                    continuum_rtol=args.continuum_rtol,
+                    continuum_atol=args.continuum_atol,
+                )
+                exact_out = out / "post_dsec_exact_replay"
+                exact_fixed_products = write_fixed_state_calc_hmc_all_products(
+                    exact_final_result, exact_out, port_version="v0.4.58"
+                )
+                paths.update(
+                    {
+                        f"exact_final_fixed_state_{key}": str(value)
+                        for key, value in exact_fixed_products.items()
+                    }
+                )
+                exact_parity_products = write_complete_fixed_state_parity_products(
+                    exact_final_parity, exact_out, port_version="v0.4.58"
+                )
+                paths.update(
+                    {
+                        f"exact_final_parity_{key}": str(value)
+                        for key, value in exact_parity_products.items()
+                    }
+                )
+                replay_path = exact_out / "xstar_post_dsec_exact_replay_applied.json"
+                replay_path.write_text(
+                    json.dumps(replay_details, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                paths["exact_final_replay_applied_json"] = str(replay_path)
+
             acceptance = build_dsec_acceptance(
                 parity,
                 frozen_v0444=frozen,
                 final_fixed_state_parity_ready=(final_parity.ready and thermal_parity.ready),
             )
-            fixed_products = write_fixed_state_calc_hmc_all_products(
-                final_result, out, port_version="v0.4.57"
-            )
-            paths.update({f"final_fixed_state_{key}": str(value) for key, value in fixed_products.items()})
-            final_parity_products = write_complete_fixed_state_parity_products(
-                final_parity, out, port_version="v0.4.57"
-            )
-            paths.update({f"final_parity_{key}": str(value) for key, value in final_parity_products.items()})
             acceptance_products = write_dsec_acceptance_products(
-                acceptance, out, port_version="v0.4.57"
+                acceptance, out, port_version="v0.4.58"
             )
             paths.update({f"acceptance_{key}": str(value) for key, value in acceptance_products.items()})
 
@@ -1212,6 +1318,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             transition_parity=transition_parity,
             transition_internal_parity=transition_internal_parity,
             final_parity=final_parity,
+            exact_final_parity=exact_final_parity,
             acceptance=acceptance,
             frozen=frozen,
             paths=paths,
@@ -1223,13 +1330,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.print_summary:
         print("Call-correlated physical XSTAR/Python dsec validation")
         print("------------------------------------------------------")
-        print("port_version=v0.4.57")
+        print("port_version=v0.4.58")
         print(f"global_writeback_mode={args.global_writeback_mode}")
         print(f"leveltemp_lifecycle={args.leveltemp_lifecycle}")
         print(
             f"terminal_continuum_seed_mode={args.terminal_continuum_seed_mode}"
         )
         print(f"transition_input_mode={args.transition_input_mode}")
+        print(f"post_dsec_input_mode={args.post_dsec_input_mode}")
         print(f"xstar_dsec_call_id={args.xstar_dsec_call_id}")
         print(f"xstar_input_calc_hmc_all_call_id={input_call_id}")
         print(f"xstar_post_dsec_calc_hmc_all_call_id={post_call_id}")
@@ -1284,6 +1392,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         if final_parity is not None:
             print("post_dsec_calc_hmc_all_executed=True")
             print(f"final_fixed_state_parity_ready={final_parity.ready}")
+        if exact_final_parity is not None:
+            print("exact_post_dsec_replay_executed=True")
+            print(
+                "exact_post_dsec_fixed_state_parity_ready="
+                f"{exact_final_parity.ready}"
+            )
         print(f"frozen_v0444_complete_fixed_state_regression={frozen.ready}")
         if acceptance is not None:
             print(f"v0445_bounded_dsec_acceptance_ready={acceptance.ready}")

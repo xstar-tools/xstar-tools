@@ -1804,3 +1804,58 @@ count, source branch/residual parity, all-evaluation thermal parity,
 evaluation-2 active solver parity, final fixed-state parity, and the frozen
 v0.4.44 regression.  Strict floating-point trajectory and transition-array
 results remain separate fields and are never silently relaxed.
+
+
+## v0.4.58 exact post-`dsec` final-call replay
+
+`examples/128_validate_xstar_dsec_post_final_replay.py` runs unrestricted natural
+source-zero `dsec`, classifies the same-sign near-zero `hmctot` row separately
+from its passing heating/cooling components, and then replays the complete
+captured XSTAR call-entry state for the correlated post-`dsec` `calc_hmc_all`.
+It requires no new XSTAR run when the v0.4.48 call-1 probe directory contains
+call 34 input, `freef`, and `bremem` products.
+
+Use the example-127 command with these substitutions:
+
+```diff
+- examples/127_validate_xstar_dsec_source_zero_unrestricted.py
++ examples/128_validate_xstar_dsec_post_final_replay.py
+
+- --out-dir xstar_dsec_source_zero_unrestricted_v0457
++ --out-dir xstar_dsec_post_final_replay_v0458
+```
+
+The decisive fields are `source_control_flow_ready`,
+`thermal_component_trajectory_ready`,
+`exact_post_dsec_fixed_state_parity_ready`, and
+`ready_to_advance_to_bremsmap`.
+
+### `128_validate_xstar_dsec_post_final_replay.py`
+
+Run the unrestricted production `dsec` path, classify same-sign near-zero
+`hmctot` roundoff separately from component parity, and replay the exact
+correlated XSTAR post-`dsec` `calc_hmc_all` call-entry state:
+
+```bash
+PROBE_DIR=xstar_runs/helike_type69/o7_ne1e8_dsec_v0448
+TRANSITION_DIR=xstar_runs/helike_type69/o7_ne1e8_dsec_v0451_eval2
+
+PYTHONPATH=src python \
+  examples/128_validate_xstar_dsec_post_final_replay.py \
+  --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --xstar-dsec-trajectory "$PROBE_DIR/xstar_dsec_trajectory_probe.csv" \
+  --xstar-dsec-call-id 1 \
+  --xstar-call-correlation "$PROBE_DIR/xstar_dsec_calc_hmc_all_call_correlation.csv" \
+  --xstar-dsec-input-probe-dir "$PROBE_DIR" \
+  --xstar-post-dsec-probe-dir "$PROBE_DIR" \
+  --xstar-dsec-thermal-decomposition "$PROBE_DIR/xstar_dsec_thermal_decomposition_probe.csv" \
+  --xstar-transition-input-probe-dir "$TRANSITION_DIR" \
+  --xstar-transition-call-correlation "$TRANSITION_DIR/xstar_dsec_calc_hmc_all_call_correlation.csv" \
+  --xstar-transition-evaluation-index 2 \
+  --oxygen-call73-regression-dir oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434 \
+  --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat \
+  --initial-population-policy require-all \
+  --out-dir xstar_dsec_post_final_replay_v0458 \
+  --print-summary
+```

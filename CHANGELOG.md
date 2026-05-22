@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## v0.4.58 exact post-`dsec` final-call replay - 2026-05-21
+
+The user-side v0.4.57 unrestricted run converged naturally in the same 33
+`calc_hmc_all` evaluations as XSTAR and preserved the complete event sequence,
+integer controls, and thermal/charge residual signs.  The only thermal trajectory
+row outside the 0.5% relative gate was evaluation 24 `hmctot`, where both codes
+remain negative and differ by `2.180338e-5` in a normalized residual close to
+zero.  Every underlying heating/cooling component passes; the largest component
+differences are only a few `1e-12`.
+
+The naturally converged Python root is `T4=7.664826496730516`, versus the XSTAR
+post-`dsec` input `T4=7.665518557731817` (about `9.03e-5` relative).  This small
+root displacement explains the strict runtime and continuum-workspace failures
+in the natural post-`dsec` fixed-state comparison, while all primary/secondary
+thermal totals, charge quantities, and `hmctot` pass their physical tolerances.
+
+v0.4.58 adds:
+
+- `--post-dsec-input-mode natural|compare-both` to the physical runner;
+- exact replay of the correlated XSTAR post-`dsec` call-entry runtime, radiation,
+  escape arrays, continuum workspaces, dense global populations, and `leveltemp`;
+- `examples/128_validate_xstar_dsec_post_final_replay.py`;
+- `xstar-atomic-validate-dsec-post-final-replay`;
+- source-semantic trajectory classification that treats event/integer/residual-
+  sign parity separately from normalized near-zero residual magnitude; and
+- a final gate that requires the exact post-`dsec` replay to reproduce the fixed
+  state before `bremsmap` is unlocked.
+
+Production defaults remain `dense-source`, `reset-per-call`, and `source-zero`.
+No XSTAR rebuild or new capture is required.
+
 ## v0.4.57 - 2026-05-21
 
 v0.4.57 consumes the user-side v0.4.56 natural source-zero four-evaluation
