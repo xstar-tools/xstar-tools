@@ -1324,3 +1324,43 @@ acceptance is the full 607-row oxygen matrix and population vector with matching
 live-radiation and line/RRC optical-depth state; missing context blocks readiness
 and is not replaced with probe coefficients.
 
+
+## 14. Bounded radial-shell source port (v0.4.64)
+
+The first Milestone-5 release translates the radial routines that do not depend
+on unresolved atomic physics:
+
+```text
+step -> trnfrc -> accepted local xstarcalc -> heatt handler -> stpcut -> trnfrn
+```
+
+Use the installed validator:
+
+```bash
+xstar-atomic-port-bounded-radial-shell \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
+or the source-tree example:
+
+```bash
+PYTHONPATH=src python examples/134_validate_xstar_bounded_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
+The low-level kernels retain caller-owned capacity above their active source
+ranges. `stpcut` changes only the optical-depth row selected by the source
+direction convention. `trnfrn` commits only active continuum, line, and RRC
+entries to the old-state arrays.
+
+This release intentionally stops before three unresolved paths:
+
+- `heatt` is supplied as an explicit source-state handler and remains the next
+  physics translation target;
+- passes after the first raise at missing `unsavd` before shell work; and
+- nonzero turbulent velocity raises at missing `gsmooth` after local
+  `xstarcalc` and before `heatt`.
+
+No detail or final spectrum writer is called by the bounded radial driver.

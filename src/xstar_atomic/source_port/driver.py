@@ -30,6 +30,8 @@ class XSTARSourceRoutine(str, Enum):
     HEATT = "heatt"
     STPCUT = "stpcut"
     TRNFRN = "trnfrn"
+    GSSMOOTH = "gsmooth"
+    UNSAVD = "unsavd"
 
 
 XSTARCALC_SOURCE_ORDER: Sequence[XSTARSourceRoutine] = (
@@ -275,6 +277,159 @@ class XSTARPythonDriver:
             "completed_source_routines": list(
                 result.provenance.get("completed_source_routines", [])
             ),
+        }
+        return result
+
+
+    def run_radial_shell(
+        self,
+        state: Optional[XSTARPythonState] = None,
+        *,
+        zone_index: int,
+        pass_index: int = 1,
+        direction: int = 1,
+        fixed_state: bool = False,
+    ) -> XSTARPythonState:
+        """Run one bounded radial-shell caller sequence from ``xstar.f90``.
+
+        ``zone_index`` and ``pass_index`` are the one-based ``jkp`` and ``kk``
+        values *after* the source loop increments ``jkp``.  The method
+        preserves the source-level control boundaries used by the first radial
+        milestone:
+
+        * reverse/multipass shells first require ``unsavd``;
+        * first-pass zone 1 skips ``step`` and sets ``delr=0``;
+        * later first-pass zones execute ``step``;
+        * ``trnfrc`` precedes the complete accepted local ``xstarcalc``;
+        * nonzero turbulent velocity requires ``gsmooth`` before ``heatt``;
+        * ``heatt`` remains an explicitly registered state handler;
+        * the inline radius/column update precedes ``stpcut`` and ``trnfrn``.
+
+        Output calls (``pprint``, ``savd``, and spectrum writers) are
+        intentionally outside this bounded routine.
+        """
+        result = state or XSTARPythonState()
+        jkp = int(zone_index)
+        kk = int(pass_index)
+        ldir = int(direction)
+        if jkp < 1:
+            raise ValueError("zone_index must be one-based and positive")
+        if kk < 1:
+            raise ValueError("pass_index must be one-based and positive")
+        if ldir not in (-1, 1):
+            raise ValueError("direction must be -1 or 1")
+
+        result.transfer.zone_index = jkp
+        result.transfer.pass_index = kk
+        result.transfer.direction = ldir
+        result.control["jkp"] = jkp
+        result.control["kk"] = kk
+        result.control["ldir"] = ldir
+
+        def execute(routine: XSTARSourceRoutine) -> None:
+            handler = self.routine_handlers.get(routine)
+            if handler is None:
+                raise UnportedXSTARSourceRoutine(routine, state=result)
+            handler(result)
+            result.provenance.setdefault("completed_source_routines", []).append(
+                routine.value
+            )
+
+        completed_before = len(
+            result.provenance.get("completed_source_routines", [])
+        )
+        skipped_before = len(result.provenance.get("skipped_source_routines", []))
+
+        # xstar.f90 calls unsavd before any local work on passes after the first.
+        if kk > 1:
+            execute(XSTARSourceRoutine.UNSAVD)
+            nlimd = int(result.control.get("nlimd", result.control.get("nlimdt", 1)))
+            result.control["nlimdt"] = 0 if ldir > 0 else nlimd
+        else:
+            # Save the initial density/radius for the analytic density law.
+            lcdd = int(result.control.get("lcdd", 1))
+            if lcdd == 1 and jkp == 1:
+                result.control["xpx0"] = float(result.plasma.xpx)
+                result.control["r0"] = float(result.transfer.radius)
+
+            result.control["nlimdt"] = int(
+                result.control.get("nlimd", result.control.get("nlimdt", 1))
+            )
+            result.transfer.step_size = 0.0
+            result.control["delr"] = 0.0
+            result.control["ectt"] = 1.0
+            if jkp > 1:
+                execute(XSTARSourceRoutine.STEP)
+            else:
+                result.provenance.setdefault("skipped_source_routines", []).append(
+                    XSTARSourceRoutine.STEP.value
+                )
+
+        radius = float(result.transfer.radius)
+        xpx = float(result.plasma.xpx)
+        xlum = float(result.control.get("xlum", 0.0))
+        if radius <= 0.0 or xpx <= 0.0:
+            raise ValueError("radial shell requires positive radius and hydrogen density")
+        r19 = radius * float(np.float32(1.0e-19))
+        xi = xlum / r19 / r19 / xpx
+        result.control["xi"] = xi
+        result.control["zeta"] = float(np.log10(xi)) if xi > 0.0 else float("-inf")
+
+        execute(XSTARSourceRoutine.TRNFRC)
+
+        tinf = float(result.control.get("tinf", 0.0))
+        if result.plasma.temperature < tinf * 1.02:
+            result.plasma.temperature = tinf * 1.01
+
+        self.run_xstarcalc(result, fixed_state=fixed_state)
+
+        vturbi = float(result.control.get("vturbi", 0.0))
+        if vturbi > float(np.float32(1.0e-34)):
+            execute(XSTARSourceRoutine.GSSMOOTH)
+
+        execute(XSTARSourceRoutine.HEATT)
+
+        # Inline xstar.f90 position, density, radial-depth, and column updates.
+        delr = float(result.transfer.step_size)
+        radexp = float(result.control.get("radexp", 0.0))
+        if radexp < -99.0:
+            raise NotImplementedError(
+                "tabulated radial density update (radexp < -99) is not part of "
+                "the bounded radial-shell milestone"
+            )
+        result.transfer.radius = float(result.transfer.radius) + delr
+        lcdd = int(result.control.get("lcdd", 1))
+        if lcdd == 1:
+            xpx0 = float(result.control.get("xpx0", result.plasma.xpx))
+            r0 = float(result.control.get("r0", result.transfer.radius))
+            if r0 <= 0.0:
+                raise ValueError("r0 must be positive for the analytic density law")
+            result.plasma.xpx = xpx0 * (result.transfer.radius / r0) ** radexp
+        result.transfer.radial_depth = float(result.transfer.radial_depth) + delr
+        result.transfer.column = float(result.transfer.column) + float(result.plasma.xpx) * delr
+        result.control["r"] = float(result.transfer.radius)
+        result.control["rdel"] = float(result.transfer.radial_depth)
+        result.control["xcol"] = float(result.transfer.column)
+        result.control["delr"] = delr
+
+        execute(XSTARSourceRoutine.STPCUT)
+        execute(XSTARSourceRoutine.TRNFRN)
+
+        completed = tuple(
+            result.provenance.get("completed_source_routines", [])[completed_before:]
+        )
+        skipped = tuple(
+            result.provenance.get("skipped_source_routines", [])[skipped_before:]
+        )
+        result.transfer.provenance["radial_shell"] = {
+            "source_file": "xstar/src/xstar/xstar.f90",
+            "zone_index": jkp,
+            "pass_index": kk,
+            "direction": ldir,
+            "completed_source_routines": list(completed),
+            "skipped_source_routines": list(skipped),
+            "output_writers_executed": False,
+            "fixed_state_mode": bool(fixed_state),
         }
         return result
 

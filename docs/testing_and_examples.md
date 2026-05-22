@@ -70,3 +70,16 @@ PYTHONPATH=src python examples/06_high_level_api_quickstart.py /path/to/xstar/da
 ### Source-level failure diagnostics
 
 `examples/36_source_level_failure_diagnostics.py` compares He-like source-fit outputs level by level. It is intended for the post-validation question of why O VII remains reachable while C V, Mg XI, and Ca XIX are not. It reports source level labels, fitted weights, f/i/r response contributions, zero-response flags, optional component populations, dominant radiative and collisional paths, and weak/pruned-level indicators.
+
+## v0.4.64 bounded radial shell
+
+```bash
+PYTHONPATH=src python examples/134_validate_xstar_bounded_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
+The gate combines direct original-Fortran references for `step`, `trnfrc`,
+`stpcut`, and `trnfrn` with first-pass caller-order tests. It also requires
+explicit failure at untranslated `unsavd` and `gsmooth`, and confirms that no
+output writer is entered.

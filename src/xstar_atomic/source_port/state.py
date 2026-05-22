@@ -97,11 +97,16 @@ class XSTARTransferState:
 
     zone_index: int = 0
     pass_index: int = 0
+    direction: int = 1
     radius: float = 0.0
+    radial_depth: float = 0.0
     column: float = 0.0
+    step_size: float = 0.0
     tau_in: Optional[np.ndarray] = None
     tau_out: Optional[np.ndarray] = None
     converged: bool = False
+    source_arrays: Dict[str, Any] = field(default_factory=dict)
+    provenance: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

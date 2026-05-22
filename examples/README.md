@@ -1953,3 +1953,22 @@ PYTHONPATH=src python examples/133_validate_xstar_complete_local_xstarcalc.py \
   --out-dir xstar_complete_local_xstarcalc_source_validation_v0463 \
   --print-summary
 ```
+
+## v0.4.64 bounded radial-shell validation
+
+### `134_validate_xstar_bounded_radial_shell.py`
+
+Validate `step`, `trnfrc`, `stpcut`, and `trnfrn` against frozen outputs from
+direct compilation of the unmodified XSTAR routines, then exercise the bounded
+first-pass caller around the accepted local `xstarcalc`:
+
+```bash
+PYTHONPATH=src python examples/134_validate_xstar_bounded_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
+The caller gate requires zone 1 to skip `step`, later first-pass zones to run
+it, exact `trnfrc -> xstarcalc -> heatt -> stpcut -> trnfrn` ordering, shared
+caller-owned radial arrays, explicit failure at missing reverse-pass `unsavd`,
+explicit failure at missing turbulent `gsmooth`, and no output-writer calls.

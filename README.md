@@ -1,3 +1,39 @@
+## v0.4.64 bounded radial-shell caller and transfer kernels
+
+v0.4.64 begins Milestone 5 without opening output writers. It translates the
+four radial kernels with no unresolved atomic-data dependency:
+
+```text
+step
+trnfrc
+stpcut
+trnfrn
+```
+
+and composes them around the accepted local caller in the exact first-pass
+sequence:
+
+```text
+[step for zones > 1] -> trnfrc -> xstarcalc -> [gsmooth if vturbi > 0]
+-> heatt -> inline radius/column update -> stpcut -> trnfrn
+```
+
+`heatt` remains an explicit source-state handler. Reverse/multipass shells fail
+at missing `unsavd`, and nonzero turbulent velocity fails at missing `gsmooth`;
+neither path is approximated. The direct kernel fixture uses outputs generated
+by compiling the unmodified XSTAR routines with only dimension/module stubs.
+The expanded caller fixture confirms zone-1 `step` skipping, later-zone `step`,
+shared caller-owned arrays, the exact failure boundaries, and exclusion of all
+output writers.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/134_validate_xstar_bounded_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
 ## v0.4.63 complete local `xstarcalc` assembly
 
 The user-side v0.4.62 validation confirms the complete `calc_emis_all` source

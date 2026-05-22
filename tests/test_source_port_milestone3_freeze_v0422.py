@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.63"
-    assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
+    assert PORT_LEDGER_VERSION == "v0.4.64"
+    assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3, 4)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "translate and validate the radial transfer/zone-control sequence after the "
-        "accepted complete local xstarcalc assembly; then port output writers and "
-        "only afterward consider an optional C++ backend"
+        "translate heatt as the next substantial radial physics routine, then close "
+        "gsmooth and unsavd/multipass state before adding any output writers; only "
+        "after full Python source equivalence consider an optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",
@@ -49,6 +49,11 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     assert by_routine["dsec"].status is PortStatus.TRANSLATED
     assert by_routine["calc_emis_all"].status is PortStatus.VALIDATED
     assert by_routine["xstarcalc"].status is PortStatus.VALIDATED
+    for routine in ("step", "trnfrc", "stpcut", "trnfrn"):
+        assert by_routine[routine].status is PortStatus.VALIDATED
+    assert by_routine["heatt"].status is PortStatus.SCAFFOLD
+    assert by_routine["gsmooth"].status is PortStatus.UNPORTED
+    assert by_routine["unsavd"].status is PortStatus.UNPORTED
     assert by_routine["xstar"].status is PortStatus.SCAFFOLD
 
 

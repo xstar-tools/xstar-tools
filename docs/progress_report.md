@@ -1,5 +1,7 @@
 # XSTAR `atdb.fits` Python Reader Progress Report
 
+> **v0.4.64 update:** translated `step`, `trnfrc`, `stpcut`, and `trnfrn`, validated them against direct compilation of the original Fortran, and composed the bounded first-pass radial shell around the accepted local `xstarcalc`. Zone 1 skips `step`; later first-pass zones execute it. `heatt` remains an explicit source-state handler. Reverse passes fail at missing `unsavd`, turbulent runs fail at missing `gsmooth`, and output writers remain blocked.
+
 > **v0.3.208 update:** added a source-aligned live-state type-53 implementation (`epim`, `bremsam`, `bremsint`), complete `phint53` rate/heating/cooling evaluation, record/matrix parity, and selected-system integration after native types 51/50/71. The kernel agrees with a standalone compiled original `phint53.f90` case within `5e-8`. Real O VII acceptance, `phint53hunt`, and opacity/RRC-emissivity parity remain open.
 
 
