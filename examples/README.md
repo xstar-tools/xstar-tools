@@ -1883,3 +1883,20 @@ requires that all underlying fixed-state quantities pass, both Python and XSTAR
 the `dsec.f90` convergence decision `abs(hmctot) <= 1.e-4`.  A successful result
 writes `exact_post_dsec_fixed_state_semantic_ready=True` and
 `ready_to_advance_to_bremsmap=True`.
+
+
+## v0.4.60 `bremsmap` source validation
+
+### `130_validate_xstar_bremsmap.py`
+
+Validate the literal `bremsmap -> nbinc -> huntf` translation against two
+frozen direct-original-Fortran cases:
+
+```bash
+PYTHONPATH=src python examples/130_validate_xstar_bremsmap.py \
+  --out-dir xstar_bremsmap_source_validation_v0460 \
+  --print-summary
+```
+
+The gate requires exact reduced-grid mapping and preservation of the
+caller-owned `bremsint(ncn2m+1)` tail boundary.

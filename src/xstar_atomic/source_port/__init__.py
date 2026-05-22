@@ -759,3 +759,20 @@ __all__ = [
     "write_dsec_transition_state_products",
     "write_dsec_input_snapshot_products",
 ]
+
+from .radiation import (
+    XSTAR_BREMSMAP_ERG_PER_EV,
+    XSTAR_BREMSMAP_EPIM_FLOOR,
+    XSTAR_HUNTF_ZERO_FLOOR,
+    BremsMapPortError,
+    BremsMapContext,
+    BremsMapResult,
+    huntf,
+    nbinc,
+    bremsmap,
+    apply_bremsmap_to_state,
+    register_bremsmap_source_routine,
+    direct_fortran_reference_cases,
+    run_direct_fortran_reference_validation,
+    write_bremsmap_validation_products,
+)
