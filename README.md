@@ -1,3 +1,31 @@
+## v0.4.69 detail and final FITS output writers
+
+v0.4.69 translates the bounded output sequence after the accepted radial
+control path. Per-shell saving now composes
+`savd -> fstepr -> fstepr2 -> fstepr3 -> fstepr4` into caller-owned per-pass
+detail stores and writes the source pass-specific FITS names. The final caller
+executes `xstarcalc(nlimd=0) -> heatt -> stpcut`, records the literal `pprint`
+boundary, and then runs `writespectra -> writespectra2 -> writespectra3 ->
+writespectra4` under the source `lwri` gates.
+
+The port preserves REAL(4) persistence, one-based HDU insertion and shifting,
+level/line/RRC activity gates, the 600-line limit, transmitted continuum, the
+five-field `writespectra` scattered-column omission, caller-owned state
+identity, and FITS checksums. Direct references cover original `voigte`, the
+strong-line `binemis` chain, and detail/final row construction.
+
+Legacy `pprint` ASCII reports remain an explicit source-state handler and are
+not fabricated. Physical all-ATDB standard-benchmark output parity remains the
+next acceptance stage.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+  --out-dir xstar_output_writer_source_validation_v0469 \
+  --print-summary
+```
+
 ## v0.4.68 tabulated radial density and fixed pass-control contract
 
 v0.4.68 closes the remaining bounded radial-control path before output writers.

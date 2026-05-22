@@ -884,6 +884,15 @@ def save_radial_shell_state(
         state, terminal_record=terminal_record
     )
     inserted_hdu = pass_state.insert_after_hdu(int(hdunum), snapshot)
+    output_record_written = False
+    if bool(state.control.get("output_writers_enabled", False)):
+        lwri = int(state.control.get("lwri", 0))
+        npass = int(state.control.get("npass", 1))
+        if lwri > 0 or npass > 1:
+            from .output_writers import append_detail_output_from_state
+
+            append_detail_output_from_state(state, hdunum=int(hdunum))
+            output_record_written = True
     state.transfer.provenance.setdefault("saved_shell_records", []).append(
         {
             "source_file": "xstar/xstarlib/src/savd.f90",
@@ -893,7 +902,7 @@ def save_radial_shell_state(
             "inserted_hdu": int(inserted_hdu),
             "terminal_record": bool(terminal_record),
             "storage": "caller-owned in-memory REAL(4) shell state",
-            "output_writer_executed": False,
+            "output_writer_executed": bool(output_record_written),
         }
     )
     return inserted_hdu
@@ -1754,6 +1763,38 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
 
     state.control["calc_hmc_all_source_handler"] = hmc_with_caller_workspace
 
+    from .output_writers import (
+        LevelOutputMetadata,
+        LineOutputMetadata,
+        RRCOutputMetadata,
+        SourceOutputMetadata,
+    )
+
+    state.control["output_atomic_metadata"] = SourceOutputMetadata(
+        levels=tuple(
+            LevelOutputMetadata(
+                global_index=index,
+                ion_index=1,
+                excitation_eV=float((index - 1) * 10.0),
+                ion_label="o_vii",
+                atomic_number=8,
+                level_label=("ground" if index == 1 else f"level_{index}"),
+                upper_index=index,
+            )
+            for index in range(1, 7)
+        ),
+        lines=(
+            LineOutputMetadata(1, 21.60, "o_vii", "ground", "resonance", rate_type=50, data_type=50, atomic_mass=16.0, natural_rate_s=3.0e8),
+            LineOutputMetadata(2, 21.80, "o_vii", "ground", "intercombination", rate_type=50, data_type=50, atomic_mass=16.0, natural_rate_s=2.0e8),
+            LineOutputMetadata(3, 22.10, "o_vii", "ground", "forbidden", rate_type=50, data_type=50, atomic_mass=16.0, natural_rate_s=1.0e3),
+        ),
+        rrcs=(
+            RRCOutputMetadata(1, 1, 739.3, "o_vii", "ground"),
+            RRCOutputMetadata(2, 2, 700.0, "o_vii", "level_2"),
+            RRCOutputMetadata(3, 3, 650.0, "o_vii", "level_3"),
+        ),
+        provenance={"fixture": "bounded-radial-output-v0.4.69"},
+    )
     state.control["cfrac"] = 0.25
     return state
 

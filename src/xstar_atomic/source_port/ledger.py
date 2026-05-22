@@ -91,12 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.68"
+PORT_LEDGER_VERSION = "v0.4.69"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3, 4)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "translate the detail and final output writers now that the bounded radial "
-    "density, transfer, saved-state, and fixed pass-count contracts are closed; "
-    "only after full Python source equivalence consider an optional C++ backend"
+    "translate the legacy pprint ASCII products and then run a physical "
+    "standard-benchmark detail/final-spectrum parity gate; only after full "
+    "Python source equivalence consider an optional C++ backend"
 )
 
 
@@ -104,9 +104,10 @@ def default_port_ledger() -> XSTARPortLedger:
     """Return the source-port ledger through the bounded radial-shell release.
 
     ``validated`` means validated for the stated oracle and scope.  It does not
-    imply that the complete radial XSTAR program is translated.  Reverse and
-    repeated saved-state restoration, tabulated radial density, and the fixed
-    requested-pass contract are accepted; output writers remain future work.
+    imply physical all-ATDB standard-benchmark parity.  The bounded radial
+    caller, saved/pass state, detail FITS products, and final FITS writer
+    sequence are accepted.  Legacy ``pprint`` ASCII products and physical
+    benchmark output parity remain future work.
     """
     E = PortLedgerEntry
     V, T, P, S, U = (
@@ -267,9 +268,61 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.radial_control",
           "compiled literal inline density.dat fragment plus bounded source-loop and fixed requested-pass contract validation",
           "Accepted in v0.4.68. Preserves the initial pre-pass density read, sequential post-shell reads, retained rnew/dennew values at EOF, post-update-density column accumulation, radius-error stop, literal first/later shell predicates, (-1)**kk directions, numrec<=0 forcing npass=1, and the absence of an adaptive pass-convergence test."),
+        E("xstar/xstarlib/src/fheader.f90", "fheader", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers._primary_hdu",
+          "bounded FITS primary-header schema and checksum validation",
+          "Accepted in v0.4.69 for CREATOR, MODEL, ATDATA, primary/parameter/data HDU ordering, and checksums. The legacy source BITPIX declaration is not claimed byte-identical because Astropy emits a standards-compliant empty primary HDU."),
+        E("xstar/xstarlib/src/fparmlist.f90", "fparmlist", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_parameter_table",
+          "bounded source schema, 1I parameter index, REAL(4) values, strings, and FITS layout",
+          "Accepted in v0.4.69 for the caller-owned parameter table used by detail and final products."),
+        E("xstar/xstarlib/src/savd.f90", "savd", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.append_detail_output_from_state",
+          "bounded radial composition with per-pass caller-owned stores and source HDU insertion order",
+          "Accepted in v0.4.69. Preserves fstepr -> fstepr2 -> fstepr3 -> fstepr4 order and pass-specific fnappend filenames."),
+        E("xstar/xstarlib/src/fstepr.f90", "fstepr", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_detail_level_table",
+          "direct original-Fortran row selection plus REAL(4) schema validation",
+          "Accepted in v0.4.69 for populated-level detail rows and shell header values."),
+        E("xstar/xstarlib/src/fstepr2.f90", "fstepr2", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_detail_line_table",
+          "direct original-Fortran active-line row selection and schema validation",
+          "Accepted in v0.4.69. The source-undefined no-active-line path fails explicitly rather than inventing an uninitialized row."),
+        E("xstar/xstarlib/src/fstepr3.f90", "fstepr3", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_detail_rrc_table",
+          "direct original-Fortran RRC row selection and schema validation",
+          "Accepted in v0.4.69 for active type-7 RRC detail rows."),
+        E("xstar/xstarlib/src/fstepr4.f90", "fstepr4", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_detail_continuum_table",
+          "direct original-Fortran continuum columns and REAL(4) persistence",
+          "Accepted in v0.4.69 for the active continuum range and shell header contract."),
+        E("xstar/xstarlib/src/voigte.f90", "voigte", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.voigte",
+          "direct compilation of unmodified original Fortran at three profile points",
+          "Accepted in v0.4.69 as the line-profile helper used by binemis."),
+        E("xstar/xstarlib/src/binemis.f90", "binemis", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_binemis_spectrum",
+          "direct compilation of unmodified binemis/rlbin/nbinc/huntf/voigte/drd for a strong-line fixture",
+          "Accepted in v0.4.69 for source ranking, profile integration/rebinning, active-range mutation, and caller-owned tails; the compiled comparison uses a 5e-7 bound for source-visible default-real/grid rounding."),
+        E("xstar/xstarlib/src/writespectra.f90", "writespectra", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_final_spectrum_table",
+          "direct source schema and final spectrum construction validation",
+          "Accepted in v0.4.69. Preserves the source quirk that defines six descriptors but writes tfields=5, dropping the scattered column."),
+        E("xstar/xstarlib/src/writespectra2.f90", "writespectra2", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_final_line_table",
+          "direct original-Fortran line selection/ranking fragment and 600-row limit",
+          "Accepted in v0.4.69 for the strongest final line table."),
+        E("xstar/xstarlib/src/writespectra3.f90", "writespectra3", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_final_continuum_table",
+          "direct compiled literal transmitted-continuum loop and column schema",
+          "Accepted in v0.4.69 for incident, transmitted, inward, and outward continuum columns."),
+        E("xstar/xstarlib/src/writespectra4.f90", "writespectra4", "milestone5_outputs", V,
+          "xstar_atomic.source_port.output_writers.build_final_rrc_table",
+          "direct original-Fortran RRC selection fragment and schema validation",
+          "Accepted in v0.4.69 for final RRC rows when either direction exceeds the source floor."),
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-4 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products. v0.4.47 replaces invalid compact-vector replay with source-faithful global xilevg carry/remapping across changing dsec bases. v0.4.48 adds call correlation, exact matching input-state capture, distinct input/post-dsec references, per-evaluation thermal decomposition, and fast prefix mode. v0.4.51 diagnoses the first repeated-call transition mismatch, and v0.4.52 corrects dense native global alias writeback plus per-call leveltemp lifecycle with a controlled four-mode causality scan. v0.4.53 adds exact evaluation-2 replay, v0.4.54 localizes the solver-entry mismatch, v0.4.55 restores the literal terminal zero seed, and v0.4.56 accepts the natural four-evaluation source branch/thermal prefix. v0.4.57 adds unrestricted all-evaluation convergence and post-dsec fixed-state acceptance. v0.4.58 adds exact post-dsec call-entry replay. v0.4.59 confirms that the only strict replay failure is the near-zero normalized `hmctot`: both Python and XSTAR exactly reproduce the source heatf expression, both satisfy the literal dsec `1.e-4` convergence test, and every underlying fixed-state quantity passes. Milestone-4 local-zone balance is source-semantically accepted. v0.4.60 validates bremsmap. v0.4.61 translates and validates calc_emisab_all -> calc_emisab_element -> calc_emisab_ion. v0.4.62 accepts calc_emis_all, v0.4.63 accepts complete local xstarcalc, and v0.4.64 accepts the bounded first-pass step -> trnfrc -> xstarcalc -> heatt-handler -> stpcut -> trnfrn caller contract. v0.4.65 translates and directly validates heatt and replaces that handler in the same radial sequence. v0.4.66 translates and directly validates gsmooth/gsmooth2 and closes the nonzero-turbulence branch before heatt. v0.4.67 translates and directly validates unsavd, adds caller-owned REAL(4) shell/pass state with source HDU insertion semantics, and accepts three alternating radial passes. v0.4.68 closes the inline density.dat branch and makes the fixed requested-pass, direction, shell-loop, and numrec<=0 contracts explicit without inventing adaptive convergence. Output writers remain blocked."),
+          "Milestones 1-4 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products. v0.4.47 replaces invalid compact-vector replay with source-faithful global xilevg carry/remapping across changing dsec bases. v0.4.48 adds call correlation, exact matching input-state capture, distinct input/post-dsec references, per-evaluation thermal decomposition, and fast prefix mode. v0.4.51 diagnoses the first repeated-call transition mismatch, and v0.4.52 corrects dense native global alias writeback plus per-call leveltemp lifecycle with a controlled four-mode causality scan. v0.4.53 adds exact evaluation-2 replay, v0.4.54 localizes the solver-entry mismatch, v0.4.55 restores the literal terminal zero seed, and v0.4.56 accepts the natural four-evaluation source branch/thermal prefix. v0.4.57 adds unrestricted all-evaluation convergence and post-dsec fixed-state acceptance. v0.4.58 adds exact post-dsec call-entry replay. v0.4.59 confirms that the only strict replay failure is the near-zero normalized `hmctot`: both Python and XSTAR exactly reproduce the source heatf expression, both satisfy the literal dsec `1.e-4` convergence test, and every underlying fixed-state quantity passes. Milestone-4 local-zone balance is source-semantically accepted. v0.4.60 validates bremsmap. v0.4.61 translates and validates calc_emisab_all -> calc_emisab_element -> calc_emisab_ion. v0.4.62 accepts calc_emis_all, v0.4.63 accepts complete local xstarcalc, and v0.4.64 accepts the bounded first-pass step -> trnfrc -> xstarcalc -> heatt-handler -> stpcut -> trnfrn caller contract. v0.4.65 translates and directly validates heatt and replaces that handler in the same radial sequence. v0.4.66 translates and directly validates gsmooth/gsmooth2 and closes the nonzero-turbulence branch before heatt. v0.4.67 translates and directly validates unsavd, adds caller-owned REAL(4) shell/pass state with source HDU insertion semantics, and accepts three alternating radial passes. v0.4.68 closes the inline density.dat branch and makes the fixed requested-pass, direction, shell-loop, and numrec<=0 contracts explicit without inventing adaptive convergence. v0.4.69 translates and validates the savd/fstepr detail FITS sequence, binemis/voigte, and writespectra1-4 final FITS sequence in caller order. Legacy pprint ASCII products remain an explicit source-state handler and physical all-ATDB standard-benchmark output parity is not yet claimed."),
     ]
     return XSTARPortLedger(entries)

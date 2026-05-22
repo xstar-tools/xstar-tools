@@ -124,11 +124,11 @@ def test_v0468_acceptance_closes_radial_control_without_outputs():
 
 
 def test_v0468_ledger_exports_and_version():
-    assert xa.__version__ == "0.4.68"
+    assert xa.__version__ == "0.4.69"
     ledger = default_port_ledger()
     entry = next(
         item for item in ledger.entries
         if item.routine == "tabulated_density_and_pass_control"
     )
     assert entry.status.value == "validated"
-    assert "output writers" in ledger.entries[-1].limitations.lower()
+    assert "pprint" in ledger.entries[-1].limitations.lower()

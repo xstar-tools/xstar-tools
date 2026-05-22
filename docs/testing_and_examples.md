@@ -1,3 +1,18 @@
+## v0.4.69 detail and final output-writer validation
+
+```bash
+PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+  --out-dir xstar_output_writer_source_validation_v0469 \
+  --print-summary
+
+PYTHONPATH=src pytest -q tests/test_source_port_v0469_output_writers.py
+PYTHONPATH=src pytest -q tests/test_source_port*.py
+```
+
+Expected acceptance includes
+`detail_and_final_output_writer_source_acceptance_ready=True` and
+`next_source_target=legacy_pprint_ascii_products_and_physical_standard_benchmark_output_parity`.
+
 ## v0.4.68 tabulated radial density and pass control
 
 ```bash

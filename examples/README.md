@@ -2048,3 +2048,19 @@ PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py
   --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
   --print-summary
 ```
+
+## v0.4.69 detail and final output-writer validation
+
+### `139_validate_xstar_output_writers.py`
+
+This example validates `savd -> fstepr*`, `binemis -> voigte`, the final
+no-`dsec` local recomputation, and `writespectra1-4`. It writes bounded detail
+and final FITS products and verifies pass-specific filenames, REAL(4) schemas,
+HDU order, checksums, `lwri` gates, caller-owned state, and the explicit legacy
+`pprint` boundary.
+
+```bash
+PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+  --out-dir xstar_output_writer_source_validation_v0469 \
+  --print-summary
+```

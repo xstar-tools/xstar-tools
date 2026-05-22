@@ -1,3 +1,11 @@
+> **v0.4.69 update:** translated and directly validated the bounded detail and
+> final FITS output sequence. `savd -> fstepr*`, `binemis -> voigte`, and
+> `writespectra1-4` now execute in source order on caller-owned radial state.
+> Pass-specific detail filenames, REAL(4) tables, HDU insertion, `lwri` gates,
+> final no-`dsec` recomputation, and FITS checksums pass. Legacy `pprint` ASCII
+> reports and physical standard-benchmark output parity remain explicit next
+> work.
+
 > **v0.4.68 update:** translated and directly validated the inline tabulated
 > radial-density branch in `xstar.f90`; added caller-owned sequential density
 > state, exact EOF/`iostat` behavior, literal first/later shell predicates, and

@@ -1450,3 +1450,21 @@ PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py
   --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
   --print-summary
 ```
+
+## 19. Detail and final FITS output writers (v0.4.69)
+
+Enable the caller-owned output path to construct the four per-pass detail
+products at each `savd` boundary. The source order is
+`fstepr -> fstepr2 -> fstepr3 -> fstepr4`. After radial passes, the final
+no-`dsec` local calculation is followed by `heatt`, `stpcut`, the explicit
+legacy `pprint` boundary, and `writespectra1-4` according to `lwri`.
+
+```bash
+PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+  --out-dir xstar_output_writer_source_validation_v0469 \
+  --print-summary
+```
+
+This release writes the bounded FITS products and validates schemas, REAL(4)
+values, insertion order, final source order, and checksums. Legacy `pprint`
+ASCII products and physical standard-benchmark parity remain future work.

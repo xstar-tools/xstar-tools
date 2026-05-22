@@ -835,3 +835,21 @@ the fixed requested pass count rather than an invented adaptive tolerance.
    PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
      --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
      --print-summary
+
+Detail and final FITS output writers (v0.4.69)
+------------------------------------------------
+
+The bounded radial caller now constructs the per-pass detail FITS products in
+literal ``fstepr -> fstepr2 -> fstepr3 -> fstepr4`` order.  After the radial
+passes, the final no-``dsec`` local calculation is followed by ``heatt``,
+``stpcut``, the explicit legacy ``pprint`` boundary, and ``writespectra1-4``
+under the source ``lwri`` gates.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+     --out-dir xstar_output_writer_source_validation_v0469 \
+     --print-summary
+
+Legacy ``pprint`` ASCII products and physical standard-benchmark output parity
+remain future work.
