@@ -94,13 +94,17 @@ class CalcEmisabWorkspace:
         )
 
     def validate(self, *, n_lines: int, n_continua: int, n_energy: int) -> None:
+        # The continuum work arrays are dimensioned on the caller's full
+        # ``ncn`` grid even when ``calc_emisab_all`` receives the reduced
+        # ``epim(1:ncn2m)`` grid.  Require capacity for the active reduced
+        # range, but preserve caller-owned rows above ``ncn2m``.
         checks = {
             "rcem": self.rcem.shape == (2, int(n_lines) + 1),
             "oplin": self.oplin.shape == (int(n_lines) + 1,),
-            "brcems": self.brcems.shape == (int(n_energy),),
-            "rccemis": self.rccemis.shape == (2, int(n_energy)),
-            "opakc": self.opakc.shape == (int(n_energy),),
-            "opakcont": self.opakcont.shape == (int(n_energy),),
+            "brcems": self.brcems.ndim == 1 and self.brcems.shape[0] >= int(n_energy),
+            "rccemis": self.rccemis.ndim == 2 and self.rccemis.shape[0] == 2 and self.rccemis.shape[1] >= int(n_energy),
+            "opakc": self.opakc.ndim == 1 and self.opakc.shape[0] >= int(n_energy),
+            "opakcont": self.opakcont.ndim == 1 and self.opakcont.shape[0] >= int(n_energy),
             "cemab": self.cemab.shape == (2, int(n_continua) + 1),
             "cabab": self.cabab.shape == (int(n_continua) + 1,),
             "opakab": self.opakab.shape == (int(n_continua) + 1,),
@@ -248,11 +252,16 @@ def _radiation_arrays(radiation: Any) -> tuple[np.ndarray, np.ndarray, np.ndarra
     epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
     brem = np.asarray(getattr(radiation, "bremsam", ()), dtype=float).reshape(-1)
     bint = np.asarray(getattr(radiation, "bremsint", ()), dtype=float).reshape(-1)
-    if epi.size < 4 or epi.size != brem.size or epi.size != bint.size:
-        raise CalcEmisabPortError("calc_emisab requires matching epim/bremsam/bremsint arrays with at least four bins")
-    if np.any(np.diff(epi) <= 0.0) or not all(np.all(np.isfinite(x)) for x in (epi, brem, bint)):
+    if epi.size < 4 or brem.size < epi.size or bint.size < epi.size:
+        raise CalcEmisabPortError(
+            "calc_emisab requires epim with at least four bins and "
+            "bremsam/bremsint capacity for the active reduced grid"
+        )
+    if np.any(np.diff(epi) <= 0.0) or not all(
+        np.all(np.isfinite(x)) for x in (epi, brem[: epi.size], bint[: epi.size])
+    ):
         raise CalcEmisabPortError("invalid calc_emisab radiation arrays")
-    return epi, brem, bint
+    return epi, brem[: epi.size], bint[: epi.size]
 
 
 def resolve_calc_emisab_density(*, xpx: float, pressure: float, t_1e4: float, xee: float, lcdd: int) -> float:
@@ -323,21 +332,23 @@ def _accumulate_ucalc_continuum(workspace: CalcEmisabWorkspace, result: UCalcRes
         values = diagnostics.get(key)
         if values is not None:
             arr = np.asarray(values, dtype=float).reshape(-1)
-            if arr.size != target.size:
-                raise CalcEmisabPortError(f"ucalc {key} length {arr.size} != continuum length {target.size}")
-            target += arr
+            if arr.size > target.size:
+                raise CalcEmisabPortError(
+                    f"ucalc {key} length {arr.size} exceeds continuum capacity {target.size}"
+                )
+            target[: arr.size] += arr
     inward = diagnostics.get("rccemis_inward")
     outward = diagnostics.get("rccemis_outward")
     if inward is not None:
         arr = np.asarray(inward, dtype=float).reshape(-1)
-        if arr.size != workspace.rccemis.shape[1]:
-            raise CalcEmisabPortError("ucalc inward continuum emissivity length mismatch")
-        workspace.rccemis[0] += arr
+        if arr.size > workspace.rccemis.shape[1]:
+            raise CalcEmisabPortError("ucalc inward continuum emissivity exceeds workspace")
+        workspace.rccemis[0, : arr.size] += arr
     if outward is not None:
         arr = np.asarray(outward, dtype=float).reshape(-1)
-        if arr.size != workspace.rccemis.shape[1]:
-            raise CalcEmisabPortError("ucalc outward continuum emissivity length mismatch")
-        workspace.rccemis[1] += arr
+        if arr.size > workspace.rccemis.shape[1]:
+            raise CalcEmisabPortError("ucalc outward continuum emissivity exceeds workspace")
+        workspace.rccemis[1, : arr.size] += arr
 
 
 def _evaluate_ucalc(context: CalcEmisabContext, record: int, ucontext: UCalcContext) -> UCalcResult:

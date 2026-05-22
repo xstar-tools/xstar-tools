@@ -1,3 +1,32 @@
+## v0.4.63 complete local `xstarcalc` assembly
+
+The user-side v0.4.62 validation confirms the complete `calc_emis_all` source
+chain. v0.4.63 assembles the accepted local-zone routines in literal
+`xstarcalc.f90` order:
+
+```text
+bremsmap -> [dsec] -> calc_hmc_all -> calc_emisab_all -> calc_emis_all
+```
+
+The brackets denote the source `nlimdt == 0` skip branch. The driver now also
+preserves `lpri` save/zero/restore and the final
+`nry = nbinc(13.6, epi, ncn2) + 2` assignment.
+
+Composition exposed one real ownership correction: `calc_emisab_all` consumes
+the reduced `epim(1:ncn2m)` grid while continuum arrays remain dimensioned on
+the full caller grid. The port now requires capacity for the active reduced
+range and preserves all higher caller-owned rows. The bounded complete-local
+fixture passes call-order, skip, shared-workspace, reduced/full-grid, ranking,
+array-continuity, and final-state gates. Radial transfer and output are next.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/133_validate_xstar_complete_local_xstarcalc.py \
+  --out-dir xstar_complete_local_xstarcalc_source_validation_v0463 \
+  --print-summary
+```
+
 ## v0.4.62 source-faithful `calc_emis_all`
 
 The user-side v0.4.61 validation closes the complete

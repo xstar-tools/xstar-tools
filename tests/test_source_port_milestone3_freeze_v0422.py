@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.62"
+    assert PORT_LEDGER_VERSION == "v0.4.63"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "assemble and validate the complete local xstarcalc sequence after the accepted "
-        "bremsmap, dsec, calc_hmc_all, calc_emisab_all, and calc_emis_all subsystems; "
-        "then continue with radial transfer and outputs -> optional C++ backend"
+        "translate and validate the radial transfer/zone-control sequence after the "
+        "accepted complete local xstarcalc assembly; then port output writers and "
+        "only afterward consider an optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",
@@ -48,6 +48,7 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     assert by_routine["calc_hmc_all"].status is PortStatus.TRANSLATED
     assert by_routine["dsec"].status is PortStatus.TRANSLATED
     assert by_routine["calc_emis_all"].status is PortStatus.VALIDATED
+    assert by_routine["xstarcalc"].status is PortStatus.VALIDATED
     assert by_routine["xstar"].status is PortStatus.SCAFFOLD
 
 

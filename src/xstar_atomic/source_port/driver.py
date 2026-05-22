@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
+import numpy as np
+
 from .state import XSTARPythonState
 
 
@@ -201,13 +203,80 @@ class XSTARPythonDriver:
         *,
         fixed_state: bool = False,
     ) -> XSTARPythonState:
-        """Run the source-order ``xstarcalc`` plan.
+        """Run ``xstarcalc.f90`` in literal local-zone source order.
 
-        ``fixed_state=True`` skips ``dsec`` and is the Milestone-4 entry point
-        for captured-temperature/electron-fraction validation.
+        The translated driver preserves the control semantics surrounding the
+        nested calls, not only the call list itself:
+
+        * ``bremsmap`` executes before thermal iteration;
+        * ``lpri`` is saved and forced to zero for the local calculation;
+        * ``dsec`` is skipped when ``nlimdt == 0`` or ``fixed_state`` is true;
+        * the final ``calc_hmc_all`` call always executes after ``dsec``;
+        * ``calc_emisab_all`` precedes ``calc_emis_all``;
+        * ``nry = nbinc(13.6, epi, ncn2) + 2`` is evaluated after emissivity;
+        * the caller's ``lpri`` value is restored on exit.
+
+        Individual routine implementations remain explicitly registered.
+        Missing translated routines therefore still fail immediately.
         """
-        order = XSTARCALC_FIXED_STATE_ORDER if fixed_state else XSTARCALC_SOURCE_ORDER
-        return self.run_source_routines(order, state=state)
+        result = state or XSTARPythonState()
+
+        def execute(routine: XSTARSourceRoutine) -> None:
+            handler = self.routine_handlers.get(routine)
+            if handler is None:
+                raise UnportedXSTARSourceRoutine(routine, state=result)
+            handler(result)
+            result.provenance.setdefault("completed_source_routines", []).append(
+                routine.value
+            )
+
+        execute(XSTARSourceRoutine.BREMSMAP)
+
+        lpri_saved = int(result.control.get("lpri", 0))
+        result.control["lprisv"] = lpri_saved
+        result.control["lpri"] = 0
+        dsec_executed = False
+        try:
+            nlimdt = int(result.control.get("nlimdt", 1))
+            if not fixed_state and nlimdt != 0:
+                execute(XSTARSourceRoutine.DSEC)
+                dsec_executed = True
+            else:
+                result.provenance.setdefault("skipped_source_routines", []).append(
+                    XSTARSourceRoutine.DSEC.value
+                )
+
+            execute(XSTARSourceRoutine.CALC_HMC_ALL)
+            execute(XSTARSourceRoutine.CALC_EMISAB_ALL)
+            execute(XSTARSourceRoutine.CALC_EMIS_ALL)
+
+            if result.radiation.epi is not None:
+                from .radiation import nbinc
+
+                ncn2 = int(
+                    result.control.get(
+                        "ncn2", len(np.asarray(result.radiation.epi).reshape(-1))
+                    )
+                )
+                result.control["nry"] = int(
+                    nbinc(13.6, result.radiation.epi, ncn2) + 2
+                )
+        finally:
+            result.control["lpri"] = lpri_saved
+
+        result.local_zone.provenance["xstarcalc"] = {
+            "source_file": "xstar/xstarlib/src/xstarcalc.f90",
+            "fixed_state_mode": bool(fixed_state),
+            "dsec_executed": bool(dsec_executed),
+            "nlimdt": int(result.control.get("nlimdt", 1)),
+            "lpri_saved": lpri_saved,
+            "lpri_restored": int(result.control.get("lpri", 0)),
+            "nry": (int(result.control["nry"]) if "nry" in result.control else None),
+            "completed_source_routines": list(
+                result.provenance.get("completed_source_routines", [])
+            ),
+        }
+        return result
 
     def run(
         self,

@@ -91,12 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.62"
+PORT_LEDGER_VERSION = "v0.4.63"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "assemble and validate the complete local xstarcalc sequence after the accepted "
-    "bremsmap, dsec, calc_hmc_all, calc_emisab_all, and calc_emis_all subsystems; "
-    "then continue with radial transfer and outputs -> optional C++ backend"
+    "translate and validate the radial transfer/zone-control sequence after the "
+    "accepted complete local xstarcalc assembly; then port output writers and "
+    "only afterward consider an optional C++ backend"
 )
 
 
@@ -229,10 +229,11 @@ def default_port_ledger() -> XSTARPortLedger:
         E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", V,
           "xstar_atomic.source_port.emergent_emissivity.calc_emis_all",
           "bounded source-order synthetic parity for rlbin ranking, calc_emis_element/calc_emis_ion traversal, rate-type 7/9/42 behavior, fline/flinel ownership, Thomson reset, freef, and bremem",
-          "Accepted in v0.4.62. The translation preserves ranking from precomputed calc_emisab arrays before continuum reset, the source rank-limit quirk, all-ion compact aliases and inactive offsets, rate-type-9 double ucalc execution, retained kkkl reuse by rate types 9/42, caller-owned fline/flinel, and final freef/bremem source slots."),
-        E("xstar/xstarlib/src/xstarcalc.f90", "xstarcalc", "milestone4_local_zone", U,
-          "xstar_atomic.source_port.driver.XSTARPythonDriver", "",
-          "All immediate local-zone callees are source-complete through v0.4.62; assemble and validate their complete xstarcalc call order next."),
+          "Accepted in v0.4.62. The translation preserves ranking from precomputed calc_emisab arrays before continuum reset, the source rank-limit quirk, all-ion compact aliases and inactive offsets, rate-type-9 double ucalc execution, retained kkkl reuse by rate types 9/42, caller-owned fline/flinel, and final freef/bremem source slots. v0.4.63 composes this routine with calc_emisab_all on one full-grid caller workspace while preserving the reduced-grid active range."),
+        E("xstar/xstarlib/src/xstarcalc.f90", "xstarcalc", "milestone4_local_zone", V,
+          "xstar_atomic.source_port.xstarcalc.run_complete_local_xstarcalc",
+          "bounded complete-local assembly validates literal bremsmap -> optional dsec -> final calc_hmc_all -> calc_emisab_all -> calc_emis_all order, shared array ownership, nlimdt skip, lpri save/restore, and final nry",
+          "Accepted in v0.4.63 for the complete local-zone caller contract. Physical all-ATDB end-to-end emissivity parity remains part of later radial-zone integration."),
         E("xstar/xstarlib/src/trnfrc.f90", "trnfrc", "milestone5_transfer", U,
           "xstar_atomic.source_port.transfer.trnfrc", "", "Radial two-stream transfer deferred until one-zone parity."),
         E("xstar/xstarlib/src/trnfrn.f90", "trnfrn", "milestone5_transfer", U,

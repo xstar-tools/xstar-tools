@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.62"
+__version__ = "0.4.63"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -761,4 +761,26 @@ __all__.extend([
     "resolve_calc_emisab_density", "calc_emisab_ion", "calc_emisab_element", "calc_emisab_all",
     "apply_calc_emisab_all_to_state", "register_calc_emisab_all_source_routine",
     "run_calc_emisab_source_order_validation", "write_calc_emisab_validation_products",
+])
+
+from .source_port.xstarcalc import (
+    CompleteLocalXstarcalcPortError,
+    CompleteLocalXstarcalcResult,
+    apply_dsec_to_state,
+    apply_calc_hmc_all_to_state,
+    register_complete_local_xstarcalc_source_routines,
+    run_complete_local_xstarcalc,
+    run_complete_local_xstarcalc_validation,
+    write_complete_local_xstarcalc_validation_products,
+)
+
+__all__.extend([
+    "CompleteLocalXstarcalcPortError",
+    "CompleteLocalXstarcalcResult",
+    "apply_dsec_to_state",
+    "apply_calc_hmc_all_to_state",
+    "register_complete_local_xstarcalc_source_routines",
+    "run_complete_local_xstarcalc",
+    "run_complete_local_xstarcalc_validation",
+    "write_complete_local_xstarcalc_validation_products",
 ])

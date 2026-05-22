@@ -1938,3 +1938,18 @@ rate-type-9 double `ucalc`, rate-type-42 retained-continuum-pointer behavior,
 strong-line `fline/flinel`, caller-owned non-reset arrays, Thomson continuum
 reset, `ucalc` continuum side effects, and the final `freef`/`bremem` calls.
 
+
+
+## v0.4.63 complete local `xstarcalc` validation
+
+### `133_validate_xstar_complete_local_xstarcalc.py`
+
+Validate literal local `xstarcalc` ordering, `nlimdt` skip behavior, `lpri`
+ownership, shared reduced/full-grid continuum workspaces, precomputed feature
+ranking, caller-owned array continuity, and final `nry`.
+
+```bash
+PYTHONPATH=src python examples/133_validate_xstar_complete_local_xstarcalc.py \
+  --out-dir xstar_complete_local_xstarcalc_source_validation_v0463 \
+  --print-summary
+```
