@@ -282,3 +282,9 @@ include xstar_atomic_v0.4.69.md
 include xstar_atomic_conversation_summary_v0469.md
 include XSTAR_SOURCE_CHANGES_v0.4.69.md
 include src_v0469_update_report.md
+
+include xstar_atomic_v0.4.70.md
+include xstar_atomic_conversation_summary_v0470.md
+include XSTAR_SOURCE_CHANGES_v0.4.70.md
+include src_v0470_update_report.md
+recursive-include docs/validation/v0470_fortran_pprint_reference *

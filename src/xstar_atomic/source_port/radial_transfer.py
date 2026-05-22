@@ -1239,6 +1239,10 @@ def run_bounded_radial_pass(
     # density unit itself remains at its current file position.
     state.control["density_iostat"] = 0
     initialize_bounded_radial_pass_state(state)
+    if bool(state.control.get("pprint_legacy_enabled", False)):
+        from .pprint_legacy import legacy_pprint_begin_pass
+
+        legacy_pprint_begin_pass(state)
 
     runner = driver or XSTARPythonDriver()
     if driver is None:
@@ -1338,6 +1342,12 @@ def run_bounded_radial_pass(
     if kk == 1:
         # Source sets numrec=jkp+1 after the first radial traversal.
         state.control["numrec"] = shell_count + 1
+    if bool(state.control.get("pprint_legacy_enabled", False)):
+        from .pprint_legacy import legacy_pprint_after_heatt
+
+        # The source terminal report reuses the final shell state and jkp, and
+        # final-pass pprint(12) writes the numrec row.
+        legacy_pprint_after_heatt(state, terminal_record=True)
     terminal_hdu = save_radial_shell_state(
         state, hdunum=shell_count + 1, terminal_record=True
     )

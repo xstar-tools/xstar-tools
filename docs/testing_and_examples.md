@@ -1,3 +1,30 @@
+## v0.4.70 legacy `pprint` and physical output-parity validation
+
+```bash
+PYTHONPATH=src python examples/140_validate_xstar_pprint_physical_output.py \
+  --out-dir xstar_output_writer_source_validation_v0470 \
+  --print-summary
+
+PYTHONPATH=src pytest -q tests/test_source_port_v0470_pprint_physical_output.py
+PYTHONPATH=src pytest -q tests/test_source_port*.py
+```
+
+Expected bounded acceptance includes
+`pprint_direct_original_fortran_reference_ready=True`,
+`legacy_pprint_ascii_products_written_ready=True`, and
+`next_source_target=physical_all_atdb_standard_benchmark_output_parity`.
+
+After independently running original XSTAR and the Python port with the same
+physical standard benchmark, compare their products with:
+
+```bash
+PYTHONPATH=src python examples/140_validate_xstar_pprint_physical_output.py \
+  --out-dir xstar_output_writer_source_validation_v0470 \
+  --xstar-run-dir /path/to/original_xstar_run \
+  --python-run-dir /path/to/python_run \
+  --print-summary
+```
+
 ## v0.4.69 detail and final output-writer validation
 
 ```bash

@@ -1,3 +1,15 @@
+### `140_validate_xstar_pprint_physical_output.py`
+
+Validates the source-default legacy `pprint` products and, when supplied with
+`--xstar-run-dir` and `--python-run-dir`, compares all standard detail/final
+outputs without using XSTAR data as Python production input.
+
+```bash
+PYTHONPATH=src python examples/140_validate_xstar_pprint_physical_output.py \
+  --out-dir xstar_output_writer_source_validation_v0470 \
+  --print-summary
+```
+
 # xstar-atomic examples
 
 This directory contains runnable examples and development/validation workflows for `xstar-atomic`. The examples are organized by relevance so new users can start with simple database inspection and advanced developers can jump directly to same-run XSTAR validation and source-code audits.

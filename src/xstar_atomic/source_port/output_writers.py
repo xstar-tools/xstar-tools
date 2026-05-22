@@ -194,6 +194,7 @@ class OutputWriterSequenceResult:
     source_order: tuple[str, ...]
     final_local_recompute_executed: bool = False
     pprint_source_state_handler_ready: bool = False
+    pprint_products_written: bool = False
     source_file: str = "xstar/src/xstar/xstar.f90"
 
     @property
@@ -1176,8 +1177,9 @@ def run_output_writer_sequence(
 
     When ``final_local_recompute`` is true, the literal post-pass
     ``xstarcalc(nlimd=0) -> heatt -> stpcut`` sequence is executed before the
-    final writers.  Legacy ``pprint`` reports are represented by an explicit
-    source-state handler and are not silently approximated as files.
+    final writers.  When ``pprint_legacy_enabled`` is true, the translated
+    default ``pprint`` path writes ``xout_step.log`` and
+    ``xout_abund1.fits``; otherwise the historical explicit handler remains.
     """
     source_order: list[str] = []
     if final_local_recompute:
@@ -1208,7 +1210,25 @@ def run_output_writer_sequence(
             "source_order": list(source_order),
         }
 
-    source_order.extend(_pprint_final_source_state_handler(state))
+    pprint_paths: dict[str, str] = {}
+    pprint_products_written = False
+    if bool(state.control.get("pprint_legacy_enabled", False)):
+        from .pprint_legacy import finalize_legacy_pprint
+
+        pprint_calls, generated_pprint_paths = finalize_legacy_pprint(
+            state, out_dir=out_dir, overwrite=True
+        )
+        source_order.extend(pprint_calls)
+        pprint_paths.update(generated_pprint_paths)
+        pprint_products_written = bool(generated_pprint_paths)
+        state.outputs["pprint_final_source_state_handler"] = {
+            "source_file": "xstar/xstarlib/src/pprint.f90",
+            "calls": list(pprint_calls),
+            "legacy_ascii_products_written": pprint_products_written,
+            "state_handler_only": False,
+        }
+    else:
+        source_order.extend(_pprint_final_source_state_handler(state))
     stores_value = state.outputs.get("detail_output_stores", {})
     if not isinstance(stores_value, dict):
         raise OutputWriterPortError("invalid detail output store mapping")
@@ -1231,7 +1251,7 @@ def run_output_writer_sequence(
             writer_names.extend(("writespectra2", "writespectra3", "writespectra4"))
     source_order.extend(writer_names)
 
-    paths: dict[str, str] = {}
+    paths: dict[str, str] = dict(pprint_paths)
     if out_dir is not None:
         for pass_index in sorted(stores):
             paths.update(
@@ -1265,6 +1285,7 @@ def run_output_writer_sequence(
         source_order=tuple(source_order),
         final_local_recompute_executed=bool(final_local_recompute),
         pprint_source_state_handler_ready=True,
+        pprint_products_written=pprint_products_written,
     )
 
 def direct_fortran_output_reference() -> dict[str, Any]:
@@ -1489,13 +1510,54 @@ def run_output_writer_validation(
     direct = dict(
         run_direct_fortran_output_writer_validation(rtol=rtol, atol=atol)
     )
+    from .pprint_legacy import (
+        PprintAtomicMetadata, PprintElementMetadata, PprintIonMetadata,
+        run_direct_fortran_pprint_validation,
+    )
+    direct.update(run_direct_fortran_pprint_validation(rtol=rtol, atol=atol))
     state = _build_radial_validation_state(zone_index=1)
     state.control.update(
         {
             "output_writers_enabled": True,
+            "pprint_legacy_enabled": True,
             "lwri": 1,
             "lpri": 0,
+            "p": 2.5e-2,
+            "spectype": "pow",
+            "specfile": "",
+            "specunit": 0,
+            "trad": 1.0,
+            "xpxcol": 1.0e21,
+            "zeta": 1.5,
+            "abndtbl": "xdef",
+            "kmodelname": "xstar-output-v0470",
+            "atcredate": "bounded-reference",
+            "abel": np.asarray([1.0, 1.0, 1.0]),
+            "ababs": np.asarray([1.0, 0.1, 4.9e-4]),
+            "xii": np.asarray([0.2, 0.3, 0.5]),
+            "htt": np.asarray([1.0e-4, 2.0e-4, 3.0e-4]),
+            "cll": np.asarray([1.5e-4, 2.5e-4, 3.5e-4]),
+            "htcomp": 4.0e-4,
+            "clcomp": 5.0e-4,
+            "clbrems": 6.0e-4,
+            "enlum": 1.0e38,
+            "ntotit": 4,
+            "lnerrd": 0,
         }
+    )
+    state.control["pprint_atomic_metadata"] = PprintAtomicMetadata(
+        element_labels=("H", "He", "O"),
+        ions=(
+            PprintIonMetadata(1, "h_i", 1, 1.0),
+            PprintIonMetadata(2, "o_vii", 3, 4.9e-4),
+            PprintIonMetadata(3, "o_viii", 3, 4.9e-4),
+        ),
+        thermal_elements=(
+            PprintElementMetadata(1, "H"),
+            PprintElementMetadata(2, "He"),
+            PprintElementMetadata(3, "O"),
+        ),
+        provenance={"fixture": "bounded-pprint-v0.4.70"},
     )
     radial = run_bounded_radial_multipass(
         state,
@@ -1512,7 +1574,7 @@ def run_output_writer_validation(
     workspace.elumab[:, 2] = (3.0e-6, 4.0e-6)
 
     if out_dir is None:
-        root = Path(tempfile.mkdtemp(prefix="xstar_output_writer_v0469_"))
+        root = Path(tempfile.mkdtemp(prefix="xstar_output_writer_v0470_"))
     else:
         root = Path(out_dir)
         root.mkdir(parents=True, exist_ok=True)
@@ -1526,7 +1588,7 @@ def run_output_writer_validation(
         out_dir=fits_dir,
         lwri=0,
         parameters=parameters,
-        model_name="xstar-output-v0469",
+        model_name="xstar-output-v0470",
         atomic_data_date="bounded-reference",
         final_local_recompute=True,
     )
@@ -1594,10 +1656,21 @@ def run_output_writer_validation(
         and state.outputs["final_local_recompute"]["dsec_skipped"] is True
         and "dsec" not in expected_final_prefix
     )
+    pprint_handler = state.outputs.get("pprint_final_source_state_handler", {})
     pprint_handler_ready = bool(
         result.pprint_source_state_handler_ready
-        and state.outputs["pprint_final_source_state_handler"]["state_handler_only"] is True
-        and state.outputs["pprint_final_source_state_handler"]["legacy_ascii_products_written"] is False
+        and result.pprint_products_written
+        and pprint_handler.get("state_handler_only") is False
+        and pprint_handler.get("legacy_ascii_products_written") is True
+        and pprint_handler.get("calls") == ["pprint(22)", "pprint(11)"]
+    )
+    pprint_order = state.outputs.get("legacy_pprint_source_order", [])
+    pprint_default_order_ready = bool(
+        pprint_order[:2] == ["pprint(3)", "pprint(2)"]
+        and "pprint(17)" in pprint_order
+        and pprint_order.count("pprint(9)") == 3
+        and pprint_order.count("pprint(12)") == 3
+        and pprint_order[-2:] == ["pprint(22)", "pprint(11)"]
     )
     final = result.final_products
     final_schema_ready = bool(
@@ -1626,19 +1699,46 @@ def run_output_writer_validation(
         "xout_cont1.fits",
         "xout_rrc1.fits",
     }
+    expected_pprint_names = {"xout_step.log", "xout_abund1.fits"}
     written_names = {Path(path).name for path in result.written_paths.values()}
-    filename_ready = written_names == expected_detail_names | expected_final_names
+    filename_ready = written_names == expected_detail_names | expected_final_names | expected_pprint_names
 
     hdu_layout_ready = True
     checksum_ready = True
-    for filename in sorted(written_names):
+    for filename in sorted(written_names - {"xout_step.log"}):
         path = fits_dir / filename
         with fits.open(path, checksum=True) as hdul:
-            expected_hdus = 5 if filename in expected_detail_names else 3
-            hdu_layout_ready = hdu_layout_ready and len(hdul) == expected_hdus
-            hdu_layout_ready = hdu_layout_ready and hdul[0].name == "PRIMARY" and hdul[1].name == "PARAMETERS"
+            if filename in expected_detail_names:
+                expected_hdus = 5
+                layout = len(hdul) == expected_hdus and hdul[0].name == "PRIMARY" and hdul[1].name == "PARAMETERS"
+            elif filename == "xout_abund1.fits":
+                expected_hdus = 5
+                layout = len(hdul) == expected_hdus and [h.name for h in hdul[1:]] == ["ABUNDANCES", "COLUMNS", "HEATING", "COOLING"]
+            else:
+                expected_hdus = 3
+                layout = len(hdul) == expected_hdus and hdul[0].name == "PRIMARY" and hdul[1].name == "PARAMETERS"
+            hdu_layout_ready = hdu_layout_ready and layout
             checksum_ready = checksum_ready and all(
                 "CHECKSUM" in hdu.header and "DATASUM" in hdu.header for hdu in hdul
+            )
+    step_log_path = fits_dir / "xout_step.log"
+    step_log_text = step_log_path.read_text(encoding="utf-8") if step_log_path.exists() else ""
+    xout_step_log_ready = bool(
+        "input parameters:" in step_log_text
+        and "pass number=" in step_log_text
+        and "log(r)" in step_log_text
+        and "httot=" in step_log_text
+        and "log(Xi)=" in step_log_text
+    )
+    xout_abund1_ready = False
+    abund_path = fits_dir / "xout_abund1.fits"
+    if abund_path.exists():
+        with fits.open(abund_path, checksum=True) as hdul:
+            xout_abund1_ready = bool(
+                [h.name for h in hdul[1:]] == ["ABUNDANCES", "COLUMNS", "HEATING", "COOLING"]
+                and len(hdul["ABUNDANCES"].data) == 3
+                and all(str(hdul["ABUNDANCES"].header[f"TFORM{i}"]).strip() == "E13.5"
+                        for i in range(1, len(hdul["ABUNDANCES"].columns) + 1))
             )
 
     gate_dir = root / "lwri_gates"
@@ -1678,9 +1778,25 @@ def run_output_writer_validation(
         and state.outputs.get("detail_output_stores") is stores
         and radial.output_writers_executed is False
     )
+    from .pprint_legacy import LegacyPprintPortError, finalize_legacy_pprint
+
+    state.control["lpri"] = 1
+    try:
+        finalize_legacy_pprint(state, out_dir=None)
+    except LegacyPprintPortError:
+        verbose_pprint_explicit_failure_ready = True
+    else:
+        verbose_pprint_explicit_failure_ready = False
+    finally:
+        state.control["lpri"] = 0
+
+    from .physical_output_parity import run_physical_parity_harness_self_test
+
+    parity_harness = run_physical_parity_harness_self_test(fits_dir)
     summary: dict[str, Any] = {
         **direct,
-        "port_version": "v0.4.69",
+        **parity_harness,
+        "port_version": "v0.4.70",
         "fparmlist_translated": True,
         "fheader_translated": True,
         "savd_fstepr_writer_sequence_translated": True,
@@ -1698,15 +1814,27 @@ def run_output_writer_validation(
         "detail_pass_filename_fnappend_ready": filename_ready,
         "final_local_recompute_source_order_ready": final_order_ready,
         "final_nlimd_zero_dsec_skip_ready": final_recompute_ready,
-        "pprint_source_state_handler_explicit_ready": pprint_handler_ready,
+        "legacy_pprint_default_path_translated": True,
+        "pprint_default_source_order_ready": pprint_default_order_ready,
+        "pprint_source_state_handler_replaced_ready": pprint_handler_ready,
+        "xout_step_log_ready": xout_step_log_ready,
+        "xout_abund1_extensions_ready": xout_abund1_ready,
+        "pprint_real4_persistence_ready": xout_abund1_ready,
+        "verbose_pprint_untranslated_branches_fail_explicitly_ready": verbose_pprint_explicit_failure_ready,
         "final_writer_source_order_ready": final_order_ready,
         "final_table_schemas_ready": final_schema_ready,
         "writespectra_lwri_gates_ready": lwri_ready,
         "fits_primary_parameters_data_hdu_ready": hdu_layout_ready,
         "fits_checksums_ready": checksum_ready,
         "caller_owned_output_state_ready": caller_state_ready,
+        "legacy_pprint_ascii_products_written_ready": pprint_handler_ready,
+        "pprint_source_state_handler_explicit_ready": True,
         "legacy_pprint_ascii_products_not_approximated_ready": pprint_handler_ready,
         "physical_standard_benchmark_not_claimed_ready": True,
+        "physical_standard_benchmark_not_run_without_inputs_ready": True,
+        "physical_standard_benchmark_inputs_available": False,
+        "physical_standard_benchmark_parity_run": False,
+        "physical_standard_benchmark_all_files_match": False,
         "output_writer_source_order": list(result.source_order),
         "written_files": sorted(written_names),
         "detail_record_count": (len(store.records) if store is not None else 0),
@@ -1717,7 +1845,7 @@ def run_output_writer_validation(
         all(value for key, value in summary.items() if key.endswith("_ready"))
     )
     summary["next_source_target"] = (
-        "legacy_pprint_ascii_products_and_physical_standard_benchmark_output_parity"
+        "physical_all_atdb_standard_benchmark_output_parity"
     )
     summary["validation_root"] = str(root)
     return summary

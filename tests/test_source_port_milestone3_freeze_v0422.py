@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.69"
+    assert PORT_LEDGER_VERSION == "v0.4.70"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3, 4)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "translate the legacy pprint ASCII products and then run a physical "
-        "standard-benchmark detail/final-spectrum parity gate; only after full "
-        "Python source equivalence consider an optional C++ backend"
+        "run and diagnose physical all-ATDB standard-benchmark detail/final-spectrum "
+        "parity using independent original-XSTAR and Python output directories; only "
+        "after full Python source equivalence consider an optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

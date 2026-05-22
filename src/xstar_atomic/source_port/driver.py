@@ -305,8 +305,9 @@ class XSTARPythonDriver:
         * translated ``heatt`` updates continuum, line, and RRC transfer state;
         * the inline radius/column update precedes ``stpcut`` and ``trnfrn``.
 
-        Output calls (``pprint``, ``savd``, and spectrum writers) are
-        intentionally outside this bounded routine.
+        ``savd`` remains caller-owned; when explicitly enabled, the default
+        legacy ``pprint(9/12)`` calls execute at their literal post-``heatt``
+        source boundary.  Final spectrum writers remain outside this routine.
         """
         result = state or XSTARPythonState()
         jkp = int(zone_index)
@@ -394,6 +395,18 @@ class XSTARPythonDriver:
             execute(XSTARSourceRoutine.GSSMOOTH)
 
         execute(XSTARSourceRoutine.HEATT)
+
+        # xstar.f90 emits the short radial log and, on the final requested
+        # pass, accumulates the abundance/heating/cooling row immediately
+        # after heatt and before savd.  The bounded legacy writer is enabled
+        # only when the caller supplies its atomic metadata.
+        if bool(result.control.get("pprint_legacy_enabled", False)):
+            from .pprint_legacy import legacy_pprint_after_heatt
+
+            pprint_calls = legacy_pprint_after_heatt(result, terminal_record=False)
+            result.provenance.setdefault("completed_source_routines", []).extend(
+                pprint_calls
+            )
 
         # savd occurs here in xstar.f90, before the geometry/column update.
         # The bounded port uses a caller-owned in-memory REAL(4) snapshot and

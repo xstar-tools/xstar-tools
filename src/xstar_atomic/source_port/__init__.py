@@ -1068,3 +1068,46 @@ __all__.extend([
     "run_output_writer_validation",
     "write_output_writer_validation_products",
 ])
+
+
+from .pprint_legacy import (
+    LegacyPprintPortError,
+    PprintIonMetadata,
+    PprintElementMetadata,
+    PprintAtomicMetadata,
+    LegacyPprintBuffers,
+    initialize_legacy_pprint,
+    legacy_pprint_begin_pass,
+    legacy_pprint_after_heatt,
+    finalize_legacy_pprint,
+    write_xout_abund1,
+    direct_fortran_pprint_reference,
+    run_direct_fortran_pprint_validation,
+)
+
+from .physical_output_parity import (
+    FINAL_FITS_PRODUCTS,
+    DETAIL_PATTERNS,
+    LEGACY_TEXT_PRODUCTS,
+    ColumnParity,
+    FileParity,
+    PhysicalOutputParityResult,
+    compare_fits_product,
+    compare_step_log,
+    compare_physical_output_directories,
+    run_physical_parity_harness_self_test,
+)
+
+__all__.extend([
+    "LegacyPprintPortError", "PprintIonMetadata", "PprintElementMetadata",
+    "PprintAtomicMetadata", "LegacyPprintBuffers",
+    "initialize_legacy_pprint", "legacy_pprint_begin_pass",
+    "legacy_pprint_after_heatt", "finalize_legacy_pprint",
+    "write_xout_abund1", "direct_fortran_pprint_reference",
+    "run_direct_fortran_pprint_validation",
+    "FINAL_FITS_PRODUCTS", "DETAIL_PATTERNS", "LEGACY_TEXT_PRODUCTS",
+    "ColumnParity", "FileParity", "PhysicalOutputParityResult",
+    "compare_fits_product", "compare_step_log",
+    "compare_physical_output_directories",
+    "run_physical_parity_harness_self_test",
+])

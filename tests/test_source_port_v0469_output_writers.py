@@ -64,6 +64,7 @@ def test_v0469_fits_products_have_source_layout_and_checksums(output_summary):
     expected = {
         "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
         "xout_spect1.fits", "xout_lines1.fits", "xout_cont1.fits", "xout_rrc1.fits",
+        "xout_abund1.fits",
     }
     assert {path.name for path in root.glob("*.fits")} == expected
     with fits.open(root / "xout_spect1.fits", checksum=True) as hdul:
@@ -81,12 +82,12 @@ def test_v0469_caller_owned_state_and_explicit_pprint_boundary(output_summary):
 def test_v0469_output_writer_acceptance(output_summary):
     assert output_summary["detail_and_final_output_writer_source_acceptance_ready"] is True
     assert output_summary["next_source_target"] == (
-        "legacy_pprint_ascii_products_and_physical_standard_benchmark_output_parity"
+        "physical_all_atdb_standard_benchmark_output_parity"
     )
 
 
 def test_v0469_ledger_exports_and_version():
-    assert xa.__version__ == "0.4.69"
+    assert xa.__version__ == "0.4.70"
     ledger = default_port_ledger()
     routines = {entry.routine: entry for entry in ledger.entries}
     for routine in (
@@ -94,4 +95,4 @@ def test_v0469_ledger_exports_and_version():
         "binemis", "voigte", "writespectra", "writespectra2", "writespectra3", "writespectra4",
     ):
         assert routines[routine].status.value == "validated"
-    assert "pprint" in ledger.entries[-1].limitations.lower()
+    assert routines["pprint"].status.value == "validated"

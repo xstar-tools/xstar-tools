@@ -1,5 +1,47 @@
 # CHANGELOG
 
+## v0.4.70 legacy `pprint` products and physical output-parity harness - 2026-05-22
+
+v0.4.70 replaces the final non-writing `pprint` handler for the source-default
+`lpri=0` path. The bounded radial caller now preserves the default legacy
+sequence:
+
+```text
+pprint(3) -> pprint(2)
+per pass: pprint(17)
+per shell: pprint(9) -> [final pass: pprint(12)]
+terminal shell state: pprint(9) -> [final pass: pprint(12)]
+final local recompute: pprint(22) -> pprint(11)
+```
+
+The translated path writes `xout_step.log` and `xout_abund1.fits` with the
+source `ABUNDANCES`, `COLUMNS`, `HEATING`, and `COOLING` extensions. It
+preserves final-pass-only accumulation, the terminal `numrec` row, source
+REAL(4) persistence through `E13.5` ASCII columns, the ion-column trapezoid,
+and the option-11 `n_p` unit-field typo. Verbose `lpri>0` diagnostic report
+branches fail explicitly rather than being approximated.
+
+A new independent output comparator checks HDU names, table schemas, row
+counts, strings, every numeric column, pass-specific detail files, and the
+structured zone/final rows of `xout_step.log`. XSTAR products remain diagnostic
+oracles only and never become production inputs. The comparator self-test
+passes on the bounded product set.
+
+Physical all-ATDB standard-benchmark parity is **not claimed in this release**:
+the release environment did not contain a paired original-XSTAR and Python
+physical benchmark run. Supply both directories to execute the open gate:
+
+```bash
+PYTHONPATH=src python examples/140_validate_xstar_pprint_physical_output.py \
+  --out-dir xstar_output_writer_source_validation_v0470 \
+  --xstar-run-dir /path/to/original_xstar_run \
+  --python-run-dir /path/to/python_run \
+  --print-summary
+```
+
+Without the two physical directories, the command validates the bounded source
+translation and records that physical parity was not run.
+
 ## v0.4.69 detail and final FITS output writers - 2026-05-22
 
 v0.4.69 translates the bounded output sequence after the accepted radial

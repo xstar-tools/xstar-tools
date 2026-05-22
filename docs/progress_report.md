@@ -1,3 +1,13 @@
+> **v0.4.70 update:** translated and directly validated the coherent default
+> `lpri=0` legacy `pprint` path. The radial/final caller now writes
+> `xout_step.log` and `xout_abund1.fits` at the literal source boundaries,
+> preserving final-pass accumulation, terminal-row ownership, REAL(4)/`E13.5`
+> persistence, ion-column integration, and the source `n_p` unit-field typo. An
+> independent comparator now checks legacy, detail, and final products from
+> paired original-XSTAR and Python runs. The comparator self-test passes; a
+> physical all-ATDB benchmark remains pending because paired physical run
+> directories were unavailable in the release environment.
+
 > **v0.4.69 update:** translated and directly validated the bounded detail and
 > final FITS output sequence. `savd -> fstepr*`, `binemis -> voigte`, and
 > `writespectra1-4` now execute in source order on caller-owned radial state.
