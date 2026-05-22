@@ -1,5 +1,41 @@
 # CHANGELOG
 
+## v0.4.59 final normalized-residual source semantics - 2026-05-21
+
+The user-side v0.4.58 exact post-`dsec` replay reproduces the complete captured
+call-entry runtime and continuum state.  Every underlying fixed-state quantity
+passes: runtime, continuum components, primary and secondary heating/cooling
+totals, electron contribution, charge residual, and charge identity.  The only
+strict failure is `hmctot`, whose relative difference is amplified by cancellation
+near thermal equilibrium.
+
+Python and XSTAR independently reproduce the literal `heatf.f90` expression
+
+```text
+hmctot = 2 * (httot - cltot) / (1e-37 + httot + cltot)
+```
+
+with values `6.007235133655397e-5` and `8.259870956279396e-5`.  Both satisfy
+XSTAR's actual `dsec.f90` convergence condition `abs(hmctot) <= 1.e-4`.
+Therefore the strict residual mismatch does not change the source convergence
+decision and is retained as a diagnostic rather than a physics blocker.
+
+v0.4.59 adds:
+
+- source-expression and source-convergence classification for the exact final
+  replay;
+- `examples/129_validate_xstar_dsec_final_residual_semantics.py`;
+- `xstar-atomic-validate-dsec-final-residual-semantics`;
+- an offline reanalysis path that consumes a completed v0.4.58 result tree and
+  requires no ATDB read, XSTAR rebuild, or 33-evaluation rerun; and
+- separate strict and source-semantic final-state fields.
+
+The O VII local-zone Milestone-4 `dsec` gate is source-semantically accepted.
+Strict floating-point trajectory, transition-array, natural-root, and normalized
+residual differences remain visible.  `bremsmap` is now the next source-order
+translation target.  Production defaults remain `dense-source`,
+`reset-per-call`, and `source-zero`.
+
 ## v0.4.58 exact post-`dsec` final-call replay - 2026-05-21
 
 The user-side v0.4.57 unrestricted run converged naturally in the same 33

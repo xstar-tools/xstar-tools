@@ -1859,3 +1859,27 @@ PYTHONPATH=src python \
   --out-dir xstar_dsec_post_final_replay_v0458 \
   --print-summary
 ```
+
+
+## v0.4.59 offline final-residual source semantics
+
+### `129_validate_xstar_dsec_final_residual_semantics.py`
+
+Reclassify a completed v0.4.58 post-final replay without rerunning the physical
+33-evaluation calculation:
+
+```bash
+PYTHONPATH=src python \
+  examples/129_validate_xstar_dsec_final_residual_semantics.py \
+  --v0458-results-dir xstar_dsec_post_final_replay_v0458 \
+  --out-dir xstar_dsec_final_residual_semantics_v0459 \
+  --print-summary
+```
+
+The validator preserves `exact_post_dsec_fixed_state_parity_ready=False` when
+the normalized residual misses the strict relative tolerance.  It separately
+requires that all underlying fixed-state quantities pass, both Python and XSTAR
+`hmctot` values reproduce the literal `heatf.f90` expression, and both satisfy
+the `dsec.f90` convergence decision `abs(hmctot) <= 1.e-4`.  A successful result
+writes `exact_post_dsec_fixed_state_semantic_ready=True` and
+`ready_to_advance_to_bremsmap=True`.

@@ -8,6 +8,7 @@ from xstar_atomic.source_port_dsec_physical_cli import build_parser as build_phy
 from xstar_atomic.source_port_dsec_post_final_replay_cli import (
     _classify,
     _clean_passthrough,
+    _exact_final_source_semantic_summary,
     _natural_final_physics_ready,
     _source_control_flow_ready,
     _thermal_semantic_summary,
@@ -29,6 +30,7 @@ def _accepted_payload(**updates):
         "natural_final_fixed_state_parity_ready": False,
         "exact_post_dsec_replay_executed": True,
         "exact_post_dsec_fixed_state_parity_ready": True,
+        "exact_post_dsec_fixed_state_semantic_ready": True,
         "frozen_v0444_complete_fixed_state_regression": True,
         "strict_trajectory_ready": False,
         "python_evaluation_count": 33,
@@ -135,15 +137,70 @@ def test_post_replay_classifier_accepts_root_roundoff() -> None:
     )
 
 
-def test_post_replay_classifier_reports_exact_replay_failure() -> None:
+def test_post_replay_classifier_accepts_strict_residual_roundoff() -> None:
     assert _classify(
         _accepted_payload(exact_post_dsec_fixed_state_parity_ready=False)
-    ) == "source_zero_post_replay_fixed_state_mismatch"
+    ) == "source_zero_post_replay_ready_with_source_converged_residual_roundoff"
 
 
-def test_post_replay_products_record_v0458_acceptance(tmp_path: Path) -> None:
+def test_post_replay_classifier_reports_exact_semantic_failure() -> None:
+    assert _classify(
+        _accepted_payload(exact_post_dsec_fixed_state_semantic_ready=False)
+    ) == "source_zero_post_replay_fixed_state_semantic_mismatch"
+
+
+def test_exact_final_source_semantics_accept_source_converged_hmctot() -> None:
+    py_h = 2.1780313628738658e-7
+    py_c = 2.1779005273384123e-7
+    xs_h = 2.1780603350353703e-7
+    xs_c = 2.177880437491999e-7
+    py_r = 2.0 * (py_h - py_c) / (1.0e-37 + py_h + py_c)
+    xs_r = 2.0 * (xs_h - xs_c) / (1.0e-37 + xs_h + xs_c)
+    rows = []
+    for quantity, py, xs, ready in (
+        ("temperature_t4", 7.6655, 7.6655, True),
+        ("electron_fraction_xee", 1.204656, 1.204656, True),
+        ("httot", py_h, xs_h, True),
+        ("cltot", py_c, xs_c, True),
+        ("httot2", 6.2541e-8, 6.2543e-8, True),
+        ("cltot2", 6.21735e-8, 6.21736e-8, True),
+        ("elcter", -4.1405e-5, -4.14068e-5, True),
+        ("hmctot", py_r, xs_r, False),
+    ):
+        rows.append({
+            "quantity": quantity,
+            "python_value": str(py),
+            "xstar_value": str(xs),
+            "within_tolerance": str(ready),
+        })
+    summary = {
+        "fixed_state_calc_hmc_all_translated": True,
+        "pre_matrix_ready": True,
+        "element_loop_ready": True,
+        "charge_scope_complete": True,
+        "continuum_sequence_complete": True,
+        "runtime_state_parity_ready": True,
+        "continuum_component_parity_ready": True,
+        "primary_heating_cooling_totals_parity_ready": True,
+        "secondary_heating_cooling_totals_parity_ready": True,
+        "electron_contribution_parity_ready": True,
+        "charge_residual_parity_ready": True,
+        "charge_identity_ready": True,
+        "hmctot_parity_ready": False,
+        "complete_fixed_state_ready": True,
+    }
+    result = _exact_final_source_semantic_summary(summary, rows)
+    assert result["exact_post_dsec_fixed_state_semantic_ready"] is True
+    assert result["exact_post_dsec_hmctot_residual_only_failure"] is True
+    assert result["exact_post_dsec_hmctot_source_expression_ready"] is True
+    assert result["exact_post_dsec_hmctot_convergence_decision_ready"] is True
+    assert result["exact_post_dsec_python_hmctot_converged"] is True
+    assert result["exact_post_dsec_xstar_hmctot_converged"] is True
+
+
+def test_post_replay_products_record_v0459_acceptance(tmp_path: Path) -> None:
     products = _write_products(tmp_path, _accepted_payload())
     data = json.loads(products["json"].read_text(encoding="utf-8"))
-    assert data["port_version"] == "v0.4.58"
+    assert data["port_version"] == "v0.4.59"
     assert data["unrestricted_source_semantic_acceptance_ready"] is True
     assert data["ready_to_advance_to_bremsmap"] is True

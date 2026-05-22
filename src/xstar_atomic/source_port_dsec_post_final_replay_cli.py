@@ -4,10 +4,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .source_port_dsec_physical_cli import main as physical_main
+
+
+DSEC_SOURCE_THERMAL_TOLERANCE = 1.0e-4
 
 
 def _strip_option(args: Sequence[str], option: str, *, takes_value: bool) -> List[str]:
@@ -49,13 +53,13 @@ def _clean_passthrough(args: Sequence[str]) -> List[str]:
 
 def _read_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
-        raise RuntimeError(f"required v0.4.58 product is missing: {path}")
+        raise RuntimeError(f"required post-final-replay product is missing: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _read_rows(path: Path) -> List[Dict[str, str]]:
     if not path.is_file():
-        raise RuntimeError(f"required v0.4.58 CSV is missing: {path}")
+        raise RuntimeError(f"required post-final-replay CSV is missing: {path}")
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
 
@@ -144,6 +148,105 @@ def _natural_final_physics_ready(summary: Mapping[str, Any]) -> bool:
     )
 
 
+def _exact_final_source_semantic_summary(
+    summary: Mapping[str, Any],
+    rows: Sequence[Mapping[str, str]],
+    *,
+    source_thermal_tolerance: float = DSEC_SOURCE_THERMAL_TOLERANCE,
+) -> Dict[str, Any]:
+    """Classify exact post-``dsec`` parity using XSTAR's source decision.
+
+    ``heatf.f90`` defines ``hmctot`` as a normalized difference.  Near thermal
+    equilibrium, tiny independently accepted changes in ``httot`` and ``cltot``
+    can produce a large relative change in ``hmctot``.  ``dsec.f90`` does not
+    compare that residual with a reference value; it tests
+    ``abs(hmctot) <= crith`` with ``crith=1.e-4``.  Keep strict residual parity
+    visible, but accept the final fixed state when every underlying source
+    quantity passes, both residuals reproduce the source expression, and both
+    make the same converged source decision.
+    """
+    by_quantity = {str(row["quantity"]): row for row in rows}
+    required = {
+        "httot", "cltot", "hmctot", "httot2", "cltot2", "elcter",
+        "temperature_t4", "electron_fraction_xee",
+    }
+    missing = sorted(required - set(by_quantity))
+    if missing:
+        return {
+            "exact_post_dsec_fixed_state_semantic_ready": False,
+            "exact_post_dsec_semantic_missing_quantities": missing,
+            "exact_post_dsec_source_thermal_tolerance": float(source_thermal_tolerance),
+        }
+
+    def value(quantity: str, side: str) -> float:
+        return float(by_quantity[quantity][f"{side}_value"])
+
+    py_httot = value("httot", "python")
+    py_cltot = value("cltot", "python")
+    xs_httot = value("httot", "xstar")
+    xs_cltot = value("cltot", "xstar")
+    py_hmctot = value("hmctot", "python")
+    xs_hmctot = value("hmctot", "xstar")
+    py_reconstructed = 2.0 * (py_httot - py_cltot) / (1.0e-37 + py_httot + py_cltot)
+    xs_reconstructed = 2.0 * (xs_httot - xs_cltot) / (1.0e-37 + xs_httot + xs_cltot)
+    py_formula_ready = math.isclose(py_hmctot, py_reconstructed, rel_tol=5.0e-12, abs_tol=1.0e-15)
+    xs_formula_ready = math.isclose(xs_hmctot, xs_reconstructed, rel_tol=5.0e-12, abs_tol=1.0e-15)
+    py_converged = abs(py_hmctot) <= float(source_thermal_tolerance)
+    xs_converged = abs(xs_hmctot) <= float(source_thermal_tolerance)
+    convergence_decision_ready = py_converged == xs_converged
+    same_sign = _same_sign(py_hmctot, xs_hmctot)
+
+    strict_failures = [
+        str(row["quantity"])
+        for row in rows
+        if not _truth(row.get("within_tolerance"))
+    ]
+    residual_only_failure = strict_failures == ["hmctot"]
+    underlying_fixed_state_ready = bool(
+        summary.get("fixed_state_calc_hmc_all_translated")
+        and summary.get("pre_matrix_ready")
+        and summary.get("element_loop_ready")
+        and summary.get("charge_scope_complete")
+        and summary.get("continuum_sequence_complete")
+        and summary.get("runtime_state_parity_ready")
+        and summary.get("continuum_component_parity_ready")
+        and summary.get("primary_heating_cooling_totals_parity_ready")
+        and summary.get("secondary_heating_cooling_totals_parity_ready")
+        and summary.get("electron_contribution_parity_ready")
+        and summary.get("charge_residual_parity_ready")
+        and summary.get("charge_identity_ready")
+        and summary.get("complete_fixed_state_ready")
+    )
+    semantic_ready = bool(
+        underlying_fixed_state_ready
+        and residual_only_failure
+        and py_formula_ready
+        and xs_formula_ready
+        and convergence_decision_ready
+        and py_converged
+        and xs_converged
+        and same_sign
+    )
+    return {
+        "exact_post_dsec_fixed_state_semantic_ready": semantic_ready,
+        "exact_post_dsec_underlying_fixed_state_ready": underlying_fixed_state_ready,
+        "exact_post_dsec_hmctot_strict_parity_ready": summary.get("hmctot_parity_ready") is True,
+        "exact_post_dsec_hmctot_residual_only_failure": residual_only_failure,
+        "exact_post_dsec_hmctot_source_expression_ready": bool(py_formula_ready and xs_formula_ready),
+        "exact_post_dsec_python_hmctot_source_expression_ready": py_formula_ready,
+        "exact_post_dsec_xstar_hmctot_source_expression_ready": xs_formula_ready,
+        "exact_post_dsec_python_hmctot_reconstructed": py_reconstructed,
+        "exact_post_dsec_xstar_hmctot_reconstructed": xs_reconstructed,
+        "exact_post_dsec_python_hmctot_converged": py_converged,
+        "exact_post_dsec_xstar_hmctot_converged": xs_converged,
+        "exact_post_dsec_hmctot_convergence_decision_ready": convergence_decision_ready,
+        "exact_post_dsec_hmctot_sign_ready": same_sign,
+        "exact_post_dsec_source_thermal_tolerance": float(source_thermal_tolerance),
+        "exact_post_dsec_strict_failure_quantities": strict_failures,
+        "exact_post_dsec_semantic_missing_quantities": [],
+    }
+
+
 def _classify(payload: Mapping[str, Any]) -> str:
     if payload.get("python_dsec_converged") is not True:
         return "source_zero_post_replay_dsec_not_converged"
@@ -159,22 +262,24 @@ def _classify(payload: Mapping[str, Any]) -> str:
         return "source_zero_post_replay_natural_final_physics_mismatch"
     if payload.get("exact_post_dsec_replay_executed") is not True:
         return "source_zero_post_replay_missing"
-    if payload.get("exact_post_dsec_fixed_state_parity_ready") is not True:
-        return "source_zero_post_replay_fixed_state_mismatch"
+    if payload.get("exact_post_dsec_fixed_state_semantic_ready") is not True:
+        return "source_zero_post_replay_fixed_state_semantic_mismatch"
     if payload.get("frozen_v0444_complete_fixed_state_regression") is not True:
         return "source_zero_post_replay_frozen_regression_failed"
     if payload.get("strict_trajectory_ready") is True and payload.get(
         "natural_final_fixed_state_parity_ready"
     ) is True:
         return "source_zero_post_replay_strict_ready"
+    if payload.get("exact_post_dsec_fixed_state_parity_ready") is not True:
+        return "source_zero_post_replay_ready_with_source_converged_residual_roundoff"
     return "source_zero_post_replay_ready_with_converged_root_roundoff"
 
 
 def _write_products(out: Path, payload: Dict[str, Any]) -> Dict[str, Path]:
     out.mkdir(parents=True, exist_ok=True)
     payload = dict(payload)
-    payload["port_version"] = "v0.4.58"
-    payload["diagnostic"] = "unrestricted_source_zero_post_dsec_exact_replay"
+    payload["port_version"] = "v0.4.59"
+    payload["diagnostic"] = "unrestricted_source_zero_post_dsec_final_residual_semantics"
     payload["unrestricted_source_semantic_acceptance_ready"] = bool(
         payload.get("python_dsec_converged")
         and payload.get("evaluation_count_ready")
@@ -185,7 +290,7 @@ def _write_products(out: Path, payload: Dict[str, Any]) -> Dict[str, Path]:
         and payload.get("post_dsec_calc_hmc_all_executed")
         and payload.get("natural_final_physics_ready")
         and payload.get("exact_post_dsec_replay_executed")
-        and payload.get("exact_post_dsec_fixed_state_parity_ready")
+        and payload.get("exact_post_dsec_fixed_state_semantic_ready")
         and payload.get("frozen_v0444_complete_fixed_state_regression")
     )
     payload["ready_to_advance_to_bremsmap"] = payload[
@@ -229,7 +334,10 @@ def _write_products(out: Path, payload: Dict[str, Any]) -> Dict[str, Path]:
         f"- Evaluation-2 internals: `{payload.get('evaluation2_internal_ready')}`",
         f"- Natural final physics: `{payload.get('natural_final_physics_ready')}`",
         f"- Natural final strict parity: `{payload.get('natural_final_fixed_state_parity_ready')}`",
-        f"- Exact post-dsec replay parity: `{payload.get('exact_post_dsec_fixed_state_parity_ready')}`",
+        f"- Exact post-dsec strict parity: `{payload.get('exact_post_dsec_fixed_state_parity_ready')}`",
+        f"- Exact post-dsec source-semantic parity: `{payload.get('exact_post_dsec_fixed_state_semantic_ready')}`",
+        f"- Exact residual source expression: `{payload.get('exact_post_dsec_hmctot_source_expression_ready')}`",
+        f"- Exact residual convergence decision: `{payload.get('exact_post_dsec_hmctot_convergence_decision_ready')}`",
         f"- Natural final T4/XSTAR T4: `{payload.get('python_final_temperature_t4')}/{payload.get('xstar_final_temperature_t4')}`",
         f"- Natural final xee/XSTAR xee: `{payload.get('python_final_electron_fraction_xee')}/{payload.get('xstar_final_electron_fraction_xee')}`",
         "",
@@ -331,6 +439,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             payload["xstar_final_temperature_t4"] = float(row["xstar_value"])
         elif row["quantity"] == "electron_fraction_xee":
             payload["xstar_final_electron_fraction_xee"] = float(row["xstar_value"])
+    payload.update(_exact_final_source_semantic_summary(exact_final, exact_rows))
 
     products = _write_products(out, payload)
     if owned.print_summary:
@@ -347,6 +456,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"natural_final_physics_ready={payload['natural_final_physics_ready']}")
         print(f"natural_final_fixed_state_parity_ready={payload['natural_final_fixed_state_parity_ready']}")
         print(f"exact_post_dsec_fixed_state_parity_ready={payload['exact_post_dsec_fixed_state_parity_ready']}")
+        print(f"exact_post_dsec_fixed_state_semantic_ready={payload['exact_post_dsec_fixed_state_semantic_ready']}")
         data = _read_json(products["json"])
         print(f"unrestricted_source_semantic_acceptance_ready={data['unrestricted_source_semantic_acceptance_ready']}")
         print(f"ready_to_advance_to_bremsmap={data['ready_to_advance_to_bremsmap']}")
