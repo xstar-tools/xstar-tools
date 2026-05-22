@@ -776,3 +776,29 @@ from .radiation import (
     run_direct_fortran_reference_validation,
     write_bremsmap_validation_products,
 )
+
+from .emissivity import (
+    CalcEmisabPortError,
+    CalcEmisabWorkspace,
+    CalcEmisabContext,
+    CalcEmisabRecordTrace,
+    CalcEmisabIonTrace,
+    CalcEmisabElementTrace,
+    CalcEmisabResult,
+    resolve_calc_emisab_density,
+    calc_emisab_ion,
+    calc_emisab_element,
+    calc_emisab_all,
+    apply_calc_emisab_all_to_state,
+    register_calc_emisab_all_source_routine,
+    run_source_order_validation as run_calc_emisab_source_order_validation,
+    write_calc_emisab_validation_products,
+)
+
+__all__.extend([
+    "CalcEmisabPortError", "CalcEmisabWorkspace", "CalcEmisabContext",
+    "CalcEmisabRecordTrace", "CalcEmisabIonTrace", "CalcEmisabElementTrace", "CalcEmisabResult",
+    "resolve_calc_emisab_density", "calc_emisab_ion", "calc_emisab_element", "calc_emisab_all",
+    "apply_calc_emisab_all_to_state", "register_calc_emisab_all_source_routine",
+    "run_calc_emisab_source_order_validation", "write_calc_emisab_validation_products",
+])

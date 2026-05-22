@@ -481,6 +481,14 @@ def evaluate_type53_ucalc_record(
         "lfast": int(lfast),
         "opacity_rrc_population_context_supplied": bool(abund1 != 0.0 or abund2 != 0.0),
         "opakab_cm^-1": ph.opakab_cm_inv,
+        # ``phint53.f90`` mutates these caller-owned continuum arrays in
+        # addition to returning the six scalar channels.  Expose the exact
+        # per-record increments so ``calc_emisab_ion`` can replay the source
+        # side effects rather than treating ``ucalc`` as a scalar-only API.
+        "opakc_cm^-1": list(ph.opakc_cm_inv),
+        "opakcont_cm^-1": list(ph.opakcont_cm_inv),
+        "rccemis_inward": list(ph.rccemis_inward),
+        "rccemis_outward": list(ph.rccemis_outward),
         "phint53_diagnostics": dict(ph.diagnostics),
     }
 

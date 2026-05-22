@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.60"
+__version__ = "0.4.61"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -735,4 +735,30 @@ __all__.extend([
     "build_physical_dsec_runtime_state",
     "apply_dsec_matching_input_state",
     "clone_physical_dsec_runtime_state",
+])
+
+from .source_port.emissivity import (
+    CalcEmisabPortError,
+    CalcEmisabWorkspace,
+    CalcEmisabContext,
+    CalcEmisabRecordTrace,
+    CalcEmisabIonTrace,
+    CalcEmisabElementTrace,
+    CalcEmisabResult,
+    resolve_calc_emisab_density,
+    calc_emisab_ion,
+    calc_emisab_element,
+    calc_emisab_all,
+    apply_calc_emisab_all_to_state,
+    register_calc_emisab_all_source_routine,
+    run_source_order_validation as run_calc_emisab_source_order_validation,
+    write_calc_emisab_validation_products,
+)
+
+__all__.extend([
+    "CalcEmisabPortError", "CalcEmisabWorkspace", "CalcEmisabContext",
+    "CalcEmisabRecordTrace", "CalcEmisabIonTrace", "CalcEmisabElementTrace", "CalcEmisabResult",
+    "resolve_calc_emisab_density", "calc_emisab_ion", "calc_emisab_element", "calc_emisab_all",
+    "apply_calc_emisab_all_to_state", "register_calc_emisab_all_source_routine",
+    "run_calc_emisab_source_order_validation", "write_calc_emisab_validation_products",
 ])

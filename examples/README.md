@@ -1900,3 +1900,20 @@ PYTHONPATH=src python examples/130_validate_xstar_bremsmap.py \
 
 The gate requires exact reduced-grid mapping and preservation of the
 caller-owned `bremsint(ncn2m+1)` tail boundary.
+
+## v0.4.61 `calc_emisab_all` source validation
+
+### `131_validate_xstar_calc_emisab_all.py`
+
+Validate the literal `calc_emisab_all -> calc_emisab_element ->
+calc_emisab_ion` translation with a bounded synthetic pointer state:
+
+```bash
+PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
+  --out-dir xstar_calc_emisab_all_source_validation_v0461 \
+  --print-summary
+```
+
+The gate verifies density control, full-output resets, carried continuum
+workspaces, compact continuum aliases, inactive-ion offsets, rate types
+4/7/9/14, and `ucalc` continuum side effects.

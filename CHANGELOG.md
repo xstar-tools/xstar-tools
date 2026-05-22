@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## v0.4.61 source-faithful `calc_emisab_all` - 2026-05-21
+
+The user-side v0.4.60 validation confirms the complete `bremsmap -> nbinc ->
+huntf` gate. v0.4.61 advances one source-order step and translates
+`calc_emisab_all.f90 -> calc_emisab_element.f90 -> calc_emisab_ion.f90`.
+
+The translation preserves the two source density overrides, the distinction
+between arrays cleared by `calc_emisab_all` and continuum arrays carried into
+`ucalc`, source-order all-ion compact population mapping, repeated
+continuum/next-ion-ground aliases, inactive-ion compact offsets, mutable
+`leveltemp` writes only for active ions, one-based line/RRC pointers, and the
+rate-type 4/7/9/14 branches. The type-53 live evaluator now exposes its
+per-record `opakc`, `opakcont`, and inward/outward `rccemis` increments so the
+caller can reproduce `ucalc` side effects instead of using only scalar
+`ans1..ans6` values.
+
+The bounded validation uses an independent synthetic ATDB/pointer state that
+contains two aliased ions while only the first ion is active. It exercises all
+four source branches and verifies output ownership and source record order.
+`calc_emis_all` is the next source-order target.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
+  --out-dir xstar_calc_emisab_all_source_validation_v0461 \
+  --print-summary
+```
+
 ## v0.4.60 source-faithful `bremsmap` - 2026-05-21
 
 The v0.4.59 offline acceptance run confirms `ready_to_advance_to_bremsmap=True`.

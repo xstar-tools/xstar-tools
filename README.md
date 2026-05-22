@@ -1276,3 +1276,20 @@ vector at the start of the final Lucy outer iteration. v0.4.38 keeps these
 vectors separate: final `x` drives `xiin`, charge conservation, and the fully
 stripped residual; final-outer-start `xo` remains the source of `xtotg`.
 Example 111 validates the split and the all-element pre-continuum acceptance.
+
+## Source-faithful `calc_emisab_all` (v0.4.61)
+
+v0.4.61 translates the bounded emissivity/opacity abundance chain
+`calc_emisab_all -> calc_emisab_element -> calc_emisab_ion`. It preserves the
+Fortran output-reset boundary, caller-owned continuum-array side effects,
+all-ion compact alias mapping, inactive-ion offsets, active-ion `leveltemp`
+mutation, and rate types 4, 7, 9, and 14.
+
+```bash
+PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
+  --out-dir xstar_calc_emisab_all_source_validation_v0461 \
+  --print-summary
+```
+
+The next source-order target is `calc_emis_all`; full `xstarcalc`, radial
+transfer, and output writers remain unported.
