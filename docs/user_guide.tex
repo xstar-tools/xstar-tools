@@ -1386,3 +1386,17 @@ PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
 The bounded fixture accepts directions \texttt{-1,+1,-1} and restore HDUs
 \texttt{5,4,3}. Tabulated radial density, pass convergence, and output writers
 remain excluded.
+
+\section{Tabulated radial density and fixed pass control (v0.4.68)}
+
+For \texttt{radexp < -99}, \texttt{TabulatedRadialDensityState} owns the
+sequential \texttt{density.dat} rows. The first row initializes the radial
+state, later rows are consumed after each shell, and end-of-file retains the
+last values while setting nonzero \texttt{iostat}. Pass completion follows the
+fixed requested pass count; no adaptive inter-pass tolerance is introduced.
+
+\begin{verbatim}
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+\end{verbatim}

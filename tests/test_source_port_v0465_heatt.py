@@ -55,8 +55,8 @@ def test_v0465_radial_composition_uses_translated_heatt():
     summary = run_bounded_radial_shell_validation()
     assert summary["heatt_translated_in_radial_sequence_ready"] is True
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
+    assert summary["next_source_target"] == "detail_and_final_output_writers"
 
 
 def test_v0465_version():
-    assert xa.__version__ == "0.4.67"
+    assert xa.__version__ == "0.4.68"

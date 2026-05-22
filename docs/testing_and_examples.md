@@ -1,3 +1,24 @@
+## v0.4.68 tabulated radial density and pass control
+
+```bash
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+
+PYTHONPATH=src pytest -q \
+  tests/test_source_port_v0468_radial_density_pass_control.py \
+  tests/test_source_port_v0467_unsavd_multipass.py \
+  tests/test_source_port_v0466_gsmooth.py \
+  tests/test_source_port_v0465_heatt.py \
+  tests/test_source_port_v0464_radial_transfer.py \
+  tests/test_source_port_milestone3_freeze_v0422.py
+```
+
+The example validates the compiled literal density-update source fragment, the
+integrated three-row `density.dat` path, retained-value EOF semantics, the
+source shell-loop predicates, fixed pass count, direction alternation, and the
+absence of invented adaptive convergence. Output writers remain excluded.
+
 ## v0.4.67 translated `unsavd` and multipass state
 
 ```bash

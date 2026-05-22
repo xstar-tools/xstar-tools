@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## v0.4.68 tabulated radial density and fixed pass-control contract - 2026-05-22
+
+v0.4.68 closes the remaining bounded radial-control path before output writers.
+It translates the inline `radexp < -99` branch in `xstar.f90` and makes the
+source pass-convergence contract explicit.
+
+The caller-owned `TabulatedRadialDensityState` reproduces the sequential
+`density.dat` unit. The first radius/density pair is consumed before the pass
+loop. One further pair is read after every shell, after the saved-state boundary
+and before `stpcut`. The source assignment order is preserved:
+
+```text
+read rnew, dennew
+-> delr = rnew - r
+-> reject delr < 0 as "radius error"
+-> r = rnew
+-> xpx = dennew
+-> rdel = rdel + delr
+-> xcol = xcol + xpx*delr
+```
+
+At end of file, the sequential read returns nonzero `iostat` while retaining the
+previous `rnew` and `dennew`. This gives a final zero-width update and terminates
+the next literal shell-loop test. The Python path does not rewind the density
+stream or invent additional rows.
+
+The pass contract now records that XSTAR uses a fixed requested number of
+passes, directions `ldir=(-1)**kk`, and no adaptive comparison between
+successive passes. `numrec <= 0` forces `npass=1`. The exact first-pass and
+repeated-pass predicates are exposed in provenance. Output writers remain
+excluded.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+```
+
 ## v0.4.67 translated `unsavd` and bounded repeated radial passes - 2026-05-22
 
 v0.4.67 translates `unsavd.f90`, validates its caller-visible restoration

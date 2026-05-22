@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.67"
+    assert PORT_LEDGER_VERSION == "v0.4.68"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3, 4)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "close the tabulated radial-density branch and explicit pass-convergence "
-        "contract before adding any output writers; only after full Python source "
-        "equivalence consider an optional C++ backend"
+        "translate the detail and final output writers now that the bounded radial "
+        "density, transfer, saved-state, and fixed pass-count contracts are closed; "
+        "only after full Python source equivalence consider an optional C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

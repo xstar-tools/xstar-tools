@@ -2032,3 +2032,19 @@ PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
   --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
   --print-summary
 ```
+
+## v0.4.68 tabulated radial-density and pass-control validation
+
+### `138_validate_xstar_radial_density_pass_control.py`
+
+This example validates the inline
+`density.dat` branch and fixed requested-pass contract around the accepted
+radial caller. It confirms the initial pre-pass read, post-shell sequential
+updates, EOF-retained values, `iostat` shell termination, exact directions and
+pass count, and exclusion of output writers.
+
+```bash
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+```

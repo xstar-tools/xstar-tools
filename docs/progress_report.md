@@ -1,3 +1,8 @@
+> **v0.4.68 update:** translated and directly validated the inline tabulated
+> radial-density branch in `xstar.f90`; added caller-owned sequential density
+> state, exact EOF/`iostat` behavior, literal first/later shell predicates, and
+> the fixed requested-pass convergence contract. Output writers remain excluded.
+>
 > **v0.4.67 update:** translated and directly validated `unsavd.f90`; added
 > caller-owned REAL(4) shell/pass snapshots with source HDU insertion/shift
 > order; and accepted three alternating radial passes with `unsavd` before

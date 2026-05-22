@@ -820,3 +820,18 @@ order ``5,4,3``.
    PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
      --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
      --print-summary
+
+Tabulated radial density and fixed pass control (v0.4.68)
+---------------------------------------------------------
+
+For ``radexp < -99``, ``TabulatedRadialDensityState`` owns the sequential
+``density.dat`` rows.  The first row initializes the radial state; later rows
+are consumed after each shell.  EOF retains the final values, sets nonzero
+``iostat``, and terminates the next literal source loop.  Pass completion uses
+the fixed requested pass count rather than an invented adaptive tolerance.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+     --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+     --print-summary

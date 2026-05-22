@@ -403,21 +403,23 @@ class XSTARPythonDriver:
             save_handler(result, hdunum=jkp + 1, terminal_record=False)
 
         # Inline xstar.f90 position, density, radial-depth, and column updates.
-        delr = float(result.transfer.step_size)
         radexp = float(result.control.get("radexp", 0.0))
         if radexp < -99.0:
-            raise NotImplementedError(
-                "tabulated radial density update (radexp < -99) is not part of "
-                "the bounded radial-shell milestone"
-            )
-        result.transfer.radius = float(result.transfer.radius) + delr
-        lcdd = int(result.control.get("lcdd", 1))
-        if lcdd == 1:
-            xpx0 = float(result.control.get("xpx0", result.plasma.xpx))
-            r0 = float(result.control.get("r0", result.transfer.radius))
-            if r0 <= 0.0:
-                raise ValueError("r0 must be positive for the analytic density law")
-            result.plasma.xpx = xpx0 * (result.transfer.radius / r0) ** radexp
+            from .radial_control import advance_tabulated_radial_density
+
+            advance_tabulated_radial_density(result)
+            delr = float(result.transfer.step_size)
+        else:
+            delr = float(result.transfer.step_size)
+            result.transfer.radius = float(result.transfer.radius) + delr
+            lcdd = int(result.control.get("lcdd", 1))
+            if lcdd == 1:
+                xpx0 = float(result.control.get("xpx0", result.plasma.xpx))
+                r0 = float(result.control.get("r0", result.transfer.radius))
+                if r0 <= 0.0:
+                    raise ValueError("r0 must be positive for the analytic density law")
+                result.plasma.xpx = xpx0 * (result.transfer.radius / r0) ** radexp
+        # The source uses the post-update density in xcol=xcol+xpx*delr.
         result.transfer.radial_depth = float(result.transfer.radial_depth) + delr
         result.transfer.column = float(result.transfer.column) + float(result.plasma.xpx) * delr
         result.control["r"] = float(result.transfer.radius)

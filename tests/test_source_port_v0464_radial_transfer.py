@@ -31,7 +31,7 @@ def test_v0464_direct_original_fortran_kernel_gate():
 def test_v0464_bounded_radial_acceptance():
     summary = run_bounded_radial_shell_validation()
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
+    assert summary["next_source_target"] == "detail_and_final_output_writers"
 
 
 def test_v0464_zone1_skips_step_and_preserves_order():
@@ -206,4 +206,4 @@ def test_v0464_registration_includes_gsmooth_and_unsavd():
 
 
 def test_v0464_version():
-    assert xa.__version__ == "0.4.67"
+    assert xa.__version__ == "0.4.68"

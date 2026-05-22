@@ -856,6 +856,22 @@ __all__.extend([
     "write_complete_local_xstarcalc_validation_products",
 ])
 
+from .radial_control import (
+    RadialControlPortError,
+    TabulatedRadialDensityError,
+    TabulatedRadialRadiusError,
+    TabulatedDensityReadResult,
+    TabulatedRadialDensityState,
+    initialize_tabulated_radial_density,
+    advance_tabulated_radial_density,
+    RadialPassConvergenceContract,
+    build_radial_pass_convergence_contract,
+    first_pass_shell_condition,
+    repeated_pass_shell_condition,
+    direct_fortran_tabulated_density_reference_cases,
+    run_direct_fortran_tabulated_density_validation,
+)
+
 from .radial_transfer import (
     XSTAR_STEP_RADIUS_SCALE,
     XSTAR_STEP_GEOMETRY_FACTOR,
@@ -912,6 +928,19 @@ from .radial_transfer import (
 )
 
 __all__.extend([
+    "RadialControlPortError",
+    "TabulatedRadialDensityError",
+    "TabulatedRadialRadiusError",
+    "TabulatedDensityReadResult",
+    "TabulatedRadialDensityState",
+    "initialize_tabulated_radial_density",
+    "advance_tabulated_radial_density",
+    "RadialPassConvergenceContract",
+    "build_radial_pass_convergence_contract",
+    "first_pass_shell_condition",
+    "repeated_pass_shell_condition",
+    "direct_fortran_tabulated_density_reference_cases",
+    "run_direct_fortran_tabulated_density_validation",
     "XSTAR_STEP_RADIUS_SCALE",
     "XSTAR_STEP_GEOMETRY_FACTOR",
     "XSTAR_STEP_ZREMS_GATE",

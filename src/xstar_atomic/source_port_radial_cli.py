@@ -12,16 +12,16 @@ from .source_port.radial_transfer import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate step/trnfrc/gsmooth/heatt/stpcut/trnfrn plus unsavd "
-            "against direct original-Fortran references and exercise caller-owned "
-            "REAL(4) saved shell state across alternating repeated radial passes."
+            "Validate step/trnfrc/gsmooth/heatt/stpcut/trnfrn plus unsavd, "
+            "the inline density.dat branch, and the fixed requested-pass contract "
+            "without entering detail or final output writers."
         )
     )
     parser.add_argument("--rtol", type=float, default=2.0e-14)
     parser.add_argument("--atol", type=float, default=1.0e-30)
     parser.add_argument(
         "--out-dir",
-        default="xstar_bounded_radial_shell_source_validation_v0467",
+        default="xstar_bounded_radial_shell_source_validation_v0468",
     )
     parser.add_argument("--print-summary", action="store_true")
     return parser

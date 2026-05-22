@@ -9,7 +9,9 @@ caller-owned continuum, line, RRC, and mutable state left by ``xstarcalc``.
 The smoothing branch executes only for nonzero turbulent velocity and remains
 at its literal source position before ``heatt``.  Reverse-pass ``unsavd`` restoration uses a caller-owned in-memory equivalent
 of the source FITS shell records, including REAL(4) persistence and HDU insertion
-order.  Output writers remain outside this bounded shell contract.
+order.  The inline ``density.dat`` branch and fixed requested-pass convergence
+contract are also translated.  Output writers remain outside this bounded shell
+contract.
 
 The low-level kernels preserve the source's active-range mutation and caller-
 owned tail semantics.  Default-real constants that participate in mixed
@@ -42,6 +44,17 @@ from .gsmooth import (
     run_direct_fortran_gsmooth_validation,
 )
 from .radiation import nbinc
+from .radial_control import (
+    RadialPassConvergenceContract,
+    TabulatedRadialDensityState,
+    TabulatedRadialRadiusError,
+    advance_tabulated_radial_density,
+    build_radial_pass_convergence_contract,
+    first_pass_shell_condition,
+    initialize_tabulated_radial_density,
+    repeated_pass_shell_condition,
+    run_direct_fortran_tabulated_density_validation,
+)
 from .saved_radial_state import (
     SavedRadialPassState,
     SavedRadialStatePortError,
@@ -255,6 +268,9 @@ class BoundedRadialPassResult:
     saved_hdus: tuple[int, ...]
     terminal_saved_hdu: int
     numrec: int
+    termination_reason: str
+    density_iostat: int
+    source_loop_predicate: str
     source_file: str = "xstar/src/xstar/xstar.f90"
 
 
@@ -265,6 +281,7 @@ class BoundedRadialMultipassResult:
     state: XSTARPythonState
     pass_results: tuple[BoundedRadialPassResult, ...]
     saved_state: SavedRadialStateStore
+    pass_convergence_contract: RadialPassConvergenceContract
     output_writers_executed: bool = False
     source_file: str = "xstar/src/xstar/xstar.f90"
 
@@ -1146,6 +1163,20 @@ def run_bounded_radial_shell(
 
 
 
+def _first_pass_stop_reason(state: XSTARPythonState) -> str:
+    if int(state.control.get("density_iostat", 0)) != 0:
+        return "density_iostat_nonzero"
+    if float(state.transfer.column) >= float(state.control.get("xpxcol", np.inf)):
+        return "column_limit"
+    if float(state.plasma.xee) <= float(state.control.get("xeemin", -np.inf)):
+        return "electron_fraction_limit"
+    if float(state.plasma.temperature) <= float(state.control.get("tinf", 0.0)) * 0.99:
+        return "temperature_floor"
+    if int(state.control.get("numrec", 0)) <= 0:
+        return "numrec_nonpositive"
+    return "bounded_first_pass_shell_count"
+
+
 def run_bounded_radial_pass(
     state: XSTARPythonState,
     *,
@@ -1158,9 +1189,11 @@ def run_bounded_radial_pass(
 ) -> BoundedRadialPassResult:
     """Execute one bounded pass with source-order save/restore state.
 
-    ``first_pass_shell_count`` bounds the otherwise physical first-pass stop
-    criteria.  Later passes execute exactly ``numrec`` iterations, as in
-    ``xstar.f90``.  The direction defaults to the literal ``(-1)**kk``.
+    For the analytic density law, ``first_pass_shell_count`` remains the
+    bounded substitute for the physical first-pass stop conditions.  For
+    ``radexp < -99`` the caller-owned :class:`TabulatedRadialDensityState`
+    drives the literal ``ierr``-controlled shell loop.  Later tabulated passes
+    also honor ``jkp<numrec`` and ``ierr==0`` rather than inventing rows.
     """
     kk = int(pass_index)
     if kk < 1:
@@ -1174,6 +1207,17 @@ def run_bounded_radial_pass(
     if ldir not in (-1, 1):
         raise RadialTransferPortError("radial pass direction must be -1 or 1")
 
+    radexp = float(state.control.get("radexp", 0.0))
+    tabulated = radexp < -99.0
+    if tabulated:
+        table = state.control.get("tabulated_density_state")
+        if not isinstance(table, TabulatedRadialDensityState):
+            raise RadialTransferPortError(
+                "radexp < -99 requires state.control['tabulated_density_state']"
+            )
+        if kk == 1 and not table.initialized:
+            initialize_tabulated_radial_density(state, table)
+
     store = _saved_store_from_state(state, create=True)
     pass_state = store.begin_pass(kk, replace=True)
     state.transfer.pass_index = kk
@@ -1182,35 +1226,106 @@ def run_bounded_radial_pass(
     state.control["ldir"] = ldir
     state.control["restored_hdus"] = []
     state.control["save_radial_shell_state_handler"] = save_radial_shell_state
+    # xstar.f90 resets ierr=0 at the start of every pass; the sequential
+    # density unit itself remains at its current file position.
+    state.control["density_iostat"] = 0
     initialize_bounded_radial_pass_state(state)
-
-    if kk == 1:
-        if first_pass_shell_count is None or int(first_pass_shell_count) < 1:
-            raise RadialTransferPortError(
-                "first_pass_shell_count must be positive for pass 1"
-            )
-        shell_count = int(first_pass_shell_count)
-    else:
-        shell_count = int(state.control["numrec"])
-        if shell_count < 1:
-            raise RadialTransferPortError("numrec must be positive on later passes")
 
     runner = driver or XSTARPythonDriver()
     if driver is None:
         register_bounded_radial_source_routines(runner)
     shells: list[BoundedRadialShellResult] = []
-    for jkp in range(1, shell_count + 1):
-        shells.append(
-            run_bounded_radial_shell(
-                state,
-                zone_index=jkp,
-                pass_index=kk,
-                direction=ldir,
-                driver=runner,
-                fixed_state=fixed_state,
-            )
-        )
 
+    if kk == 1 and not tabulated:
+        if int(state.control.get("numrec", 0)) <= 0:
+            # The source first-pass predicate contains numrec>0, so no shell is
+            # entered after numrec<=0 has forced npass=1.
+            termination_reason = "numrec_nonpositive"
+            source_predicate = (
+                "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and "
+                "numrec>0 and ierr==0"
+            )
+        else:
+            if first_pass_shell_count is None or int(first_pass_shell_count) < 1:
+                raise RadialTransferPortError(
+                    "first_pass_shell_count must be positive for analytic pass 1"
+                )
+            shell_limit = int(first_pass_shell_count)
+            for jkp in range(1, shell_limit + 1):
+                shells.append(
+                    run_bounded_radial_shell(
+                        state,
+                        zone_index=jkp,
+                        pass_index=kk,
+                        direction=ldir,
+                        driver=runner,
+                        fixed_state=fixed_state,
+                    )
+                )
+            termination_reason = "bounded_first_pass_shell_count"
+            source_predicate = (
+                "bounded substitute for xcol<xpxcol and xee>xeemin and "
+                "t>tinf*0.99 and numrec>0 and ierr==0"
+            )
+    elif kk == 1:
+        jkp = 0
+        while first_pass_shell_condition(state):
+            jkp += 1
+            if jkp > 3999:
+                raise RadialTransferPortError("too many steps: buffer filled")
+            shells.append(
+                run_bounded_radial_shell(
+                    state,
+                    zone_index=jkp,
+                    pass_index=kk,
+                    direction=ldir,
+                    driver=runner,
+                    fixed_state=fixed_state,
+                )
+            )
+        termination_reason = _first_pass_stop_reason(state)
+        source_predicate = (
+            "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and numrec>0 and ierr==0"
+        )
+    elif not tabulated:
+        shell_count = int(state.control["numrec"])
+        if shell_count < 1:
+            raise RadialTransferPortError("numrec must be positive on later passes")
+        for jkp in range(1, shell_count + 1):
+            shells.append(
+                run_bounded_radial_shell(
+                    state,
+                    zone_index=jkp,
+                    pass_index=kk,
+                    direction=ldir,
+                    driver=runner,
+                    fixed_state=fixed_state,
+                )
+            )
+        termination_reason = "numrec_completed"
+        source_predicate = "jkp<numrec and ierr==0"
+    else:
+        jkp = 0
+        while repeated_pass_shell_condition(state, completed_shells=jkp):
+            jkp += 1
+            shells.append(
+                run_bounded_radial_shell(
+                    state,
+                    zone_index=jkp,
+                    pass_index=kk,
+                    direction=ldir,
+                    driver=runner,
+                    fixed_state=fixed_state,
+                )
+            )
+        termination_reason = (
+            "density_iostat_nonzero"
+            if int(state.control.get("density_iostat", 0)) != 0
+            else "numrec_completed"
+        )
+        source_predicate = "jkp<numrec and ierr==0"
+
+    shell_count = len(shells)
     if kk == 1:
         # Source sets numrec=jkp+1 after the first radial traversal.
         state.control["numrec"] = shell_count + 1
@@ -1227,6 +1342,9 @@ def run_bounded_radial_pass(
         saved_hdus=pass_state.populated_hdus(),
         terminal_saved_hdu=int(terminal_hdu),
         numrec=int(state.control["numrec"]),
+        termination_reason=termination_reason,
+        density_iostat=int(state.control.get("density_iostat", 0)),
+        source_loop_predicate=source_predicate,
     )
     state.transfer.provenance.setdefault("radial_passes", []).append(
         {
@@ -1238,6 +1356,9 @@ def run_bounded_radial_pass(
             "restored_hdus": list(result.restored_hdus),
             "saved_hdus": list(result.saved_hdus),
             "terminal_saved_hdu": result.terminal_saved_hdu,
+            "termination_reason": result.termination_reason,
+            "density_iostat": result.density_iostat,
+            "source_loop_predicate": result.source_loop_predicate,
             "output_writers_executed": False,
         }
     )
@@ -1247,19 +1368,40 @@ def run_bounded_radial_pass(
 def run_bounded_radial_multipass(
     state: XSTARPythonState,
     *,
-    first_pass_shell_count: int,
+    first_pass_shell_count: Optional[int],
     pass_count: int = 3,
     driver: Optional[XSTARPythonDriver] = None,
     fixed_state: bool = False,
 ) -> BoundedRadialMultipassResult:
-    """Execute bounded alternating passes through translated ``unsavd``."""
-    count = int(pass_count)
-    if count < 2:
-        raise RadialTransferPortError("multipass validation requires at least two passes")
+    """Execute the literal fixed requested-pass schedule.
+
+    This is an explicit source convergence contract: no adaptive comparison of
+    successive passes is introduced.  ``numrec <= 0`` forces one effective
+    pass exactly as in ``xstar.f90``.
+    """
+    requested = int(pass_count)
+    initial_numrec = int(state.control.get("numrec", 0))
+    contract = build_radial_pass_convergence_contract(
+        numrec=initial_numrec, npass=requested
+    )
+    count = int(contract.effective_passes)
+    if count < 1:
+        raise RadialTransferPortError("effective pass count must be positive")
     runner = driver or XSTARPythonDriver()
     if driver is None:
         register_bounded_radial_source_routines(runner)
     state.control["npass"] = count
+    state.transfer.provenance["pass_convergence_contract"] = {
+        "source_file": contract.source_file,
+        "requested_passes": contract.requested_passes,
+        "effective_passes": contract.effective_passes,
+        "initial_numrec": contract.initial_numrec,
+        "directions": list(contract.directions),
+        "adaptive_convergence_used": contract.adaptive_convergence_used,
+        "convergence_kind": contract.convergence_kind,
+        "first_pass_predicate": contract.first_pass_predicate,
+        "repeated_pass_predicate": contract.repeated_pass_predicate,
+    }
     results: list[BoundedRadialPassResult] = []
     for kk in range(1, count + 1):
         results.append(
@@ -1272,10 +1414,12 @@ def run_bounded_radial_multipass(
                 fixed_state=fixed_state,
             )
         )
+    state.transfer.converged = len(results) == count
     return BoundedRadialMultipassResult(
         state=state,
         pass_results=tuple(results),
         saved_state=_saved_store_from_state(state),
+        pass_convergence_contract=contract,
         output_writers_executed=False,
     )
 
@@ -1617,9 +1761,14 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
 def run_bounded_radial_shell_validation(
     *, rtol: float = 2.0e-14, atol: float = 1.0e-30
 ) -> Mapping[str, Any]:
-    """Validate direct kernels plus source-faithful repeated radial passes."""
+    """Validate radial kernels, saved passes, density tables, and pass control."""
     direct = dict(run_direct_fortran_radial_validation(rtol=rtol, atol=atol))
     direct.update(run_direct_fortran_unsavd_validation(rtol=rtol, atol=atol))
+    direct.update(
+        run_direct_fortran_tabulated_density_validation(
+            rtol=min(rtol, 2.0e-15), atol=0.0
+        )
+    )
 
     zone1_state = _build_radial_validation_state(zone_index=1)
     zone1 = run_bounded_radial_shell(zone1_state, zone_index=1, pass_index=1, direction=1)
@@ -1752,9 +1901,109 @@ def run_bounded_radial_shell_validation(
         )
     )
 
+    # Source tabulated-density path: first row is consumed before pass 1;
+    # each shell consumes one further row, and EOF retains the last values.
+    table_state = _build_radial_validation_state(zone_index=1)
+    table_state.control.update(
+        {
+            "radexp": -100.0,
+            "xpxcol": 1.0e40,
+            "xeemin": -1.0,
+            "numrec": 20,
+            "tabulated_density_state": TabulatedRadialDensityState.from_rows(
+                [(1.0e18, 1.25e8), (1.4e18, 2.5e8), (2.1e18, 4.0e8)]
+            ),
+        }
+    )
+    table_run = run_bounded_radial_multipass(
+        table_state, first_pass_shell_count=None, pass_count=1
+    )
+    table_pass = table_run.pass_results[0]
+    density_reads = table_state.transfer.provenance.get("tabulated_density_reads", [])
+    table_initial_ready = bool(
+        table_state.transfer.provenance["tabulated_density_initialization"]["row_one_based"] == 1
+        and len(table_pass.shell_results) == 3
+    )
+    table_update_ready = bool(
+        [row["row_one_based"] for row in density_reads] == [2, 3, None]
+        and np.allclose(
+            [row["delr_cm"] for row in density_reads],
+            [4.0e17, 7.0e17, 0.0],
+            rtol=2.0e-15,
+            atol=0.0,
+        )
+        and np.isclose(table_state.transfer.radius, 2.1e18, rtol=2.0e-15)
+        and np.isclose(table_state.plasma.xpx, 4.0e8, rtol=2.0e-15)
+        and np.isclose(table_state.transfer.radial_depth, 1.1e18, rtol=2.0e-15)
+        and np.isclose(table_state.transfer.column, 3.8000000000000002e26, rtol=2.0e-15)
+    )
+    table_eof_ready = bool(
+        table_pass.termination_reason == "density_iostat_nonzero"
+        and table_pass.density_iostat == -1
+        and density_reads[-1]["retained_previous_values"] is True
+        and table_pass.numrec == 4
+    )
+    table_call_order_ready = bool(
+        table_pass.shell_results[0].source_order == expected_zone1
+        and table_pass.shell_results[1].source_order == expected_zone2
+        and table_pass.shell_results[2].source_order == expected_zone2
+    )
+    table_stream = table_state.control["tabulated_density_state"]
+    table_stream_ready = bool(
+        isinstance(table_stream, TabulatedRadialDensityState)
+        and table_stream.next_index_zero_based == 3
+        and table_stream.iostat == -1
+        and table_stream.initialized
+    )
+    descending_state = _build_radial_validation_state(zone_index=1)
+    descending_table = TabulatedRadialDensityState.from_rows(
+        [(2.0e18, 1.0e8), (1.5e18, 2.0e8)]
+    )
+    initialize_tabulated_radial_density(descending_state, descending_table)
+    try:
+        advance_tabulated_radial_density(descending_state)
+    except TabulatedRadialRadiusError:
+        radius_error_ready = True
+    else:
+        radius_error_ready = False
+
+    contract = multipass.pass_convergence_contract
+    forced_one = build_radial_pass_convergence_contract(numrec=0, npass=5)
+    forced_state = _build_radial_validation_state(zone_index=1)
+    forced_state.control["numrec"] = 0
+    forced_state.local_zone.source_arrays["xilevg"] = np.zeros(2, dtype=float)
+    forced_state.local_zone.source_arrays["rnisg"] = np.zeros(2, dtype=float)
+    forced_run = run_bounded_radial_multipass(
+        forced_state, first_pass_shell_count=1, pass_count=5
+    )
+    pass_contract_ready = bool(
+        contract.requested_passes == 3
+        and contract.effective_passes == 3
+        and contract.directions == (-1, 1, -1)
+        and contract.adaptive_convergence_used is False
+        and contract.convergence_kind == "fixed_requested_pass_count"
+        and multipass_state.transfer.converged is True
+    )
+    numrec_force_ready = bool(
+        forced_one.effective_passes == 1
+        and forced_one.directions == (-1,)
+        and forced_one.adaptive_convergence_used is False
+        and len(forced_run.pass_results) == 1
+        and forced_run.pass_results[0].direction == -1
+        and len(forced_run.pass_results[0].shell_results) == 0
+        and forced_run.pass_results[0].termination_reason == "numrec_nonpositive"
+        and forced_run.pass_results[0].numrec == 1
+    )
+    pass_loop_predicates_ready = bool(
+        pass1.source_loop_predicate.startswith("bounded substitute")
+        and pass2.source_loop_predicate == "jkp<numrec and ierr==0"
+        and table_pass.source_loop_predicate
+        == "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and numrec>0 and ierr==0"
+    )
+
     summary: dict[str, Any] = {
         **direct,
-        "port_version": "v0.4.67",
+        "port_version": "v0.4.68",
         "bounded_radial_shell_translated": True,
         "zone1_step_skip_ready": zone1_skip_ready,
         "zone1_first_pass_call_order_ready": zone1_order_ready,
@@ -1785,14 +2034,32 @@ def run_bounded_radial_shell_validation(
             [list(shell.source_order) for shell in radial_pass.shell_results]
             for radial_pass in multipass.pass_results
         ],
+        "tabulated_density_initial_source_read_ready": table_initial_ready,
+        "tabulated_density_post_shell_update_ready": table_update_ready,
+        "tabulated_density_eof_loop_termination_ready": table_eof_ready,
+        "tabulated_density_call_order_ready": table_call_order_ready,
+        "tabulated_density_sequential_stream_ownership_ready": table_stream_ready,
+        "tabulated_density_negative_radius_failure_ready": radius_error_ready,
+        "tabulated_density_shell_count": len(table_pass.shell_results),
+        "tabulated_density_read_rows": [row["row_one_based"] for row in density_reads],
+        "fixed_pass_count_convergence_contract_ready": pass_contract_ready,
+        "numrec_nonpositive_forces_one_pass_ready": numrec_force_ready,
+        "source_pass_loop_predicates_ready": pass_loop_predicates_ready,
+        "adaptive_pass_convergence_not_invented_ready": bool(
+            not contract.adaptive_convergence_used
+            and not forced_one.adaptive_convergence_used
+        ),
+        "pass_convergence_kind": contract.convergence_kind,
         "output_writers_excluded_ready": bool(
             not zone1.output_writers_executed
             and not zone2.output_writers_executed
             and not turbulent.output_writers_executed
             and not multipass.output_writers_executed
+            and not table_run.output_writers_executed
             and all(
                 not shell.output_writers_executed
-                for radial_pass in multipass.pass_results
+                for run in (multipass, table_run)
+                for radial_pass in run.pass_results
                 for shell in radial_pass.shell_results
             )
         ),
@@ -1800,8 +2067,9 @@ def run_bounded_radial_shell_validation(
     summary["bounded_radial_shell_source_acceptance_ready"] = bool(
         all(value for key, value in summary.items() if key.endswith("_ready"))
     )
-    summary["next_source_target"] = "tabulated_radial_density_and_pass_convergence"
+    summary["next_source_target"] = "detail_and_final_output_writers"
     return summary
+
 
 def write_bounded_radial_shell_validation_products(
     summary: Mapping[str, Any], out_dir: str | Path

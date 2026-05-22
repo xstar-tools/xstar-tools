@@ -1434,3 +1434,19 @@ PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
 The fixture accepts directions `-1,+1,-1`, source restore HDUs `5,4,3`, and
 `unsavd -> trnfrc` order on later passes. Tabulated radial density, pass
 convergence, and output writers remain excluded.
+
+## 18. Tabulated radial density and fixed pass control (v0.4.68)
+
+For `radexp < -99`, create a caller-owned `TabulatedRadialDensityState` from
+rows or `density.dat`. The first row initializes the radial state before pass 1;
+subsequent rows are consumed after each shell. EOF retains the final values,
+sets nonzero `iostat`, and terminates the next literal source loop.
+
+The radial driver records a fixed requested-pass contract. It does not invent
+adaptive convergence between passes.
+
+```bash
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+```

@@ -87,11 +87,11 @@ def test_v0467_validation_closes_unsavd_without_outputs():
     assert summary["repeated_radial_pass_state_ready"] is True
     assert summary["output_writers_excluded_ready"] is True
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
+    assert summary["next_source_target"] == "detail_and_final_output_writers"
 
 
 def test_v0467_registration_and_version():
     driver = XSTARPythonDriver()
     register_bounded_radial_source_routines(driver)
     assert XSTARSourceRoutine.UNSAVD in driver.implemented_source_routines()
-    assert xa.__version__ == "0.4.67"
+    assert xa.__version__ == "0.4.68"

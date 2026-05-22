@@ -72,7 +72,7 @@ def test_v0466_turbulent_radial_branch_places_gsmooth_before_heatt():
     order = summary["turbulent_source_order"]
     assert order.index("calc_emis_all") < order.index("gsmooth") < order.index("heatt")
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
+    assert summary["next_source_target"] == "detail_and_final_output_writers"
 
 
 def test_v0466_registration_includes_gsmooth_and_unsavd():
@@ -84,4 +84,4 @@ def test_v0466_registration_includes_gsmooth_and_unsavd():
 
 
 def test_v0466_version():
-    assert xa.__version__ == "0.4.67"
+    assert xa.__version__ == "0.4.68"
