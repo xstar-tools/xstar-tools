@@ -1917,3 +1917,24 @@ PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
 The gate verifies density control, full-output resets, carried continuum
 workspaces, compact continuum aliases, inactive-ion offsets, rate types
 4/7/9/14, and `ucalc` continuum side effects.
+
+## v0.4.62 `calc_emis_all` source validation
+
+### `132_validate_xstar_calc_emis_all.py`
+
+Validate the literal `calc_emis_all -> rlbin -> calc_emis_element ->
+calc_emis_ion -> freef -> bremem` translation with a bounded source-order
+fixture:
+
+```bash
+PYTHONPATH=src python examples/132_validate_xstar_calc_emis_all.py \
+  --out-dir xstar_calc_emis_all_source_validation_v0462 \
+  --print-summary
+```
+
+The gate verifies precomputed `calc_emisab_all` ranking, the source rank-table
+limit, all-ion compact aliases, inactive offsets, rate-type-7 strong RRC,
+rate-type-9 double `ucalc`, rate-type-42 retained-continuum-pointer behavior,
+strong-line `fline/flinel`, caller-owned non-reset arrays, Thomson continuum
+reset, `ucalc` continuum side effects, and the final `freef`/`bremem` calls.
+

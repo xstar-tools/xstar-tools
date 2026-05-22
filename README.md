@@ -1,3 +1,52 @@
+## v0.4.62 source-faithful `calc_emis_all`
+
+The user-side v0.4.61 validation closes the complete
+`calc_emisab_all -> calc_emisab_element -> calc_emisab_ion` gate. v0.4.62
+advances one source-order step and translates:
+
+```text
+xstarcalc.f90
+  -> calc_emis_all.f90
+  -> rlbin.f90
+  -> calc_emis_element.f90
+  -> calc_emis_ion.f90
+  -> freef.f90
+  -> bremem.f90
+```
+
+The translation ranks the precomputed `calc_emisab_all` line/RRC arrays before
+resetting the continuum workspace, preserves the source `rlbin` insertion
+order and its effective `nrank-1` retention limit, retains caller-owned
+`fline` and `flinel`, rebuilds only the source-owned continuum state, and
+replays the complete all-ion compact alias map including inactive-ion offsets.
+It also preserves the rate-type-9 double `ucalc` call and rate-type-42 reuse of
+the most recently retained continuum pointer.
+
+The bounded validation fixture exercises strong RRC and line output, continuum
+side effects, Thomson reset, `freef`, and `bremem`. A passing run reports
+`calc_emis_all_source_acceptance_ready=True`; the next source-order target is
+the complete local `xstarcalc` sequence.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/132_validate_xstar_calc_emis_all.py \
+  --out-dir xstar_calc_emis_all_source_validation_v0462 \
+  --print-summary
+```
+
+## v0.4.61 source-faithful `calc_emisab_all`
+
+The user-side v0.4.60 validation confirms the complete `bremsmap -> nbinc ->
+huntf` gate. v0.4.61 translates `calc_emisab_all.f90 ->
+calc_emisab_element.f90 -> calc_emisab_ion.f90` while preserving source-owned
+output resets, caller-owned continuum workspaces, all-ion compact aliases,
+inactive-ion offsets, mutable `leveltemp`, one-based line/RRC pointers, and the
+rate-type 4/7/9/14 branches. Type-53 `ucalc` diagnostics expose the continuum
+opacity and RRC-emissivity increments needed to reproduce its array side
+effects. The bounded example 131 validation passes and advances to
+`calc_emis_all`.
+
 ## v0.4.60 source-faithful `bremsmap`
 
 The v0.4.59 offline acceptance run confirms `ready_to_advance_to_bremsmap=True`.

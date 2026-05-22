@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v0.4.62 source-faithful `calc_emis_all` - 2026-05-22
+
+The user-side v0.4.61 validation confirms the complete `calc_emisab_all`
+source chain. v0.4.62 translates `calc_emis_all.f90`, `rlbin.f90`,
+`calc_emis_element.f90`, `calc_emis_ion.f90`, and the final `freef.f90` and
+`bremem.f90` source slots.
+
+The translation preserves the pre-reset ranking dependency on `calc_emisab_all`
+line/RRC products, literal `rlbin` insertion ordering, the effective
+`nrank-1` source retention behavior, source-owned continuum reset, caller-owned
+`fline/flinel`, all-ion compact aliases, inactive-ion offsets, active-ion
+`leveltemp` writes, rate-type-7 strong RRC output, rate-type-9's two `ucalc`
+invocations, rate-type-42 reuse of the retained continuum pointer, strong-line
+`fline/flinel` formulas, and `ucalc` continuum side effects.
+
+The bounded fixture exercises all of those ownership and control-flow details,
+plus the final `freef` and `bremem` calls. `calc_emis_all` is accepted and the
+next source-order target is the complete local `xstarcalc` sequence.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/132_validate_xstar_calc_emis_all.py \
+  --out-dir xstar_calc_emis_all_source_validation_v0462 \
+  --print-summary
+```
+
 ## v0.4.61 source-faithful `calc_emisab_all` - 2026-05-21
 
 The user-side v0.4.60 validation confirms the complete `bremsmap -> nbinc ->

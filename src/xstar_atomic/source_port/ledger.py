@@ -91,13 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.61"
+PORT_LEDGER_VERSION = "v0.4.62"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "translate and validate calc_emis_all after the accepted source-faithful "
-    "calc_emisab_all -> calc_emisab_element -> calc_emisab_ion subsystem; "
-    "then continue with complete xstarcalc -> radial transfer and outputs -> "
-    "optional C++ backend"
+    "assemble and validate the complete local xstarcalc sequence after the accepted "
+    "bremsmap, dsec, calc_hmc_all, calc_emisab_all, and calc_emis_all subsystems; "
+    "then continue with radial transfer and outputs -> optional C++ backend"
 )
 
 
@@ -227,11 +226,13 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.emissivity.calc_emisab_all",
           "bounded source-order synthetic parity for density branches, output resets, carried continuum side effects, compact continuum aliases, inactive-ion offsets, and rate types 4/7/9/14",
           "Accepted in v0.4.61 together with calc_emisab_element and calc_emisab_ion. The translation preserves all-ion compact mapping before stage filtering, source-order shared continuum aliases, mutable leveltemp writes only for active ions, one-based line/RRC pointers, ucalc continuum-array side effects, and the distinct source ownership of reset versus carried arrays."),
-        E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", U,
-          "xstar_atomic.source_port.emissivity.calc_emis_all", "", "Complete line/RRC/continuum products not yet ported."),
+        E("xstar/xstarlib/src/calc_emis_all.f90", "calc_emis_all", "milestone4_local_zone", V,
+          "xstar_atomic.source_port.emergent_emissivity.calc_emis_all",
+          "bounded source-order synthetic parity for rlbin ranking, calc_emis_element/calc_emis_ion traversal, rate-type 7/9/42 behavior, fline/flinel ownership, Thomson reset, freef, and bremem",
+          "Accepted in v0.4.62. The translation preserves ranking from precomputed calc_emisab arrays before continuum reset, the source rank-limit quirk, all-ion compact aliases and inactive offsets, rate-type-9 double ucalc execution, retained kkkl reuse by rate types 9/42, caller-owned fline/flinel, and final freef/bremem source slots."),
         E("xstar/xstarlib/src/xstarcalc.f90", "xstarcalc", "milestone4_local_zone", U,
           "xstar_atomic.source_port.driver.XSTARPythonDriver", "",
-          "Assemble only after bremsmap, dsec, calc_hmc_all, calc_emisab_all, and calc_emis_all are source-complete."),
+          "All immediate local-zone callees are source-complete through v0.4.62; assemble and validate their complete xstarcalc call order next."),
         E("xstar/xstarlib/src/trnfrc.f90", "trnfrc", "milestone5_transfer", U,
           "xstar_atomic.source_port.transfer.trnfrc", "", "Radial two-stream transfer deferred until one-zone parity."),
         E("xstar/xstarlib/src/trnfrn.f90", "trnfrn", "milestone5_transfer", U,

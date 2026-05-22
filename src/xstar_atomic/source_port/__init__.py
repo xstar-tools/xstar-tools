@@ -802,3 +802,34 @@ __all__.extend([
     "apply_calc_emisab_all_to_state", "register_calc_emisab_all_source_routine",
     "run_calc_emisab_source_order_validation", "write_calc_emisab_validation_products",
 ])
+
+from .emergent_emissivity import (
+    CalcEmisPortError,
+    CalcEmisWorkspace,
+    CalcEmisContext,
+    FeatureRankTrace,
+    CalcEmisRecordTrace,
+    CalcEmisIonTrace,
+    CalcEmisElementTrace,
+    CalcEmisResult,
+    resolve_calc_emis_density,
+    rlbin_insert,
+    build_feature_rank_tables,
+    calc_emis_ion,
+    calc_emis_element,
+    calc_emis_all,
+    apply_calc_emis_all_to_state,
+    register_calc_emis_all_source_routine,
+    run_calc_emis_source_order_validation,
+    write_calc_emis_validation_products,
+)
+
+__all__.extend([
+    "CalcEmisPortError", "CalcEmisWorkspace", "CalcEmisContext",
+    "FeatureRankTrace", "CalcEmisRecordTrace", "CalcEmisIonTrace",
+    "CalcEmisElementTrace", "CalcEmisResult",
+    "resolve_calc_emis_density", "rlbin_insert", "build_feature_rank_tables",
+    "calc_emis_ion", "calc_emis_element", "calc_emis_all",
+    "apply_calc_emis_all_to_state", "register_calc_emis_all_source_routine",
+    "run_calc_emis_source_order_validation", "write_calc_emis_validation_products",
+])
