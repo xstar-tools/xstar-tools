@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## v0.4.66 translated `gsmooth` and nonzero-turbulence radial branch - 2026-05-22
+
+v0.4.66 translates `gsmooth.f90` and `gsmooth2.f90`, validates the combined
+thermal/turbulent velocity and all four smoothed arrays against the unmodified
+original Fortran, and closes the optional source branch before `heatt`:
+
+```text
+[first-pass zones > 1: step]
+-> trnfrc
+-> xstarcalc
+-> [gsmooth when vturbi > 1.e-34]
+-> heatt
+-> inline radius/density/radial-depth/column update
+-> stpcut
+-> trnfrn
+```
+
+The translation preserves the wrapper order
+`brcems -> rccemis(1) -> rccemis(2) -> opakc`, bins 1--2, the 20-keV
+pass-through, plus/minus trapezoid walks, literal stopping tests, binary32
+source constants, and caller-owned tails. The same caller arrays are smoothed
+before translated `heatt` consumes them.
+
+Reverse passes still fail at missing `unsavd`; multipass restoration, tabulated
+radial density, and output writers remain explicitly unported.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \
+  --print-summary
+```
+
 ## v0.4.65 translated `heatt` and bounded radial composition - 2026-05-22
 
 v0.4.65 translates `heatt.f90`, validates its caller-visible continuum, line,

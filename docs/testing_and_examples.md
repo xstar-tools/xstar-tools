@@ -1,3 +1,18 @@
+## v0.4.66 translated `gsmooth` radial shell
+
+Run the direct-original-Fortran smoothing gate and both zero/nonzero-turbulence
+first-pass caller paths:
+
+```bash
+PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \
+  --print-summary
+```
+
+The fixture checks the wrapper helper order, active/tail ownership, source bins
+1--2, the 20-keV pass-through, `calc_emis_all -> gsmooth -> heatt` placement,
+and continued explicit failure at reverse-pass `unsavd`.
+
 
 ## v0.4.65 translated `heatt` radial shell
 

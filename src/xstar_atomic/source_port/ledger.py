@@ -91,12 +91,12 @@ class XSTARPortLedger:
         return {"csv": str(csv_path), "json": str(json_path)}
 
 
-PORT_LEDGER_VERSION = "v0.4.65"
+PORT_LEDGER_VERSION = "v0.4.66"
 COMPLETED_SOURCE_PORT_MILESTONES = (1, 2, 3, 4)
 NEXT_COHERENT_SOURCE_PORT_TARGET = (
-    "translate gsmooth, then close unsavd/multipass saved-state restoration before "
-    "adding any output writers; only after full Python source equivalence consider "
-    "an optional C++ backend"
+    "close unsavd/multipass saved-state restoration before adding any output "
+    "writers; only after full Python source equivalence consider an optional C++ "
+    "backend"
 )
 
 
@@ -104,9 +104,9 @@ def default_port_ledger() -> XSTARPortLedger:
     """Return the source-port ledger through the bounded radial-shell release.
 
     ``validated`` means validated for the stated oracle and scope.  It does not
-    imply that the complete radial XSTAR program is translated.  Turbulent
-    smoothing, reverse-pass restoration, multipass convergence, and output
-    writers remain explicit future work.
+    imply that the complete radial XSTAR program is translated.  Reverse-pass
+    restoration, multipass convergence, and output writers remain explicit
+    future work.
     """
     E = PortLedgerEntry
     V, T, P, S, U = (
@@ -255,15 +255,16 @@ def default_port_ledger() -> XSTARPortLedger:
           "xstar_atomic.source_port.heatt.heatt",
           "direct compilation of the unmodified original routine for continuum, line, RRC, and leveltemp outputs plus bounded radial composition",
           "Accepted in v0.4.65. Preserves active-range caller ownership, old-array luminosity construction, the stale final-continuum optp2 value consumed by the first inward line term, source-order packed RRC traversal, and partial leveltemp overwrite. The source-uninitialized local cmp1/cmp2 Compton diagnostic is reported explicitly rather than invented."),
-        E("xstar/xstarlib/src/gsmooth.f90", "gsmooth", "milestone5_transfer", U,
-          "", "explicit failure at the exact post-xstarcalc source boundary",
-          "Nonzero turbulent velocity is not approximated."),
+        E("xstar/xstarlib/src/gsmooth.f90", "gsmooth", "milestone5_transfer", V,
+          "xstar_atomic.source_port.gsmooth.gsmooth",
+          "direct compilation of the unmodified gsmooth/gsmooth2 routines plus nonzero-turbulence radial composition",
+          "Accepted in v0.4.66. Preserves the literal brcems -> rccemis(1) -> rccemis(2) -> opakc helper order, bins 1-2 ownership, the 20-keV pass-through, source stopping tests, and caller-owned tails."),
         E("xstar/xstarlib/src/unsavd.f90", "unsavd", "milestone5_transfer", U,
           "", "explicit failure before any reverse/multipass shell work",
           "Reverse-pass saved-state restoration is not approximated."),
         E("xstar/src/xstar/xstar.f90", "xstar", "driver", S,
           "xstar_atomic.source_port.driver.XSTARPythonDriver",
           "source-level xstarcalc and zone call-order plans with explicit untranslated-routine failure",
-          "Milestones 1-4 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products. v0.4.47 replaces invalid compact-vector replay with source-faithful global xilevg carry/remapping across changing dsec bases. v0.4.48 adds call correlation, exact matching input-state capture, distinct input/post-dsec references, per-evaluation thermal decomposition, and fast prefix mode. v0.4.51 diagnoses the first repeated-call transition mismatch, and v0.4.52 corrects dense native global alias writeback plus per-call leveltemp lifecycle with a controlled four-mode causality scan. v0.4.53 adds exact evaluation-2 replay, v0.4.54 localizes the solver-entry mismatch, v0.4.55 restores the literal terminal zero seed, and v0.4.56 accepts the natural four-evaluation source branch/thermal prefix. v0.4.57 adds unrestricted all-evaluation convergence and post-dsec fixed-state acceptance. v0.4.58 adds exact post-dsec call-entry replay. v0.4.59 confirms that the only strict replay failure is the near-zero normalized `hmctot`: both Python and XSTAR exactly reproduce the source heatf expression, both satisfy the literal dsec `1.e-4` convergence test, and every underlying fixed-state quantity passes. Milestone-4 local-zone balance is source-semantically accepted. v0.4.60 validates bremsmap. v0.4.61 translates and validates calc_emisab_all -> calc_emisab_element -> calc_emisab_ion. v0.4.62 accepts calc_emis_all, v0.4.63 accepts complete local xstarcalc, and v0.4.64 accepts the bounded first-pass step -> trnfrc -> xstarcalc -> heatt-handler -> stpcut -> trnfrn caller contract. v0.4.65 translates and directly validates heatt and replaces that handler in the same radial sequence while continuing to fail explicitly at unsavd and gsmooth. Output writers remain blocked."),
+          "Milestones 1-4 are complete. The accepted oxygen and H/He/O pre-continuum gates are frozen. v0.4.39 accepted the relativistic Compton subsystem and v0.4.40 accepted `freef`. v0.4.41 accepted `bremem`. v0.4.42 accepted `heatf`. v0.4.43 adds complete fixed-state calc_hmc_all thermal/charge closure. v0.4.44 corrects pre/post-continuum state ownership without changing physics or XSTAR probes. v0.4.45 translates the exact stateful dsec control algorithm and trajectory tooling. v0.4.46 adds the physical example-119 runner with per-trial continuum reconstruction and same-process acceptance products. v0.4.47 replaces invalid compact-vector replay with source-faithful global xilevg carry/remapping across changing dsec bases. v0.4.48 adds call correlation, exact matching input-state capture, distinct input/post-dsec references, per-evaluation thermal decomposition, and fast prefix mode. v0.4.51 diagnoses the first repeated-call transition mismatch, and v0.4.52 corrects dense native global alias writeback plus per-call leveltemp lifecycle with a controlled four-mode causality scan. v0.4.53 adds exact evaluation-2 replay, v0.4.54 localizes the solver-entry mismatch, v0.4.55 restores the literal terminal zero seed, and v0.4.56 accepts the natural four-evaluation source branch/thermal prefix. v0.4.57 adds unrestricted all-evaluation convergence and post-dsec fixed-state acceptance. v0.4.58 adds exact post-dsec call-entry replay. v0.4.59 confirms that the only strict replay failure is the near-zero normalized `hmctot`: both Python and XSTAR exactly reproduce the source heatf expression, both satisfy the literal dsec `1.e-4` convergence test, and every underlying fixed-state quantity passes. Milestone-4 local-zone balance is source-semantically accepted. v0.4.60 validates bremsmap. v0.4.61 translates and validates calc_emisab_all -> calc_emisab_element -> calc_emisab_ion. v0.4.62 accepts calc_emis_all, v0.4.63 accepts complete local xstarcalc, and v0.4.64 accepts the bounded first-pass step -> trnfrc -> xstarcalc -> heatt-handler -> stpcut -> trnfrn caller contract. v0.4.65 translates and directly validates heatt and replaces that handler in the same radial sequence. v0.4.66 translates and directly validates gsmooth/gsmooth2 and closes the nonzero-turbulence branch before heatt while continuing to fail explicitly at unsavd. Output writers remain blocked."),
     ]
     return XSTARPortLedger(entries)

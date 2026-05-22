@@ -1991,3 +1991,22 @@ A passing run reports
 `heatt_direct_original_fortran_reference_ready=True`,
 `heatt_translated_in_radial_sequence_ready=True`, and
 `bounded_radial_shell_source_acceptance_ready=True`.
+
+
+## v0.4.66 translated `gsmooth` radial validation
+
+### `136_validate_xstar_gsmooth_radial_shell.py`
+
+Validates `gsmooth.f90` and `gsmooth2.f90` against direct outputs from the
+unmodified original Fortran and exercises the nonzero-turbulence radial branch
+before translated `heatt`.
+
+```bash
+PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \
+  --print-summary
+```
+
+A passing run reports `gsmooth_direct_original_fortran_reference_ready=True`,
+`turbulent_gsmooth_before_heatt_ready=True`, and
+`bounded_radial_shell_source_acceptance_ready=True`.

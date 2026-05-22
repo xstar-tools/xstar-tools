@@ -4,11 +4,12 @@ This module translates the bounded first-pass Milestone-5 sequence::
 
     step -> trnfrc -> [accepted local xstarcalc] -> heatt -> stpcut -> trnfrn
 
-``heatt`` is now a translated source routine operating on the same caller-owned
-continuum, line, RRC, and mutable ``leveltemp`` state left by ``xstarcalc``.
-The optional ``gsmooth`` branch and reverse-pass ``unsavd`` restoration are
-deliberately not approximated: the driver raises at those source routines until
-they are ported.  Output writers are outside this bounded shell contract.
+``gsmooth`` and ``heatt`` are translated source routines operating on the same
+caller-owned continuum, line, RRC, and mutable state left by ``xstarcalc``.
+The smoothing branch executes only for nonzero turbulent velocity and remains
+at its literal source position before ``heatt``.  Reverse-pass ``unsavd``
+restoration is deliberately not approximated.  Output writers are outside this
+bounded shell contract.
 
 The low-level kernels preserve the source's active-range mutation and caller-
 owned tail semantics.  Default-real constants that participate in mixed
@@ -34,6 +35,11 @@ from .heatt import (
     HeattResult,
     heatt,
     run_direct_fortran_heatt_validation,
+)
+from .gsmooth import (
+    GSmoothResult,
+    gsmooth,
+    run_direct_fortran_gsmooth_validation,
 )
 from .radiation import nbinc
 from .state import XSTARPythonState
@@ -630,6 +636,39 @@ def apply_trnfrc_to_state(state: XSTARPythonState) -> TrnfrcResult:
     return result
 
 
+def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
+    """Apply translated ``gsmooth.f90`` to the post-``xstarcalc`` arrays."""
+    workspace = _workspace_from_state(state)
+    context = state.control.get("calc_emis_context")
+    if context is None:
+        raise RadialTransferPortError(
+            "translated gsmooth requires state.control['calc_emis_context']"
+        )
+    ncn2 = int(state.control["ncn2"])
+    result = gsmooth(
+        temperature_1e4K=float(getattr(context, "temperature_1e4K")),
+        turbulent_velocity_km_s=float(state.control.get("vturbi", 0.0)),
+        epi_eV=state.radiation.epi,
+        opakc_before=workspace.opakc,
+        rccemis_before=workspace.rccemis,
+        brcems_before=workspace.emissivity.base.brcems,
+        ncn2=ncn2,
+    )
+    workspace.opakc[:] = result.opakc_after
+    workspace.rccemis[:, :] = result.rccemis_after
+    workspace.emissivity.base.brcems[:] = result.brcems_after
+    state.transfer.source_arrays["gsmooth"] = result
+    state.transfer.provenance["gsmooth"] = {
+        "source_file": result.source_file,
+        "helper_source_file": "xstar/xstarlib/src/gsmooth2.f90",
+        "active_ncn2": result.ncn2,
+        "temperature_1e4K": result.temperature_1e4K,
+        "turbulent_velocity_km_s": result.turbulent_velocity_km_s,
+        "vtherm_cm_s": result.vtherm_cm_s,
+    }
+    return result
+
+
 def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     """Apply translated ``heatt.f90`` to the radial caller-owned state."""
     workspace = _workspace_from_state(state)
@@ -768,10 +807,11 @@ def register_bounded_radial_source_routines(driver: XSTARPythonDriver) -> None:
     register_complete_local_xstarcalc_source_routines(driver)
     driver.register_source_routine(XSTARSourceRoutine.STEP, apply_step_to_state)
     driver.register_source_routine(XSTARSourceRoutine.TRNFRC, apply_trnfrc_to_state)
+    driver.register_source_routine(XSTARSourceRoutine.GSSMOOTH, apply_gsmooth_to_state)
     driver.register_source_routine(XSTARSourceRoutine.HEATT, apply_heatt_to_state)
     driver.register_source_routine(XSTARSourceRoutine.STPCUT, apply_stpcut_to_state)
     driver.register_source_routine(XSTARSourceRoutine.TRNFRN, apply_trnfrn_to_state)
-    # ``GSSMOOTH`` and ``UNSAVD`` are intentionally not registered.
+    # ``UNSAVD`` is intentionally not registered.
 
 
 def run_bounded_radial_shell(
@@ -1015,8 +1055,10 @@ def run_direct_fortran_radial_validation(
     )
 
     heatt_direct = dict(run_direct_fortran_heatt_validation(rtol=rtol, atol=atol))
+    gsmooth_direct = dict(run_direct_fortran_gsmooth_validation(rtol=rtol, atol=atol))
     summary = {
-        "port_version": "v0.4.65",
+        "port_version": "v0.4.66",
+        **gsmooth_direct,
         **heatt_direct,
         "step_translated": True,
         "trnfrc_translated": True,
@@ -1222,32 +1264,49 @@ def run_bounded_radial_shell_validation(
         )
 
     turbulent_state = _build_radial_validation_state(zone_index=1)
-    turbulent_state.control["vturbi"] = 1.0
-    turbulent_failure_ready = False
-    turbulent_completed: tuple[str, ...] = ()
-    try:
-        run_bounded_radial_shell(turbulent_state, zone_index=1, pass_index=1, direction=1)
-    except UnportedXSTARSourceRoutine as exc:
-        turbulent_failure_ready = exc.routine is XSTARSourceRoutine.GSSMOOTH
-        turbulent_completed = tuple(
-            turbulent_state.provenance.get("completed_source_routines", [])
+    # Keep the final active energy above the source 20-keV smoothing cutoff so
+    # the source-local RRC work arrays are never read beyond their initialized
+    # 1:ncn2 range.
+    np.asarray(turbulent_state.radiation.epi)[-1] = 2.1e4
+    turbulent_state.control["vturbi"] = 1.2e4
+    turbulent = run_bounded_radial_shell(
+        turbulent_state, zone_index=1, pass_index=1, direction=1
+    )
+    expected_turbulent = (
+        "trnfrc",
+        "bremsmap",
+        "dsec",
+        "calc_hmc_all",
+        "calc_emisab_all",
+        "calc_emis_all",
+        "gsmooth",
+        "heatt",
+        "stpcut",
+        "trnfrn",
+    )
+    turbulent_order_ready = turbulent.source_order == expected_turbulent
+    gsmooth_result = turbulent_state.transfer.source_arrays.get("gsmooth")
+    turbulent_gsmooth_ready = bool(
+        isinstance(gsmooth_result, GSmoothResult)
+        and turbulent.source_order.index("calc_emis_all")
+        < turbulent.source_order.index("gsmooth")
+        < turbulent.source_order.index("heatt")
+        and turbulent_state.transfer.provenance["gsmooth"]["source_file"]
+        == "xstar/xstarlib/src/gsmooth.f90"
+    )
+    turbulent_ws = turbulent_state.control["radial_transfer_workspace"]
+    turbulent_ownership_ready = bool(
+        isinstance(gsmooth_result, GSmoothResult)
+        and np.array_equal(turbulent_ws.opakc, gsmooth_result.opakc_after)
+        and np.array_equal(turbulent_ws.rccemis, gsmooth_result.rccemis_after)
+        and np.array_equal(
+            turbulent_ws.emissivity.base.brcems, gsmooth_result.brcems_after
         )
-    turbulent_boundary_order_ready = bool(
-        turbulent_completed
-        == (
-            "trnfrc",
-            "bremsmap",
-            "dsec",
-            "calc_hmc_all",
-            "calc_emisab_all",
-            "calc_emis_all",
-        )
-        and "heatt" not in turbulent_completed
     )
 
     summary: dict[str, Any] = {
         **direct,
-        "port_version": "v0.4.65",
+        "port_version": "v0.4.66",
         "bounded_radial_shell_translated": True,
         "zone1_step_skip_ready": zone1_skip_ready,
         "zone1_first_pass_call_order_ready": zone1_order_ready,
@@ -1259,19 +1318,21 @@ def run_bounded_radial_shell_validation(
         "heatt_translated_in_radial_sequence_ready": heatt_boundary_ready,
         "reverse_pass_unsavd_explicit_failure_ready": reverse_failure_ready,
         "reverse_pass_completed_before_failure": list(reverse_completed),
-        "turbulent_gsmooth_explicit_failure_ready": turbulent_failure_ready,
-        "turbulent_failure_source_boundary_ready": turbulent_boundary_order_ready,
-        "turbulent_completed_before_failure": list(turbulent_completed),
+        "turbulent_gsmooth_executed_ready": turbulent_gsmooth_ready,
+        "turbulent_gsmooth_before_heatt_ready": turbulent_order_ready,
+        "turbulent_shared_array_ownership_ready": turbulent_ownership_ready,
+        "turbulent_source_order": list(turbulent.source_order),
         "output_writers_excluded_ready": bool(
             not zone1.output_writers_executed
             and not zone2.output_writers_executed
+            and not turbulent.output_writers_executed
             and not zone2_state.transfer.provenance["radial_shell"]["output_writers_executed"]
         ),
     }
     summary["bounded_radial_shell_source_acceptance_ready"] = bool(
         all(value for key, value in summary.items() if key.endswith("_ready"))
     )
-    summary["next_source_target"] = "gsmooth"
+    summary["next_source_target"] = "unsavd_multipass_state"
     return summary
 
 
@@ -1304,6 +1365,9 @@ __all__ = [
     "XSTAR_TRNFRC_GEOMETRY_FACTOR",
     "XSTAR_TRNFRC_ERG_PER_EV",
     "RadialTransferPortError",
+    "GSmoothResult",
+    "gsmooth",
+    "run_direct_fortran_gsmooth_validation",
     "HeattResult",
     "heatt",
     "run_direct_fortran_heatt_validation",
@@ -1319,6 +1383,7 @@ __all__ = [
     "trnfrn",
     "apply_step_to_state",
     "apply_trnfrc_to_state",
+    "apply_gsmooth_to_state",
     "apply_heatt_to_state",
     "apply_stpcut_to_state",
     "apply_trnfrn_to_state",

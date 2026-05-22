@@ -1,3 +1,5 @@
+> **v0.4.66 update:** translated `gsmooth.f90` and `gsmooth2.f90`, validated the combined velocity plus `brcems`, both `rccemis` rows, `opakc`, unchanged bins 1--2, the 20-keV pass-through, and caller tails against the unmodified original Fortran, and closed the nonzero-turbulence branch before translated `heatt`. `unsavd`, multipass restoration, tabulated radial density, and output writers remain explicitly unported.
+
 
 > **v0.4.65 update:** translated `heatt.f90`, validated continuum, line, RRC, caller-tail, stale-`optp2`, and partial-`leveltemp` semantics against the unmodified original Fortran, and replaced the former handler in the accepted first-pass radial sequence. `gsmooth`, `unsavd`, multipass restoration, and all output writers remain explicitly unported.
 # XSTAR `atdb.fits` Python Reader Progress Report

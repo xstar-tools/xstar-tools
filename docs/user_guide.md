@@ -1393,3 +1393,26 @@ PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
 
 Turbulent smoothing, reverse/multipass saved-state restoration, and output
 writers are still excluded.
+
+
+## 16. Translated turbulent smoothing (v0.4.66)
+
+For `vturbi > 1.e-34`, the bounded radial caller now executes translated
+`gsmooth` between local `xstarcalc` and `heatt`:
+
+```text
+calc_emis_all -> gsmooth -> heatt
+```
+
+The wrapper computes the source thermal/turbulent speed and calls `gsmooth2` on
+`brcems`, `rccemis(1,:)`, `rccemis(2,:)`, and `opakc` in that order. The helper
+leaves bins 1--2 unchanged, convolves only bins below 20 keV, leaves higher
+energies unchanged, and preserves caller capacity above `ncn2`.
+
+```bash
+PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \
+  --print-summary
+```
+
+Reverse/multipass restoration and output writers remain excluded.
