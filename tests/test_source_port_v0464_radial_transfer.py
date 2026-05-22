@@ -8,7 +8,6 @@ from xstar_atomic.source_port import (
     XSTARPythonDriver,
     XSTARSourceRoutine,
     RadialTransferWorkspace,
-    UnportedXSTARSourceRoutine,
     register_bounded_radial_source_routines,
     run_bounded_radial_shell_validation,
     run_direct_fortran_radial_validation,
@@ -32,7 +31,7 @@ def test_v0464_direct_original_fortran_kernel_gate():
 def test_v0464_bounded_radial_acceptance():
     summary = run_bounded_radial_shell_validation()
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "unsavd_multipass_state"
+    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
 
 
 def test_v0464_zone1_skips_step_and_preserves_order():
@@ -68,10 +67,10 @@ def test_v0464_later_first_pass_executes_step():
     ]
 
 
-def test_v0464_intentional_unported_boundaries_and_turbulent_branch():
+def test_v0464_repeated_pass_and_turbulent_branch():
     summary = run_bounded_radial_shell_validation()
-    assert summary["reverse_pass_unsavd_explicit_failure_ready"] is True
-    assert summary["reverse_pass_completed_before_failure"] == []
+    assert summary["reverse_pass_unsavd_executed_ready"] is True
+    assert summary["reverse_pass_restore_hdu_order_ready"] is True
     assert summary["turbulent_gsmooth_executed_ready"] is True
     assert summary["turbulent_gsmooth_before_heatt_ready"] is True
     assert summary["turbulent_shared_array_ownership_ready"] is True
@@ -193,7 +192,7 @@ def test_v0464_trnfrn_active_range_copy_only():
     assert np.all(result.elumabo_after[:, 3:] == -3.0)
 
 
-def test_v0464_registration_includes_gsmooth_and_excludes_unsavd():
+def test_v0464_registration_includes_gsmooth_and_unsavd():
     driver = XSTARPythonDriver()
     register_bounded_radial_source_routines(driver)
     implemented = driver.implemented_source_routines()
@@ -203,8 +202,8 @@ def test_v0464_registration_includes_gsmooth_and_excludes_unsavd():
     assert XSTARSourceRoutine.STPCUT in implemented
     assert XSTARSourceRoutine.TRNFRN in implemented
     assert XSTARSourceRoutine.GSSMOOTH in implemented
-    assert XSTARSourceRoutine.UNSAVD not in implemented
+    assert XSTARSourceRoutine.UNSAVD in implemented
 
 
 def test_v0464_version():
-    assert xa.__version__ == "0.4.66"
+    assert xa.__version__ == "0.4.67"

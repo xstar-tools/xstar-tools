@@ -1,3 +1,9 @@
+> **v0.4.67 update:** translated and directly validated `unsavd.f90`; added
+> caller-owned REAL(4) shell/pass snapshots with source HDU insertion/shift
+> order; and accepted three alternating radial passes with `unsavd` before
+> `trnfrc`. Output writers are still excluded. Tabulated radial density and
+> explicit pass convergence are the next bounded targets.
+
 > **v0.4.66 update:** translated `gsmooth.f90` and `gsmooth2.f90`, validated the combined velocity plus `brcems`, both `rccemis` rows, `opakc`, unchanged bins 1--2, the 20-keV pass-through, and caller tails against the unmodified original Fortran, and closed the nonzero-turbulence branch before translated `heatt`. `unsavd`, multipass restoration, tabulated radial density, and output writers remain explicitly unported.
 
 

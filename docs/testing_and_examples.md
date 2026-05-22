@@ -1,3 +1,18 @@
+## v0.4.67 translated `unsavd` and multipass state
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+
+PYTHONPATH=src pytest -q tests/test_source_port_v0467_unsavd_multipass.py
+PYTHONPATH=src pytest -q tests/test_source_port*.py
+```
+
+Expected acceptance includes direct original-Fortran `unsavd` parity, REAL(4)
+saved-state parity, HDU insertion/shift order, restore order `5,4,3` on passes
+2 and 3, and exclusion of all output writers.
+
 ## v0.4.66 translated `gsmooth` radial shell
 
 Run the direct-original-Fortran smoothing gate and both zero/nonzero-turbulence

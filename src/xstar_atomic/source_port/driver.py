@@ -297,7 +297,7 @@ class XSTARPythonDriver:
         preserves the source-level control boundaries used by the first radial
         milestone:
 
-        * reverse/multipass shells first require ``unsavd``;
+        * reverse/multipass shells restore the previous pass through ``unsavd``;
         * first-pass zone 1 skips ``step`` and sets ``delr=0``;
         * later first-pass zones execute ``step``;
         * ``trnfrc`` precedes the complete accepted local ``xstarcalc``;
@@ -340,11 +340,17 @@ class XSTARPythonDriver:
         )
         skipped_before = len(result.provenance.get("skipped_source_routines", []))
 
-        # xstar.f90 calls unsavd before any local work on passes after the first.
+        # xstar.f90 computes the reverse record, saves rdelo, selects nlimdt,
+        # and then calls unsavd before any local work on later passes.
         if kk > 1:
-            execute(XSTARSourceRoutine.UNSAVD)
+            numrec = int(result.control["numrec"])
+            jk = numrec + 1 - jkp
+            result.control["jk"] = jk
+            result.control["unsavd_jkstep"] = jk + 2
+            result.control["rdelo"] = float(result.transfer.radial_depth)
             nlimd = int(result.control.get("nlimd", result.control.get("nlimdt", 1)))
             result.control["nlimdt"] = 0 if ldir > 0 else nlimd
+            execute(XSTARSourceRoutine.UNSAVD)
         else:
             # Save the initial density/radius for the analytic density law.
             lcdd = int(result.control.get("lcdd", 1))
@@ -388,6 +394,13 @@ class XSTARPythonDriver:
             execute(XSTARSourceRoutine.GSSMOOTH)
 
         execute(XSTARSourceRoutine.HEATT)
+
+        # savd occurs here in xstar.f90, before the geometry/column update.
+        # The bounded port uses a caller-owned in-memory REAL(4) snapshot and
+        # does not execute any FITS/output writer.
+        save_handler = result.control.get("save_radial_shell_state_handler")
+        if callable(save_handler):
+            save_handler(result, hdunum=jkp + 1, terminal_record=False)
 
         # Inline xstar.f90 position, density, radial-depth, and column updates.
         delr = float(result.transfer.step_size)

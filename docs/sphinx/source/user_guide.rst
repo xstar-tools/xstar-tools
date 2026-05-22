@@ -805,3 +805,18 @@ The v0.3.154 benchmark can preserve solver products and hand the matrix terms to
      --print-summary
 
 The type-50 detail audit classifies matrix/rate residuals as ``matrix_matches_ucalc_rate``, ``rate_evaluator_mismatch``, ``matrix_placement_mismatch``, or ``no_matching_matrix_term``.
+
+Saved shell state and repeated radial passes (v0.4.67)
+------------------------------------------------------
+
+The bounded radial driver now restores caller-owned REAL(4) shell snapshots
+through translated ``unsavd`` on later passes. One-based record insertion and
+shifting reproduce the source HDU contract without implementing an output
+writer. The validation fixture accepts directions ``-1,+1,-1`` and restore
+order ``5,4,3``.
+
+.. code-block:: bash
+
+   PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+     --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+     --print-summary

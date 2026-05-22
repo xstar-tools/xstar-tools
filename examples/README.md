@@ -2010,3 +2010,25 @@ PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
 A passing run reports `gsmooth_direct_original_fortran_reference_ready=True`,
 `turbulent_gsmooth_before_heatt_ready=True`, and
 `bounded_radial_shell_source_acceptance_ready=True`.
+
+## v0.4.67 translated `unsavd` and multipass validation
+
+`137_validate_xstar_unsavd_multipass.py` validates the translated restoration
+routine and the caller-owned REAL(4) shell/pass state across three alternating
+radial passes. It confirms source HDU insertion/shift order, restore order
+`5,4,3`, `unsavd` before `trnfrc`, direction-dependent `dsec`, and exclusion of
+output writers.
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+```
+
+### `137_validate_xstar_unsavd_multipass.py`
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+```

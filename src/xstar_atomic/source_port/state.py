@@ -105,6 +105,7 @@ class XSTARTransferState:
     tau_in: Optional[np.ndarray] = None
     tau_out: Optional[np.ndarray] = None
     converged: bool = False
+    saved_pass_state: Optional[Any] = None
     source_arrays: Dict[str, Any] = field(default_factory=dict)
     provenance: Dict[str, Any] = field(default_factory=dict)
 

@@ -72,16 +72,16 @@ def test_v0466_turbulent_radial_branch_places_gsmooth_before_heatt():
     order = summary["turbulent_source_order"]
     assert order.index("calc_emis_all") < order.index("gsmooth") < order.index("heatt")
     assert summary["bounded_radial_shell_source_acceptance_ready"] is True
-    assert summary["next_source_target"] == "unsavd_multipass_state"
+    assert summary["next_source_target"] == "tabulated_radial_density_and_pass_convergence"
 
 
-def test_v0466_registration_includes_gsmooth_but_not_unsavd():
+def test_v0466_registration_includes_gsmooth_and_unsavd():
     driver = XSTARPythonDriver()
     register_bounded_radial_source_routines(driver)
     implemented = driver.implemented_source_routines()
     assert XSTARSourceRoutine.GSSMOOTH in implemented
-    assert XSTARSourceRoutine.UNSAVD not in implemented
+    assert XSTARSourceRoutine.UNSAVD in implemented
 
 
 def test_v0466_version():
-    assert xa.__version__ == "0.4.66"
+    assert xa.__version__ == "0.4.67"

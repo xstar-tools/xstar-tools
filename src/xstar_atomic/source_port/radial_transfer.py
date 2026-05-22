@@ -7,9 +7,9 @@ This module translates the bounded first-pass Milestone-5 sequence::
 ``gsmooth`` and ``heatt`` are translated source routines operating on the same
 caller-owned continuum, line, RRC, and mutable state left by ``xstarcalc``.
 The smoothing branch executes only for nonzero turbulent velocity and remains
-at its literal source position before ``heatt``.  Reverse-pass ``unsavd``
-restoration is deliberately not approximated.  Output writers are outside this
-bounded shell contract.
+at its literal source position before ``heatt``.  Reverse-pass ``unsavd`` restoration uses a caller-owned in-memory equivalent
+of the source FITS shell records, including REAL(4) persistence and HDU insertion
+order.  Output writers remain outside this bounded shell contract.
 
 The low-level kernels preserve the source's active-range mutation and caller-
 owned tail semantics.  Default-real constants that participate in mixed
@@ -42,6 +42,16 @@ from .gsmooth import (
     run_direct_fortran_gsmooth_validation,
 )
 from .radiation import nbinc
+from .saved_radial_state import (
+    SavedRadialPassState,
+    SavedRadialStatePortError,
+    SavedRadialStateStore,
+    SavedShellSnapshot,
+    UnsavdResult,
+    make_saved_shell_snapshot,
+    run_direct_fortran_unsavd_validation,
+    unsavd,
+)
 from .state import XSTARPythonState
 from .xstarcalc import register_complete_local_xstarcalc_source_routines
 
@@ -230,6 +240,32 @@ class BoundedRadialShellResult:
     skipped_source_routines: tuple[str, ...]
     step_executed: bool
     output_writers_executed: bool
+    source_file: str = "xstar/src/xstar/xstar.f90"
+
+
+@dataclass(frozen=True)
+class BoundedRadialPassResult:
+    """One bounded pass with source HDU save/restore bookkeeping."""
+
+    state: XSTARPythonState
+    pass_index: int
+    direction: int
+    shell_results: tuple[BoundedRadialShellResult, ...]
+    restored_hdus: tuple[int, ...]
+    saved_hdus: tuple[int, ...]
+    terminal_saved_hdu: int
+    numrec: int
+    source_file: str = "xstar/src/xstar/xstar.f90"
+
+
+@dataclass(frozen=True)
+class BoundedRadialMultipassResult:
+    """Bounded repeated-pass result without output writers."""
+
+    state: XSTARPythonState
+    pass_results: tuple[BoundedRadialPassResult, ...]
+    saved_state: SavedRadialStateStore
+    output_writers_executed: bool = False
     source_file: str = "xstar/src/xstar/xstar.f90"
 
 
@@ -737,6 +773,261 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     return result
 
 
+
+def _saved_store_from_state(
+    state: XSTARPythonState, *, create: bool = False
+) -> SavedRadialStateStore:
+    store = state.transfer.saved_pass_state
+    if store is None and create:
+        store = SavedRadialStateStore()
+        state.transfer.saved_pass_state = store
+    if not isinstance(store, SavedRadialStateStore):
+        raise RadialTransferPortError(
+            "transfer.saved_pass_state must be a SavedRadialStateStore"
+        )
+    return store
+
+
+def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.ndarray]:
+    xilev = state.local_zone.source_arrays.get("xilevg")
+    if xilev is None:
+        xilev = state.plasma.populations
+    rnist = state.local_zone.source_arrays.get("rnisg")
+    if xilev is None or rnist is None:
+        raise RadialTransferPortError(
+            "saved radial state requires current xilevg and rnisg arrays"
+        )
+    x = np.asarray(xilev, dtype=float).reshape(-1)
+    rn = np.asarray(rnist, dtype=float).reshape(-1)
+    if x.shape != rn.shape:
+        raise RadialTransferPortError("xilevg and rnisg lengths differ")
+    return x, rn
+
+
+def capture_saved_shell_snapshot_from_state(
+    state: XSTARPythonState, *, terminal_record: bool = False
+) -> SavedShellSnapshot:
+    """Capture the exact caller-owned state passed to ``savd``.
+
+    The resulting in-memory record deliberately applies the REAL(4) rounding
+    performed by the source ``fstepr*`` FITS writers.  It is transfer state,
+    not an output product.
+    """
+    workspace = _workspace_from_state(state)
+    xilev, rnist = _level_arrays_from_state(state)
+    ncn2 = int(state.control["ncn2"])
+    n_lines = int(state.control.get("nlsvn", workspace.elum.shape[1]))
+    n_continua = int(state.control.get("ncsvn", workspace.elumab.shape[1]))
+    level_indices = state.control.get("saved_level_indices_one_based")
+    line_indices = state.control.get("saved_line_indices_one_based")
+    rrc_indices = state.control.get("saved_rrc_indices_one_based")
+    return make_saved_shell_snapshot(
+        pass_index=int(state.transfer.pass_index),
+        zone_index=int(state.transfer.zone_index),
+        terminal_record=bool(terminal_record),
+        temperature=float(state.plasma.temperature),
+        pressure=float(state.control.get("p", 0.0)),
+        radius=float(state.transfer.radius),
+        radial_depth=float(state.transfer.radial_depth),
+        step_size=float(state.transfer.step_size),
+        column=float(state.transfer.column),
+        electron_fraction=float(state.plasma.xee),
+        hydrogen_density=float(state.plasma.xpx),
+        zeta=float(state.control.get("zeta", 0.0)),
+        xilev=xilev,
+        rnist=rnist,
+        rcem=workspace.rcem_physical[:, :n_lines],
+        oplin=workspace.oplin_physical[:n_lines],
+        tau0=workspace.tau0[:, :n_lines],
+        cemab=workspace.cemab_physical[:, :n_continua],
+        cabab=workspace.emissivity.base.cabab[1 : n_continua + 1],
+        opakab=workspace.opakab_physical[:n_continua],
+        tauc=workspace.tauc[:, :n_continua],
+        zrems=workspace.zrems,
+        dpthc=workspace.dpthc,
+        opakc=workspace.opakc,
+        rccemis=workspace.rccemis,
+        ncn2=ncn2,
+        level_indices_one_based=level_indices,
+        line_indices_one_based=line_indices,
+        rrc_indices_one_based=rrc_indices,
+    )
+
+
+def save_radial_shell_state(
+    state: XSTARPythonState,
+    *,
+    hdunum: int,
+    terminal_record: bool = False,
+) -> int:
+    """Insert one shell record after the source-requested one-based HDU."""
+    store = _saved_store_from_state(state, create=True)
+    pass_state = store.begin_pass(int(state.transfer.pass_index))
+    snapshot = capture_saved_shell_snapshot_from_state(
+        state, terminal_record=terminal_record
+    )
+    inserted_hdu = pass_state.insert_after_hdu(int(hdunum), snapshot)
+    state.transfer.provenance.setdefault("saved_shell_records", []).append(
+        {
+            "source_file": "xstar/xstarlib/src/savd.f90",
+            "pass_index": int(state.transfer.pass_index),
+            "zone_index": int(state.transfer.zone_index),
+            "after_hdu": int(hdunum),
+            "inserted_hdu": int(inserted_hdu),
+            "terminal_record": bool(terminal_record),
+            "storage": "caller-owned in-memory REAL(4) shell state",
+            "output_writer_executed": False,
+        }
+    )
+    return inserted_hdu
+
+
+def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
+    """Restore the previous pass's shell record through ``unsavd.f90``."""
+    workspace = _workspace_from_state(state)
+    store = _saved_store_from_state(state)
+    pass_index = int(state.transfer.pass_index)
+    if pass_index <= 1:
+        raise RadialTransferPortError("unsavd is valid only after the first pass")
+    previous = store.require_pass(pass_index - 1)
+    jkstep = int(state.control["unsavd_jkstep"])
+    snapshot = previous.snapshot_at_hdu(jkstep)
+    xilev, rnist = _level_arrays_from_state(state)
+    ncn2 = int(state.control["ncn2"])
+    n_lines = int(state.control.get("nlsvn", workspace.elum.shape[1]))
+    n_continua = int(state.control.get("ncsvn", workspace.elumab.shape[1]))
+    result = unsavd(
+        snapshot,
+        jkstep=jkstep,
+        direction=int(state.transfer.direction),
+        epi_eV=state.radiation.epi,
+        ncn2=ncn2,
+        xilev_before=xilev,
+        rnist_before=rnist,
+        rcem_before=workspace.rcem_physical[:, :n_lines],
+        oplin_before=workspace.oplin_physical[:n_lines],
+        tau0_before=workspace.tau0[:, :n_lines],
+        cemab_before=workspace.cemab_physical[:, :n_continua],
+        cabab_before=workspace.emissivity.base.cabab[1 : n_continua + 1],
+        opakab_before=workspace.opakab_physical[:n_continua],
+        tauc_before=workspace.tauc[:, :n_continua],
+        zrems_before=workspace.zrems,
+        dpthc_before=workspace.dpthc,
+        opakc_before=workspace.opakc,
+        rccemis_before=workspace.rccemis,
+    )
+
+    state.plasma.temperature = result.temperature
+    state.plasma.xee = result.electron_fraction
+    state.plasma.xpx = result.hydrogen_density
+    state.transfer.radius = result.radius
+    state.transfer.radial_depth = result.radial_depth
+    state.transfer.step_size = result.step_size
+    state.transfer.column = result.column
+    state.control.update(
+        {
+            "t": result.temperature,
+            "p": result.pressure,
+            "r": result.radius,
+            "rdel": result.radial_depth,
+            "delr": result.step_size,
+            "xcol": result.column,
+            "xee": result.electron_fraction,
+            "xpx": result.hydrogen_density,
+            "zeta": result.zeta,
+            "nry_unsavd": result.nry,
+        }
+    )
+    state.plasma.populations = result.xilev_after
+    state.local_zone.source_arrays["xilevg"] = result.xilev_after
+    state.local_zone.source_arrays["rnisg"] = result.rnist_after
+    for key in ("calc_emisab_context", "calc_emis_context"):
+        context = state.control.get(key)
+        if context is not None:
+            context.xilevg = result.xilev_after
+            context.rnisg = result.rnist_after
+            context.temperature_1e4K = result.temperature / 1.0e4
+            context.electron_fraction_xee = result.electron_fraction
+            context.hydrogen_density_cm3 = result.hydrogen_density
+            context.pressure_dyn_cm2 = result.pressure
+
+    workspace.rcem_physical[:, :n_lines] = result.rcem_after
+    workspace.oplin_physical[:n_lines] = result.oplin_after
+    workspace.tau0[:, :n_lines] = result.tau0_after
+    workspace.cemab_physical[:, :n_continua] = result.cemab_after
+    workspace.emissivity.base.cabab[1 : n_continua + 1] = result.cabab_after
+    workspace.opakab_physical[:n_continua] = result.opakab_after
+    workspace.tauc[:, :n_continua] = result.tauc_after
+    workspace.zrems[:, :] = result.zrems_after
+    workspace.dpthc[:, :] = result.dpthc_after
+    workspace.opakc[:] = result.opakc_after
+    workspace.rccemis[:, :] = result.rccemis_after
+
+    state.transfer.source_arrays["unsavd"] = result
+    state.transfer.provenance["unsavd"] = {
+        "source_file": result.source_file,
+        "previous_pass": pass_index - 1,
+        "jkstep": jkstep,
+        "direction": result.direction,
+        "direction_row_one_based": result.direction_row_one_based,
+        "zrems_saved_but_not_restored": result.zrems_saved_but_not_restored,
+    }
+    state.control.setdefault("restored_hdus", []).append(jkstep)
+    return result
+
+
+def initialize_bounded_radial_pass_state(state: XSTARPythonState) -> None:
+    """Apply the radial subset of ``init`` and source-spectrum seeding.
+
+    This helper is intentionally bounded to caller-owned arrays needed by the
+    saved-pass contract.  It does not claim the full ``init.f90`` routine.
+    """
+    workspace = _workspace_from_state(state)
+    ncn2 = int(state.control["ncn2"])
+    workspace.rccemis[:, :] = 0.0
+    workspace.emissivity.base.brcems[:] = 0.0
+    workspace.emissivity.flinel[:] = 0.0
+    workspace.zrems[:4, :] = 0.0  # source init does not clear zrems(5,:)
+    workspace.zremso[:, :] = 0.0
+    workspace.dpthc[:, :] = 0.0
+    workspace.dpthcont[:, :] = 0.0
+    workspace.opakc[:] = 0.0
+    workspace.opakcont[:] = 0.0
+    workspace.emissivity.base.rcem[:, :] = 0.0
+    workspace.emissivity.base.oplin[:] = 0.0
+    workspace.emissivity.fline[:, :] = 0.0
+    workspace.elum[:, :] = 0.0
+    workspace.elumo[:, :] = 0.0
+    workspace.tau0[:, :] = 0.0
+    workspace.emissivity.base.cemab[:, :] = 0.0
+    workspace.emissivity.base.cabab[:] = 0.0
+    workspace.emissivity.base.opakab[:] = 0.0
+    workspace.elumab[:, :] = 0.0
+    workspace.elumabo[:, :] = 0.0
+    workspace.tauc[:, :] = 0.0
+    if state.radiation.bremsa is not None:
+        np.asarray(state.radiation.bremsa)[:] = 0.0
+    if state.radiation.bremsam is not None:
+        np.asarray(state.radiation.bremsam)[:] = 0.0
+    if state.radiation.bremsint is not None:
+        np.asarray(state.radiation.bremsint)[:] = 0.0
+    workspace.zrems[0, :ncn2] = workspace.zremsz[:ncn2]
+    workspace.zremso[0, :ncn2] = workspace.zremsz[:ncn2]
+    xilev = state.local_zone.source_arrays.get("xilevg")
+    if xilev is not None:
+        zero = np.zeros_like(np.asarray(xilev, dtype=float))
+        state.local_zone.source_arrays["xilevg"] = zero
+        state.plasma.populations = zero
+    state.transfer.provenance.setdefault("pass_initialization", []).append(
+        {
+            "pass_index": int(state.transfer.pass_index),
+            "source_file": "xstar/xstarlib/src/init.f90 + xstar.f90",
+            "bounded_radial_subset": True,
+            "zrems_row5_retained": True,
+        }
+    )
+
+
 def apply_stpcut_to_state(state: XSTARPythonState) -> StpcutResult:
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
@@ -803,7 +1094,7 @@ def apply_trnfrn_to_state(state: XSTARPythonState) -> TrnfrnResult:
 
 
 def register_bounded_radial_source_routines(driver: XSTARPythonDriver) -> None:
-    """Register translated first-pass kernels plus accepted local ``xstarcalc``."""
+    """Register translated radial kernels, ``unsavd``, and local ``xstarcalc``."""
     register_complete_local_xstarcalc_source_routines(driver)
     driver.register_source_routine(XSTARSourceRoutine.STEP, apply_step_to_state)
     driver.register_source_routine(XSTARSourceRoutine.TRNFRC, apply_trnfrc_to_state)
@@ -811,7 +1102,7 @@ def register_bounded_radial_source_routines(driver: XSTARPythonDriver) -> None:
     driver.register_source_routine(XSTARSourceRoutine.HEATT, apply_heatt_to_state)
     driver.register_source_routine(XSTARSourceRoutine.STPCUT, apply_stpcut_to_state)
     driver.register_source_routine(XSTARSourceRoutine.TRNFRN, apply_trnfrn_to_state)
-    # ``UNSAVD`` is intentionally not registered.
+    driver.register_source_routine(XSTARSourceRoutine.UNSAVD, apply_unsavd_to_state)
 
 
 def run_bounded_radial_shell(
@@ -850,6 +1141,141 @@ def run_bounded_radial_shell(
         source_order=source_order,
         skipped_source_routines=skipped,
         step_executed=XSTARSourceRoutine.STEP.value in source_order,
+        output_writers_executed=False,
+    )
+
+
+
+def run_bounded_radial_pass(
+    state: XSTARPythonState,
+    *,
+    pass_index: int,
+    first_pass_shell_count: Optional[int] = None,
+    total_passes: Optional[int] = None,
+    direction: Optional[int] = None,
+    driver: Optional[XSTARPythonDriver] = None,
+    fixed_state: bool = False,
+) -> BoundedRadialPassResult:
+    """Execute one bounded pass with source-order save/restore state.
+
+    ``first_pass_shell_count`` bounds the otherwise physical first-pass stop
+    criteria.  Later passes execute exactly ``numrec`` iterations, as in
+    ``xstar.f90``.  The direction defaults to the literal ``(-1)**kk``.
+    """
+    kk = int(pass_index)
+    if kk < 1:
+        raise RadialTransferPortError("pass_index must be positive")
+    if total_passes is not None:
+        state.control["npass"] = int(total_passes)
+    npass = int(state.control.get("npass", max(kk, 1)))
+    if npass < kk:
+        raise RadialTransferPortError("total pass count is smaller than pass_index")
+    ldir = int((-1) ** kk if direction is None else direction)
+    if ldir not in (-1, 1):
+        raise RadialTransferPortError("radial pass direction must be -1 or 1")
+
+    store = _saved_store_from_state(state, create=True)
+    pass_state = store.begin_pass(kk, replace=True)
+    state.transfer.pass_index = kk
+    state.transfer.direction = ldir
+    state.control["kk"] = kk
+    state.control["ldir"] = ldir
+    state.control["restored_hdus"] = []
+    state.control["save_radial_shell_state_handler"] = save_radial_shell_state
+    initialize_bounded_radial_pass_state(state)
+
+    if kk == 1:
+        if first_pass_shell_count is None or int(first_pass_shell_count) < 1:
+            raise RadialTransferPortError(
+                "first_pass_shell_count must be positive for pass 1"
+            )
+        shell_count = int(first_pass_shell_count)
+    else:
+        shell_count = int(state.control["numrec"])
+        if shell_count < 1:
+            raise RadialTransferPortError("numrec must be positive on later passes")
+
+    runner = driver or XSTARPythonDriver()
+    if driver is None:
+        register_bounded_radial_source_routines(runner)
+    shells: list[BoundedRadialShellResult] = []
+    for jkp in range(1, shell_count + 1):
+        shells.append(
+            run_bounded_radial_shell(
+                state,
+                zone_index=jkp,
+                pass_index=kk,
+                direction=ldir,
+                driver=runner,
+                fixed_state=fixed_state,
+            )
+        )
+
+    if kk == 1:
+        # Source sets numrec=jkp+1 after the first radial traversal.
+        state.control["numrec"] = shell_count + 1
+    terminal_hdu = save_radial_shell_state(
+        state, hdunum=shell_count + 1, terminal_record=True
+    )
+    restored_hdus = tuple(int(value) for value in state.control["restored_hdus"])
+    result = BoundedRadialPassResult(
+        state=state,
+        pass_index=kk,
+        direction=ldir,
+        shell_results=tuple(shells),
+        restored_hdus=restored_hdus,
+        saved_hdus=pass_state.populated_hdus(),
+        terminal_saved_hdu=int(terminal_hdu),
+        numrec=int(state.control["numrec"]),
+    )
+    state.transfer.provenance.setdefault("radial_passes", []).append(
+        {
+            "source_file": result.source_file,
+            "pass_index": kk,
+            "direction": ldir,
+            "shell_count": shell_count,
+            "numrec": result.numrec,
+            "restored_hdus": list(result.restored_hdus),
+            "saved_hdus": list(result.saved_hdus),
+            "terminal_saved_hdu": result.terminal_saved_hdu,
+            "output_writers_executed": False,
+        }
+    )
+    return result
+
+
+def run_bounded_radial_multipass(
+    state: XSTARPythonState,
+    *,
+    first_pass_shell_count: int,
+    pass_count: int = 3,
+    driver: Optional[XSTARPythonDriver] = None,
+    fixed_state: bool = False,
+) -> BoundedRadialMultipassResult:
+    """Execute bounded alternating passes through translated ``unsavd``."""
+    count = int(pass_count)
+    if count < 2:
+        raise RadialTransferPortError("multipass validation requires at least two passes")
+    runner = driver or XSTARPythonDriver()
+    if driver is None:
+        register_bounded_radial_source_routines(runner)
+    state.control["npass"] = count
+    results: list[BoundedRadialPassResult] = []
+    for kk in range(1, count + 1):
+        results.append(
+            run_bounded_radial_pass(
+                state,
+                pass_index=kk,
+                first_pass_shell_count=(first_pass_shell_count if kk == 1 else None),
+                total_passes=count,
+                driver=runner,
+                fixed_state=fixed_state,
+            )
+        )
+    return BoundedRadialMultipassResult(
+        state=state,
+        pass_results=tuple(results),
+        saved_state=_saved_store_from_state(state),
         output_writers_executed=False,
     )
 
@@ -1057,7 +1483,7 @@ def run_direct_fortran_radial_validation(
     heatt_direct = dict(run_direct_fortran_heatt_validation(rtol=rtol, atol=atol))
     gsmooth_direct = dict(run_direct_fortran_gsmooth_validation(rtol=rtol, atol=atol))
     summary = {
-        "port_version": "v0.4.66",
+        "port_version": "v0.4.67",
         **gsmooth_direct,
         **heatt_direct,
         "step_translated": True,
@@ -1191,21 +1617,15 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
 def run_bounded_radial_shell_validation(
     *, rtol: float = 2.0e-14, atol: float = 1.0e-30
 ) -> Mapping[str, Any]:
-    """Validate direct kernels, first-pass order, ownership, and boundaries."""
+    """Validate direct kernels plus source-faithful repeated radial passes."""
     direct = dict(run_direct_fortran_radial_validation(rtol=rtol, atol=atol))
+    direct.update(run_direct_fortran_unsavd_validation(rtol=rtol, atol=atol))
 
     zone1_state = _build_radial_validation_state(zone_index=1)
     zone1 = run_bounded_radial_shell(zone1_state, zone_index=1, pass_index=1, direction=1)
     expected_zone1 = (
-        "trnfrc",
-        "bremsmap",
-        "dsec",
-        "calc_hmc_all",
-        "calc_emisab_all",
-        "calc_emis_all",
-        "heatt",
-        "stpcut",
-        "trnfrn",
+        "trnfrc", "bremsmap", "dsec", "calc_hmc_all", "calc_emisab_all",
+        "calc_emis_all", "heatt", "stpcut", "trnfrn",
     )
     zone1_order_ready = zone1.source_order == expected_zone1
     zone1_skip_ready = bool(
@@ -1217,16 +1637,8 @@ def run_bounded_radial_shell_validation(
     zone2_state = _build_radial_validation_state(zone_index=2)
     zone2 = run_bounded_radial_shell(zone2_state, zone_index=2, pass_index=1, direction=1)
     expected_zone2 = (
-        "step",
-        "trnfrc",
-        "bremsmap",
-        "dsec",
-        "calc_hmc_all",
-        "calc_emisab_all",
-        "calc_emis_all",
-        "heatt",
-        "stpcut",
-        "trnfrn",
+        "step", "trnfrc", "bremsmap", "dsec", "calc_hmc_all",
+        "calc_emisab_all", "calc_emis_all", "heatt", "stpcut", "trnfrn",
     )
     zone2_order_ready = zone2.source_order == expected_zone2
     zone2_step_ready = bool(
@@ -1252,37 +1664,15 @@ def run_bounded_radial_shell_validation(
         and heatt_result.compton_coefficients_source_initialized is False
     )
 
-    reverse_state = _build_radial_validation_state(zone_index=1)
-    reverse_failure_ready = False
-    reverse_completed: tuple[str, ...] = ()
-    try:
-        run_bounded_radial_shell(reverse_state, zone_index=1, pass_index=2, direction=-1)
-    except UnportedXSTARSourceRoutine as exc:
-        reverse_failure_ready = exc.routine is XSTARSourceRoutine.UNSAVD
-        reverse_completed = tuple(
-            reverse_state.provenance.get("completed_source_routines", [])
-        )
-
     turbulent_state = _build_radial_validation_state(zone_index=1)
-    # Keep the final active energy above the source 20-keV smoothing cutoff so
-    # the source-local RRC work arrays are never read beyond their initialized
-    # 1:ncn2 range.
     np.asarray(turbulent_state.radiation.epi)[-1] = 2.1e4
     turbulent_state.control["vturbi"] = 1.2e4
     turbulent = run_bounded_radial_shell(
         turbulent_state, zone_index=1, pass_index=1, direction=1
     )
     expected_turbulent = (
-        "trnfrc",
-        "bremsmap",
-        "dsec",
-        "calc_hmc_all",
-        "calc_emisab_all",
-        "calc_emis_all",
-        "gsmooth",
-        "heatt",
-        "stpcut",
-        "trnfrn",
+        "trnfrc", "bremsmap", "dsec", "calc_hmc_all", "calc_emisab_all",
+        "calc_emis_all", "gsmooth", "heatt", "stpcut", "trnfrn",
     )
     turbulent_order_ready = turbulent.source_order == expected_turbulent
     gsmooth_result = turbulent_state.transfer.source_arrays.get("gsmooth")
@@ -1304,9 +1694,67 @@ def run_bounded_radial_shell_validation(
         )
     )
 
+    multipass_state = _build_radial_validation_state(zone_index=1)
+    multipass = run_bounded_radial_multipass(
+        multipass_state, first_pass_shell_count=2, pass_count=3
+    )
+    pass1, pass2, pass3 = multipass.pass_results
+    expected_restore_hdus = (5, 4, 3)
+    direction_ready = tuple(p.direction for p in multipass.pass_results) == (-1, 1, -1)
+    restore_order_ready = bool(
+        pass2.restored_hdus == expected_restore_hdus
+        and pass3.restored_hdus == expected_restore_hdus
+    )
+    unsavd_before_transfer_ready = bool(
+        all(
+            shell.source_order[0] == "unsavd"
+            and shell.source_order.index("unsavd") < shell.source_order.index("trnfrc")
+            for radial_pass in (pass2, pass3)
+            for shell in radial_pass.shell_results
+        )
+    )
+    hdu_insertion_ready = bool(
+        pass1.saved_hdus == (3, 4, 5)
+        and pass1.terminal_saved_hdu == 4
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(3).zone_index == 1
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(4).terminal_record
+        and multipass.saved_state.require_pass(1).snapshot_at_hdu(5).zone_index == 2
+        and pass2.saved_hdus == (3, 4, 5, 6)
+        and pass2.terminal_saved_hdu == 5
+    )
+    first_snapshot = multipass.saved_state.require_pass(1).snapshot_at_hdu(3)
+    real4_ready = bool(
+        first_snapshot.radius == float(np.float32(first_snapshot.radius))
+        and first_snapshot.temperature == float(np.float32(first_snapshot.temperature))
+        and np.array_equal(
+            first_snapshot.opakc,
+            np.asarray(first_snapshot.opakc, dtype=np.float32).astype(float),
+        )
+    )
+    pass2_dsec_skip_ready = bool(
+        all("dsec" not in shell.source_order for shell in pass2.shell_results)
+    )
+    pass3_dsec_execute_ready = bool(
+        all("dsec" in shell.source_order for shell in pass3.shell_results)
+    )
+    repeated_state_ready = bool(
+        pass1.numrec == 3
+        and len(pass2.shell_results) == 3
+        and len(pass3.shell_results) == 3
+        and pass2.saved_hdus == (3, 4, 5, 6)
+        and pass3.saved_hdus == (3, 4, 5, 6)
+    )
+    zrems_local_ready = bool(
+        all(
+            shell.state.transfer.source_arrays["unsavd"].zrems_saved_but_not_restored
+            for radial_pass in (pass2, pass3)
+            for shell in radial_pass.shell_results
+        )
+    )
+
     summary: dict[str, Any] = {
         **direct,
-        "port_version": "v0.4.66",
+        "port_version": "v0.4.67",
         "bounded_radial_shell_translated": True,
         "zone1_step_skip_ready": zone1_skip_ready,
         "zone1_first_pass_call_order_ready": zone1_order_ready,
@@ -1316,25 +1764,44 @@ def run_bounded_radial_shell_validation(
         "later_zone_source_order": list(zone2.source_order),
         "shared_radial_array_ownership_ready": ownership_ready,
         "heatt_translated_in_radial_sequence_ready": heatt_boundary_ready,
-        "reverse_pass_unsavd_explicit_failure_ready": reverse_failure_ready,
-        "reverse_pass_completed_before_failure": list(reverse_completed),
         "turbulent_gsmooth_executed_ready": turbulent_gsmooth_ready,
         "turbulent_gsmooth_before_heatt_ready": turbulent_order_ready,
         "turbulent_shared_array_ownership_ready": turbulent_ownership_ready,
         "turbulent_source_order": list(turbulent.source_order),
+        "caller_owned_saved_shell_state_ready": isinstance(
+            multipass_state.transfer.saved_pass_state, SavedRadialStateStore
+        ),
+        "saved_state_real4_rounding_ready": real4_ready,
+        "saved_hdu_insertion_shift_order_ready": hdu_insertion_ready,
+        "multipass_direction_alternation_ready": direction_ready,
+        "reverse_pass_unsavd_executed_ready": unsavd_before_transfer_ready,
+        "reverse_pass_restore_hdu_order_ready": restore_order_ready,
+        "reverse_pass_restored_hdus": [list(pass2.restored_hdus), list(pass3.restored_hdus)],
+        "positive_pass_nlimdt_zero_dsec_skip_ready": pass2_dsec_skip_ready,
+        "negative_repeated_pass_nlimdt_restore_dsec_ready": pass3_dsec_execute_ready,
+        "unsavd_zrems_local_temporary_in_multipass_ready": zrems_local_ready,
+        "repeated_radial_pass_state_ready": repeated_state_ready,
+        "multipass_source_orders": [
+            [list(shell.source_order) for shell in radial_pass.shell_results]
+            for radial_pass in multipass.pass_results
+        ],
         "output_writers_excluded_ready": bool(
             not zone1.output_writers_executed
             and not zone2.output_writers_executed
             and not turbulent.output_writers_executed
-            and not zone2_state.transfer.provenance["radial_shell"]["output_writers_executed"]
+            and not multipass.output_writers_executed
+            and all(
+                not shell.output_writers_executed
+                for radial_pass in multipass.pass_results
+                for shell in radial_pass.shell_results
+            )
         ),
     }
     summary["bounded_radial_shell_source_acceptance_ready"] = bool(
         all(value for key, value in summary.items() if key.endswith("_ready"))
     )
-    summary["next_source_target"] = "unsavd_multipass_state"
+    summary["next_source_target"] = "tabulated_radial_density_and_pass_convergence"
     return summary
-
 
 def write_bounded_radial_shell_validation_products(
     summary: Mapping[str, Any], out_dir: str | Path
@@ -1377,6 +1844,16 @@ __all__ = [
     "TrnfrnResult",
     "RadialTransferWorkspace",
     "BoundedRadialShellResult",
+    "BoundedRadialPassResult",
+    "BoundedRadialMultipassResult",
+    "SavedRadialStatePortError",
+    "SavedShellSnapshot",
+    "SavedRadialPassState",
+    "SavedRadialStateStore",
+    "UnsavdResult",
+    "make_saved_shell_snapshot",
+    "unsavd",
+    "run_direct_fortran_unsavd_validation",
     "step",
     "trnfrc",
     "stpcut",
@@ -1385,10 +1862,16 @@ __all__ = [
     "apply_trnfrc_to_state",
     "apply_gsmooth_to_state",
     "apply_heatt_to_state",
+    "capture_saved_shell_snapshot_from_state",
+    "save_radial_shell_state",
+    "apply_unsavd_to_state",
+    "initialize_bounded_radial_pass_state",
     "apply_stpcut_to_state",
     "apply_trnfrn_to_state",
     "register_bounded_radial_source_routines",
     "run_bounded_radial_shell",
+    "run_bounded_radial_pass",
+    "run_bounded_radial_multipass",
     "direct_fortran_radial_reference_cases",
     "run_direct_fortran_radial_validation",
     "run_bounded_radial_shell_validation",

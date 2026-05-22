@@ -1416,3 +1416,21 @@ PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
 ```
 
 Reverse/multipass restoration and output writers remain excluded.
+
+## 17. Saved shell state and repeated radial passes (v0.4.67)
+
+The bounded radial driver now stores caller-owned shell snapshots at the
+literal `savd` call positions and restores them through translated `unsavd` on
+later passes. Snapshot values are persisted as REAL(4), and records use the
+same one-based insertion/shift order as the source FITS HDUs. This is transfer
+state only; no output file is written.
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+```
+
+The fixture accepts directions `-1,+1,-1`, source restore HDUs `5,4,3`, and
+`unsavd -> trnfrc` order on later passes. Tabulated radial density, pass
+convergence, and output writers remain excluded.

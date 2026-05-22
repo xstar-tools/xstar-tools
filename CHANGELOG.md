@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## v0.4.67 translated `unsavd` and bounded repeated radial passes - 2026-05-22
+
+v0.4.67 translates `unsavd.f90`, validates its caller-visible restoration
+against the unmodified original Fortran, and adds the caller-owned saved
+shell/pass state required by the radial driver. The bounded model now executes
+three alternating passes without entering any output writer:
+
+```text
+pass 1, ldir=-1: initialize -> shells -> saved REAL(4) records
+pass 2, ldir=+1: unsavd -> shell calculation, with nlimdt=0
+pass 3, ldir=-1: unsavd -> shell calculation, with nlimdt=nlimd
+```
+
+The in-memory persistence contract reproduces the source `savd`/`unsavd`
+interface rather than the FITS output mechanism: values are rounded through
+REAL(4), HDUs 1--2 are reserved, each record is inserted after the requested
+one-based HDU, and later records shift exactly as CFITSIO `ftcrhd` would shift
+them. For the two-shell fixture, pass 1 stores shell 1 at HDU 3, inserts the
+terminal record at HDU 4, and shifts shell 2 to HDU 5. Passes 2 and 3 therefore
+restore HDUs `5, 4, 3` in source order.
+
+`unsavd` restores the saved scalars, populations, line/RRC/continuum arrays,
+and only the optical-depth row owned by the current direction. The saved
+`zrems` table is read into a local temporary and intentionally does not replace
+the caller array, matching the original source. Tabulated radial density,
+explicit pass-convergence control, and output writers remain unported.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+```
+
 ## v0.4.66 translated `gsmooth` and nonzero-turbulence radial branch - 2026-05-22
 
 v0.4.66 translates `gsmooth.f90` and `gsmooth2.f90`, validates the combined

@@ -1369,3 +1369,20 @@ PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
 \texttt{gsmooth}, \texttt{unsavd}, multipass restoration, and output writers
 remain excluded.
 \n\section{Translated turbulent smoothing (v0.4.66)}\n\nFor \texttt{vturbi > 1.e-34}, the bounded radial caller now executes the\ntranslated \texttt{gsmooth} routine after local \texttt{xstarcalc} and before\n\texttt{heatt}.  The source wrapper calls \texttt{gsmooth2} on\n\texttt{brcems}, the two \texttt{rccemis} rows, and \texttt{opakc} in literal\norder.  Bins 1--2, energies at or above 20~keV, and caller-owned capacity above\n\texttt{ncn2} remain unchanged.\n\n\begin{verbatim}\nPYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \\\n  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \\\n  --print-summary\n\end{verbatim}\n\nReverse/multipass restoration and output writers remain excluded.\n
+\section{Saved shell state and repeated radial passes (v0.4.67)}
+
+The bounded radial driver stores caller-owned shell snapshots at the literal
+\texttt{savd} call positions and restores them through translated
+\texttt{unsavd} on later passes. Values are persisted as REAL(4), and records
+follow the same one-based HDU insertion and shifting order as the original
+source. This is transfer state only; no output file is written.
+
+\begin{verbatim}
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+\end{verbatim}
+
+The bounded fixture accepts directions \texttt{-1,+1,-1} and restore HDUs
+\texttt{5,4,3}. Tabulated radial density, pass convergence, and output writers
+remain excluded.
