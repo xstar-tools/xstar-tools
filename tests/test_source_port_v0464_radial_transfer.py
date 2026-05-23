@@ -206,4 +206,4 @@ def test_v0464_registration_includes_gsmooth_and_unsavd():
 
 
 def test_v0464_version():
-    assert xa.__version__ == "0.4.77"
+    assert xa.__version__ == "0.4.78"

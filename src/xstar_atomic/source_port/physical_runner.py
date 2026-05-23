@@ -13,6 +13,7 @@ source branches fail explicitly instead of being approximated.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import copy
 from hashlib import sha256
 import json
 import math
@@ -69,7 +70,12 @@ from .pprint_legacy import (
     PprintIonMetadata,
 )
 from .radiation import nbinc
-from .radial_transfer import RadialTransferWorkspace, run_bounded_radial_multipass
+from .radial_transfer import (
+    BoundedRadialShellResult,
+    RadialTransferWorkspace,
+    run_bounded_radial_multipass,
+    run_bounded_radial_shell,
+)
 from .state import XSTARPythonState
 from .thermal_balance import HeatFContext
 
@@ -1401,6 +1407,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
     master = state.atomic.master
     derived = state.atomic.derived
     required = tuple(z for z, value in enumerate(parameters.physical_abundances, start=1) if value > 1.0e-24)
+    calc_kwargs_factory = _calc_kwargs_factory(state, compton_table)
 
     def build_runtime() -> DsecMutableRuntimeState:
         prior: DsecMutableRuntimeState | None = state.control.get("physical_dsec_runtime")
@@ -1448,8 +1455,14 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         evaluator = CalcHMCAllDsecEvaluator(
             master=master,
             derived=derived,
-            calc_kwargs_factory=_calc_kwargs_factory(runtime_state, compton_table),
+            calc_kwargs_factory=calc_kwargs_factory,
             progress_callback=dsec_progress,
+            capture_all_input_snapshots=bool(
+                runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
+            ),
+            evaluation_gate_callback=runtime_state.control.get(
+                "zone1_dsec_evaluation_gate_callback"
+            ),
         )
         result = dsec(
             runtime,
@@ -1457,6 +1470,74 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
             tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
         )
+        if bool(runtime_state.control.get("zone1_dsec_capture_all_inputs", False)) and evaluator.input_snapshots:
+            target_temperature_k = float(
+                runtime_state.control.get("zone1_dsec_target_temperature_k", 73198.4)
+            )
+            source_snapshot = min(
+                evaluator.input_snapshots,
+                key=lambda item: abs(float(item.temperature_k) - target_temperature_k),
+            )
+            target_xee = float(
+                runtime_state.control.get(
+                    "zone1_dsec_target_electron_fraction_xee",
+                    source_snapshot.electron_fraction_xee,
+                )
+            )
+            target_xpx = float(
+                runtime_state.control.get(
+                    "zone1_dsec_target_hydrogen_density_cm3",
+                    source_snapshot.hydrogen_density_cm3,
+                )
+            )
+            free_context = source_snapshot.calc_kwargs.get("free_free_context")
+            bremem_context = source_snapshot.calc_kwargs.get("bremem_context")
+            opakc = None if free_context is None else np.asarray(
+                getattr(free_context, "opakc_before_cm_inv", ()), dtype=float
+            ).copy()
+            brcems = None if bremem_context is None else np.asarray(
+                getattr(bremem_context, "brcems_before", ()), dtype=float
+            ).copy()
+            target_runtime = DsecMutableRuntimeState(
+                temperature_t4=target_temperature_k / 1.0e4,
+                electron_fraction_xee=target_xee,
+                hydrogen_density_cm3=target_xpx,
+                element_requests=tuple(copy.deepcopy(source_snapshot.element_requests)),
+                required_element_z=source_snapshot.required_element_z,
+                pressure=float(source_snapshot.pressure),
+                lcdd=int(source_snapshot.lcdd),
+                global_level_populations=dict(source_snapshot.global_level_populations),
+                global_xilevg_by_index=None if source_snapshot.global_xilevg_by_index is None else np.asarray(source_snapshot.global_xilevg_by_index, dtype=float).copy(),
+                global_bilevg_by_index=None if source_snapshot.global_bilevg_by_index is None else np.asarray(source_snapshot.global_bilevg_by_index, dtype=float).copy(),
+                global_rnisg_by_index=None if source_snapshot.global_rnisg_by_index is None else np.asarray(source_snapshot.global_rnisg_by_index, dtype=float).copy(),
+                global_level_index_by_key=dict(source_snapshot.global_level_index_by_key),
+                leveltemp_workspace=copy.deepcopy(source_snapshot.leveltemp_workspace),
+                leveltemp_owner_by_column=copy.deepcopy(source_snapshot.leveltemp_owner_by_column),
+                source_global_alias_writeback=bool(source_snapshot.source_global_alias_writeback),
+                reset_leveltemp_each_calc_hmc_all=True,
+                work_arrays={"opakc": opakc, "brcems": brcems},
+            )
+            target_evaluator = CalcHMCAllDsecEvaluator(
+                master=master,
+                derived=derived,
+                calc_kwargs_factory=calc_kwargs_factory,
+                dispatcher=copy.deepcopy(source_snapshot.dispatcher_state),
+                element_solver=copy.deepcopy(source_snapshot.element_solver_state),
+                pre_matrix_solver=copy.deepcopy(source_snapshot.pre_matrix_solver_state),
+            )
+            target_evaluation = target_evaluator(target_runtime)
+            runtime_state.control["zone1_dsec_target_result"] = target_evaluation.fixed_state_result
+            runtime_state.control["zone1_dsec_target_metadata"] = {
+                "source": "fixed_target_state_replay",
+                "source_evaluation_index": int(source_snapshot.evaluation_index),
+                "source_temperature_K": float(source_snapshot.temperature_k),
+                "target_temperature_K": target_temperature_k,
+                "target_electron_fraction_xee": target_xee,
+                "target_hydrogen_density_cm3": target_xpx,
+                "xstar_target_state_used": bool(
+                    runtime_state.control.get("zone1_dsec_xstar_target_state_used", False)
+                ),
+            }
         _compact_dsec_diagnostics(runtime_state, evaluator, result)
         runtime_state.control["physical_dsec_runtime"] = result.state
         runtime_state.control["physical_calc_evaluator"] = evaluator
@@ -1479,7 +1560,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         evaluator = CalcHMCAllDsecEvaluator(
             master=master,
             derived=derived,
-            calc_kwargs_factory=_calc_kwargs_factory(runtime_state, compton_table),
+            calc_kwargs_factory=calc_kwargs_factory,
         )
         evaluation = evaluator(runtime)
         if evaluation.fixed_state_result is None:
@@ -2004,6 +2085,150 @@ def run_xstar_python_script(
     )
 
 
+
+@dataclass
+class Zone1DsecDiagnosticRun:
+    """One bounded physical zone-1 run with every DSEC entry state retained."""
+
+    ready: bool
+    parameters: NormalizedXSTARParameters
+    final_state: XSTARPythonState
+    shell_result: BoundedRadialShellResult
+    dsec_result: Any
+    evaluator: CalcHMCAllDsecEvaluator
+    products: Mapping[str, Path]
+    atomic_build: AtomicDatabaseBuildResult = field(repr=False)
+
+    def close(self) -> None:
+        self.atomic_build.atomic_state.close()
+
+    def __enter__(self) -> "Zone1DsecDiagnosticRun":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ready": bool(self.ready),
+            "zone_index": 1,
+            "n_evaluations": len(self.evaluator.evaluations),
+            "n_input_snapshots": len(self.evaluator.input_snapshots),
+            "final_temperature_K": float(self.final_state.plasma.temperature),
+            "final_electron_fraction_xee": float(self.final_state.plasma.xee),
+            "products": {key: str(value) for key, value in self.products.items()},
+            "production_rates_modified": False,
+            "production_tolerances_modified": False,
+            "empirical_corrections_added": False,
+        }
+
+
+def run_zone1_dsec_diagnostic_from_parameters(
+    parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any],
+    *,
+    atdb_path: str | Path | None = None,
+    output_dir: str | Path = "zone1_dsec_diagnostic",
+    coheat_path: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
+    xstar_probe_dir: str | Path | None = None,
+    enforce_cooling_gate: bool = False,
+    cooling_rtol: float = 5.0e-5,
+    cooling_atol: float = 1.0e-30,
+) -> Zone1DsecDiagnosticRun:
+    """Execute only the first physical radial shell and retain all DSEC inputs."""
+    from .zone1_dsec_diagnostic import write_zone1_python_diagnostic_products
+    from .zone1_dsec_probe_analysis import (
+        load_xstar_target_state,
+        make_carbon_cooling_gate,
+    )
+
+    resolved_atdb = _resolve_runner_atdb_path(atdb_path)
+    normalized = normalize_xstar_parameters(parameters)
+    pointer_cache_path, metadata_cache_path = _cache_paths(resolved_atdb, cache_dir)
+    state, built = _build_initial_state(
+        normalized,
+        atdb_path=resolved_atdb,
+        coheat_path=coheat_path,
+        pointer_cache=pointer_cache_path,
+        metadata_cache=metadata_cache_path,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
+    )
+    state.control["zone1_dsec_capture_all_inputs"] = True
+    state.control["zone1_dsec_target_temperature_k"] = 73198.4
+    if xstar_probe_dir is not None:
+        target_state = load_xstar_target_state(xstar_probe_dir)
+        state.control["zone1_dsec_target_temperature_k"] = float(
+            target_state["temperature_K"]
+        )
+        state.control["zone1_dsec_target_electron_fraction_xee"] = float(
+            target_state["electron_fraction_xee"]
+        )
+        state.control["zone1_dsec_target_hydrogen_density_cm3"] = float(
+            target_state["hydrogen_density_cm3"]
+        )
+        state.control["zone1_dsec_xstar_target_state_used"] = True
+    if enforce_cooling_gate:
+        if xstar_probe_dir is None:
+            built.atomic_state.close()
+            raise XSTARPythonRunnerError(
+                "enforce_cooling_gate requires xstar_probe_dir"
+            )
+        state.control["zone1_dsec_evaluation_gate_callback"] = make_carbon_cooling_gate(
+            xstar_probe_dir, rtol=cooling_rtol, atol=cooling_atol
+        )
+    try:
+        shell = run_bounded_radial_shell(
+            state, zone_index=1, pass_index=1, direction=-1, fixed_state=False
+        )
+        evaluator = state.control.get("physical_calc_evaluator")
+        if not isinstance(evaluator, CalcHMCAllDsecEvaluator):
+            raise XSTARPythonRunnerError("zone-1 DSEC evaluator was not retained")
+        dsec_result = state.local_zone.source_arrays.get("dsec")
+        if dsec_result is None:
+            raise XSTARPythonRunnerError("zone-1 DSEC result was not retained")
+        products = write_zone1_python_diagnostic_products(
+            snapshots=evaluator.input_snapshots,
+            evaluations=evaluator.evaluations,
+            master=built.master,
+            derived=built.derived,
+            out_dir=output_dir,
+            target_result=state.control.get("zone1_dsec_target_result"),
+            target_metadata=state.control.get("zone1_dsec_target_metadata"),
+        )
+        ready = bool(
+            evaluator.evaluations
+            and len(evaluator.input_snapshots) == len(evaluator.evaluations)
+            and Path(products["summary_json"]).is_file()
+        )
+        return Zone1DsecDiagnosticRun(
+            ready=ready,
+            parameters=normalized,
+            final_state=state,
+            shell_result=shell,
+            dsec_result=dsec_result,
+            evaluator=evaluator,
+            products=products,
+            atomic_build=built,
+        )
+    except Exception:
+        built.atomic_state.close()
+        raise
+
+
+def run_zone1_dsec_diagnostic_script(
+    run_script: str | Path,
+    **kwargs: Any,
+) -> Zone1DsecDiagnosticRun:
+    """Parse one literal ``run_xstar.sh`` and execute the bounded zone-1 gate."""
+    return run_zone1_dsec_diagnostic_from_parameters(
+        parse_run_xstar_script(run_script), **kwargs
+    )
+
 def run_c5_ne1_acceptance(
     *,
     run_script: str | Path,
@@ -2106,5 +2331,8 @@ __all__ = [
     "run_xstar_python",
     "run_xstar_python_command",
     "run_xstar_python_script",
+    "Zone1DsecDiagnosticRun",
+    "run_zone1_dsec_diagnostic_from_parameters",
+    "run_zone1_dsec_diagnostic_script",
     "run_c5_ne1_acceptance",
 ]

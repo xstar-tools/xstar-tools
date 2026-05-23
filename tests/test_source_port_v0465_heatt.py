@@ -59,4 +59,4 @@ def test_v0465_radial_composition_uses_translated_heatt():
 
 
 def test_v0465_version():
-    assert xa.__version__ == "0.4.77"
+    assert xa.__version__ == "0.4.78"

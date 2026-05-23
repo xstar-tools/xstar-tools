@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-atomic
-Version: 0.4.77
+Version: 0.4.78
 Summary: Source-faithful Python port and atomic-physics audit tools for XSTAR
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,21 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.4.78 bounded zone-1 DSEC diagnostic
+
+v0.4.78 isolates the first `c5_ne1` DSEC call before any further full radial
+parity attempt.  It captures every mutable `calc_hmc_all` entry state, performs
+exact same-entry replay, compares original/Python C IV-C VI rates at
+`73198.4 K`, audits the selected C V matrix rows and all contributing ATDB
+records, and can stop before the thermal root finder commits the first
+mismatching carbon cooling term.
+
+Use `examples/146_prepare_xstar_zone1_dsec_probe.py` for the original-XSTAR
+probe, `examples/145_diagnose_xstar_zone1_dsec.py` for the one-zone Python run,
+and `examples/147_analyze_xstar_zone1_dsec_probe.py` for the cross-comparison.
+The full command sequence is in `V0478_ZONE1_DSEC_WORKFLOW.md`.  No production
+rate or acceptance tolerance changes in this release.
 
 ## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate
 
@@ -657,7 +672,7 @@ also writes `xstar_dsec_element_thermal_decomposition.csv` for every evaluation.
 No XSTAR rebuild is required.
 
 # xstar-atomic
-> **Current development baseline: v0.4.77.** The first real all-ATDB Python run now reaches the first radial detail save with vectorized caches and per-DSEC diagnostics. v0.4.77 restores the full source `nnml` capacity of `xilevg`, `bilevg`, and `rnisg` at radial/emissivity/output boundaries while preserving the compact active-element prefix inside repeated DSEC evaluations. C V thermal/population parity remains open; no empirical correction is used.
+> **Current development baseline: v0.4.76.** The first real all-ATDB Python run now completes. v0.4.76 restores literal first-pass control, fixes temperature/detail/local-level/RRC output semantics, upgrades the metadata cache to v3, and adds per-DSEC thermal and carbon-rate diagnostics. C V thermal/population parity remains open; no empirical correction is used.
 
 
 

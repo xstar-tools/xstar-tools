@@ -335,6 +335,12 @@ class DsecCalcHMCAllInputSnapshot:
     global_xilevg_by_index: Optional[np.ndarray] = None
     global_bilevg_by_index: Optional[np.ndarray] = None
     global_rnisg_by_index: Optional[np.ndarray] = None
+    element_requests: Tuple[FixedStateElementRequest, ...] = ()
+    required_element_z: Optional[Tuple[int, ...]] = None
+    source_global_alias_writeback: bool = False
+    dispatcher_state: Optional[Any] = None
+    element_solver_state: Optional[Any] = None
+    pre_matrix_solver_state: Optional[Any] = None
 
 
 @dataclass(frozen=True)
@@ -372,6 +378,8 @@ class CalcHMCAllDsecEvaluator:
     pre_evaluation_callback: Optional[Callable[[int, DsecMutableRuntimeState], None]] = None
     progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
     capture_input_snapshot_indices: Tuple[int, ...] = ()
+    capture_all_input_snapshots: bool = False
+    evaluation_gate_callback: Optional[Callable[[int, DsecCalcHMCAllInputSnapshot, FixedStateCalcHMCAllResult], None]] = None
     evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
     input_snapshots: List[DsecCalcHMCAllInputSnapshot] = field(default_factory=list, init=False)
 
@@ -401,7 +409,9 @@ class CalcHMCAllDsecEvaluator:
             kwargs["pre_matrix_solver"] = self.pre_matrix_solver
 
         requests = state.requests_for_next_call()
-        if evaluation_index in set(self.capture_input_snapshot_indices):
+        capture_snapshot = bool(self.capture_all_input_snapshots or evaluation_index in set(self.capture_input_snapshot_indices))
+        snapshot: Optional[DsecCalcHMCAllInputSnapshot] = None
+        if capture_snapshot:
             prior = state.last_calc_hmc_all
             radiation = requests[0].radiation if requests else None
             escape = requests[0].escape if requests else None
@@ -457,6 +467,17 @@ class CalcHMCAllDsecEvaluator:
                         getattr(state, "global_rnisg_by_index"), dtype=float
                     ).copy()
                 ),
+                element_requests=tuple(copy.deepcopy(requests)),
+                required_element_z=(
+                    None if state.required_element_z is None
+                    else tuple(int(z) for z in state.required_element_z)
+                ),
+                source_global_alias_writeback=bool(
+                    getattr(state, "source_global_alias_writeback", False)
+                ),
+                dispatcher_state=copy.deepcopy(self.dispatcher),
+                element_solver_state=copy.deepcopy(self.element_solver),
+                pre_matrix_solver_state=copy.deepcopy(self.pre_matrix_solver),
             )
             self.input_snapshots.append(snapshot)
 
@@ -486,6 +507,10 @@ class CalcHMCAllDsecEvaluator:
             ),
             **kwargs,
         )
+        if self.evaluation_gate_callback is not None:
+            if snapshot is None:
+                raise DsecPortError("evaluation_gate_callback requires an input snapshot")
+            self.evaluation_gate_callback(evaluation_index, snapshot, result)
         state.commit_calc_hmc_all(result)
         if self.progress_callback is not None:
             self.progress_callback(state.calc_hmc_all_call_count, state, result)

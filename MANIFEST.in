@@ -313,3 +313,9 @@ include src_v0476_update_report.md
 include xstar_atomic_v0.4.77.md
 include XSTAR_SOURCE_CHANGES_v0.4.77.md
 include src_v0477_update_report.md
+
+include xstar_atomic_v0.4.78.md
+include XSTAR_SOURCE_CHANGES_v0.4.78.md
+include src_v0478_update_report.md
+include V0478_ZONE1_DSEC_WORKFLOW.md
+include xstar_atomic_conversation_summary_v0478.md

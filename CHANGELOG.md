@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.4.78 — bounded zone-1 DSEC source-state and carbon-cooling parity gate - 2026-05-23
+
+- Adds an observation-only original-XSTAR probe for the complete first-zone DSEC evaluation sequence.
+- Fingerprints every represented mutable `calc_hmc_all` input before every trial.
+- Adds exact same-entry deterministic replay for every captured Python state.
+- Compares C IV/C V/C VI rates at the original state nearest `73198.4 K`.
+- Audits every C V matrix record and scaling factor touching local levels `4-6`, `10-12`, and `20`.
+- Adds term-by-term carbon cooling comparison before DSEC may commit a mismatching trial.
+- Preserves all production rates, source branches, tolerances, NPZ caches, and physical-output comparators; no empirical correction is introduced.
+- Validation: 43 focused tests, all 385 source-port tests, byte-compilation, Fortran helper compilation, and extracted-sdist tests.
+
 ## v0.4.77 full source global-level capacity at radial/output boundaries - 2026-05-23
 
 v0.4.77 is a bounded source-state/output hotfix driven by the first user-side

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.4.77"
+version = "0.4.78"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -82,6 +82,9 @@ xstar-atomic-validate-dsec-final-residual-semantics = "xstar_atomic.source_port_
 xstar-atomic-prepare-calc-hmc-all-probe = "xstar_atomic.calc_hmc_all_probe_cli:main"
 xstar-atomic-prepare-dsec-probe = "xstar_atomic.dsec_probe_cli:main"
 xstar-atomic-prepare-dsec-matching-probe = "xstar_atomic.dsec_matching_probe_cli:main"
+xstar-atomic-diagnose-zone1-dsec = "xstar_atomic.source_port_zone1_dsec_cli:main"
+xstar-atomic-prepare-zone1-dsec-probe = "xstar_atomic.zone1_dsec_probe_cli:main"
+xstar-atomic-analyze-zone1-dsec-probe = "xstar_atomic.zone1_dsec_analysis_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

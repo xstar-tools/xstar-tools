@@ -1202,6 +1202,12 @@ def assemble_element_matrix(
                         "ion_index": block.ion_index,
                         "ion_stage": block.ion_stage,
                         "nlev": block.nlev,
+                        # Diagnostic provenance retained from the literal
+                        # calc_hmc_ion -> ucalc call.  These fields do not
+                        # participate in matrix assembly or any rate.
+                        "escape_factor_in": float(ptmp1),
+                        "escape_factor_out": float(ptmp2),
+                        "density_scale": float(context.hydrogen_density_cm3),
                         "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
                         "leveltemp_workspace_write_sequence": second_pass_write_sequence,
                         "leveltemp_workspace_max_column": max(levels.levels, default=0),

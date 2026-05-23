@@ -1171,6 +1171,9 @@ from .physical_runner import (
     run_xstar_python,
     run_xstar_python_command,
     run_xstar_python_script,
+    Zone1DsecDiagnosticRun,
+    run_zone1_dsec_diagnostic_from_parameters,
+    run_zone1_dsec_diagnostic_script,
     run_c5_ne1_acceptance,
 )
 
@@ -1186,7 +1189,8 @@ __all__.extend([
     "prepare_xstar_python_cache",
     "run_xstar_from_parameters", "run_xstar_python",
     "run_xstar_python_command", "run_xstar_python_script",
-    "run_c5_ne1_acceptance",
+    "Zone1DsecDiagnosticRun", "run_zone1_dsec_diagnostic_from_parameters",
+    "run_zone1_dsec_diagnostic_script", "run_c5_ne1_acceptance",
 ])
 
 from .physical_output_diagnostics import (
@@ -1197,4 +1201,27 @@ from .physical_output_diagnostics import (
 __all__.extend([
     "PhysicalMismatchDiagnosis",
     "diagnose_physical_output_mismatch",
+])
+
+from .zone1_dsec_diagnostic import (
+    TARGET_CARBON_STAGES, TARGET_CV_LOCAL_LEVELS, TARGET_TEMPERATURE_K,
+    numeric_fingerprint, snapshot_fingerprints, replay_same_entry_state,
+    extract_python_carbon_rates, extract_python_cv_matrix_audit,
+    carbon_cooling_rows, compare_cooling_terms, enforce_cooling_gate,
+    write_zone1_python_diagnostic_products,
+)
+from .zone1_dsec_probe_analysis import (
+    load_xstar_target_state, load_xstar_carbon_cooling_terms,
+    analyze_xstar_zone1_probe, compare_zone1_probe_with_python,
+    make_carbon_cooling_gate,
+)
+
+__all__.extend([
+    "TARGET_CARBON_STAGES", "TARGET_CV_LOCAL_LEVELS", "TARGET_TEMPERATURE_K",
+    "numeric_fingerprint", "snapshot_fingerprints", "replay_same_entry_state",
+    "extract_python_carbon_rates", "extract_python_cv_matrix_audit",
+    "carbon_cooling_rows", "compare_cooling_terms", "enforce_cooling_gate",
+    "write_zone1_python_diagnostic_products", "load_xstar_target_state",
+    "load_xstar_carbon_cooling_terms", "analyze_xstar_zone1_probe",
+    "compare_zone1_probe_with_python", "make_carbon_cooling_gate",
 ])

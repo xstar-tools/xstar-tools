@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.77"
+__version__ = "0.4.78"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -816,6 +816,9 @@ from .source_port.physical_runner import (
     run_xstar_python,
     run_xstar_python_command,
     run_xstar_python_script,
+    Zone1DsecDiagnosticRun,
+    run_zone1_dsec_diagnostic_from_parameters,
+    run_zone1_dsec_diagnostic_script,
     run_c5_ne1_acceptance,
 )
 
@@ -832,7 +835,11 @@ for _name in (
 if "ProgressCallback" not in __all__:
     __all__.append("ProgressCallback")
 
-for _name in ("XSTARPythonCacheResult", "prepare_xstar_python_cache"):
+for _name in (
+    "XSTARPythonCacheResult", "prepare_xstar_python_cache",
+    "Zone1DsecDiagnosticRun", "run_zone1_dsec_diagnostic_from_parameters",
+    "run_zone1_dsec_diagnostic_script",
+):
     if _name not in __all__:
         __all__.append(_name)
 
