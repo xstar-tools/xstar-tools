@@ -1098,13 +1098,37 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
     return factory
 
 
+def _guard_full_global_level_array(values: Sequence[float], derived: Any) -> np.ndarray:
+    """Return the source-owned one-based ``nnml`` vector.
+
+    ``calc_hmc_all`` may allocate its dense mutable arrays only through the
+    largest global level index belonging to the elements active in the current
+    model.  The original executable nevertheless owns full ``nnml`` arrays,
+    with every inactive tail entry left at its initialized zero value.  Radial
+    snapshots and ``fstepr`` detail writers therefore require that full source
+    capacity rather than the active-element prefix.
+    """
+
+    array = np.asarray(values, dtype=float).reshape(-1)
+    capacity = int(getattr(derived, "n_level_records", 0))
+    npilev = np.asarray(getattr(derived, "npilev", ()), dtype=np.int64)
+    if npilev.size:
+        capacity = max(capacity, int(np.max(npilev)))
+    capacity = max(capacity, int(array.size))
+    guarded = np.zeros(capacity + 1, dtype=float)
+    guarded[1 : array.size + 1] = array
+    return guarded
+
+
 def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeState, result: FixedStateCalcHMCAllResult) -> None:
     state.plasma.temperature = float(result.temperature_k)
     state.plasma.xpx = float(result.hydrogen_density_cm3)
     state.plasma.xee = float(result.electron_fraction_xee)
     state.plasma.electron_density = float(result.electron_density_cm3)
     state.plasma.ion_fractions = dict(result.ion_fractions)
-    state.plasma.populations = _guard(result.global_xilevg_by_index)
+    state.plasma.populations = _guard_full_global_level_array(
+        result.global_xilevg_by_index, state.atomic.derived
+    )
     state.thermal.heating = float(result.httot)
     state.thermal.cooling = float(result.cltot)
     state.thermal.residual = float(result.hmctot)
@@ -1113,9 +1137,15 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
     state.local_zone.calc_hmc_all = result
     state.local_zone.source_arrays.update(
         {
-            "xilevg": _guard(result.global_xilevg_by_index),
-            "bilevg": _guard(result.global_bilevg_by_index),
-            "rnisg": _guard(result.global_rnisg_by_index),
+            "xilevg": _guard_full_global_level_array(
+                result.global_xilevg_by_index, state.atomic.derived
+            ),
+            "bilevg": _guard_full_global_level_array(
+                result.global_bilevg_by_index, state.atomic.derived
+            ),
+            "rnisg": _guard_full_global_level_array(
+                result.global_rnisg_by_index, state.atomic.derived
+            ),
             "xii": _ion_fraction_array(state.atomic.derived, result),
             "htt": _element_array(result.htt),
             "cll": _element_array(result.cll),
@@ -1186,9 +1216,15 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
         abundances_by_z={z: float(v) for z, v in enumerate(parameters.physical_abundances, start=1)},
         min_ion_stage_by_z=dict(result.mml),
         max_ion_stage_by_z=dict(result.mmu),
-        xilevg=_guard(result.global_xilevg_by_index),
-        bilevg=_guard(result.global_bilevg_by_index),
-        rnisg=_guard(result.global_rnisg_by_index),
+        xilevg=_guard_full_global_level_array(
+            result.global_xilevg_by_index, state.atomic.derived
+        ),
+        bilevg=_guard_full_global_level_array(
+            result.global_bilevg_by_index, state.atomic.derived
+        ),
+        rnisg=_guard_full_global_level_array(
+            result.global_rnisg_by_index, state.atomic.derived
+        ),
         radiation=radiation,
         escape=escape,
         covering_fraction=float(parameters.get("cfrac")),

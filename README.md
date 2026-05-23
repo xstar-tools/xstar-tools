@@ -629,7 +629,7 @@ also writes `xstar_dsec_element_thermal_decomposition.csv` for every evaluation.
 No XSTAR rebuild is required.
 
 # xstar-atomic
-> **Current development baseline: v0.4.76.** The first real all-ATDB Python run now completes. v0.4.76 restores literal first-pass control, fixes temperature/detail/local-level/RRC output semantics, upgrades the metadata cache to v3, and adds per-DSEC thermal and carbon-rate diagnostics. C V thermal/population parity remains open; no empirical correction is used.
+> **Current development baseline: v0.4.77.** The first real all-ATDB Python run now reaches the first radial detail save with vectorized caches and per-DSEC diagnostics. v0.4.77 restores the full source `nnml` capacity of `xilevg`, `bilevg`, and `rnisg` at radial/emissivity/output boundaries while preserving the compact active-element prefix inside repeated DSEC evaluations. C V thermal/population parity remains open; no empirical correction is used.
 
 
 

@@ -44,6 +44,7 @@ XSTAR_SOURCE_CHANGES_v0.4.73.md
 XSTAR_SOURCE_CHANGES_v0.4.74.md
 XSTAR_SOURCE_CHANGES_v0.4.75.md
 XSTAR_SOURCE_CHANGES_v0.4.76.md
+XSTAR_SOURCE_CHANGES_v0.4.77.md
 pyproject.toml
 src_v0441_update_report.md
 src_v0442_update_report.md
@@ -81,6 +82,7 @@ src_v0473_update_report.md
 src_v0474_update_report.md
 src_v0475_update_report.md
 src_v0476_update_report.md
+src_v0477_update_report.md
 xstar_all_calc_hmc_all_v0436_diagnosis_v0437.md
 xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 xstar_atomic_conversation_summary_v0426.md
@@ -205,6 +207,7 @@ xstar_atomic_v0.4.73.md
 xstar_atomic_v0.4.74.md
 xstar_atomic_v0.4.75.md
 xstar_atomic_v0.4.76.md
+xstar_atomic_v0.4.77.md
 xstar_atomic_v0.4.8.md
 xstar_atomic_v0.4.9.md
 xstar_calc_hmc_all_v0426_offline_global_level_summary.csv
@@ -787,6 +790,7 @@ tests/test_source_port_v0472_physical_runner_api.py
 tests/test_source_port_v0473_cache_performance.py
 tests/test_source_port_v0475_continuum_chain.py
 tests/test_source_port_v0476_physical_parity_diagnostics.py
+tests/test_source_port_v0477_full_global_level_capacity.py
 tests/test_stage6_cascade_yield_source.py
 tests/test_stage6_examples.py
 tests/test_stage6_source_fit_helpers.py

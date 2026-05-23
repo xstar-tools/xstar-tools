@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.4.77 full source global-level capacity at radial/output boundaries - 2026-05-23
+
+v0.4.77 is a bounded source-state/output hotfix driven by the first user-side
+v0.4.76 run.  That run completed 39 DSEC evaluations for zone 1 and then
+failed while saving the detail record because the translated solver retained
+only the active H/He/C prefix of the global level arrays (493 entries), whereas
+`fstepr` metadata spans the full 39,221-row source `nnml` space.
+
+The original executable always owns full `xilevg`, `bilevg`, and `rnisg`
+arrays; levels belonging to zero-abundance elements remain initialized to zero.
+The physical runner now restores that full source capacity when committing a
+`calc_hmc_all` result to shared radial/emissivity/output state.  Active entries
+are copied unchanged and the inactive tail is zero-filled.  Repeated DSEC
+trials continue to use the compact active prefix, so this release changes no
+rate, matrix, population, thermal iteration, or cache data.
+
+Existing source-port pointer and output-metadata NPZ caches remain valid.
+
+Validation: 33 focused tests, all 375 source-port tests, byte-compilation, and
+all 375 source-port tests from the extracted source distribution pass.
+
 ## v0.4.76 first completed all-ATDB run diagnostics and source radial/output fidelity - 2026-05-23
 
 v0.4.76 is driven by the first completed real all-ATDB `c5_ne1` Python run.
