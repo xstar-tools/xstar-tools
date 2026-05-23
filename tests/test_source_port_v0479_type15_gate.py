@@ -267,6 +267,31 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     assert summary["carbon_cooling_logical_parity_ready"] is True
     assert summary["thermal_root_may_continue"] is True
 
+    # A benchmark with no selected data-type-15 record must report the proof
+    # as non-applicable rather than fail merely because lazily-created shell
+    # probe files do not exist.  Record-level C IV parity still remains a gate.
+    non_type15_record = dict(record)
+    non_type15_record["data_type"] = 59
+    non_type15_record["rate_type"] = 1
+    for root, prefix in ((py, "python"), (xs, "xstar")):
+        _write_csv(
+            root / f"{prefix}_zone1_civ_calc_ion_rates_records_T73198p4K.csv",
+            [non_type15_record],
+        )
+    not_applicable = compare_zone1_probe_with_python(
+        xstar_analysis_dir=xs,
+        python_diagnostic_dir=py,
+        out_dir=tmp_path / "comparison_not_applicable",
+    )
+    not_applicable_summary = json.loads(
+        not_applicable["summary_json"].read_text(encoding="utf-8")
+    )
+    assert not_applicable_summary["type15_record_level_proof_applicable"] is False
+    assert not_applicable_summary["type15_record_level_proof_ready"] is False
+    assert not_applicable_summary["type15_record_gate_passed"] is True
+    assert not_applicable_summary["civ_record_level_parity_ready"] is True
+    assert not_applicable_summary["thermal_root_may_continue"] is True
+
     # Coverage is strict: one missing logical C V row blocks both gate 5 and DSEC.
     _write_csv(
         xs / "xstar_zone1_cv_matrix_levels_4_6_10_12_20.csv",
@@ -283,4 +308,4 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     assert incomplete_summary["cv_logical_row_count_xstar"] == 931
     assert incomplete_summary["cv_logical_coefficient_parity_ready"] is False
     assert incomplete_summary["thermal_root_may_continue"] is False
-    assert xa.__version__ == "0.4.80"
+    assert xa.__version__ == "0.4.81"

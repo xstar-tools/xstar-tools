@@ -22,7 +22,7 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.80"
+    assert PORT_LEDGER_VERSION == "v0.4.81"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
         "run the instrumented original-XSTAR and Python zone-1 C IV type-15 gate against "

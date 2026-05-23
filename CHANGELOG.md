@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.4.81 — optional lazy data-type-15 probe handling - 2026-05-23
+
+- Fixes an analyzer error that unconditionally required the lazily-created
+  type-15 shell and call-site CSV files.
+- Distinguishes XSTAR data type from rate type: data type 95 / rate type 15 does
+  not require data-type-15 shell products.
+- Requires the shell/effective files only when a selected C IV record actually
+  has `data_type == 15`.
+- Adds explicit `type15_record_level_proof_applicable` and
+  `type15_record_gate_passed` summary fields.
+- Does not falsely claim a type-15 proof when it is not exercised, and does not
+  block the independent C IV record/topology/population/cooling gates.
+- No production-physics or original-XSTAR source changes.
+- Validation: 391 source-port tests passed.
+
 ## v0.4.80 — constant-memory zone-1 analyzer hotfix - 2026-05-23
 
 - Replaces full-file materialization of original-XSTAR probe CSVs with

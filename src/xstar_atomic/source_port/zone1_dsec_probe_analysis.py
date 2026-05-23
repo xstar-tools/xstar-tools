@@ -495,6 +495,67 @@ def _bool_value(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes"}
 
 
+
+
+def _load_type15_probe_rows(
+    root: Path,
+    *,
+    target_call: int,
+    civ_raw: Sequence[Mapping[str, str]],
+    progress: Callable[[str], None] | None = None,
+) -> tuple[dict[int, list[dict[str, str]]], dict[tuple[int, int], dict[str, str]]]:
+    """Load data-type-15 shell/call-site probes only when applicable.
+
+    The original-XSTAR helper creates these CSV files lazily.  A selected
+    C IV record with ``rate_type == 15`` is not necessarily data type 15
+    (the current case contains data type 95/rate type 15).  Therefore the
+    absence of the two data-type-15 files is valid when no selected C IV
+    record has ``data_type == 15``.  When such a record is present, both
+    files remain mandatory and a missing file is a real probe-contract
+    failure.
+    """
+    selected_records = {
+        int(row["record"])
+        for row in civ_raw
+        if int(row["data_type"]) == 15
+    }
+    if not selected_records:
+        if progress is not None:
+            progress(
+                "type15_probe_not_applicable "
+                "selected_civ_data_type15_records=0"
+            )
+        return {}, {}
+
+    if progress is not None:
+        progress(
+            "type15_probe_required "
+            f"selected_civ_data_type15_records={len(selected_records)}"
+        )
+    shell_rows = [
+        row
+        for row in _iter_rows(root / "xstar_zone1_type15_shell_probe.csv")
+        if int(row["calc_hmc_all_call_id"]) == target_call
+        and int(row["record"]) in selected_records
+    ]
+    shells_by_record: Dict[int, list[dict[str, str]]] = {}
+    for row in shell_rows:
+        shells_by_record.setdefault(int(row["record"]), []).append(row)
+    for values in shells_by_record.values():
+        values.sort(key=lambda row: int(row["shell_index"]))
+
+    effective_rows = [
+        row
+        for row in _iter_rows(root / "xstar_zone1_type15_effective_probe.csv")
+        if int(row["calc_hmc_all_call_id"]) == target_call
+        and int(row["record"]) in selected_records
+    ]
+    effective_by_record_phase = {
+        (int(row["record"]), int(row["phase"])): row
+        for row in effective_rows
+    }
+    return shells_by_record, effective_by_record_phase
+
 def analyze_xstar_zone1_probe(
     probe_dir: str | Path,
     *,
@@ -600,29 +661,13 @@ def analyze_xstar_zone1_probe(
     rates_path = out / "xstar_zone1_carbon_rates_T73198p4K.csv"
     _write(rates_path, rate_rows)
 
-    shell_rows = [
-        row for row in _iter_rows(root / "xstar_zone1_type15_shell_probe.csv")
-        if int(row["calc_hmc_all_call_id"]) == target_call
-    ]
-    shells_by_record: Dict[int, list[dict[str, str]]] = {}
-    for row in shell_rows:
-        shells_by_record.setdefault(int(row["record"]), []).append(row)
-    for values in shells_by_record.values():
-        values.sort(key=lambda row: int(row["shell_index"]))
-
-    effective_rows = [
-        row for row in _iter_rows(root / "xstar_zone1_type15_effective_probe.csv")
-        if int(row["calc_hmc_all_call_id"]) == target_call
-    ]
-    effective_by_record_phase = {
-        (int(row["record"]), int(row["phase"])): row
-        for row in effective_rows
-    }
-
     civ_raw = [
         row for row in _iter_rows(root / "xstar_zone1_civ_calc_ion_rates_records_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
     ]
+    shells_by_record, effective_by_record_phase = _load_type15_probe_rows(
+        root, target_call=target_call, civ_raw=civ_raw, progress=progress
+    )
     civ_records: list[dict[str, Any]] = []
     for row in civ_raw:
         record = int(row["record"])
@@ -915,7 +960,7 @@ def analyze_xstar_zone1_probe(
     _write(cooling_path, cooling)
 
     summary = {
-        "diagnostic_release": "0.4.80",
+        "diagnostic_release": "0.4.81",
         "probe_contract_version": "0.4.79",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
@@ -1019,7 +1064,7 @@ def compare_zone1_probe_with_python(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> Mapping[str, Path]:
-    """Evaluate the v0.4.79 ten-gate contract with the v0.4.80 analyzer."""
+    """Evaluate the v0.4.79 physical contract with the v0.4.81 analyzer."""
     xs = Path(xstar_analysis_dir)
     py = Path(python_diagnostic_dir)
     out = Path(out_dir)
@@ -1173,6 +1218,7 @@ def compare_zone1_probe_with_python(
         record for record in set(py_record_map) & set(xs_record_map)
         if int(py_record_map[record]["data_type"]) == 15
     ]
+    type15_record_level_proof_applicable = bool(type15_common)
     type15_last_shell_ready = bool(type15_common)
     type15_parent_diff_observed = False
     for record in type15_common:
@@ -1200,10 +1246,15 @@ def compare_zone1_probe_with_python(
             if abs(parent - effective) > atol + rtol * abs(effective):
                 type15_parent_diff_observed = True
     type15_record_proof_ready = bool(
-        record_coverage_ready
+        type15_record_level_proof_applicable
+        and record_coverage_ready
         and record_numeric_ready
         and type15_last_shell_ready
         and type15_parent_diff_observed
+    )
+    type15_record_gate_passed = bool(
+        not type15_record_level_proof_applicable
+        or type15_record_proof_ready
     )
 
     # 3. C IV retained by the same critf-selected topology.
@@ -1400,7 +1451,7 @@ def compare_zone1_probe_with_python(
     # 10. DSEC is allowed to continue only after all requested physical gates.
     thermal_root_ready = bool(
         same_entry_ready
-        and type15_record_proof_ready
+        and type15_record_gate_passed
         and civ_rate_ready
         and civ_fraction_ready
         and civ_retained_ready
@@ -1412,9 +1463,11 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.80",
+        "diagnostic_release": "0.4.81",
         "probe_contract_version": "0.4.79",
         "same_entry_replay_ready": same_entry_ready,
+        "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
+        "type15_record_gate_passed": type15_record_gate_passed,
         "type15_record_coverage_ready": record_coverage_ready,
         "type15_record_numeric_parity_ready": record_numeric_ready,
         "type15_final_shell_threshold_ready": type15_last_shell_ready,

@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=(
             "skip the observation-only full-capacity input fingerprint pass; "
-            "the ten physical type-15/topology gates are still evaluated"
+            "the physical record/topology/population/cooling gates are still evaluated"
         ),
     )
     parser.add_argument(

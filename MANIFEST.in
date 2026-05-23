@@ -329,3 +329,8 @@ include V0480_MEMORY_SAFE_ANALYZER.md
 include XSTAR_SOURCE_CHANGES_v0.4.80.md
 include src_v0480_update_report.md
 include xstar_atomic_v0.4.80.md
+
+include V0481_OPTIONAL_TYPE15_PROBE.md
+include XSTAR_SOURCE_CHANGES_v0.4.81.md
+include src_v0481_update_report.md
+include xstar_atomic_v0.4.81.md

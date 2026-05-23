@@ -1,3 +1,14 @@
+## v0.4.81 optional data-type-15 probe handling
+
+v0.4.81 corrects the analyzer's interpretation of the original-XSTAR probe
+contract. The type-15 shell/effective CSVs are lazily created and are required
+only when a selected preliminary C IV record has **data type 15**. A rate-type-15
+record of data type 95 does not make those files applicable. The analyzer now
+reports the proof as non-applicable, keeps C IV record-level parity as a separate
+gate, and continues the topology/population/cooling comparison. No production
+physics or Fortran instrumentation changes. See
+`V0481_OPTIONAL_TYPE15_PROBE.md`.
+
 ## v0.4.80 memory-safe zone-1 analyzer
 
 v0.4.80 is an analysis-only hotfix over v0.4.79. It streams the enormous

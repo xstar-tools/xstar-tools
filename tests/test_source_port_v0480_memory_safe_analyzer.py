@@ -5,6 +5,8 @@ from pathlib import Path
 
 import xstar_atomic as xa
 from xstar_atomic.source_port import zone1_dsec_probe_analysis as analysis
+from xstar_atomic.source_port.dsec import DsecPortError
+import pytest
 
 
 def _write(path: Path, rows: list[dict[str, object]]) -> None:
@@ -99,4 +101,41 @@ def test_v0480_raw_probe_fingerprints_stream_without_read_materialization(
     )["sha256"]
     assert any(item.startswith("fingerprint_file_start") for item in progress)
     assert any(item.startswith("fingerprint_file_done") for item in progress)
-    assert xa.__version__ == "0.4.80"
+    assert xa.__version__ == "0.4.81"
+
+
+def test_v0481_type15_probe_files_are_optional_when_no_selected_data_type15_record(
+    tmp_path: Path,
+) -> None:
+    progress: list[str] = []
+    shells, effective = analysis._load_type15_probe_rows(
+        tmp_path,
+        target_call=10,
+        civ_raw=[{
+            "record": "6077",
+            "data_type": "59",
+        }, {
+            "record": "6176",
+            "data_type": "95",
+        }],
+        progress=progress.append,
+    )
+    assert shells == {}
+    assert effective == {}
+    assert progress == [
+        "type15_probe_not_applicable selected_civ_data_type15_records=0"
+    ]
+
+
+def test_v0481_type15_probe_files_remain_required_when_data_type15_is_selected(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(DsecPortError, match="xstar_zone1_type15_shell_probe.csv"):
+        analysis._load_type15_probe_rows(
+            tmp_path,
+            target_call=10,
+            civ_raw=[{
+                "record": "123",
+                "data_type": "15",
+            }],
+        )
