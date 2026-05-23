@@ -1,4 +1,4 @@
-"""CLI for the bounded v0.4.78 zone-1 DSEC diagnostic."""
+"""CLI for the bounded v0.4.79 zone-1 DSEC diagnostic."""
 from __future__ import annotations
 
 import argparse

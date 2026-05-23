@@ -46,7 +46,7 @@ def _write_script(path: Path) -> Path:
 
 
 def test_v0472_public_api_exports_and_version():
-    assert xa.__version__ == "0.4.78"
+    assert xa.__version__ == "0.4.79"
     assert callable(xa.run_xstar_python)
     assert callable(xa.run_xstar_python_command)
     assert callable(xa.run_xstar_python_script)

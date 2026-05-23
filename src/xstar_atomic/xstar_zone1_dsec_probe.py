@@ -13,9 +13,32 @@ from .xstar_dsec_probe import write_dsec_probe_products
 
 
 def zone1_extra_helper() -> str:
-    return r'''! xstar-atomic v0.4.78 bounded zone-1 DSEC detail probe.
+    return r'''! xstar-atomic v0.4.79 bounded zone-1 DSEC/type-15 detail probe.
 !
 ! Diagnostic only.  No caller-owned value is modified.
+module xap_zone1_preliminary_rate_state
+  implicit none
+  integer, save :: xap_zone1_preliminary_active = 0
+  integer, save :: xap_zone1_preliminary_element_z = 0
+  integer, save :: xap_zone1_preliminary_ion_stage = 0
+  integer, save :: xap_zone1_preliminary_record = 0
+contains
+  subroutine xap_zone1_set_preliminary_rate(element_z,ion_stage,record)
+    integer,intent(in) :: element_z,ion_stage,record
+    xap_zone1_preliminary_element_z = element_z
+    xap_zone1_preliminary_ion_stage = ion_stage
+    xap_zone1_preliminary_record = record
+    xap_zone1_preliminary_active = 1
+  end subroutine xap_zone1_set_preliminary_rate
+
+  subroutine xap_zone1_clear_preliminary_rate()
+    xap_zone1_preliminary_active = 0
+    xap_zone1_preliminary_element_z = 0
+    xap_zone1_preliminary_ion_stage = 0
+    xap_zone1_preliminary_record = 0
+  end subroutine xap_zone1_clear_preliminary_rate
+end module xap_zone1_preliminary_rate_state
+
 subroutine xap_zone1_entry_arrays(nelem,abel,mml,mmu,nlevel,klev)
   use xap_calc_hmc_probe_state
   implicit none
@@ -133,6 +156,171 @@ subroutine xap_zone1_thermal_term(term_index,record,row_index,column_index, &
   close(lun)
 9004 format(9(i12,','),4(es26.16e3,','),es26.16e3)
 end subroutine xap_zone1_thermal_term
+
+subroutine xap_zone1_begin_calc_ion_rate_record(element_z,ion_stage,record)
+  use xap_calc_hmc_probe_state
+  use xap_zone1_preliminary_rate_state
+  implicit none
+  integer,intent(in) :: element_z,ion_stage,record
+  if (xap_hmc_capture.ne.1) then
+    call xap_zone1_clear_preliminary_rate()
+    return
+  endif
+  if (element_z.eq.6 .and. ion_stage.eq.4) then
+    call xap_zone1_set_preliminary_rate(element_z,ion_stage,record)
+  else
+    call xap_zone1_clear_preliminary_rate()
+  endif
+end subroutine xap_zone1_begin_calc_ion_rate_record
+
+subroutine xap_zone1_type15_shell(record,parent_record,parent_threshold, &
+    n_shells,shell_index,shell_threshold,shell_d,is_final)
+  use xap_calc_hmc_probe_state
+  use xap_zone1_preliminary_rate_state
+  implicit none
+  integer,intent(in) :: record,parent_record,n_shells,shell_index,is_final
+  real(8),intent(in) :: parent_threshold,shell_threshold,shell_d
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_zone1_preliminary_active.ne.1) return
+  if (xap_zone1_preliminary_element_z.ne.6 .or. &
+      xap_zone1_preliminary_ion_stage.ne.4) return
+  if (record.ne.xap_zone1_preliminary_record) return
+  inquire(file='xstar_zone1_type15_shell_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_type15_shell_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,record,parent_record,parent_threshold_ev,'// &
+    'n_shells,shell_index,shell_threshold_ev,shell_d,is_final'
+  write(lun,9005) xap_hmc_current_call,record,parent_record,parent_threshold, &
+    n_shells,shell_index,shell_threshold,shell_d,is_final
+  close(lun)
+9005 format(3(i12,','),es26.16e3,',',2(i12,','),2(es26.16e3,','),i12)
+end subroutine xap_zone1_type15_shell
+
+subroutine xap_zone1_type15_effective(record,parent_record,phase, &
+    effective_threshold,effective_d)
+  use xap_calc_hmc_probe_state
+  use xap_zone1_preliminary_rate_state
+  implicit none
+  integer,intent(in) :: record,parent_record,phase
+  real(8),intent(in) :: effective_threshold,effective_d
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_zone1_preliminary_active.ne.1) return
+  if (xap_zone1_preliminary_element_z.ne.6 .or. &
+      xap_zone1_preliminary_ion_stage.ne.4) return
+  if (record.ne.xap_zone1_preliminary_record) return
+  inquire(file='xstar_zone1_type15_effective_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_type15_effective_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,record,parent_record,phase,'// &
+    'effective_threshold_ev,effective_d'
+  write(lun,9009) xap_hmc_current_call,record,parent_record,phase, &
+    effective_threshold,effective_d
+  close(lun)
+9009 format(4(i12,','),es26.16e3,',',es26.16e3)
+end subroutine xap_zone1_type15_effective
+
+subroutine xap_zone1_calc_ion_rate_record(element_z,ion_stage,ion_index, &
+    record,data_type,rate_type,parent_record,parent_threshold, &
+    ans1,ans2,ans3,ans4,ans5,ans6,pirti_before,pirti_contribution, &
+    pirti_after,rrrti_before,rrrti_contribution,rrrti_after,idest1,idest2)
+  use xap_calc_hmc_probe_state
+  use xap_zone1_preliminary_rate_state
+  implicit none
+  integer,intent(in) :: element_z,ion_stage,ion_index,record,data_type
+  integer,intent(in) :: rate_type,parent_record,idest1,idest2
+  real(8),intent(in) :: parent_threshold,ans1,ans2,ans3,ans4,ans5,ans6
+  real(8),intent(in) :: pirti_before,pirti_contribution,pirti_after
+  real(8),intent(in) :: rrrti_before,rrrti_contribution,rrrti_after
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) then
+    call xap_zone1_clear_preliminary_rate()
+    return
+  endif
+  if (element_z.ne.6 .or. ion_stage.ne.4) then
+    call xap_zone1_clear_preliminary_rate()
+    return
+  endif
+  inquire(file='xstar_zone1_civ_calc_ion_rates_records_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_civ_calc_ion_rates_records_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) then
+    call xap_zone1_clear_preliminary_rate()
+    return
+  endif
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,element_z,ion_stage,ion_index,record,data_type,'// &
+    'rate_type,parent_record,parent_threshold_ev,ans1,ans2,ans3,ans4,'// &
+    'ans5,ans6,pirti_before,pirti_contribution,pirti_after,rrrti_before,'// &
+    'rrrti_contribution,rrrti_after,idest1,idest2'
+  write(lun,9006) xap_hmc_current_call,element_z,ion_stage,ion_index,record, &
+    data_type,rate_type,parent_record,parent_threshold,ans1,ans2,ans3,ans4, &
+    ans5,ans6,pirti_before,pirti_contribution,pirti_after,rrrti_before, &
+    rrrti_contribution,rrrti_after,idest1,idest2
+  close(lun)
+  call xap_zone1_clear_preliminary_rate()
+9006 format(8(i12,','),13(es26.16e3,','),i12,',',i12)
+end subroutine xap_zone1_calc_ion_rate_record
+
+subroutine xap_zone1_normalization_row(outer_iteration,nspmx,nspcon, &
+    ajissup,bmatsup)
+  use xap_calc_hmc_probe_state
+  use globaldata, only: ndss
+  implicit none
+  integer,intent(in) :: outer_iteration,nspmx,nspcon
+  real(8),intent(in) :: ajissup(ndss,*),bmatsup(*)
+  integer :: lun,ios,column
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_hmc_target_element.gt.0 .and. &
+      xap_hmc_current_element_z.ne.xap_hmc_target_element) return
+  inquire(file='xstar_zone1_msolvelucy_normalization_row_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_msolvelucy_normalization_row_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,element_index,element_z,outer_iteration,'// &
+    'condensed_dimension,normalization_row,column,matrix_value,rhs_value'
+  do column=1,nspmx
+    write(lun,9007) xap_hmc_current_call,xap_hmc_current_element_index, &
+      xap_hmc_current_element_z,outer_iteration,nspmx,nspcon,column, &
+      ajissup(nspcon,column),bmatsup(nspcon)
+  enddo
+  close(lun)
+9007 format(7(i12,','),es26.16e3,',',es26.16e3)
+end subroutine xap_zone1_normalization_row
+
+subroutine xap_zone1_level_population(element_z,ion_stage,ion_index, &
+    local_level,compact_index,population)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: element_z,ion_stage,ion_index,local_level
+  integer,intent(in) :: compact_index
+  real(8),intent(in) :: population
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (element_z.ne.6) return
+  inquire(file='xstar_zone1_carbon_level_population_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_carbon_level_population_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,element_z,ion_stage,ion_index,local_level,'// &
+    'compact_index,population'
+  write(lun,9008) xap_hmc_current_call,element_z,ion_stage,ion_index, &
+    local_level,compact_index,population
+  close(lun)
+9008 format(6(i12,','),es26.16e3)
+end subroutine xap_zone1_level_population
 '''
 
 
@@ -154,6 +342,34 @@ def zone1_insertion_snippets() -> Dict[str, str]:
           call xap_zone1_thermal_term(ll,ltpsv(ll),mm,nn,ltyp,lrtyp, &
      &         x(mm),cjisb(ll),cjisb2(ll))
 """,
+        "calc_ion_rates_record": """! In calc_ion_rates.f90, save pirti/rrrti and mark the selected record immediately before ucalc.
+            pirti_before=pirti
+            rrrti_before=rrrti
+            call xap_zone1_begin_calc_ion_rate_record(nnzz, &
+     &        nnzz-nnnn+1,ml_data)
+! Then insert after the source accumulation branches.
+            call xap_zone1_calc_ion_rate_record(nnzz,nnzz-nnnn+1, &
+     &        jkk_ion,ml_data,ltyp,lrtyp,ml_ion,parent_threshold, &
+     &        ans1,ans2,ans3,ans4,ans5,ans6,pirti_before, &
+     &        pirti-pirti_before,pirti,rrrti_before, &
+     &        rrrti-rrrti_before,rrrti,idest1,idest2)
+""",
+        "ucalc_type15_shell": """! In ucalc.f90 label 15, preserve the parent threshold before the shell loop and insert after ett/ddd are assigned.
+        call xap_zone1_type15_shell(ml,nilin,xap_parent_threshold,na, &
+     &       lk,ett,ddd,merge(1,0,lk.eq.na))
+! Insert immediately before call bkhsgo.
+      call xap_zone1_type15_effective(ml,nilin,1,ett,ddd)
+! Insert immediately before call phintfo.
+      call xap_zone1_type15_effective(ml,nilin,2,ett,ddd)
+""",
+        "msolvelucy_normalization_row": """! Insert after number conservation is imposed and before call leqt2f.
+        call xap_zone1_normalization_row(niter,nspmx,nspcon, &
+     &       ajissup,bmatsup)
+""",
+        "calc_hmc_element_level_population": """! Insert in the active-ion post-solve writeback loop immediately after xileve(mm+ipmat)=x(mm+ipmat2).
+              call xap_zone1_level_population(nnz,klion,jkk_ion,mm, &
+     &             mm+ipmat2,x(mm+ipmat2))
+""",
     }
 
 
@@ -170,16 +386,19 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     helper = out / "xstar_atomic_zone1_dsec_probe_helpers.f90"
     helper.write_text(zone1_extra_helper(), encoding="utf-8")
     snippets = out / "xstar_atomic_zone1_dsec_insertion_snippets.md"
-    text = ["# v0.4.78 zone-1 DSEC extra insertion snippets", ""]
+    text = ["# v0.4.79 zone-1 DSEC/type-15 insertion snippets", ""]
     for name, snippet in zone1_insertion_snippets().items():
         text.extend((f"## {name}", "", "```fortran", snippet.rstrip(), "```", ""))
+        snippet_path = out / f"{name}_insertion.f90"
+        snippet_path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
+        products[f"zone1_{name}_insertion"] = snippet_path
     snippets.write_text("\n".join(text), encoding="utf-8")
-    manifest = out / "README_v0478_zone1_dsec_probe.md"
+    manifest = out / "README_v0479_zone1_dsec_probe.md"
     manifest.write_text(
-        "# XSTAR v0.4.78 bounded zone-1 DSEC probe\n\n"
+        "# XSTAR v0.4.79 bounded zone-1 DSEC/type-15 probe\n\n"
         "Compile the correlation, calc_hmc_all, dsec, and zone-1 helper modules "
         "before the instrumented XSTAR sources. Apply the existing insertion "
-        "snippets plus the four extra snippets in this directory.\n\n"
+        "snippets plus the eight extra snippets in this directory.\n\n"
         "Run only the first physical benchmark with:\n\n"
         "```bash\n"
         "export XSTAR_ATOMIC_DSEC_TARGET_CALL=1\n"
@@ -190,7 +409,7 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "```\n\n"
         "Evaluation zero means every internal calc_hmc_all evaluation in DSEC "
         "call 1. Delete old probe CSVs before running. The helpers are "
-        "observation-only and do not modify production physics.\n",
+        "observation-only. The Python production path changes only data type 15 to reproduce the literal final-shell threshold order.\n",
         encoding="utf-8",
     )
     products.update({"zone1_helper": helper, "zone1_snippets": snippets, "zone1_manifest": manifest})

@@ -1,3 +1,24 @@
+## v0.4.79 C IV type-15 proof and literal threshold correction
+
+v0.4.79 is a bounded physical correction release for the first concrete
+zone-1 divergence found by v0.4.78. Original `ucalc.f90` data type 15 reads a
+parent threshold, then overwrites `ett` and `ddd` in its shell loop and passes
+the **final shell** values to both `bkhsgo` and `phintfo`. The Python port had
+retained the parent threshold. v0.4.79 preserves both values in diagnostics but
+uses the final shell threshold and `d` in production, with no other rate,
+solver, DSEC, radial, writer, tolerance, or cache change.
+
+The original-XSTAR probe now captures every selected preliminary C IV
+`calc_ion_rates` record, type-15 shell thresholds and `d` values, cumulative
+`pirti`/`rrrti`, the carbon compact initial vector, the first condensed
+normalization row, and selected C V populations. The comparator implements the
+ten requested gates and compares C V coefficients and carbon cooling under
+stable logical keys rather than trajectory-dependent compact indices.
+
+Use `V0479_TYPE15_WORKFLOW.md`. First-zone parity is not claimed until the
+instrumented original XSTAR and production-ATDB Python runs produce
+`thermal_root_may_continue=true`.
+
 ## v0.4.78 bounded zone-1 DSEC diagnostic
 
 v0.4.78 isolates the first `c5_ne1` DSEC call before any further full radial

@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.4.79 — C IV preliminary type-15 record proof and literal shell-threshold correction - 2026-05-23
+
+- Corrects the sole production-physics discrepancy in this release: data type
+  15 now passes the final shell-loop `ett` and `ddd` to `bkhsgo`, and the same
+  final `ett` to `phintfo`, exactly as `ucalc.f90` does.
+- Retains parent threshold, all shell thresholds/`d` values, final effective
+  threshold/`d`, and the explicit `bkhsgo`/`phintfo` threshold provenance.
+- Adds preliminary C IV `calc_ion_rates` record instrumentation with `ans1..6`,
+  endpoints, parent record, and before/contribution/after `pirti` and `rrrti`.
+- Correlates type-15 shell rows only with the active preliminary C IV record,
+  preventing duplicate rows from later detailed matrix evaluations.
+- Adds carbon topology, complete compact initial-vector, condensed
+  normalization-row, selected C V population, and logical carbon-cooling
+  products on both original-XSTAR and Python sides.
+- Replaces the conflated v0.4.78 matrix/cooling gate with ten coverage-strict
+  gates, including exactly 932 logical C V rows and zero compact row/column
+  offset.
+- Enables Lucy trace capture only for the fixed target-state carbon replay used
+  by the diagnostic; ordinary production execution is unchanged.
+- Adds focused v0.4.79 unit and synthetic ten-gate tests.
+- Validation: all 388 source-port tests, Python byte compilation, and compilation of the four helper modules plus the four newly instrumented original-XSTAR routines.
+- Does not modify any other rate family, matrix formula, solver branch, DSEC
+  condition, radial/output code, tolerance, empirical factor, or cache schema.
+
 ## v0.4.78 — bounded zone-1 DSEC source-state and carbon-cooling parity gate - 2026-05-23
 
 - Adds an observation-only original-XSTAR probe for the complete first-zone DSEC evaluation sequence.

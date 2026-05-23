@@ -1423,9 +1423,14 @@ def write_fixed_state_calc_hmc_all_products(
             handle,
             fieldnames=(
                 "element_z", "ion_stage", "ion_index", "record",
-                "data_type", "rate_type", "status",
+                "data_type", "rate_type", "status", "parent_record",
+                "parent_threshold_ev", "shell_thresholds_ev", "shell_d_values",
+                "effective_threshold_ev", "effective_d",
+                "bkhsgo_threshold_ev", "phintfo_threshold_ev",
                 "idest1_packed", "idest1", "idest2",
-                "ans1", "ans2", "added_to_pirti", "added_to_rrrti", "reason",
+                "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
+                "pirti_before", "added_to_pirti", "pirti_after",
+                "rrrti_before", "added_to_rrrti", "rrrti_after", "reason",
             ),
         )
         writer.writeheader()
@@ -1440,13 +1445,33 @@ def write_fixed_state_calc_hmc_all_products(
                         "data_type": row.data_type,
                         "rate_type": row.rate_type,
                         "status": row.status,
+                        "parent_record": row.parent_record,
+                        "parent_threshold_ev": row.parent_threshold_ev,
+                        "shell_thresholds_ev": ";".join(
+                            f"{value:.17e}" for value in row.shell_thresholds_ev
+                        ),
+                        "shell_d_values": ";".join(
+                            f"{value:.17e}" for value in row.shell_d_values
+                        ),
+                        "effective_threshold_ev": row.effective_threshold_ev,
+                        "effective_d": row.effective_d,
+                        "bkhsgo_threshold_ev": row.bkhsgo_threshold_ev,
+                        "phintfo_threshold_ev": row.phintfo_threshold_ev,
                         "idest1_packed": row.idest1_packed,
                         "idest1": row.idest1,
                         "idest2": row.idest2,
                         "ans1": row.ans1,
                         "ans2": row.ans2,
+                        "ans3": row.ans3,
+                        "ans4": row.ans4,
+                        "ans5": row.ans5,
+                        "ans6": row.ans6,
+                        "pirti_before": row.pirti_before,
                         "added_to_pirti": row.added_to_pirti,
+                        "pirti_after": row.pirti_after,
+                        "rrrti_before": row.rrrti_before,
                         "added_to_rrrti": row.added_to_rrrti,
+                        "rrrti_after": row.rrrti_after,
                         "reason": row.reason,
                     })
 

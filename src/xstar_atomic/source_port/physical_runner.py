@@ -12,7 +12,7 @@ source branches fail explicitly instead of being approximated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import copy
 from hashlib import sha256
 import json
@@ -1502,7 +1502,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                 temperature_t4=target_temperature_k / 1.0e4,
                 electron_fraction_xee=target_xee,
                 hydrogen_density_cm3=target_xpx,
-                element_requests=tuple(copy.deepcopy(source_snapshot.element_requests)),
+                element_requests=tuple(
+                    replace(copy.deepcopy(request), capture_lucy_trace=(int(request.element_z) == 6))
+                    for request in source_snapshot.element_requests
+                ),
                 required_element_z=source_snapshot.required_element_z,
                 pressure=float(source_snapshot.pressure),
                 lcdd=int(source_snapshot.lcdd),

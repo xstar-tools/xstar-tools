@@ -1469,26 +1469,73 @@ class SourceFaithfulUCalc:
         return self._eval_type36(r,c,s)
 
     def _eval_type15(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
+        """Translate source label 15 with literal shell-loop overwrite order.
+
+        ``ucalc.f90`` first reads the parent-record threshold into ``ett`` but
+        then overwrites ``ett`` and ``ddd`` for every BKH shell.  The final
+        shell values are passed to both ``bkhsgo`` and ``phintfo``.  Preserve
+        both the parent and shell values in diagnostics, but use only the final
+        shell values in production calculations.
+        """
         from .ucalc_leaves import bkhsgo
         if len(r.integers)<5 or len(r.reals)<14:
             return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type15_short_record")
         parent=self._parent_record(r,c)
-        threshold=_finite(c.extras.get("type15_threshold_ev"))
-        if threshold is None and parent is not None and parent.reals: threshold=float(parent.reals[0])
-        if threshold is None or threshold<=0:
+        parent_threshold=_finite(c.extras.get("type15_threshold_ev"))
+        if parent_threshold is None and parent is not None and parent.reals:
+            parent_threshold=float(parent.reals[0])
+        if parent_threshold is None or parent_threshold<=0:
             return self._context_blocked(r,s,"type15_requires_parent_threshold_record")
-        na=max(1,int(r.integers[-5])); b=[]; coeff=[]; d=None
+
+        na=max(1,int(r.integers[-5]))
+        shell_thresholds=[]
+        shell_d_values=[]
+        b=[]
+        coeff=[]
+        effective_threshold=None
+        effective_d=None
         for k in range(na):
             off=15*k
-            if off+14>len(r.reals): break
-            d=float(r.reals[off+1]); b.append(float(r.reals[off+2])); coeff.append(tuple(float(x) for x in r.reals[off+3:off+14]))
-        if not b or d is None:
+            if off+14>len(r.reals):
+                break
+            # Literal source assignments inside ``do lk=1,na``:
+            #   ett=rdat(np1r-1+1+lz)
+            #   ddd=rdat(np1r-1+2+lz)
+            effective_threshold=float(r.reals[off])
+            effective_d=float(r.reals[off+1])
+            shell_thresholds.append(effective_threshold)
+            shell_d_values.append(effective_d)
+            b.append(float(r.reals[off+2]))
+            coeff.append(tuple(float(x) for x in r.reals[off+3:off+14]))
+        if not b or effective_threshold is None or effective_d is None:
             return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type15_missing_bkh_shell_coefficients")
-        epi=self._mapped_grid(c); sigma=bkhsgo(epi,threshold,d,b,coeff)
-        id1=int(r.integers[-2]); id2=int(r.integers[-3])-int(r.integers[-1])
+
+        epi=self._mapped_grid(c)
+        sigma=bkhsgo(epi,effective_threshold,effective_d,b,coeff)
+        id1=int(r.integers[-2])
+        id2=int(r.integers[-3])-int(r.integers[-1])
         sw=c.levels.weight(1)/max(c.levels.weight(c.nlevp),1e-48)
-        out=_photo_result_swapped(self,r,c,s,sigma=sigma,threshold=threshold,swrat=sw,id1=id1,id2=id2)
-        return replace(out,diagnostics={**dict(out.diagnostics),"bkh_n_shells":len(b),"bkh_d":d,"threshold_source":"parent_record_or_context"})
+        out=_photo_result_swapped(
+            self,r,c,s,sigma=sigma,threshold=effective_threshold,
+            swrat=sw,id1=id1,id2=id2,
+        )
+        return replace(
+            out,
+            diagnostics={
+                **dict(out.diagnostics),
+                "type15_parent_record": int(r.parent_record),
+                "type15_parent_threshold_ev": float(parent_threshold),
+                "type15_shell_thresholds_ev": tuple(shell_thresholds),
+                "type15_shell_d_values": tuple(shell_d_values),
+                "type15_effective_threshold_ev": float(effective_threshold),
+                "type15_effective_d": float(effective_d),
+                "type15_bkhsgo_threshold_ev": float(effective_threshold),
+                "type15_phintfo_threshold_ev": float(effective_threshold),
+                "bkh_n_shells": len(b),
+                "bkh_d": float(effective_d),
+                "threshold_source": "final_type15_shell_record",
+            },
+        )
 
     def _eval_type23(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if not r.integers:

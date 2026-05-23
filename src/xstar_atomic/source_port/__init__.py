@@ -1206,8 +1206,11 @@ __all__.extend([
 from .zone1_dsec_diagnostic import (
     TARGET_CARBON_STAGES, TARGET_CV_LOCAL_LEVELS, TARGET_TEMPERATURE_K,
     numeric_fingerprint, snapshot_fingerprints, replay_same_entry_state,
-    extract_python_carbon_rates, extract_python_cv_matrix_audit,
-    carbon_cooling_rows, compare_cooling_terms, enforce_cooling_gate,
+    extract_python_carbon_rates, extract_python_civ_preliminary_records,
+    extract_python_carbon_topology, extract_python_carbon_initial_populations,
+    extract_python_carbon_normalization_row, extract_python_cv_level_populations,
+    extract_python_cv_matrix_audit, carbon_cooling_rows,
+    carbon_cooling_logical_rows, compare_cooling_terms, enforce_cooling_gate,
     write_zone1_python_diagnostic_products,
 )
 from .zone1_dsec_probe_analysis import (
@@ -1219,8 +1222,11 @@ from .zone1_dsec_probe_analysis import (
 __all__.extend([
     "TARGET_CARBON_STAGES", "TARGET_CV_LOCAL_LEVELS", "TARGET_TEMPERATURE_K",
     "numeric_fingerprint", "snapshot_fingerprints", "replay_same_entry_state",
-    "extract_python_carbon_rates", "extract_python_cv_matrix_audit",
-    "carbon_cooling_rows", "compare_cooling_terms", "enforce_cooling_gate",
+    "extract_python_carbon_rates", "extract_python_civ_preliminary_records",
+    "extract_python_carbon_topology", "extract_python_carbon_initial_populations",
+    "extract_python_carbon_normalization_row", "extract_python_cv_level_populations",
+    "extract_python_cv_matrix_audit", "carbon_cooling_rows",
+    "carbon_cooling_logical_rows", "compare_cooling_terms", "enforce_cooling_gate",
     "write_zone1_python_diagnostic_products", "load_xstar_target_state",
     "load_xstar_carbon_cooling_terms", "analyze_xstar_zone1_probe",
     "compare_zone1_probe_with_python", "make_carbon_cooling_gate",

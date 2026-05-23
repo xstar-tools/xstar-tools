@@ -603,6 +603,245 @@ def extract_python_carbon_rates(
     )
 
 
+def _format_float_sequence(values: Sequence[float]) -> str:
+    return ";".join(f"{float(value):.17e}" for value in values)
+
+
+def extract_python_civ_preliminary_records(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return every selected C IV record from the preliminary rate pass."""
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None:
+        return ()
+    rates = carbon.calc_ion_rates.get(4)
+    if rates is None:
+        return ()
+    output: list[dict[str, Any]] = []
+    for row in rates.contributions:
+        output.append(
+            {
+                "source": "python",
+                "evaluation_index": int(evaluation_index),
+                "call_id": 0,
+                "element_z": 6,
+                "ion_stage": 4,
+                "ion_index": int(rates.ion_index),
+                "record": int(row.record),
+                "data_type": int(row.data_type),
+                "rate_type": int(row.rate_type),
+                "status": str(row.status),
+                "parent_record": int(row.parent_record),
+                "parent_threshold_ev": float(row.parent_threshold_ev),
+                "shell_thresholds_ev": _format_float_sequence(row.shell_thresholds_ev),
+                "shell_d_values": _format_float_sequence(row.shell_d_values),
+                "final_effective_threshold_ev": float(row.effective_threshold_ev),
+                "final_effective_d": float(row.effective_d),
+                "bkhsgo_threshold_ev": float(row.bkhsgo_threshold_ev),
+                "bkhsgo_effective_d": float(row.effective_d),
+                "phintfo_threshold_ev": float(row.phintfo_threshold_ev),
+                "phintfo_effective_d": float(row.effective_d),
+                "ans1": float(row.ans1),
+                "ans2": float(row.ans2),
+                "ans3": float(row.ans3),
+                "ans4": float(row.ans4),
+                "ans5": float(row.ans5),
+                "ans6": float(row.ans6),
+                "pirti_before": float(row.pirti_before),
+                "pirti_contribution": float(row.added_to_pirti),
+                "pirti_after": float(row.pirti_after),
+                "rrrti_before": float(row.rrrti_before),
+                "rrrti_contribution": float(row.added_to_rrrti),
+                "rrrti_after": float(row.rrrti_after),
+                "idest1": int(row.idest1),
+                "idest2": int(row.idest2),
+            }
+        )
+    return tuple(output)
+
+
+def extract_python_carbon_topology(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None:
+        return ()
+    preliminary_civ = float(carbon.preliminary_ion_fractions.get(4, 0.0))
+    selected_min = int(carbon.selected_min_ion_stage)
+    selected_max = int(carbon.selected_max_ion_stage)
+    return (
+        {
+            "source": "python",
+            "evaluation_index": int(evaluation_index),
+            "element_z": 6,
+            "critf": float(carbon.request.critf),
+            "civ_preliminary_fraction": preliminary_civ,
+            "selected_min_ion_stage": selected_min,
+            "selected_max_ion_stage": selected_max,
+            "civ_retained": bool(selected_min <= 4 <= selected_max),
+            "compact_dimension": int(carbon.equilibrium.assembly.basis.n_rows),
+            "normalization_row": int(carbon.equilibrium.assembly.basis.normalization_row),
+        },
+    )
+
+
+def extract_python_carbon_initial_populations(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None:
+        return ()
+    assembly = carbon.equilibrium.assembly
+    values = np.asarray(assembly.initial_populations, dtype=float)
+    return tuple(
+        {
+            "source": "python",
+            "evaluation_index": int(evaluation_index),
+            "compact_dimension": int(assembly.basis.n_rows),
+            "compact_index": index,
+            "population": float(values[index]),
+        }
+        for index in range(1, int(assembly.basis.n_rows) + 1)
+    )
+
+
+def extract_python_carbon_normalization_row(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None:
+        return ()
+    solve = carbon.equilibrium.solve
+    trace = None if solve is None else solve.trace
+    if trace is None or not trace.condensed_matrix_rows:
+        return ()
+    first_outer = min(int(row["outer_iteration"]) for row in trace.condensed_matrix_rows)
+    rows = [
+        row for row in trace.condensed_matrix_rows
+        if int(row["outer_iteration"]) == first_outer
+    ]
+    dimension = max(int(row["row_superlevel"]) for row in rows)
+    return tuple(
+        {
+            "source": "python",
+            "evaluation_index": int(evaluation_index),
+            "outer_iteration": first_outer,
+            "condensed_dimension": dimension,
+            "normalization_row": dimension,
+            "column": int(row["column_superlevel"]),
+            "matrix_value": float(row["normalized_matrix_value"]),
+            "rhs_value": 1.0,
+        }
+        for row in rows
+        if int(row["row_superlevel"]) == dimension
+    )
+
+
+def extract_python_cv_level_populations(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None or carbon.equilibrium.solve is None:
+        return ()
+    block = next(
+        (
+            item for item in carbon.equilibrium.assembly.basis.blocks
+            if int(item.ion_stage) == 5
+        ),
+        None,
+    )
+    if block is None:
+        return ()
+    populations = np.asarray(carbon.equilibrium.solve.populations, dtype=float)
+    output: list[dict[str, Any]] = []
+    for local_level in TARGET_CV_LOCAL_LEVELS:
+        if local_level > int(block.nlev):
+            continue
+        compact_index = int(block.compact_index(local_level))
+        output.append(
+            {
+                "source": "python",
+                "evaluation_index": int(evaluation_index),
+                "element_z": 6,
+                "ion_stage": 5,
+                "ion_index": int(block.ion_index),
+                "local_level": int(local_level),
+                "compact_index": compact_index,
+                "population": float(populations[compact_index - 1]),
+            }
+        )
+    return tuple(output)
+
+
+def carbon_cooling_logical_rows(
+    result: FixedStateCalcHMCAllResult, *, evaluation_index: int
+) -> list[dict[str, Any]]:
+    """Return fixed-state carbon diagonal terms keyed by physical identity."""
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None or carbon.equilibrium.solve is None:
+        return []
+    populations = np.asarray(carbon.equilibrium.solve.populations, dtype=float)
+    rows: list[dict[str, Any]] = []
+    for term in carbon.equilibrium.assembly.terms:
+        if int(term.row) != int(term.column):
+            continue
+        population = (
+            float(populations[int(term.row) - 1])
+            if 1 <= int(term.row) <= populations.size
+            else 0.0
+        )
+        rows.append(
+            {
+                "source": "python",
+                "evaluation_index": int(evaluation_index),
+                "element_z": 6,
+                "ion_stage": int(term.ion_stage),
+                "record": int(term.record),
+                "data_type": int(term.data_type),
+                "rate_type": int(term.rate_type),
+                "role": str(term.role),
+                "idest1": int(term.idest1),
+                "idest2": int(term.idest2),
+                "lower_endpoint": int(term.lower_endpoint),
+                "upper_endpoint": int(term.upper_endpoint),
+                "population": population,
+                "cj": float(term.cj),
+                "cj2": float(term.cj2),
+                "cooling_contribution": population * float(term.cj),
+                "cooling2_contribution": population * float(term.cj2),
+            }
+        )
+    return rows
+
+
 def extract_python_cv_matrix_audit(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -893,6 +1132,42 @@ def write_zone1_python_diagnostic_products(
         rates_path,
         extract_python_carbon_rates(target_result, evaluation_index=target_eval),
     )
+    civ_records_path = out / "python_zone1_civ_calc_ion_rates_records_T73198p4K.csv"
+    civ_records = extract_python_civ_preliminary_records(
+        target_result, evaluation_index=target_eval
+    )
+    _write_rows(civ_records_path, civ_records)
+    topology_path = out / "python_zone1_carbon_topology_T73198p4K.csv"
+    _write_rows(
+        topology_path,
+        extract_python_carbon_topology(target_result, evaluation_index=target_eval),
+    )
+    initial_population_path = out / "python_zone1_carbon_initial_population_T73198p4K.csv"
+    _write_rows(
+        initial_population_path,
+        extract_python_carbon_initial_populations(
+            target_result, evaluation_index=target_eval
+        ),
+    )
+    normalization_path = out / "python_zone1_carbon_normalization_row_T73198p4K.csv"
+    _write_rows(
+        normalization_path,
+        extract_python_carbon_normalization_row(
+            target_result, evaluation_index=target_eval
+        ),
+    )
+    logical_cooling_path = out / "python_zone1_carbon_cooling_logical_T73198p4K.csv"
+    _write_rows(
+        logical_cooling_path,
+        carbon_cooling_logical_rows(target_result, evaluation_index=target_eval),
+    )
+    level_population_path = out / "python_zone1_cv_level_populations_T73198p4K.csv"
+    _write_rows(
+        level_population_path,
+        extract_python_cv_level_populations(
+            target_result, evaluation_index=target_eval
+        ),
+    )
     matrix_path = out / "python_zone1_cv_matrix_levels_4_6_10_12_20.csv"
     _write_rows(
         matrix_path,
@@ -910,7 +1185,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.78",
+        "diagnostic_release": "0.4.79",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -925,7 +1200,10 @@ def write_zone1_python_diagnostic_products(
         "target_result_metadata": target_metadata,
         "same_entry_replay_ready": bool(replay_summary)
         and all(item["ready"] for item in replay_summary),
-        "production_rates_modified": False,
+        "type15_literal_threshold_order_corrected": True,
+        "n_civ_preliminary_record_rows": len(civ_records),
+        "production_rates_modified": True,
+        "production_rate_change_scope": "ucalc_data_type_15_final_shell_threshold_only",
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }
@@ -939,6 +1217,12 @@ def write_zone1_python_diagnostic_products(
         "replay_csv": replay_path,
         "replay_json": replay_json,
         "rates_csv": rates_path,
+        "civ_records_csv": civ_records_path,
+        "topology_csv": topology_path,
+        "initial_population_csv": initial_population_path,
+        "normalization_row_csv": normalization_path,
+        "cv_level_populations_csv": level_population_path,
+        "logical_cooling_csv": logical_cooling_path,
         "matrix_csv": matrix_path,
         "cooling_csv": cooling_path,
         "summary_json": summary_path,
@@ -960,8 +1244,14 @@ __all__ = [
     "result_fingerprints",
     "replay_same_entry_state",
     "extract_python_carbon_rates",
+    "extract_python_civ_preliminary_records",
+    "extract_python_carbon_topology",
+    "extract_python_carbon_initial_populations",
+    "extract_python_carbon_normalization_row",
+    "extract_python_cv_level_populations",
     "extract_python_cv_matrix_audit",
     "carbon_cooling_rows",
+    "carbon_cooling_logical_rows",
     "compare_cooling_terms",
     "enforce_cooling_gate",
     "write_zone1_python_diagnostic_products",

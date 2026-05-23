@@ -1,4 +1,4 @@
-"""Generate the original-XSTAR v0.4.78 zone-1 DSEC probe bundle."""
+"""Generate the original-XSTAR v0.4.79 zone-1 DSEC probe bundle."""
 from __future__ import annotations
 import argparse
 from pathlib import Path

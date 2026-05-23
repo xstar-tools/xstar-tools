@@ -231,12 +231,21 @@ def test_v0478_original_probe_bundle_captures_complete_sequence_and_required_aud
     assert "xap_zone1_rate_record" in helper
     assert "xap_zone1_second_pass_rate" in helper
     assert "xap_zone1_thermal_term" in helper
+    assert "xap_zone1_begin_calc_ion_rate_record" in helper
+    assert "xap_zone1_type15_shell" in helper
+    assert "xap_zone1_calc_ion_rate_record" in helper
+    assert "xap_zone1_normalization_row" in helper
+    assert "xap_zone1_level_population" in helper
     snippets = zone1_insertion_snippets()
     assert set(snippets) == {
         "calc_hmc_all_entry_arrays",
         "calc_hmc_ion_record",
         "calc_hmc_element_second_pass_rate",
         "msolvelucy_thermal_term",
+        "calc_ion_rates_record",
+        "ucalc_type15_shell",
+        "msolvelucy_normalization_row",
+        "calc_hmc_element_level_population",
     }
     manifest = products["zone1_manifest"].read_text(encoding="utf-8")
     assert "XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION=0" in manifest
@@ -292,4 +301,4 @@ def test_v0478_scope_constants_are_exact_and_no_empirical_correction_exists():
     assert TARGET_CV_LOCAL_LEVELS == (4, 5, 6, 10, 11, 12, 20)
     source = Path(diagnostic.__file__).read_text(encoding="utf-8")
     assert "empirical correction" not in source.lower()
-    assert xa.__version__ == "0.4.78"
+    assert xa.__version__ == "0.4.79"

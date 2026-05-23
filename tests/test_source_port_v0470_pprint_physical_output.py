@@ -87,7 +87,7 @@ def test_v0470_bounded_acceptance_and_physical_scope(pprint_summary):
 
 
 def test_v0470_ledger_and_version():
-    assert xa.__version__ == "0.4.78"
+    assert xa.__version__ == "0.4.79"
     routines = {entry.routine: entry for entry in default_port_ledger().entries}
     assert routines["pprint"].status.value == "validated"
     assert routines["physical_output_parity"].status.value == "partial"

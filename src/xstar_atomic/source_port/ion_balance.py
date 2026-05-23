@@ -54,19 +54,40 @@ class CalcIonRatesContext:
 
 @dataclass(frozen=True)
 class CalcIonRateContribution:
-    """One record considered by the literal total-rate pass."""
+    """One selected record in the literal ``calc_ion_rates`` pass.
+
+    v0.4.79 retains the cumulative-rate state and type-15 threshold provenance
+    needed for a direct original-XSTAR record-level comparison.  Empty shell
+    tuples and NaN threshold fields are used for non-type-15 records.
+    """
 
     record: int
     data_type: int
     rate_type: int
     status: str
+    parent_record: int
+    parent_threshold_ev: float
+    shell_thresholds_ev: Tuple[float, ...]
+    shell_d_values: Tuple[float, ...]
+    effective_threshold_ev: float
+    effective_d: float
+    bkhsgo_threshold_ev: float
+    phintfo_threshold_ev: float
     idest1_packed: int
     idest1: int
     idest2: int
     ans1: float
     ans2: float
+    ans3: float
+    ans4: float
+    ans5: float
+    ans6: float
+    pirti_before: float
     added_to_pirti: float
+    pirti_after: float
+    rrrti_before: float
     added_to_rrrti: float
+    rrrti_after: float
     reason: str = ""
 
 
@@ -265,6 +286,8 @@ def calc_ion_rates(
                         "parent_level_stat_weight_by_destination": parent_weight,
                     },
                 )
+                pirti_before = float(pirti)
+                rrrti_before = float(rrrti)
                 result = dispatch.evaluate_record_number(
                     master,
                     record,
@@ -292,19 +315,61 @@ def calc_ion_rates(
                         rrrti += add_rr
                 else:
                     n_blocked += 1
+                diagnostics = dict(getattr(result, "diagnostics", {}) or {})
+                try:
+                    parent_reals = np.asarray(master.record_reals(ion_record), dtype=float)
+                except (AttributeError, KeyError, TypeError, ValueError):
+                    parent_reals = np.asarray((), dtype=float)
+                parent_threshold = (
+                    float(diagnostics.get("type15_parent_threshold_ev"))
+                    if diagnostics.get("type15_parent_threshold_ev") is not None
+                    else (float(parent_reals[0]) if parent_reals.size else math.nan)
+                )
+                shell_thresholds = tuple(
+                    float(value)
+                    for value in diagnostics.get("type15_shell_thresholds_ev", ())
+                )
+                shell_d_values = tuple(
+                    float(value)
+                    for value in diagnostics.get("type15_shell_d_values", ())
+                )
                 rows.append(
                     CalcIonRateContribution(
                         record=record,
                         data_type=int(header.data_type),
                         rate_type=int(header.rate_type),
                         status=result.status.value,
+                        parent_record=ion_record,
+                        parent_threshold_ev=parent_threshold,
+                        shell_thresholds_ev=shell_thresholds,
+                        shell_d_values=shell_d_values,
+                        effective_threshold_ev=float(
+                            diagnostics.get("type15_effective_threshold_ev", math.nan)
+                        ),
+                        effective_d=float(
+                            diagnostics.get("type15_effective_d", math.nan)
+                        ),
+                        bkhsgo_threshold_ev=float(
+                            diagnostics.get("type15_bkhsgo_threshold_ev", math.nan)
+                        ),
+                        phintfo_threshold_ev=float(
+                            diagnostics.get("type15_phintfo_threshold_ev", math.nan)
+                        ),
                         idest1_packed=idest1_packed,
                         idest1=int(result.idest1),
                         idest2=int(result.idest2),
                         ans1=float(result.ans1),
                         ans2=float(result.ans2),
+                        ans3=float(getattr(result, "ans3", 0.0)),
+                        ans4=float(getattr(result, "ans4", 0.0)),
+                        ans5=float(getattr(result, "ans5", 0.0)),
+                        ans6=float(getattr(result, "ans6", 0.0)),
+                        pirti_before=pirti_before,
                         added_to_pirti=add_pi,
+                        pirti_after=float(pirti),
+                        rrrti_before=rrrti_before,
                         added_to_rrrti=add_rr,
+                        rrrti_after=float(rrrti),
                         reason=str(result.reason),
                     )
                 )
