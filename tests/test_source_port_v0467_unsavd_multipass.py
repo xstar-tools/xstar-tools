@@ -94,4 +94,4 @@ def test_v0467_registration_and_version():
     driver = XSTARPythonDriver()
     register_bounded_radial_source_routines(driver)
     assert XSTARSourceRoutine.UNSAVD in driver.implemented_source_routines()
-    assert xa.__version__ == "0.4.81"
+    assert xa.__version__ == "0.4.82"

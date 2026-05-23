@@ -76,7 +76,7 @@ from xstar_atomic.xstar_element_solver import _audit_type59_recombination_record
 def test_ucalc_level_guesses_for_type59_records():
     g59 = _guess_ucalc_levels(59, 7, [10, 2, 27, 4], nlevp=81)
     assert g59["idest1_guess"] == 27
-    assert g59["idest2_guess"] == 81 + 2 - 1
+    assert g59["idest2_guess"] == 81 + 10 - 1
     assert g59["idest3_guess"] == 4
     assert g59["idest4_guess"] == 2
 

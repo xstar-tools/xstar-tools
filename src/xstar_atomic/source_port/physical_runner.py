@@ -2120,7 +2120,11 @@ class Zone1DsecDiagnosticRun:
             "final_temperature_K": float(self.final_state.plasma.temperature),
             "final_electron_fraction_xee": float(self.final_state.plasma.xee),
             "products": {key: str(value) for key, value in self.products.items()},
-            "production_rates_modified": False,
+            "production_rates_modified": True,
+            "production_rate_change_scope": (
+                "ucalc_data_type_15_final_shell_threshold_plus_"
+                "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+            ),
             "production_tolerances_modified": False,
             "empirical_corrections_added": False,
         }

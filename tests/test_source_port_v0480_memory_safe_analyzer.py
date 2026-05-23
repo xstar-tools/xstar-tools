@@ -101,7 +101,7 @@ def test_v0480_raw_probe_fingerprints_stream_without_read_materialization(
     )["sha256"]
     assert any(item.startswith("fingerprint_file_start") for item in progress)
     assert any(item.startswith("fingerprint_file_done") for item in progress)
-    assert xa.__version__ == "0.4.81"
+    assert xa.__version__ == "0.4.82"
 
 
 def test_v0481_type15_probe_files_are_optional_when_no_selected_data_type15_record(

@@ -384,7 +384,14 @@ def _phint53hunt_exact(
 def _photo_result_swapped(dispatch: "SourceFaithfulUCalc", r: "UCalcRecord", c: "UCalcContext", s: "UCalcBranchSpec", *, sigma: Sequence[float], threshold: float, swrat: float, id1: int, id2: int, zero_reverse: bool = False) -> "UCalcResult":
     ph=_phintfo_exact(sigma_cm2=sigma,threshold_ev=threshold,context=c,swrat=swrat)
     a1,a2=ph["ans1"],ph["ans2"]; a3,a4=-ph["ans4"],-ph["ans3"]; a5,a6=-ph["ans6"],-ph["ans5"]
-    if zero_reverse: a2=a4=a6=0.0
+    # ``ucalc.f90`` zeroes the pre-swap inverse/recombination fields
+    # ``ans2``, ``ans4``, and ``ans6`` for the type-59 ground/special branch,
+    # then performs the universal heating/cooling swaps at label 9000.  In the
+    # post-swap Python contract those same source fields are ``ans2``,
+    # ``ans3``, and ``ans5``.  Zeroing ``ans4``/``ans6`` here would erase the
+    # forward photo-heating terms and retain the inverse terms, the exact
+    # opposite of the original source.
+    if zero_reverse: a2=a3=a5=0.0
     return dispatch._ctx_result(r,s,ans1=a1,ans2=a2,ans3=a3,ans4=a4,ans5=a5,ans6=a6,idest1=id1,idest2=id2,opakab=ph["opakab"],diagnostics=ph,context_fields_used=("temperature_k","xpx","xee","radiation","levels","abund1"))
 
 
@@ -971,7 +978,22 @@ class SourceFaithfulUCalc:
             id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
             parent_offset = i[-4] if len(i) >= 4 else 1
             id2 = nlev + max(0, parent_offset) - 1
-        elif dt in {12, 15, 19, 23, 27, 35, 36, 55, 59, 64, 70, 85, 88, 99}:
+        elif dt == 59:
+            # Source label 59 has four distinct trailing endpoint fields:
+            #
+            #   idest2 offset = idat(np1i-1+nidt-3)  -> integers[-4]
+            #   idest4        = idat(np1i+nidt-3)    -> integers[-3]
+            #   idest1        = idat(np1i+nidt-2)    -> integers[-2]
+            #   idest3        = idat(np1i+nidt-1)    -> integers[-1]
+            #
+            # The previous implementation incorrectly reused ``[-3]`` for
+            # both the continuum offset and idest4.
+            id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
+            parent_offset = i[-4] if len(i) >= 4 else 1
+            id2 = max(nlev + parent_offset - 1, 1)
+            id3 = i[-1] if len(i) >= 1 else 0
+            id4 = i[-3] if len(i) >= 3 else 0
+        elif dt in {12, 15, 19, 23, 27, 35, 36, 55, 64, 70, 85, 88, 99}:
             id1 = i[-2] if len(i) >= 2 else (i[0] if i else 0)
             parent_offset = i[-3] if len(i) >= 3 else 1
             id2 = max(nlev + parent_offset - 1, nlev)
@@ -1000,7 +1022,10 @@ class SourceFaithfulUCalc:
         elif dt == 86:
             id1 = max(i[-4] if len(i) >= 4 else 1, 1)
             id2 = max((i[-5] if len(i) >= 5 else 1) + nlev - 1, 1)
-        return self._base_result(record, spec, UCalcStatus.INDEX_ONLY, idest1=id1, idest2=id2)
+        values = {"idest1": id1, "idest2": id2}
+        if dt == 59:
+            values.update(idest3=id3, idest4=id4)
+        return self._base_result(record, spec, UCalcStatus.INDEX_ONLY, **values)
 
     def _register_builtin_evaluators(self) -> None:
         for dt in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 49, 55, 59, 64, 70, 72, 74, 75, 76, 77, 79, 81, 82, 85, 86, 88, 89, 92, 95, 96, 97):
@@ -1449,20 +1474,103 @@ class SourceFaithfulUCalc:
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=c.nlevp)
 
     def _eval_type59(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        if len(r.reals)<6 or len(r.integers)<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type59_short_record")
-        eth=r.reals[0]; epi=self._mapped_grid(c); sig=np.zeros_like(epi)
+        """Translate the Verner bound-free branch at source label 59.
+
+        v0.4.82 corrects three literal source-order/indexing errors exposed by
+        C IV record 6077:
+
+        * the compact six-real form starts its Verner coefficients at
+          ``rdat(np1r+1)``, so Python must decode ``reals[1:6]`` rather than
+          ``reals[:5]``;
+        * the parent/continuum offset is the fourth integer from the end,
+          while the third from the end is the separate ``idest4`` field;
+        * source zeroing occurs before the universal ans3/ans4 and ans5/ans6
+          swap, so the post-swap zero fields are ans2/ans3/ans5.
+        """
+        if len(r.reals)<6 or len(r.integers)<4:
+            return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type59_short_record")
+
+        id3=int(r.integers[-1])
+        id4=int(r.integers[-3])
+        if id4 > id3 + 1:
+            return self._base_result(
+                r, s, UCalcStatus.SOURCE_REJECTED,
+                reason="type59_idest4_exceeds_idest3_plus_one",
+                idest3=id3, idest4=id4,
+                diagnostics={
+                    "type59_idest3": id3,
+                    "type59_idest4": id4,
+                    "type59_source_guard": "idest4_le_idest3_plus_one",
+                },
+            )
+
+        eth=float(r.reals[0]); epi=self._mapped_grid(c); sig=np.zeros_like(epi)
         if len(r.reals)==9:
-            _,emax,e0,s0,ya,pp,yw,y0,y1=r.reals; l2=0
+            _,emax,e0,s0,ya,pp,yw,y0,y1=(float(v) for v in r.reals); l2=0
+            parameter_layout="nine_real_verner_fit"
         else:
-            e0,s0,ya,pp,yw=r.reals[:5]; y0=y1=0.0; l2=r.integers[2] if len(r.integers)>2 else 0
+            # Literal source assignments for nrdt /= 9:
+            #   e0=rdat(np1r+1), s0=rdat(np1r+2),
+            #   ya=rdat(np1r-1+4), pp=rdat(np1r-1+5),
+            #   yw=rdat(np1r-1+6).
+            e0,s0,ya,pp,yw=(float(v) for v in r.reals[1:6])
+            emax=math.nan; y0=y1=0.0
+            l2=int(r.integers[2]) if len(r.integers)>2 else 0
+            parameter_layout="six_real_verner_fit_threshold_then_coefficients"
+        if e0 <= 0.0 or ya <= 0.0:
+            return self._base_result(
+                r, s, UCalcStatus.SOURCE_REJECTED,
+                reason="type59_nonpositive_e0_or_ya",
+                idest3=id3, idest4=id4,
+                diagnostics={
+                    "type59_threshold_ev": eth,
+                    "type59_e0_ev": e0,
+                    "type59_ya": ya,
+                    "type59_parameter_layout": parameter_layout,
+                },
+            )
         qq=5.5+l2-pp/2.0
         for k,e in enumerate(epi):
             if e>=eth:
                 xx=e/e0-y0; yy=math.sqrt(xx*xx+y1*y1) if len(r.reals)==9 else xx
                 if yy>0: sig[k]=s0*((xx-1.0)**2+yw*yw)*_expo(-max(-60.0,min(60.0,qq*math.log(max(yy,1e-48)))))*(1.0+math.sqrt(max(yy/ya,0.0)))**(-pp)*1e-18
-        id1=r.integers[-2]; off=r.integers[-3] if len(r.integers)>=3 else 1; id2=max(c.nlevp+off-1,1)
+        id1=int(r.integers[-2])
+        off=int(r.integers[-4])
+        id2=max(c.nlevp+off-1,1)
         sw=c.levels.weight(1)/max(c.levels.weight(c.nlevp),1e-48); zero=(r.rate_type==1 or id1>1)
-        return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2,zero_reverse=zero)
+        out=_photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2,zero_reverse=zero)
+        return replace(
+            out,
+            idest3=id3,
+            idest4=id4,
+            diagnostics={
+                **dict(out.diagnostics),
+                "type59_threshold_ev": eth,
+                "type59_emax_ev": emax,
+                "type59_e0_ev": e0,
+                "type59_s0": s0,
+                "type59_ya": ya,
+                "type59_pp": pp,
+                "type59_yw": yw,
+                "type59_y0": y0,
+                "type59_y1": y1,
+                "type59_l2": l2,
+                "type59_qq": qq,
+                "type59_parameter_layout": parameter_layout,
+                "type59_parent_offset_packed_index": -4,
+                "type59_idest4_packed_index": -3,
+                "type59_parent_offset": off,
+                "type59_idest1": id1,
+                "type59_idest2": id2,
+                "type59_idest3": id3,
+                "type59_idest4": id4,
+                "type59_source_guard": "idest4_le_idest3_plus_one",
+                "type59_reverse_zero_pre_swap_fields": "ans2;ans4;ans6",
+                "type59_reverse_zero_post_swap_fields": "ans2;ans3;ans5",
+                "type59_reverse_zero_applied": bool(zero),
+                "type59_sigma_max_cm2": float(np.max(sig)) if sig.size else 0.0,
+            },
+        )
 
     def _eval_type12(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Source label 12 is an unconditional jump to the type-36 branch."""

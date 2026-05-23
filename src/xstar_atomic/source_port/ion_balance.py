@@ -57,7 +57,9 @@ class CalcIonRateContribution:
     """One selected record in the literal ``calc_ion_rates`` pass.
 
     v0.4.79 retains the cumulative-rate state and type-15 threshold provenance
-    needed for a direct original-XSTAR record-level comparison.  Empty shell
+    needed for a direct original-XSTAR record-level comparison. v0.4.82 also
+    retains branch diagnostics so the corrected type-59 compact parameter and
+    endpoint mapping is visible in the Python C IV record product. Empty shell
     tuples and NaN threshold fields are used for non-type-15 records.
     """
 
@@ -89,6 +91,7 @@ class CalcIonRateContribution:
     added_to_rrrti: float
     rrrti_after: float
     reason: str = ""
+    diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -371,6 +374,7 @@ def calc_ion_rates(
                         added_to_rrrti=add_rr,
                         rrrti_after=float(rrrti),
                         reason=str(result.reason),
+                        diagnostics=diagnostics,
                     )
                 )
             record = int(derived.npnxt[record])

@@ -1021,13 +1021,15 @@ def _guess_ucalc_levels(data_type: int, rate_type: int, ints: Sequence[int], *, 
                 out["idest3_guess"] = vals[-1]
                 out["idest4_guess"] = vals[-1] + 1
         elif data_type == 59:
-            # ucalc.f90 type 59 uses idest1=idat(nidt-2),
-            # idest2=nlevp+idat(nidt-3)-1, idest3=idat(nidt-1),
-            # idest4=idat(nidt-3).
+            # Literal source indices in ucalc.f90 label 59:
+            #   idest2=nlevp+idat(np1i-1+nidt-3)-1 -> vals[-4]
+            #   idest4=idat(np1i+nidt-3)           -> vals[-3]
+            #   idest1=idat(np1i+nidt-2)           -> vals[-2]
+            #   idest3=idat(np1i+nidt-1)           -> vals[-1]
             if len(vals) >= 2:
                 out["idest1_guess"] = vals[-2]
-            if len(vals) >= 3 and nlevp is not None:
-                out["idest2_guess"] = int(nlevp) + vals[-3] - 1
+            if len(vals) >= 4 and nlevp is not None:
+                out["idest2_guess"] = int(nlevp) + vals[-4] - 1
             if len(vals) >= 1:
                 out["idest3_guess"] = vals[-1]
             if len(vals) >= 3:
@@ -1744,7 +1746,12 @@ def _audit_type59_recombination_record(
     idest1 = vals[-2] if len(vals) >= 2 else None
     idest3 = vals[-1] if len(vals) >= 1 else None
     idest4 = vals[-3] if len(vals) >= 3 else None
-    idest2 = (int(nlevp) + idest4 - 1) if (nlevp is not None and idest4 is not None) else None
+    parent_offset = vals[-4] if len(vals) >= 4 else None
+    idest2 = (
+        int(nlevp) + parent_offset - 1
+        if (nlevp is not None and parent_offset is not None)
+        else None
+    )
     ett_preview = rd[0] if len(rd) >= 1 else None
     e0_preview = rd[1] if len(rd) >= 2 else None
     s0_preview = rd[2] if len(rd) >= 3 else None
@@ -1777,7 +1784,8 @@ def _audit_type59_recombination_record(
         "type59_idest1_destination_level": dest,
         "type59_idest2_continuum_or_parent_level_guess": idest2,
         "type59_idest3_guess": idest3,
-        "type59_idest4_or_continuum_offset_guess": idest4,
+        "type59_idest4_guess": idest4,
+        "type59_parent_continuum_offset_guess": parent_offset,
         "type59_threshold_energy_preview_eV": ett_preview,
         "type59_e0_preview": e0_preview,
         "type59_s0_preview": s0_preview,

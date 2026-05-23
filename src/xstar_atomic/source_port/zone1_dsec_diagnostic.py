@@ -624,6 +624,7 @@ def extract_python_civ_preliminary_records(
         return ()
     output: list[dict[str, Any]] = []
     for row in rates.contributions:
+        diagnostics = dict(row.diagnostics or {})
         output.append(
             {
                 "source": "python",
@@ -660,6 +661,37 @@ def extract_python_civ_preliminary_records(
                 "rrrti_after": float(row.rrrti_after),
                 "idest1": int(row.idest1),
                 "idest2": int(row.idest2),
+                "type59_parameter_layout": str(
+                    diagnostics.get("type59_parameter_layout", "")
+                ),
+                "type59_threshold_ev": float(
+                    diagnostics.get("type59_threshold_ev", math.nan)
+                ),
+                "type59_e0_ev": float(
+                    diagnostics.get("type59_e0_ev", math.nan)
+                ),
+                "type59_s0": float(diagnostics.get("type59_s0", math.nan)),
+                "type59_ya": float(diagnostics.get("type59_ya", math.nan)),
+                "type59_pp": float(diagnostics.get("type59_pp", math.nan)),
+                "type59_yw": float(diagnostics.get("type59_yw", math.nan)),
+                "type59_l2": int(diagnostics.get("type59_l2", 0)),
+                "type59_parent_offset": int(
+                    diagnostics.get("type59_parent_offset", 0)
+                ),
+                "type59_idest3": int(diagnostics.get("type59_idest3", 0)),
+                "type59_idest4": int(diagnostics.get("type59_idest4", 0)),
+                "type59_reverse_zero_pre_swap_fields": str(
+                    diagnostics.get("type59_reverse_zero_pre_swap_fields", "")
+                ),
+                "type59_reverse_zero_post_swap_fields": str(
+                    diagnostics.get("type59_reverse_zero_post_swap_fields", "")
+                ),
+                "type59_reverse_zero_applied": bool(
+                    diagnostics.get("type59_reverse_zero_applied", False)
+                ),
+                "type59_sigma_max_cm2": float(
+                    diagnostics.get("type59_sigma_max_cm2", math.nan)
+                ),
             }
         )
     return tuple(output)
@@ -1185,7 +1217,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.81",
+        "diagnostic_release": "0.4.82",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -1201,9 +1233,15 @@ def write_zone1_python_diagnostic_products(
         "same_entry_replay_ready": bool(replay_summary)
         and all(item["ready"] for item in replay_summary),
         "type15_literal_threshold_order_corrected": True,
+        "type59_literal_compact_layout_corrected": True,
+        "type59_literal_continuum_offset_corrected": True,
+        "type59_literal_pre_swap_reverse_zeroing_corrected": True,
         "n_civ_preliminary_record_rows": len(civ_records),
         "production_rates_modified": True,
-        "production_rate_change_scope": "ucalc_data_type_15_final_shell_threshold_only",
+        "production_rate_change_scope": (
+            "ucalc_data_type_15_final_shell_threshold_plus_"
+            "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+        ),
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }

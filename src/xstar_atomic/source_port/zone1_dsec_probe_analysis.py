@@ -960,7 +960,7 @@ def analyze_xstar_zone1_probe(
     _write(cooling_path, cooling)
 
     summary = {
-        "diagnostic_release": "0.4.81",
+        "diagnostic_release": "0.4.82",
         "probe_contract_version": "0.4.79",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
@@ -1064,7 +1064,7 @@ def compare_zone1_probe_with_python(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> Mapping[str, Path]:
-    """Evaluate the v0.4.79 physical contract with the v0.4.81 analyzer."""
+    """Evaluate the v0.4.79 physical contract with the v0.4.82 analyzer."""
     xs = Path(xstar_analysis_dir)
     py = Path(python_diagnostic_dir)
     out = Path(out_dir)
@@ -1255,6 +1255,52 @@ def compare_zone1_probe_with_python(
     type15_record_gate_passed = bool(
         not type15_record_level_proof_applicable
         or type15_record_proof_ready
+    )
+
+    # v0.4.82 proof for the actual dominant C IV record family.  Unlike the
+    # optional data-type-15 shell proof, type 59 needs no additional original
+    # probe file: the existing calc_ion_rates record rows contain the complete
+    # returned rate/heating contract and endpoint mapping.
+    type59_common = [
+        record for record in set(py_record_map) & set(xs_record_map)
+        if int(py_record_map[record]["data_type"]) == 59
+        and int(xs_record_map[record]["data_type"]) == 59
+    ]
+    type59_record_level_proof_applicable = bool(type59_common)
+    type59_rows = [
+        row for row in record_comparison
+        if int(row["data_type"]) == 59
+    ]
+    type59_endpoint_rows = [
+        row for row in type59_rows
+        if row["field"] in {"parent_record", "idest1", "idest2", "data_type", "rate_type"}
+    ]
+    type59_rate_rows = [
+        row for row in type59_rows
+        if row["field"] in {
+            "parent_threshold_ev", "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
+            "pirti_contribution",
+        }
+    ]
+    type59_record_coverage_ready = bool(type59_common) and all(
+        record in py_record_map and record in xs_record_map
+        for record in type59_common
+    )
+    type59_endpoint_mapping_ready = bool(type59_endpoint_rows) and all(
+        bool(row["within_tolerance"]) for row in type59_endpoint_rows
+    )
+    type59_rate_heating_parity_ready = bool(type59_rate_rows) and all(
+        bool(row["within_tolerance"]) for row in type59_rate_rows
+    )
+    type59_record_level_proof_ready = bool(
+        type59_record_level_proof_applicable
+        and type59_record_coverage_ready
+        and type59_endpoint_mapping_ready
+        and type59_rate_heating_parity_ready
+    )
+    type59_record_gate_passed = bool(
+        not type59_record_level_proof_applicable
+        or type59_record_level_proof_ready
     )
 
     # 3. C IV retained by the same critf-selected topology.
@@ -1452,6 +1498,7 @@ def compare_zone1_probe_with_python(
     thermal_root_ready = bool(
         same_entry_ready
         and type15_record_gate_passed
+        and type59_record_gate_passed
         and civ_rate_ready
         and civ_fraction_ready
         and civ_retained_ready
@@ -1463,7 +1510,7 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.81",
+        "diagnostic_release": "0.4.82",
         "probe_contract_version": "0.4.79",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
@@ -1473,6 +1520,12 @@ def compare_zone1_probe_with_python(
         "type15_final_shell_threshold_ready": type15_last_shell_ready,
         "type15_parent_vs_effective_difference_observed": type15_parent_diff_observed,
         "type15_record_level_proof_ready": type15_record_proof_ready,
+        "type59_record_level_proof_applicable": type59_record_level_proof_applicable,
+        "type59_record_gate_passed": type59_record_gate_passed,
+        "type59_record_coverage_ready": type59_record_coverage_ready,
+        "type59_endpoint_mapping_ready": type59_endpoint_mapping_ready,
+        "type59_rate_heating_parity_ready": type59_rate_heating_parity_ready,
+        "type59_record_level_proof_ready": type59_record_level_proof_ready,
         "civ_record_level_parity_ready": bool(
             record_coverage_ready and record_numeric_ready
         ),
@@ -1517,7 +1570,10 @@ def compare_zone1_probe_with_python(
             bool(row["exact_match"]) for row in fp_rows
         ),
         "production_rates_modified": True,
-        "production_rate_change_scope": "ucalc_data_type_15_final_shell_threshold_only",
+        "production_rate_change_scope": (
+            "ucalc_data_type_15_final_shell_threshold_plus_"
+            "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+        ),
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }
@@ -1525,7 +1581,7 @@ def compare_zone1_probe_with_python(
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     markdown_path = out / "zone1_dsec_parity_summary.md"
     markdown_path.write_text(
-        "# Zone-1 DSEC/type-15 parity gate\n\n"
+        "# Zone-1 DSEC C IV record/topology parity gate\n\n"
         + "\n".join(f"- {key}: `{value}`" for key, value in summary.items())
         + "\n", encoding="utf-8",
     )

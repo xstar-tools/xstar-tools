@@ -65,4 +65,4 @@ def test_v0460_state_mutation_and_driver_registration():
 
 
 def test_v0460_version():
-    assert xa.__version__ == "0.4.81"
+    assert xa.__version__ == "0.4.82"

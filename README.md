@@ -1,3 +1,17 @@
+## v0.4.82 C IV data-type-59 correction
+
+v0.4.82 corrects the actual dominant C IV preliminary-rate divergence proven
+by the v0.4.81 record comparison. For compact six-real type-59 records, the
+Verner coefficients now start at `reals[1]`; `idest2` uses the fourth packed
+integer from the end rather than the independent `idest4` field; and source
+inverse-field zeroing is applied before the universal heating/cooling swap.
+Record 6077 therefore retains forward photo-heating in `ans4`/`ans6` and zeros
+post-swap `ans2`/`ans3`/`ans5`, exactly as `ucalc.f90` does.
+
+No original-XSTAR rebuild is required. Rerun the Python zone-1 diagnostic and
+the analyzer using `V0482_TYPE59_CORRECTION.md`. No other production rate,
+solver, DSEC, radial, FITS, tolerance, or cache behavior changes.
+
 ## v0.4.81 optional data-type-15 probe handling
 
 v0.4.81 corrects the analyzer's interpretation of the original-XSTAR probe

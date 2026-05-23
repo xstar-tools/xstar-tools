@@ -205,7 +205,11 @@ def decode_type49_53_summary(
 
 def decode_type59_summary(r: IndexedRecord, rd: List[float], it: List[int], labels: Dict[int, str], energies: Dict[int, float], nlev: int) -> Tuple[dict, List[dict]]:
     lower_level = safe_int(it[-2]) if len(it) >= 2 else None
-    final_rel = safe_int(it[-3]) if len(it) >= 3 else None
+    # ucalc.f90 label 59 keeps the continuum offset and idest4 in distinct
+    # trailing integer fields.  The offset used in idest2 is the fourth value
+    # from the end; the third from the end is idest4.
+    final_rel = safe_int(it[-4]) if len(it) >= 4 else None
+    idest4 = safe_int(it[-3]) if len(it) >= 3 else None
     ion_pointer = safe_int(it[-1]) if len(it) >= 1 else None
     final_continuum_index = nlev + final_rel - 1 if final_rel is not None else None
     lower_energy = energies.get(lower_level) if lower_level is not None else None
@@ -225,6 +229,7 @@ def decode_type59_summary(r: IndexedRecord, rd: List[float], it: List[int], labe
         "lower_energy_eV": lower_energy,
         "final_continuum_relative_index": final_rel,
         "final_continuum_index": final_continuum_index,
+        "idest4": idest4,
         "ion_pointer": ion_pointer,
         "nreal": r.nreal,
         "nint": r.nint,

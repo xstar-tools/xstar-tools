@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## v0.4.82 — C IV data-type-59 compact-layout and ans-order correction - 2026-05-23
+
+- Uses the completed original/Python C IV record comparison to identify data
+  type 59 record 6077 as the `4.037108e10 s^-1` Python outlier; original XSTAR
+  returns `1.190480e-10 s^-1`.
+- Corrects compact six-real decoding from `reals[:5]` to `reals[1:6]`.
+- Corrects the type-59 continuum offset from the third to the fourth packed
+  integer from the end; `idest4` remains the distinct third-from-end field.
+- Preserves the literal `idest4 <= idest3 + 1` source gate and returns both
+  endpoint fields in the Python contract.
+- Corrects reverse-rate zeroing order: XSTAR zeroes pre-swap
+  `ans2/ans4/ans6`, which correspond to post-swap `ans2/ans3/ans5`; forward
+  photo-heating remains in `ans4/ans6`.
+- Applies the endpoint correction to index-only decoding, public type-59
+  photoionization summaries, and legacy audit helpers.
+- Adds a dedicated type-59 record proof to the zone-1 comparator.
+- Adds focused tests for compact coefficient mapping, endpoint mapping,
+  pre-swap zero semantics, and the source endpoint guard.
+- No original-XSTAR, other rate-family, matrix, solver, DSEC, radial, FITS,
+  tolerance, cache, or empirical-correction change.
+
 ## v0.4.81 — optional lazy data-type-15 probe handling - 2026-05-23
 
 - Fixes an analyzer error that unconditionally required the lazily-created

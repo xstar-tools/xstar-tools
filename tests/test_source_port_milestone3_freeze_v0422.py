@@ -22,11 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.81"
+    assert PORT_LEDGER_VERSION == "v0.4.82"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "run the instrumented original-XSTAR and Python zone-1 C IV type-15 gate against "
-        "the production ATDB, require thermal_root_may_continue=true, then rerun c5_ne1 "
+        "rerun the Python zone-1 diagnostic after the literal data-type-59 compact-field, "
+        "continuum-offset, and post-swap zeroing corrections; require record 6077 and the "
+        "ten physical gates to pass, then rerun c5_ne1 "
         "ten-product parity before the canonical four-case and 62-case suites"
     )
     for routine in (
