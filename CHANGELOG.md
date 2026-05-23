@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## v0.4.83 — type-59 source-guard normal zero return - 2026-05-23
+
+- Fixes the status semantics of `if (idest4.gt.idest3+1) go to 9000` at
+  original `ucalc.f90` label 59.
+- Preserves the guard but returns a ready zero-rate result instead of
+  `SOURCE_REJECTED`, preventing strict `calc_ion_rates` from aborting on
+  legitimate ATDB record 5386.
+- Keeps `ans1..ans6` and `idest1/idest2` zero while retaining decoded
+  `idest3/idest4`, matching source initialization and branch order.
+- Applies the same pre-`indonly` guard ordering to index-only evaluation.
+- Leaves the v0.4.82 type-59 coefficient, continuum-offset, and ans-order
+  corrections unchanged.
+- No original-XSTAR, other rate-family, matrix, solver, DSEC, radial, FITS,
+  tolerance, cache, or empirical-correction change.
+- Validation: 396 source-port tests passed.
+
 ## v0.4.82 — C IV data-type-59 compact-layout and ans-order correction - 2026-05-23
 
 - Uses the completed original/Python C IV record comparison to identify data

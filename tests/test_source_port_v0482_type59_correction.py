@@ -122,9 +122,9 @@ def test_type59_index_only_uses_distinct_parent_offset_and_idest4():
     assert (result.idest1, result.idest2, result.idest3, result.idest4) == (1, 26, 4, 3)
 
 
-def test_type59_source_endpoint_guard_is_literal():
+def test_type59_source_endpoint_guard_returns_literal_evaluated_zero():
     record = UCalcRecord(
-        6077,
+        5386,
         59,
         1,
         19,
@@ -132,6 +132,28 @@ def test_type59_source_endpoint_guard_is_literal():
         (0, 0, 2, 1, 8, 1, 4),
     )
     result = SourceFaithfulUCalc().evaluate(record, _type59_context())
-    assert result.status is UCalcStatus.SOURCE_REJECTED
-    assert result.reason == "type59_idest4_exceeds_idest3_plus_one"
-    assert (result.idest3, result.idest4) == (4, 8)
+    assert result.status is UCalcStatus.EVALUATED
+    assert result.ready is True
+    assert result.reason == "type59_source_zero_idest4_exceeds_idest3_plus_one"
+    assert (result.idest1, result.idest2, result.idest3, result.idest4) == (0, 0, 4, 8)
+    assert (result.ans1, result.ans2, result.ans3, result.ans4, result.ans5, result.ans6) == (0.0,) * 6
+    assert result.diagnostics["type59_source_guard_triggered"] is True
+    assert result.diagnostics["type59_source_guard_action"] == "normal_zero_return_via_label_9000"
+
+
+def test_type59_source_endpoint_guard_precedes_indonly_endpoint_mapping():
+    record = UCalcRecord(
+        5386,
+        59,
+        1,
+        19,
+        (20.0, 30.0, 2.0, 1.5, 2.5, 0.2),
+        (0, 0, 2, 1, 8, 1, 4),
+    )
+    context = _type59_context()
+    context.indonly = True
+    result = SourceFaithfulUCalc().evaluate(record, context)
+    assert result.status is UCalcStatus.INDEX_ONLY
+    assert result.ready is True
+    assert (result.idest1, result.idest2, result.idest3, result.idest4) == (0, 0, 4, 8)
+    assert result.reason == "type59_source_zero_idest4_exceeds_idest3_plus_one"

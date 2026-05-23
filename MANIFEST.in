@@ -339,3 +339,8 @@ include V0482_TYPE59_CORRECTION.md
 include XSTAR_SOURCE_CHANGES_v0.4.82.md
 include src_v0482_update_report.md
 include xstar_atomic_v0.4.82.md
+
+include V0483_TYPE59_SOURCE_ZERO_RETURN.md
+include XSTAR_SOURCE_CHANGES_v0.4.83.md
+include src_v0483_update_report.md
+include xstar_atomic_v0.4.83.md

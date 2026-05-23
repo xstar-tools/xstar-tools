@@ -110,7 +110,7 @@ def test_v0476_step_log_parser_normalizes_optional_legacy_second_integer():
 
 
 def test_v0476_version():
-    assert xa.__version__ == "0.4.82"
+    assert xa.__version__ == "0.4.83"
 
 
 def test_v0476_rrc_threshold_uses_source_level_limit_minus_excitation():

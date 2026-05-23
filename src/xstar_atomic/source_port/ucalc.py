@@ -979,6 +979,25 @@ class SourceFaithfulUCalc:
             parent_offset = i[-4] if len(i) >= 4 else 1
             id2 = nlev + max(0, parent_offset) - 1
         elif dt == 59:
+            # Source label 59 evaluates its idest4/idest3 guard before the
+            # generic ``indonly`` return.  A guarded record therefore keeps
+            # idest1/idest2 at their source-entry zero values instead of
+            # acquiring synthetic compact endpoints.
+            id3 = i[-1] if len(i) >= 1 else 0
+            id4 = i[-3] if len(i) >= 3 else 0
+            if id4 > id3 + 1:
+                return self._base_result(
+                    record, spec, UCalcStatus.INDEX_ONLY,
+                    idest3=id3, idest4=id4,
+                    reason="type59_source_zero_idest4_exceeds_idest3_plus_one",
+                    diagnostics={
+                        "type59_idest3": id3,
+                        "type59_idest4": id4,
+                        "type59_source_guard": "idest4_le_idest3_plus_one",
+                        "type59_source_guard_triggered": True,
+                        "type59_source_guard_action": "normal_zero_return_via_label_9000",
+                    },
+                )
             # Source label 59 has four distinct trailing endpoint fields:
             #
             #   idest2 offset = idat(np1i-1+nidt-3)  -> integers[-4]
@@ -1493,14 +1512,27 @@ class SourceFaithfulUCalc:
         id3=int(r.integers[-1])
         id4=int(r.integers[-3])
         if id4 > id3 + 1:
+            # Literal ucalc.f90 label-59 source guard:
+            #
+            #   if (idest4.gt.idest3+1) go to 9000
+            #
+            # Label 9000 is the normal return path.  ans1..ans6 and
+            # idest1/idest2 were initialized to zero at routine entry, while
+            # idest3/idest4 retain the values decoded immediately before the
+            # guard.  This is an evaluated zero-rate record, not a blocked or
+            # invalid record.  Treating it as SOURCE_REJECTED makes strict
+            # calc_ion_rates abort on legitimate ATDB rows such as record
+            # 5386.
             return self._base_result(
-                r, s, UCalcStatus.SOURCE_REJECTED,
-                reason="type59_idest4_exceeds_idest3_plus_one",
+                r, s, UCalcStatus.EVALUATED,
+                reason="type59_source_zero_idest4_exceeds_idest3_plus_one",
                 idest3=id3, idest4=id4,
                 diagnostics={
                     "type59_idest3": id3,
                     "type59_idest4": id4,
                     "type59_source_guard": "idest4_le_idest3_plus_one",
+                    "type59_source_guard_triggered": True,
+                    "type59_source_guard_action": "normal_zero_return_via_label_9000",
                 },
             )
 

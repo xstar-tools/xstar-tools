@@ -1,3 +1,13 @@
+## v0.4.83 type-59 source-guard zero-return hotfix
+
+v0.4.83 fixes the return status of the literal type-59
+`idest4 > idest3 + 1` guard. Original `ucalc.f90` branches to label 9000,
+returning zero rates normally; Python had marked the selected row as blocked
+and strict `calc_ion_rates` aborted on record 5386. The guard is unchanged,
+but it now returns a ready zero record in ordinary and index-only execution.
+All v0.4.82 record-6077 physics corrections remain unchanged. See
+`V0483_TYPE59_SOURCE_ZERO_RETURN.md`.
+
 ## v0.4.82 C IV data-type-59 correction
 
 v0.4.82 corrects the actual dominant C IV preliminary-rate divergence proven

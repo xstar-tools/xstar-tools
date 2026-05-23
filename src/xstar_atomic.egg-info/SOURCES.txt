@@ -6,6 +6,7 @@ V0479_TYPE15_WORKFLOW.md
 V0480_MEMORY_SAFE_ANALYZER.md
 V0481_OPTIONAL_TYPE15_PROBE.md
 V0482_TYPE59_CORRECTION.md
+V0483_TYPE59_SOURCE_ZERO_RETURN.md
 XSTAR_PYTHON_PORT.md
 XSTAR_SOURCE_CHANGES_v0.4.35.md
 XSTAR_SOURCE_CHANGES_v0.4.36.md
@@ -55,6 +56,7 @@ XSTAR_SOURCE_CHANGES_v0.4.79.md
 XSTAR_SOURCE_CHANGES_v0.4.80.md
 XSTAR_SOURCE_CHANGES_v0.4.81.md
 XSTAR_SOURCE_CHANGES_v0.4.82.md
+XSTAR_SOURCE_CHANGES_v0.4.83.md
 pyproject.toml
 setup.cfg
 src_v0441_update_report.md
@@ -99,6 +101,7 @@ src_v0479_update_report.md
 src_v0480_update_report.md
 src_v0481_update_report.md
 src_v0482_update_report.md
+src_v0483_update_report.md
 xstar_all_calc_hmc_all_v0436_diagnosis_v0437.md
 xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 xstar_atomic_conversation_summary_v0426.md
@@ -231,6 +234,7 @@ xstar_atomic_v0.4.8.md
 xstar_atomic_v0.4.80.md
 xstar_atomic_v0.4.81.md
 xstar_atomic_v0.4.82.md
+xstar_atomic_v0.4.83.md
 xstar_atomic_v0.4.9.md
 xstar_calc_hmc_all_v0426_offline_global_level_summary.csv
 xstar_calc_hmc_all_v0426_offline_reanalysis_summary.json
