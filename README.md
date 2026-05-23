@@ -1,3 +1,58 @@
+## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate
+
+v0.4.72 adds the first public end-to-end execution API for the translated
+Python XSTAR call graph:
+
+- `run_xstar_python(**parameters)` accepts ordinary XSTAR keyword arguments;
+- `run_xstar_python_command(command)` parses a literal `xstar key=value ...`
+  command and runs Python only;
+- `run_xstar_python_script(run_xstar.sh)` reads the script as data without
+  sourcing or executing it;
+- `run_xstar_from_parameters(parameters)` is the common typed execution path.
+
+The runner resolves `atdb.fits` through the package data-path policy, applies
+the source `rread1` pressure/density/radius setup, builds the literal `ener`
+grid and built-in power-law spectrum, initializes caller-owned local/radial
+state, executes the translated radial/pass calculation, and writes the strict
+ten-product set. Original XSTAR products are never calculation inputs.
+
+The direct Python convenience API supports sparse abundance shorthand. A call
+that supplies only `habund`, `heabund`, and `cabund` sets all unspecified
+elements to zero. Literal command and script APIs retain XSTAR parameter-file
+defaults unless every abundance is supplied explicitly.
+
+The FITS `PARAMETERS` extension now uses the literal 56-row
+`xstar.f90 -> pprint(3) -> fparmlist` name/type/comment order, including string
+values in the source comment column and REAL(4) persistence. The input
+`lprint=1` value is retained in that table. The untranslated verbose terminal
+`pprint` reports are not emitted; all structured FITS products and the
+comparator-visible zone/final rows of `xout_step.log` remain enabled.
+
+`run_c5_ne1_acceptance()` provides the strict gate requested for
+`helike_type69/c5_ne1`: it first generates all ten Python products independently,
+then compares them directly against the original-XSTAR directory using the
+existing schema/value comparator. The gate cannot pass when an original product
+is missing, and never uses original outputs to seed Python state.
+
+The uploaded `original_xstar.tar.gz` intentionally omits the generated products,
+and the release environment does not contain the production `atdb.fits` or an
+installed XSTAR executable. Consequently, package-level API/gate tests pass, but
+physical all-ATDB c5_ne1 output parity is not claimed in this release. The next
+acceptance action is to run the new API on the user's production ATDB after
+regenerating the ten original products.
+
+Run the Python case and strict comparison with:
+
+```bash
+PYTHONPATH=src python examples/142_run_xstar_python.py \
+  --run-script original_xstar/helike_type69/c5_ne1/run_xstar.sh \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --output-dir python_xstar/helike_type69/c5_ne1 \
+  --original-run-dir original_xstar/helike_type69/c5_ne1 \
+  --summary-json c5_ne1_physical_parity_v0472.json \
+  --print-summary
+```
+
 ## v0.4.71 original-XSTAR physical benchmark
 
 Inventory the supplied 62-case run-script tree and prepare the canonical

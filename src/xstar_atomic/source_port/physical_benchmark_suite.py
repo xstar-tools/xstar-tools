@@ -218,13 +218,13 @@ class PhysicalBenchmarkSuiteResult:
             "physical_benchmark_all_selected_cases_match": self.all_selected_cases_match,
             "required_products": list(REQUIRED_XSTAR_PRODUCTS),
             "canonical_standard_cases": list(CANONICAL_STANDARD_CASES),
-            "python_physical_runner_built_in": False,
+            "python_physical_runner_built_in": True,
             "xstar_outputs_used_as_python_inputs": False,
             "physical_all_atdb_parity_claimed": self.all_selected_cases_match,
             "next_source_target": (
                 "expand_physical_standard_suite_after_parity"
                 if self.all_selected_cases_match
-                else "physical_input_to_state_runner_and_standard_suite_parity"
+                else "c5_ne1_independent_python_ten_product_parity"
             ),
             "provenance": dict(self.provenance),
             "cases": [case.as_dict() for case in self.selected_cases],
@@ -630,7 +630,7 @@ def run_physical_benchmark_suite(
         case_results=tuple(comparisons),
         source_archive=archive,
         provenance={
-            "benchmark_version": "v0.4.71",
+            "benchmark_version": "v0.4.72",
             "benchmark_role": "strict diagnostic oracle",
             "source_archive_sha256": (_sha256_file(archive) if archive else None),
             "original_scripts_executed_as_shell": False,

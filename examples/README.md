@@ -2092,3 +2092,19 @@ PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
   --out-dir xstar_output_writer_source_validation_v0469 \
   --print-summary
 ```
+
+## 142_run_xstar_python.py
+
+Public physical Python XSTAR runner. It accepts either a literal command or a
+`run_xstar.sh` file, writes the ten standard detail/final products, and can run
+the strict independent `c5_ne1` comparison against an original-XSTAR directory.
+The shell script is parsed as data and is never sourced.
+
+```bash
+PYTHONPATH=src python examples/142_run_xstar_python.py \
+  --run-script original_xstar/helike_type69/c5_ne1/run_xstar.sh \
+  --atdb /path/to/atdb.fits \
+  --output-dir python_xstar/helike_type69/c5_ne1 \
+  --original-run-dir original_xstar/helike_type69/c5_ne1 \
+  --print-summary
+```

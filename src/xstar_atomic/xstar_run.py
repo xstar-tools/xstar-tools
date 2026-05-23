@@ -1,8 +1,9 @@
 """XSTAR command/input handling and Python-output recreation planning.
 
-This module is intentionally conservative.  It does **not** claim to run a full
-XSTAR-equivalent plasma calculation yet.  Instead it provides the first public
-API layer needed to make that possible:
+This module provides the conservative command/parser and output-planning layer.
+The executable translated physical runner is exposed separately by
+``xstar_atomic.source_port.physical_runner``; physical all-ATDB parity remains
+an explicit benchmark gate rather than an assumption.  This module provides:
 
 * parse a shell-style ``xstar key=value ...`` command into normalized inputs;
 * list the standard XSTAR FITS products and the live internal state needed to

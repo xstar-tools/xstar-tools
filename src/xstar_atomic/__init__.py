@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.71"
+__version__ = "0.4.72"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -795,4 +795,19 @@ from .source_port.physical_benchmark_suite import (
     select_benchmark_cases, prepare_original_xstar_suite,
     run_original_xstar_case, compare_benchmark_case,
     run_physical_benchmark_suite, write_physical_benchmark_products,
+)
+
+# Public end-to-end source-port execution API.
+from .source_port.physical_runner import (
+    XSTARPythonRunnerError,
+    UnsupportedXSTARParameterError,
+    XSTARPythonAcceptanceError,
+    NormalizedXSTARParameters,
+    XSTARPythonRunResult,
+    C5NE1AcceptanceResult,
+    run_xstar_from_parameters,
+    run_xstar_python,
+    run_xstar_python_command,
+    run_xstar_python_script,
+    run_c5_ne1_acceptance,
 )

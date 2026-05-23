@@ -152,7 +152,7 @@ def test_v0471_missing_products_never_claim_parity(four_case_suite: Path, tmp_pa
 
 
 def test_v0471_version_and_ledger():
-    assert xa.__version__ == "0.4.71"
+    assert xa.__version__ == "0.4.72"
     routines = {entry.routine: entry for entry in default_port_ledger().entries}
     assert routines["physical_benchmark_suite"].status.value == "partial"
 

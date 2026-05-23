@@ -1145,3 +1145,23 @@ __all__.extend([
     "run_original_xstar_case", "compare_benchmark_case",
     "run_physical_benchmark_suite", "write_physical_benchmark_products",
 ])
+
+from .physical_runner import (
+    XSTARPythonRunnerError,
+    UnsupportedXSTARParameterError,
+    XSTARPythonAcceptanceError,
+    NormalizedXSTARParameters,
+    XSTARPythonRunResult,
+    C5NE1AcceptanceResult,
+    XSTAR_PARAMETER_DEFAULTS,
+    XDEF_ABUNDANCES,
+    normalize_xstar_parameters,
+    ener_grid,
+    powerlaw_spectrum,
+    photon_number_luminosity,
+    run_xstar_from_parameters,
+    run_xstar_python,
+    run_xstar_python_command,
+    run_xstar_python_script,
+    run_c5_ne1_acceptance,
+)
