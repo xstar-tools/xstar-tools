@@ -1,3 +1,14 @@
+## v0.4.80 memory-safe zone-1 analyzer
+
+v0.4.80 is an analysis-only hotfix over v0.4.79. It streams the enormous
+original-XSTAR probe CSVs instead of materializing them and adds
+`--skip-input-fingerprints` plus `--progress`. Existing v0.4.79 original probe
+outputs and Python diagnostics can be reused. No production physics changes.
+
+The uploaded Python record audit shows that the remaining C IV outlier is data
+type 59 record 6077; the type-15 record is negligible. Complete the repaired
+original-record comparison before changing type 59.
+
 ## v0.4.79 C IV type-15 proof and literal threshold correction
 
 v0.4.79 is a bounded physical correction release for the first concrete

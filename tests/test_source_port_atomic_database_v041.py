@@ -301,7 +301,7 @@ def test_atomic_database_cli_writes_reusable_products(tmp_path: Path, capsys):
 def test_atomic_database_source_port_api_is_public():
     import xstar_atomic as xa
 
-    assert xa.__version__ == "0.4.79"
+    assert xa.__version__ == "0.4.80"
     assert xa.readtbl is readtbl
     assert callable(xa.load_atomic_database_state)
     assert "readtbl" in xa.__all__

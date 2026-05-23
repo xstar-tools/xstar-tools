@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.4.80 — constant-memory zone-1 analyzer hotfix - 2026-05-23
+
+- Replaces full-file materialization of original-XSTAR probe CSVs with
+  incremental constant-memory fingerprints that preserve the same SHA-256 and
+  numerical summary contract.
+- Streams and target-filters the remaining raw probe products.
+- Adds `--skip-input-fingerprints` because the full-capacity fingerprints are
+  observational and are not part of the ten physical acceptance gates.
+- Adds `--progress` reporting for large analyzer stages and files.
+- Reports the dominant Python C IV preliminary record in the parity summary.
+- Establishes from the uploaded Python v0.4.79 products that data type 59
+  record 6077, not type 15, produces the `4.037108e10 s^-1` outlier.
+- Makes no production-physics, Fortran-probe, tolerance, cache, radial, or FITS
+  change relative to v0.4.79.
+
 ## v0.4.79 — C IV preliminary type-15 record proof and literal shell-threshold correction - 2026-05-23
 
 - Corrects the sole production-physics discrepancy in this release: data type

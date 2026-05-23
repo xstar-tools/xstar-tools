@@ -1,4 +1,4 @@
-"""Post-process and compare the v0.4.79 original-XSTAR zone-1/type-15 probe."""
+"""Memory-safe post-processing for the v0.4.79 zone-1/type-15 probe."""
 from __future__ import annotations
 
 import csv
@@ -8,7 +8,7 @@ import math
 import struct
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from typing import Any, Callable, Dict, Iterable, Iterator, Mapping, Sequence
 
 from .dsec import DsecPortError, load_xstar_dsec_trajectory
 from .fortran_numbers import parse_fortran_float
@@ -21,11 +21,28 @@ from .zone1_dsec_diagnostic import (
 )
 
 
-def _read(path: Path) -> list[dict[str, str]]:
+def _iter_rows(path: Path) -> Iterator[dict[str, str]]:
+    """Yield CSV rows without materializing the complete probe file.
+
+    Several original-XSTAR probe products contain full-capacity arrays for
+    every DSEC evaluation and can contain tens of millions of rows.  Keeping
+    ``list(csv.DictReader(...))`` copies of those products is unnecessary and
+    can cause the Linux OOM killer to terminate the analyzer.
+    """
     if not path.is_file():
         raise DsecPortError(f"missing zone-1 probe product: {path}")
     with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+        yield from csv.DictReader(handle)
+
+
+def _read(path: Path) -> list[dict[str, str]]:
+    """Read a bounded analysis product into memory.
+
+    Raw original-XSTAR probe products must be consumed with ``_iter_rows``.
+    This helper remains appropriate for the compact derived CSV products used
+    by the final comparator.
+    """
+    return list(_iter_rows(path))
 
 
 def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -45,7 +62,7 @@ def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
 
 
 def _call_map(root: Path) -> dict[int, int]:
-    rows = _read(root / "xstar_dsec_calc_hmc_all_call_correlation.csv")
+    rows = _iter_rows(root / "xstar_dsec_calc_hmc_all_call_correlation.csv")
     return {
         int(row["calc_hmc_all_call_id"]): int(row["dsec_evaluation_index"])
         for row in rows
@@ -100,9 +117,105 @@ def _fingerprint(
     }
 
 
+class _FingerprintAccumulator:
+    """Incremental equivalent of ``_fingerprint`` for one logical array."""
+
+    __slots__ = (
+        "count",
+        "nonzero_count",
+        "finite_count",
+        "minimum",
+        "maximum",
+        "total",
+        "total_abs",
+        "total_square",
+        "weighted_total",
+        "first",
+        "last",
+        "sha",
+        "has_numeric",
+    )
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.nonzero_count = 0
+        self.finite_count = 0
+        self.minimum = math.nan
+        self.maximum = math.nan
+        self.total = 0.0
+        self.total_abs = 0.0
+        self.total_square = 0.0
+        self.weighted_total = 0.0
+        self.first: float | int | str = math.nan
+        self.last: float | int | str = math.nan
+        self.sha = hashlib.sha256()
+        self.has_numeric = False
+
+    def add(self, index: int, value: float | int | str) -> None:
+        if self.count == 0:
+            self.first = value
+        self.last = value
+        self.count += 1
+        self.sha.update(struct.pack("<q", int(index)))
+        if isinstance(value, str):
+            encoded = value.encode("utf-8")
+            self.sha.update(struct.pack("<q", len(encoded)))
+            self.sha.update(encoded)
+            return
+        if isinstance(value, int):
+            self.sha.update(struct.pack("<q", value))
+        else:
+            self.sha.update(struct.pack("<d", float(value)))
+        numeric = float(value)
+        if not self.has_numeric:
+            self.minimum = numeric
+            self.maximum = numeric
+            self.has_numeric = True
+        else:
+            # Preserve the ordered Python min/max behavior used by the old
+            # list implementation, including any leading NaN semantics.
+            self.minimum = min(self.minimum, numeric)
+            self.maximum = max(self.maximum, numeric)
+        self.nonzero_count += int(numeric != 0.0)
+        self.finite_count += int(math.isfinite(numeric))
+        self.total += numeric
+        self.total_abs += abs(numeric)
+        self.total_square += numeric * numeric
+        self.weighted_total += int(index) * numeric
+
+    def finish(self, *, call: int, evaluation: int, name: str) -> dict[str, Any]:
+        return {
+            "evaluation_index": int(evaluation),
+            "call_id": int(call),
+            "name": name,
+            "count": self.count,
+            "nonzero_count": self.nonzero_count,
+            "finite_count": self.finite_count,
+            "minimum": self.minimum if self.has_numeric else math.nan,
+            "maximum": self.maximum if self.has_numeric else math.nan,
+            "total": self.total if self.has_numeric else math.nan,
+            "total_abs": self.total_abs if self.has_numeric else math.nan,
+            "total_square": self.total_square if self.has_numeric else math.nan,
+            "weighted_total": self.weighted_total if self.has_numeric else math.nan,
+            "first": self.first,
+            "last": self.last,
+            "sha256": self.sha.hexdigest(),
+        }
+
+
 def _numeric_fingerprint_rows(
-    root: Path, call_to_eval: Mapping[int, int]
+    root: Path,
+    call_to_eval: Mapping[int, int],
+    *,
+    progress: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
+    """Fingerprint raw probe arrays in one pass with bounded memory.
+
+    v0.4.79 materialized each complete full-capacity CSV and then retained a
+    second grouped list of every value.  The continuum/escape probe products
+    can therefore require several gigabytes.  This implementation retains only
+    one small accumulator for each ``(call, canonical_name)`` pair.
+    """
     specs = [
         (
             "xstar_calc_hmc_all_input_continuum_probe.csv",
@@ -152,9 +265,16 @@ def _numeric_fingerprint_rows(
     ]
     output: list[dict[str, Any]] = []
     for filename, index_name, fields in specs:
-        rows = _read(root / filename)
-        grouped: Dict[tuple[int, str], list[tuple[int, float | int]]] = {}
-        for position, row in enumerate(rows, start=1):
+        probe_path = root / filename
+        if progress is not None:
+            progress(
+                f"fingerprint_file_start file={filename} "
+                f"size_bytes={probe_path.stat().st_size if probe_path.is_file() else -1}"
+            )
+        grouped: Dict[tuple[int, str], _FingerprintAccumulator] = {}
+        n_rows = 0
+        for position, row in enumerate(_iter_rows(probe_path), start=1):
+            n_rows = position
             call = int(row["calc_hmc_all_call_id"])
             if call not in call_to_eval:
                 continue
@@ -169,38 +289,58 @@ def _numeric_fingerprint_rows(
                     value = int(row[field])
                 else:
                     value = parse_fortran_float(row[field])
-                grouped.setdefault((call, canonical_name), []).append(
-                    (logical_index, value)
-                )
-        for (call, name), values in sorted(grouped.items()):
+                group_key = (call, canonical_name)
+                accumulator = grouped.get(group_key)
+                if accumulator is None:
+                    accumulator = _FingerprintAccumulator()
+                    grouped[group_key] = accumulator
+                accumulator.add(logical_index, value)
+        for (call, name), accumulator in sorted(grouped.items()):
             output.append(
-                _fingerprint(
+                accumulator.finish(
                     call=call,
                     evaluation=call_to_eval[call],
                     name=name,
-                    values=values,
                 )
             )
+        if progress is not None:
+            progress(
+                f"fingerprint_file_done file={filename} rows={n_rows} "
+                f"groups={len(grouped)}"
+            )
 
-    klev_rows = _read(root / "xstar_zone1_calc_hmc_all_input_klev_probe.csv")
-    grouped_klev: Dict[int, list[tuple[int, str]]] = {}
-    for row in klev_rows:
+    klev_path = root / "xstar_zone1_calc_hmc_all_input_klev_probe.csv"
+    if progress is not None:
+        progress(
+            "fingerprint_file_start "
+            f"file={klev_path.name} "
+            f"size_bytes={klev_path.stat().st_size if klev_path.is_file() else -1}"
+        )
+    grouped_klev: Dict[int, _FingerprintAccumulator] = {}
+    n_klev_rows = 0
+    for row in _iter_rows(klev_path):
+        n_klev_rows += 1
         call = int(row["calc_hmc_all_call_id"])
         if call in call_to_eval:
-            grouped_klev.setdefault(call, []).append(
-                (int(row["column_index"]), row["klev_hex"])
-            )
-    for call, values in sorted(grouped_klev.items()):
+            accumulator = grouped_klev.get(call)
+            if accumulator is None:
+                accumulator = _FingerprintAccumulator()
+                grouped_klev[call] = accumulator
+            accumulator.add(int(row["column_index"]), row["klev_hex"])
+    for call, accumulator in sorted(grouped_klev.items()):
         output.append(
-            _fingerprint(
+            accumulator.finish(
                 call=call,
                 evaluation=call_to_eval[call],
                 name="leveltemp_workspace.klev",
-                values=values,
             )
         )
+    if progress is not None:
+        progress(
+            f"fingerprint_file_done file={klev_path.name} rows={n_klev_rows} "
+            f"groups={len(grouped_klev)}"
+        )
 
-    summary_rows = _read(root / "xstar_calc_hmc_all_input_summary_probe.csv")
     scalar_fields = (
         "temperature_t4",
         "temperature_k",
@@ -217,29 +357,26 @@ def _numeric_fingerprint_rows(
         "critf",
         "ncn2",
     )
-    for row in summary_rows:
+    for row in _iter_rows(root / "xstar_calc_hmc_all_input_summary_probe.csv"):
         call = int(row["calc_hmc_all_call_id"])
         if call not in call_to_eval:
             continue
-        values = [
-            (
-                index,
-                int(row[field])
-                if field in {"lcdd", "ncn2"}
-                else parse_fortran_float(row[field]),
-            )
-            for index, field in enumerate(scalar_fields, start=1)
-        ]
+        accumulator = _FingerprintAccumulator()
+        for index, field in enumerate(scalar_fields, start=1):
+            value: float | int
+            if field in {"lcdd", "ncn2"}:
+                value = int(row[field])
+            else:
+                value = parse_fortran_float(row[field])
+            accumulator.add(index, value)
         output.append(
-            _fingerprint(
+            accumulator.finish(
                 call=call,
                 evaluation=call_to_eval[call],
                 name="runtime_scalars",
-                values=values,
             )
         )
     return sorted(output, key=lambda row: (row["evaluation_index"], row["name"]))
-
 
 def load_xstar_target_state(
     probe_dir: str | Path,
@@ -248,7 +385,7 @@ def load_xstar_target_state(
 ) -> dict[str, Any]:
     root = Path(probe_dir)
     call_to_eval = _call_map(root)
-    summaries = _read(root / "xstar_calc_hmc_all_input_summary_probe.csv")
+    summaries = _iter_rows(root / "xstar_calc_hmc_all_input_summary_probe.csv")
     candidates = [
         row
         for row in summaries
@@ -281,7 +418,7 @@ def load_xstar_carbon_cooling_terms(
 ) -> list[dict[str, Any]]:
     root = Path(probe_dir)
     call_to_eval = _call_map(root)
-    rows = _read(root / "xstar_zone1_calc_hmc_all_thermal_terms_probe.csv")
+    rows = _iter_rows(root / "xstar_zone1_calc_hmc_all_thermal_terms_probe.csv")
     output: list[dict[str, Any]] = []
     for row in rows:
         call = int(row["calc_hmc_all_call_id"])
@@ -363,6 +500,8 @@ def analyze_xstar_zone1_probe(
     *,
     out_dir: str | Path,
     target_temperature_k: float = TARGET_TEMPERATURE_K,
+    include_input_fingerprints: bool = True,
+    progress: Callable[[str], None] | None = None,
 ) -> Mapping[str, Path]:
     root = Path(probe_dir)
     out = Path(out_dir)
@@ -388,10 +527,25 @@ def analyze_xstar_zone1_probe(
     sequence_path = out / "xstar_zone1_dsec_evaluation_sequence.csv"
     _write(sequence_path, sequence_rows)
 
-    fingerprints = _numeric_fingerprint_rows(root, call_to_eval)
+    if include_input_fingerprints:
+        if progress is not None:
+            progress("input_fingerprint_stage_start")
+        fingerprints = _numeric_fingerprint_rows(
+            root, call_to_eval, progress=progress
+        )
+        if progress is not None:
+            progress(
+                f"input_fingerprint_stage_done fingerprints={len(fingerprints)}"
+            )
+    else:
+        fingerprints = []
+        if progress is not None:
+            progress("input_fingerprint_stage_skipped")
     fingerprints_path = out / "xstar_zone1_calc_hmc_all_input_fingerprints.csv"
     _write(fingerprints_path, fingerprints)
 
+    if progress is not None:
+        progress("target_state_analysis_start")
     target_state = load_xstar_target_state(
         root, target_temperature_k=target_temperature_k
     )
@@ -400,13 +554,13 @@ def analyze_xstar_zone1_probe(
 
     pre = [
         row
-        for row in _read(root / "xstar_calc_hmc_element_pre_matrix_probe.csv")
+        for row in _iter_rows(root / "xstar_calc_hmc_element_pre_matrix_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
     second = [
         row
-        for row in _read(
+        for row in _iter_rows(
             root / "xstar_zone1_calc_hmc_all_second_pass_rates_probe.csv"
         )
         if int(row["calc_hmc_all_call_id"]) == target_call
@@ -447,7 +601,7 @@ def analyze_xstar_zone1_probe(
     _write(rates_path, rate_rows)
 
     shell_rows = [
-        row for row in _read(root / "xstar_zone1_type15_shell_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_type15_shell_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
     ]
     shells_by_record: Dict[int, list[dict[str, str]]] = {}
@@ -457,7 +611,7 @@ def analyze_xstar_zone1_probe(
         values.sort(key=lambda row: int(row["shell_index"]))
 
     effective_rows = [
-        row for row in _read(root / "xstar_zone1_type15_effective_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_type15_effective_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
     ]
     effective_by_record_phase = {
@@ -466,7 +620,7 @@ def analyze_xstar_zone1_probe(
     }
 
     civ_raw = [
-        row for row in _read(root / "xstar_zone1_civ_calc_ion_rates_records_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_civ_calc_ion_rates_records_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
     ]
     civ_records: list[dict[str, Any]] = []
@@ -526,7 +680,7 @@ def analyze_xstar_zone1_probe(
 
     stage4 = next((row for row in pre if int(row["ion_stage"]) == 4), None)
     initial_raw = [
-        row for row in _read(root / "xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv")
+        row for row in _iter_rows(root / "xstar_calc_hmc_all_msolvelucy_initial_population_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
@@ -567,7 +721,7 @@ def analyze_xstar_zone1_probe(
     _write(topology_path, topology_rows)
 
     normalization_raw = [
-        row for row in _read(root / "xstar_zone1_msolvelucy_normalization_row_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_msolvelucy_normalization_row_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
@@ -600,7 +754,7 @@ def analyze_xstar_zone1_probe(
             "compact_index": int(row["compact_index"]),
             "population": parse_fortran_float(row["population"]),
         }
-        for row in _read(root / "xstar_zone1_carbon_level_population_probe.csv")
+        for row in _iter_rows(root / "xstar_zone1_carbon_level_population_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["ion_stage"]) == 5
         and int(row["local_level"]) in set(TARGET_CV_LOCAL_LEVELS)
@@ -610,7 +764,7 @@ def analyze_xstar_zone1_probe(
 
     records = [
         row
-        for row in _read(root / "xstar_zone1_calc_hmc_all_rate_records_probe.csv")
+        for row in _iter_rows(root / "xstar_zone1_calc_hmc_all_rate_records_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
         and int(row["ion_stage"]) == 5
@@ -626,7 +780,7 @@ def analyze_xstar_zone1_probe(
     record_map = {int(row["record"]): row for row in records}
     matrix = [
         row
-        for row in _read(root / "xstar_calc_hmc_all_matrix_terms_probe.csv")
+        for row in _iter_rows(root / "xstar_calc_hmc_all_matrix_terms_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
         and int(row["source_record"]) in record_map
@@ -701,13 +855,13 @@ def analyze_xstar_zone1_probe(
     _write(matrix_path, matrix_rows)
 
     all_rate_records = [
-        row for row in _read(root / "xstar_zone1_calc_hmc_all_rate_records_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_calc_hmc_all_rate_records_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
     all_record_map = {int(row["record"]): row for row in all_rate_records}
     all_matrix = [
-        row for row in _read(root / "xstar_calc_hmc_all_matrix_terms_probe.csv")
+        row for row in _iter_rows(root / "xstar_calc_hmc_all_matrix_terms_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
@@ -721,7 +875,7 @@ def analyze_xstar_zone1_probe(
             role_order[record], f"term_{role_order[record]}"
         )
     thermal_raw = [
-        row for row in _read(root / "xstar_zone1_calc_hmc_all_thermal_terms_probe.csv")
+        row for row in _iter_rows(root / "xstar_zone1_calc_hmc_all_thermal_terms_probe.csv")
         if int(row["calc_hmc_all_call_id"]) == target_call
         and int(row["element_z"]) == 6
     ]
@@ -761,10 +915,13 @@ def analyze_xstar_zone1_probe(
     _write(cooling_path, cooling)
 
     summary = {
-        "diagnostic_release": "0.4.79",
+        "diagnostic_release": "0.4.80",
+        "probe_contract_version": "0.4.79",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
+        "input_fingerprints_skipped": not include_input_fingerprints,
+        "input_fingerprint_algorithm": "streaming_constant_memory",
         "target_temperature_K": target_temperature_k,
         "selected_call_id": target_call,
         "selected_evaluation_index": target_eval,
@@ -792,6 +949,11 @@ def analyze_xstar_zone1_probe(
     summary_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    if progress is not None:
+        progress(
+            "target_state_analysis_done "
+            f"target_call={target_call} target_evaluation={target_eval}"
+        )
     return {
         "sequence_csv": sequence_path,
         "fingerprints_csv": fingerprints_path,
@@ -857,7 +1019,7 @@ def compare_zone1_probe_with_python(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> Mapping[str, Path]:
-    """Evaluate the v0.4.79 ten-gate type-15/topology acceptance contract."""
+    """Evaluate the v0.4.79 ten-gate contract with the v0.4.80 analyzer."""
     xs = Path(xstar_analysis_dir)
     py = Path(python_diagnostic_dir)
     out = Path(out_dir)
@@ -907,6 +1069,14 @@ def compare_zone1_probe_with_python(
     xs_records = _read(xs / "xstar_zone1_civ_calc_ion_rates_records_T73198p4K.csv")
     py_record_map = {int(row["record"]): row for row in py_records}
     xs_record_map = {int(row["record"]): row for row in xs_records}
+    dominant_python_civ_record = (
+        max(
+            py_records,
+            key=lambda row: abs(_float(row, "pirti_contribution")),
+        )
+        if py_records
+        else None
+    )
     common_record_fields = (
         "parent_threshold_ev",
         "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
@@ -1242,13 +1412,41 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.79",
+        "diagnostic_release": "0.4.80",
+        "probe_contract_version": "0.4.79",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_coverage_ready": record_coverage_ready,
         "type15_record_numeric_parity_ready": record_numeric_ready,
         "type15_final_shell_threshold_ready": type15_last_shell_ready,
         "type15_parent_vs_effective_difference_observed": type15_parent_diff_observed,
         "type15_record_level_proof_ready": type15_record_proof_ready,
+        "civ_record_level_parity_ready": bool(
+            record_coverage_ready and record_numeric_ready
+        ),
+        "python_civ_dominant_record": (
+            None
+            if dominant_python_civ_record is None
+            else int(dominant_python_civ_record["record"])
+        ),
+        "python_civ_dominant_data_type": (
+            None
+            if dominant_python_civ_record is None
+            else int(dominant_python_civ_record["data_type"])
+        ),
+        "python_civ_dominant_rate_type": (
+            None
+            if dominant_python_civ_record is None
+            else int(dominant_python_civ_record["rate_type"])
+        ),
+        "python_civ_dominant_pirti_contribution": (
+            None
+            if dominant_python_civ_record is None
+            else _float(dominant_python_civ_record, "pirti_contribution")
+        ),
+        "python_civ_type15_is_dominant": bool(
+            dominant_python_civ_record is not None
+            and int(dominant_python_civ_record["data_type"]) == 15
+        ),
         "civ_preliminary_photoionization_parity_ready": civ_rate_ready,
         "civ_preliminary_fraction_parity_ready": civ_fraction_ready,
         "civ_retained_by_critf_ready": civ_retained_ready,

@@ -1,6 +1,7 @@
-"""Analyze and optionally compare the bounded original-XSTAR zone-1 probe."""
+"""Analyze and optionally compare the bounded original-XSTAR zone-1 probe with constant-memory streaming."""
 from __future__ import annotations
 import argparse
+import sys
 from pathlib import Path
 from .source_port.zone1_dsec_probe_analysis import analyze_xstar_zone1_probe, compare_zone1_probe_with_python
 
@@ -13,8 +14,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--compare-out-dir")
     parser.add_argument("--rtol", type=float, default=5.0e-5)
     parser.add_argument("--atol", type=float, default=1.0e-30)
+    parser.add_argument(
+        "--skip-input-fingerprints",
+        action="store_true",
+        help=(
+            "skip the observation-only full-capacity input fingerprint pass; "
+            "the ten physical type-15/topology gates are still evaluated"
+        ),
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="print streaming analyzer stage/file progress to stderr",
+    )
     args = parser.parse_args(argv)
-    products = analyze_xstar_zone1_probe(args.xstar_probe_dir, out_dir=args.out_dir)
+
+    progress = None
+    if args.progress:
+        def progress(message: str) -> None:
+            print(f"[zone1-analyzer] {message}", file=sys.stderr, flush=True)
+
+    products = analyze_xstar_zone1_probe(
+        args.xstar_probe_dir,
+        out_dir=args.out_dir,
+        include_input_fingerprints=not args.skip_input_fingerprints,
+        progress=progress,
+    )
     for key, value in sorted(products.items()):
         print(f"{key}={value}")
     if args.python_diagnostic_dir:

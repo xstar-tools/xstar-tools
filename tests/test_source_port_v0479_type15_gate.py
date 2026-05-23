@@ -251,6 +251,10 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     )
     summary = json.loads(products["summary_json"].read_text(encoding="utf-8"))
     assert summary["type15_record_level_proof_ready"] is True
+    assert summary["civ_record_level_parity_ready"] is True
+    assert summary["python_civ_dominant_record"] == 123
+    assert summary["python_civ_dominant_data_type"] == 15
+    assert summary["python_civ_type15_is_dominant"] is True
     assert summary["civ_preliminary_photoionization_parity_ready"] is True
     assert summary["civ_preliminary_fraction_parity_ready"] is True
     assert summary["civ_retained_by_critf_ready"] is True
@@ -279,4 +283,4 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     assert incomplete_summary["cv_logical_row_count_xstar"] == 931
     assert incomplete_summary["cv_logical_coefficient_parity_ready"] is False
     assert incomplete_summary["thermal_root_may_continue"] is False
-    assert xa.__version__ == "0.4.79"
+    assert xa.__version__ == "0.4.80"
