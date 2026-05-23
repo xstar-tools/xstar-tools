@@ -20,6 +20,7 @@ import math
 import os
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
@@ -911,11 +912,18 @@ def _load_or_build_source_output_metadata(
     rebuild_cache: bool,
 ) -> SourceOutputMetadata:
     path = None if cache_path is None else Path(cache_path)
+    cache_failure: str | None = None
     if use_cache and path is not None and path.is_file() and not rebuild_cache:
         try:
             return load_source_output_metadata_cache(master, path)
-        except (AtomicDatabaseError, OSError, ValueError, KeyError, json.JSONDecodeError):
-            pass
+        except (
+            AtomicDatabaseError, OSError, ValueError, KeyError, TypeError,
+            IndexError, EOFError, json.JSONDecodeError, zipfile.BadZipFile,
+        ) as exc:
+            # NPZ CRC/ZIP/member-read failures are cache corruption, not a
+            # physical-run failure.  Rebuild from the authoritative ATDB and
+            # atomically replace the damaged sidecar.
+            cache_failure = exc.__class__.__name__
     metadata = build_source_output_metadata(master, derived)
     if use_cache and path is not None:
         save_source_output_metadata_cache(master, metadata, path)
@@ -925,8 +933,16 @@ def _load_or_build_source_output_metadata(
             rrcs=metadata.rrcs,
             provenance={
                 **dict(metadata.provenance),
-                "metadata_cache_status": "rebuilt" if rebuild_cache else "miss_written",
+                "metadata_cache_status": (
+                    "rebuilt" if rebuild_cache
+                    else "corrupt_rebuilt" if cache_failure is not None
+                    else "miss_written"
+                ),
                 "metadata_cache_path": str(path),
+                **(
+                    {"metadata_cache_failure": cache_failure}
+                    if cache_failure is not None else {}
+                ),
             },
         )
     return metadata

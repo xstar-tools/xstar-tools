@@ -274,7 +274,10 @@ def calc_ion_rates(
                     abund2=0.0,
                     jkion=int(ion_index),
                     nlev=nlev,
-                    lfast=int(context.lfast),
+                    # calc_ion_rates.f90 owns a local ``lfpi=1`` and passes
+                    # it to every preliminary ucalc call.  The caller's
+                    # second-pass lfast setting must not leak into this pass.
+                    lfast=1,
                     levels=levels,
                     radiation=context.radiation,
                     derived_pointers=derived,
@@ -285,6 +288,8 @@ def calc_ion_rates(
                         "ion_charge": ion_stage - 1,
                         "ion_record": ion_record,
                         "lfpi": 1,
+                        "requested_lfast": int(context.lfast),
+                        "calc_ion_rates_lfast": 1,
                         "parent_level_energy_ev_by_destination": parent_energy,
                         "parent_level_stat_weight_by_destination": parent_weight,
                     },

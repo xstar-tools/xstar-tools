@@ -217,6 +217,8 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     cooling = [{
         "ion_stage": 5,
         "record": 777,
+        "data_type": 50,
+        "rate_type": 4,
         "role": "forward_diag_loss",
         "idest1": 20,
         "idest2": 20,
@@ -238,7 +240,10 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
         _write_csv(root / f"{prefix}_zone1_carbon_initial_population_T73198p4K.csv", initial)
         _write_csv(root / f"{prefix}_zone1_carbon_normalization_row_T73198p4K.csv", normalization)
         _write_csv(root / f"{prefix}_zone1_cv_level_populations_T73198p4K.csv", levels)
-        _write_csv(root / f"{prefix}_zone1_carbon_cooling_logical_T73198p4K.csv", cooling)
+        cooling_rows = [dict(row) for row in cooling]
+        if prefix == "xstar":
+            cooling_rows[0]["idest1"], cooling_rows[0]["idest2"] = 99, 42
+        _write_csv(root / f"{prefix}_zone1_carbon_cooling_logical_T73198p4K.csv", cooling_rows)
         _write_csv(root / f"{prefix}_zone1_calc_hmc_all_input_fingerprints.csv", fingerprint)
     (py / "python_zone1_same_entry_replay_summary.json").write_text(
         json.dumps({"ready": True}), encoding="utf-8"
@@ -308,4 +313,4 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     assert incomplete_summary["cv_logical_row_count_xstar"] == 931
     assert incomplete_summary["cv_logical_coefficient_parity_ready"] is False
     assert incomplete_summary["thermal_root_may_continue"] is False
-    assert xa.__version__ == "0.4.83"
+    assert xa.__version__ == "0.4.84"

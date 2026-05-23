@@ -169,52 +169,121 @@ def _xstar_phint53hunt_pass_indices(nb1: int, nphint: int, nskip: int) -> list[i
     return out
 
 
-def _enxt_bounds(eth: float, epi: Sequence[float], t_1e4: float, lfast: int) -> tuple[int, int, int]:
-    n = len(epi); nb = _nbinc(eth, epi); bktm = XSTAR_KT_EV_PER_1E4K * t_1e4
-    if lfast <= 2:
-        nph = n - max(2, n // 50) - 1; skip = 1
-    elif lfast == 3:
-        nph = _nbinc(max(3.0 * eth, eth + 3.0 * bktm), epi); nph = max(nph, nb + 1); skip = max(1, (nph - nb) // 16)
+def _xstar_enxt_step(
+    *,
+    threshold_ev: float,
+    nb1_fortran: int,
+    epi: Sequence[float],
+    t_1e4: float,
+    lfast: int,
+    jk_fortran: int,
+) -> tuple[int, int, int]:
+    """Translate one call to ``enxt.f90`` using one-based indices."""
+    arr = np.asarray(epi, dtype=float)
+    n = int(arr.size)
+    numcon2 = max(2, n // 50)
+    numcon3 = n - numcon2
+    bktm = XSTAR_SOURCE_KT_EV_PER_1E4K * float(t_1e4)
+    if int(lfast) <= 2:
+        nphint = n - numcon2
+        nskip = 1
+        nskip2 = 1
+    elif int(lfast) == 3:
+        nphint = _xstar_nbinc_fortran_value(
+            max(3.0 * threshold_ev, threshold_ev + 3.0 * bktm), arr
+        )
+        nphint = max(nphint, int(nb1_fortran) + 1)
+        nskip = max(1, int((nphint - int(nb1_fortran)) / 16))
+        nskip2 = nskip
     else:
-        nph = _nbinc(1.0e4, epi); skip = 1
-    nph = min(max(nph, nb + skip), n - max(2, n // 50) - 1)
-    return nb, nph, skip
+        nphint = _xstar_nbinc_fortran_value(1.0e4, arr)
+        nskip = 1
+        nskip2 = 1
+    nskip1 = nskip
+    epii = float(arr[max(1, min(n, int(jk_fortran))) - 1])
+    exptst = (epii - float(threshold_ev)) / max(bktm, 1.0e-48)
+    if exptst < 3.0:
+        lrcalc = 1
+        nskip = nskip1
+    else:
+        lrcalc = 0
+        nskip = nskip2
+    nphint = max(nphint, int(nb1_fortran) + nskip)
+    nphint = min(nphint, numcon3)
+    return int(nskip), int(nphint), int(lrcalc)
 
 
 def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: "UCalcContext", swrat: float) -> dict[str, float]:
-    """Direct Python translation of ``phintfo.f90`` scalar outputs."""
+    """Literal one-based translation of ``phintfo.f90`` scalar outputs."""
     epi, bremsa, _ = _radiation_arrays(context.radiation)
     sig = np.asarray(sigma_cm2, dtype=float)
     if sig.size != epi.size:
         raise ValueError("cross section must be mapped to the live radiation grid")
-    nb, nph, skip = _enxt_bounds(threshold_ev, epi, context.t, context.lfast)
+    n = int(epi.size)
+    nb1 = _xstar_nbinc_fortran_value(threshold_ev, epi)
+    numcon2 = max(2, n // 50)
+    nphint = max(n - numcon2, nb1 + 1)
+    nphint = min(nphint, n - numcon2)
     bktm = XSTAR_SOURCE_KT_EV_PER_1E4K * context.t
-    rnist = 5.216e-21 * float(swrat) / max(context.t * context.tsq, 1e-48)
-    sumr=sumh=sumh2=sumi=sumc=sumc2=0.0
-    tempro=tempio=atmp2o=atmp22o=0.0; enero=float(epi[nb]); opakab=0.0
-    indices=list(range(nb,nph+1,skip))
-    if indices[-1] != nph: indices.append(nph)
-    for pos,k in enumerate(indices):
-        ener=float(epi[k]); s=max(float(sig[k]),0.0); brem=float(bremsa[k])/25.3
-        tempr=25.3*s*brem/max(ener,1e-48); de=ener-enero
-        sumr += (tempr+tempro)*de/2.0
-        sumh += (tempr*ener+tempro*enero)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
-        sumh2 += (tempr*(ener-threshold_ev)+tempro*(enero-threshold_ev))*de*XSTAR_SOURCE_ERG_PER_EV/2.0
-        exptst=max(1e-36,(ener-threshold_ev)/max(bktm,1e-48)); ex=_expo(-exptst)
-        bbnurj=min(ener,2e4)**3*1.571e22
-        tempi1=rnist*bbnurj*ex*s/max(ener,1e-48); tempi2=rnist*brem*ex*s/max(ener,1e-48); tempi=tempi1+tempi2
-        atmp2=tempi1*ener; atmp22=tempi1*(ener-threshold_ev)
-        sumi += (tempi+tempio)*de/2.0
-        sumc += (atmp2+atmp2o)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
-        sumc2 += (atmp22+atmp22o)*de*XSTAR_SOURCE_ERG_PER_EV/2.0
-        optmp=context.abund1*s*context.hydrogen_density_cm3
-        if pos <= 1: opakab=optmp
-        tempro=tempr; tempio=tempi; atmp2o=atmp2; atmp22o=atmp22; enero=ener
-    ne=context.electron_density_cm3
+    rnist = 5.216e-21 * float(swrat) / max(context.t * context.tsq, 1.0e-48)
+    sumr = sumh = sumh2 = sumi = sumc = sumc2 = 0.0
+    tempr = tempi = tempro = tempio = 0.0
+    atmp2 = atmp22 = 0.0
+    ener = float(epi[nb1 - 1])
+    opakab = 0.0
+    kl = int(nb1)
+    tst = 1.0e10
+    eps = 1.0e-2
+    n_steps = 0
+    last_lrcalc = 0
+    last_nskip = 1
+    while kl <= nphint and (int(context.lfast) <= 2 or tst > eps):
+        enero = ener
+        ener = float(epi[kl - 1])
+        epii = ener
+        sgtmp = max(float(sig[kl - 1]), 0.0)
+        bremtmp = float(bremsa[kl - 1]) / 25.3
+        tempro = tempr
+        tempr = 25.3 * sgtmp * bremtmp / max(epii, 1.0e-48)
+        deld = ener - enero
+        tst = (tempr + tempro) * deld / 2.0
+        sumr += tst
+        sumh += (tempr * ener + tempro * enero) * deld * XSTAR_SOURCE_ERG_PER_EV / 2.0
+        sumh2 += (
+            tempr * (ener - threshold_ev)
+            + tempro * (enero - threshold_ev)
+        ) * deld * XSTAR_SOURCE_ERG_PER_EV / 2.0
+        exptst = max(1.0e-36, (epii - threshold_ev) / max(bktm, 1.0e-48))
+        exptmp = _expo(-exptst)
+        bbnurj = min(epii, 2.0e4) ** 3 * 1.571e22
+        tempi1 = rnist * bbnurj * exptmp * sgtmp / max(epii, 1.0e-48)
+        tempi2 = rnist * bremtmp * exptmp * sgtmp / max(epii, 1.0e-48)
+        tempi = tempi1 + tempi2
+        atmp2o = atmp2
+        atmp2 = tempi1 * epii
+        atmp22o = atmp22
+        atmp22 = tempi1 * (epii - threshold_ev)
+        sumi += (tempi + tempio) * deld / 2.0
+        sumc += (atmp2 + atmp2o) * deld * XSTAR_SOURCE_ERG_PER_EV / 2.0
+        sumc2 += (atmp22 + atmp22o) * deld * XSTAR_SOURCE_ERG_PER_EV / 2.0
+        optmp = context.abund1 * sgtmp * context.hydrogen_density_cm3
+        if kl <= nb1 + 1:
+            opakab = optmp
+        tempio = tempi
+        n_steps += 1
+        last_nskip, nphint, last_lrcalc = _xstar_enxt_step(
+            threshold_ev=threshold_ev, nb1_fortran=nb1, epi=epi,
+            t_1e4=context.t, lfast=context.lfast, jk_fortran=kl,
+        )
+        kl += last_nskip
+    ne = context.electron_density_cm3
     return {
         "ans1": sumr, "ans2": ne * sumi, "ans3": sumh, "ans4": ne * sumc,
         "ans5": sumh2, "ans6": ne * sumc2, "opakab": opakab,
-        "nb1": nb, "nphint": nph,
+        "nb1": nb1, "nphint": nphint,
+        "n_integration_steps": n_steps,
+        "last_nskip": last_nskip, "last_lrcalc": last_lrcalc,
+        "grid_index_semantics": "one_based_nbinc_huntf_nearest",
         "source_bktm_eV": bktm,
         "source_erg_per_eV": XSTAR_SOURCE_ERG_PER_EV,
         "source_boltzmann_erg_K": XSTAR_SOURCE_BOLTZMANN_ERG_K,
@@ -1541,10 +1610,7 @@ class SourceFaithfulUCalc:
             _,emax,e0,s0,ya,pp,yw,y0,y1=(float(v) for v in r.reals); l2=0
             parameter_layout="nine_real_verner_fit"
         else:
-            # Literal source assignments for nrdt /= 9:
-            #   e0=rdat(np1r+1), s0=rdat(np1r+2),
-            #   ya=rdat(np1r-1+4), pp=rdat(np1r-1+5),
-            #   yw=rdat(np1r-1+6).
+            # Literal source assignments for nrdt /= 9.
             e0,s0,ya,pp,yw=(float(v) for v in r.reals[1:6])
             emax=math.nan; y0=y1=0.0
             l2=int(r.integers[2]) if len(r.integers)>2 else 0
@@ -1561,16 +1627,51 @@ class SourceFaithfulUCalc:
                     "type59_parameter_layout": parameter_layout,
                 },
             )
-        qq=5.5+l2-pp/2.0
-        for k,e in enumerate(epi):
-            if e>=eth:
-                xx=e/e0-y0; yy=math.sqrt(xx*xx+y1*y1) if len(r.reals)==9 else xx
-                if yy>0: sig[k]=s0*((xx-1.0)**2+yw*yw)*_expo(-max(-60.0,min(60.0,qq*math.log(max(yy,1e-48)))))*(1.0+math.sqrt(max(yy/ya,0.0)))**(-pp)*1e-18
         id1=int(r.integers[-2])
         off=int(r.integers[-4])
         id2=max(c.nlevp+off-1,1)
-        sw=c.levels.weight(1)/max(c.levels.weight(c.nlevp),1e-48); zero=(r.rate_type==1 or id1>1)
-        out=_photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2,zero_reverse=zero)
+
+        # Source label 59 uses the current record threshold for both sigma and
+        # phintfo, but an excited parent destination changes ggup and therefore
+        # the Milne statistical-weight ratio.
+        gglo=c.levels.weight(1)
+        ggup=c.levels.weight(c.nlevp)
+        parent_excitation_ev=0.0
+        if id2>c.nlevp:
+            parent_excitation_ev,parent_weight=self._parent_destination_context(c,id2)
+            ggup=parent_weight
+        if ggup<=1.0e-24:
+            return self._base_result(
+                r,s,UCalcStatus.SOURCE_REJECTED,reason="type59_nonpositive_parent_stat_weight",
+                idest1=id1,idest2=id2,idest3=id3,idest4=id4,
+            )
+        sw=gglo/ggup
+
+        qq=5.5+l2-pp/2.0
+        nb1=_xstar_nbinc_fortran_value(eth,epi)
+        nphint=max(len(epi)-max(2,len(epi)//50),nb1+1)
+        ll=nb1
+        while ll<=nphint:
+            energy=float(epi[ll-1])
+            xx=energy/e0-y0
+            yy=math.sqrt(xx*xx+y1*y1) if len(r.reals)==9 else xx
+            yyqq=math.exp(-min(60.0,max(-60.0,qq*math.log(max(1.0e-48,yy)))))
+            term1=(xx-1.0)*(xx-1.0)+yw*yw
+            term3=(1.0+math.sqrt(max(yy/ya,0.0)))**(-pp)
+            sig[ll-1]=s0*term1*yyqq*term3*1.0e-18
+            nskip,nphint,_=_xstar_enxt_step(
+                threshold_ev=eth,nb1_fortran=nb1,epi=epi,t_1e4=c.t,
+                lfast=1,jk_fortran=ll,
+            )
+            ll+=nskip
+
+        # ucalc.f90 owns ``lfastl=1`` for type 59 regardless of the caller.
+        source_context=replace(c,lfast=1)
+        zero=(r.rate_type==1 or id1>1)
+        out=_photo_result_swapped(
+            self,r,source_context,s,sigma=sig,threshold=eth,swrat=sw,
+            id1=id1,id2=id2,zero_reverse=zero,
+        )
         return replace(
             out,
             idest3=id3,
@@ -1601,6 +1702,16 @@ class SourceFaithfulUCalc:
                 "type59_reverse_zero_post_swap_fields": "ans2;ans3;ans5",
                 "type59_reverse_zero_applied": bool(zero),
                 "type59_sigma_max_cm2": float(np.max(sig)) if sig.size else 0.0,
+                "type59_nb1_fortran": nb1,
+                "type59_nphint_fortran": nphint,
+                "type59_sigma_grid_policy": "literal_nbinc_enxt_one_based",
+                "type59_source_lfast": 1,
+                "type59_requested_lfast": int(c.lfast),
+                "type59_gglo": gglo,
+                "type59_ggup": ggup,
+                "type59_swrat": sw,
+                "type59_excited_parent_destination": bool(id2>c.nlevp),
+                "type59_parent_excitation_ev": parent_excitation_ev,
             },
         )
 

@@ -177,7 +177,7 @@ def test_element_equilibrium_cli_and_public_api(tmp_path: Path, capsys):
     text = capsys.readouterr().out
     assert "full_element_direct_solve_ready=True" in text
     assert (out / "xstar_element_equilibrium_summary.json").is_file()
-    assert xa.__version__ == "0.4.83"
+    assert xa.__version__ == "0.4.84"
     assert callable(xa.solve_element_statistical_equilibrium)
     assert "solve_element_statistical_equilibrium" in xa.__all__
 

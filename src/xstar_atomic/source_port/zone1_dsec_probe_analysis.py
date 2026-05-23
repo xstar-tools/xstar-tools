@@ -960,7 +960,7 @@ def analyze_xstar_zone1_probe(
     _write(cooling_path, cooling)
 
     summary = {
-        "diagnostic_release": "0.4.82",
+        "diagnostic_release": "0.4.84",
         "probe_contract_version": "0.4.79",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
@@ -1452,8 +1452,11 @@ def compare_zone1_probe_with_python(
     )
     py_cooling = _read(py / "python_zone1_carbon_cooling_logical_T73198p4K.csv")
     xs_cooling = _read(xs / "xstar_zone1_carbon_cooling_logical_T73198p4K.csv")
+    # Raw idest1/idest2 orientation is a matrix-write implementation detail
+    # and can be reversed while naming the same physical endpoint pair.  Gate
+    # cooling on the stable record/type/role/physical-endpoint identity.
     cooling_keys = (
-        "ion_stage", "record", "role", "idest1", "idest2",
+        "ion_stage", "record", "data_type", "rate_type", "role",
         "lower_endpoint", "upper_endpoint",
     )
     cooling_rows = _numeric_comparison(
@@ -1510,7 +1513,7 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.82",
+        "diagnostic_release": "0.4.84",
         "probe_contract_version": "0.4.79",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
@@ -1572,7 +1575,8 @@ def compare_zone1_probe_with_python(
         "production_rates_modified": True,
         "production_rate_change_scope": (
             "ucalc_data_type_15_final_shell_threshold_plus_"
-            "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+            "data_type_59_compact_fields_continuum_offset_pre_swap_zeroing_"
+            "literal_nbinc_enxt_excited_parent_weight_plus_calc_ion_rates_lfpi1"
         ),
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,

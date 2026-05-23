@@ -124,7 +124,7 @@ def test_v0468_acceptance_closes_radial_control_without_outputs():
 
 
 def test_v0468_ledger_exports_and_version():
-    assert xa.__version__ == "0.4.83"
+    assert xa.__version__ == "0.4.84"
     ledger = default_port_ledger()
     entry = next(
         item for item in ledger.entries

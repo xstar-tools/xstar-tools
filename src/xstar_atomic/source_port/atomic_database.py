@@ -24,6 +24,7 @@ import csv
 import json
 import os
 import tempfile
+import zipfile
 
 import numpy as np
 from astropy.io import fits
@@ -1251,7 +1252,13 @@ def load_atomic_database_state(
             try:
                 derived = load_derived_pointer_cache(master, cache_path, validate=validate)
                 loaded_from_cache = True
-            except (AtomicDatabaseError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            except (
+                AtomicDatabaseError, OSError, ValueError, KeyError, TypeError,
+                IndexError, EOFError, json.JSONDecodeError, zipfile.BadZipFile,
+            ) as exc:
+                # A damaged NPZ sidecar is observational cache state.  Rebuild
+                # the source pointer hierarchy from atdb.fits and atomically
+                # replace the cache instead of aborting the physical run.
                 cache_failure = exc.__class__.__name__
         if not loaded_from_cache:
             derived = setptrs(
@@ -1263,7 +1270,11 @@ def load_atomic_database_state(
             if rebuild_pointer_cache:
                 status = "rebuilt"
             elif cache_failure is not None:
-                status = "stale_rebuilt"
+                status = (
+                    "stale_rebuilt"
+                    if cache_failure == "AtomicDatabaseError"
+                    else "corrupt_rebuilt"
+                )
             else:
                 status = "miss"
             derived.provenance["pointer_cache_status"] = status

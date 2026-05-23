@@ -1,3 +1,7 @@
+## v0.4.84 preliminary-rate/grid parity and resilient caches
+
+v0.4.84 addresses the remaining v0.4.83 zone-1 differences without changing the restored 24-evaluation DSEC branch. Preliminary `calc_ion_rates` now passes the literal local `lfpi=1`; type 59 and `phintfo` use the source one-based `huntf/nbinc/enxt` continuum traversal and excited-parent statistical weight; logical carbon cooling is keyed by stable physical identities. Both large NPZ sidecars now recover from CRC/ZIP/NumPy member corruption by rebuilding atomically from `atdb.fits`. See `V0484_PRELIMINARY_LFPI_TYPE59_GRID_CACHE_RECOVERY.md`.
+
 ## v0.4.83 type-59 source-guard zero-return hotfix
 
 v0.4.83 fixes the return status of the literal type-59

@@ -344,3 +344,8 @@ include V0483_TYPE59_SOURCE_ZERO_RETURN.md
 include XSTAR_SOURCE_CHANGES_v0.4.83.md
 include src_v0483_update_report.md
 include xstar_atomic_v0.4.83.md
+
+include V0484_PRELIMINARY_LFPI_TYPE59_GRID_CACHE_RECOVERY.md
+include XSTAR_SOURCE_CHANGES_v0.4.84.md
+include src_v0484_update_report.md
+include xstar_atomic_v0.4.84.md

@@ -301,4 +301,4 @@ def test_v0478_scope_constants_are_exact_and_no_empirical_correction_exists():
     assert TARGET_CV_LOCAL_LEVELS == (4, 5, 6, 10, 11, 12, 20)
     source = Path(diagnostic.__file__).read_text(encoding="utf-8")
     assert "empirical correction" not in source.lower()
-    assert xa.__version__ == "0.4.83"
+    assert xa.__version__ == "0.4.84"

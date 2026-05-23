@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.4.84 — preliminary lfpi, literal type-59 grid, and cache recovery - 2026-05-23
+
+- Uses the successful v0.4.83 production run as the acceptance baseline: Python now follows the original 24-evaluation DSEC path and converges to 73206.20 K versus 73198.41 K.
+- Restores the literal `calc_ion_rates.f90` caller-owned `lfpi=1`; the preliminary pass no longer inherits the detailed second-pass `lfast=2` setting. This removes non-source Milne/inverse fields from preliminary type-53 records.
+- Replaces conventional lower-bracket continuum indexing in `phintfo` and type 59 with the original one-based logarithmic-nearest `huntf -> nbinc -> enxt` traversal, including the threshold-nearest bin even when it lies below the nominal threshold.
+- Uses the resolved excited-parent statistical weight for type-59 `swrat` while retaining the current-record threshold passed to `phintfo`, matching source label 59.
+- Canonicalizes fixed-state logical carbon-cooling keys by record, data/rate type, role, and physical endpoints; raw `idest1/idest2` orientation remains diagnostic metadata rather than a false gate key.
+- Treats CRC, ZIP, EOF, and NumPy member-read failures in both derived-pointer and output-metadata NPZ caches as cache misses, rebuilds from `atdb.fits`, and atomically replaces the damaged sidecar.
+- Adds regression tests that corrupt `npfi.npy` and `line_upper_level.npy` inside otherwise valid NPZ archives and require a successful rebuild followed by a cache hit.
+- No original-XSTAR, matrix, solver, DSEC, radial-transfer, FITS-writer, tolerance, or empirical-correction change.
+- Validation: 400 source-port tests passed before packaging.
+
 ## v0.4.83 — type-59 source-guard normal zero return - 2026-05-23
 
 - Fixes the status semantics of `if (idest4.gt.idest3+1) go to 9000` at
