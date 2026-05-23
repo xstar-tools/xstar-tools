@@ -1049,10 +1049,20 @@ def write_detail_output_files(
     return paths
 
 
+def _state_temperature_t4(state: XSTARPythonState) -> float:
+    """Return source ``t`` in 10^4 K using explicit state ownership when set."""
+    value = float(state.plasma.temperature)
+    unit = str(state.control.get("plasma_temperature_unit", "legacy-auto")).strip().lower()
+    if unit in {"k", "kelvin"}:
+        return value / 1.0e4
+    if unit in {"t4", "1e4k", "10^4k"}:
+        return value
+    # Backward compatibility for bounded synthetic writer fixtures.
+    return value / 1.0e4 if value > 1.0e3 else value
+
+
 def _shell_header_from_state(state: XSTARPythonState) -> ShellOutputHeader:
-    temp = float(state.plasma.temperature)
-    # Existing radial validation states store K, while source t is 10^4 K.
-    t4 = temp / 1.0e4 if temp > 1.0e3 else temp
+    t4 = _state_temperature_t4(state)
     radius = float(state.transfer.radius)
     delr = float(state.transfer.step_size)
     return ShellOutputHeader(
@@ -1068,18 +1078,42 @@ def _shell_header_from_state(state: XSTARPythonState) -> ShellOutputHeader:
     )
 
 
+def _detail_level_vector(values: Sequence[float], metadata: SourceOutputMetadata) -> np.ndarray:
+    """Return the zero-based vector expected by the FITS detail builders.
+
+    The live translated solver owns source-style one-based global population
+    arrays with a zero guard.  ``build_detail_level_table`` deliberately uses
+    Python zero-based indexing (``global_index - 1``), so the guard must be
+    removed exactly once at this adapter boundary.  Synthetic writer fixtures
+    may already provide guardless vectors and are retained unchanged.
+    """
+    arr = np.asarray(values, dtype=float).reshape(-1)
+    required = max((int(row.global_index) for row in metadata.levels), default=0)
+    if required <= 0:
+        return arr.copy()
+    if arr.size == required + 1:
+        return arr[1:].copy()
+    if arr.size < required:
+        raise OutputWriterPortError(
+            f"level vector has length {arr.size}, shorter than required global index {required}"
+        )
+    return arr.copy()
+
+
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
     metadata = _metadata_from_control(state)
     workspace = _workspace_from_state(state)
     populations, lte = _level_arrays_from_state(state)
+    populations_out = _detail_level_vector(populations, metadata)
+    lte_out = _detail_level_vector(lte, metadata)
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
         metadata=metadata,
         header=_shell_header_from_state(state),
-        populations=populations,
-        lte_populations=lte,
+        populations=populations_out,
+        lte_populations=lte_out,
         rcem=workspace.rcem_physical,
         oplin=workspace.oplin_physical,
         tau0=workspace.tau0,
@@ -1125,8 +1159,7 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
     metadata = _metadata_from_control(state)
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
-    temp = float(state.plasma.temperature)
-    t4 = temp / 1.0e4 if temp > 1.0e3 else temp
+    t4 = _state_temperature_t4(state)
     products = build_final_output_products(
         metadata=metadata,
         xlum=float(state.control.get("xlum", 1.0)),

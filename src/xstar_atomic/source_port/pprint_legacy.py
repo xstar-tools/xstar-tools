@@ -133,6 +133,11 @@ def _fortran_logical_line_17() -> tuple[str, str]:
 
 def _temperature_t4(state: XSTARPythonState) -> float:
     value = float(state.plasma.temperature)
+    unit = str(state.control.get("plasma_temperature_unit", "legacy-auto")).strip().lower()
+    if unit in {"k", "kelvin"}:
+        return value / 1.0e4
+    if unit in {"t4", "1e4k", "10^4k"}:
+        return value
     return value / 1.0e4 if value > 1.0e3 else value
 
 
@@ -322,10 +327,10 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
         np.log10(max(dpthc[1, nry0], 1.0e-10)),
     )
     line = " " + "".join(f" {float(value):6.2f}" for value in values)
-    line += (
-        f"{int(state.control.get('ntotit', 0)):3d}"
-        f"{int(state.control.get('lnerrd', 0)):3d}"
-    )
+    # The current source call supplies only ntotit to the historical 2i3
+    # FORMAT.  Match the observed xout_step.log rather than emitting the Python
+    # diagnostic lnerrd as an extra column.
+    line += f"{int(state.control.get('ntotit', 0)):3d}"
     buf.log_lines.append(line)
     buf.source_calls.append("pprint(9)")
     return line

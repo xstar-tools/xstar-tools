@@ -384,9 +384,10 @@ class XSTARPythonDriver:
 
         execute(XSTARSourceRoutine.TRNFRC)
 
-        tinf = float(result.control.get("tinf", 0.0))
-        if result.plasma.temperature < tinf * 1.02:
-            result.plasma.temperature = tinf * 1.01
+        # Source t/tinf are in 10^4 K; the Python state stores kelvin.
+        tinf_K = float(result.control.get("tinf", 0.0)) * 1.0e4
+        if result.plasma.temperature < tinf_K * 1.02:
+            result.plasma.temperature = tinf_K * 1.01
 
         self.run_xstarcalc(result, fixed_state=fixed_state)
 

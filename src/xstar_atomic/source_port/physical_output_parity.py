@@ -168,7 +168,7 @@ _HEADER_EXACT_EXCLUDE = {
 }
 _HEADER_PREFIX_EXCLUDE = (
     "NAXIS", "TTYPE", "TFORM", "TUNIT", "TDISP", "TSCAL", "TZERO",
-    "TNULL", "TDIM",
+    "TNULL", "TDIM", "TBCOL",
 )
 
 
@@ -310,7 +310,11 @@ def compare_fits_product(
 
 _ZONE_LINE = re.compile(
     r"^\s*" + r"\s+".join([r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?)"] * 11)
-    + r"\s+([+-]?\d+)\s+([+-]?\d+)\s*$"
+    # Current XSTAR passes only ``ntotit`` to a historical ``2i3`` FORMAT.
+    # Accept an optional second integer from older/debug writers, but exclude it
+    # from the structured comparison so both source variants normalize to the
+    # same 12-value row.
+    + r"\s+([+-]?\d+)(?:\s+[+-]?\d+)?\s*$"
 )
 _FINAL_ASSIGNMENT = re.compile(
     r"=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?)"

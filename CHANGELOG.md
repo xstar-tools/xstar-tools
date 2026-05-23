@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## v0.4.76 first completed all-ATDB run diagnostics and source radial/output fidelity - 2026-05-23
+
+v0.4.76 is driven by the first completed real all-ATDB `c5_ne1` Python run.
+The v0.4.75 runner loaded both NPZ caches in about six seconds, completed all
+translated local/radial routines, wrote all ten products in about four minutes,
+and reached the independent comparator. Physical parity did not yet pass.
+
+The release restores the literal XSTAR first-pass stop predicate rather than
+using `nsteps` as an exact shell count; makes the kelvin/source-`10^4 K`
+boundary explicit; retains `trad`; removes the detail-array one-based guard;
+and reconstructs source-local level ownership before assigning global output
+rows. It also corrects excited-state RRC thresholds to source
+`ionization_limit - excitation_energy` semantics. The output-metadata cache
+format is v3, so old metadata sidecars rebuild automatically while the pointer
+cache remains valid.
+
+Current one-integer step rows are emitted and normalized against optional
+legacy two-integer rows. FITS `TBCOL*` layout cards are excluded from physical
+header comparison.
+
+The standalone/CLI mismatch diagnostics now include native per-DSEC-evaluation
+progress and compact internal reports for thermal residuals, carbon ion
+fractions/cooling, and the dominant carbon diagonal rate terms with ATDB
+provenance. The v0.4.75 products localize the remaining leading mismatch to C V
+population balance: first-zone carbon cooling is about `6.039e3` too large and
+the Python thermal solution reaches `1.93676e4 K` instead of `7.31984e4 K`.
+No rate is fitted, suppressed, or rescaled in v0.4.76.
+
+Validation: 30 focused tests, all 372 source-port tests, byte-compilation, and
+all 372 tests from the extracted source distribution pass.
+
 ## v0.4.75 source-ordered continuum workspace chaining - 2026-05-23
 
 v0.4.75 fixes the first all-ATDB radial-shell failure that remained after the

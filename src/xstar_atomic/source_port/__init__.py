@@ -1188,3 +1188,13 @@ __all__.extend([
     "run_xstar_python_command", "run_xstar_python_script",
     "run_c5_ne1_acceptance",
 ])
+
+from .physical_output_diagnostics import (
+    PhysicalMismatchDiagnosis,
+    diagnose_physical_output_mismatch,
+)
+
+__all__.extend([
+    "PhysicalMismatchDiagnosis",
+    "diagnose_physical_output_mismatch",
+])

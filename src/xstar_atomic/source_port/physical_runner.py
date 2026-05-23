@@ -513,7 +513,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 1
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 3
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -697,7 +697,13 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         fallback = f"{ELEMENT_SYMBOLS[z-1]}_{stage}" if 1 <= z <= len(ELEMENT_SYMBOLS) else f"ion_{ion_index}"
         ion_labels[ion_index] = _clean_label(master.record_chars(rec), fallback)
 
-    global_indices = np.arange(1, int(derived.n_level_records) + 1, dtype=np.int32)
+    # ``setptrs`` assigns global population rows in packed-record order, but
+    # ``calc_rates_level_lte`` fills ``leveltemp`` by the packed local level ID.
+    # The source writers then pair ``npilev(mm,ion)`` with ``leveltemp(:,mm)``.
+    # Therefore labels/energies must be resolved by (ion, local ID), not by the
+    # record that happened to allocate a given global row.  This distinction is
+    # observable for ions whose superlevel/continuum records are not ordered by
+    # their local IDs (for example C IV in the canonical benchmark).
     level_records = np.asarray(
         derived.level_record_by_global_index[1 : int(derived.n_level_records) + 1],
         dtype=np.int64,
@@ -712,10 +718,10 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     has_real = level_nreal > 0
     if np.any(has_real):
         excitation[has_real] = master.rdat1.gather(level_rptr[has_real], dtype=np.float64)
-    local_indices = global_indices.copy()
+    packed_local_indices = np.zeros(level_records.size, dtype=np.int64)
     has_local = level_nint >= 2
     if np.any(has_local):
-        local_indices[has_local] = master.idat1.gather(
+        packed_local_indices[has_local] = master.idat1.gather(
             level_iptr[has_local] + level_nint[has_local] - 2,
             dtype=np.int64,
         )
@@ -727,29 +733,46 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
             dtype=np.float64,
         )
 
+    record_position_by_local: dict[tuple[int, int], int] = {}
+    for pos, (ion_index, local_index) in enumerate(
+        zip(level_ions, packed_local_indices)
+    ):
+        ion = int(ion_index)
+        local = int(local_index)
+        if ion > 0 and local > 0:
+            # Literal leveltemp write semantics: a repeated local ID is owned by
+            # the later source record.
+            record_position_by_local[(ion, local)] = pos
+
     levels: list[LevelOutputMetadata] = []
     levels_by_key: dict[tuple[int, int], LevelOutputMetadata] = {}
     ionpot_by_key: dict[tuple[int, int], float] = {}
-    for pos, (global_index, rec, ion_index, local) in enumerate(
-        zip(global_indices, level_records, level_ions, local_indices)
-    ):
-        ion = int(ion_index)
-        if ion <= 0:
-            continue
+    npilev = np.asarray(derived.npilev, dtype=np.int64)
+    nlevs = np.asarray(derived.nlevs, dtype=np.int64)
+    for ion in range(1, int(derived.n_ions) + 1):
         z = int(derived.ion_element_z[ion])
-        row = LevelOutputMetadata(
-            global_index=int(global_index),
-            ion_index=ion,
-            excitation_eV=float(excitation[pos]),
-            ion_label=ion_labels[ion],
-            atomic_number=z,
-            level_label=_clean_label(master.record_chars(int(rec)), f"level_{int(local)}"),
-            upper_index=int(local),
-        )
-        levels.append(row)
-        key = (ion, int(local))
-        levels_by_key[key] = row
-        ionpot_by_key[key] = float(ionization_potential[pos])
+        local_limit = int(nlevs[ion])
+        for local in range(1, local_limit + 1):
+            if local >= npilev.shape[0]:
+                break
+            global_index = int(npilev[local, ion])
+            pos = record_position_by_local.get((ion, local))
+            if global_index <= 0 or pos is None:
+                continue
+            rec = int(level_records[pos])
+            row = LevelOutputMetadata(
+                global_index=global_index,
+                ion_index=ion,
+                excitation_eV=float(excitation[pos]),
+                ion_label=ion_labels[ion],
+                atomic_number=z,
+                level_label=_clean_label(master.record_chars(rec), f"level_{local}"),
+                upper_index=local,
+            )
+            levels.append(row)
+            key = (ion, local)
+            levels_by_key[key] = row
+            ionpot_by_key[key] = float(ionization_potential[pos])
 
     line_indices = np.arange(1, int(derived.nlsvn) + 1, dtype=np.int32)
     line_records = np.asarray(derived.nplin[1 : int(derived.nlsvn) + 1], dtype=np.int64)
@@ -836,7 +859,16 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         if ion <= 0 or continuum_nint[pos] < 2:
             continue
         level = levels_by_key.get((ion, local_index))
-        threshold = ionpot_by_key.get((ion, local_index), float(fallback_threshold[pos]))
+        # fstepr3.f90 writes ``eth = rlev(4,idest1)-rlev(1,idest1)``.
+        # Type-13 level records store those as the fourth and first REAL
+        # fields respectively.  v0.4.73-v0.4.75 used rlev(4) directly, which
+        # collapsed every excited-level RRC of an ion onto the same ionization
+        # potential and also fed incorrect wavelengths to calc_emis.
+        threshold = _source_rrc_threshold_eV(
+            level,
+            ionpot_by_key.get((ion, local_index)),
+            float(fallback_threshold[pos]),
+        )
         global_level = (
             int(derived.npilev[local_index, ion])
             if 0 < local_index < derived.npilev.shape[0]
@@ -858,7 +890,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v1",
+            "metadata_builder": "vectorized_numpy_v3_source_local_ordinals_rrc_thresholds",
             "metadata_cache_status": "built",
         },
     )
@@ -1182,6 +1214,153 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
     state.control["shared_emissivity_workspace"] = workspace.emissivity
 
 
+def _source_rrc_threshold_eV(
+    level: LevelOutputMetadata | None,
+    ionization_potential_eV: float | None,
+    fallback_eV: float,
+) -> float:
+    """Return the literal fstepr3 threshold ``rlev(4)-rlev(1)``.
+
+    ``rlev(1)`` is the bound-level excitation energy and ``rlev(4)`` is the
+    ionization-limit energy carried by the same type-13 level record.
+    """
+    if level is None or ionization_potential_eV is None:
+        return float(fallback_eV)
+    return float(ionization_potential_eV) - float(level.excitation_eV)
+
+
+def _compact_dsec_diagnostics(
+    runtime_state: XSTARPythonState,
+    evaluator: CalcHMCAllDsecEvaluator,
+    dsec_result: Any,
+    *,
+    max_cooling_terms_per_evaluation: int = 20,
+) -> None:
+    """Retain bounded, JSON-safe DSEC diagnostics for the physical gate.
+
+    The full per-evaluation matrices are intentionally not retained.  For each
+    trial we keep the thermal/charge residuals, per-element totals, C ion
+    fractions, solver diagnostics, and the largest diagonal carbon cooling
+    contributions.  These values are produced by the Python calculation only;
+    original XSTAR products remain external comparison oracles.
+    """
+    store = runtime_state.control.setdefault(
+        "physical_dsec_compact_diagnostics",
+        {"evaluations": [], "carbon_cooling_terms": [], "shells": []},
+    )
+    evaluation_rows = store["evaluations"]
+    cooling_rows = store["carbon_cooling_terms"]
+    pass_index = int(runtime_state.transfer.pass_index)
+    zone_index = int(runtime_state.transfer.zone_index)
+
+    for evaluation_index, evaluation in enumerate(evaluator.evaluations, start=1):
+        fixed = evaluation.fixed_state_result
+        if fixed is None:
+            continue
+        carbon = next(
+            (item for item in fixed.element_results if int(item.request.element_z) == 6),
+            None,
+        )
+        row: dict[str, Any] = {
+            "pass_index": pass_index,
+            "zone_index": zone_index,
+            "evaluation_index": evaluation_index,
+            "temperature_K": float(fixed.temperature_k),
+            "temperature_t4": float(fixed.temperature_k) / 1.0e4,
+            "electron_fraction_xee": float(fixed.electron_fraction_xee),
+            "elcter": float(fixed.elcter),
+            "hmctot": float(fixed.hmctot),
+            "httot": float(fixed.httot),
+            "cltot": float(fixed.cltot),
+            "carbon_heating": float(fixed.htt.get(6, 0.0)),
+            "carbon_cooling": float(fixed.cll.get(6, 0.0)),
+            "carbon_heating2": float(fixed.htt2.get(6, 0.0)),
+            "carbon_cooling2": float(fixed.cll2.get(6, 0.0)),
+            "dsec_lnerr": int(dsec_result.lnerr),
+            "dsec_ntotit": int(dsec_result.ntotit),
+        }
+        if carbon is not None and carbon.equilibrium.solve is not None:
+            solve = carbon.equilibrium.solve
+            row.update(
+                {
+                    "carbon_solver_converged": bool(solve.converged),
+                    "carbon_solver_method": str(solve.solver_method),
+                    "carbon_dense_rank": int(solve.dense_rank),
+                    "carbon_dense_condition_number": float(solve.dense_condition_number),
+                    "carbon_max_active_relative_row_residual": float(
+                        solve.max_active_relative_row_residual
+                    ),
+                    "carbon_normalization_error": float(solve.normalization_error),
+                }
+            )
+            for stage in range(1, 8):
+                row[f"carbon_stage_{stage}_fraction"] = float(
+                    fixed.ion_fractions.get((6, stage), 0.0)
+                )
+
+            contributions: list[dict[str, Any]] = []
+            assembly = carbon.equilibrium.assembly
+            populations = np.asarray(solve.populations, dtype=float)
+            abundance = float(carbon.request.abundance)
+            for term in assembly.terms:
+                if int(term.row) != int(term.column) or float(term.cj) <= 0.0:
+                    continue
+                compact_row = int(term.row)
+                if compact_row < 1 or compact_row > populations.size:
+                    continue
+                population = float(populations[compact_row - 1])
+                contribution_per_abundance = population * float(term.cj)
+                contribution = contribution_per_abundance * abundance
+                roles = assembly.basis.row(compact_row).roles
+                contributions.append(
+                    {
+                        "pass_index": pass_index,
+                        "zone_index": zone_index,
+                        "evaluation_index": evaluation_index,
+                        "temperature_K": float(fixed.temperature_k),
+                        "hmctot": float(fixed.hmctot),
+                        "record": int(term.record),
+                        "data_type": int(term.data_type),
+                        "rate_type": int(term.rate_type),
+                        "compact_row": compact_row,
+                        "population": population,
+                        "cj": float(term.cj),
+                        "contribution_per_abundance": contribution_per_abundance,
+                        "physical_contribution": contribution,
+                        "idest1": int(term.idest1),
+                        "idest2": int(term.idest2),
+                        "lower_endpoint": int(term.lower_endpoint),
+                        "upper_endpoint": int(term.upper_endpoint),
+                        "row_roles_json": json.dumps(roles, sort_keys=True),
+                    }
+                )
+            contributions.sort(
+                key=lambda item: abs(float(item["physical_contribution"])),
+                reverse=True,
+            )
+            for rank, item in enumerate(
+                contributions[: int(max_cooling_terms_per_evaluation)], start=1
+            ):
+                item["rank"] = rank
+                cooling_rows.append(item)
+        evaluation_rows.append(row)
+
+    store["shells"].append(
+        {
+            "pass_index": pass_index,
+            "zone_index": zone_index,
+            "n_evaluations": len(evaluator.evaluations),
+            "lnerr": int(dsec_result.lnerr),
+            "ntotit": int(dsec_result.ntotit),
+            "charge_converged": bool(dsec_result.charge_converged),
+            "thermal_converged": bool(dsec_result.thermal_converged),
+            "final_temperature_K": float(dsec_result.state.temperature_k),
+            "final_hmctot": float(dsec_result.final_hmctot),
+            "final_elcter": float(dsec_result.final_elcter),
+        }
+    )
+
+
 def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXSTARParameters, compton_table: Any) -> None:
     master = state.atomic.master
     derived = state.atomic.derived
@@ -1210,10 +1389,31 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
 
     def dsec_handler(runtime_state: XSTARPythonState) -> Any:
         runtime = build_runtime()
+
+        def dsec_progress(
+            evaluation_index: int,
+            mutable: DsecMutableRuntimeState,
+            fixed: FixedStateCalcHMCAllResult,
+        ) -> None:
+            carbon_cooling = float(fixed.cll.get(6, 0.0))
+            _emit_progress(
+                runtime_state.control.get("progress_callback"),
+                "dsec_evaluation",
+                pass_index=int(runtime_state.transfer.pass_index),
+                zone_index=int(runtime_state.transfer.zone_index),
+                evaluation_index=int(evaluation_index),
+                temperature_K=float(fixed.temperature_k),
+                electron_fraction=float(fixed.electron_fraction_xee),
+                hmctot=float(fixed.hmctot),
+                elcter=float(fixed.elcter),
+                carbon_cooling=carbon_cooling,
+            )
+
         evaluator = CalcHMCAllDsecEvaluator(
             master=master,
             derived=derived,
             calc_kwargs_factory=_calc_kwargs_factory(runtime_state, compton_table),
+            progress_callback=dsec_progress,
         )
         result = dsec(
             runtime,
@@ -1221,6 +1421,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
             tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
         )
+        _compact_dsec_diagnostics(runtime_state, evaluator, result)
         runtime_state.control["physical_dsec_runtime"] = result.state
         runtime_state.control["physical_calc_evaluator"] = evaluator
         runtime_state.plasma.temperature = result.state.temperature_k
@@ -1369,6 +1570,11 @@ def _build_initial_state(
             "npass": int(parameters.get("npass")),
             "xlum": float(parameters.luminosity_1e38),
             "tinf": 0.099,
+            "trad": float(parameters.get("trad")),
+            # Physical-runner plasma temperature is always stored in kelvin.
+            # Writer adapters use this explicit ownership flag instead of a
+            # magnitude heuristic (which misrendered the 990 K floor as T4=990).
+            "plasma_temperature_unit": "K",
             "vturbi": float(parameters.get("vturbi")),
             "radexp": float(parameters.get("radexp")),
             "lcdd": int(parameters.lcdd),

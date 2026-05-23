@@ -278,7 +278,9 @@ def first_pass_shell_condition(state: XSTARPythonState) -> bool:
     return bool(
         float(state.transfer.column) < float(state.control.get("xpxcol", np.inf))
         and float(state.plasma.xee) > float(state.control.get("xeemin", -np.inf))
-        and float(state.plasma.temperature)
+        # Python owns temperature in kelvin; source ``t`` and ``tinf`` are
+        # measured in 10^4 K.
+        and float(state.plasma.temperature) / 1.0e4
         > float(state.control.get("tinf", 0.0)) * 0.99
         and int(state.control.get("numrec", 0)) > 0
         and int(state.control.get("density_iostat", 0)) == 0

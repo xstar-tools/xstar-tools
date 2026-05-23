@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 
+from .source_port.physical_output_diagnostics import diagnose_physical_output_mismatch
 from .source_port.physical_runner import (
     XSTARPythonRunnerError,
     run_c5_ne1_acceptance,
@@ -46,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-cache", action="store_true", help="disable NPZ pointer/metadata caches")
     parser.add_argument("--rebuild-cache", action="store_true", help="rebuild both source-port NPZ caches")
     parser.add_argument("--summary-json", help="write machine-readable run/parity summary")
+    parser.add_argument(
+        "--diagnostics-dir",
+        help=(
+            "after an original/Python parity run, write compact structural, "
+            "thermal, line, and level mismatch diagnostics to this directory"
+        ),
+    )
     parser.add_argument("--print-summary", action="store_true")
     parser.add_argument(
         "--progress",
@@ -118,6 +126,14 @@ def main(argv: list[str] | None = None) -> int:
                 progress_callback=progress_callback,
             )
             summary = result.as_dict()
+            if args.diagnostics_dir is not None:
+                diagnosis = diagnose_physical_output_mismatch(
+                    result.original_run_dir,
+                    result.python_run.output_dir,
+                    output_dir=args.diagnostics_dir,
+                    state=result.python_run.final_state,
+                )
+                summary["diagnostics"] = diagnosis.as_dict()
             if args.print_summary:
                 print("Python XSTAR c5_ne1 direct parity acceptance")
                 print("------------------------------------------------")
@@ -132,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{key}={summary[key]}")
                 print(f"python_output_dir={result.python_run.output_dir}")
                 print(f"original_run_dir={result.original_run_dir}")
+                if args.diagnostics_dir is not None:
+                    print(f"diagnostics_dir={Path(args.diagnostics_dir).resolve()}")
         elif args.run_script is not None:
             result = run_xstar_python_script(
                 args.run_script,

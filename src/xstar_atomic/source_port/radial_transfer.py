@@ -1205,11 +1205,14 @@ def _first_pass_stop_reason(state: XSTARPythonState) -> str:
         return "column_limit"
     if float(state.plasma.xee) <= float(state.control.get("xeemin", -np.inf)):
         return "electron_fraction_limit"
-    if float(state.plasma.temperature) <= float(state.control.get("tinf", 0.0)) * 0.99:
+    if (
+        float(state.plasma.temperature) / 1.0e4
+        <= float(state.control.get("tinf", 0.0)) * 0.99
+    ):
         return "temperature_floor"
     if int(state.control.get("numrec", 0)) <= 0:
         return "numrec_nonpositive"
-    return "bounded_first_pass_shell_count"
+    return "source_first_pass_condition_false"
 
 
 def run_bounded_radial_pass(
@@ -1224,11 +1227,12 @@ def run_bounded_radial_pass(
 ) -> BoundedRadialPassResult:
     """Execute one bounded pass with source-order save/restore state.
 
-    For the analytic density law, ``first_pass_shell_count`` remains the
-    bounded substitute for the physical first-pass stop conditions.  For
-    ``radexp < -99`` the caller-owned :class:`TabulatedRadialDensityState`
-    drives the literal ``ierr``-controlled shell loop.  Later tabulated passes
-    also honor ``jkp<numrec`` and ``ierr==0`` rather than inventing rows.
+    The production analytic and tabulated first passes both use the literal
+    source predicate ``xcol<xpxcol and xee>xeemin and t>tinf*0.99 and
+    numrec>0 and ierr==0``.  ``first_pass_shell_count`` is retained only for
+    the bounded synthetic validation fixture; it is not a production shell
+    cap and does not reinterpret the XSTAR ``nsteps`` parameter.  Later passes
+    honor ``jkp<numrec`` and ``ierr==0``.
     """
     kk = int(pass_index)
     if kk < 1:
@@ -1291,13 +1295,15 @@ def run_bounded_radial_pass(
                 "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and "
                 "numrec>0 and ierr==0"
             )
-        else:
+        elif bool(state.control.get("bounded_radial_validation_mode", False)):
+            # Historical synthetic fixtures deliberately execute a tiny fixed
+            # number of shells.  Keep that bounded test contract isolated from
+            # the production source predicate.
             if first_pass_shell_count is None or int(first_pass_shell_count) < 1:
                 raise RadialTransferPortError(
-                    "first_pass_shell_count must be positive for analytic pass 1"
+                    "first_pass_shell_count must be positive in bounded validation mode"
                 )
-            shell_limit = int(first_pass_shell_count)
-            for jkp in range(1, shell_limit + 1):
+            for jkp in range(1, int(first_pass_shell_count) + 1):
                 shells.append(
                     run_bounded_radial_shell(
                         state,
@@ -1308,10 +1314,28 @@ def run_bounded_radial_pass(
                         fixed_state=fixed_state,
                     )
                 )
-            termination_reason = "bounded_first_pass_shell_count"
+            termination_reason = "bounded_validation_shell_count"
+            source_predicate = "bounded synthetic validation fixture"
+        else:
+            jkp = 0
+            while first_pass_shell_condition(state):
+                jkp += 1
+                if jkp > 3999:
+                    raise RadialTransferPortError("too many steps: buffer filled")
+                shells.append(
+                    run_bounded_radial_shell(
+                        state,
+                        zone_index=jkp,
+                        pass_index=kk,
+                        direction=ldir,
+                        driver=runner,
+                        fixed_state=fixed_state,
+                    )
+                )
+            termination_reason = _first_pass_stop_reason(state)
             source_predicate = (
-                "bounded substitute for xcol<xpxcol and xee>xeemin and "
-                "t>tinf*0.99 and numrec>0 and ierr==0"
+                "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and "
+                "numrec>0 and ierr==0"
             )
     elif kk == 1:
         jkp = 0
@@ -1777,11 +1801,12 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
         "taumax": 10.0,
         "numrec": 20,
         "xlum": 1.0e38,
-        "tinf": 100.0,
+        "tinf": 0.01,
         "vturbi": 0.0,
         "radexp": 0.0,
         "lcdd": 1,
         "lpri": 0,
+        "bounded_radial_validation_mode": True,
     })
     state.transfer.radius = 1.0e19
     state.transfer.radial_depth = 0.0
@@ -2102,7 +2127,7 @@ def run_bounded_radial_shell_validation(
         and forced_run.pass_results[0].numrec == 1
     )
     pass_loop_predicates_ready = bool(
-        pass1.source_loop_predicate.startswith("bounded substitute")
+        pass1.source_loop_predicate == "bounded synthetic validation fixture"
         and pass2.source_loop_predicate == "jkp<numrec and ierr==0"
         and table_pass.source_loop_predicate
         == "xcol<xpxcol and xee>xeemin and t>tinf*0.99 and numrec>0 and ierr==0"

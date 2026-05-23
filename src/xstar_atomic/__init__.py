@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.75"
+__version__ = "0.4.76"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -833,5 +833,14 @@ if "ProgressCallback" not in __all__:
     __all__.append("ProgressCallback")
 
 for _name in ("XSTARPythonCacheResult", "prepare_xstar_python_cache"):
+    if _name not in __all__:
+        __all__.append(_name)
+
+from .source_port.physical_output_diagnostics import (
+    PhysicalMismatchDiagnosis,
+    diagnose_physical_output_mismatch,
+)
+
+for _name in ("PhysicalMismatchDiagnosis", "diagnose_physical_output_mismatch"):
     if _name not in __all__:
         __all__.append(_name)

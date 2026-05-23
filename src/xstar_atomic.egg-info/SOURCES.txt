@@ -42,6 +42,8 @@ XSTAR_SOURCE_CHANGES_v0.4.71.md
 XSTAR_SOURCE_CHANGES_v0.4.72.md
 XSTAR_SOURCE_CHANGES_v0.4.73.md
 XSTAR_SOURCE_CHANGES_v0.4.74.md
+XSTAR_SOURCE_CHANGES_v0.4.75.md
+XSTAR_SOURCE_CHANGES_v0.4.76.md
 pyproject.toml
 src_v0441_update_report.md
 src_v0442_update_report.md
@@ -77,6 +79,8 @@ src_v0471_update_report.md
 src_v0472_update_report.md
 src_v0473_update_report.md
 src_v0474_update_report.md
+src_v0475_update_report.md
+src_v0476_update_report.md
 xstar_all_calc_hmc_all_v0436_diagnosis_v0437.md
 xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 xstar_atomic_conversation_summary_v0426.md
@@ -199,6 +203,8 @@ xstar_atomic_v0.4.71.md
 xstar_atomic_v0.4.72.md
 xstar_atomic_v0.4.73.md
 xstar_atomic_v0.4.74.md
+xstar_atomic_v0.4.75.md
+xstar_atomic_v0.4.76.md
 xstar_atomic_v0.4.8.md
 xstar_atomic_v0.4.9.md
 xstar_calc_hmc_all_v0426_offline_global_level_summary.csv
@@ -349,6 +355,7 @@ examples/140_validate_xstar_pprint_physical_output.py
 examples/141_benchmark_original_xstar_outputs.py
 examples/142_run_xstar_python.py
 examples/143_prepare_xstar_python_cache.py
+examples/144_diagnose_xstar_physical_parity.py
 examples/14_download_or_configure_data.py
 examples/15_o7_cascade_tuning_scan.py
 examples/16_o7_metastable_coupling_diagnostics.py
@@ -636,6 +643,7 @@ src/xstar_atomic/source_port/msolvelucy_initial_state.py
 src/xstar_atomic/source_port/msolvelucy_state_parity.py
 src/xstar_atomic/source_port/output_writers.py
 src/xstar_atomic/source_port/physical_benchmark_suite.py
+src/xstar_atomic/source_port/physical_output_diagnostics.py
 src/xstar_atomic/source_port/physical_output_parity.py
 src/xstar_atomic/source_port/physical_runner.py
 src/xstar_atomic/source_port/population_parity.py
@@ -778,6 +786,7 @@ tests/test_source_port_v0471_physical_benchmark_suite.py
 tests/test_source_port_v0472_physical_runner_api.py
 tests/test_source_port_v0473_cache_performance.py
 tests/test_source_port_v0475_continuum_chain.py
+tests/test_source_port_v0476_physical_parity_diagnostics.py
 tests/test_stage6_cascade_yield_source.py
 tests/test_stage6_examples.py
 tests/test_stage6_source_fit_helpers.py

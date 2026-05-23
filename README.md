@@ -1,11 +1,3 @@
-## v0.4.75 source-ordered continuum chain
-
-v0.4.75 preserves the vectorized source-port caches and restores the literal
-`comp2 -> freef -> bremem -> heatf` mutable workspace order in the public
-physical runner. `bremem` now receives `freef`'s updated opacity and `heatf`
-receives the freshly generated continuum outputs for every DSEC trial. Existing
-NPZ caches remain valid; the all-ATDB C V parity run remains the external gate.
-
 ## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate
 
 v0.4.72 adds the first public end-to-end execution API for the translated
@@ -637,6 +629,8 @@ also writes `xstar_dsec_element_thermal_decomposition.csv` for every evaluation.
 No XSTAR rebuild is required.
 
 # xstar-atomic
+> **Current development baseline: v0.4.76.** The first real all-ATDB Python run now completes. v0.4.76 restores literal first-pass control, fixes temperature/detail/local-level/RRC output semantics, upgrades the metadata cache to v3, and adds per-DSEC thermal and carbon-rate diagnostics. C V thermal/population parity remains open; no empirical correction is used.
+
 
 
 ## Full XSTAR Python source port
