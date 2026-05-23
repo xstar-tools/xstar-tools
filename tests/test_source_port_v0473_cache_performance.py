@@ -10,7 +10,16 @@ from xstar_atomic.source_port import (
     load_atomic_database_state,
 )
 from xstar_atomic.source_port import physical_runner as runner
-from tests.test_source_port_atomic_database_v041 import _write_mini_atdb
+import importlib.util
+
+_HELPER_PATH = Path(__file__).with_name("test_source_port_atomic_database_v041.py")
+_HELPER_SPEC = importlib.util.spec_from_file_location(
+    "xstar_atomic_test_source_port_atomic_database_v041", _HELPER_PATH
+)
+assert _HELPER_SPEC is not None and _HELPER_SPEC.loader is not None
+_HELPER_MODULE = importlib.util.module_from_spec(_HELPER_SPEC)
+_HELPER_SPEC.loader.exec_module(_HELPER_MODULE)
+_write_mini_atdb = _HELPER_MODULE._write_mini_atdb
 
 
 def test_v0473_sparse_slice_uses_sorted_vectorized_override_ranges():
@@ -155,3 +164,54 @@ def test_v0473_live_radiation_rejects_short_active_arrays():
     )
     with pytest.raises(ValueError, match="invalid live radiation arrays"):
         _radiation_arrays(state)
+
+
+def test_v0474_source_brems_arrays_keep_full_high_resolution_capacity(tmp_path: Path):
+    """The shared XSTAR arrays must satisfy both trnfrc and reduced-grid ucalc."""
+    atdb = tmp_path / "atdb.fits"
+    _write_mini_atdb(atdb)
+    parameters = runner.normalize_xstar_parameters(
+        {
+            "ncn2": 1200,
+            "nsteps": 1,
+            "npass": 1,
+            "spectrum": "pow",
+            "abundtbl": "xdef",
+        }
+    )
+    state, built = runner._build_initial_state(
+        parameters,
+        atdb_path=atdb,
+        use_cache=False,
+    )
+    try:
+        assert state.control["ncn2"] == 1200
+        assert state.control["ncn2m"] == 999
+        assert np.asarray(state.radiation.bremsa).size == 1200
+        assert np.asarray(state.radiation.bremsam).size == 1200
+        assert np.asarray(state.radiation.bremsint).size == 1200
+    finally:
+        built.atomic_state.close()
+
+
+def test_v0474_trnfrc_accepts_the_full_capacity_shared_bremsint():
+    from xstar_atomic.source_port.radial_transfer import trnfrc
+
+    n = 12
+    epi = np.geomspace(0.1, 1.0e4, n)
+    result = trnfrc(
+        direction=-1,
+        radius_cm=1.0e18,
+        column_limit_cm2=1.0e20,
+        hydrogen_density_cm3=1.0,
+        epi_eV=epi,
+        zremsz=np.ones(n),
+        dpthc=np.zeros((2, n)),
+        opakc=np.ones(n),
+        zrems=np.ones((5, n)),
+        bremsa_before=np.zeros(n),
+        bremsint_before=np.zeros(n),
+        ncn2=n,
+    )
+    assert result.bremsint_after.size == n
+    assert np.all(np.isfinite(result.bremsint_after))

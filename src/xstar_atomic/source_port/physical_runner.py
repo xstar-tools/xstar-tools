@@ -1283,10 +1283,13 @@ def _build_initial_state(
     state.radiation.epi = epi
     state.radiation.bremsa = np.zeros(ncn2, dtype=float)
     state.radiation.epim = epim
-    # bremsam is active on 1:ncn2m.  bremsint additionally owns the literal
-    # caller tail row ncn2m+1 read by the descending bremsmap loop.
-    state.radiation.bremsam = np.zeros(ncn2m, dtype=float)
-    state.radiation.bremsint = np.zeros(ncn2m + 1, dtype=float)
+    # xstar.f90 allocates bremsam(ncn) and bremsint(ncn), even though
+    # bremsmap/dsec consume only rows 1:ncn2m.  trnfrc owns bremsint on the
+    # full high-resolution 1:ncn2 range, while bremsmap also reads the
+    # reduced-grid boundary row ncn2m+1.  Preserve that shared full-capacity
+    # source array and let ucalc expose only the active 1:ncn2m views.
+    state.radiation.bremsam = np.zeros(ncn2, dtype=float)
+    state.radiation.bremsint = np.zeros(ncn2, dtype=float)
     state.radiation.zrems = workspace.zrems
     state.radiation.zremso = workspace.zremso
     state.plasma.temperature = parameters.temperature_k

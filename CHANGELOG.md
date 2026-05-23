@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.4.74 full-capacity continuum arrays and extracted-sdist test fix - 2026-05-23
+
+v0.4.74 preserves the v0.4.73 vectorized ATDB/metadata NPZ caches and corrects
+two issues exposed by the first user-side rerun. The physical runner now
+allocates `bremsam` and `bremsint` with the original high-resolution `ncn2`
+capacity, matching `xstar.f90`. `trnfrc` therefore owns the full
+`bremsint(1:ncn2)` range, while `bremsmap`, `dsec`, and `ucalc` continue to use
+only the reduced `1:ncn2m` prefix and the caller-owned `ncn2m+1` boundary row.
+This removes `RadialTransferPortError: bremsint is shorter than the active
+range` at the start of radial zone 1 without restoring the earlier strict
+equal-length live-radiation check.
+
+The v0.4.73 cache-performance test now loads its sibling mini-ATDB helper by
+explicit file path, so focused tests collect correctly from an extracted source
+distribution where `tests/` is not a Python package. New regressions cover the
+full-capacity continuum arrays and full-range `trnfrc` use. No physical
+equations or persistence rules changed.
+
 ## v0.4.73 vectorized ATDB caches, sparse-slice speedup, progress, and live-radiation tail fix - 2026-05-22
 
 v0.4.73 corrects the production physical-runner startup behavior exposed by
