@@ -94,12 +94,25 @@ def _linear_hunt(grid: Sequence[float], x: float) -> int:
 def _radiation_arrays(state: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if state is None:
         raise ValueError("live radiation state is required")
-    epi = np.asarray(getattr(state, "epim_eV", getattr(state, "epi_eV", ())), dtype=float)
-    brem = np.asarray(getattr(state, "bremsam", getattr(state, "bremsa", ())), dtype=float)
-    bint = np.asarray(getattr(state, "bremsint", np.zeros_like(epi)), dtype=float)
-    if epi.size < 3 or epi.size != brem.size or epi.size != bint.size or np.any(np.diff(epi) <= 0):
+    epi = np.asarray(getattr(state, "epim_eV", getattr(state, "epi_eV", ())), dtype=float).reshape(-1)
+    brem = np.asarray(getattr(state, "bremsam", getattr(state, "bremsa", ())), dtype=float).reshape(-1)
+    bint = np.asarray(getattr(state, "bremsint", np.zeros_like(epi)), dtype=float).reshape(-1)
+    n = int(epi.size)
+    # bremsmap.f90 owns a caller tail at bremsint(ncn2m+1), and the translated
+    # state may retain additional inactive capacity in bremsam/bremsint.  ucalc
+    # consumes only rows 1:ncn2m, so require capacity rather than exact length
+    # and return the active reduced-grid views.
+    if (
+        n < 3
+        or brem.size < n
+        or bint.size < n
+        or np.any(np.diff(epi) <= 0)
+        or not np.all(np.isfinite(epi))
+        or not np.all(np.isfinite(brem[:n]))
+        or not np.all(np.isfinite(bint[:n]))
+    ):
         raise ValueError("invalid live radiation arrays")
-    return epi, brem, bint
+    return epi, brem[:n], bint[:n]
 
 
 def _nbinc(energy: float, epi: Sequence[float]) -> int:

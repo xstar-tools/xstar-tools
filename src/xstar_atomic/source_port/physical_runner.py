@@ -14,7 +14,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import json
 import math
+import os
+import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
@@ -23,11 +27,17 @@ import numpy as np
 
 from ..data import resolve_atdb_path
 from ..xstar_run import XSTARInputParameters, parse_xstar_command
-from .atomic_database import AtomicDatabaseBuildResult, load_atomic_database_state
+from .atomic_database import (
+    AtomicDatabaseBuildResult,
+    AtomicDatabaseError,
+    atomic_database_fingerprint,
+    default_derived_pointer_cache_path,
+    load_atomic_database_state,
+)
 from .bremsstrahlung import BremsstrahlungContext
 from .compton import Comp2Context, load_compton_table
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
-from .element_equilibrium import EscapeProbabilityContext, build_level_table
+from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .emissivity import CalcEmisabContext
 from .free_free import FreeFreeContext
@@ -71,6 +81,18 @@ class UnsupportedXSTARParameterError(XSTARPythonRunnerError):
 
 class XSTARPythonAcceptanceError(XSTARPythonRunnerError):
     """Raised when the strict ten-product or original-XSTAR parity gate fails."""
+
+
+ProgressCallback = Callable[[str, Mapping[str, Any]], None]
+
+
+def _emit_progress(
+    callback: ProgressCallback | None,
+    event: str,
+    **details: Any,
+) -> None:
+    if callback is not None:
+        callback(str(event), details)
 
 
 ERGSEV = 1.602197e-12
@@ -255,6 +277,15 @@ class C5NE1AcceptanceResult:
             and self.all_files_match
         )
 
+    def close(self) -> None:
+        self.python_run.close()
+
+    def __enter__(self) -> "C5NE1AcceptanceResult":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "python_run": self.python_run.as_dict(),
@@ -266,6 +297,38 @@ class C5NE1AcceptanceResult:
             "ready": self.ready,
             "xstar_outputs_used_as_python_inputs": False,
             "parity": None if self.parity is None else self.parity.as_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class XSTARPythonCacheResult:
+    ready: bool
+    atdb_path: Path
+    pointer_cache_path: Path
+    metadata_cache_path: Path
+    pointer_cache_status: str
+    metadata_cache_status: str
+    n_records: int
+    n_ions: int
+    n_levels: int
+    n_lines: int
+    n_continua: int
+    elapsed_seconds: float
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ready": self.ready,
+            "atdb_path": str(self.atdb_path),
+            "pointer_cache_path": str(self.pointer_cache_path),
+            "metadata_cache_path": str(self.metadata_cache_path),
+            "pointer_cache_status": self.pointer_cache_status,
+            "metadata_cache_status": self.metadata_cache_status,
+            "n_records": self.n_records,
+            "n_ions": self.n_ions,
+            "n_levels": self.n_levels,
+            "n_lines": self.n_lines,
+            "n_continua": self.n_continua,
+            "elapsed_seconds": self.elapsed_seconds,
         }
 
 
@@ -447,6 +510,147 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 1
+
+
+def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
+    """Return the default vectorized output-metadata NPZ sidecar."""
+    path = Path(fitsfile)
+    return path.with_name(path.name + ".xstar_atomic_output_metadata.npz")
+
+
+def _cache_paths(atdb_path: str | Path, cache_dir: str | Path | None) -> tuple[Path, Path]:
+    atdb = Path(atdb_path).resolve()
+    if cache_dir is None:
+        return default_derived_pointer_cache_path(atdb), default_output_metadata_cache_path(atdb)
+    root = Path(cache_dir).expanduser().resolve()
+    return (
+        root / (atdb.name + ".xstar_atomic_source_port.npz"),
+        root / (atdb.name + ".xstar_atomic_output_metadata.npz"),
+    )
+
+
+def _string_array(values: Sequence[str]) -> np.ndarray:
+    text = [str(value) for value in values]
+    width = max((len(value) for value in text), default=1)
+    return np.asarray(text, dtype=f"U{max(1, width)}")
+
+
+def save_source_output_metadata_cache(
+    master: Any,
+    metadata: SourceOutputMetadata,
+    path: str | Path,
+) -> Path:
+    """Persist writer metadata as an uncompressed, vectorized NumPy NPZ."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    cache_metadata = {
+        "format_version": OUTPUT_METADATA_CACHE_FORMAT_VERSION,
+        "fingerprint": atomic_database_fingerprint(master),
+        "cache_kind": "source_output_metadata",
+        "layout": "vectorized_npz_v1",
+    }
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(target.parent),
+            prefix=target.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            np.savez(
+                handle,
+                metadata_json=np.asarray(json.dumps(cache_metadata, separators=(",", ":"))),
+                level_global_index=np.asarray([row.global_index for row in metadata.levels], dtype=np.int32),
+                level_ion_index=np.asarray([row.ion_index for row in metadata.levels], dtype=np.int32),
+                level_excitation_eV=np.asarray([row.excitation_eV for row in metadata.levels], dtype=np.float64),
+                level_ion_label=_string_array([row.ion_label for row in metadata.levels]),
+                level_atomic_number=np.asarray([row.atomic_number for row in metadata.levels], dtype=np.int16),
+                level_label=_string_array([row.level_label for row in metadata.levels]),
+                level_upper_index=np.asarray([row.upper_index for row in metadata.levels], dtype=np.int32),
+                line_index=np.asarray([row.line_index for row in metadata.lines], dtype=np.int32),
+                line_wavelength_angstrom=np.asarray([row.wavelength_angstrom for row in metadata.lines], dtype=np.float64),
+                line_ion_label=_string_array([row.ion_label for row in metadata.lines]),
+                line_lower_level=_string_array([row.lower_level for row in metadata.lines]),
+                line_upper_level=_string_array([row.upper_level for row in metadata.lines]),
+                line_rate_type=np.asarray([row.rate_type for row in metadata.lines], dtype=np.int16),
+                line_data_type=np.asarray([row.data_type for row in metadata.lines], dtype=np.int16),
+                line_atomic_mass=np.asarray([row.atomic_mass for row in metadata.lines], dtype=np.float64),
+                line_natural_rate_s=np.asarray([row.natural_rate_s for row in metadata.lines], dtype=np.float64),
+                line_auger_width_eV=np.asarray([row.auger_width_eV for row in metadata.lines], dtype=np.float64),
+                line_auger_rate_s=np.asarray([row.auger_rate_s for row in metadata.lines], dtype=np.float64),
+                rrc_continuum_index=np.asarray([row.continuum_index for row in metadata.rrcs], dtype=np.int32),
+                rrc_level_global_index=np.asarray([row.level_global_index for row in metadata.rrcs], dtype=np.int32),
+                rrc_threshold_eV=np.asarray([row.threshold_eV for row in metadata.rrcs], dtype=np.float64),
+                rrc_ion_label=_string_array([row.ion_label for row in metadata.rrcs]),
+                rrc_lower_level=_string_array([row.lower_level for row in metadata.rrcs]),
+                rrc_upper_level=_string_array([row.upper_level for row in metadata.rrcs]),
+            )
+        os.replace(temporary_name, target)
+    except Exception:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+        raise
+    return target
+
+
+def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOutputMetadata:
+    """Load and validate vectorized writer metadata from an NPZ sidecar."""
+    source = Path(path)
+    with np.load(source, allow_pickle=False) as z:
+        cache_metadata = json.loads(str(z["metadata_json"].item()))
+        if int(cache_metadata.get("format_version", -1)) != OUTPUT_METADATA_CACHE_FORMAT_VERSION:
+            raise AtomicDatabaseError(f"stale output metadata cache {source}: format version")
+        if cache_metadata.get("fingerprint") != atomic_database_fingerprint(master):
+            raise AtomicDatabaseError(f"stale output metadata cache {source}: ATDB fingerprint")
+        levels = tuple(
+            LevelOutputMetadata(
+                global_index=int(a), ion_index=int(b), excitation_eV=float(c),
+                ion_label=str(d), atomic_number=int(e), level_label=str(f), upper_index=int(g),
+            )
+            for a, b, c, d, e, f, g in zip(
+                z["level_global_index"], z["level_ion_index"], z["level_excitation_eV"],
+                z["level_ion_label"], z["level_atomic_number"], z["level_label"], z["level_upper_index"],
+            )
+        )
+        lines = tuple(
+            LineOutputMetadata(
+                line_index=int(a), wavelength_angstrom=float(b), ion_label=str(c),
+                lower_level=str(d), upper_level=str(e), rate_type=int(f), data_type=int(g),
+                atomic_mass=float(h), natural_rate_s=float(i), auger_width_eV=float(j), auger_rate_s=float(k),
+            )
+            for a, b, c, d, e, f, g, h, i, j, k in zip(
+                z["line_index"], z["line_wavelength_angstrom"], z["line_ion_label"],
+                z["line_lower_level"], z["line_upper_level"], z["line_rate_type"],
+                z["line_data_type"], z["line_atomic_mass"], z["line_natural_rate_s"],
+                z["line_auger_width_eV"], z["line_auger_rate_s"],
+            )
+        )
+        rrcs = tuple(
+            RRCOutputMetadata(
+                continuum_index=int(a), level_global_index=int(b), threshold_eV=float(c),
+                ion_label=str(d), lower_level=str(e), upper_level=str(f),
+            )
+            for a, b, c, d, e, f in zip(
+                z["rrc_continuum_index"], z["rrc_level_global_index"], z["rrc_threshold_eV"],
+                z["rrc_ion_label"], z["rrc_lower_level"], z["rrc_upper_level"],
+            )
+        )
+    return SourceOutputMetadata(
+        levels=levels,
+        lines=lines,
+        rrcs=rrcs,
+        provenance={
+            "source": "readtbl/setptrs packed ATDB pointers",
+            "source_faithful": True,
+            "metadata_cache_status": "hit",
+            "metadata_cache_path": str(source),
+        },
+    )
+
+
 def _clean_label(raw: bytes | str, fallback: str) -> str:
     if isinstance(raw, bytes):
         text = raw.decode("latin-1", errors="replace")
@@ -456,106 +660,235 @@ def _clean_label(raw: bytes | str, fallback: str) -> str:
     return text or fallback
 
 
-def _parent_ion_index(derived: Any, recno: int) -> int:
-    ion_record = int(derived.npar[int(recno)])
-    if ion_record <= 0:
-        return 0
-    matches = np.flatnonzero(np.asarray(derived.ion_records, dtype=int) == ion_record)
-    return int(matches[0]) if matches.size else 0
+def _record_to_ion_index(derived: Any) -> np.ndarray:
+    """Build an O(1) record-to-ion map from source parent pointers."""
+    n_records = int(np.asarray(derived.npar).size - 1)
+    ion_record_to_index = np.zeros(n_records + 1, dtype=np.int32)
+    ion_records = np.asarray(derived.ion_records, dtype=np.int64)
+    valid_ions = np.flatnonzero(ion_records > 0)
+    ion_record_to_index[ion_records[valid_ions]] = valid_ions.astype(np.int32)
+    parent_records = np.asarray(derived.npar, dtype=np.int64)
+    result = np.zeros_like(parent_records, dtype=np.int32)
+    valid_parent = (parent_records > 0) & (parent_records < ion_record_to_index.size)
+    result[valid_parent] = ion_record_to_index[parent_records[valid_parent]]
+    # Ion-header records are useful to label themselves as well.
+    result[ion_records[valid_ions]] = valid_ions.astype(np.int32)
+    return result
 
 
 def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetadata:
-    """Resolve packed ATDB pointers into the metadata consumed by the writers."""
-    levels: list[LevelOutputMetadata] = []
-    for global_index in range(1, int(derived.n_level_records) + 1):
-        rec = int(derived.level_record_by_global_index[global_index])
-        if rec <= 0:
-            continue
-        ion_index = _parent_ion_index(derived, rec)
-        if ion_index <= 0:
-            continue
-        reals = master.record_reals(rec)
-        ints = master.record_integers(rec)
+    """Resolve packed ATDB pointers into writer metadata with vectorized reads.
+
+    Only the variable-length character labels require small Python loops.  All
+    parent resolution and scalar REALS/INTEGERS fields use direct NumPy gathers;
+    the former per-RRC rebuild of an entire ion level table is eliminated.
+    """
+    pointers = np.asarray(master.nptrs.numpy())
+    record_to_ion = _record_to_ion_index(derived)
+
+    ion_labels: list[str] = [""] * (int(derived.n_ions) + 1)
+    for ion_index in range(1, int(derived.n_ions) + 1):
         z = int(derived.ion_element_z[ion_index])
         stage = int(derived.ion_stage[ion_index])
-        local = int(ints[-2]) if len(ints) >= 2 else global_index
-        ion_label = _clean_label(master.record_chars(int(derived.ion_records[ion_index])), f"{ELEMENT_SYMBOLS[z-1]}_{stage}")
-        levels.append(
-            LevelOutputMetadata(
-                global_index=global_index,
-                ion_index=ion_index,
-                excitation_eV=float(reals[0]) if len(reals) else 0.0,
-                ion_label=ion_label,
-                atomic_number=z,
-                level_label=_clean_label(master.record_chars(rec), f"level_{local}"),
-                upper_index=local,
+        rec = int(derived.ion_records[ion_index])
+        fallback = f"{ELEMENT_SYMBOLS[z-1]}_{stage}" if 1 <= z <= len(ELEMENT_SYMBOLS) else f"ion_{ion_index}"
+        ion_labels[ion_index] = _clean_label(master.record_chars(rec), fallback)
+
+    global_indices = np.arange(1, int(derived.n_level_records) + 1, dtype=np.int32)
+    level_records = np.asarray(
+        derived.level_record_by_global_index[1 : int(derived.n_level_records) + 1],
+        dtype=np.int64,
+    )
+    level_rows = pointers[level_records - 1]
+    level_ions = record_to_ion[level_records]
+    level_nreal = np.asarray(level_rows[:, 4], dtype=np.int64)
+    level_nint = np.asarray(level_rows[:, 5], dtype=np.int64)
+    level_rptr = np.asarray(level_rows[:, 7], dtype=np.int64)
+    level_iptr = np.asarray(level_rows[:, 8], dtype=np.int64)
+    excitation = np.zeros(level_records.size, dtype=np.float64)
+    has_real = level_nreal > 0
+    if np.any(has_real):
+        excitation[has_real] = master.rdat1.gather(level_rptr[has_real], dtype=np.float64)
+    local_indices = global_indices.copy()
+    has_local = level_nint >= 2
+    if np.any(has_local):
+        local_indices[has_local] = master.idat1.gather(
+            level_iptr[has_local] + level_nint[has_local] - 2,
+            dtype=np.int64,
+        )
+    ionization_potential = excitation.copy()
+    has_ionpot = level_nreal > 3
+    if np.any(has_ionpot):
+        ionization_potential[has_ionpot] = master.rdat1.gather(
+            level_rptr[has_ionpot] + 3,
+            dtype=np.float64,
+        )
+
+    levels: list[LevelOutputMetadata] = []
+    levels_by_key: dict[tuple[int, int], LevelOutputMetadata] = {}
+    ionpot_by_key: dict[tuple[int, int], float] = {}
+    for pos, (global_index, rec, ion_index, local) in enumerate(
+        zip(global_indices, level_records, level_ions, local_indices)
+    ):
+        ion = int(ion_index)
+        if ion <= 0:
+            continue
+        z = int(derived.ion_element_z[ion])
+        row = LevelOutputMetadata(
+            global_index=int(global_index),
+            ion_index=ion,
+            excitation_eV=float(excitation[pos]),
+            ion_label=ion_labels[ion],
+            atomic_number=z,
+            level_label=_clean_label(master.record_chars(int(rec)), f"level_{int(local)}"),
+            upper_index=int(local),
+        )
+        levels.append(row)
+        key = (ion, int(local))
+        levels_by_key[key] = row
+        ionpot_by_key[key] = float(ionization_potential[pos])
+
+    line_indices = np.arange(1, int(derived.nlsvn) + 1, dtype=np.int32)
+    line_records = np.asarray(derived.nplin[1 : int(derived.nlsvn) + 1], dtype=np.int64)
+    line_rows = pointers[line_records - 1]
+    line_ions = record_to_ion[line_records]
+    line_nreal = np.asarray(line_rows[:, 4], dtype=np.int64)
+    line_nint = np.asarray(line_rows[:, 5], dtype=np.int64)
+    line_rptr = np.asarray(line_rows[:, 7], dtype=np.int64)
+    line_iptr = np.asarray(line_rows[:, 8], dtype=np.int64)
+    wavelengths = np.zeros(line_records.size, dtype=np.float64)
+    line_has_real = line_nreal > 0
+    if np.any(line_has_real):
+        wavelengths[line_has_real] = np.abs(
+            master.rdat1.gather(line_rptr[line_has_real], dtype=np.float64)
+        )
+    lower = np.zeros(line_records.size, dtype=np.int64)
+    upper = np.zeros(line_records.size, dtype=np.int64)
+    has_lower = line_nint >= 1
+    has_upper = line_nint >= 2
+    if np.any(has_lower):
+        lower[has_lower] = master.idat1.gather(line_iptr[has_lower], dtype=np.int64)
+    if np.any(has_upper):
+        upper[has_upper] = master.idat1.gather(line_iptr[has_upper] + 1, dtype=np.int64)
+    natural = np.zeros(line_records.size, dtype=np.float64)
+    natural_mask = (np.asarray(line_rows[:, 1], dtype=np.int64) == 50) & (line_nreal > 2)
+    if np.any(natural_mask):
+        natural[natural_mask] = master.rdat1.gather(
+            line_rptr[natural_mask] + 2,
+            dtype=np.float64,
+        )
+
+    lines: list[LineOutputMetadata] = []
+    for pos, (line_index, ion_index) in enumerate(zip(line_indices, line_ions)):
+        ion = int(ion_index)
+        if ion <= 0:
+            continue
+        z = int(derived.ion_element_z[ion])
+        low = int(lower[pos])
+        up = int(upper[pos])
+        low_row = levels_by_key.get((ion, low))
+        up_row = levels_by_key.get((ion, up))
+        lines.append(
+            LineOutputMetadata(
+                line_index=int(line_index),
+                wavelength_angstrom=float(wavelengths[pos]),
+                ion_label=ion_labels[ion],
+                lower_level=(low_row.level_label if low_row else f"level_{low}"),
+                upper_level=(up_row.level_label if up_row else f"level_{up}"),
+                rate_type=int(line_rows[pos, 2]),
+                data_type=int(line_rows[pos, 1]),
+                atomic_mass=float(ATOMIC_MASS[z - 1]),
+                natural_rate_s=float(natural[pos]),
             )
         )
 
-    levels_by_key = {(row.ion_index, row.upper_index): row for row in levels}
-    lines: list[LineOutputMetadata] = []
-    for line_index in range(1, int(derived.nlsvn) + 1):
-        rec = int(derived.nplin[line_index])
-        header = master.header(rec)
-        reals = master.record_reals(rec)
-        ints = master.record_integers(rec)
-        ion_index = _parent_ion_index(derived, rec)
-        if ion_index <= 0:
-            continue
-        z = int(derived.ion_element_z[ion_index])
-        stage = int(derived.ion_stage[ion_index])
-        lower = int(ints[0]) if len(ints) >= 1 else 0
-        upper = int(ints[1]) if len(ints) >= 2 else 0
-        lower_label = levels_by_key.get((ion_index, lower))
-        upper_label = levels_by_key.get((ion_index, upper))
-        lines.append(
-            LineOutputMetadata(
-                line_index=line_index,
-                wavelength_angstrom=abs(float(reals[0])) if len(reals) else 0.0,
-                ion_label=_clean_label(master.record_chars(int(derived.ion_records[ion_index])), f"{ELEMENT_SYMBOLS[z-1]}_{stage}"),
-                lower_level=(lower_label.level_label if lower_label else f"level_{lower}"),
-                upper_level=(upper_label.level_label if upper_label else f"level_{upper}"),
-                rate_type=int(header.rate_type),
-                data_type=int(header.data_type),
-                atomic_mass=float(ATOMIC_MASS[z - 1]),
-                natural_rate_s=(float(reals[2]) if int(header.data_type) == 50 and len(reals) > 2 else 0.0),
-            )
+    continuum_indices = np.arange(1, int(derived.ncsvn) + 1, dtype=np.int32)
+    continuum_records = np.asarray(derived.npcon[1 : int(derived.ncsvn) + 1], dtype=np.int64)
+    continuum_rows = pointers[continuum_records - 1]
+    continuum_ions = record_to_ion[continuum_records]
+    continuum_nreal = np.asarray(continuum_rows[:, 4], dtype=np.int64)
+    continuum_nint = np.asarray(continuum_rows[:, 5], dtype=np.int64)
+    continuum_rptr = np.asarray(continuum_rows[:, 7], dtype=np.int64)
+    continuum_iptr = np.asarray(continuum_rows[:, 8], dtype=np.int64)
+    continuum_local = np.zeros(continuum_records.size, dtype=np.int64)
+    continuum_has_local = continuum_nint >= 2
+    if np.any(continuum_has_local):
+        continuum_local[continuum_has_local] = master.idat1.gather(
+            continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 2,
+            dtype=np.int64,
+        )
+    fallback_threshold = np.zeros(continuum_records.size, dtype=np.float64)
+    continuum_has_real = continuum_nreal > 0
+    if np.any(continuum_has_real):
+        fallback_threshold[continuum_has_real] = master.rdat1.gather(
+            continuum_rptr[continuum_has_real], dtype=np.float64,
         )
 
     rrcs: list[RRCOutputMetadata] = []
-    for continuum_index in range(1, int(derived.ncsvn) + 1):
-        rec = int(derived.npcon[continuum_index])
-        ints = master.record_integers(rec)
-        ion_index = _parent_ion_index(derived, rec)
-        if ion_index <= 0 or len(ints) < 2:
+    for pos, (continuum_index, ion_index, local) in enumerate(
+        zip(continuum_indices, continuum_ions, continuum_local)
+    ):
+        ion = int(ion_index)
+        local_index = int(local)
+        if ion <= 0 or continuum_nint[pos] < 2:
             continue
-        z = int(derived.ion_element_z[ion_index])
-        stage = int(derived.ion_stage[ion_index])
-        local = int(ints[-2])
-        level = levels_by_key.get((ion_index, local))
-        try:
-            table = build_level_table(master, derived, ion_index)
-            threshold = float(table.require(local).ionization_potential_ev)
-        except Exception:
-            reals = master.record_reals(rec)
-            threshold = float(reals[0]) if len(reals) else 0.0
-        global_level = int(derived.npilev[local, ion_index]) if 0 < local < derived.npilev.shape[0] else 0
-        ion_label = _clean_label(master.record_chars(int(derived.ion_records[ion_index])), f"{ELEMENT_SYMBOLS[z-1]}_{stage}")
+        level = levels_by_key.get((ion, local_index))
+        threshold = ionpot_by_key.get((ion, local_index), float(fallback_threshold[pos]))
+        global_level = (
+            int(derived.npilev[local_index, ion])
+            if 0 < local_index < derived.npilev.shape[0]
+            else 0
+        )
         rrcs.append(
             RRCOutputMetadata(
-                continuum_index=continuum_index,
+                continuum_index=int(continuum_index),
                 level_global_index=global_level,
-                threshold_eV=threshold,
-                ion_label=ion_label,
-                lower_level=(level.level_label if level else f"level_{local}"),
+                threshold_eV=float(threshold),
+                ion_label=ion_labels[ion],
+                lower_level=(level.level_label if level else f"level_{local_index}"),
             )
         )
     return SourceOutputMetadata(
         levels=tuple(levels),
         lines=tuple(lines),
         rrcs=tuple(rrcs),
-        provenance={"source": "readtbl/setptrs packed ATDB pointers", "source_faithful": True},
+        provenance={
+            "source": "readtbl/setptrs packed ATDB pointers",
+            "source_faithful": True,
+            "metadata_builder": "vectorized_numpy_v1",
+            "metadata_cache_status": "built",
+        },
     )
+
+
+def _load_or_build_source_output_metadata(
+    master: Any,
+    derived: Any,
+    *,
+    cache_path: str | Path | None,
+    use_cache: bool,
+    rebuild_cache: bool,
+) -> SourceOutputMetadata:
+    path = None if cache_path is None else Path(cache_path)
+    if use_cache and path is not None and path.is_file() and not rebuild_cache:
+        try:
+            return load_source_output_metadata_cache(master, path)
+        except (AtomicDatabaseError, OSError, ValueError, KeyError, json.JSONDecodeError):
+            pass
+    metadata = build_source_output_metadata(master, derived)
+    if use_cache and path is not None:
+        save_source_output_metadata_cache(master, metadata, path)
+        return SourceOutputMetadata(
+            levels=metadata.levels,
+            lines=metadata.lines,
+            rrcs=metadata.rrcs,
+            provenance={
+                **dict(metadata.provenance),
+                "metadata_cache_status": "rebuilt" if rebuild_cache else "miss_written",
+                "metadata_cache_path": str(path),
+            },
+        )
+    return metadata
 
 
 def build_pprint_atomic_metadata(derived: Any, output_metadata: SourceOutputMetadata, abundances: np.ndarray) -> PprintAtomicMetadata:
@@ -878,9 +1211,43 @@ def _resolve_runner_atdb_path(atdb_path: str | Path | None) -> Path:
     return Path(resolve_atdb_path(atdb_path, prompt=False)).resolve()
 
 
-def _build_initial_state(parameters: NormalizedXSTARParameters, *, atdb_path: str | Path, coheat_path: str | Path | None = None) -> tuple[XSTARPythonState, AtomicDatabaseBuildResult]:
-    built = load_atomic_database_state(atdb_path, abundances=np.ones(30, dtype=float), llinabs=True)
+def _build_initial_state(
+    parameters: NormalizedXSTARParameters,
+    *,
+    atdb_path: str | Path,
+    coheat_path: str | Path | None = None,
+    pointer_cache: str | Path | None = None,
+    metadata_cache: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
+) -> tuple[XSTARPythonState, AtomicDatabaseBuildResult]:
+    _emit_progress(
+        progress_callback,
+        "atdb_load_start",
+        atdb_path=str(Path(atdb_path).resolve()),
+        pointer_cache=str(pointer_cache) if pointer_cache is not None else None,
+    )
+    built = load_atomic_database_state(
+        atdb_path,
+        abundances=np.ones(30, dtype=float),
+        llinabs=True,
+        pointer_cache=pointer_cache,
+        use_pointer_cache=use_cache,
+        rebuild_pointer_cache=rebuild_cache,
+    )
+    _emit_progress(
+        progress_callback,
+        "atdb_load_done",
+        pointer_cache_status=str(built.derived.provenance.get("pointer_cache_status", "not_used")),
+        n_records=int(built.master.np2),
+        n_ions=int(built.derived.n_ions),
+        n_levels=int(built.derived.n_level_records),
+        n_lines=int(built.derived.nlsvn),
+        n_continua=int(built.derived.ncsvn),
+    )
     state = XSTARPythonState(atomic=built.atomic_state)
+    state.control["progress_callback"] = progress_callback
     derived = built.derived
     ncn2 = int(parameters.get("ncn2"))
     ncn2m = 999
@@ -916,8 +1283,10 @@ def _build_initial_state(parameters: NormalizedXSTARParameters, *, atdb_path: st
     state.radiation.epi = epi
     state.radiation.bremsa = np.zeros(ncn2, dtype=float)
     state.radiation.epim = epim
-    state.radiation.bremsam = np.zeros(ncn2, dtype=float)
-    state.radiation.bremsint = np.zeros(ncn2, dtype=float)
+    # bremsam is active on 1:ncn2m.  bremsint additionally owns the literal
+    # caller tail row ncn2m+1 read by the descending bremsmap loop.
+    state.radiation.bremsam = np.zeros(ncn2m, dtype=float)
+    state.radiation.bremsint = np.zeros(ncn2m + 1, dtype=float)
     state.radiation.zrems = workspace.zrems
     state.radiation.zremso = workspace.zremso
     state.plasma.temperature = parameters.temperature_k
@@ -977,7 +1346,26 @@ def _build_initial_state(parameters: NormalizedXSTARParameters, *, atdb_path: st
             "atcredate": str(getattr(built.master, "creation_date", "")),
         }
     )
-    metadata = build_source_output_metadata(built.master, derived)
+    _emit_progress(
+        progress_callback,
+        "metadata_start",
+        metadata_cache=str(metadata_cache) if metadata_cache is not None else None,
+    )
+    metadata = _load_or_build_source_output_metadata(
+        built.master,
+        derived,
+        cache_path=metadata_cache,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+    )
+    _emit_progress(
+        progress_callback,
+        "metadata_done",
+        metadata_cache_status=str(metadata.provenance.get("metadata_cache_status", "not_used")),
+        n_levels=len(metadata.levels),
+        n_lines=len(metadata.lines),
+        n_rrcs=len(metadata.rrcs),
+    )
     state.control["output_atomic_metadata"] = metadata
     state.control["pprint_atomic_metadata"] = build_pprint_atomic_metadata(
         derived, metadata, parameters.physical_abundances
@@ -995,6 +1383,61 @@ def _build_initial_state(parameters: NormalizedXSTARParameters, *, atdb_path: st
         "xstar_outputs_used_as_inputs": False,
     }
     return state, built
+
+
+def prepare_xstar_python_cache(
+    *,
+    atdb_path: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
+) -> XSTARPythonCacheResult:
+    """Build or validate the vectorized pointer and output-metadata NPZ caches."""
+    start = time.perf_counter()
+    resolved = _resolve_runner_atdb_path(atdb_path)
+    pointer_cache, metadata_cache = _cache_paths(resolved, cache_dir)
+    _emit_progress(
+        progress_callback,
+        "cache_prepare_start",
+        atdb_path=str(resolved),
+        pointer_cache=str(pointer_cache),
+        metadata_cache=str(metadata_cache),
+        rebuild_cache=bool(rebuild_cache),
+    )
+    built = load_atomic_database_state(
+        resolved,
+        abundances=np.ones(30, dtype=float),
+        llinabs=True,
+        pointer_cache=pointer_cache,
+        use_pointer_cache=True,
+        rebuild_pointer_cache=rebuild_cache,
+    )
+    try:
+        metadata = _load_or_build_source_output_metadata(
+            built.master,
+            built.derived,
+            cache_path=metadata_cache,
+            use_cache=True,
+            rebuild_cache=rebuild_cache,
+        )
+        result = XSTARPythonCacheResult(
+            ready=pointer_cache.is_file() and metadata_cache.is_file(),
+            atdb_path=resolved,
+            pointer_cache_path=pointer_cache,
+            metadata_cache_path=metadata_cache,
+            pointer_cache_status=str(built.derived.provenance.get("pointer_cache_status", "not_used")),
+            metadata_cache_status=str(metadata.provenance.get("metadata_cache_status", "not_used")),
+            n_records=int(built.master.np2),
+            n_ions=int(built.derived.n_ions),
+            n_levels=int(built.derived.n_level_records),
+            n_lines=int(built.derived.nlsvn),
+            n_continua=int(built.derived.ncsvn),
+            elapsed_seconds=float(time.perf_counter() - start),
+        )
+        _emit_progress(progress_callback, "cache_prepare_done", **result.as_dict())
+        return result
+    finally:
+        built.atomic_state.close()
 
 
 def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputParameter, ...]:
@@ -1021,6 +1464,10 @@ def run_xstar_from_parameters(
     zero_unspecified_abundances: bool = False,
     abundances: Mapping[str, float] | None = None,
     overwrite: bool = True,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     del input_dir  # Reserved for spectrum/density-file source branches.
@@ -1029,6 +1476,15 @@ def run_xstar_from_parameters(
         parameters,
         zero_unspecified_abundances=zero_unspecified_abundances,
         abundances=abundances,
+    )
+    pointer_cache_path, metadata_cache_path = _cache_paths(resolved_atdb, cache_dir)
+    _emit_progress(
+        progress_callback,
+        "physical_run_start",
+        atdb_path=str(resolved_atdb),
+        output_dir=str(Path(output_dir)),
+        use_cache=bool(use_cache),
+        rebuild_cache=bool(rebuild_cache),
     )
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1043,14 +1499,34 @@ def run_xstar_from_parameters(
                 target.unlink()
 
     state, built = _build_initial_state(
-        normalized, atdb_path=resolved_atdb, coheat_path=coheat_path
+        normalized,
+        atdb_path=resolved_atdb,
+        coheat_path=coheat_path,
+        pointer_cache=pointer_cache_path,
+        metadata_cache=metadata_cache_path,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
     )
     try:
+        _emit_progress(
+            progress_callback,
+            "radial_start",
+            requested_passes=int(normalized.get("npass")),
+            first_pass_shell_count=int(normalized.get("nsteps")),
+        )
         radial = run_bounded_radial_multipass(
             state,
             first_pass_shell_count=int(normalized.get("nsteps")),
             pass_count=int(normalized.get("npass")),
         )
+        _emit_progress(
+            progress_callback,
+            "radial_done",
+            completed_passes=len(radial.pass_results),
+            completed_zones=sum(len(item.shell_results) for item in radial.pass_results),
+        )
+        _emit_progress(progress_callback, "output_writer_start", output_dir=str(out))
         writer = run_output_writer_sequence(
             state,
             out_dir=out,
@@ -1059,6 +1535,11 @@ def run_xstar_from_parameters(
             model_name=str(normalized.get("modelname")),
             atomic_data_date=str(getattr(built.master, "creation_date", "")),
             final_local_recompute=True,
+        )
+        _emit_progress(
+            progress_callback,
+            "output_writer_done",
+            source_order=list(writer.source_order),
         )
         present, missing = products_present(out)
         products = {name: out / name for name in present}
@@ -1070,7 +1551,7 @@ def run_xstar_from_parameters(
                 + ", ".join(missing)
             )
         source_order = tuple(state.provenance.get("completed_source_routines", ())) + tuple(writer.source_order)
-        return XSTARPythonRunResult(
+        result = XSTARPythonRunResult(
             ready=True,
             parameters=normalized,
             output_dir=out,
@@ -1091,8 +1572,27 @@ def run_xstar_from_parameters(
                 "strict_ten_product_contract": True,
                 "xstar_outputs_used_as_python_inputs": False,
                 "atdb_path": str(resolved_atdb),
+                "pointer_cache_path": str(pointer_cache_path),
+                "pointer_cache_status": str(built.derived.provenance.get("pointer_cache_status", "not_used")),
+                "metadata_cache_path": str(metadata_cache_path),
+                "metadata_cache_status": str(
+                    state.control["output_atomic_metadata"].provenance.get(
+                        "metadata_cache_status", "not_used"
+                    )
+                ),
+                "vectorized_metadata_builder": True,
+                "vectorized_sparse_slice": True,
             },
         )
+        _emit_progress(
+            progress_callback,
+            "physical_run_done",
+            ready=True,
+            completed_passes=result.completed_passes,
+            completed_zones=result.completed_zones,
+            n_products=len(result.products),
+        )
+        return result
     except Exception:
         state.atomic.close()
         raise
@@ -1107,6 +1607,10 @@ def run_xstar_python(
     zero_unspecified_abundances: bool | None = None,
     abundances: Mapping[str, float] | None = None,
     overwrite: bool = True,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -1133,6 +1637,10 @@ def run_xstar_python(
         zero_unspecified_abundances=sparse,
         abundances=abundances,
         overwrite=overwrite,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
     )
 
 
@@ -1151,6 +1659,10 @@ def run_xstar_python_command(
     input_dir: str | Path | None = None,
     coheat_path: str | Path | None = None,
     overwrite: bool = True,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -1160,6 +1672,10 @@ def run_xstar_python_command(
         input_dir=input_dir,
         coheat_path=coheat_path,
         overwrite=overwrite,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
     )
 
 
@@ -1170,6 +1686,10 @@ def run_xstar_python_script(
     output_dir: str | Path = ".",
     coheat_path: str | Path | None = None,
     overwrite: bool = True,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -1181,6 +1701,10 @@ def run_xstar_python_script(
         input_dir=path.parent,
         coheat_path=coheat_path,
         overwrite=overwrite,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
     )
 
 
@@ -1197,6 +1721,10 @@ def run_c5_ne1_acceptance(
     step_atol: float = 5.0e-3,
     require_original_products: bool = True,
     raise_on_failure: bool = True,
+    cache_dir: str | Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -1204,12 +1732,22 @@ def run_c5_ne1_acceptance(
         atdb_path=atdb_path,
         output_dir=python_output_dir,
         coheat_path=coheat_path,
+        cache_dir=cache_dir,
+        use_cache=use_cache,
+        rebuild_cache=rebuild_cache,
+        progress_callback=progress_callback,
     )
     original = Path(original_run_dir)
     _present, missing = products_present(original)
     available = not missing
     parity: PhysicalOutputParityResult | None = None
     if available:
+        _emit_progress(
+            progress_callback,
+            "parity_start",
+            original_run_dir=str(original),
+            python_output_dir=str(python_run.output_dir),
+        )
         parity = compare_physical_output_directories(
             original,
             python_run.output_dir,
@@ -1218,6 +1756,12 @@ def run_c5_ne1_acceptance(
             step_rtol=step_rtol,
             step_atol=step_atol,
             required_files=REQUIRED_XSTAR_PRODUCTS,
+        )
+        _emit_progress(
+            progress_callback,
+            "parity_done",
+            parity_run=bool(parity.parity_run),
+            all_files_match=bool(parity.all_files_ready),
         )
     result = C5NE1AcceptanceResult(
         python_run=python_run,
@@ -1242,12 +1786,14 @@ def run_c5_ne1_acceptance(
 
 
 __all__ = [
+    "ProgressCallback",
     "XSTARPythonRunnerError",
     "UnsupportedXSTARParameterError",
     "XSTARPythonAcceptanceError",
     "NormalizedXSTARParameters",
     "XSTARPythonRunResult",
     "C5NE1AcceptanceResult",
+    "XSTARPythonCacheResult",
     "XSTAR_PARAMETER_DEFAULTS",
     "XDEF_ABUNDANCES",
     "normalize_xstar_parameters",
@@ -1255,6 +1801,10 @@ __all__ = [
     "powerlaw_spectrum",
     "photon_number_luminosity",
     "build_source_output_metadata",
+    "default_output_metadata_cache_path",
+    "save_source_output_metadata_cache",
+    "load_source_output_metadata_cache",
+    "prepare_xstar_python_cache",
     "build_pprint_atomic_metadata",
     "run_xstar_from_parameters",
     "run_xstar_python",

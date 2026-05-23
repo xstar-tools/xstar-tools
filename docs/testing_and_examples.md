@@ -1,3 +1,18 @@
+## v0.4.73 vectorized physical-runner cache and progress validation
+
+```bash
+PYTHONPATH=src python examples/143_prepare_xstar_python_cache.py \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --progress --print-summary
+
+PYTHONPATH=src pytest -q tests/test_source_port_v0473_cache_performance.py
+PYTHONPATH=src pytest -q tests/test_source_port*.py
+```
+
+The first cache preparation should report pointer `miss` and metadata
+`miss_written`; the second should report `hit` for both. A real c5_ne1 run can
+then be started with `examples/142_run_xstar_python.py ... --progress`.
+
 ## v0.4.71 original-XSTAR physical benchmark suite
 
 ```bash

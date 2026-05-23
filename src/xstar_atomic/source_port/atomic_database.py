@@ -23,6 +23,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping,
 import csv
 import json
 import os
+import tempfile
 
 import numpy as np
 from astropy.io import fits
@@ -64,6 +65,32 @@ class FortranPackedVector:
         self._data = np.asarray(data).reshape(-1)
         self.name = name
         self._overrides: Dict[int, Any] = {}
+        # Sparse mutations are accumulated by setptrs and then read many times.
+        # Keep a lazily rebuilt sorted NumPy representation so range overlays
+        # use searchsorted/vector assignment instead of scanning the full dict.
+        self._override_indices_cache: np.ndarray | None = None
+        self._override_values_cache: np.ndarray | None = None
+
+    def _invalidate_override_cache(self) -> None:
+        self._override_indices_cache = None
+        self._override_values_cache = None
+
+    def _sorted_overrides(self) -> tuple[np.ndarray, np.ndarray]:
+        if self._override_indices_cache is None or self._override_values_cache is None:
+            if not self._overrides:
+                self._override_indices_cache = np.asarray([], dtype=np.int64)
+                self._override_values_cache = np.asarray([], dtype=self._data.dtype)
+            else:
+                indices = np.fromiter(self._overrides.keys(), dtype=np.int64, count=len(self._overrides))
+                order = np.argsort(indices, kind="stable")
+                indices = indices[order]
+                values = np.asarray(
+                    [self._overrides[int(index)] for index in indices],
+                    dtype=self._data.dtype,
+                )
+                self._override_indices_cache = indices
+                self._override_values_cache = values
+        return self._override_indices_cache, self._override_values_cache
 
     def __len__(self) -> int:
         return int(self._data.size)
@@ -86,9 +113,53 @@ class FortranPackedVector:
         idx = int(index)
         self._check(idx)
         self._overrides[idx] = value
+        self._invalidate_override_cache()
+
+    def set_overrides(self, indices: Sequence[int] | np.ndarray, values: Sequence[Any] | np.ndarray) -> None:
+        """Install multiple one-based sparse overrides with one cache invalidation."""
+        idx = np.asarray(indices, dtype=np.int64).reshape(-1)
+        val = np.asarray(values).reshape(-1)
+        if idx.size != val.size:
+            raise ValueError("override indices and values differ in length")
+        if idx.size == 0:
+            return
+        if int(idx.min()) < 1 or int(idx.max()) > len(self):
+            raise IndexError(f"{self.name} override outside 1..{len(self)}")
+        for packed_index, value in zip(idx.tolist(), val.tolist()):
+            self._overrides[int(packed_index)] = value
+        self._invalidate_override_cache()
+
+    def gather(self, indices: Sequence[int] | np.ndarray, *, dtype: Any = None) -> np.ndarray:
+        """Vectorized one-based indexed read with sparse overrides applied."""
+        idx = np.asarray(indices, dtype=np.int64)
+        flat = idx.reshape(-1)
+        if flat.size == 0:
+            return np.asarray([], dtype=dtype).reshape(idx.shape)
+        if int(flat.min()) < 1 or int(flat.max()) > len(self):
+            raise IndexError(f"{self.name} gather outside 1..{len(self)}")
+        out = np.asarray(self._data[flat - 1]).copy()
+        if self._overrides:
+            override_indices, override_values = self._sorted_overrides()
+            positions = np.searchsorted(override_indices, flat)
+            valid = positions < override_indices.size
+            if np.any(valid):
+                valid_positions = positions[valid]
+                matches = override_indices[valid_positions] == flat[valid]
+                if np.any(matches):
+                    target = np.flatnonzero(valid)[matches]
+                    out[target] = override_values[valid_positions[matches]]
+        if dtype is not None:
+            out = out.astype(dtype, copy=False)
+        return out.reshape(idx.shape)
 
     def slice(self, start: int, count: int, *, dtype: Any = None) -> np.ndarray:
-        """Return ``count`` values beginning at one-based ``start``."""
+        """Return ``count`` values beginning at one-based ``start``.
+
+        Sparse overrides are selected by two binary searches and applied with
+        vectorized assignment.  Runtime is O(log M + K), where M is the total
+        override count and K is the number intersecting this slice, rather than
+        O(M) for every packed record.
+        """
         if count < 0:
             raise ValueError("count must be non-negative")
         if count == 0:
@@ -97,11 +168,12 @@ class FortranPackedVector:
         self._check(start + count - 1)
         out = np.asarray(self._data[start - 1 : start - 1 + count])
         if self._overrides:
-            out = out.copy()
-            for packed_index, value in self._overrides.items():
-                offset = packed_index - start
-                if 0 <= offset < count:
-                    out[offset] = value
+            override_indices, override_values = self._sorted_overrides()
+            lo = int(np.searchsorted(override_indices, start, side="left"))
+            hi = int(np.searchsorted(override_indices, start + count, side="left"))
+            if hi > lo:
+                out = out.copy()
+                out[override_indices[lo:hi] - int(start)] = override_values[lo:hi]
         if dtype is not None:
             out = out.astype(dtype, copy=False)
         return out
@@ -111,8 +183,9 @@ class FortranPackedVector:
         if not copy and not self._overrides:
             return self._data
         out = np.asarray(self._data).copy()
-        for index, value in self._overrides.items():
-            out[index - 1] = value
+        if self._overrides:
+            indices, values = self._sorted_overrides()
+            out[indices - 1] = values
         return out
 
     @property
@@ -510,17 +583,21 @@ def _prescan_dimensions(master: XSTARMasterData) -> Dict[str, int]:
 def _apply_line_wavelength_absolute_values(
     master: XSTARMasterData, derived: XSTARDerivedPointers
 ) -> int:
-    """Apply XSTAR's optional ``llinabs`` mutation using sparse overrides."""
-    changed = 0
-    for line_index in range(1, derived.nlsvn + 1):
-        recno = int(derived.nplin[line_index])
-        h = master.header(recno)
-        if h.nreal > 0:
-            wavelength = float(master.rdat1[h.real_ptr])
-            if wavelength < 0.0:
-                master.rdat1[h.real_ptr] = abs(wavelength)
-                changed += 1
-    return changed
+    """Apply XSTAR's optional ``llinabs`` mutation using vectorized overrides."""
+    if int(derived.nlsvn) <= 0:
+        return 0
+    records = np.asarray(derived.nplin[1 : int(derived.nlsvn) + 1], dtype=np.int64)
+    pointer_rows = master.nptrs.numpy()[records - 1]
+    valid = np.asarray(pointer_rows[:, 4] > 0, dtype=bool)
+    if not np.any(valid):
+        return 0
+    packed_indices = np.asarray(pointer_rows[valid, 7], dtype=np.int64)
+    wavelengths = master.rdat1.gather(packed_indices, dtype=np.float64)
+    negative = wavelengths < 0.0
+    if not np.any(negative):
+        return 0
+    master.rdat1.set_overrides(packed_indices[negative], np.abs(wavelengths[negative]))
+    return int(np.count_nonzero(negative))
 
 
 def setptrs(
@@ -859,7 +936,13 @@ def dbwk2(
 
 
 
-POINTER_CACHE_FORMAT_VERSION = 1
+POINTER_CACHE_FORMAT_VERSION = 2
+
+
+def default_derived_pointer_cache_path(fitsfile: str | Path) -> Path:
+    """Return the default vectorized source-port pointer-cache sidecar."""
+    path = Path(fitsfile)
+    return path.with_name(path.name + ".xstar_atomic_source_port.npz")
 
 
 def atomic_database_fingerprint(master: XSTARMasterData) -> Dict[str, Any]:
@@ -896,32 +979,48 @@ def save_derived_pointer_cache(
         "max_rate_type": derived.max_rate_type,
         "provenance": derived.provenance,
     }
-    temporary = target.with_name(target.name + ".tmp.npz")
-    np.savez_compressed(
-        temporary,
-        metadata_json=np.asarray(json.dumps(metadata)),
-        npar=derived.npar,
-        npnxt=derived.npnxt,
-        npfirst=derived.npfirst,
-        npfi=derived.npfi,
-        npfe=derived.npfe,
-        nplin=derived.nplin,
-        nplini=derived.nplini,
-        npcon=derived.npcon,
-        npconi2=derived.npconi2,
-        npconi=derived.npconi,
-        npilev=derived.npilev,
-        npilevi=derived.npilevi,
-        nlevs=derived.nlevs,
-        nptrt=derived.nptrt,
-        element_records=derived.element_records,
-        ion_records=derived.ion_records,
-        ion_element_z=derived.ion_element_z,
-        ion_stage=derived.ion_stage,
-        level_record_by_global_index=derived.level_record_by_global_index,
-        level_global_index_by_record=derived.level_global_index_by_record,
-    )
-    os.replace(temporary, target)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=str(target.parent),
+            prefix=target.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            # Uncompressed NPZ is intentionally used here: these dense numeric
+            # arrays are startup caches, and decompression cost dominated repeat
+            # physical runs on production ATDB files.
+            np.savez(
+                handle,
+                metadata_json=np.asarray(json.dumps(metadata, separators=(",", ":"))),
+                npar=derived.npar,
+                npnxt=derived.npnxt,
+                npfirst=derived.npfirst,
+                npfi=derived.npfi,
+                npfe=derived.npfe,
+                nplin=derived.nplin,
+                nplini=derived.nplini,
+                npcon=derived.npcon,
+                npconi2=derived.npconi2,
+                npconi=derived.npconi,
+                npilev=derived.npilev,
+                npilevi=derived.npilevi,
+                nlevs=derived.nlevs,
+                nptrt=derived.nptrt,
+                element_records=derived.element_records,
+                ion_records=derived.ion_records,
+                ion_element_z=derived.ion_element_z,
+                ion_stage=derived.ion_stage,
+                level_record_by_global_index=derived.level_record_by_global_index,
+                level_global_index_by_record=derived.level_global_index_by_record,
+            )
+        os.replace(temporary_name, target)
+    except Exception:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+        raise
     return target
 
 
@@ -1141,30 +1240,45 @@ def load_atomic_database_state(
     try:
         cache_path = Path(pointer_cache) if pointer_cache is not None else None
         derived: XSTARDerivedPointers
+        cache_failure: str | None = None
+        loaded_from_cache = False
         if (
             cache_path is not None
             and use_pointer_cache
             and cache_path.is_file()
             and not rebuild_pointer_cache
         ):
-            derived = load_derived_pointer_cache(master, cache_path, validate=validate)
-            derived.provenance["llinabs"] = bool(llinabs)
-            if llinabs:
-                derived.provenance["n_line_wavelengths_made_absolute"] = (
-                    _apply_line_wavelength_absolute_values(master, derived)
-                )
-        else:
+            try:
+                derived = load_derived_pointer_cache(master, cache_path, validate=validate)
+                loaded_from_cache = True
+            except (AtomicDatabaseError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                cache_failure = exc.__class__.__name__
+        if not loaded_from_cache:
             derived = setptrs(
                 master,
                 abundances=abundances,
                 llinabs=llinabs,
                 validate=validate,
             )
-            derived.provenance["pointer_cache_status"] = (
-                "rebuilt" if rebuild_pointer_cache else "miss"
-            )
-            if cache_path is not None:
+            if rebuild_pointer_cache:
+                status = "rebuilt"
+            elif cache_failure is not None:
+                status = "stale_rebuilt"
+            else:
+                status = "miss"
+            derived.provenance["pointer_cache_status"] = status
+            if cache_failure is not None:
+                derived.provenance["pointer_cache_failure"] = cache_failure
+            if cache_path is not None and use_pointer_cache:
                 save_derived_pointer_cache(master, derived, cache_path)
+        else:
+            derived.provenance["llinabs"] = bool(llinabs)
+            if llinabs:
+                derived.provenance["n_line_wavelengths_made_absolute"] = (
+                    _apply_line_wavelength_absolute_values(master, derived)
+                )
+        if cache_path is not None:
+            derived.provenance["pointer_cache_path"] = str(cache_path)
         atomic = populate_atomic_state(XSTARAtomicState(), master, derived)
         return AtomicDatabaseBuildResult(atomic_state=atomic, master=master, derived=derived)
     except Exception:

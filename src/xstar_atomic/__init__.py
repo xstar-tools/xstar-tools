@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.4.72"
+__version__ = "0.4.73"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
@@ -423,6 +423,7 @@ from .source_port import (
     dbwk2,
     load_atomic_database_state,
     register_atomic_database_stages,
+    default_derived_pointer_cache_path,
     save_derived_pointer_cache,
     load_derived_pointer_cache,
     write_atomic_database_products,
@@ -799,15 +800,38 @@ from .source_port.physical_benchmark_suite import (
 
 # Public end-to-end source-port execution API.
 from .source_port.physical_runner import (
+    ProgressCallback,
     XSTARPythonRunnerError,
     UnsupportedXSTARParameterError,
     XSTARPythonAcceptanceError,
     NormalizedXSTARParameters,
     XSTARPythonRunResult,
     C5NE1AcceptanceResult,
+    XSTARPythonCacheResult,
+    default_output_metadata_cache_path,
+    save_source_output_metadata_cache,
+    load_source_output_metadata_cache,
+    prepare_xstar_python_cache,
     run_xstar_from_parameters,
     run_xstar_python,
     run_xstar_python_command,
     run_xstar_python_script,
     run_c5_ne1_acceptance,
 )
+
+
+for _name in (
+    "default_derived_pointer_cache_path",
+    "default_output_metadata_cache_path",
+    "save_source_output_metadata_cache",
+    "load_source_output_metadata_cache",
+):
+    if _name not in __all__:
+        __all__.append(_name)
+
+if "ProgressCallback" not in __all__:
+    __all__.append("ProgressCallback")
+
+for _name in ("XSTARPythonCacheResult", "prepare_xstar_python_cache"):
+    if _name not in __all__:
+        __all__.append(_name)

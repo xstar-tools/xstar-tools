@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v0.4.73 vectorized ATDB caches, sparse-slice speedup, progress, and live-radiation tail fix - 2026-05-22
+
+v0.4.73 corrects the production physical-runner startup behavior exposed by
+the user's first all-ATDB c5_ne1 execution. `FortranPackedVector.slice()` now
+uses a lazily cached sorted NumPy override index plus `searchsorted` and vector
+assignment instead of scanning every line-wavelength override for every packed
+record. The metadata builder uses vectorized packed gathers and one-time
+ion/level maps.
+
+The physical runner now automatically reads and writes validated, uncompressed
+NumPy NPZ sidecars for the exact source-port `setptrs` arrays and the complete
+writer metadata. `prepare_xstar_python_cache()` and example 143 prepare these
+caches explicitly; alternate cache directories support read-only ATDB installs.
+The separate high-level `atdb.fits.xstar_atomic_index.npz` cache remains
+unchanged because it does not contain the literal source-port pointer arrays.
+
+Native progress callbacks and CLI `--progress` report ATDB/cache, metadata,
+pass, zone, writer, and parity boundaries.
+
+The real v0.4.72 run also exposed the literal `bremsint(ncn2m+1)` caller tail.
+v0.4.73 allocates the reduced arrays at their source extents and lets `ucalc`
+consume only active rows `1:ncn2m`, eliminating the false
+`invalid live radiation arrays` failure at the first H I ion-balance record.
+No physical equations, rate formulae, matrix topology, transfer equations, or
+writer persistence rules changed. Physical c5_ne1 product parity remains to be
+rerun against the independently generated original-XSTAR directory.
+
 ## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate - 2026-05-22
 
 v0.4.72 adds the first public end-to-end execution API for the translated

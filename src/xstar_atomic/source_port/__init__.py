@@ -65,6 +65,7 @@ from .atomic_database import (
     load_atomic_database_state,
     register_atomic_database_stages,
     POINTER_CACHE_FORMAT_VERSION,
+    default_derived_pointer_cache_path,
     atomic_database_fingerprint,
     save_derived_pointer_cache,
     load_derived_pointer_cache,
@@ -529,6 +530,7 @@ __all__ = [
     "load_atomic_database_state",
     "register_atomic_database_stages",
     "POINTER_CACHE_FORMAT_VERSION",
+    "default_derived_pointer_cache_path",
     "atomic_database_fingerprint",
     "save_derived_pointer_cache",
     "load_derived_pointer_cache",
@@ -1147,21 +1149,42 @@ __all__.extend([
 ])
 
 from .physical_runner import (
+    ProgressCallback,
     XSTARPythonRunnerError,
     UnsupportedXSTARParameterError,
     XSTARPythonAcceptanceError,
     NormalizedXSTARParameters,
     XSTARPythonRunResult,
     C5NE1AcceptanceResult,
+    XSTARPythonCacheResult,
     XSTAR_PARAMETER_DEFAULTS,
     XDEF_ABUNDANCES,
     normalize_xstar_parameters,
     ener_grid,
     powerlaw_spectrum,
     photon_number_luminosity,
+    default_output_metadata_cache_path,
+    save_source_output_metadata_cache,
+    load_source_output_metadata_cache,
+    prepare_xstar_python_cache,
     run_xstar_from_parameters,
     run_xstar_python,
     run_xstar_python_command,
     run_xstar_python_script,
     run_c5_ne1_acceptance,
 )
+
+
+__all__.extend([
+    "XSTARPythonRunnerError", "UnsupportedXSTARParameterError",
+    "XSTARPythonAcceptanceError", "NormalizedXSTARParameters",
+    "XSTARPythonRunResult", "C5NE1AcceptanceResult", "XSTARPythonCacheResult",
+    "XSTAR_PARAMETER_DEFAULTS", "XDEF_ABUNDANCES",
+    "normalize_xstar_parameters", "ener_grid", "powerlaw_spectrum",
+    "photon_number_luminosity", "default_output_metadata_cache_path",
+    "save_source_output_metadata_cache", "load_source_output_metadata_cache",
+    "prepare_xstar_python_cache",
+    "run_xstar_from_parameters", "run_xstar_python",
+    "run_xstar_python_command", "run_xstar_python_script",
+    "run_c5_ne1_acceptance",
+])

@@ -83,6 +83,12 @@ class RadialTransferPortError(RuntimeError):
     """Raised when a translated radial source contract is invalid."""
 
 
+def _emit_progress(state: XSTARPythonState, event: str, **details: Any) -> None:
+    callback = state.control.get("progress_callback")
+    if callable(callback):
+        callback(str(event), details)
+
+
 @dataclass(frozen=True)
 class StepResult:
     """Result of the literal ``step.f90`` zone-size calculation."""
@@ -1141,6 +1147,15 @@ def run_bounded_radial_shell(
     fixed_state: bool = False,
 ) -> BoundedRadialShellResult:
     """Execute one bounded radial shell around the accepted local driver."""
+    _emit_progress(
+        state,
+        "radial_shell_start",
+        pass_index=int(pass_index),
+        zone_index=int(zone_index),
+        direction=int(direction),
+        temperature_K=float(state.plasma.temperature),
+        column_cm2=float(state.transfer.column),
+    )
     runner = driver or XSTARPythonDriver()
     if driver is None:
         register_bounded_radial_source_routines(runner)
@@ -1159,7 +1174,7 @@ def run_bounded_radial_shell(
     skipped = tuple(
         state.provenance.get("skipped_source_routines", [])[skipped_before:]
     )
-    return BoundedRadialShellResult(
+    result = BoundedRadialShellResult(
         state=state,
         zone_index=int(zone_index),
         pass_index=int(pass_index),
@@ -1169,6 +1184,17 @@ def run_bounded_radial_shell(
         step_executed=XSTARSourceRoutine.STEP.value in source_order,
         output_writers_executed=False,
     )
+    _emit_progress(
+        state,
+        "radial_shell_done",
+        pass_index=result.pass_index,
+        zone_index=result.zone_index,
+        direction=result.direction,
+        temperature_K=float(state.plasma.temperature),
+        electron_fraction=float(state.plasma.xee),
+        column_cm2=float(state.transfer.column),
+    )
+    return result
 
 
 
@@ -1216,6 +1242,13 @@ def run_bounded_radial_pass(
     if ldir not in (-1, 1):
         raise RadialTransferPortError("radial pass direction must be -1 or 1")
 
+    _emit_progress(
+        state,
+        "radial_pass_start",
+        pass_index=kk,
+        direction=ldir,
+        total_passes=npass,
+    )
     radexp = float(state.control.get("radexp", 0.0))
     tabulated = radexp < -99.0
     if tabulated:
@@ -1381,6 +1414,15 @@ def run_bounded_radial_pass(
             "output_writers_executed": False,
         }
     )
+    _emit_progress(
+        state,
+        "radial_pass_done",
+        pass_index=result.pass_index,
+        direction=result.direction,
+        shell_count=len(result.shell_results),
+        termination_reason=result.termination_reason,
+        numrec=result.numrec,
+    )
     return result
 
 
@@ -1406,6 +1448,13 @@ def run_bounded_radial_multipass(
     count = int(contract.effective_passes)
     if count < 1:
         raise RadialTransferPortError("effective pass count must be positive")
+    _emit_progress(
+        state,
+        "radial_multipass_start",
+        requested_passes=requested,
+        effective_passes=count,
+        first_pass_shell_count=first_pass_shell_count,
+    )
     runner = driver or XSTARPythonDriver()
     if driver is None:
         register_bounded_radial_source_routines(runner)
@@ -1434,13 +1483,20 @@ def run_bounded_radial_multipass(
             )
         )
     state.transfer.converged = len(results) == count
-    return BoundedRadialMultipassResult(
+    result = BoundedRadialMultipassResult(
         state=state,
         pass_results=tuple(results),
         saved_state=_saved_store_from_state(state),
         pass_convergence_contract=contract,
         output_writers_executed=False,
     )
+    _emit_progress(
+        state,
+        "radial_multipass_done",
+        completed_passes=len(result.pass_results),
+        completed_zones=sum(len(item.shell_results) for item in result.pass_results),
+    )
+    return result
 
 
 def direct_fortran_radial_reference_cases() -> Mapping[str, Any]:

@@ -1,3 +1,16 @@
+> **v0.4.73 update:** fixed the first production physical-runner startup
+> bottleneck. Packed sparse wavelength overrides now use a sorted NumPy index,
+> `searchsorted`, and vector assignment rather than a full override scan for
+> every record slice. The physical runner automatically loads/writes validated
+> uncompressed NPZ sidecars for complete source-port pointers and output
+> metadata, and the metadata builder now uses vectorized parent/scalar gathers.
+> Added cache preparation API/example and native ATDB/pass/zone/writer/parity
+> progress events. The first real run also exposed the literal reduced-grid
+> `bremsint(ncn2m+1)` tail; the live `ucalc` adapter now consumes only active
+> rows `1:ncn2m`, removing the false first-zone radiation-array failure. No
+> physical equations changed; the real c5_ne1 all-ATDB product comparison
+> remains open.
+
 > **v0.4.71 update:** converted the supplied 62-case `original_xstar`
 > run-script tree into a strict benchmark manifest and runner. The harness
 > parses literal XSTAR parameters without sourcing shell scripts, identifies

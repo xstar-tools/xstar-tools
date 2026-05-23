@@ -2093,7 +2093,7 @@ PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
   --print-summary
 ```
 
-## 142_run_xstar_python.py
+### `142_run_xstar_python.py`
 
 Public physical Python XSTAR runner. It accepts either a literal command or a
 `run_xstar.sh` file, writes the ten standard detail/final products, and can run
@@ -2106,5 +2106,19 @@ PYTHONPATH=src python examples/142_run_xstar_python.py \
   --atdb /path/to/atdb.fits \
   --output-dir python_xstar/helike_type69/c5_ne1 \
   --original-run-dir original_xstar/helike_type69/c5_ne1 \
+  --print-summary
+```
+
+
+### `143_prepare_xstar_python_cache.py`
+
+Prebuild and validate the source-port derived-pointer and output-metadata NPZ
+caches used by the physical Python runner. The first run writes the caches;
+subsequent runs validate and reuse them.
+
+```bash
+PYTHONPATH=src python examples/143_prepare_xstar_python_cache.py \
+  --atdb /path/to/atdb.fits \
+  --progress \
   --print-summary
 ```

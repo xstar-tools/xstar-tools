@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import sys
@@ -35,9 +36,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--step-rtol", type=float, default=5.0e-3)
     parser.add_argument("--step-atol", type=float, default=5.0e-3)
     parser.add_argument("--no-overwrite", action="store_true")
+    parser.add_argument(
+        "--cache-dir",
+        help=(
+            "directory for vectorized source-port NPZ caches; by default the "
+            "cache sidecars are written beside atdb.fits"
+        ),
+    )
+    parser.add_argument("--no-cache", action="store_true", help="disable NPZ pointer/metadata caches")
+    parser.add_argument("--rebuild-cache", action="store_true", help="rebuild both source-port NPZ caches")
     parser.add_argument("--summary-json", help="write machine-readable run/parity summary")
     parser.add_argument("--print-summary", action="store_true")
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="print live ATDB/cache/pass/zone/writer/comparator progress",
+    )
     return parser
+
+
+def _progress_printer(event: str, details: dict[str, object]) -> None:
+    stamp = datetime.now().isoformat(timespec="seconds")
+    payload = " ".join(f"{key}={value}" for key, value in sorted(details.items()))
+    print(f"[{stamp}] {event}" + (f" {payload}" if payload else ""), flush=True)
 
 
 def _load_command(args: argparse.Namespace) -> str:
@@ -58,6 +79,13 @@ def _print_run(summary: dict[str, object]) -> None:
     products = summary.get("products", {})
     print("written_products=" + repr(sorted(products)))
     print("xstar_outputs_used_as_python_inputs=" + str(summary.get("provenance", {}).get("xstar_outputs_used_as_python_inputs")))
+    provenance = summary.get("provenance", {})
+    for key in (
+        "pointer_cache_path", "pointer_cache_status",
+        "metadata_cache_path", "metadata_cache_status",
+    ):
+        if key in provenance:
+            print(f"{key}={provenance.get(key)}")
     warnings = summary.get("warnings", [])
     if warnings:
         print("warnings=" + repr(warnings))
@@ -65,6 +93,7 @@ def _print_run(summary: dict[str, object]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    progress_callback = _progress_printer if args.progress else None
     try:
         if args.original_run_dir is not None:
             if args.run_script is None:
@@ -83,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
                 step_atol=args.step_atol,
                 require_original_products=True,
                 raise_on_failure=False,
+                cache_dir=args.cache_dir,
+                use_cache=not args.no_cache,
+                rebuild_cache=args.rebuild_cache,
+                progress_callback=progress_callback,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -106,6 +139,10 @@ def main(argv: list[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 coheat_path=args.coheat_data,
                 overwrite=not args.no_overwrite,
+                cache_dir=args.cache_dir,
+                use_cache=not args.no_cache,
+                rebuild_cache=args.rebuild_cache,
+                progress_callback=progress_callback,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -117,6 +154,10 @@ def main(argv: list[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 coheat_path=args.coheat_data,
                 overwrite=not args.no_overwrite,
+                cache_dir=args.cache_dir,
+                use_cache=not args.no_cache,
+                rebuild_cache=args.rebuild_cache,
+                progress_callback=progress_callback,
             )
             summary = result.as_dict()
             if args.print_summary:

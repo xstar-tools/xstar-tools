@@ -2,7 +2,7 @@
 
 `xstar-atomic` reads XSTAR's packed `atdb.fits` atomic database, evaluates selected XSTAR rate formulae, builds prototype level-population products, and provides source-code-first validation tools for comparing against same-run XSTAR outputs.
 
-The package is not intended to replace XSTAR yet. Its present purpose is to make the atomic-data and local-rate pieces auditable from Python, with explicit provenance for the XSTAR record, source-code branch, local plasma state, radiation field, escape treatment, compact element basis, and population-matrix term. The long-term roadmap now includes a source-equivalent Python implementation of the local plasma, element-population, transfer, and output layers, followed by a C++ backend for performance-critical kernels.
+The package now includes a bounded public Python physical runner in addition to the atomic-data and source-code audit APIs. The translated local, radial, and output path is still undergoing physical all-ATDB parity testing and is not yet a general replacement for every XSTAR input branch. A C++ backend remains deferred until Python physical parity is accepted.
 
 The detailed architecture and physics reference is [XSTAR atomic database, source architecture, physics, and implementation roadmap](xstar_atdb_source_physics_implementation_guide.md). A LaTeX version is provided as `docs/xstar_atdb_source_physics_implementation_guide.tex`.
 
@@ -53,7 +53,24 @@ python -m pip install -e .[hdf5]
 python -m pip install -e .[sparse]
 ```
 
-### 1.2 Configure `atdb.fits`
+### 1.2 Prepare the vectorized source-port caches
+
+v0.4.73 uses validated NumPy NPZ sidecars for the translated pointer hierarchy
+and output metadata. Build them once before a long physical run:
+
+```bash
+PYTHONPATH=src python examples/143_prepare_xstar_python_cache.py \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --progress --print-summary
+```
+
+By default the files are written beside `atdb.fits` as
+`atdb.fits.xstar_atomic_source_port.npz` and
+`atdb.fits.xstar_atomic_output_metadata.npz`. Use `--cache-dir` when the XSTAR
+data directory is read-only. The physical runner accepts `--no-cache`,
+`--rebuild-cache`, and `--progress`.
+
+### 1.3 Configure `atdb.fits`
 
 The main database is XSTAR's packed atomic database, usually located at:
 
