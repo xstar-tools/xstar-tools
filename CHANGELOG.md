@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.4.75 source-ordered continuum workspace chaining - 2026-05-23
+
+v0.4.75 fixes the first all-ATDB radial-shell failure that remained after the
+v0.4.74 continuum-capacity correction. The production physical runner had
+constructed the immutable `comp2`, `freef`, `bremem`, and `heatf` contexts from
+the same pre-continuum `opakc`/`brcems` snapshots. Original
+`calc_hmc_all.f90` instead calls them in literal mutable order:
+
+`comp2 -> freef(opakc in/out) -> bremem(opakc after freef, brcems in/out) -> heatf(fresh outputs)`.
+
+The physical `calc_kwargs_factory` now replays that exact ownership chain for
+every DSEC trial: `bremem` receives the opacity returned by the immediately
+preceding `freef`, and `heatf` receives the freshly generated bremsstrahlung
+emissivity, free-free heating, and Compton coefficients. This removes
+`CalcHMCAllError: bremem incoming opakc does not match preceding freef output`
+without weakening the source-state consistency checks.
+
+Two new regressions cover both a zero-initialized first call and a carried
+continuum workspace from a prior DSEC evaluation. Existing v0.4.73 NPZ caches
+remain valid. No atomic-rate, matrix, thermal, transfer, or output formula was
+changed; the real C V physical parity run remains the external acceptance gate.
+
 ## v0.4.74 full-capacity continuum arrays and extracted-sdist test fix - 2026-05-23
 
 v0.4.74 preserves the v0.4.73 vectorized ATDB/metadata NPZ caches and corrects

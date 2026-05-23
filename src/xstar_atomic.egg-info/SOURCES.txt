@@ -777,6 +777,7 @@ tests/test_source_port_v0470_pprint_physical_output.py
 tests/test_source_port_v0471_physical_benchmark_suite.py
 tests/test_source_port_v0472_physical_runner_api.py
 tests/test_source_port_v0473_cache_performance.py
+tests/test_source_port_v0475_continuum_chain.py
 tests/test_stage6_cascade_yield_source.py
 tests/test_stage6_examples.py
 tests/test_stage6_source_fit_helpers.py

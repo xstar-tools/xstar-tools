@@ -34,13 +34,16 @@ from .atomic_database import (
     default_derived_pointer_cache_path,
     load_atomic_database_state,
 )
-from .bremsstrahlung import BremsstrahlungContext
-from .compton import Comp2Context, load_compton_table
+from .bremsstrahlung import (
+    BremsstrahlungContext,
+    bremem_continuum_result,
+)
+from .compton import Comp2Context, comp2_continuum_result, load_compton_table
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .emissivity import CalcEmisabContext
-from .free_free import FreeFreeContext
+from .free_free import FreeFreeContext, freef_continuum_result
 from .local_zone import FixedStateCalcHMCAllResult, FixedStateElementRequest
 from .output_writers import (
     LevelOutputMetadata,
@@ -988,15 +991,63 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             opakc = np.zeros(n, dtype=float)
         if brcems is None:
             brcems = np.zeros(n, dtype=float)
-        comp = Comp2Context(epi_eV=epi, bremsa=brem, table=compton_table, ncn2=n, source="run_xstar_python:comp2")
-        free = FreeFreeContext(epi_eV=epi, bremsa=brem, opakc_before_cm_inv=np.asarray(opakc, dtype=float)[:n], ncn2=n, source="run_xstar_python:freef")
-        bremem = BremsstrahlungContext(epi_eV=epi, brcems_before=np.asarray(brcems, dtype=float)[:n], opakc_before_cm_inv=np.asarray(opakc, dtype=float)[:n], ncn2=n, source="run_xstar_python:bremem")
+        # The Fortran sequence owns one mutable continuum workspace:
+        #
+        #   comp2 -> freef(opakc in/out) -> bremem(opakc after freef,
+        #   brcems in/out) -> heatf(fresh leaf results)
+        #
+        # Context dataclasses are immutable snapshots, so construct them in
+        # literal source order.  Building every context from the same incoming
+        # arrays (the v0.4.73/v0.4.74 behavior) loses freef's in-place opakc
+        # mutation before bremem and is rejected by calc_hmc_all.
+        comp = Comp2Context(
+            epi_eV=epi,
+            bremsa=brem,
+            table=compton_table,
+            ncn2=n,
+            source="run_xstar_python:comp2",
+        )
+        comp_result, _ = comp2_continuum_result(
+            comp,
+            temperature_k=runtime.temperature_k,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            electron_fraction_xee=runtime.electron_fraction_xee,
+        )
+
+        free = FreeFreeContext(
+            epi_eV=epi,
+            bremsa=brem,
+            opakc_before_cm_inv=np.asarray(opakc, dtype=float)[:n],
+            ncn2=n,
+            source="run_xstar_python:freef",
+        )
+        free_result, _ = freef_continuum_result(
+            free,
+            temperature_k=runtime.temperature_k,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            electron_fraction_xee=runtime.electron_fraction_xee,
+        )
+
+        bremem = BremsstrahlungContext(
+            epi_eV=epi,
+            brcems_before=np.asarray(brcems, dtype=float)[:n],
+            opakc_before_cm_inv=free_result.opakc_after_cm_inv,
+            ncn2=n,
+            source="run_xstar_python:bremem",
+        )
+        bremem_result, _ = bremem_continuum_result(
+            bremem,
+            temperature_k=runtime.temperature_k,
+            hydrogen_density_cm3=runtime.hydrogen_density_cm3,
+            electron_fraction_xee=runtime.electron_fraction_xee,
+        )
+
         heat = HeatFContext(
             epi_eV=epi,
-            brcems=np.asarray(brcems, dtype=float)[:n],
-            htfreef_erg_cm3_s=0.0,
-            cmp1=0.0,
-            cmp2=0.0,
+            brcems=bremem_result.brcems_after,
+            htfreef_erg_cm3_s=free_result.htfreef_erg_cm3_s,
+            cmp1=comp_result.cmp1,
+            cmp2=comp_result.cmp2,
             httot_before=0.0,
             cltot_before=0.0,
             httot2_before=0.0,

@@ -1,3 +1,11 @@
+## v0.4.75 source-ordered continuum chain
+
+v0.4.75 preserves the vectorized source-port caches and restores the literal
+`comp2 -> freef -> bremem -> heatf` mutable workspace order in the public
+physical runner. `bremem` now receives `freef`'s updated opacity and `heatf`
+receives the freshly generated continuum outputs for every DSEC trial. Existing
+NPZ caches remain valid; the all-ATDB C V parity run remains the external gate.
+
 ## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate
 
 v0.4.72 adds the first public end-to-end execution API for the translated
