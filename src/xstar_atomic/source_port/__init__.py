@@ -1111,3 +1111,37 @@ __all__.extend([
     "compare_physical_output_directories",
     "run_physical_parity_harness_self_test",
 ])
+
+
+from .physical_benchmark_suite import (
+    REQUIRED_XSTAR_PRODUCTS,
+    CANONICAL_STANDARD_CASES,
+    PhysicalBenchmarkError,
+    ParsedXSTARCommand,
+    OriginalXSTARBenchmarkCase,
+    OriginalExecutionResult,
+    CasePhysicalBenchmarkResult,
+    PhysicalBenchmarkSuiteResult,
+    parse_run_xstar_script,
+    discover_original_xstar_cases,
+    select_benchmark_cases,
+    prepare_original_xstar_suite,
+    products_present,
+    clean_expected_products,
+    run_original_xstar_case,
+    compare_benchmark_case,
+    run_physical_benchmark_suite,
+    write_physical_benchmark_products,
+)
+
+__all__.extend([
+    "REQUIRED_XSTAR_PRODUCTS", "CANONICAL_STANDARD_CASES",
+    "PhysicalBenchmarkError", "ParsedXSTARCommand",
+    "OriginalXSTARBenchmarkCase", "OriginalExecutionResult",
+    "CasePhysicalBenchmarkResult", "PhysicalBenchmarkSuiteResult",
+    "parse_run_xstar_script", "discover_original_xstar_cases",
+    "select_benchmark_cases", "prepare_original_xstar_suite",
+    "products_present", "clean_expected_products",
+    "run_original_xstar_case", "compare_benchmark_case",
+    "run_physical_benchmark_suite", "write_physical_benchmark_products",
+])

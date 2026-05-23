@@ -1,3 +1,12 @@
+> **v0.4.71 update:** converted the supplied 62-case `original_xstar`
+> run-script tree into a strict benchmark manifest and runner. The harness
+> parses literal XSTAR parameters without sourcing shell scripts, identifies
+> the canonical C V/O VII/Mg XI/Ca XIX four-case gate, can regenerate original
+> products, and requires ten output products per case for independent
+> XSTAR-versus-Python comparison. The archive omits those products and the
+> general Python input-to-state runner remains open, so physical all-ATDB parity
+> is not yet claimed.
+
 > **v0.4.70 update:** translated and directly validated the coherent default
 > `lpri=0` legacy `pprint` path. The radial/final caller now writes
 > `xout_step.log` and `xout_abund1.fits` at the literal source boundaries,

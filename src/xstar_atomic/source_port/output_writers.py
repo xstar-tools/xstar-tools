@@ -1557,7 +1557,7 @@ def run_output_writer_validation(
             PprintElementMetadata(2, "He"),
             PprintElementMetadata(3, "O"),
         ),
-        provenance={"fixture": "bounded-pprint-v0.4.70"},
+        provenance={"fixture": "bounded-pprint-v0.4.71"},
     )
     radial = run_bounded_radial_multipass(
         state,
@@ -1796,7 +1796,7 @@ def run_output_writer_validation(
     summary: dict[str, Any] = {
         **direct,
         **parity_harness,
-        "port_version": "v0.4.70",
+        "port_version": "v0.4.71",
         "fparmlist_translated": True,
         "fheader_translated": True,
         "savd_fstepr_writer_sequence_translated": True,

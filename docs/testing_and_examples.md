@@ -1,3 +1,23 @@
+## v0.4.71 original-XSTAR physical benchmark suite
+
+```bash
+PYTHONPATH=src python examples/141_benchmark_original_xstar_outputs.py \
+  --suite-archive original_xstar.tar.gz \
+  --out-dir xstar_physical_benchmark_v0471 \
+  --selection canonical-four \
+  --print-summary
+
+PYTHONPATH=src pytest -q tests/test_source_port_v0471_physical_benchmark_suite.py
+PYTHONPATH=src pytest -q tests/test_source_port*.py
+```
+
+The attached archive contains 62 `run_xstar.sh` definitions but intentionally
+omits the ten output products. Add `--run-original` to regenerate original
+products with the installed XSTAR executable. Supply a mirrored, independently
+generated Python result root with `--python-run-root` to activate the strict
+ten-product case comparison. Missing products or numerical/schema mismatches
+produce exit status 2.
+
 ## v0.4.70 legacy `pprint` and physical output-parity validation
 
 ```bash

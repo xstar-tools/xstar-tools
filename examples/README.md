@@ -1,3 +1,19 @@
+
+### `141_benchmark_original_xstar_outputs.py`
+
+Parses an `original_xstar` run-script archive, inventories all physical cases,
+selects the canonical four-case all-ATDB benchmark, optionally regenerates the
+original products, and compares all ten detail/final outputs against an
+independently generated mirrored Python result tree.
+
+```bash
+PYTHONPATH=src python examples/141_benchmark_original_xstar_outputs.py \
+  --suite-archive original_xstar.tar.gz \
+  --out-dir xstar_physical_benchmark_v0471 \
+  --selection canonical-four \
+  --print-summary
+```
+
 ### `140_validate_xstar_pprint_physical_output.py`
 
 Validates the source-default legacy `pprint` products and, when supplied with

@@ -159,6 +159,65 @@ def _compare_strings(
     )
 
 
+
+
+_HEADER_EXACT_EXCLUDE = {
+    "", "SIMPLE", "XTENSION", "BITPIX", "EXTEND", "PCOUNT", "GCOUNT",
+    "TFIELDS", "EXTNAME", "CHECKSUM", "DATASUM", "DATE", "CREATOR",
+    "ORIGIN", "COMMENT", "HISTORY",
+}
+_HEADER_PREFIX_EXCLUDE = (
+    "NAXIS", "TTYPE", "TFORM", "TUNIT", "TDISP", "TSCAL", "TZERO",
+    "TNULL", "TDIM",
+)
+
+
+def _physical_header_values(header: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for key, value in header.items():
+        name = str(key).strip().upper()
+        if name in _HEADER_EXACT_EXCLUDE or any(name.startswith(prefix) for prefix in _HEADER_PREFIX_EXCLUDE):
+            continue
+        if isinstance(value, (str, int, float, bool, np.integer, np.floating, np.bool_)):
+            values[name] = value
+    return values
+
+
+def _compare_headers(
+    hdu_name: str,
+    xheader: Any,
+    pheader: Any,
+    *,
+    rtol: float,
+    atol: float,
+) -> tuple[bool, list[ColumnParity], list[str]]:
+    xv = _physical_header_values(xheader)
+    pv = _physical_header_values(pheader)
+    ready = True
+    details: list[ColumnParity] = []
+    notes: list[str] = []
+    for key in sorted(set(xv) | set(pv)):
+        if key not in xv or key not in pv:
+            ready = False
+            notes.append(f"{hdu_name} header keyword {key} missing on one side")
+            continue
+        a, b = xv[key], pv[key]
+        if isinstance(a, (int, float, bool, np.integer, np.floating, np.bool_)) and isinstance(
+            b, (int, float, bool, np.integer, np.floating, np.bool_)
+        ):
+            detail = _compare_numeric(
+                hdu_name, f"HEADER:{key}", np.asarray([a]), np.asarray([b]),
+                rtol=rtol, atol=atol,
+            )
+        else:
+            detail = _compare_strings(
+                hdu_name, f"HEADER:{key}", np.asarray([str(a)]), np.asarray([str(b)])
+            )
+        details.append(detail)
+        ready = ready and detail.ready
+    return ready, details, notes
+
+
 def compare_fits_product(
     xstar_path: str | Path,
     python_path: str | Path,
@@ -166,7 +225,7 @@ def compare_fits_product(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> FileParity:
-    """Compare FITS HDU/column schemas and all persisted table values."""
+    """Compare stable headers, HDU/column schemas, and all persisted values."""
     xp = Path(xstar_path)
     pp = Path(python_path)
     present_x = xp.is_file()
@@ -198,7 +257,19 @@ def compare_fits_product(
             if xname != pname:
                 schema_ready = False
                 notes.append(f"HDU {index + 1} name differs: {xname!r} != {pname!r}")
+            header_ready, header_details, header_notes = _compare_headers(
+                xname, xa.header, pa.header, rtol=rtol, atol=atol
+            )
+            schema_ready = schema_ready and header_ready
+            details.extend(header_details)
+            notes.extend(header_notes)
             if not hasattr(xa, "columns") and not hasattr(pa, "columns"):
+                xdata = np.asarray([]) if xa.data is None else np.asarray(xa.data)
+                pdata = np.asarray([]) if pa.data is None else np.asarray(pa.data)
+                if xdata.size or pdata.size:
+                    details.append(
+                        _compare_numeric(xname, "IMAGE_DATA", xdata, pdata, rtol=rtol, atol=atol)
+                    )
                 continue
             xcols = tuple(getattr(xa.columns, "names", ()) or ())
             pcols = tuple(getattr(pa.columns, "names", ()) or ())
@@ -325,11 +396,16 @@ def compare_physical_output_directories(
     atol: float = 1.0e-30,
     step_rtol: float = 5.0e-3,
     step_atol: float = 5.0e-3,
+    required_files: Sequence[str] | None = None,
 ) -> PhysicalOutputParityResult:
     """Compare standard all-ATDB detail/final products from two runs."""
     xd = Path(xstar_run_dir)
     pd = Path(python_run_dir)
-    required = _discover_required_files(xd, pd)
+    required = (
+        tuple(dict.fromkeys(str(name) for name in required_files))
+        if required_files is not None
+        else _discover_required_files(xd, pd)
+    )
     files: list[FileParity] = []
     for name in required:
         if name.endswith(".fits"):
@@ -354,6 +430,7 @@ def compare_physical_output_directories(
             "fits_atol": float(atol),
             "step_rtol": float(step_rtol),
             "step_atol": float(step_atol),
+            "required_files_explicit": required_files is not None,
         },
     )
 

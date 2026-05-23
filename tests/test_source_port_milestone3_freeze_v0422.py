@@ -22,12 +22,12 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.70"
+    assert PORT_LEDGER_VERSION == "v0.4.71"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3, 4)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "run and diagnose physical all-ATDB standard-benchmark detail/final-spectrum "
-        "parity using independent original-XSTAR and Python output directories; only "
-        "after full Python source equivalence consider an optional C++ backend"
+        "build the physical input-to-state Python runner for the canonical four-case "
+        "all-ATDB benchmark, then require strict detail/final-output parity before "
+        "expanding to the complete 62-case suite or considering a C++ backend"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

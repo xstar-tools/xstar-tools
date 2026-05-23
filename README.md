@@ -1,3 +1,28 @@
+## v0.4.71 original-XSTAR physical benchmark
+
+Inventory the supplied 62-case run-script tree and prepare the canonical
+four-case C V / O VII / Mg XI / Ca XIX benchmark:
+
+```bash
+PYTHONPATH=src python examples/141_benchmark_original_xstar_outputs.py \
+  --suite-archive original_xstar.tar.gz \
+  --out-dir xstar_physical_benchmark_v0471 \
+  --selection canonical-four \
+  --print-summary
+```
+
+To regenerate the omitted original XSTAR products, add `--run-original` and,
+when needed, `--xstar-executable /path/to/xstar`. To compare independent Python
+outputs, mirror the case directory structure below a Python root and add
+`--python-run-root /path/to/python_results`. The benchmark requires all ten
+detail/final products per case and exits with status 2 for any missing file or
+mismatch. XSTAR outputs are comparison oracles only; they never initialize the
+Python calculation.
+
+The current release does not yet contain the general physical Python
+input-to-state runner, so inventory/regeneration is ready but physical all-ATDB
+parity is not claimed.
+
 ## v0.4.70 legacy `pprint` products and physical output-parity harness
 
 v0.4.70 replaces the final non-writing `pprint` handler for the source-default

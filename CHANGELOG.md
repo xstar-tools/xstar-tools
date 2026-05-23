@@ -1,5 +1,48 @@
 # CHANGELOG
 
+## v0.4.71 original-XSTAR physical benchmark suite - 2026-05-22
+
+v0.4.71 turns the supplied `original_xstar` run-script tree into a strict,
+reproducible physical-output benchmark. The new harness parses the literal
+`xstar key=value ...` commands without sourcing shell scripts, inventories all
+62 cases, identifies the canonical C V / O VII / Mg XI / Ca XIX four-case
+acceptance subset, and records duplicate physical parameter groups.
+
+The harness can optionally regenerate original XSTAR products by invoking the
+parsed argv directly, and it compares mirrored original/Python case directories
+using an explicit ten-product contract:
+
+```text
+xo01_detail.fits  xo01_detal2.fits  xo01_detal3.fits  xo01_detal4.fits
+xout_abund1.fits xout_spect1.fits xout_lines1.fits xout_cont1.fits
+xout_rrc1.fits   xout_step.log
+```
+
+Case, file, HDU, and column diagnostics are written to JSON, Markdown, and CSV.
+A case passes only when every required file is present and every schema/value
+comparison passes. Original XSTAR outputs remain diagnostic oracles and are
+never used to seed Python state.
+
+The uploaded archive intentionally omits the ten physical products, and the
+general input-parameter-to-live-state Python runner is not yet implemented.
+Therefore v0.4.71 validates the benchmark definition and strict gate but does
+not claim physical all-ATDB parity. The next target is the independent Python
+physical runner for the canonical four cases.
+
+The package dependency markers also prevent the Astropy/NumPy combination that
+failed when older Astropy called the removed `numpy.in1d`: Python 3.11+ now
+requires Astropy 7.2 or newer, while older Python retains NumPy below 2.4.
+
+Run the attached suite inventory with:
+
+```bash
+PYTHONPATH=src python examples/141_benchmark_original_xstar_outputs.py \
+  --suite-archive original_xstar.tar.gz \
+  --out-dir xstar_physical_benchmark_v0471 \
+  --selection canonical-four \
+  --print-summary
+```
+
 ## v0.4.70 legacy `pprint` products and physical output-parity harness - 2026-05-22
 
 v0.4.70 replaces the final non-writing `pprint` handler for the source-default
