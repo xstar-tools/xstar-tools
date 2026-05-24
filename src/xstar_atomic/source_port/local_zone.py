@@ -205,6 +205,10 @@ class FixedStateCalcHMCAllResult:
     element_loop_ready: bool
     charge_closure_scope_complete: bool
     complete_fixed_state_ready: bool
+    # Diagnostic-only, source-ordered carbon state-path trace.  Production
+    # calculations do not consume these rows.  The trace is populated only
+    # when the carbon request enables ``capture_lucy_trace``.
+    carbon_state_path: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     # Shared mutable ``leveltemp`` state after the final element in this
     # ``calc_hmc_all`` call.  ``dsec`` feeds these objects into the next call.
@@ -493,6 +497,74 @@ def calc_hmc_all(
     live_xh0 = xpx * hydrogen_ground_fraction * hydrogen_abundance
     live_xh1 = xpx * (1.0 - hydrogen_ground_fraction) * hydrogen_abundance
 
+    capture_carbon_state_path = any(
+        int(item.element_z) == 6 and bool(item.capture_lucy_trace)
+        for item in elements
+    )
+    carbon_state_path: Dict[str, List[Dict[str, Any]]] = {
+        "hydrogen": [],
+        "levels": [],
+        "stage_totals": [],
+        "aliases": [],
+    }
+    if capture_carbon_state_path:
+        carbon_state_path["hydrogen"].append(
+            {
+                "source": "python",
+                "phase_code": 10,
+                "phase": "calc_hmc_all_entry_hydrogen",
+                "hydrogen_ground_fraction": float(hydrogen_ground_fraction),
+                "hydrogen_abundance": float(hydrogen_abundance),
+                "hydrogen_density_cm3": float(xpx),
+                "neutral_h_density_cm3": float(live_xh0),
+                "ionized_h_density_cm3": float(live_xh1),
+            }
+        )
+
+    def _native_element_rows(
+        *, phase_code: int, phase: str, element_z: int, values: np.ndarray
+    ) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        full_index_offset = 0
+        for ion_index in range(
+            1, min(n_ions + 1, ion_stages.size, ion_elements.size, nlevs.size)
+        ):
+            if int(ion_elements[ion_index]) != int(element_z):
+                continue
+            stage = int(ion_stages[ion_index])
+            nlev = int(nlevs[ion_index])
+            for local_level in range(1, nlev + 1):
+                global_index = int(
+                    global_level_index_by_key.get(
+                        (int(element_z), stage, local_level), 0
+                    )
+                )
+                population = (
+                    float(values[global_index - 1])
+                    if 1 <= global_index <= values.size
+                    else 0.0
+                )
+                rows.append(
+                    {
+                        "source": "python",
+                        "phase_code": int(phase_code),
+                        "phase": str(phase),
+                        "outer_iteration": 0,
+                        "fixed_iteration": 0,
+                        "compact_index": 0,
+                        "superlevel": 0,
+                        "ion_counter": 0,
+                        "ion_stage": stage,
+                        "ion_index": ion_index,
+                        "local_level": local_level,
+                        "global_index": global_index,
+                        "full_element_index": full_index_offset + local_level,
+                        "population": population,
+                    }
+                )
+            full_index_offset += max(0, nlev - 1)
+        return rows
+
     for request in elements:
         request.validate()
         effective_request = replace(
@@ -502,6 +574,15 @@ def calc_hmc_all(
         )
         z = int(effective_request.element_z)
         abundance = float(effective_request.abundance)
+        if capture_carbon_state_path and z == 6:
+            carbon_state_path["levels"].extend(
+                _native_element_rows(
+                    phase_code=20,
+                    phase="calc_hmc_all_map_global_to_element_entry",
+                    element_z=6,
+                    values=global_xilevg_by_index,
+                )
+            )
 
         ion_rate_context = CalcIonRatesContext(
             temperature_k=float(temperature_k),
@@ -593,6 +674,176 @@ def calc_hmc_all(
             }
         if solve is None:
             raise CalcHMCAllError(f"element Z={z} did not produce a population solution")
+
+        if capture_carbon_state_path and z == 6:
+            basis = equilibrium.assembly.basis
+            initial = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
+
+            def _compact_identity(compact_index: int) -> Dict[str, int]:
+                basis_row = basis.row(int(compact_index))
+                ion_stage = int(basis.ion_stage[int(compact_index)])
+                role = next(
+                    (
+                        item for item in reversed(basis_row.roles)
+                        if int(item.get("ion_stage", 0)) == ion_stage
+                    ),
+                    basis_row.roles[-1] if basis_row.roles else {},
+                )
+                return {
+                    "superlevel": int(basis_row.superlevel),
+                    "ion_counter": int(basis_row.ion_counter),
+                    "ion_stage": ion_stage,
+                    "ion_index": int(role.get("ion_index", 0)),
+                    "local_level": int(role.get("local_level", 0)),
+                    "global_index": int(
+                        global_level_index_by_key.get(
+                            (6, ion_stage, int(role.get("local_level", 0))), 0
+                        )
+                    ),
+                }
+
+            def _append_compact(
+                phase_code: int,
+                phase: str,
+                compact_index: int,
+                population: float,
+                *,
+                outer_iteration: int = 0,
+                fixed_iteration: int = 0,
+            ) -> None:
+                identity = _compact_identity(compact_index)
+                # The original msolvelucy interface owns only compact-row,
+                # superlevel and ion-counter identities.  Keep native/global
+                # endpoint fields zero for phases 30--80 so the Python and
+                # Fortran probes compare the same caller-visible state.
+                identity["ion_index"] = 0
+                identity["local_level"] = 0
+                identity["global_index"] = 0
+                carbon_state_path["levels"].append(
+                    {
+                        "source": "python",
+                        "phase_code": int(phase_code),
+                        "phase": str(phase),
+                        "outer_iteration": int(outer_iteration),
+                        "fixed_iteration": int(fixed_iteration),
+                        "compact_index": int(compact_index),
+                        "full_element_index": 0,
+                        "population": float(population),
+                        **identity,
+                    }
+                )
+
+            for compact_index in range(1, int(basis.n_rows) + 1):
+                _append_compact(
+                    30,
+                    "calc_hmc_element_pre_msolvelucy",
+                    compact_index,
+                    float(initial[compact_index]),
+                )
+
+            trace = solve.trace
+            if trace is not None:
+                for row in trace.outer_level_rows:
+                    compact_index = int(row["compact_index"])
+                    outer = int(row["outer_iteration"])
+                    _append_compact(
+                        40, "msolvelucy_outer_start", compact_index,
+                        float(row["population_outer_start"]),
+                        outer_iteration=outer,
+                    )
+                    _append_compact(
+                        50, "msolvelucy_post_condensed", compact_index,
+                        float(row["population_after_condensed"]),
+                        outer_iteration=outer,
+                    )
+                    _append_compact(
+                        70, "msolvelucy_post_fixed_point_outer", compact_index,
+                        float(row["population_after_fixed_point"]),
+                        outer_iteration=outer,
+                        fixed_iteration=int(row["fixed_iterations_this_outer"]),
+                    )
+                for row in trace.fixed_point_rows:
+                    _append_compact(
+                        60, "msolvelucy_fixed_point_after_normalization",
+                        int(row["compact_index"]),
+                        float(row["population_after"]),
+                        outer_iteration=int(row["outer_iteration"]),
+                        fixed_iteration=int(row["fixed_iteration"]),
+                    )
+                # Source xtot is accumulated from the vector at the start of
+                # every outer iteration.  Group the traced rows in the same
+                # compact-index order.
+                outer_groups: Dict[int, List[Dict[str, Any]]] = {}
+                for row in trace.outer_level_rows:
+                    outer_groups.setdefault(int(row["outer_iteration"]), []).append(row)
+                counter_to_stage = {
+                    int(block.ion_counter): int(block.ion_stage)
+                    for block in basis.blocks
+                }
+                for outer, rows in sorted(outer_groups.items()):
+                    totals: Dict[int, float] = {}
+                    for row in sorted(rows, key=lambda item: int(item["compact_index"])):
+                        compact_index = int(row["compact_index"])
+                        if compact_index >= int(basis.n_rows):
+                            continue
+                        counter = int(row["ion_counter"])
+                        totals[counter] = totals.get(counter, 0.0) + float(
+                            row["population_outer_start"]
+                        )
+                    for counter, total_value in sorted(totals.items()):
+                        carbon_state_path["stage_totals"].append(
+                            {
+                                "source": "python",
+                                "phase_code": 41,
+                                "phase": "msolvelucy_outer_start_xtot",
+                                "outer_iteration": int(outer),
+                                "ion_counter": int(counter),
+                                "ion_stage": int(counter_to_stage.get(counter, 0)),
+                                "population_total": float(total_value),
+                            }
+                        )
+
+            final_populations = np.asarray(solve.populations, dtype=float)
+            for compact_index in range(1, int(basis.n_rows) + 1):
+                _append_compact(
+                    80, "msolvelucy_final_vector", compact_index,
+                    float(final_populations[compact_index - 1]),
+                    outer_iteration=int(solve.outer_iterations),
+                )
+            counter_to_stage = {
+                int(block.ion_counter): int(block.ion_stage)
+                for block in basis.blocks
+            }
+            source_totals = np.asarray(solve.ion_population_totals, dtype=float)
+            final_totals = np.asarray(
+                solve.ion_population_totals_final_vector, dtype=float
+            )
+            for counter, stage in sorted(counter_to_stage.items()):
+                slot = counter - 1
+                if 0 <= slot < source_totals.size:
+                    carbon_state_path["stage_totals"].append(
+                        {
+                            "source": "python",
+                            "phase_code": 90,
+                            "phase": "msolvelucy_final_outer_start_xtot",
+                            "outer_iteration": int(solve.outer_iterations),
+                            "ion_counter": counter,
+                            "ion_stage": stage,
+                            "population_total": float(source_totals[slot]),
+                        }
+                    )
+                if 0 <= slot < final_totals.size:
+                    carbon_state_path["stage_totals"].append(
+                        {
+                            "source": "python",
+                            "phase_code": 100,
+                            "phase": "calc_hmc_element_final_vector_xii",
+                            "outer_iteration": int(solve.outer_iterations),
+                            "ion_counter": counter,
+                            "ion_stage": stage,
+                            "population_total": float(final_totals[slot]),
+                        }
+                    )
 
         second_pass_pirt: Dict[int, float] = {}
         second_pass_rrrt: Dict[int, float] = {}
@@ -747,6 +998,44 @@ def calc_hmc_all(
                         full_bile[full_index] = 0.0
                 ipmat += nlev - 1
 
+            if capture_carbon_state_path and z == 6:
+                full_offset = 0
+                for ion_index, stage, nlev in all_ions:
+                    for local_level in range(1, nlev + 1):
+                        full_index = full_offset + local_level
+                        global_index = int(
+                            global_level_index_by_key.get(
+                                (6, int(stage), local_level), 0
+                            )
+                        )
+                        carbon_state_path["levels"].append(
+                            {
+                                "source": "python",
+                                "phase_code": 110,
+                                "phase": "calc_hmc_element_workspace_writeback",
+                                "outer_iteration": int(solve.outer_iterations),
+                                "fixed_iteration": 0,
+                                "compact_index": int(
+                                    block_by_ion[ion_index].compact_index(local_level)
+                                    if ion_index in block_by_ion else 0
+                                ),
+                                "superlevel": int(
+                                    basis.row(block_by_ion[ion_index].compact_index(local_level)).superlevel
+                                    if ion_index in block_by_ion else 0
+                                ),
+                                "ion_counter": int(
+                                    getattr(block_by_ion.get(ion_index), "ion_counter", 0)
+                                ),
+                                "ion_stage": int(stage),
+                                "ion_index": int(ion_index),
+                                "local_level": int(local_level),
+                                "global_index": global_index,
+                                "full_element_index": int(full_index),
+                                "population": float(full_x[full_index]),
+                            }
+                        )
+                    full_offset += nlev - 1
+
             ipmat = 0
             for ion_index, stage, nlev in all_ions:
                 for local_level in range(1, nlev + 1):
@@ -769,6 +1058,57 @@ def calc_hmc_all(
                     rnisg[key] = rn
                     bilevg[key] = bile
                 ipmat += nlev - 1
+
+            if capture_carbon_state_path and z == 6:
+                carbon_state_path["levels"].extend(
+                    _native_element_rows(
+                        phase_code=120,
+                        phase="calc_hmc_all_global_writeback",
+                        element_z=6,
+                        values=global_xilevg_by_index,
+                    )
+                )
+                for lower, upper in zip(all_ions[:-1], all_ions[1:]):
+                    lower_ion, lower_stage, lower_nlev = lower
+                    upper_ion, upper_stage, _upper_nlev = upper
+                    lower_global = int(
+                        global_level_index_by_key.get(
+                            (6, int(lower_stage), int(lower_nlev)), 0
+                        )
+                    )
+                    upper_global = int(
+                        global_level_index_by_key.get(
+                            (6, int(upper_stage), 1), 0
+                        )
+                    )
+                    lower_value = (
+                        float(global_xilevg_by_index[lower_global - 1])
+                        if 1 <= lower_global <= global_xilevg_by_index.size
+                        else 0.0
+                    )
+                    upper_value = (
+                        float(global_xilevg_by_index[upper_global - 1])
+                        if 1 <= upper_global <= global_xilevg_by_index.size
+                        else 0.0
+                    )
+                    carbon_state_path["aliases"].append(
+                        {
+                            "source": "python",
+                            "phase_code": 130,
+                            "phase": "calc_hmc_all_alias_boundary",
+                            "lower_ion_index": int(lower_ion),
+                            "lower_ion_stage": int(lower_stage),
+                            "lower_local_level": int(lower_nlev),
+                            "lower_global_index": lower_global,
+                            "lower_population": lower_value,
+                            "upper_ion_index": int(upper_ion),
+                            "upper_ion_stage": int(upper_stage),
+                            "upper_local_level": 1,
+                            "upper_global_index": upper_global,
+                            "upper_population": upper_value,
+                            "absolute_difference": abs(lower_value - upper_value),
+                        }
+                    )
 
         element_results.append(
             FixedStateElementResult(
@@ -1120,6 +1460,7 @@ def calc_hmc_all(
         element_loop_ready=all_ready,
         charge_closure_scope_complete=charge_scope_complete,
         complete_fixed_state_ready=complete,
+        carbon_state_path=carbon_state_path,
         leveltemp_workspace=leveltemp_workspace,
         leveltemp_owner_by_column=leveltemp_owner_by_column,
         global_element_index_by_z=global_element_index_by_z,

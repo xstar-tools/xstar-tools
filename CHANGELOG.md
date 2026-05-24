@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.4.86 — diagnostic-only exact source-order carbon state path - 2026-05-24
+
+- Adds matching Python and original-XSTAR observations for live hydrogen entry state, incoming carbon global mapping, compact pre-solve state, every Lucy outer/fixed iteration, final vector and stage totals, element/global writeback, and continuum/ground aliases.
+- Emits four new Python products, four original probe products, and four comparison CSVs.
+- Reports a structured `source_order_first_divergence` with phase, source locus, row identity, and numerical difference.
+- Keeps new state-path comparisons diagnostic-only and outside the existing thermal acceptance gate.
+- Preserves compatibility with older v0.4.79 probe directories where the new files are absent.
+- Reconciles the v0.4.78 audit: all six old production/solver “Still open” items were fixed in v0.4.85; input-fingerprint canonicalization remains open diagnostic work.
+- Makes no production rate, matrix, solver, DSEC, radial, FITS, tolerance, cache-schema, or empirical-correction change.
+
 ## v0.4.85 — live hydrogen charge-exchange state and strict production `msolvelucy` - 2026-05-23
 
 - Reconstructs `xh0=xpx*xilevg(1)*abel(1)` and `xh1=xpx*(1-xilevg(1))*abel(1)` from the incoming dense global H I population at every `calc_hmc_all` call.

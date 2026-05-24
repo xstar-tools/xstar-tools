@@ -45,6 +45,31 @@ def _read(path: Path) -> list[dict[str, str]]:
     return list(_iter_rows(path))
 
 
+def _read_optional(path: Path) -> list[dict[str, str]]:
+    """Read a bounded optional diagnostic product, returning an empty list."""
+    if not path.is_file():
+        return []
+    return list(_iter_rows(path))
+
+
+_STATE_PHASE_NAMES = {
+    10: "calc_hmc_all_entry_hydrogen",
+    20: "calc_hmc_all_map_global_to_element_entry",
+    30: "calc_hmc_element_pre_msolvelucy",
+    40: "msolvelucy_outer_start",
+    41: "msolvelucy_outer_start_xtot",
+    50: "msolvelucy_post_condensed",
+    60: "msolvelucy_fixed_point_after_normalization",
+    70: "msolvelucy_post_fixed_point_outer",
+    80: "msolvelucy_final_vector",
+    90: "msolvelucy_final_outer_start_xtot",
+    100: "calc_hmc_element_final_vector_xii",
+    110: "calc_hmc_element_workspace_writeback",
+    120: "calc_hmc_all_global_writeback",
+    130: "calc_hmc_all_alias_boundary",
+}
+
+
 def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -959,9 +984,107 @@ def analyze_xstar_zone1_probe(
     cooling_path = out / "xstar_zone1_carbon_cooling_terms.csv"
     _write(cooling_path, cooling)
 
+    # v0.4.86 diagnostic-only source-order state path.  These files are
+    # optional so older v0.4.79 probe directories remain analyzable.
+    hydrogen_raw = [
+        row for row in _read_optional(root / "xstar_zone1_hydrogen_state_path_probe.csv")
+        if int(row.get("calc_hmc_all_call_id", 0)) == target_call
+    ]
+    hydrogen_state_rows = [
+        {
+            "source": "xstar",
+            "evaluation_index": target_eval,
+            "phase_code": 10,
+            "phase": _STATE_PHASE_NAMES[10],
+            "hydrogen_ground_fraction": parse_fortran_float(row["xilevg1"]),
+            "hydrogen_abundance": parse_fortran_float(row["abel1"]),
+            "hydrogen_density_cm3": parse_fortran_float(row["xpx"]),
+            "neutral_h_density_cm3": parse_fortran_float(row["xh0"]),
+            "ionized_h_density_cm3": parse_fortran_float(row["xh1"]),
+        }
+        for row in hydrogen_raw
+    ]
+    hydrogen_state_path = out / "xstar_zone1_hydrogen_state_path.csv"
+    _write(hydrogen_state_path, hydrogen_state_rows)
+
+    carbon_state_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_carbon_state_path_probe.csv"):
+        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+            continue
+        phase_code = int(row["phase_code"])
+        carbon_state_rows.append(
+            {
+                "source": "xstar",
+                "evaluation_index": target_eval,
+                "phase_code": phase_code,
+                "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+                "outer_iteration": int(row.get("outer_iteration", 0)),
+                "fixed_iteration": int(row.get("fixed_iteration", 0)),
+                "compact_index": int(row.get("compact_index", 0)),
+                "superlevel": int(row.get("superlevel", 0)),
+                "ion_counter": int(row.get("ion_counter", 0)),
+                "ion_stage": int(row.get("ion_stage", 0)),
+                "ion_index": int(row.get("ion_index", 0)),
+                "local_level": int(row.get("local_level", 0)),
+                "global_index": int(row.get("global_index", 0)),
+                "full_element_index": int(row.get("full_element_index", 0)),
+                "population": parse_fortran_float(row["population"]),
+            }
+        )
+    carbon_state_path = out / "xstar_zone1_carbon_state_path_T73198p4K.csv"
+    _write(carbon_state_path, carbon_state_rows)
+
+    carbon_stage_total_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_carbon_stage_totals_probe.csv"):
+        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+            continue
+        phase_code = int(row["phase_code"])
+        carbon_stage_total_rows.append(
+            {
+                "source": "xstar",
+                "evaluation_index": target_eval,
+                "phase_code": phase_code,
+                "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+                "outer_iteration": int(row.get("outer_iteration", 0)),
+                "ion_counter": int(row.get("ion_counter", 0)),
+                "ion_stage": int(row.get("ion_stage", 0)),
+                "population_total": parse_fortran_float(row["population_total"]),
+            }
+        )
+    carbon_stage_totals_path = out / "xstar_zone1_carbon_stage_totals_T73198p4K.csv"
+    _write(carbon_stage_totals_path, carbon_stage_total_rows)
+
+    carbon_alias_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_carbon_alias_boundaries_probe.csv"):
+        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+            continue
+        lower_population = parse_fortran_float(row["lower_population"])
+        upper_population = parse_fortran_float(row["upper_population"])
+        carbon_alias_rows.append(
+            {
+                "source": "xstar",
+                "evaluation_index": target_eval,
+                "phase_code": 130,
+                "phase": _STATE_PHASE_NAMES[130],
+                "lower_ion_index": int(row["lower_ion_index"]),
+                "lower_ion_stage": int(row["lower_ion_stage"]),
+                "lower_local_level": int(row["lower_local_level"]),
+                "lower_global_index": int(row["lower_global_index"]),
+                "lower_population": lower_population,
+                "upper_ion_index": int(row["upper_ion_index"]),
+                "upper_ion_stage": int(row["upper_ion_stage"]),
+                "upper_local_level": int(row["upper_local_level"]),
+                "upper_global_index": int(row["upper_global_index"]),
+                "upper_population": upper_population,
+                "absolute_difference": abs(lower_population - upper_population),
+            }
+        )
+    carbon_alias_path = out / "xstar_zone1_carbon_alias_boundaries_T73198p4K.csv"
+    _write(carbon_alias_path, carbon_alias_rows)
+
     summary = {
-        "diagnostic_release": "0.4.85",
-        "probe_contract_version": "0.4.79",
+        "diagnostic_release": "0.4.86",
+        "probe_contract_version": "0.4.86",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -985,6 +1108,13 @@ def analyze_xstar_zone1_probe(
         "n_cv_selected_level_population_rows": len(level_population_rows),
         "n_carbon_logical_cooling_terms": len(logical_cooling_rows),
         "n_carbon_cooling_terms": len(cooling),
+        "n_hydrogen_state_path_rows": len(hydrogen_state_rows),
+        "n_carbon_state_path_rows": len(carbon_state_rows),
+        "n_carbon_stage_total_rows": len(carbon_stage_total_rows),
+        "n_carbon_alias_rows": len(carbon_alias_rows),
+        "source_order_state_path_probe_available": bool(
+            hydrogen_state_rows and carbon_state_rows and carbon_stage_total_rows
+        ),
         "production_rates_modified": False,
         "probe_is_observation_only": True,
         "production_solver_modified": False,
@@ -1013,6 +1143,10 @@ def analyze_xstar_zone1_probe(
         "logical_cooling_csv": logical_cooling_path,
         "matrix_csv": matrix_path,
         "cooling_csv": cooling_path,
+        "hydrogen_state_path_csv": hydrogen_state_path,
+        "carbon_state_path_csv": carbon_state_path,
+        "carbon_stage_totals_csv": carbon_stage_totals_path,
+        "carbon_alias_boundaries_csv": carbon_alias_path,
         "summary_json": summary_path,
     }
 
@@ -1473,6 +1607,144 @@ def compare_zone1_probe_with_python(
         bool(row["within_tolerance"]) for row in cooling_rows
     )
 
+    # v0.4.86 source-order state-path comparison.  This is diagnostic-only
+    # until the newly instrumented original XSTAR has generated the products.
+    py_state = _read_optional(py / "python_zone1_carbon_state_path_T73198p4K.csv")
+    xs_state = _read_optional(xs / "xstar_zone1_carbon_state_path_T73198p4K.csv")
+    state_keys = (
+        "phase_code", "outer_iteration", "fixed_iteration",
+        "compact_index", "superlevel", "ion_counter", "ion_stage",
+        "ion_index", "local_level", "global_index", "full_element_index",
+    )
+    state_rows = _numeric_comparison(
+        py_state, xs_state, keys=state_keys, fields=("population",),
+        rtol=rtol, atol=atol,
+    ) if py_state or xs_state else []
+    state_path = out / "zone1_carbon_state_path_comparison_T73198p4K.csv"
+    _write(state_path, state_rows)
+    py_state_keys = {tuple(str(row.get(key, "")) for key in state_keys) for row in py_state}
+    xs_state_keys = {tuple(str(row.get(key, "")) for key in state_keys) for row in xs_state}
+    state_path_ready = bool(state_rows) and len(py_state_keys) == len(py_state) and len(xs_state_keys) == len(xs_state) and py_state_keys == xs_state_keys and all(bool(row["within_tolerance"]) for row in state_rows)
+
+    py_stage = _read_optional(py / "python_zone1_carbon_stage_totals_T73198p4K.csv")
+    xs_stage = _read_optional(xs / "xstar_zone1_carbon_stage_totals_T73198p4K.csv")
+    stage_keys = ("phase_code", "outer_iteration", "ion_counter", "ion_stage")
+    stage_rows = _numeric_comparison(
+        py_stage, xs_stage, keys=stage_keys, fields=("population_total",),
+        rtol=rtol, atol=atol,
+    ) if py_stage or xs_stage else []
+    stage_path = out / "zone1_carbon_stage_total_comparison_T73198p4K.csv"
+    _write(stage_path, stage_rows)
+    py_stage_keys = {tuple(str(row.get(key, "")) for key in stage_keys) for row in py_stage}
+    xs_stage_keys = {tuple(str(row.get(key, "")) for key in stage_keys) for row in xs_stage}
+    stage_totals_ready = bool(stage_rows) and len(py_stage_keys) == len(py_stage) and len(xs_stage_keys) == len(xs_stage) and py_stage_keys == xs_stage_keys and all(bool(row["within_tolerance"]) for row in stage_rows)
+
+    py_h = _read_optional(py / "python_zone1_hydrogen_state_path.csv")
+    xs_h = _read_optional(xs / "xstar_zone1_hydrogen_state_path.csv")
+    # The Python file contains all evaluations; the original analysis contains
+    # the selected target evaluation only.
+    target_evals = {str(row.get("evaluation_index", "")) for row in xs_h}
+    py_h = [row for row in py_h if str(row.get("evaluation_index", "")) in target_evals]
+    hydrogen_rows = _numeric_comparison(
+        py_h, xs_h, keys=("evaluation_index", "phase_code"),
+        fields=(
+            "hydrogen_ground_fraction", "hydrogen_abundance",
+            "hydrogen_density_cm3", "neutral_h_density_cm3",
+            "ionized_h_density_cm3",
+        ), rtol=rtol, atol=atol,
+    ) if py_h or xs_h else []
+    hydrogen_path = out / "zone1_hydrogen_state_path_comparison_T73198p4K.csv"
+    _write(hydrogen_path, hydrogen_rows)
+    hydrogen_state_ready = bool(hydrogen_rows) and all(bool(row["within_tolerance"]) for row in hydrogen_rows)
+
+    py_alias = _read_optional(py / "python_zone1_carbon_alias_boundaries_T73198p4K.csv")
+    xs_alias = _read_optional(xs / "xstar_zone1_carbon_alias_boundaries_T73198p4K.csv")
+    alias_keys = (
+        "lower_ion_index", "lower_ion_stage", "lower_local_level",
+        "lower_global_index", "upper_ion_index", "upper_ion_stage",
+        "upper_local_level", "upper_global_index",
+    )
+    alias_rows = _numeric_comparison(
+        py_alias, xs_alias, keys=alias_keys,
+        fields=("lower_population", "upper_population", "absolute_difference"),
+        rtol=rtol, atol=atol,
+    ) if py_alias or xs_alias else []
+    alias_path = out / "zone1_carbon_alias_boundary_comparison_T73198p4K.csv"
+    _write(alias_path, alias_rows)
+    alias_ready = bool(alias_rows) and all(bool(row["within_tolerance"]) for row in alias_rows)
+
+    source_order_state_path_probe_available = bool(
+        py_state and xs_state and py_stage and xs_stage and py_h and xs_h
+    )
+
+    def _failure_candidate(rows, phase_code: int | None = None):
+        failed = [row for row in rows if not bool(row.get("within_tolerance", False))]
+        if not failed:
+            return None
+        def _order(row):
+            return (
+                int(row.get("phase_code", phase_code or 0)),
+                int(row.get("outer_iteration", 0)),
+                int(row.get("fixed_iteration", 0)),
+                int(row.get("compact_index", 0)),
+                int(row.get("ion_counter", 0)),
+                int(row.get("ion_stage", 0)),
+                int(row.get("global_index", 0)),
+                str(row.get("field", "")),
+            )
+        return min(failed, key=_order)
+
+    candidates = []
+    for rows, forced_phase, family in (
+        (hydrogen_rows, 10, "hydrogen"),
+        (state_rows, None, "level_state"),
+        (stage_rows, None, "stage_total"),
+        (alias_rows, 130, "alias_boundary"),
+    ):
+        row = _failure_candidate(rows, forced_phase)
+        if row is not None:
+            phase_code = int(row.get("phase_code", forced_phase or 0))
+            candidates.append((phase_code, family, row))
+    first_state_path_divergence = None
+    if candidates:
+        phase_code, family, row = min(
+            candidates,
+            key=lambda item: (
+                item[0],
+                int(item[2].get("outer_iteration", 0)),
+                int(item[2].get("fixed_iteration", 0)),
+                int(item[2].get("compact_index", 0)),
+                int(item[2].get("ion_stage", 0)),
+            ),
+        )
+        if phase_code <= 20:
+            locus = "incoming_global_state_or_live_hydrogen"
+        elif phase_code == 30:
+            locus = "global_to_compact_mapping"
+        elif phase_code < 100:
+            locus = "msolvelucy_iteration_path"
+        elif phase_code == 100:
+            locus = "final_vector_xii_accumulation"
+        elif phase_code == 110:
+            locus = "element_workspace_writeback"
+        elif phase_code == 120:
+            locus = "global_xilevg_writeback"
+        else:
+            locus = "continuum_ground_alias_writeback"
+        first_state_path_divergence = {
+            "family": family,
+            "phase_code": phase_code,
+            "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+            "locus": locus,
+            **{key: row.get(key) for key in (
+                "outer_iteration", "fixed_iteration", "compact_index",
+                "ion_counter", "ion_stage", "ion_index", "local_level",
+                "global_index", "full_element_index", "field",
+                "python_value", "xstar_value", "absolute_difference",
+                "relative_difference",
+            ) if key in row},
+        }
+
     # Keep the old raw-fingerprint comparison as an observation, not a gate.
     py_fp = _read(py / "python_zone1_calc_hmc_all_input_fingerprints.csv")
     xs_fp = _read(xs / "xstar_zone1_calc_hmc_all_input_fingerprints.csv")
@@ -1515,8 +1787,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.85",
-        "probe_contract_version": "0.4.79",
+        "diagnostic_release": "0.4.86",
+        "probe_contract_version": "0.4.86",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -1569,6 +1841,14 @@ def compare_zone1_probe_with_python(
         "cv_normalization_row_ready": normalization_ready,
         "cv_level20_population_parity_ready": level20_ready,
         "carbon_cooling_logical_parity_ready": cooling_ready,
+        "source_order_state_path_probe_available": source_order_state_path_probe_available,
+        "hydrogen_state_path_parity_ready": hydrogen_state_ready,
+        "carbon_state_path_parity_ready": state_path_ready,
+        "carbon_stage_totals_parity_ready": stage_totals_ready,
+        "carbon_alias_boundary_parity_ready": alias_ready,
+        "state_path_probe_is_diagnostic_only": True,
+        "source_order_first_divergence": first_state_path_divergence,
+        "production_physics_modified_in_this_release": False,
         "thermal_root_may_continue": thermal_root_ready,
         "input_fingerprint_common_count": len(fp_rows),
         "input_fingerprint_exact_observation": bool(fp_rows) and all(
@@ -1609,6 +1889,10 @@ def compare_zone1_probe_with_python(
         "normalization_row_comparison_csv": normalization_path,
         "cv_level_population_comparison_csv": level_path,
         "cooling_comparison_csv": cooling_path,
+        "carbon_state_path_comparison_csv": state_path,
+        "carbon_stage_total_comparison_csv": stage_path,
+        "hydrogen_state_path_comparison_csv": hydrogen_path,
+        "carbon_alias_boundary_comparison_csv": alias_path,
         "summary_json": summary_path,
         "summary_markdown": markdown_path,
     }

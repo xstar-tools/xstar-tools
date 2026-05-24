@@ -236,6 +236,10 @@ def test_v0478_original_probe_bundle_captures_complete_sequence_and_required_aud
     assert "xap_zone1_calc_ion_rate_record" in helper
     assert "xap_zone1_normalization_row" in helper
     assert "xap_zone1_level_population" in helper
+    assert "xap_zone1_hydrogen_state" in helper
+    assert "xap_zone1_carbon_state_path" in helper
+    assert "xap_zone1_carbon_stage_total" in helper
+    assert "xap_zone1_alias_candidate" in helper
     snippets = zone1_insertion_snippets()
     assert set(snippets) == {
         "calc_hmc_all_entry_arrays",
@@ -246,6 +250,12 @@ def test_v0478_original_probe_bundle_captures_complete_sequence_and_required_aud
         "ucalc_type15_shell",
         "msolvelucy_normalization_row",
         "calc_hmc_element_level_population",
+        "calc_hmc_all_live_hydrogen_state",
+        "calc_hmc_all_carbon_incoming_state",
+        "calc_hmc_all_carbon_global_writeback",
+        "calc_hmc_element_carbon_pre_solve",
+        "calc_hmc_element_carbon_writeback_and_xii",
+        "msolvelucy_source_order_state_path",
     }
     manifest = products["zone1_manifest"].read_text(encoding="utf-8")
     assert "XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION=0" in manifest
@@ -301,4 +311,4 @@ def test_v0478_scope_constants_are_exact_and_no_empirical_correction_exists():
     assert TARGET_CV_LOCAL_LEVELS == (4, 5, 6, 10, 11, 12, 20)
     source = Path(diagnostic.__file__).read_text(encoding="utf-8")
     assert "empirical correction" not in source.lower()
-    assert xa.__version__ == "0.4.85"
+    assert xa.__version__ == "0.4.86"

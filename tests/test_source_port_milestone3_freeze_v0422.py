@@ -22,14 +22,14 @@ def test_updated_translation_ledger_marks_milestones_1_to_3_and_next_target():
     ledger = default_port_ledger()
     by_routine = {entry.routine: entry for entry in ledger.entries}
 
-    assert PORT_LEDGER_VERSION == "v0.4.85"
+    assert PORT_LEDGER_VERSION == "v0.4.86"
     assert COMPLETED_SOURCE_PORT_MILESTONES == (1, 2, 3)
     assert NEXT_COHERENT_SOURCE_PORT_TARGET == (
-        "rerun the production zone-1 diagnostic after v0.4.85 reconstructs xh0/xh1 "
-        "from incoming global H I and enables strict source msolvelucy semantics; require "
-        "the initial compact population vector, logical carbon cooling, and "
-        "thermal_root_may_continue to pass before c5_ne1 ten-product parity and the "
-        "canonical four-case and 62-case suites"
+        "rebuild the observation-only v0.4.86 original-XSTAR state-path probe and "
+        "compare the first divergence across incoming carbon xilevg, compact pre-solve "
+        "x, every source-ordered msolvelucy outer/fixed iteration, final xii, element "
+        "workspace writeback, global writeback, and continuum/ground aliases; do not "
+        "apply another production correction until that first divergence is proven"
     )
     for routine in (
         "readtbl", "setptrs", "ucalc", "levwk", "levwkelement",

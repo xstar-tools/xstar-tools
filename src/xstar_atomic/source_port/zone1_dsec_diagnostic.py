@@ -762,6 +762,72 @@ def extract_python_carbon_initial_populations(
     )
 
 
+def extract_python_carbon_state_path(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return the diagnostic-only source-ordered carbon level path."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in trace.get("levels", ())
+    )
+
+
+def extract_python_carbon_stage_totals(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return source-ordered C III--C VI totals around ``msolvelucy``."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in trace.get("stage_totals", ())
+    )
+
+
+def extract_python_carbon_alias_boundaries(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return lower-continuum/next-ground alias values after global writeback."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in trace.get("aliases", ())
+    )
+
+
+def extract_python_hydrogen_state_path(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return the live H I/H II charge-exchange state at calc_hmc_all entry."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    rows = list(trace.get("hydrogen", ()))
+    if not rows:
+        rows = [
+            {
+                "source": "python",
+                "phase_code": 10,
+                "phase": "calc_hmc_all_entry_hydrogen",
+                "hydrogen_ground_fraction": float(result.hydrogen_ground_fraction),
+                "hydrogen_abundance": float(result.hydrogen_abundance),
+                "hydrogen_density_cm3": float(result.hydrogen_density_cm3),
+                "neutral_h_density_cm3": float(result.neutral_h_density_cm3),
+                "ionized_h_density_cm3": float(result.ionized_h_density_cm3),
+            }
+        ]
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in rows
+    )
+
+
 def extract_python_carbon_normalization_row(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1191,6 +1257,33 @@ def write_zone1_python_diagnostic_products(
             target_result, evaluation_index=target_eval
         ),
     )
+    state_path = out / "python_zone1_carbon_state_path_T73198p4K.csv"
+    state_path_rows = extract_python_carbon_state_path(
+        target_result, evaluation_index=target_eval
+    )
+    _write_rows(state_path, state_path_rows)
+    stage_totals_path = out / "python_zone1_carbon_stage_totals_T73198p4K.csv"
+    stage_total_rows = extract_python_carbon_stage_totals(
+        target_result, evaluation_index=target_eval
+    )
+    _write_rows(stage_totals_path, stage_total_rows)
+    alias_path = out / "python_zone1_carbon_alias_boundaries_T73198p4K.csv"
+    alias_rows = extract_python_carbon_alias_boundaries(
+        target_result, evaluation_index=target_eval
+    )
+    _write_rows(alias_path, alias_rows)
+    hydrogen_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        result = evaluation.fixed_state_result
+        if result is not None:
+            hydrogen_rows.extend(
+                extract_python_hydrogen_state_path(
+                    result, evaluation_index=evaluation_index
+                )
+            )
+    hydrogen_path = out / "python_zone1_hydrogen_state_path.csv"
+    _write_rows(hydrogen_path, hydrogen_rows)
+
     normalization_path = out / "python_zone1_carbon_normalization_row_T73198p4K.csv"
     _write_rows(
         normalization_path,
@@ -1227,7 +1320,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.82",
+        "diagnostic_release": "0.4.86",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -1247,6 +1340,12 @@ def write_zone1_python_diagnostic_products(
         "type59_literal_continuum_offset_corrected": True,
         "type59_literal_pre_swap_reverse_zeroing_corrected": True,
         "n_civ_preliminary_record_rows": len(civ_records),
+        "n_carbon_state_path_rows": len(state_path_rows),
+        "n_carbon_stage_total_rows": len(stage_total_rows),
+        "n_carbon_alias_rows": len(alias_rows),
+        "n_hydrogen_state_rows": len(hydrogen_rows),
+        "source_order_state_path_probe_added": True,
+        "production_physics_modified_in_this_release": False,
         "production_rates_modified": True,
         "production_rate_change_scope": (
             "ucalc_data_type_15_final_shell_threshold_plus_"
@@ -1276,6 +1375,10 @@ def write_zone1_python_diagnostic_products(
         "civ_records_csv": civ_records_path,
         "topology_csv": topology_path,
         "initial_population_csv": initial_population_path,
+        "carbon_state_path_csv": state_path,
+        "carbon_stage_totals_csv": stage_totals_path,
+        "carbon_alias_boundaries_csv": alias_path,
+        "hydrogen_state_path_csv": hydrogen_path,
         "normalization_row_csv": normalization_path,
         "cv_level_populations_csv": level_population_path,
         "logical_cooling_csv": logical_cooling_path,
@@ -1303,6 +1406,10 @@ __all__ = [
     "extract_python_civ_preliminary_records",
     "extract_python_carbon_topology",
     "extract_python_carbon_initial_populations",
+    "extract_python_carbon_state_path",
+    "extract_python_carbon_stage_totals",
+    "extract_python_carbon_alias_boundaries",
+    "extract_python_hydrogen_state_path",
     "extract_python_carbon_normalization_row",
     "extract_python_cv_level_populations",
     "extract_python_cv_matrix_audit",

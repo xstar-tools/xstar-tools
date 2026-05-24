@@ -321,6 +321,138 @@ subroutine xap_zone1_level_population(element_z,ion_stage,ion_index, &
   close(lun)
 9008 format(6(i12,','),es26.16e3)
 end subroutine xap_zone1_level_population
+
+! ----------------------------------------------------------------------
+! xstar-atomic v0.4.86 diagnostic-only exact source-order state-path probe.
+! These routines observe caller-owned values and never modify production
+! rates, matrices, populations, or solver control.
+
+module xap_zone1_alias_probe_state
+  implicit none
+  integer, save :: xap_alias_valid = 0
+  integer, save :: xap_alias_ion_index = 0
+  integer, save :: xap_alias_ion_stage = 0
+  integer, save :: xap_alias_local_level = 0
+  integer, save :: xap_alias_global_index = 0
+  real(8), save :: xap_alias_population = 0.d0
+contains
+  subroutine xap_zone1_alias_reset()
+    xap_alias_valid = 0
+    xap_alias_ion_index = 0
+    xap_alias_ion_stage = 0
+    xap_alias_local_level = 0
+    xap_alias_global_index = 0
+    xap_alias_population = 0.d0
+  end subroutine xap_zone1_alias_reset
+end module xap_zone1_alias_probe_state
+
+subroutine xap_zone1_hydrogen_state(xilevg1,abel1,xpx,xh0,xh1)
+  use xap_calc_hmc_probe_state
+  implicit none
+  real(8),intent(in) :: xilevg1,abel1,xpx,xh0,xh1
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  inquire(file='xstar_zone1_hydrogen_state_path_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_hydrogen_state_path_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,xilevg1,abel1,xpx,xh0,xh1'
+  write(lun,9101) xap_hmc_current_call,xilevg1,abel1,xpx,xh0,xh1
+  close(lun)
+9101 format(i12,5(',',es26.16e3))
+end subroutine xap_zone1_hydrogen_state
+
+subroutine xap_zone1_carbon_state_path(phase_code,outer_iteration, &
+    fixed_iteration,compact_index,superlevel,ion_counter,ion_stage, &
+    ion_index,local_level,global_index,full_element_index,population)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: phase_code,outer_iteration,fixed_iteration
+  integer,intent(in) :: compact_index,superlevel,ion_counter,ion_stage
+  integer,intent(in) :: ion_index,local_level,global_index,full_element_index
+  real(8),intent(in) :: population
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_hmc_current_element_z.ne.6 .and. phase_code.ge.30) return
+  inquire(file='xstar_zone1_carbon_state_path_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_carbon_state_path_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
+    'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
+    'local_level,global_index,full_element_index,population'
+  write(lun,9102) xap_hmc_current_call,phase_code,outer_iteration, &
+    fixed_iteration,compact_index,superlevel,ion_counter,ion_stage, &
+    ion_index,local_level,global_index,full_element_index,population
+  close(lun)
+9102 format(12(i12,','),es26.16e3)
+end subroutine xap_zone1_carbon_state_path
+
+subroutine xap_zone1_carbon_stage_total(phase_code,outer_iteration, &
+    ion_counter,ion_stage,population_total)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: phase_code,outer_iteration,ion_counter,ion_stage
+  real(8),intent(in) :: population_total
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_hmc_current_element_z.ne.6) return
+  inquire(file='xstar_zone1_carbon_stage_totals_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_carbon_stage_totals_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,phase_code,outer_iteration,ion_counter,'// &
+    'ion_stage,population_total'
+  write(lun,9103) xap_hmc_current_call,phase_code,outer_iteration, &
+    ion_counter,ion_stage,population_total
+  close(lun)
+9103 format(5(i12,','),es26.16e3)
+end subroutine xap_zone1_carbon_stage_total
+
+subroutine xap_zone1_alias_candidate(ion_index,ion_stage,local_level,nlev, &
+    global_index,population)
+  use xap_calc_hmc_probe_state
+  use xap_zone1_alias_probe_state
+  implicit none
+  integer,intent(in) :: ion_index,ion_stage,local_level,nlev,global_index
+  real(8),intent(in) :: population
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1) return
+  if (xap_hmc_current_element_z.ne.6) return
+  if (local_level.eq.1 .and. xap_alias_valid.eq.1) then
+    inquire(file='xstar_zone1_carbon_alias_boundaries_probe.csv',exist=exists)
+    open(newunit=lun,file='xstar_zone1_carbon_alias_boundaries_probe.csv', &
+         status='unknown',position='append',action='write',iostat=ios)
+    if (ios.eq.0) then
+      if (.not.exists) write(lun,'(A)') &
+        'calc_hmc_all_call_id,lower_ion_index,lower_ion_stage,'// &
+        'lower_local_level,lower_global_index,lower_population,'// &
+        'upper_ion_index,upper_ion_stage,upper_local_level,'// &
+        'upper_global_index,upper_population'
+      write(lun,9104) xap_hmc_current_call,xap_alias_ion_index, &
+        xap_alias_ion_stage,xap_alias_local_level,xap_alias_global_index, &
+        xap_alias_population,ion_index,ion_stage,local_level,global_index, &
+        population
+      close(lun)
+    endif
+  endif
+  if (local_level.eq.nlev) then
+    xap_alias_valid = 1
+    xap_alias_ion_index = ion_index
+    xap_alias_ion_stage = ion_stage
+    xap_alias_local_level = local_level
+    xap_alias_global_index = global_index
+    xap_alias_population = population
+  endif
+9104 format(5(i12,','),es26.16e3,',',4(i12,','),es26.16e3)
+end subroutine xap_zone1_alias_candidate
 '''
 
 
@@ -370,6 +502,57 @@ def zone1_insertion_snippets() -> Dict[str, str]:
               call xap_zone1_level_population(nnz,klion,jkk_ion,mm, &
      &             mm+ipmat2,x(mm+ipmat2))
 """,
+        "calc_hmc_all_live_hydrogen_state": """! Insert immediately after the literal xh0/xh1 assignments in calc_hmc_all.f90.
+      call xap_zone1_hydrogen_state(xilevg(1),abel(1),xpx,xh0,xh1)
+""",
+        "calc_hmc_all_carbon_incoming_state": """! Insert in the global-to-element population mapping loop after xileve(mm+ipmat)=xilevg(mmtmp).
+                  if (jk.eq.6) call xap_zone1_carbon_state_path(20,0,0, &
+     &              0,0,0,klion,jkk,mm,mmtmp,mm+ipmat,                 &
+     &              xileve(mm+ipmat))
+""",
+        "calc_hmc_all_carbon_global_writeback": """! Before the carbon global save loop, reset alias tracking.
+          if (jk.eq.6) call xap_zone1_alias_reset()
+! After each xilevg(mmtmp)=xileve(...) assignment, record phase 120 and the alias candidate.
+                  if (jk.eq.6) then
+                    call xap_zone1_carbon_state_path(120,0,0,0,0,0,   &
+     &                klion,jkk,mm,mmtmp,mm+ipmatsv,xilevg(mmtmp))
+                    call xap_zone1_alias_candidate(jkk,klion,mm,nlev,  &
+     &                mmtmp,xilevg(mmtmp))
+                    endif
+""",
+        "calc_hmc_element_carbon_pre_solve": """! Insert immediately before call msolvelucy.
+      if (nnz.eq.6) then
+        do mm=1,ipmat2
+          call xap_zone1_carbon_state_path(30,0,0,mm,nsup(mm),         &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          enddo
+        endif
+""",
+        "calc_hmc_element_carbon_writeback_and_xii": """! After each active-ion xileve writeback, record phase 110.
+              if (nnz.eq.6) call xap_zone1_carbon_state_path(110,     &
+     &          nit,0,mm+ipmat2,nsup(mm+ipmat2),nion(mm+ipmat2),      &
+     &          klion,jkk_ion,mm,0,mm+ipmat,xileve(mm+ipmat))
+! After each ion-stage xii sum, record phase 100.
+            if (nnz.eq.6) call xap_zone1_carbon_stage_total(100,nit,  &
+     &          nion(ipmat2+1),klion,xii(klion))
+""",
+        "msolvelucy_source_order_state_path": """! Inside msolvelucy, record phases in source order:
+! 40 outer-start x, 41 outer-start xtot, 50 post-condensed x,
+! 60 each fixed-point normalized x, 70 post-fixed-point x,
+! 80 final x, and 90 final outer-start xtot.
+          call xap_zone1_carbon_state_path(40,niter,0,mm,nsup(mm), &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          call xap_zone1_carbon_stage_total(41,niter,mm,mm,xtot(mm))
+          call xap_zone1_carbon_state_path(50,niter,0,mm,nsup(mm), &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          call xap_zone1_carbon_state_path(60,niter,nit2,mm,nsup(mm), &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          call xap_zone1_carbon_state_path(70,niter,nit2,mm,nsup(mm), &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          call xap_zone1_carbon_state_path(80,niter,0,mm,nsup(mm), &
+     &      nion(mm),nion(mm),0,0,0,0,x(mm))
+          call xap_zone1_carbon_stage_total(90,niter,mm,mm,xtot(mm))
+""",
     }
 
 
@@ -386,19 +569,19 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     helper = out / "xstar_atomic_zone1_dsec_probe_helpers.f90"
     helper.write_text(zone1_extra_helper(), encoding="utf-8")
     snippets = out / "xstar_atomic_zone1_dsec_insertion_snippets.md"
-    text = ["# v0.4.79 zone-1 DSEC/type-15 insertion snippets", ""]
+    text = ["# v0.4.86 zone-1 DSEC/source-order state-path insertion snippets", ""]
     for name, snippet in zone1_insertion_snippets().items():
         text.extend((f"## {name}", "", "```fortran", snippet.rstrip(), "```", ""))
         snippet_path = out / f"{name}_insertion.f90"
         snippet_path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
         products[f"zone1_{name}_insertion"] = snippet_path
     snippets.write_text("\n".join(text), encoding="utf-8")
-    manifest = out / "README_v0479_zone1_dsec_probe.md"
+    manifest = out / "README_v0486_zone1_state_path_probe.md"
     manifest.write_text(
-        "# XSTAR v0.4.79 bounded zone-1 DSEC/type-15 probe\n\n"
+        "# XSTAR v0.4.86 diagnostic-only source-order state-path probe\n\n"
         "Compile the correlation, calc_hmc_all, dsec, and zone-1 helper modules "
         "before the instrumented XSTAR sources. Apply the existing insertion "
-        "snippets plus the eight extra snippets in this directory.\n\n"
+        "snippets plus the source-order state-path snippets in this directory.\n\n"
         "Run only the first physical benchmark with:\n\n"
         "```bash\n"
         "export XSTAR_ATOMIC_DSEC_TARGET_CALL=1\n"
@@ -409,7 +592,7 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "```\n\n"
         "Evaluation zero means every internal calc_hmc_all evaluation in DSEC "
         "call 1. Delete old probe CSVs before running. The helpers are "
-        "observation-only. The Python production path changes only data type 15 to reproduce the literal final-shell threshold order.\n",
+        "observation-only. v0.4.86 adds observations only and makes no production-physics correction.\n",
         encoding="utf-8",
     )
     products.update({"zone1_helper": helper, "zone1_snippets": snippets, "zone1_manifest": manifest})

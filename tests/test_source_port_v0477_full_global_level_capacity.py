@@ -51,4 +51,4 @@ def test_v0477_full_capacity_vector_reaches_detail_writer_without_short_array_er
 
 
 def test_v0477_version():
-    assert xa.__version__ == "0.4.85"
+    assert xa.__version__ == "0.4.86"

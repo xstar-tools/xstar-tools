@@ -1,3 +1,7 @@
+## v0.4.86 exact source-order carbon state-path probe
+
+v0.4.86 is diagnostic-only. It adds matching Python and original-XSTAR observations from live `calc_hmc_all` entry state through incoming carbon mapping, compact pre-solve state, every source-ordered `msolvelucy` outer/fixed iteration, final `xii`, element/global writeback, and continuum/ground aliases. The analyzer reports the first divergent phase and source locus. No production physics changes. See `V0486_SOURCE_ORDER_STATE_PATH_PROBE.md` and `V0486_EARLY_ISSUES_STATUS.md`.
+
 ## v0.4.85 live hydrogen state and strict production Lucy solver
 
 v0.4.85 reconstructs `xh0/xh1` from the incoming dense global H I ground population at every `calc_hmc_all` entry, matching `xpx*xilevg(1)*abel(1)` and its ionized complement. Production `msolvelucy` now has no least-squares fallback or dense rescue and uses literal ordered normalization and convergence arithmetic. Standalone diagnostic contexts retain recovery only when explicitly enabled. See `V0485_LIVE_HYDROGEN_STRICT_MSOLVELUCY.md`.
