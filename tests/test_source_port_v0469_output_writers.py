@@ -87,7 +87,7 @@ def test_v0469_output_writer_acceptance(output_summary):
 
 
 def test_v0469_ledger_exports_and_version():
-    assert xa.__version__ == "0.4.86"
+    assert xa.__version__ == "0.4.87"
     ledger = default_port_ledger()
     routines = {entry.routine: entry for entry in ledger.entries}
     for routine in (

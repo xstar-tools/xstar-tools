@@ -313,4 +313,4 @@ def test_v0479_ten_gate_comparator_requires_and_accepts_complete_exact_contract(
     assert incomplete_summary["cv_logical_row_count_xstar"] == 931
     assert incomplete_summary["cv_logical_coefficient_parity_ready"] is False
     assert incomplete_summary["thermal_root_may_continue"] is False
-    assert xa.__version__ == "0.4.86"
+    assert xa.__version__ == "0.4.87"

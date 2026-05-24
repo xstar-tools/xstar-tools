@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.4.87 - 2026-05-24
+
+- Fix the diagnostic-only v0.4.86 original-XSTAR state-path helper link failure.
+- Export `xap_zone1_alias_reset` as an external subroutine that uses the private alias-state module internally, matching the existing external call in `calc_hmc_all.f90`.
+- Add a real `gfortran` compile/link regression for the generated helper symbol.
+- No production rates, matrices, populations, solver behavior, DSEC control, radial physics, writers, tolerances, or cache schemas changed.
+
 ## v0.4.86 — diagnostic-only exact source-order carbon state path - 2026-05-24
 
 - Adds matching Python and original-XSTAR observations for live hydrogen entry state, incoming carbon global mapping, compact pre-solve state, every Lucy outer/fixed iteration, final vector and stage totals, element/global writeback, and continuum/ground aliases.

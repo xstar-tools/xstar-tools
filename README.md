@@ -1,3 +1,8 @@
+
+## v0.4.87 diagnostic helper link hotfix
+
+v0.4.87 changes only the original-XSTAR observation helper: `xap_zone1_alias_reset` is emitted as an external subroutine so the existing `calc_hmc_all` call resolves at link time. Production Python physics is identical to v0.4.86.
+
 ## v0.4.86 exact source-order carbon state-path probe
 
 v0.4.86 is diagnostic-only. It adds matching Python and original-XSTAR observations from live `calc_hmc_all` entry state through incoming carbon mapping, compact pre-solve state, every source-ordered `msolvelucy` outer/fixed iteration, final `xii`, element/global writeback, and continuum/ground aliases. The analyzer reports the first divergent phase and source locus. No production physics changes. See `V0486_SOURCE_ORDER_STATE_PATH_PROBE.md` and `V0486_EARLY_ISSUES_STATUS.md`.

@@ -323,7 +323,7 @@ subroutine xap_zone1_level_population(element_z,ion_stage,ion_index, &
 end subroutine xap_zone1_level_population
 
 ! ----------------------------------------------------------------------
-! xstar-atomic v0.4.86 diagnostic-only exact source-order state-path probe.
+! xstar-atomic v0.4.87 diagnostic-only source-order state-path build hotfix.
 ! These routines observe caller-owned values and never modify production
 ! rates, matrices, populations, or solver control.
 
@@ -335,16 +335,18 @@ module xap_zone1_alias_probe_state
   integer, save :: xap_alias_local_level = 0
   integer, save :: xap_alias_global_index = 0
   real(8), save :: xap_alias_population = 0.d0
-contains
-  subroutine xap_zone1_alias_reset()
-    xap_alias_valid = 0
-    xap_alias_ion_index = 0
-    xap_alias_ion_stage = 0
-    xap_alias_local_level = 0
-    xap_alias_global_index = 0
-    xap_alias_population = 0.d0
-  end subroutine xap_zone1_alias_reset
 end module xap_zone1_alias_probe_state
+
+subroutine xap_zone1_alias_reset()
+  use xap_zone1_alias_probe_state
+  implicit none
+  xap_alias_valid = 0
+  xap_alias_ion_index = 0
+  xap_alias_ion_stage = 0
+  xap_alias_local_level = 0
+  xap_alias_global_index = 0
+  xap_alias_population = 0.d0
+end subroutine xap_zone1_alias_reset
 
 subroutine xap_zone1_hydrogen_state(xilevg1,abel1,xpx,xh0,xh1)
   use xap_calc_hmc_probe_state
@@ -569,16 +571,16 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     helper = out / "xstar_atomic_zone1_dsec_probe_helpers.f90"
     helper.write_text(zone1_extra_helper(), encoding="utf-8")
     snippets = out / "xstar_atomic_zone1_dsec_insertion_snippets.md"
-    text = ["# v0.4.86 zone-1 DSEC/source-order state-path insertion snippets", ""]
+    text = ["# v0.4.87 zone-1 DSEC/source-order state-path insertion snippets", ""]
     for name, snippet in zone1_insertion_snippets().items():
         text.extend((f"## {name}", "", "```fortran", snippet.rstrip(), "```", ""))
         snippet_path = out / f"{name}_insertion.f90"
         snippet_path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
         products[f"zone1_{name}_insertion"] = snippet_path
     snippets.write_text("\n".join(text), encoding="utf-8")
-    manifest = out / "README_v0486_zone1_state_path_probe.md"
+    manifest = out / "README_v0487_zone1_state_path_probe.md"
     manifest.write_text(
-        "# XSTAR v0.4.86 diagnostic-only source-order state-path probe\n\n"
+        "# XSTAR v0.4.87 diagnostic-only source-order state-path probe build hotfix\n\n"
         "Compile the correlation, calc_hmc_all, dsec, and zone-1 helper modules "
         "before the instrumented XSTAR sources. Apply the existing insertion "
         "snippets plus the source-order state-path snippets in this directory.\n\n"
@@ -592,7 +594,7 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "```\n\n"
         "Evaluation zero means every internal calc_hmc_all evaluation in DSEC "
         "call 1. Delete old probe CSVs before running. The helpers are "
-        "observation-only. v0.4.86 adds observations only and makes no production-physics correction.\n",
+        "observation-only. v0.4.87 fixes only the alias-reset helper linkage; it adds no production-physics correction.\n",
         encoding="utf-8",
     )
     products.update({"zone1_helper": helper, "zone1_snippets": snippets, "zone1_manifest": manifest})

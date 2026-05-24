@@ -140,7 +140,7 @@ def test_v0486_extractors_preserve_source_order_and_evaluation_identity():
     assert hydrogen[0]["ionized_h_density_cm3"] == 6.0
 
 
-def test_v0486_original_helper_and_snippets_cover_every_state_path_phase():
+def test_v0487_original_helper_and_snippets_cover_every_state_path_phase():
     helper = zone1_extra_helper()
     snippets = zone1_insertion_snippets()
     for routine in (
@@ -153,6 +153,9 @@ def test_v0486_original_helper_and_snippets_cover_every_state_path_phase():
     for phase in (20, 30, 40, 41, 50, 60, 70, 80, 90, 100, 110, 120):
         assert f"({phase}," in "\n".join(snippets.values())
     assert "xap_zone1_alias_reset" in snippets["calc_hmc_all_carbon_global_writeback"]
+    assert "module xap_zone1_alias_probe_state" in helper
+    assert "contains\n  subroutine xap_zone1_alias_reset" not in helper
+    assert "subroutine xap_zone1_alias_reset()\n  use xap_zone1_alias_probe_state" in helper
 
 
 def test_v0486_hydrogen_extractor_falls_back_to_result_scalars():
