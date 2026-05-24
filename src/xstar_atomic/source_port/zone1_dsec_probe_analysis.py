@@ -1224,8 +1224,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.88",
-        "probe_contract_version": "0.4.88",
+        "diagnostic_release": "0.4.89",
+        "probe_contract_version": "0.4.89",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -1348,6 +1348,146 @@ def _numeric_comparison(
     return output
 
 
+def _numeric_comparison_with_presence(
+    python_rows: Sequence[Mapping[str, str]],
+    xstar_rows: Sequence[Mapping[str, str]],
+    *,
+    keys: Sequence[str],
+    fields: Sequence[str],
+    rtol: float,
+    atol: float,
+) -> list[dict[str, Any]]:
+    """Compare numeric rows while separating coverage from numeric parity.
+
+    v0.4.88 used the union of keys and substituted zero for a missing side.
+    That was useful for spotting missing rows, but it made unmatched hydrogen
+    vector rows look like physical 0-vs-1 population disagreements.  v0.4.89
+    records key coverage explicitly and only evaluates tolerance for matched
+    rows.
+    """
+
+    def key(row: Mapping[str, str]) -> tuple[str, ...]:
+        return tuple(str(row.get(field, "")) for field in keys)
+
+    def number(row: Mapping[str, str], field: str) -> float:
+        value = row.get(field, "")
+        if value in (None, ""):
+            return 0.0
+        return parse_fortran_float(str(value))
+
+    py = {key(row): row for row in python_rows}
+    xs = {key(row): row for row in xstar_rows}
+    output: list[dict[str, Any]] = []
+    for item in sorted(set(py) | set(xs)):
+        prow = py.get(item)
+        xrow = xs.get(item)
+        matched = prow is not None and xrow is not None
+        for field in fields:
+            base = {name: value for name, value in zip(keys, item)}
+            if not matched:
+                output.append(
+                    {
+                        **base,
+                        "field": field,
+                        "python_present": prow is not None,
+                        "xstar_present": xrow is not None,
+                        "comparison_status": "matched" if matched else "unmatched_key",
+                        "python_value": "" if prow is None else prow.get(field, ""),
+                        "xstar_value": "" if xrow is None else xrow.get(field, ""),
+                        "absolute_difference": "",
+                        "relative_difference": "",
+                        "within_tolerance": False,
+                    }
+                )
+                continue
+            pv = number(prow, field)
+            xv = number(xrow, field)
+            diff = abs(pv - xv)
+            output.append(
+                {
+                    **base,
+                    "field": field,
+                    "python_present": True,
+                    "xstar_present": True,
+                    "comparison_status": "matched",
+                    "python_value": pv,
+                    "xstar_value": xv,
+                    "absolute_difference": diff,
+                    "relative_difference": diff / max(abs(pv), abs(xv), atol),
+                    "within_tolerance": diff <= atol + rtol * abs(xv),
+                }
+            )
+    return output
+
+
+def _canonical_hydrogen_phase(row: Mapping[str, str]) -> dict[str, str]:
+    """Return a row copy with the H mapping phase canonicalized.
+
+    The Python v0.4.88 product names the hydrogen global-to-element mapping as
+    phase 21, while the original-XSTAR side emits the same physical rows under
+    the generic element-mapping phase 20.  For comparison these are the same
+    physical locus, so both are keyed as phase 21.
+    """
+    out = dict(row)
+    if str(out.get("phase_code", "")) == "20":
+        phase = str(out.get("phase", "")).lower()
+        if (
+            not phase
+            or "hydrogen" in phase
+            or str(out.get("ion_stage", "")) in ("1", "")
+        ):
+            out["phase_code"] = "21"
+            out["phase"] = _STATE_PHASE_NAMES[21]
+    return out
+
+
+def _first_row(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    predicate: Callable[[Mapping[str, Any]], bool],
+) -> Mapping[str, Any] | None:
+    selected = [row for row in rows if predicate(row)]
+    if not selected:
+        return None
+
+    def as_int(row: Mapping[str, Any], key: str) -> int:
+        value = row.get(key, 0)
+        if value in (None, ""):
+            return 0
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+    return min(
+        selected,
+        key=lambda row: (
+            as_int(row, "evaluation_index"),
+            as_int(row, "phase_code"),
+            as_int(row, "outer_iteration"),
+            as_int(row, "fixed_iteration"),
+            as_int(row, "compact_index"),
+            as_int(row, "ion_counter"),
+            as_int(row, "ion_stage"),
+            as_int(row, "ion_index"),
+            as_int(row, "local_level"),
+            str(row.get("field", "")),
+        ),
+    )
+
+
+def _row_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    keys = (
+        "evaluation_index", "phase_code", "phase", "outer_iteration",
+        "fixed_iteration", "compact_index", "ion_counter", "ion_stage",
+        "ion_index", "local_level", "full_element_index", "element_z",
+        "field", "python_present", "xstar_present", "comparison_status",
+        "python_value", "xstar_value", "absolute_difference",
+        "relative_difference", "within_tolerance",
+    )
+    return {key: row.get(key) for key in keys if key in row}
 
 
 def _rows_with_fields(
@@ -1370,14 +1510,16 @@ def _compare_optional_numeric_groups(
     *,
     rtol: float,
     atol: float,
+    include_presence: bool = False,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for py_rows, xs_rows, keys, fields in groups:
         left = _rows_with_fields(py_rows, keys=keys, fields=fields)
         right = _rows_with_fields(xs_rows, keys=keys, fields=fields)
         if left or right:
+            compare = _numeric_comparison_with_presence if include_presence else _numeric_comparison
             rows.extend(
-                _numeric_comparison(
+                compare(
                     left, right, keys=keys, fields=fields, rtol=rtol, atol=atol
                 )
             )
@@ -1830,12 +1972,21 @@ def compare_zone1_probe_with_python(
     xs_stage_keys = {tuple(str(row.get(key, "")) for key in stage_keys) for row in xs_stage}
     stage_totals_ready = bool(stage_rows) and len(py_stage_keys) == len(py_stage) and len(xs_stage_keys) == len(xs_stage) and py_stage_keys == xs_stage_keys and all(bool(row["within_tolerance"]) for row in stage_rows)
 
-    py_h = _read_optional(py / "python_zone1_hydrogen_state_path.csv")
-    xs_h = _read_optional(xs / "xstar_zone1_hydrogen_state_path.csv")
+    py_h_raw = _read_optional(py / "python_zone1_hydrogen_state_path.csv")
+    xs_h_raw = _read_optional(xs / "xstar_zone1_hydrogen_state_path.csv")
+    py_h = [_canonical_hydrogen_phase(row) for row in py_h_raw]
+    xs_h = [_canonical_hydrogen_phase(row) for row in xs_h_raw]
+    def _phase_rows(rows: Sequence[Mapping[str, str]], phases: set[int]) -> list[Mapping[str, str]]:
+        return [
+            row for row in rows
+            if row.get("phase_code") not in (None, "")
+            and int(row.get("phase_code", 0)) in phases
+        ]
+
     hydrogen_rows = _compare_optional_numeric_groups(
         (
             (
-                py_h, xs_h,
+                _phase_rows(py_h, {10}), _phase_rows(xs_h, {10}),
                 ("evaluation_index", "phase_code"),
                 (
                     "hydrogen_ground_fraction", "hydrogen_abundance",
@@ -1844,7 +1995,8 @@ def compare_zone1_probe_with_python(
                 ),
             ),
             (
-                py_h, xs_h,
+                _phase_rows(py_h, {21, 30, 40, 50, 60, 70, 80, 110, 120}),
+                _phase_rows(xs_h, {21, 30, 40, 50, 60, 70, 80, 110, 120}),
                 (
                     "evaluation_index", "phase_code", "outer_iteration",
                     "fixed_iteration", "compact_index", "superlevel",
@@ -1854,27 +2006,71 @@ def compare_zone1_probe_with_python(
                 ("population",),
             ),
             (
-                py_h, xs_h,
+                _phase_rows(py_h, {41, 90, 100}),
+                _phase_rows(xs_h, {41, 90, 100}),
                 ("evaluation_index", "phase_code", "outer_iteration", "ion_counter", "ion_stage"),
                 ("population_total",),
             ),
             (
-                py_h, xs_h,
+                _phase_rows(py_h, {25}), _phase_rows(xs_h, {25}),
                 ("evaluation_index", "phase_code", "ion_stage", "ion_index"),
                 ("photoionization_rate", "recombination_rate", "preliminary_ion_fraction"),
             ),
         ),
         rtol=rtol,
         atol=atol,
+        include_presence=True,
     ) if py_h or xs_h else []
+    for row in hydrogen_rows:
+        if "phase_code" in row:
+            try:
+                row["phase"] = _STATE_PHASE_NAMES.get(int(row["phase_code"]), f"phase_{row['phase_code']}")
+            except (TypeError, ValueError):
+                row["phase"] = f"phase_{row.get('phase_code', '')}"
     hydrogen_path = out / "zone1_hydrogen_state_path_comparison_T73198p4K.csv"
     _write(hydrogen_path, hydrogen_rows)
-    hydrogen_state_ready = bool(hydrogen_rows) and all(bool(row["within_tolerance"]) for row in hydrogen_rows)
-    hydrogen_first_differing_evaluation = None
-    for row in sorted(hydrogen_rows, key=lambda item: int(item.get("evaluation_index", 0))):
-        if not bool(row.get("within_tolerance", False)):
-            hydrogen_first_differing_evaluation = int(row.get("evaluation_index", 0))
-            break
+    hydrogen_matched_rows = [
+        row for row in hydrogen_rows
+        if row.get("comparison_status", "matched") == "matched"
+    ]
+    hydrogen_unmatched_rows = [
+        row for row in hydrogen_rows
+        if row.get("comparison_status") == "unmatched_key"
+    ]
+    hydrogen_state_ready = (
+        bool(hydrogen_matched_rows)
+        and not hydrogen_unmatched_rows
+        and all(bool(row["within_tolerance"]) for row in hydrogen_matched_rows)
+    )
+    hydrogen_first_raw_numeric_difference = _first_row(
+        hydrogen_matched_rows,
+        predicate=lambda row: float(row.get("absolute_difference") or 0.0) > 0.0,
+    )
+    hydrogen_first_tolerance_failure = _first_row(
+        hydrogen_matched_rows,
+        predicate=lambda row: not bool(row.get("within_tolerance", False)),
+    )
+    hydrogen_first_unmatched_key_failure = _first_row(
+        hydrogen_unmatched_rows, predicate=lambda row: True
+    )
+    hydrogen_first_differing_evaluation = (
+        None
+        if hydrogen_first_tolerance_failure is None
+        else int(hydrogen_first_tolerance_failure.get("evaluation_index", 0))
+    )
+
+    hydrogen_recombination_audit_rows = [
+        row for row in hydrogen_matched_rows
+        if 18 <= int(row.get("evaluation_index", 0)) <= 24
+        and int(row.get("phase_code", 0)) == 25
+        and row.get("field") in ("recombination_rate", "preliminary_ion_fraction")
+    ]
+    hydrogen_recombination_audit_path = out / "zone1_hydrogen_recombination_audit_eval18_24_T73198p4K.csv"
+    _write(hydrogen_recombination_audit_path, hydrogen_recombination_audit_rows)
+    hydrogen_recombination_first_tolerance_failure = _first_row(
+        hydrogen_recombination_audit_rows,
+        predicate=lambda row: not bool(row.get("within_tolerance", False)),
+    )
 
     py_electron = _read_optional(py / "python_zone1_electron_fraction_path.csv")
     xs_electron = _read_optional(xs / "xstar_zone1_electron_fraction_path.csv")
@@ -1931,12 +2127,18 @@ def compare_zone1_probe_with_python(
     )
 
     def _failure_candidate(rows, phase_code: int | None = None):
-        failed = [row for row in rows if not bool(row.get("within_tolerance", False))]
+        failed = [
+            row for row in rows
+            if row.get("comparison_status", "matched") == "matched"
+            and not bool(row.get("within_tolerance", False))
+        ]
         if not failed:
             return None
         def _order(row):
+            evaluation = row.get("evaluation_index", "")
+            evaluation_order = 999999 if evaluation in (None, "") else int(evaluation)
             return (
-                int(row.get("evaluation_index", 0)),
+                evaluation_order,
                 int(row.get("phase_code", phase_code or 0)),
                 int(row.get("outer_iteration", 0)),
                 int(row.get("fixed_iteration", 0)),
@@ -1951,7 +2153,7 @@ def compare_zone1_probe_with_python(
 
     candidates = []
     for rows, forced_phase, family in (
-        (hydrogen_rows, None, "hydrogen"),
+        (hydrogen_matched_rows, None, "hydrogen"),
         (state_rows, None, "level_state"),
         (stage_rows, None, "stage_total"),
         (electron_rows, 140, "electron_fraction"),
@@ -1961,7 +2163,8 @@ def compare_zone1_probe_with_python(
         row = _failure_candidate(rows, forced_phase)
         if row is not None:
             phase_code = int(row.get("phase_code", forced_phase or 0))
-            evaluation_index = int(row.get("evaluation_index", 0))
+            raw_evaluation = row.get("evaluation_index", "")
+            evaluation_index = 999999 if raw_evaluation in (None, "") else int(raw_evaluation)
             candidates.append((evaluation_index, phase_code, family, row))
     first_state_path_divergence = None
     if candidates:
@@ -1996,7 +2199,7 @@ def compare_zone1_probe_with_python(
             locus = "continuum_ground_alias_writeback"
         first_state_path_divergence = {
             "family": family,
-            "evaluation_index": evaluation_index,
+            "evaluation_index": None if evaluation_index == 999999 else evaluation_index,
             "phase_code": phase_code,
             "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
             "locus": locus,
@@ -2051,8 +2254,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.88",
-        "probe_contract_version": "0.4.88",
+        "diagnostic_release": "0.4.89",
+        "probe_contract_version": "0.4.89",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -2107,7 +2310,15 @@ def compare_zone1_probe_with_python(
         "carbon_cooling_logical_parity_ready": cooling_ready,
         "source_order_state_path_probe_available": source_order_state_path_probe_available,
         "hydrogen_state_path_parity_ready": hydrogen_state_ready,
+        "hydrogen_phase20_21_canonicalized": True,
+        "hydrogen_matched_comparison_rows": len(hydrogen_matched_rows),
+        "hydrogen_unmatched_key_rows": len(hydrogen_unmatched_rows),
         "hydrogen_first_differing_evaluation": hydrogen_first_differing_evaluation,
+        "hydrogen_first_raw_numeric_difference": _row_summary(hydrogen_first_raw_numeric_difference),
+        "hydrogen_first_tolerance_failure": _row_summary(hydrogen_first_tolerance_failure),
+        "hydrogen_first_unmatched_key_failure": _row_summary(hydrogen_first_unmatched_key_failure),
+        "hydrogen_recombination_audit_eval18_24_ready": bool(hydrogen_recombination_audit_rows),
+        "hydrogen_recombination_audit_eval18_24_first_tolerance_failure": _row_summary(hydrogen_recombination_first_tolerance_failure),
         "electron_fraction_path_parity_ready": electron_ready,
         "carbon_stage_correlation_parity_ready": carbon_corr_ready,
         "carbon_state_path_parity_ready": state_path_ready,
@@ -2160,6 +2371,7 @@ def compare_zone1_probe_with_python(
         "carbon_state_path_comparison_csv": state_path,
         "carbon_stage_total_comparison_csv": stage_path,
         "hydrogen_state_path_comparison_csv": hydrogen_path,
+        "hydrogen_recombination_audit_eval18_24_csv": hydrogen_recombination_audit_path,
         "electron_fraction_path_comparison_csv": electron_path,
         "carbon_stage_correlation_comparison_csv": carbon_corr_path,
         "carbon_alias_boundary_comparison_csv": alias_path,
