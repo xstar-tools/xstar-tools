@@ -806,25 +806,60 @@ def extract_python_hydrogen_state_path(
     *,
     evaluation_index: int,
 ) -> tuple[dict[str, Any], ...]:
-    """Return the live H I/H II charge-exchange state at calc_hmc_all entry."""
+    """Return all diagnostic-only hydrogen state-history rows.
+
+    v0.4.86/v0.4.87 emitted only the live H I/H II entry scalar row.
+    v0.4.88 keeps that row and, when the diagnostic runner enabled the H trace,
+    adds H global mapping, compact solve path, final ``xii`` totals, and
+    writeback rows for every DSEC evaluation.
+    """
     trace = getattr(result, "carbon_state_path", {}) or {}
-    rows = list(trace.get("hydrogen", ()))
+    rows = list(trace.get("hydrogen_history", ())) or list(trace.get("hydrogen", ()))
     if not rows:
         rows = [
             {
                 "source": "python",
                 "phase_code": 10,
                 "phase": "calc_hmc_all_entry_hydrogen",
+                "element_z": 1,
+                "ion_stage": 1,
                 "hydrogen_ground_fraction": float(result.hydrogen_ground_fraction),
                 "hydrogen_abundance": float(result.hydrogen_abundance),
                 "hydrogen_density_cm3": float(result.hydrogen_density_cm3),
                 "neutral_h_density_cm3": float(result.neutral_h_density_cm3),
                 "ionized_h_density_cm3": float(result.ionized_h_density_cm3),
+                "population": float(result.hydrogen_ground_fraction),
             }
         ]
     return tuple(
         {"evaluation_index": int(evaluation_index), **dict(row)}
         for row in rows
+    )
+
+
+def extract_python_electron_fraction_path(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return element-by-element electron-fraction contribution history."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in trace.get("electron_history", ())
+    )
+
+
+def extract_python_carbon_stage_correlation(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return lightweight C phase-20/120 stage totals for all-eval correlation."""
+    trace = getattr(result, "carbon_state_path", {}) or {}
+    return tuple(
+        {"evaluation_index": int(evaluation_index), **dict(row)}
+        for row in trace.get("carbon_correlation_stage_totals", ())
     )
 
 
@@ -1284,6 +1319,26 @@ def write_zone1_python_diagnostic_products(
     hydrogen_path = out / "python_zone1_hydrogen_state_path.csv"
     _write_rows(hydrogen_path, hydrogen_rows)
 
+    electron_rows: list[dict[str, Any]] = []
+    carbon_correlation_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        result = evaluation.fixed_state_result
+        if result is not None:
+            electron_rows.extend(
+                extract_python_electron_fraction_path(
+                    result, evaluation_index=evaluation_index
+                )
+            )
+            carbon_correlation_rows.extend(
+                extract_python_carbon_stage_correlation(
+                    result, evaluation_index=evaluation_index
+                )
+            )
+    electron_path = out / "python_zone1_electron_fraction_path.csv"
+    _write_rows(electron_path, electron_rows)
+    carbon_correlation_path = out / "python_zone1_carbon_stage_correlation.csv"
+    _write_rows(carbon_correlation_path, carbon_correlation_rows)
+
     normalization_path = out / "python_zone1_carbon_normalization_row_T73198p4K.csv"
     _write_rows(
         normalization_path,
@@ -1320,7 +1375,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.86",
+        "diagnostic_release": "0.4.88",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -1344,6 +1399,8 @@ def write_zone1_python_diagnostic_products(
         "n_carbon_stage_total_rows": len(stage_total_rows),
         "n_carbon_alias_rows": len(alias_rows),
         "n_hydrogen_state_rows": len(hydrogen_rows),
+        "n_electron_fraction_path_rows": len(electron_rows),
+        "n_carbon_stage_correlation_rows": len(carbon_correlation_rows),
         "source_order_state_path_probe_added": True,
         "production_physics_modified_in_this_release": False,
         "production_rates_modified": True,
@@ -1379,6 +1436,8 @@ def write_zone1_python_diagnostic_products(
         "carbon_stage_totals_csv": stage_totals_path,
         "carbon_alias_boundaries_csv": alias_path,
         "hydrogen_state_path_csv": hydrogen_path,
+        "electron_fraction_path_csv": electron_path,
+        "carbon_stage_correlation_csv": carbon_correlation_path,
         "normalization_row_csv": normalization_path,
         "cv_level_populations_csv": level_population_path,
         "logical_cooling_csv": logical_cooling_path,
@@ -1410,6 +1469,8 @@ __all__ = [
     "extract_python_carbon_stage_totals",
     "extract_python_carbon_alias_boundaries",
     "extract_python_hydrogen_state_path",
+    "extract_python_electron_fraction_path",
+    "extract_python_carbon_stage_correlation",
     "extract_python_carbon_normalization_row",
     "extract_python_cv_level_populations",
     "extract_python_cv_matrix_audit",

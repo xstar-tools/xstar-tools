@@ -379,6 +379,10 @@ class CalcHMCAllDsecEvaluator:
     progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
     capture_input_snapshot_indices: Tuple[int, ...] = ()
     capture_all_input_snapshots: bool = False
+    # Diagnostic-only: request Lucy/state-path traces for selected elements
+    # during the live DSEC evaluations.  This is used by v0.4.88 to capture
+    # the all-evaluation hydrogen history without replaying every state.
+    capture_lucy_trace_element_z: Tuple[int, ...] = ()
     evaluation_gate_callback: Optional[Callable[[int, DsecCalcHMCAllInputSnapshot, FixedStateCalcHMCAllResult], None]] = None
     evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
     input_snapshots: List[DsecCalcHMCAllInputSnapshot] = field(default_factory=list, init=False)
@@ -409,6 +413,14 @@ class CalcHMCAllDsecEvaluator:
             kwargs["pre_matrix_solver"] = self.pre_matrix_solver
 
         requests = state.requests_for_next_call()
+        trace_elements = {int(z) for z in self.capture_lucy_trace_element_z}
+        if trace_elements:
+            requests = tuple(
+                replace(request, capture_lucy_trace=True)
+                if int(request.element_z) in trace_elements
+                else request
+                for request in requests
+            )
         capture_snapshot = bool(self.capture_all_input_snapshots or evaluation_index in set(self.capture_input_snapshot_indices))
         snapshot: Optional[DsecCalcHMCAllInputSnapshot] = None
         if capture_snapshot:

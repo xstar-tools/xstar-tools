@@ -323,7 +323,7 @@ subroutine xap_zone1_level_population(element_z,ion_stage,ion_index, &
 end subroutine xap_zone1_level_population
 
 ! ----------------------------------------------------------------------
-! xstar-atomic v0.4.87 diagnostic-only source-order state-path build hotfix.
+! xstar-atomic v0.4.88 diagnostic-only source-order hydrogen-history probe.
 ! These routines observe caller-owned values and never modify production
 ! rates, matrices, populations, or solver control.
 
@@ -354,16 +354,23 @@ subroutine xap_zone1_hydrogen_state(xilevg1,abel1,xpx,xh0,xh1)
   real(8),intent(in) :: xilevg1,abel1,xpx,xh0,xh1
   integer :: lun,ios
   logical :: exists
-  if (xap_hmc_capture.ne.1) return
+  if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
   inquire(file='xstar_zone1_hydrogen_state_path_probe.csv',exist=exists)
   open(newunit=lun,file='xstar_zone1_hydrogen_state_path_probe.csv', &
        status='unknown',position='append',action='write',iostat=ios)
   if (ios.ne.0) return
   if (.not.exists) write(lun,'(A)') &
-    'calc_hmc_all_call_id,xilevg1,abel1,xpx,xh0,xh1'
-  write(lun,9101) xap_hmc_current_call,xilevg1,abel1,xpx,xh0,xh1
+    'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
+    'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
+    'local_level,global_index,full_element_index,hydrogen_ground_fraction,'// &
+    'hydrogen_abundance,hydrogen_density_cm3,neutral_h_density_cm3,'// &
+    'ionized_h_density_cm3,photoionization_rate,recombination_rate,'// &
+    'preliminary_ion_fraction,population,population_total,'// &
+    'continuum_population'
+  write(lun,9101) xap_hmc_current_call,10,0,0,0,0,0,1,0,0,1,1, &
+    xilevg1,abel1,xpx,xh0,xh1,0.d0,0.d0,0.d0,xilevg1,0.d0,0.d0
   close(lun)
-9101 format(i12,5(',',es26.16e3))
+9101 format(12(i12,','),10(es26.16e3,','),es26.16e3)
 end subroutine xap_zone1_hydrogen_state
 
 subroutine xap_zone1_carbon_state_path(phase_code,outer_iteration, &
@@ -377,6 +384,27 @@ subroutine xap_zone1_carbon_state_path(phase_code,outer_iteration, &
   real(8),intent(in) :: population
   integer :: lun,ios
   logical :: exists
+  if (xap_hmc_current_element_z.eq.1) then
+    if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
+    inquire(file='xstar_zone1_hydrogen_state_path_probe.csv',exist=exists)
+    open(newunit=lun,file='xstar_zone1_hydrogen_state_path_probe.csv', &
+         status='unknown',position='append',action='write',iostat=ios)
+    if (ios.ne.0) return
+    if (.not.exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
+      'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
+      'local_level,global_index,full_element_index,hydrogen_ground_fraction,'// &
+      'hydrogen_abundance,hydrogen_density_cm3,neutral_h_density_cm3,'// &
+      'ionized_h_density_cm3,photoionization_rate,recombination_rate,'// &
+      'preliminary_ion_fraction,population,population_total,'// &
+      'continuum_population'
+    write(lun,9102) xap_hmc_current_call,phase_code,outer_iteration, &
+      fixed_iteration,compact_index,superlevel,ion_counter,ion_stage, &
+      ion_index,local_level,global_index,full_element_index, &
+      0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,population,0.d0,0.d0
+    close(lun)
+    return
+  endif
   if (xap_hmc_capture.ne.1) return
   if (xap_hmc_current_element_z.ne.6 .and. phase_code.ge.30) return
   inquire(file='xstar_zone1_carbon_state_path_probe.csv',exist=exists)
@@ -387,11 +415,12 @@ subroutine xap_zone1_carbon_state_path(phase_code,outer_iteration, &
     'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
     'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
     'local_level,global_index,full_element_index,population'
-  write(lun,9102) xap_hmc_current_call,phase_code,outer_iteration, &
+  write(lun,9103) xap_hmc_current_call,phase_code,outer_iteration, &
     fixed_iteration,compact_index,superlevel,ion_counter,ion_stage, &
     ion_index,local_level,global_index,full_element_index,population
   close(lun)
-9102 format(12(i12,','),es26.16e3)
+9102 format(12(i12,','),10(es26.16e3,','),es26.16e3)
+9103 format(12(i12,','),es26.16e3)
 end subroutine xap_zone1_carbon_state_path
 
 subroutine xap_zone1_carbon_stage_total(phase_code,outer_iteration, &
@@ -402,6 +431,26 @@ subroutine xap_zone1_carbon_stage_total(phase_code,outer_iteration, &
   real(8),intent(in) :: population_total
   integer :: lun,ios
   logical :: exists
+  if (xap_hmc_current_element_z.eq.1) then
+    if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
+    inquire(file='xstar_zone1_hydrogen_state_path_probe.csv',exist=exists)
+    open(newunit=lun,file='xstar_zone1_hydrogen_state_path_probe.csv', &
+         status='unknown',position='append',action='write',iostat=ios)
+    if (ios.ne.0) return
+    if (.not.exists) write(lun,'(A)') &
+      'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
+      'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
+      'local_level,global_index,full_element_index,hydrogen_ground_fraction,'// &
+      'hydrogen_abundance,hydrogen_density_cm3,neutral_h_density_cm3,'// &
+      'ionized_h_density_cm3,photoionization_rate,recombination_rate,'// &
+      'preliminary_ion_fraction,population,population_total,'// &
+      'continuum_population'
+    write(lun,9104) xap_hmc_current_call,phase_code,outer_iteration,0, &
+      0,0,ion_counter,ion_stage,0,0,0,0,0.d0,0.d0,0.d0,0.d0,0.d0, &
+      0.d0,0.d0,0.d0,0.d0,population_total,0.d0
+    close(lun)
+    return
+  endif
   if (xap_hmc_capture.ne.1) return
   if (xap_hmc_current_element_z.ne.6) return
   inquire(file='xstar_zone1_carbon_stage_totals_probe.csv',exist=exists)
@@ -411,11 +460,90 @@ subroutine xap_zone1_carbon_stage_total(phase_code,outer_iteration, &
   if (.not.exists) write(lun,'(A)') &
     'calc_hmc_all_call_id,phase_code,outer_iteration,ion_counter,'// &
     'ion_stage,population_total'
-  write(lun,9103) xap_hmc_current_call,phase_code,outer_iteration, &
+  write(lun,9105) xap_hmc_current_call,phase_code,outer_iteration, &
     ion_counter,ion_stage,population_total
   close(lun)
-9103 format(5(i12,','),es26.16e3)
+9104 format(12(i12,','),10(es26.16e3,','),es26.16e3)
+9105 format(5(i12,','),es26.16e3)
 end subroutine xap_zone1_carbon_stage_total
+
+subroutine xap_zone1_hydrogen_rate_total(ion_stage,ion_index, &
+    pirt,rrrt,preliminary_fraction)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: ion_stage,ion_index
+  real(8),intent(in) :: pirt,rrrt,preliminary_fraction
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
+  inquire(file='xstar_zone1_hydrogen_state_path_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_hydrogen_state_path_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,phase_code,outer_iteration,fixed_iteration,'// &
+    'compact_index,superlevel,ion_counter,ion_stage,ion_index,'// &
+    'local_level,global_index,full_element_index,hydrogen_ground_fraction,'// &
+    'hydrogen_abundance,hydrogen_density_cm3,neutral_h_density_cm3,'// &
+    'ionized_h_density_cm3,photoionization_rate,recombination_rate,'// &
+    'preliminary_ion_fraction,population,population_total,'// &
+    'continuum_population'
+  write(lun,9106) xap_hmc_current_call,25,0,0,0,0,0,ion_stage, &
+    ion_index,0,0,0,0.d0,0.d0,0.d0,0.d0,0.d0,pirt,rrrt, &
+    preliminary_fraction,0.d0,0.d0,0.d0
+  close(lun)
+9106 format(12(i12,','),10(es26.16e3,','),es26.16e3)
+end subroutine xap_zone1_hydrogen_rate_total
+
+subroutine xap_zone1_electron_fraction_path(element_z,element_abundance, &
+    selected_min_ion_stage,selected_max_ion_stage,xisum, &
+    fully_stripped_fraction,electron_increment,electron_after)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: element_z,selected_min_ion_stage,selected_max_ion_stage
+  real(8),intent(in) :: element_abundance,xisum,fully_stripped_fraction
+  real(8),intent(in) :: electron_increment,electron_after
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
+  inquire(file='xstar_zone1_electron_fraction_path_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_electron_fraction_path_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,phase_code,element_z,element_abundance,'// &
+    'selected_min_ion_stage,selected_max_ion_stage,xisum,'// &
+    'fully_stripped_fraction,electron_contribution_increment,'// &
+    'electron_contribution_after_element'
+  write(lun,9107) xap_hmc_current_call,140,element_z,element_abundance, &
+    selected_min_ion_stage,selected_max_ion_stage,xisum, &
+    fully_stripped_fraction,electron_increment,electron_after
+  close(lun)
+9107 format(3(i12,','),es26.16e3,',',2(i12,','),3(es26.16e3,','),es26.16e3)
+end subroutine xap_zone1_electron_fraction_path
+
+subroutine xap_zone1_carbon_stage_correlation(phase_code,ion_stage, &
+    ion_index,population_total,continuum_population)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer,intent(in) :: phase_code,ion_stage,ion_index
+  real(8),intent(in) :: population_total,continuum_population
+  integer :: lun,ios
+  logical :: exists
+  if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
+  if (xap_hmc_current_element_z.ne.6) return
+  inquire(file='xstar_zone1_carbon_stage_correlation_probe.csv',exist=exists)
+  open(newunit=lun,file='xstar_zone1_carbon_stage_correlation_probe.csv', &
+       status='unknown',position='append',action='write',iostat=ios)
+  if (ios.ne.0) return
+  if (.not.exists) write(lun,'(A)') &
+    'calc_hmc_all_call_id,phase_code,ion_stage,ion_index,'// &
+    'population_total,continuum_population'
+  write(lun,9108) xap_hmc_current_call,phase_code,ion_stage,ion_index, &
+    population_total,continuum_population
+  close(lun)
+9108 format(4(i12,','),es26.16e3,',',es26.16e3)
+end subroutine xap_zone1_carbon_stage_correlation
 
 subroutine xap_zone1_alias_candidate(ion_index,ion_stage,local_level,nlev, &
     global_index,population)
@@ -438,7 +566,7 @@ subroutine xap_zone1_alias_candidate(ion_index,ion_stage,local_level,nlev, &
         'lower_local_level,lower_global_index,lower_population,'// &
         'upper_ion_index,upper_ion_stage,upper_local_level,'// &
         'upper_global_index,upper_population'
-      write(lun,9104) xap_hmc_current_call,xap_alias_ion_index, &
+      write(lun,9109) xap_hmc_current_call,xap_alias_ion_index, &
         xap_alias_ion_stage,xap_alias_local_level,xap_alias_global_index, &
         xap_alias_population,ion_index,ion_stage,local_level,global_index, &
         population
@@ -453,7 +581,7 @@ subroutine xap_zone1_alias_candidate(ion_index,ion_stage,local_level,nlev, &
     xap_alias_global_index = global_index
     xap_alias_population = population
   endif
-9104 format(5(i12,','),es26.16e3,',',4(i12,','),es26.16e3)
+9109 format(5(i12,','),es26.16e3,',',4(i12,','),es26.16e3)
 end subroutine xap_zone1_alias_candidate
 '''
 
@@ -508,22 +636,29 @@ def zone1_insertion_snippets() -> Dict[str, str]:
       call xap_zone1_hydrogen_state(xilevg(1),abel(1),xpx,xh0,xh1)
 """,
         "calc_hmc_all_carbon_incoming_state": """! Insert in the global-to-element population mapping loop after xileve(mm+ipmat)=xilevg(mmtmp).
+                  if (jk.eq.1) call xap_zone1_hydrogen_state_path(21,0,0, &
+     &              0,0,0,klion,jkk,mm,mmtmp,mm+ipmat,                 &
+     &              xileve(mm+ipmat))
                   if (jk.eq.6) call xap_zone1_carbon_state_path(20,0,0, &
      &              0,0,0,klion,jkk,mm,mmtmp,mm+ipmat,                 &
      &              xileve(mm+ipmat))
 """,
         "calc_hmc_all_carbon_global_writeback": """! Before the carbon global save loop, reset alias tracking.
           if (jk.eq.6) call xap_zone1_alias_reset()
-! After each xilevg(mmtmp)=xileve(...) assignment, record phase 120 and the alias candidate.
+! After each xilevg(mmtmp)=xileve(...) assignment, record phase 120.
+! Carbon also records the alias candidate.
+                  if (jk.eq.1) call xap_zone1_hydrogen_state_path(120,0,0, &
+     &              0,0,0,klion,jkk,mm,mmtmp,mm+ipmatsv,xilevg(mmtmp))
                   if (jk.eq.6) then
                     call xap_zone1_carbon_state_path(120,0,0,0,0,0,   &
      &                klion,jkk,mm,mmtmp,mm+ipmatsv,xilevg(mmtmp))
                     call xap_zone1_alias_candidate(jkk,klion,mm,nlev,  &
      &                mmtmp,xilevg(mmtmp))
                     endif
+! Use the same pattern for the continuum/terminal level, replacing mm+ipmatsv by ipmatsv+nlev.
 """,
         "calc_hmc_element_carbon_pre_solve": """! Insert immediately before call msolvelucy.
-      if (nnz.eq.6) then
+      if ((nnz.eq.6).or.(nnz.eq.1)) then
         do mm=1,ipmat2
           call xap_zone1_carbon_state_path(30,0,0,mm,nsup(mm),         &
      &      nion(mm),nion(mm),0,0,0,0,x(mm))
@@ -531,12 +666,17 @@ def zone1_insertion_snippets() -> Dict[str, str]:
         endif
 """,
         "calc_hmc_element_carbon_writeback_and_xii": """! After each active-ion xileve writeback, record phase 110.
-              if (nnz.eq.6) call xap_zone1_carbon_state_path(110,     &
+              if ((nnz.eq.6).or.(nnz.eq.1)) call xap_zone1_carbon_state_path(110, &
      &          nit,0,mm+ipmat2,nsup(mm+ipmat2),nion(mm+ipmat2),      &
      &          klion,jkk_ion,mm,0,mm+ipmat,xileve(mm+ipmat))
 ! After each ion-stage xii sum, record phase 100.
-            if (nnz.eq.6) call xap_zone1_carbon_stage_total(100,nit,  &
+            if ((nnz.eq.6).or.(nnz.eq.1)) call xap_zone1_carbon_stage_total(100,nit, &
      &          nion(ipmat2+1),klion,xii(klion))
+""",
+        "calc_hmc_all_electron_fraction_path": """! Insert immediately after enelec receives the fully stripped contribution.
+          call xap_zone1_electron_fraction_path(jk,xeltp,mml(jk),      &
+     &      mmu(jk),xisum,max(0.d0,1.-xisum),                          &
+     &      enelec-enelec_before_element,enelec)
 """,
         "msolvelucy_source_order_state_path": """! Inside msolvelucy, record phases in source order:
 ! 40 outer-start x, 41 outer-start xtot, 50 post-condensed x,
@@ -571,16 +711,16 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
     helper = out / "xstar_atomic_zone1_dsec_probe_helpers.f90"
     helper.write_text(zone1_extra_helper(), encoding="utf-8")
     snippets = out / "xstar_atomic_zone1_dsec_insertion_snippets.md"
-    text = ["# v0.4.87 zone-1 DSEC/source-order state-path insertion snippets", ""]
+    text = ["# v0.4.88 zone-1 DSEC/source-order hydrogen-history insertion snippets", ""]
     for name, snippet in zone1_insertion_snippets().items():
         text.extend((f"## {name}", "", "```fortran", snippet.rstrip(), "```", ""))
         snippet_path = out / f"{name}_insertion.f90"
         snippet_path.write_text(snippet.rstrip() + "\n", encoding="utf-8")
         products[f"zone1_{name}_insertion"] = snippet_path
     snippets.write_text("\n".join(text), encoding="utf-8")
-    manifest = out / "README_v0487_zone1_state_path_probe.md"
+    manifest = out / "README_v0488_zone1_hydrogen_history_probe.md"
     manifest.write_text(
-        "# XSTAR v0.4.87 diagnostic-only source-order state-path probe build hotfix\n\n"
+        "# XSTAR v0.4.88 diagnostic-only all-evaluation hydrogen-history probe\n\n"
         "Compile the correlation, calc_hmc_all, dsec, and zone-1 helper modules "
         "before the instrumented XSTAR sources. Apply the existing insertion "
         "snippets plus the source-order state-path snippets in this directory.\n\n"
@@ -594,7 +734,7 @@ def write_zone1_probe_products(out_dir: str | Path) -> Dict[str, Path]:
         "```\n\n"
         "Evaluation zero means every internal calc_hmc_all evaluation in DSEC "
         "call 1. Delete old probe CSVs before running. The helpers are "
-        "observation-only. v0.4.87 fixes only the alias-reset helper linkage; it adds no production-physics correction.\n",
+        "observation-only. v0.4.88 extends the lightweight hydrogen/electron history probes and adds no production-physics correction.\n",
         encoding="utf-8",
     )
     products.update({"zone1_helper": helper, "zone1_snippets": snippets, "zone1_manifest": manifest})

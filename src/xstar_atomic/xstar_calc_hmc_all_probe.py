@@ -23,6 +23,7 @@ module xap_calc_hmc_probe_state
   integer, save :: xap_hmc_call_counter = 0
   integer, save :: xap_hmc_current_call = 0
   integer, save :: xap_hmc_capture = 0
+  integer, save :: xap_hmc_history_capture = 0
   integer, save :: xap_hmc_target_element = 8
   integer, save :: xap_hmc_target_record = 0
   integer, save :: xap_hmc_current_element_index = 0
@@ -100,6 +101,7 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
   implicit none
   real(8), intent(in) :: t4, xee, xpx
   integer :: target_call, target_dsec_call, target_dsec_evaluation
+  integer :: history_dsec_call
   integer :: lun, ios
   logical :: exists, dsec_match
   character(len=32) :: target_phase
@@ -109,6 +111,7 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
   xap_hmc_call_counter = xap_hmc_call_counter + 1
   xap_hmc_current_call = xap_hmc_call_counter
   xap_hmc_capture = 0
+  xap_hmc_history_capture = 0
   call xap_corr_classify_calc_hmc(xap_hmc_current_call, &
     xap_hmc_current_dsec_call, xap_hmc_current_dsec_evaluation, &
     xap_hmc_current_phase)
@@ -138,8 +141,10 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
   rtol = 1.d-10
   atol = 1.d-12
   xap_hmc_target_element = 8
+  history_dsec_call = 1
 
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_CALL', target_call)
+  call xap_read_int_env('XSTAR_ATOMIC_HMC_HISTORY_DSEC_CALL', history_dsec_call)
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_DSEC_CALL', target_dsec_call)
   call xap_read_int_env('XSTAR_ATOMIC_HMC_TARGET_DSEC_EVALUATION', &
        target_dsec_evaluation)
@@ -178,7 +183,23 @@ subroutine xap_hmc_begin_call(t4, xee, xpx)
       xap_hmc_capture = 1
     endif
   endif
+
+  if (trim(xap_hmc_current_phase) .eq. 'dsec_internal') then
+    if (history_dsec_call .le. 0) then
+      xap_hmc_history_capture = 1
+    else if (xap_hmc_current_dsec_call .eq. history_dsec_call) then
+      xap_hmc_history_capture = 1
+    endif
+  endif
 end subroutine xap_hmc_begin_call
+
+subroutine xap_hmc_set_current_element(element_index, element_z)
+  use xap_calc_hmc_probe_state
+  implicit none
+  integer, intent(in) :: element_index, element_z
+  xap_hmc_current_element_index = element_index
+  xap_hmc_current_element_z = element_z
+end subroutine xap_hmc_set_current_element
 
 subroutine xap_hmc_input_state(t4, trad, r, delr, xee, xpx, cfrac, p, &
     lcdd, zeta, vturbi, critf, ncn2, line_count, continuum_count, &

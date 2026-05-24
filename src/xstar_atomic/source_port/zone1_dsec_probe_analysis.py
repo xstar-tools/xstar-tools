@@ -55,6 +55,8 @@ def _read_optional(path: Path) -> list[dict[str, str]]:
 _STATE_PHASE_NAMES = {
     10: "calc_hmc_all_entry_hydrogen",
     20: "calc_hmc_all_map_global_to_element_entry",
+    21: "calc_hmc_all_map_global_to_hydrogen_entry",
+    25: "calc_hmc_all_preliminary_hydrogen_rates",
     30: "calc_hmc_element_pre_msolvelucy",
     40: "msolvelucy_outer_start",
     41: "msolvelucy_outer_start_xtot",
@@ -67,7 +69,9 @@ _STATE_PHASE_NAMES = {
     110: "calc_hmc_element_workspace_writeback",
     120: "calc_hmc_all_global_writeback",
     130: "calc_hmc_all_alias_boundary",
+    140: "calc_hmc_all_element_electron_contribution",
 }
+
 
 
 def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -984,71 +988,208 @@ def analyze_xstar_zone1_probe(
     cooling_path = out / "xstar_zone1_carbon_cooling_terms.csv"
     _write(cooling_path, cooling)
 
-    # v0.4.86 diagnostic-only source-order state path.  These files are
-    # optional so older v0.4.79 probe directories remain analyzable.
-    hydrogen_raw = [
-        row for row in _read_optional(root / "xstar_zone1_hydrogen_state_path_probe.csv")
-        if int(row.get("calc_hmc_all_call_id", 0)) == target_call
-    ]
-    hydrogen_state_rows = [
-        {
+    # v0.4.88 diagnostic-only source-order state path.  The full carbon
+    # path remains target-evaluation scoped because it is intentionally heavy.
+    # Hydrogen, electron-fraction, and lightweight carbon-correlation rows are
+    # retained across all DSEC evaluations so the next comparison can find the
+    # first differing evaluation rather than only the final target call.
+    def _int_field(row: Mapping[str, str], field: str, default: int = 0) -> int:
+        value = row.get(field, "")
+        return default if value in ("", None) else int(float(str(value)))
+
+    def _float_field(row: Mapping[str, str], field: str, default: float = 0.0) -> float:
+        value = row.get(field, "")
+        return default if value in ("", None) else parse_fortran_float(str(value))
+
+    hydrogen_state_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_hydrogen_state_path_probe.csv"):
+        call_id = _int_field(row, "calc_hmc_all_call_id")
+        evaluation = call_to_eval.get(call_id)
+        if evaluation is None:
+            continue
+        # v0.4.86/v0.4.87 emitted a compact legacy header containing only
+        # xilevg1/abel1/xpx/xh0/xh1 for the selected call.  v0.4.88 emits a
+        # general row schema for all phases.  Accept both for back-compat.
+        if "xilevg1" in row:
+            hydrogen_state_rows.append(
+                {
+                    "source": "xstar",
+                    "evaluation_index": evaluation,
+                    "phase_code": 10,
+                    "phase": _STATE_PHASE_NAMES[10],
+                    "outer_iteration": 0,
+                    "fixed_iteration": 0,
+                    "compact_index": 0,
+                    "superlevel": 0,
+                    "ion_counter": 0,
+                    "ion_stage": 1,
+                    "ion_index": 0,
+                    "local_level": 0,
+                    "global_index": 1,
+                    "full_element_index": 1,
+                    "hydrogen_ground_fraction": parse_fortran_float(row["xilevg1"]),
+                    "hydrogen_abundance": parse_fortran_float(row["abel1"]),
+                    "hydrogen_density_cm3": parse_fortran_float(row["xpx"]),
+                    "neutral_h_density_cm3": parse_fortran_float(row["xh0"]),
+                    "ionized_h_density_cm3": parse_fortran_float(row["xh1"]),
+                    "population": parse_fortran_float(row["xilevg1"]),
+                }
+            )
+            continue
+        phase_code = _int_field(row, "phase_code")
+        item: dict[str, Any] = {
             "source": "xstar",
-            "evaluation_index": target_eval,
-            "phase_code": 10,
-            "phase": _STATE_PHASE_NAMES[10],
-            "hydrogen_ground_fraction": parse_fortran_float(row["xilevg1"]),
-            "hydrogen_abundance": parse_fortran_float(row["abel1"]),
-            "hydrogen_density_cm3": parse_fortran_float(row["xpx"]),
-            "neutral_h_density_cm3": parse_fortran_float(row["xh0"]),
-            "ionized_h_density_cm3": parse_fortran_float(row["xh1"]),
+            "evaluation_index": evaluation,
+            "phase_code": phase_code,
+            "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+            "outer_iteration": _int_field(row, "outer_iteration"),
+            "fixed_iteration": _int_field(row, "fixed_iteration"),
+            "compact_index": _int_field(row, "compact_index"),
+            "superlevel": _int_field(row, "superlevel"),
+            "ion_counter": _int_field(row, "ion_counter"),
+            "ion_stage": _int_field(row, "ion_stage"),
+            "ion_index": _int_field(row, "ion_index"),
+            "local_level": _int_field(row, "local_level"),
+            "global_index": _int_field(row, "global_index"),
+            "full_element_index": _int_field(row, "full_element_index"),
         }
-        for row in hydrogen_raw
-    ]
+        for field in (
+            "hydrogen_ground_fraction", "hydrogen_abundance",
+            "hydrogen_density_cm3", "neutral_h_density_cm3",
+            "ionized_h_density_cm3", "photoionization_rate",
+            "recombination_rate", "preliminary_ion_fraction",
+            "population", "population_total",
+        ):
+            if field in row and str(row.get(field, "")) != "":
+                item[field] = _float_field(row, field)
+        hydrogen_state_rows.append(item)
     hydrogen_state_path = out / "xstar_zone1_hydrogen_state_path.csv"
     _write(hydrogen_state_path, hydrogen_state_rows)
 
-    carbon_state_rows: list[dict[str, Any]] = []
-    for row in _read_optional(root / "xstar_zone1_carbon_state_path_probe.csv"):
-        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+    electron_fraction_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_electron_fraction_path_probe.csv"):
+        call_id = _int_field(row, "calc_hmc_all_call_id")
+        evaluation = call_to_eval.get(call_id)
+        if evaluation is None:
             continue
-        phase_code = int(row["phase_code"])
-        carbon_state_rows.append(
+        phase_code = _int_field(row, "phase_code", 140)
+        electron_fraction_rows.append(
             {
                 "source": "xstar",
-                "evaluation_index": target_eval,
+                "evaluation_index": evaluation,
                 "phase_code": phase_code,
                 "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
-                "outer_iteration": int(row.get("outer_iteration", 0)),
-                "fixed_iteration": int(row.get("fixed_iteration", 0)),
-                "compact_index": int(row.get("compact_index", 0)),
-                "superlevel": int(row.get("superlevel", 0)),
-                "ion_counter": int(row.get("ion_counter", 0)),
-                "ion_stage": int(row.get("ion_stage", 0)),
-                "ion_index": int(row.get("ion_index", 0)),
-                "local_level": int(row.get("local_level", 0)),
-                "global_index": int(row.get("global_index", 0)),
-                "full_element_index": int(row.get("full_element_index", 0)),
-                "population": parse_fortran_float(row["population"]),
+                "element_z": _int_field(row, "element_z"),
+                "element_abundance": _float_field(row, "element_abundance"),
+                "selected_min_ion_stage": _int_field(row, "selected_min_ion_stage"),
+                "selected_max_ion_stage": _int_field(row, "selected_max_ion_stage"),
+                "xisum": _float_field(row, "xisum"),
+                "fully_stripped_fraction": _float_field(row, "fully_stripped_fraction"),
+                "electron_contribution_increment": _float_field(row, "electron_contribution_increment"),
+                "electron_contribution_after_element": _float_field(row, "electron_contribution_after_element"),
             }
         )
+    electron_fraction_path = out / "xstar_zone1_electron_fraction_path.csv"
+    _write(electron_fraction_path, electron_fraction_rows)
+
+    carbon_state_rows: list[dict[str, Any]] = []
+    carbon_correlation_buckets: dict[tuple[int, int, int, int], list[tuple[int, float]]] = {}
+    for row in _read_optional(root / "xstar_zone1_carbon_state_path_probe.csv"):
+        call_id = _int_field(row, "calc_hmc_all_call_id")
+        evaluation = call_to_eval.get(call_id)
+        if evaluation is None:
+            continue
+        phase_code = _int_field(row, "phase_code")
+        item = {
+            "source": "xstar",
+            "evaluation_index": evaluation,
+            "phase_code": phase_code,
+            "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+            "outer_iteration": _int_field(row, "outer_iteration"),
+            "fixed_iteration": _int_field(row, "fixed_iteration"),
+            "compact_index": _int_field(row, "compact_index"),
+            "superlevel": _int_field(row, "superlevel"),
+            "ion_counter": _int_field(row, "ion_counter"),
+            "ion_stage": _int_field(row, "ion_stage"),
+            "ion_index": _int_field(row, "ion_index"),
+            "local_level": _int_field(row, "local_level"),
+            "global_index": _int_field(row, "global_index"),
+            "full_element_index": _int_field(row, "full_element_index"),
+            "population": _float_field(row, "population"),
+        }
+        if call_id == target_call:
+            carbon_state_rows.append(item)
+        if phase_code in (20, 120):
+            key = (
+                evaluation,
+                phase_code,
+                int(item["ion_stage"]),
+                int(item["ion_index"]),
+            )
+            carbon_correlation_buckets.setdefault(key, []).append(
+                (int(item["local_level"]), float(item["population"]))
+            )
     carbon_state_path = out / "xstar_zone1_carbon_state_path_T73198p4K.csv"
     _write(carbon_state_path, carbon_state_rows)
 
+    carbon_correlation_rows: list[dict[str, Any]] = []
+    direct_carbon_correlation = _read_optional(root / "xstar_zone1_carbon_stage_correlation_probe.csv")
+    if direct_carbon_correlation:
+        for row in direct_carbon_correlation:
+            call_id = _int_field(row, "calc_hmc_all_call_id")
+            evaluation = call_to_eval.get(call_id)
+            if evaluation is None:
+                continue
+            phase_code = _int_field(row, "phase_code")
+            carbon_correlation_rows.append(
+                {
+                    "source": "xstar",
+                    "evaluation_index": evaluation,
+                    "phase_code": phase_code,
+                    "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+                    "ion_stage": _int_field(row, "ion_stage"),
+                    "ion_index": _int_field(row, "ion_index"),
+                    "population_total": _float_field(row, "population_total"),
+                    "continuum_population": _float_field(row, "continuum_population"),
+                }
+            )
+    else:
+        for (evaluation, phase_code, ion_stage, ion_index), values in sorted(carbon_correlation_buckets.items()):
+            if not values:
+                continue
+            max_level = max(level for level, _value in values)
+            total = sum(value for level, value in values if level < max_level)
+            continuum = sum(value for level, value in values if level == max_level)
+            carbon_correlation_rows.append(
+                {
+                    "source": "xstar",
+                    "evaluation_index": evaluation,
+                    "phase_code": phase_code,
+                    "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+                    "ion_stage": ion_stage,
+                    "ion_index": ion_index,
+                    "population_total": float(total),
+                    "continuum_population": float(continuum),
+                }
+            )
+    carbon_correlation_path = out / "xstar_zone1_carbon_stage_correlation.csv"
+    _write(carbon_correlation_path, carbon_correlation_rows)
+
     carbon_stage_total_rows: list[dict[str, Any]] = []
     for row in _read_optional(root / "xstar_zone1_carbon_stage_totals_probe.csv"):
-        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+        if _int_field(row, "calc_hmc_all_call_id") != target_call:
             continue
-        phase_code = int(row["phase_code"])
+        phase_code = _int_field(row, "phase_code")
         carbon_stage_total_rows.append(
             {
                 "source": "xstar",
                 "evaluation_index": target_eval,
                 "phase_code": phase_code,
                 "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
-                "outer_iteration": int(row.get("outer_iteration", 0)),
-                "ion_counter": int(row.get("ion_counter", 0)),
-                "ion_stage": int(row.get("ion_stage", 0)),
-                "population_total": parse_fortran_float(row["population_total"]),
+                "outer_iteration": _int_field(row, "outer_iteration"),
+                "ion_counter": _int_field(row, "ion_counter"),
+                "ion_stage": _int_field(row, "ion_stage"),
+                "population_total": _float_field(row, "population_total"),
             }
         )
     carbon_stage_totals_path = out / "xstar_zone1_carbon_stage_totals_T73198p4K.csv"
@@ -1056,25 +1197,25 @@ def analyze_xstar_zone1_probe(
 
     carbon_alias_rows: list[dict[str, Any]] = []
     for row in _read_optional(root / "xstar_zone1_carbon_alias_boundaries_probe.csv"):
-        if int(row.get("calc_hmc_all_call_id", 0)) != target_call:
+        if _int_field(row, "calc_hmc_all_call_id") != target_call:
             continue
-        lower_population = parse_fortran_float(row["lower_population"])
-        upper_population = parse_fortran_float(row["upper_population"])
+        lower_population = _float_field(row, "lower_population")
+        upper_population = _float_field(row, "upper_population")
         carbon_alias_rows.append(
             {
                 "source": "xstar",
                 "evaluation_index": target_eval,
                 "phase_code": 130,
                 "phase": _STATE_PHASE_NAMES[130],
-                "lower_ion_index": int(row["lower_ion_index"]),
-                "lower_ion_stage": int(row["lower_ion_stage"]),
-                "lower_local_level": int(row["lower_local_level"]),
-                "lower_global_index": int(row["lower_global_index"]),
+                "lower_ion_index": _int_field(row, "lower_ion_index"),
+                "lower_ion_stage": _int_field(row, "lower_ion_stage"),
+                "lower_local_level": _int_field(row, "lower_local_level"),
+                "lower_global_index": _int_field(row, "lower_global_index"),
                 "lower_population": lower_population,
-                "upper_ion_index": int(row["upper_ion_index"]),
-                "upper_ion_stage": int(row["upper_ion_stage"]),
-                "upper_local_level": int(row["upper_local_level"]),
-                "upper_global_index": int(row["upper_global_index"]),
+                "upper_ion_index": _int_field(row, "upper_ion_index"),
+                "upper_ion_stage": _int_field(row, "upper_ion_stage"),
+                "upper_local_level": _int_field(row, "upper_local_level"),
+                "upper_global_index": _int_field(row, "upper_global_index"),
                 "upper_population": upper_population,
                 "absolute_difference": abs(lower_population - upper_population),
             }
@@ -1083,8 +1224,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.86",
-        "probe_contract_version": "0.4.86",
+        "diagnostic_release": "0.4.88",
+        "probe_contract_version": "0.4.88",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -1109,12 +1250,17 @@ def analyze_xstar_zone1_probe(
         "n_carbon_logical_cooling_terms": len(logical_cooling_rows),
         "n_carbon_cooling_terms": len(cooling),
         "n_hydrogen_state_path_rows": len(hydrogen_state_rows),
+        "n_electron_fraction_path_rows": len(electron_fraction_rows),
         "n_carbon_state_path_rows": len(carbon_state_rows),
         "n_carbon_stage_total_rows": len(carbon_stage_total_rows),
+        "n_carbon_stage_correlation_rows": len(carbon_correlation_rows),
         "n_carbon_alias_rows": len(carbon_alias_rows),
         "source_order_state_path_probe_available": bool(
             hydrogen_state_rows and carbon_state_rows and carbon_stage_total_rows
         ),
+        "hydrogen_all_evaluations_probe_available": bool(hydrogen_state_rows),
+        "electron_fraction_path_probe_available": bool(electron_fraction_rows),
+        "carbon_stage_correlation_probe_available": bool(carbon_correlation_rows),
         "production_rates_modified": False,
         "probe_is_observation_only": True,
         "production_solver_modified": False,
@@ -1144,8 +1290,10 @@ def analyze_xstar_zone1_probe(
         "matrix_csv": matrix_path,
         "cooling_csv": cooling_path,
         "hydrogen_state_path_csv": hydrogen_state_path,
+        "electron_fraction_path_csv": electron_fraction_path,
         "carbon_state_path_csv": carbon_state_path,
         "carbon_stage_totals_csv": carbon_stage_totals_path,
+        "carbon_stage_correlation_csv": carbon_correlation_path,
         "carbon_alias_boundaries_csv": carbon_alias_path,
         "summary_json": summary_path,
     }
@@ -1165,7 +1313,15 @@ def _numeric_comparison(
     atol: float,
 ) -> list[dict[str, Any]]:
     def key(row: Mapping[str, str]) -> tuple[str, ...]:
-        return tuple(str(row[field]) for field in keys)
+        return tuple(str(row.get(field, "")) for field in keys)
+
+    def number(row: Mapping[str, str] | None, field: str) -> float:
+        if row is None:
+            return 0.0
+        value = row.get(field, "")
+        if value in (None, ""):
+            return 0.0
+        return parse_fortran_float(str(value))
 
     py = {key(row): row for row in python_rows}
     xs = {key(row): row for row in xstar_rows}
@@ -1174,8 +1330,8 @@ def _numeric_comparison(
         prow = py.get(item)
         xrow = xs.get(item)
         for field in fields:
-            pv = 0.0 if prow is None else _float(prow, field)
-            xv = 0.0 if xrow is None else _float(xrow, field)
+            pv = number(prow, field)
+            xv = number(xrow, field)
             diff = abs(pv - xv)
             output.append(
                 {
@@ -1191,6 +1347,41 @@ def _numeric_comparison(
             )
     return output
 
+
+
+
+def _rows_with_fields(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    keys: Sequence[str],
+    fields: Sequence[str],
+) -> list[Mapping[str, str]]:
+    """Keep rows that can be safely passed to ``_numeric_comparison``."""
+    return [
+        row
+        for row in rows
+        if all(key in row and str(row.get(key, "")) != "" for key in keys)
+        and all(field in row and str(row.get(field, "")) != "" for field in fields)
+    ]
+
+
+def _compare_optional_numeric_groups(
+    groups: Sequence[tuple[Sequence[Mapping[str, str]], Sequence[Mapping[str, str]], Sequence[str], Sequence[str]]],
+    *,
+    rtol: float,
+    atol: float,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for py_rows, xs_rows, keys, fields in groups:
+        left = _rows_with_fields(py_rows, keys=keys, fields=fields)
+        right = _rows_with_fields(xs_rows, keys=keys, fields=fields)
+        if left or right:
+            rows.extend(
+                _numeric_comparison(
+                    left, right, keys=keys, fields=fields, rtol=rtol, atol=atol
+                )
+            )
+    return rows
 
 def compare_zone1_probe_with_python(
     *,
@@ -1607,14 +1798,14 @@ def compare_zone1_probe_with_python(
         bool(row["within_tolerance"]) for row in cooling_rows
     )
 
-    # v0.4.86 source-order state-path comparison.  This is diagnostic-only
+    # v0.4.88 source-order state-path comparison.  This is diagnostic-only
     # until the newly instrumented original XSTAR has generated the products.
     py_state = _read_optional(py / "python_zone1_carbon_state_path_T73198p4K.csv")
     xs_state = _read_optional(xs / "xstar_zone1_carbon_state_path_T73198p4K.csv")
     state_keys = (
         "phase_code", "outer_iteration", "fixed_iteration",
         "compact_index", "superlevel", "ion_counter", "ion_stage",
-        "ion_index", "local_level", "global_index", "full_element_index",
+        "ion_index", "local_level", "full_element_index",
     )
     state_rows = _numeric_comparison(
         py_state, xs_state, keys=state_keys, fields=("population",),
@@ -1641,21 +1832,83 @@ def compare_zone1_probe_with_python(
 
     py_h = _read_optional(py / "python_zone1_hydrogen_state_path.csv")
     xs_h = _read_optional(xs / "xstar_zone1_hydrogen_state_path.csv")
-    # The Python file contains all evaluations; the original analysis contains
-    # the selected target evaluation only.
-    target_evals = {str(row.get("evaluation_index", "")) for row in xs_h}
-    py_h = [row for row in py_h if str(row.get("evaluation_index", "")) in target_evals]
-    hydrogen_rows = _numeric_comparison(
-        py_h, xs_h, keys=("evaluation_index", "phase_code"),
-        fields=(
-            "hydrogen_ground_fraction", "hydrogen_abundance",
-            "hydrogen_density_cm3", "neutral_h_density_cm3",
-            "ionized_h_density_cm3",
-        ), rtol=rtol, atol=atol,
+    hydrogen_rows = _compare_optional_numeric_groups(
+        (
+            (
+                py_h, xs_h,
+                ("evaluation_index", "phase_code"),
+                (
+                    "hydrogen_ground_fraction", "hydrogen_abundance",
+                    "hydrogen_density_cm3", "neutral_h_density_cm3",
+                    "ionized_h_density_cm3", "population",
+                ),
+            ),
+            (
+                py_h, xs_h,
+                (
+                    "evaluation_index", "phase_code", "outer_iteration",
+                    "fixed_iteration", "compact_index", "superlevel",
+                    "ion_counter", "ion_stage", "ion_index", "local_level",
+                    "full_element_index",
+                ),
+                ("population",),
+            ),
+            (
+                py_h, xs_h,
+                ("evaluation_index", "phase_code", "outer_iteration", "ion_counter", "ion_stage"),
+                ("population_total",),
+            ),
+            (
+                py_h, xs_h,
+                ("evaluation_index", "phase_code", "ion_stage", "ion_index"),
+                ("photoionization_rate", "recombination_rate", "preliminary_ion_fraction"),
+            ),
+        ),
+        rtol=rtol,
+        atol=atol,
     ) if py_h or xs_h else []
     hydrogen_path = out / "zone1_hydrogen_state_path_comparison_T73198p4K.csv"
     _write(hydrogen_path, hydrogen_rows)
     hydrogen_state_ready = bool(hydrogen_rows) and all(bool(row["within_tolerance"]) for row in hydrogen_rows)
+    hydrogen_first_differing_evaluation = None
+    for row in sorted(hydrogen_rows, key=lambda item: int(item.get("evaluation_index", 0))):
+        if not bool(row.get("within_tolerance", False)):
+            hydrogen_first_differing_evaluation = int(row.get("evaluation_index", 0))
+            break
+
+    py_electron = _read_optional(py / "python_zone1_electron_fraction_path.csv")
+    xs_electron = _read_optional(xs / "xstar_zone1_electron_fraction_path.csv")
+    electron_keys = ("evaluation_index", "phase_code", "element_z")
+    electron_rows = _numeric_comparison(
+        py_electron, xs_electron, keys=electron_keys,
+        fields=(
+            "xisum", "fully_stripped_fraction",
+            "electron_contribution_increment",
+            "electron_contribution_after_element",
+        ),
+        rtol=rtol,
+        atol=atol,
+    ) if py_electron or xs_electron else []
+    electron_path = out / "zone1_electron_fraction_path_comparison_T73198p4K.csv"
+    _write(electron_path, electron_rows)
+    electron_keys_py = {tuple(str(row.get(key, "")) for key in electron_keys) for row in py_electron}
+    electron_keys_xs = {tuple(str(row.get(key, "")) for key in electron_keys) for row in xs_electron}
+    electron_ready = bool(electron_rows) and electron_keys_py == electron_keys_xs and all(bool(row["within_tolerance"]) for row in electron_rows)
+
+    py_carbon_corr = _read_optional(py / "python_zone1_carbon_stage_correlation.csv")
+    xs_carbon_corr = _read_optional(xs / "xstar_zone1_carbon_stage_correlation.csv")
+    carbon_corr_keys = ("evaluation_index", "phase_code", "ion_stage", "ion_index")
+    carbon_corr_rows = _numeric_comparison(
+        py_carbon_corr, xs_carbon_corr, keys=carbon_corr_keys,
+        fields=("population_total", "continuum_population"),
+        rtol=rtol,
+        atol=atol,
+    ) if py_carbon_corr or xs_carbon_corr else []
+    carbon_corr_path = out / "zone1_carbon_stage_correlation_comparison_T73198p4K.csv"
+    _write(carbon_corr_path, carbon_corr_rows)
+    carbon_corr_keys_py = {tuple(str(row.get(key, "")) for key in carbon_corr_keys) for row in py_carbon_corr}
+    carbon_corr_keys_xs = {tuple(str(row.get(key, "")) for key in carbon_corr_keys) for row in xs_carbon_corr}
+    carbon_corr_ready = bool(carbon_corr_rows) and carbon_corr_keys_py == carbon_corr_keys_xs and all(bool(row["within_tolerance"]) for row in carbon_corr_rows)
 
     py_alias = _read_optional(py / "python_zone1_carbon_alias_boundaries_T73198p4K.csv")
     xs_alias = _read_optional(xs / "xstar_zone1_carbon_alias_boundaries_T73198p4K.csv")
@@ -1674,7 +1927,7 @@ def compare_zone1_probe_with_python(
     alias_ready = bool(alias_rows) and all(bool(row["within_tolerance"]) for row in alias_rows)
 
     source_order_state_path_probe_available = bool(
-        py_state and xs_state and py_stage and xs_stage and py_h and xs_h
+        py_h and xs_h and py_electron and xs_electron
     )
 
     def _failure_candidate(rows, phase_code: int | None = None):
@@ -1683,6 +1936,7 @@ def compare_zone1_probe_with_python(
             return None
         def _order(row):
             return (
+                int(row.get("evaluation_index", 0)),
                 int(row.get("phase_code", phase_code or 0)),
                 int(row.get("outer_iteration", 0)),
                 int(row.get("fixed_iteration", 0)),
@@ -1690,35 +1944,42 @@ def compare_zone1_probe_with_python(
                 int(row.get("ion_counter", 0)),
                 int(row.get("ion_stage", 0)),
                 int(row.get("global_index", 0)),
+                int(row.get("element_z", 0)),
                 str(row.get("field", "")),
             )
         return min(failed, key=_order)
 
     candidates = []
     for rows, forced_phase, family in (
-        (hydrogen_rows, 10, "hydrogen"),
+        (hydrogen_rows, None, "hydrogen"),
         (state_rows, None, "level_state"),
         (stage_rows, None, "stage_total"),
+        (electron_rows, 140, "electron_fraction"),
+        (carbon_corr_rows, None, "carbon_stage_correlation"),
         (alias_rows, 130, "alias_boundary"),
     ):
         row = _failure_candidate(rows, forced_phase)
         if row is not None:
             phase_code = int(row.get("phase_code", forced_phase or 0))
-            candidates.append((phase_code, family, row))
+            evaluation_index = int(row.get("evaluation_index", 0))
+            candidates.append((evaluation_index, phase_code, family, row))
     first_state_path_divergence = None
     if candidates:
-        phase_code, family, row = min(
+        evaluation_index, phase_code, family, row = min(
             candidates,
             key=lambda item: (
                 item[0],
-                int(item[2].get("outer_iteration", 0)),
-                int(item[2].get("fixed_iteration", 0)),
-                int(item[2].get("compact_index", 0)),
-                int(item[2].get("ion_stage", 0)),
+                item[1],
+                int(item[3].get("outer_iteration", 0)),
+                int(item[3].get("fixed_iteration", 0)),
+                int(item[3].get("compact_index", 0)),
+                int(item[3].get("ion_stage", 0)),
             ),
         )
-        if phase_code <= 20:
+        if phase_code <= 21:
             locus = "incoming_global_state_or_live_hydrogen"
+        elif phase_code == 25:
+            locus = "hydrogen_preliminary_rate_totals"
         elif phase_code == 30:
             locus = "global_to_compact_mapping"
         elif phase_code < 100:
@@ -1729,17 +1990,20 @@ def compare_zone1_probe_with_python(
             locus = "element_workspace_writeback"
         elif phase_code == 120:
             locus = "global_xilevg_writeback"
+        elif phase_code == 140:
+            locus = "element_electron_fraction_accumulation"
         else:
             locus = "continuum_ground_alias_writeback"
         first_state_path_divergence = {
             "family": family,
+            "evaluation_index": evaluation_index,
             "phase_code": phase_code,
             "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
             "locus": locus,
             **{key: row.get(key) for key in (
                 "outer_iteration", "fixed_iteration", "compact_index",
                 "ion_counter", "ion_stage", "ion_index", "local_level",
-                "global_index", "full_element_index", "field",
+                "global_index", "full_element_index", "element_z", "field",
                 "python_value", "xstar_value", "absolute_difference",
                 "relative_difference",
             ) if key in row},
@@ -1787,8 +2051,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.86",
-        "probe_contract_version": "0.4.86",
+        "diagnostic_release": "0.4.88",
+        "probe_contract_version": "0.4.88",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -1843,9 +2107,13 @@ def compare_zone1_probe_with_python(
         "carbon_cooling_logical_parity_ready": cooling_ready,
         "source_order_state_path_probe_available": source_order_state_path_probe_available,
         "hydrogen_state_path_parity_ready": hydrogen_state_ready,
+        "hydrogen_first_differing_evaluation": hydrogen_first_differing_evaluation,
+        "electron_fraction_path_parity_ready": electron_ready,
+        "carbon_stage_correlation_parity_ready": carbon_corr_ready,
         "carbon_state_path_parity_ready": state_path_ready,
         "carbon_stage_totals_parity_ready": stage_totals_ready,
         "carbon_alias_boundary_parity_ready": alias_ready,
+        "phase110_physical_identity_key_ready": True,
         "state_path_probe_is_diagnostic_only": True,
         "source_order_first_divergence": first_state_path_divergence,
         "production_physics_modified_in_this_release": False,
@@ -1892,6 +2160,8 @@ def compare_zone1_probe_with_python(
         "carbon_state_path_comparison_csv": state_path,
         "carbon_stage_total_comparison_csv": stage_path,
         "hydrogen_state_path_comparison_csv": hydrogen_path,
+        "electron_fraction_path_comparison_csv": electron_path,
+        "carbon_stage_correlation_comparison_csv": carbon_corr_path,
         "carbon_alias_boundary_comparison_csv": alias_path,
         "summary_json": summary_path,
         "summary_markdown": markdown_path,

@@ -1006,6 +1006,9 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
     workspace: RadialTransferWorkspace = state.control["radial_transfer_workspace"]
     radiation = _radiation_namespace(state)
     escape = _escape_context(workspace)
+    capture_hydrogen_history = bool(
+        state.control.get("zone1_dsec_capture_hydrogen_history", False)
+    )
     requests: list[FixedStateElementRequest] = []
     for z, abundance in enumerate(parameters.physical_abundances, start=1):
         if float(abundance) <= 1.0e-24:
@@ -1029,6 +1032,7 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
                 strict_context=True,
                 allow_lstsq_fallback=False,
                 allow_dense_matrix_rescue=False,
+                capture_lucy_trace=bool(capture_hydrogen_history and int(z) == 1),
             )
         )
     if not requests:
@@ -1478,6 +1482,11 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             capture_all_input_snapshots=bool(
                 runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
             ),
+            capture_lucy_trace_element_z=(
+                (1, 6)
+                if bool(runtime_state.control.get("zone1_dsec_capture_hydrogen_history", False))
+                else ()
+            ),
             evaluation_gate_callback=runtime_state.control.get(
                 "zone1_dsec_evaluation_gate_callback"
             ),
@@ -1521,7 +1530,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                 electron_fraction_xee=target_xee,
                 hydrogen_density_cm3=target_xpx,
                 element_requests=tuple(
-                    replace(copy.deepcopy(request), capture_lucy_trace=(int(request.element_z) == 6))
+                    replace(
+                        copy.deepcopy(request),
+                        capture_lucy_trace=(int(request.element_z) in (1, 6)),
+                    )
                     for request in source_snapshot.element_requests
                 ),
                 required_element_z=source_snapshot.required_element_z,
@@ -2192,6 +2204,7 @@ def run_zone1_dsec_diagnostic_from_parameters(
         progress_callback=progress_callback,
     )
     state.control["zone1_dsec_capture_all_inputs"] = True
+    state.control["zone1_dsec_capture_hydrogen_history"] = True
     state.control["zone1_dsec_target_temperature_k"] = 73198.4
     if xstar_probe_dir is not None:
         target_state = load_xstar_target_state(xstar_probe_dir)
