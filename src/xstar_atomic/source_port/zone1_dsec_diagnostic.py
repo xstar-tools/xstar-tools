@@ -457,6 +457,16 @@ def result_fingerprints(
         "temperature_k": float(result.temperature_k),
         "electron_fraction_xee": float(result.electron_fraction_xee),
         "hydrogen_density_cm3": float(result.hydrogen_density_cm3),
+        "neutral_h_density_cm3": float(
+            getattr(result, "neutral_h_density_cm3", 0.0)
+        ),
+        "ionized_h_density_cm3": float(
+            getattr(result, "ionized_h_density_cm3", 0.0)
+        ),
+        "hydrogen_ground_fraction": float(
+            getattr(result, "hydrogen_ground_fraction", 0.0)
+        ),
+        "hydrogen_abundance": float(getattr(result, "hydrogen_abundance", 0.0)),
         "hmctot": float(result.hmctot),
         "elcter": float(result.elcter),
         "httot": float(result.httot),
@@ -1240,8 +1250,16 @@ def write_zone1_python_diagnostic_products(
         "production_rates_modified": True,
         "production_rate_change_scope": (
             "ucalc_data_type_15_final_shell_threshold_plus_"
-            "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+            "data_type_59_compact_fields_continuum_offset_pre_swap_zeroing_"
+            "literal_nbinc_enxt_excited_parent_weight_plus_calc_ion_rates_lfpi1_"
+            "plus_calc_hmc_all_live_xh0_xh1_and_strict_msolvelucy"
         ),
+        "production_solver_modified": True,
+        "production_solver_change_scope": (
+            "msolvelucy_no_lstsq_no_dense_rescue_literal_1dminus24_"
+            "normalization_ordered_diff_diff2_and_rate_type5_falpha"
+        ),
+        "live_hydrogen_charge_exchange_state": True,
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }

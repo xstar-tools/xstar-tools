@@ -215,7 +215,10 @@ class ElementEquilibriumContext:
     max_fixed_point_iterations: int = 200
     lucy_tolerance: float = 1.0e-2
     fixed_point_tolerance: float = 1.0e-2
+    # Standalone element diagnostics retain the historical recovery policy.
+    # Production calc_hmc_all requests override both flags to False.
     allow_lstsq_fallback: bool = True
+    allow_dense_matrix_rescue: bool = True
     capture_lucy_trace: bool = False
     # Shared mutable ``leveltemp`` workspace entering this element.  XSTAR
     # passes one work array through elements and repeated ``calc_hmc_all``
@@ -1372,6 +1375,46 @@ def _solve_normalized(matrix: np.ndarray, normalization_row: int, *, allow_lstsq
         return x, "numpy_lstsq_fallback", rank
 
 
+def _source_fixed_difference(
+    previous: np.ndarray, current: np.ndarray, *, epsilon: float
+) -> float:
+    """Literal ordered ``diff2`` loop from ``msolvelucy.f90``."""
+
+    diff2 = 0.0
+    tst = 0.0
+    index = 0
+    n = int(current.size)
+    while diff2 < 1.0e3 and index < n and tst < 1.0e3:
+        tst = 1.0
+        if current[index] > epsilon:
+            tst = previous[index] / current[index]
+        diffs = (tst - 1.0) * (tst - 1.0)
+        diff2 += diffs
+        index += 1
+    return float(diff2)
+
+
+def _source_outer_difference(
+    previous: np.ndarray, current: np.ndarray, *, epsilon: float
+) -> float:
+    """Literal ordered outer ``diff`` loop from ``msolvelucy.f90``."""
+
+    diff = 0.0
+    index = 0
+    n = int(current.size)
+    while index < n and diff < 1.0e3:
+        _tst = previous[index] * 1.0e-30
+        if diff < 1.0e10 and current[index] > epsilon:
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                ratio = np.float64(previous[index] - current[index]) / np.float64(
+                    previous[index] + current[index]
+                )
+            diffs = min(1.0e10, float(ratio)) ** 2
+            diff += diffs
+        index += 1
+    return float(diff)
+
+
 def msolvelucy(
     assembly: ElementMatrixAssembly,
     context: ElementEquilibriumContext,
@@ -1400,7 +1443,13 @@ def msolvelucy(
     outer = 0
     total_fixed = 0
     solver_methods: List[str] = []
-    runtime_notes: List[str] = []
+    runtime_notes: List[str] = [
+        (
+            "source-strict msolvelucy policy: no least-squares fallback and no dense rescue"
+            if not context.allow_lstsq_fallback and not context.allow_dense_matrix_rescue
+            else "diagnostic msolvelucy recovery policy enabled explicitly"
+        )
+    ]
     condensed_rank = 0
     used_dense_fallback = False
     trace = LucyIterationTrace() if context.capture_lucy_trace else None
@@ -1467,32 +1516,32 @@ def msolvelucy(
                     ril[mm] += abs(term.aj2)
                     rli[mm] += abs(term.aj1) * x[nn]
             x = (rli + rui) / (ril + riu + 1.0e-24)
-            total = float(np.sum(x))
-            if not math.isfinite(total) or total <= 0:
-                # Degenerate superlevel partitions can produce an all-zero
-                # fixed-point update even when the full normalized linear
-                # system is well posed.  Solve that same source matrix with
-                # the translated leqt2f-equivalent normalization rather than
-                # clipping or inventing populations.
+            # Literal msolvelucy.f90 ordering.  Production source mode never
+            # substitutes a full-matrix solve for a degenerate fixed-point
+            # update.  A diagnostic rescue remains available only when
+            # explicitly requested by the caller.
+            total = 0.0
+            for i in range(n):
+                total += float(x[i])
+            if (not math.isfinite(total) or total <= 0.0) and context.allow_dense_matrix_rescue:
                 x, dense_method, _ = _solve_normalized(
                     assembly.dense_matrix,
                     basis.normalization_row,
                     allow_lstsq=context.allow_lstsq_fallback,
                 )
                 solver_methods.append("dense_" + dense_method)
-                runtime_notes.append("Lucy fixed-point update was degenerate; used normalized full-matrix solve")
+                runtime_notes.append(
+                    "diagnostic-only Lucy fixed-point rescue used normalized full-matrix solve"
+                )
                 used_dense_fallback = True
                 fixed_diff = 0.0
                 outer_diff = 0.0
                 break
-            x /= total
-            mask = x > eps2
-            if np.any(mask):
-                ratios = np.ones(n, dtype=float)
-                ratios[mask] = xold[mask] / x[mask]
-                fixed_diff = float(np.sum((ratios[mask] - 1.0) ** 2))
-            else:
-                fixed_diff = 0.0
+            x /= 1.0e-24 + total
+
+            # Source loop stops immediately when either cumulative diff2 or
+            # the current ratio reaches 1.e3.
+            fixed_diff = _source_fixed_difference(xold, x, epsilon=eps2)
             if trace is not None:
                 for i in range(n):
                     trace.fixed_point_rows.append(
@@ -1554,13 +1603,8 @@ def msolvelucy(
 
         if used_dense_fallback:
             break
-        mask = x > eps
-        if np.any(mask):
-            denominator = xo[mask] + x[mask]
-            frac = np.minimum(1.0e10, (xo[mask] - x[mask]) / np.where(denominator != 0.0, denominator, 1.0e-300))
-            outer_diff = float(np.sum(frac**2))
-        else:
-            outer_diff = 0.0
+        # Literal ordered outer-difference loop from msolvelucy.f90.
+        outer_diff = _source_outer_difference(xo, x, epsilon=eps)
 
     normalization = float(np.sum(x))
     residual = assembly.dense_matrix @ x
@@ -1633,7 +1677,12 @@ def msolvelucy(
             category = rate_category.get(term.rate_type)
             if category is not None:
                 fgamma[category, mm] += out_rate
-                falpha[category, mm] += in_rate
+                if term.rate_type == 5:
+                    # Literal source assignment, including its cross-row
+                    # reference: falpha(3,mm)=falpha(3,nn)+...
+                    falpha[category, mm] = falpha[category, nn] + in_rate
+                else:
+                    falpha[category, mm] += in_rate
 
         # Source msolvelucy accumulates ionization/recombination only for
         # upward compact couplings of rate types 5 and 7.
@@ -1659,8 +1708,10 @@ def msolvelucy(
     nnegative = int(np.count_nonzero(x < 0.0))
     if nnegative:
         notes.append("source-faithful Lucy iteration returned negative populations; values were not clipped")
-    if any(method == "numpy_lstsq" for method in solver_methods):
-        notes.append("one or more condensed solves used least-squares fallback")
+    if any("numpy_lstsq" in method for method in solver_methods):
+        notes.append("one or more diagnostic condensed solves used least-squares fallback")
+    if used_dense_fallback:
+        notes.append("diagnostic dense-matrix rescue was enabled and used")
 
     return LucySolveResult(
         populations=x,

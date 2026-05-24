@@ -1027,6 +1027,8 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
                 initial_population_source="xstar_init_zero_global_xilevg",
                 terminal_continuum_seed_mode="source-zero",
                 strict_context=True,
+                allow_lstsq_fallback=False,
+                allow_dense_matrix_rescue=False,
             )
         )
     if not requests:
@@ -2139,8 +2141,16 @@ class Zone1DsecDiagnosticRun:
             "production_rates_modified": True,
             "production_rate_change_scope": (
                 "ucalc_data_type_15_final_shell_threshold_plus_"
-                "data_type_59_compact_fields_continuum_offset_and_pre_swap_zeroing"
+                "data_type_59_compact_fields_continuum_offset_pre_swap_zeroing_"
+                "literal_nbinc_enxt_excited_parent_weight_plus_calc_ion_rates_lfpi1_"
+                "plus_calc_hmc_all_live_xh0_xh1_and_strict_msolvelucy"
             ),
+            "production_solver_modified": True,
+            "production_solver_change_scope": (
+                "msolvelucy_no_lstsq_no_dense_rescue_literal_1dminus24_"
+                "normalization_ordered_diff_diff2_and_rate_type5_falpha"
+            ),
+            "live_hydrogen_charge_exchange_state": True,
             "production_tolerances_modified": False,
             "empirical_corrections_added": False,
         }

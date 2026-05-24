@@ -14,7 +14,7 @@ fixed-state local-zone parity is not yet ready.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
@@ -61,6 +61,8 @@ class FixedStateElementRequest:
     neutral_h_density_cm3: float = 0.0
     ionized_h_density_cm3: float = 0.0
     lfast: int = 2
+    allow_lstsq_fallback: bool = False
+    allow_dense_matrix_rescue: bool = False
     critf: float = 1.0e-7
     use_source_ion_limits: bool = True
     initial_populations: Optional[np.ndarray] = None
@@ -154,6 +156,10 @@ class FixedStateCalcHMCAllResult:
     hydrogen_density_cm3: float
     electron_fraction_xee: float
     electron_density_cm3: float
+    neutral_h_density_cm3: float
+    ionized_h_density_cm3: float
+    hydrogen_ground_fraction: float
+    hydrogen_abundance: float
     pressure: float
     lcdd: int
     element_results: List[FixedStateElementResult]
@@ -462,39 +468,69 @@ def calc_hmc_all(
         initial_global_rnisg_by_index, name="initial_global_rnisg_by_index"
     )
 
+    # Literal calc_hmc_all.f90 entry state.  XSTAR constructs the neutral and
+    # ionized hydrogen charge-exchange densities once per calc_hmc_all call
+    # from the *incoming* global H I ground population, before the element
+    # loop mutates xilevg:
+    #
+    #   xh0=xpx*xilevg(1)*abel(1)
+    #   xh1=xpx*(1.-xilevg(1))*abel(1)
+    #
+    # The dense native array is authoritative in production.  Synthetic
+    # bounded callers without that array retain XSTAR init semantics
+    # (xilevg(1)=0) rather than using stale per-request defaults.
+    hydrogen_abundance = next(
+        (float(item.abundance) for item in elements if int(item.element_z) == 1),
+        0.0,
+    )
+    hydrogen_ground_fraction = (
+        float(global_xilevg_by_index[0])
+        if global_xilevg_by_index.size >= 1
+        else 0.0
+    )
+    if not np.isfinite(hydrogen_ground_fraction):
+        raise CalcHMCAllError("incoming global H I ground population is non-finite")
+    live_xh0 = xpx * hydrogen_ground_fraction * hydrogen_abundance
+    live_xh1 = xpx * (1.0 - hydrogen_ground_fraction) * hydrogen_abundance
+
     for request in elements:
         request.validate()
-        z = int(request.element_z)
-        abundance = float(request.abundance)
+        effective_request = replace(
+            request,
+            neutral_h_density_cm3=float(live_xh0),
+            ionized_h_density_cm3=float(live_xh1),
+        )
+        z = int(effective_request.element_z)
+        abundance = float(effective_request.abundance)
 
         ion_rate_context = CalcIonRatesContext(
             temperature_k=float(temperature_k),
             hydrogen_density_cm3=xpx,
             electron_fraction_xee=float(electron_fraction_xee),
-            radiation=request.radiation,
-            covering_fraction=float(request.covering_fraction),
-            turbulent_velocity_km_s=float(request.turbulent_velocity_km_s),
-            neutral_h_density_cm3=float(request.neutral_h_density_cm3),
-            ionized_h_density_cm3=float(request.ionized_h_density_cm3),
-            lfast=int(request.lfast),
-            strict_context=bool(request.strict_context),
+            radiation=effective_request.radiation,
+            covering_fraction=float(effective_request.covering_fraction),
+            turbulent_velocity_km_s=float(effective_request.turbulent_velocity_km_s),
+            neutral_h_density_cm3=float(effective_request.neutral_h_density_cm3),
+            ionized_h_density_cm3=float(effective_request.ionized_h_density_cm3),
+            lfast=int(effective_request.lfast),
+            strict_context=bool(effective_request.strict_context),
         )
         calc_rates_by_stage, preliminary, source_limits = pre_matrix_solver(
             master,
             derived,
             element_z=z,
             context=ion_rate_context,
-            critf=float(request.critf),
+            critf=float(effective_request.critf),
             dispatcher=dispatcher,
         )
         pre_matrix_ok = all(item.ready for item in calc_rates_by_stage.values())
         all_pre_matrix_ready &= pre_matrix_ok
-        if request.use_source_ion_limits:
+        if effective_request.use_source_ion_limits:
             selected_min = int(source_limits.mml)
             selected_max = int(source_limits.mmu)
         else:
-            selected_min = int(request.min_ion_stage)
-            selected_max = int(request.max_ion_stage)
+            selected_min = int(effective_request.min_ion_stage)
+            selected_max = int(effective_request.max_ion_stage)
         mml[z] = selected_min
         mmu[z] = selected_max
 
@@ -516,19 +552,21 @@ def calc_hmc_all(
             electron_fraction_xee=float(electron_fraction_xee),
             min_ion_stage=selected_min,
             max_ion_stage=selected_max,
-            radiation=request.radiation,
+            radiation=effective_request.radiation,
             escape=request.escape,
-            covering_fraction=float(request.covering_fraction),
-            turbulent_velocity_km_s=float(request.turbulent_velocity_km_s),
-            neutral_h_density_cm3=float(request.neutral_h_density_cm3),
-            ionized_h_density_cm3=float(request.ionized_h_density_cm3),
+            covering_fraction=float(effective_request.covering_fraction),
+            turbulent_velocity_km_s=float(effective_request.turbulent_velocity_km_s),
+            neutral_h_density_cm3=float(effective_request.neutral_h_density_cm3),
+            ionized_h_density_cm3=float(effective_request.ionized_h_density_cm3),
             abundance=abundance,
-            lfast=int(request.lfast),
-            initial_populations=request.initial_populations,
-            initial_global_populations=request.initial_global_populations,
-            terminal_continuum_seed_mode=request.terminal_continuum_seed_mode,
-            strict_context=bool(request.strict_context),
-            capture_lucy_trace=bool(request.capture_lucy_trace),
+            lfast=int(effective_request.lfast),
+            initial_populations=effective_request.initial_populations,
+            initial_global_populations=effective_request.initial_global_populations,
+            terminal_continuum_seed_mode=effective_request.terminal_continuum_seed_mode,
+            strict_context=bool(effective_request.strict_context),
+            capture_lucy_trace=bool(effective_request.capture_lucy_trace),
+            allow_lstsq_fallback=bool(effective_request.allow_lstsq_fallback),
+            allow_dense_matrix_rescue=bool(effective_request.allow_dense_matrix_rescue),
             initial_leveltemp_workspace=leveltemp_workspace,
             initial_leveltemp_owner_by_column=leveltemp_owner_by_column,
         )
@@ -734,7 +772,7 @@ def calc_hmc_all(
 
         element_results.append(
             FixedStateElementResult(
-                request=request,
+                request=effective_request,
                 equilibrium=equilibrium,
                 calc_ion_rates=calc_rates_by_stage,
                 preliminary_pirt={stage: float(item.pirti) for stage, item in calc_rates_by_stage.items()},
@@ -1033,6 +1071,10 @@ def calc_hmc_all(
         hydrogen_density_cm3=xpx,
         electron_fraction_xee=float(electron_fraction_xee),
         electron_density_cm3=xpx * float(electron_fraction_xee),
+        neutral_h_density_cm3=float(live_xh0),
+        ionized_h_density_cm3=float(live_xh1),
+        hydrogen_ground_fraction=float(hydrogen_ground_fraction),
+        hydrogen_abundance=float(hydrogen_abundance),
         pressure=float(pressure),
         lcdd=int(lcdd),
         element_results=element_results,
@@ -1110,6 +1152,11 @@ def calc_hmc_all(
             "incoming_leveltemp_workspace_present": initial_leveltemp_workspace is not None,
             "source_global_alias_writeback": bool(source_global_alias_writeback),
             "dense_global_state_ready": bool(n_global_levels > 0),
+            "hydrogen_charge_exchange_state_source": "calc_hmc_all_entry_xpx_xilevg1_abel1",
+            "incoming_hydrogen_ground_fraction": float(hydrogen_ground_fraction),
+            "hydrogen_abundance": float(hydrogen_abundance),
+            "neutral_h_density_cm3": float(live_xh0),
+            "ionized_h_density_cm3": float(live_xh1),
         },
     )
 

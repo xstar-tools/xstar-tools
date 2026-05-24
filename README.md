@@ -1,3 +1,7 @@
+## v0.4.85 live hydrogen state and strict production Lucy solver
+
+v0.4.85 reconstructs `xh0/xh1` from the incoming dense global H I ground population at every `calc_hmc_all` entry, matching `xpx*xilevg(1)*abel(1)` and its ionized complement. Production `msolvelucy` now has no least-squares fallback or dense rescue and uses literal ordered normalization and convergence arithmetic. Standalone diagnostic contexts retain recovery only when explicitly enabled. See `V0485_LIVE_HYDROGEN_STRICT_MSOLVELUCY.md`.
+
 ## v0.4.84 preliminary-rate/grid parity and resilient caches
 
 v0.4.84 addresses the remaining v0.4.83 zone-1 differences without changing the restored 24-evaluation DSEC branch. Preliminary `calc_ion_rates` now passes the literal local `lfpi=1`; type 59 and `phintfo` use the source one-based `huntf/nbinc/enxt` continuum traversal and excited-parent statistical weight; logical carbon cooling is keyed by stable physical identities. Both large NPZ sidecars now recover from CRC/ZIP/NumPy member corruption by rebuilding atomically from `atdb.fits`. See `V0484_PRELIMINARY_LFPI_TYPE59_GRID_CACHE_RECOVERY.md`.

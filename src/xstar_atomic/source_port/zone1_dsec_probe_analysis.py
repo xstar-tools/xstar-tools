@@ -960,7 +960,7 @@ def analyze_xstar_zone1_probe(
     _write(cooling_path, cooling)
 
     summary = {
-        "diagnostic_release": "0.4.84",
+        "diagnostic_release": "0.4.85",
         "probe_contract_version": "0.4.79",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
@@ -987,6 +987,8 @@ def analyze_xstar_zone1_probe(
         "n_carbon_cooling_terms": len(cooling),
         "production_rates_modified": False,
         "probe_is_observation_only": True,
+        "production_solver_modified": False,
+        "live_hydrogen_charge_exchange_state": False,
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }
@@ -1513,7 +1515,7 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.84",
+        "diagnostic_release": "0.4.85",
         "probe_contract_version": "0.4.79",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
@@ -1576,8 +1578,15 @@ def compare_zone1_probe_with_python(
         "production_rate_change_scope": (
             "ucalc_data_type_15_final_shell_threshold_plus_"
             "data_type_59_compact_fields_continuum_offset_pre_swap_zeroing_"
-            "literal_nbinc_enxt_excited_parent_weight_plus_calc_ion_rates_lfpi1"
+            "literal_nbinc_enxt_excited_parent_weight_plus_calc_ion_rates_lfpi1_"
+            "plus_calc_hmc_all_live_xh0_xh1_and_strict_msolvelucy"
         ),
+        "production_solver_modified": True,
+        "production_solver_change_scope": (
+            "msolvelucy_no_lstsq_no_dense_rescue_literal_1dminus24_"
+            "normalization_ordered_diff_diff2_and_rate_type5_falpha"
+        ),
+        "live_hydrogen_charge_exchange_state": True,
         "production_tolerances_modified": False,
         "empirical_corrections_added": False,
     }

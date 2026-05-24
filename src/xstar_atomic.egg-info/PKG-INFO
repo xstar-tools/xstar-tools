@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-atomic
-Version: 0.4.84
+Version: 0.4.85
 Summary: Source-faithful Python port and atomic-physics audit tools for XSTAR
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,10 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.4.85 live hydrogen state and strict production Lucy solver
+
+v0.4.85 reconstructs `xh0/xh1` from the incoming dense global H I ground population at every `calc_hmc_all` entry, matching `xpx*xilevg(1)*abel(1)` and its ionized complement. Production `msolvelucy` now has no least-squares fallback or dense rescue and uses literal ordered normalization and convergence arithmetic. Standalone diagnostic contexts retain recovery only when explicitly enabled. See `V0485_LIVE_HYDROGEN_STRICT_MSOLVELUCY.md`.
 
 ## v0.4.84 preliminary-rate/grid parity and resilient caches
 

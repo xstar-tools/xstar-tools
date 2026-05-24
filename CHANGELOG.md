@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.4.85 — live hydrogen charge-exchange state and strict production `msolvelucy` - 2026-05-23
+
+- Reconstructs `xh0=xpx*xilevg(1)*abel(1)` and `xh1=xpx*(1-xilevg(1))*abel(1)` from the incoming dense global H I population at every `calc_hmc_all` call.
+- Passes the same live hydrogen densities to preliminary ion balance and detailed element equilibrium.
+- Makes production `msolvelucy` source-strict: no NumPy least-squares fallback and no dense full-matrix rescue.
+- Uses literal ordered `xm` accumulation, `1.d-24+xm` normalization, and capped one-based `diff2`/`diff` loops.
+- Reproduces the literal rate-type-5 `falpha(3,mm)=falpha(3,nn)+...` assignment.
+- Keeps recovery behavior only in explicitly diagnostic standalone contexts.
+- Adds live-H, strict-solver, no-rescue, no-lstsq, and ordered-sum regression tests.
+- No original-XSTAR, atomic-data, DSEC, radial, FITS, tolerance, or empirical-correction change.
+
 ## v0.4.84 — preliminary lfpi, literal type-59 grid, and cache recovery - 2026-05-23
 
 - Uses the successful v0.4.83 production run as the acceptance baseline: Python now follows the original 24-evaluation DSEC path and converges to 73206.20 K versus 73198.41 K.
