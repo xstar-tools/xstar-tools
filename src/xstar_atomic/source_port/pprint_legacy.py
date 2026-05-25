@@ -19,6 +19,30 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import numpy as np
+
+
+def _install_astropy_numpy_compatibility() -> None:
+    """Install narrow NumPy shims needed by older Astropy on new NumPy."""
+    if not hasattr(np, "in1d"):
+        np.in1d = np.isin  # type: ignore[attr-defined]
+    try:
+        import numpy.lib._function_base_impl as _np_function_base
+    except Exception:
+        return
+    if not hasattr(_np_function_base, "_check_interpolation_as_method"):
+        def _check_interpolation_as_method(method, interpolation, fname):
+            if method != "linear":
+                raise TypeError(
+                    "You shall not pass both `method` and `interpolation`!\n"
+                    "(`interpolation` is Deprecated in favor of `method`)"
+                )
+            return interpolation
+
+        _np_function_base._check_interpolation_as_method = _check_interpolation_as_method
+
+
+_install_astropy_numpy_compatibility()
+
 from astropy.io import fits
 
 from .radiation import nbinc

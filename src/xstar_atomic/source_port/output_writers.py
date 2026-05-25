@@ -17,13 +17,34 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-# NumPy 2.4 removed np.in1d after deprecating it in NumPy 2.0.
-# Some Astropy releases still reference np.in1d while constructing FITS
-# binary table HDUs.  The output writer only needs Astropy for FITS I/O;
-# install the source-equivalent alias before Astropy imports its table/units
-# stack so 142_run_xstar_python.py remains usable on newer NumPy runtimes.
-if not hasattr(np, "in1d"):
-    np.in1d = np.isin  # type: ignore[attr-defined]
+
+def _install_astropy_numpy_compatibility() -> None:
+    """Install narrow NumPy shims needed by older Astropy on new NumPy.
+
+    Some Astropy releases import private/deprecated NumPy helpers while
+    constructing FITS table HDUs.  Newer NumPy releases removed those names.
+    The source-port writer does not rely on the deprecated behavior, but the
+    import-time references must exist for Astropy's table stack to load.
+    """
+    if not hasattr(np, "in1d"):
+        np.in1d = np.isin  # type: ignore[attr-defined]
+    try:
+        import numpy.lib._function_base_impl as _np_function_base
+    except Exception:
+        return
+    if not hasattr(_np_function_base, "_check_interpolation_as_method"):
+        def _check_interpolation_as_method(method, interpolation, fname):
+            if method != "linear":
+                raise TypeError(
+                    "You shall not pass both `method` and `interpolation`!\n"
+                    "(`interpolation` is Deprecated in favor of `method`)"
+                )
+            return interpolation
+
+        _np_function_base._check_interpolation_as_method = _check_interpolation_as_method
+
+
+_install_astropy_numpy_compatibility()
 
 from astropy.io import fits
 
