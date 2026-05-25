@@ -1168,6 +1168,15 @@ def run_bounded_radial_shell(
         direction=int(direction),
         fixed_state=bool(fixed_state),
     )
+    if bool(state.control.get("radial_spectrum_parity_diagnostic_enabled", False)):
+        from .radial_spectrum_parity import append_python_radial_shell_diagnostic
+
+        append_python_radial_shell_diagnostic(
+            state,
+            zone_index=int(zone_index),
+            pass_index=int(pass_index),
+            direction=int(direction),
+        )
     source_order = tuple(
         state.provenance.get("completed_source_routines", [])[completed_before:]
     )

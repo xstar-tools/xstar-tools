@@ -65,6 +65,10 @@ from .physical_output_parity import (
     PhysicalOutputParityResult,
     compare_physical_output_directories,
 )
+from .radial_spectrum_parity import (
+    compare_radial_spectrum_products,
+    write_python_runtime_radial_spectrum_diagnostics,
+)
 from .pprint_legacy import (
     PprintAtomicMetadata,
     PprintElementMetadata,
@@ -1918,6 +1922,7 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
+    state.control["radial_spectrum_parity_diagnostic_enabled"] = True
     try:
         _emit_progress(
             progress_callback,
@@ -1935,6 +1940,13 @@ def run_xstar_from_parameters(
             "radial_done",
             completed_passes=len(radial.pass_results),
             completed_zones=sum(len(item.shell_results) for item in radial.pass_results),
+        )
+        radial_diag_products = write_python_runtime_radial_spectrum_diagnostics(state, out)
+        state.outputs["radial_spectrum_diagnostics_v0499_products"] = radial_diag_products
+        _emit_progress(
+            progress_callback,
+            "radial_spectrum_diagnostic_done",
+            product_count=len(radial_diag_products),
         )
         _emit_progress(progress_callback, "output_writer_start", output_dir=str(out))
         writer = run_output_writer_sequence(
@@ -2329,6 +2341,19 @@ def run_c5_ne1_acceptance(
             "parity_done",
             parity_run=bool(parity.parity_run),
             all_files_match=bool(parity.all_files_ready),
+        )
+        radial_spectrum = compare_radial_spectrum_products(
+            original,
+            python_run.output_dir,
+            out_dir=Path(python_run.output_dir) / "radial_spectrum_diagnostics_v0499",
+        )
+        python_run.final_state.outputs["radial_spectrum_parity_v0499_summary"] = radial_spectrum
+        _emit_progress(
+            progress_callback,
+            "radial_spectrum_parity_done",
+            row_count_match=bool(radial_spectrum.get("radial_row_summary", {}).get("row_count_match", False)),
+            python_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("python_abundance_rows", 0)),
+            xstar_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("xstar_abundance_rows", 0)),
         )
     result = C5NE1AcceptanceResult(
         python_run=python_run,
