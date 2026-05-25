@@ -794,7 +794,7 @@ def extract_python_carbon_msolvelucy_inner_eval11_outer1(
     *,
     evaluation_index: int,
 ) -> tuple[dict[str, Any], ...]:
-    """Return v0.4.93 inner-Lucy audit rows for carbon evaluation 11.
+    """Return v0.4.94 inner-Lucy audit rows for carbon evaluation 11.
 
     This is diagnostic-only.  It observes the first condensed superlevel solve
     where v0.4.91 localized the C II-continuum / C III-ground shared row drift.
@@ -862,11 +862,20 @@ def extract_python_carbon_msolvelucy_inner_eval11_outer1(
             "population": float(assembly.initial_populations[compact_index]),
         })
         rows.append(row)
-    # Condensed RHS/source vector p before solve and p after leqt2f.
+    # Condensed source/population vector p before solve and solved
+    # superlevel populations after leqt2f.  Keep all superlevels in v0.4.94.
     for r in trace.superlevel_rows:
         if int(r.get("outer_iteration", 0)) != 1:
             continue
         sp = int(r.get("superlevel", 0))
+        row = dict(base)
+        row.update({
+            "row_kind": "condensed_rhs_source_before_solve",
+            "superlevel": sp,
+            "population_before_condensed_solve": float(r.get("population_before_condensed_solve", 0.0)),
+        })
+        rows.append(row)
+        # Backward-compatible compact row for the focused shared and nearby rows.
         if sp == shared_super or sp <= min(shared_super + 4, basis.n_superlevels):
             row = dict(base)
             row.update({
@@ -876,19 +885,58 @@ def extract_python_carbon_msolvelucy_inner_eval11_outer1(
                 "population_after_condensed_solve": float(r.get("population_after_condensed_solve", 0.0)),
             })
             rows.append(row)
-    # Raw and normalized condensed matrix row for the shared superlevel.
+        row = dict(base)
+        row.update({
+            "row_kind": "leqt2f_output_solution",
+            "superlevel": sp,
+            "population_after_condensed_solve": float(r.get("population_after_condensed_solve", 0.0)),
+        })
+        rows.append(row)
+    # Full condensed matrix before the conservation row is injected.
+    # v0.4.94 keeps the old shared-row kind for continuity and adds full
+    # matrix/leqt2f input rows with row-kind-specific comparator keys.
     for r in trace.condensed_matrix_rows:
         if int(r.get("outer_iteration", 0)) != 1:
             continue
-        if int(r.get("row_superlevel", 0)) != shared_super:
-            continue
+        row_super = int(r.get("row_superlevel", 0))
+        col_super = int(r.get("column_superlevel", 0))
+        raw_value = float(r.get("raw_matrix_value", 0.0))
+        leqt_value = float(r.get("normalized_matrix_value", 0.0))
         row = dict(base)
         row.update({
-            "row_kind": "condensed_matrix_row_before_solve",
-            "row_superlevel": int(r.get("row_superlevel", 0)),
-            "column_superlevel": int(r.get("column_superlevel", 0)),
-            "raw_matrix_value": float(r.get("raw_matrix_value", 0.0)),
-            "normalized_matrix_value": float(r.get("normalized_matrix_value", 0.0)),
+            "row_kind": "condensed_matrix_full_before_solve",
+            "row_superlevel": row_super,
+            "column_superlevel": col_super,
+            "raw_matrix_value": raw_value,
+        })
+        rows.append(row)
+        if row_super == shared_super:
+            row = dict(base)
+            row.update({
+                "row_kind": "condensed_matrix_row_before_solve",
+                "row_superlevel": row_super,
+                "column_superlevel": col_super,
+                "raw_matrix_value": raw_value,
+                "normalized_matrix_value": leqt_value,
+            })
+            rows.append(row)
+        row = dict(base)
+        row.update({
+            "row_kind": "leqt2f_input_matrix",
+            "row_superlevel": row_super,
+            "column_superlevel": col_super,
+            "normalized_matrix_value": leqt_value,
+        })
+        rows.append(row)
+    # leqt2f receives bmatsup as RHS, not the p-start vector.
+    # Source sets bmatsup(:)=0 and bmatsup(nspmx)=1 after replacing the
+    # conservation row.
+    for sp in range(1, int(basis.n_superlevels) + 1):
+        row = dict(base)
+        row.update({
+            "row_kind": "leqt2f_input_rhs",
+            "superlevel": sp,
+            "population_before_condensed_solve": 1.0 if sp == int(basis.n_superlevels) else 0.0,
         })
         rows.append(row)
     # Expansion/scatter back to compact rows from rr * p(superlevel).
@@ -1610,7 +1658,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.93",
+        "diagnostic_release": "0.4.94",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),

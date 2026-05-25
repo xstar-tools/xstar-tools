@@ -1318,8 +1318,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.93",
-        "probe_contract_version": "0.4.93",
+        "diagnostic_release": "0.4.94",
+        "probe_contract_version": "0.4.94",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -1583,7 +1583,9 @@ def _row_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
         "evaluation_index", "phase_code", "phase", "outer_iteration",
         "fixed_iteration", "compact_index", "ion_counter", "ion_stage",
         "ion_index", "local_level", "full_element_index", "element_z",
-        "field", "python_present", "xstar_present", "comparison_status",
+        "row_kind", "superlevel", "row_superlevel", "column_superlevel",
+        "term_index", "source_row", "source_column", "field",
+        "python_present", "xstar_present", "comparison_status",
         "python_value", "xstar_value", "absolute_difference",
         "relative_difference", "within_tolerance",
     )
@@ -2424,32 +2426,103 @@ def compare_zone1_probe_with_python(
     # contributions for the C II-continuum / C III-ground shared row.
     py_inner_eval11 = _read_optional(py / "python_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv")
     xs_inner_eval11 = _read_optional(xs / "xstar_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv")
-    inner_keys = (
-        "evaluation_index", "outer_iteration", "row_kind",
-        "compact_index", "superlevel", "ion_counter", "ion_stage",
-        "row_superlevel", "column_superlevel", "term_index",
-        "source_row", "source_column", "source_record", "rate_type", "data_type",
+    # v0.4.94: compare inner-Lucy rows with row-kind-specific keys.
+    # v0.4.93 used one wide key containing many placeholder-zero columns;
+    # that made physically identical Python/XSTAR rows fail to match.
+    def _kind(rows: Sequence[Mapping[str, str]], name: str) -> list[Mapping[str, str]]:
+        return [row for row in rows if str(row.get("row_kind", "")) == name]
+
+    inner_groups = (
+        ("superlevel_mapping",
+         ("evaluation_index", "outer_iteration", "row_kind", "compact_index"),
+         ("population", "rr")),
+        ("condensed_rhs_source_before_solve",
+         ("evaluation_index", "outer_iteration", "row_kind", "superlevel"),
+         ("population_before_condensed_solve",)),
+        ("condensed_rhs_and_solution",
+         ("evaluation_index", "outer_iteration", "row_kind", "superlevel"),
+         ("population_before_condensed_solve", "population_after_condensed_solve")),
+        ("condensed_matrix_full_before_solve",
+         ("evaluation_index", "outer_iteration", "row_kind", "row_superlevel", "column_superlevel"),
+         ("raw_matrix_value",)),
+        ("condensed_matrix_row_before_solve",
+         ("evaluation_index", "outer_iteration", "row_kind", "row_superlevel", "column_superlevel"),
+         ("raw_matrix_value", "normalized_matrix_value")),
+        ("leqt2f_input_matrix",
+         ("evaluation_index", "outer_iteration", "row_kind", "row_superlevel", "column_superlevel"),
+         ("normalized_matrix_value",)),
+        ("leqt2f_input_rhs",
+         ("evaluation_index", "outer_iteration", "row_kind", "superlevel"),
+         ("population_before_condensed_solve",)),
+        ("leqt2f_output_solution",
+         ("evaluation_index", "outer_iteration", "row_kind", "superlevel"),
+         ("population_after_condensed_solve",)),
+        ("expansion_scatter_after_condensed",
+         ("evaluation_index", "outer_iteration", "row_kind", "compact_index"),
+         ("rr", "population_outer_start", "population_after_condensed", "population_after_fixed_point")),
+        ("normalization_denominator_before_phase60",
+         ("evaluation_index", "outer_iteration", "row_kind"),
+         ("xm_before_normalization", "normalization_denominator")),
+        ("fixed_point_row_before_after_normalization",
+         ("evaluation_index", "outer_iteration", "row_kind", "compact_index"),
+         ("population_before", "riu", "rui", "ril", "rli", "population_unnormalized", "population_after", "xm_before_normalization", "normalization_denominator")),
+        ("ordered_dominant_matrix_contribution",
+         ("evaluation_index", "outer_iteration", "row_kind", "term_index", "source_row", "source_column", "row_superlevel", "column_superlevel"),
+         ("aj1", "aj2", "rr_mm", "rr_nn", "offdiag_contribution", "diag_contribution", "importance")),
     )
-    inner_fields = (
-        "population", "population_before_condensed_solve",
-        "population_after_condensed_solve", "raw_matrix_value",
-        "normalized_matrix_value", "rr", "population_outer_start",
-        "population_after_condensed", "population_after_fixed_point",
-        "xm_before_normalization", "normalization_denominator",
-        "population_before", "riu", "rui", "ril", "rli",
-        "population_unnormalized", "population_after", "aj1", "aj2",
-        "rr_mm", "rr_nn", "offdiag_contribution", "diag_contribution",
-        "importance",
-    )
-    carbon_inner_eval11_rows = _numeric_comparison_with_presence(
-        py_inner_eval11, xs_inner_eval11, keys=inner_keys, fields=inner_fields,
-        rtol=rtol, atol=atol,
-    ) if py_inner_eval11 or xs_inner_eval11 else []
+    carbon_inner_eval11_rows: list[dict[str, Any]] = []
+    for kind_name, keys, fields in inner_groups:
+        py_kind = _kind(py_inner_eval11, kind_name)
+        xs_kind = _kind(xs_inner_eval11, kind_name)
+        if not (py_kind or xs_kind):
+            continue
+        carbon_inner_eval11_rows.extend(
+            _numeric_comparison_with_presence(
+                py_kind, xs_kind, keys=keys, fields=fields, rtol=rtol, atol=atol
+            )
+        )
+    carbon_inner_eval11_rows.sort(key=lambda row: (
+        int(float(row.get("evaluation_index", 0) or 0)),
+        int(float(row.get("outer_iteration", 0) or 0)),
+        str(row.get("row_kind", "")),
+        int(float(row.get("compact_index", 0) or 0)),
+        int(float(row.get("superlevel", 0) or 0)),
+        int(float(row.get("row_superlevel", 0) or 0)),
+        int(float(row.get("column_superlevel", 0) or 0)),
+        int(float(row.get("term_index", 0) or 0)),
+        str(row.get("field", "")),
+    ))
     carbon_inner_eval11_path = out / "zone1_carbon_msolvelucy_inner_eval11_outer1_comparison_T73198p4K.csv"
     _write(carbon_inner_eval11_path, carbon_inner_eval11_rows)
     carbon_inner_eval11_first_tolerance_failure = _first_row(
         carbon_inner_eval11_rows,
         predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and not bool(row.get("within_tolerance", False)),
+    )
+    carbon_inner_first_input_matrix_failure = _first_row(
+        carbon_inner_eval11_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and str(row.get("row_kind", "")) in ("condensed_matrix_full_before_solve", "leqt2f_input_matrix")
+        and not bool(row.get("within_tolerance", False)),
+    )
+    carbon_inner_first_rhs_failure = _first_row(
+        carbon_inner_eval11_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and str(row.get("row_kind", "")) in ("condensed_rhs_source_before_solve", "leqt2f_input_rhs")
+        and not bool(row.get("within_tolerance", False)),
+    )
+    carbon_inner_first_solution_failure = _first_row(
+        carbon_inner_eval11_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and str(row.get("row_kind", "")) == "leqt2f_output_solution"
+        and str(row.get("field", "")) == "population_after_condensed_solve"
+        and not bool(row.get("within_tolerance", False)),
+    )
+    carbon_inner_first_scatter_failure = _first_row(
+        carbon_inner_eval11_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and str(row.get("row_kind", "")) == "expansion_scatter_after_condensed"
+        and str(row.get("field", "")) in ("population_after_condensed", "rr")
         and not bool(row.get("within_tolerance", False)),
     )
 
@@ -2601,8 +2674,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.93",
-        "probe_contract_version": "0.4.93",
+        "diagnostic_release": "0.4.94",
+        "probe_contract_version": "0.4.94",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -2678,6 +2751,10 @@ def compare_zone1_probe_with_python(
         "carbon_cii_ciii_solve_path_eval09_11_first_tolerance_failure": _row_summary(carbon_cii_ciii_first_tolerance_failure),
         "carbon_msolvelucy_inner_eval11_outer1_ready": bool(carbon_inner_eval11_rows),
         "carbon_msolvelucy_inner_eval11_outer1_first_tolerance_failure": _row_summary(carbon_inner_eval11_first_tolerance_failure),
+        "carbon_msolvelucy_inner_eval11_outer1_first_input_matrix_failure": _row_summary(carbon_inner_first_input_matrix_failure),
+        "carbon_msolvelucy_inner_eval11_outer1_first_rhs_failure": _row_summary(carbon_inner_first_rhs_failure),
+        "carbon_msolvelucy_inner_eval11_outer1_first_solution_failure": _row_summary(carbon_inner_first_solution_failure),
+        "carbon_msolvelucy_inner_eval11_outer1_first_scatter_failure": _row_summary(carbon_inner_first_scatter_failure),
         "carbon_state_path_parity_ready": state_path_ready,
         "carbon_stage_totals_parity_ready": stage_totals_ready,
         "carbon_alias_boundary_parity_ready": alias_ready,
