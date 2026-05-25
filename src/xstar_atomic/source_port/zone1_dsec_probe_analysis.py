@@ -1093,6 +1093,7 @@ def analyze_xstar_zone1_probe(
     _write(electron_fraction_path, electron_fraction_rows)
 
     carbon_state_rows: list[dict[str, Any]] = []
+    carbon_solve_eval09_11_rows: list[dict[str, Any]] = []
     carbon_correlation_buckets: dict[tuple[int, int, int, int], list[tuple[int, float]]] = {}
     for row in _read_optional(root / "xstar_zone1_carbon_state_path_probe.csv"):
         call_id = _int_field(row, "calc_hmc_all_call_id")
@@ -1119,6 +1120,8 @@ def analyze_xstar_zone1_probe(
         }
         if call_id == target_call:
             carbon_state_rows.append(item)
+        if 9 <= evaluation <= 11 and phase_code in (30, 40, 50, 60, 70, 80, 120):
+            carbon_solve_eval09_11_rows.append(dict(item))
         if phase_code in (20, 120):
             key = (
                 evaluation,
@@ -1131,6 +1134,8 @@ def analyze_xstar_zone1_probe(
             )
     carbon_state_path = out / "xstar_zone1_carbon_state_path_T73198p4K.csv"
     _write(carbon_state_path, carbon_state_rows)
+    carbon_solve_eval09_11_path = out / "xstar_zone1_carbon_solve_path_eval09_11_T73198p4K.csv"
+    _write(carbon_solve_eval09_11_path, carbon_solve_eval09_11_rows)
 
     carbon_correlation_rows: list[dict[str, Any]] = []
     direct_carbon_correlation = _read_optional(root / "xstar_zone1_carbon_stage_correlation_probe.csv")
@@ -1198,24 +1203,31 @@ def analyze_xstar_zone1_probe(
     _write(carbon_correlation_path, carbon_correlation_rows)
 
     carbon_stage_total_rows: list[dict[str, Any]] = []
+    carbon_solve_stage_eval09_11_rows: list[dict[str, Any]] = []
     for row in _read_optional(root / "xstar_zone1_carbon_stage_totals_probe.csv"):
-        if _int_field(row, "calc_hmc_all_call_id") != target_call:
+        call_id = _int_field(row, "calc_hmc_all_call_id")
+        evaluation = call_to_eval.get(call_id)
+        if evaluation is None:
             continue
         phase_code = _int_field(row, "phase_code")
-        carbon_stage_total_rows.append(
-            {
-                "source": "xstar",
-                "evaluation_index": target_eval,
-                "phase_code": phase_code,
-                "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
-                "outer_iteration": _int_field(row, "outer_iteration"),
-                "ion_counter": _int_field(row, "ion_counter"),
-                "ion_stage": _int_field(row, "ion_stage"),
-                "population_total": _float_field(row, "population_total"),
-            }
-        )
+        item = {
+            "source": "xstar",
+            "evaluation_index": evaluation,
+            "phase_code": phase_code,
+            "phase": _STATE_PHASE_NAMES.get(phase_code, f"phase_{phase_code}"),
+            "outer_iteration": _int_field(row, "outer_iteration"),
+            "ion_counter": _int_field(row, "ion_counter"),
+            "ion_stage": _int_field(row, "ion_stage"),
+            "population_total": _float_field(row, "population_total"),
+        }
+        if call_id == target_call:
+            carbon_stage_total_rows.append(dict(item))
+        if 9 <= evaluation <= 11 and phase_code in (41, 90, 100):
+            carbon_solve_stage_eval09_11_rows.append(dict(item))
     carbon_stage_totals_path = out / "xstar_zone1_carbon_stage_totals_T73198p4K.csv"
     _write(carbon_stage_totals_path, carbon_stage_total_rows)
+    carbon_solve_stage_eval09_11_path = out / "xstar_zone1_carbon_solve_stage_totals_eval09_11_T73198p4K.csv"
+    _write(carbon_solve_stage_eval09_11_path, carbon_solve_stage_eval09_11_rows)
 
     carbon_alias_rows: list[dict[str, Any]] = []
     for row in _read_optional(root / "xstar_zone1_carbon_alias_boundaries_probe.csv"):
@@ -1246,8 +1258,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.90",
-        "probe_contract_version": "0.4.90",
+        "diagnostic_release": "0.4.91",
+        "probe_contract_version": "0.4.91",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -1274,7 +1286,9 @@ def analyze_xstar_zone1_probe(
         "n_hydrogen_state_path_rows": len(hydrogen_state_rows),
         "n_electron_fraction_path_rows": len(electron_fraction_rows),
         "n_carbon_state_path_rows": len(carbon_state_rows),
+        "n_carbon_solve_path_eval09_11_rows": len(carbon_solve_eval09_11_rows),
         "n_carbon_stage_total_rows": len(carbon_stage_total_rows),
+        "n_carbon_solve_stage_total_eval09_11_rows": len(carbon_solve_stage_eval09_11_rows),
         "n_carbon_stage_correlation_rows": len(carbon_correlation_rows),
         "n_carbon_alias_rows": len(carbon_alias_rows),
         "source_order_state_path_probe_available": bool(
@@ -1314,7 +1328,9 @@ def analyze_xstar_zone1_probe(
         "hydrogen_state_path_csv": hydrogen_state_path,
         "electron_fraction_path_csv": electron_fraction_path,
         "carbon_state_path_csv": carbon_state_path,
+        "carbon_solve_path_eval09_11_csv": carbon_solve_eval09_11_path,
         "carbon_stage_totals_csv": carbon_stage_totals_path,
+        "carbon_solve_stage_totals_eval09_11_csv": carbon_solve_stage_eval09_11_path,
         "carbon_stage_correlation_csv": carbon_correlation_path,
         "carbon_alias_boundaries_csv": carbon_alias_path,
         "summary_json": summary_path,
@@ -1555,7 +1571,7 @@ def compare_zone1_probe_with_python(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> Mapping[str, Path]:
-    """Evaluate the v0.4.79 physical contract with the v0.4.82 analyzer."""
+    """Evaluate the source-port physical and diagnostic parity contracts."""
     xs = Path(xstar_analysis_dir)
     py = Path(python_diagnostic_dir)
     out = Path(out_dir)
@@ -2235,6 +2251,110 @@ def compare_zone1_probe_with_python(
         predicate=lambda row: not bool(row.get("within_tolerance", False)),
     )
 
+    # v0.4.91 diagnostic-only: compare the carbon solve path for evaluations
+    # 9--11 and isolate the physical C II-continuum / C III-ground shared row.
+    # This deliberately avoids the generic next-ground stage-correlation field
+    # that v0.4.90 identified as timing-sensitive on the XSTAR side.
+    py_carbon_solve_eval09_11 = _read_optional(py / "python_zone1_carbon_solve_path_eval09_11_T73198p4K.csv")
+    xs_carbon_solve_eval09_11 = _read_optional(xs / "xstar_zone1_carbon_solve_path_eval09_11_T73198p4K.csv")
+    carbon_solve_keys = (
+        "evaluation_index", "phase_code", "outer_iteration", "fixed_iteration",
+        "compact_index", "superlevel", "ion_counter", "ion_stage",
+    )
+    carbon_solve_eval09_11_rows = _numeric_comparison_with_presence(
+        py_carbon_solve_eval09_11, xs_carbon_solve_eval09_11,
+        keys=carbon_solve_keys, fields=("population",), rtol=rtol, atol=atol,
+    ) if py_carbon_solve_eval09_11 or xs_carbon_solve_eval09_11 else []
+    carbon_solve_eval09_11_path = out / "zone1_carbon_solve_path_eval09_11_comparison_T73198p4K.csv"
+    _write(carbon_solve_eval09_11_path, carbon_solve_eval09_11_rows)
+
+    py_carbon_solve_stage_eval09_11 = _read_optional(py / "python_zone1_carbon_solve_stage_totals_eval09_11_T73198p4K.csv")
+    xs_carbon_solve_stage_eval09_11 = _read_optional(xs / "xstar_zone1_carbon_solve_stage_totals_eval09_11_T73198p4K.csv")
+    carbon_solve_stage_keys = (
+        "evaluation_index", "phase_code", "outer_iteration",
+        "ion_counter", "ion_stage",
+    )
+    carbon_solve_stage_eval09_11_rows = _numeric_comparison_with_presence(
+        py_carbon_solve_stage_eval09_11, xs_carbon_solve_stage_eval09_11,
+        keys=carbon_solve_stage_keys, fields=("population_total",),
+        rtol=rtol, atol=atol,
+    ) if py_carbon_solve_stage_eval09_11 or xs_carbon_solve_stage_eval09_11 else []
+    carbon_solve_stage_eval09_11_path = out / "zone1_carbon_solve_stage_totals_eval09_11_comparison_T73198p4K.csv"
+    _write(carbon_solve_stage_eval09_11_path, carbon_solve_stage_eval09_11_rows)
+
+    carbon_cii_ciii_solve_rows: list[dict[str, Any]] = []
+
+    def _append_boundary_row(row: Mapping[str, Any], *, locus: str, identity: str) -> None:
+        carbon_cii_ciii_solve_rows.append({
+            "evaluation_index": row.get("evaluation_index", ""),
+            "phase_code": row.get("phase_code", ""),
+            "phase": _STATE_PHASE_NAMES.get(int(row.get("phase_code", 0) or 0), f"phase_{row.get('phase_code', '')}"),
+            "outer_iteration": row.get("outer_iteration", 0),
+            "fixed_iteration": row.get("fixed_iteration", 0),
+            "compact_index": row.get("compact_index", ""),
+            "ion_counter": row.get("ion_counter", ""),
+            "ion_stage": row.get("ion_stage", ""),
+            "field": row.get("field", ""),
+            "locus": locus,
+            "physical_identity": identity,
+            "python_present": row.get("python_present", True),
+            "xstar_present": row.get("xstar_present", True),
+            "comparison_status": row.get("comparison_status", "matched"),
+            "python_value": row.get("python_value", ""),
+            "xstar_value": row.get("xstar_value", ""),
+            "absolute_difference": row.get("absolute_difference", ""),
+            "relative_difference": row.get("relative_difference", ""),
+            "within_tolerance": row.get("within_tolerance", False),
+        })
+
+    for row in carbon_solve_eval09_11_rows:
+        if (
+            str(row.get("comparison_status", "matched")) == "matched"
+            and int(row.get("compact_index", 0) or 0) == 1
+            and int(row.get("phase_code", 0) or 0) in (30, 40, 50, 60, 70, 80)
+        ):
+            _append_boundary_row(
+                row, locus="shared_compact_row",
+                identity="C_II_continuum_equals_C_III_ground",
+            )
+    for row in carbon_solve_stage_eval09_11_rows:
+        if (
+            str(row.get("comparison_status", "matched")) == "matched"
+            and int(row.get("ion_stage", 0) or 0) == 3
+            and int(row.get("phase_code", 0) or 0) in (41, 90, 100)
+        ):
+            _append_boundary_row(
+                row, locus="C_III_stage_total",
+                identity="C_III_total_from_solve_vector",
+            )
+    for row in carbon_corr_rows:
+        if (
+            str(row.get("comparison_status", "matched")) == "matched"
+            and 9 <= int(row.get("evaluation_index", 0) or 0) <= 11
+            and int(row.get("phase_code", 0) or 0) == 120
+            and int(row.get("ion_stage", 0) or 0) == 2
+            and str(row.get("field", "")) == "continuum_population"
+        ):
+            _append_boundary_row(
+                row, locus="phase120_writeback_alias",
+                identity="C_II_continuum_equals_C_III_ground",
+            )
+    carbon_cii_ciii_solve_rows.sort(key=lambda row: (
+        int(row.get("evaluation_index", 0) or 0),
+        int(row.get("phase_code", 0) or 0),
+        int(row.get("outer_iteration", 0) or 0),
+        int(row.get("fixed_iteration", 0) or 0),
+        int(row.get("compact_index", 0) or 0),
+        str(row.get("locus", "")),
+    ))
+    carbon_cii_ciii_solve_path = out / "zone1_carbon_cii_ciii_solve_path_eval09_11_T73198p4K.csv"
+    _write(carbon_cii_ciii_solve_path, carbon_cii_ciii_solve_rows)
+    carbon_cii_ciii_first_tolerance_failure = _first_row(
+        carbon_cii_ciii_solve_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and not bool(row.get("within_tolerance", False)),
+    )
+
     py_alias = _read_optional(py / "python_zone1_carbon_alias_boundaries_T73198p4K.csv")
     xs_alias = _read_optional(xs / "xstar_zone1_carbon_alias_boundaries_T73198p4K.csv")
     alias_keys = (
@@ -2383,8 +2503,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.90",
-        "probe_contract_version": "0.4.90",
+        "diagnostic_release": "0.4.91",
+        "probe_contract_version": "0.4.91",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -2454,6 +2574,10 @@ def compare_zone1_probe_with_python(
         "carbon_carryforward_eval09_12_first_tolerance_failure": _row_summary(carbon_eval09_12_first_tolerance_failure),
         "carbon_cii_ciii_alias_identity_eval09_12_ready": bool(carbon_cii_ciii_identity_rows),
         "carbon_writeback_to_next_entry_eval09_12_ready": bool(carbon_carryforward_rows),
+        "carbon_solve_path_eval09_11_ready": bool(carbon_solve_eval09_11_rows),
+        "carbon_solve_stage_totals_eval09_11_ready": bool(carbon_solve_stage_eval09_11_rows),
+        "carbon_cii_ciii_solve_path_eval09_11_ready": bool(carbon_cii_ciii_solve_rows),
+        "carbon_cii_ciii_solve_path_eval09_11_first_tolerance_failure": _row_summary(carbon_cii_ciii_first_tolerance_failure),
         "carbon_state_path_parity_ready": state_path_ready,
         "carbon_stage_totals_parity_ready": stage_totals_ready,
         "carbon_alias_boundary_parity_ready": alias_ready,
@@ -2510,6 +2634,9 @@ def compare_zone1_probe_with_python(
         "carbon_stage_carryforward_eval09_12_csv": carbon_eval09_12_path,
         "carbon_cii_ciii_alias_identity_eval09_12_csv": carbon_cii_ciii_identity_path,
         "carbon_writeback_to_next_entry_eval09_12_csv": carbon_carryforward_path,
+        "carbon_solve_path_eval09_11_comparison_csv": carbon_solve_eval09_11_path,
+        "carbon_solve_stage_totals_eval09_11_comparison_csv": carbon_solve_stage_eval09_11_path,
+        "carbon_cii_ciii_solve_path_eval09_11_csv": carbon_cii_ciii_solve_path,
         "carbon_alias_boundary_comparison_csv": alias_path,
         "summary_json": summary_path,
         "summary_markdown": markdown_path,

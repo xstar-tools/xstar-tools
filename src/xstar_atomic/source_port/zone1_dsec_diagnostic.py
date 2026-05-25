@@ -1297,11 +1297,40 @@ def write_zone1_python_diagnostic_products(
         target_result, evaluation_index=target_eval
     )
     _write_rows(state_path, state_path_rows)
+
+    # v0.4.91 diagnostic-only: keep the historical target-temperature
+    # state-path product above unchanged, but also export the full carbon
+    # solve path for evaluations 9--11.  These are the evaluations where
+    # v0.4.90 showed the C II-continuum / C III-ground boundary crossing
+    # tolerance during the carbon solve/writeback, before the hydrogen
+    # recombination-side mismatch becomes gate-significant.
+    carbon_solve_eval09_11_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        if 9 <= evaluation_index <= 11 and evaluation.fixed_state_result is not None:
+            for row in extract_python_carbon_state_path(
+                evaluation.fixed_state_result, evaluation_index=evaluation_index
+            ):
+                if int(row.get("phase_code", 0)) in (30, 40, 50, 60, 70, 80, 120):
+                    carbon_solve_eval09_11_rows.append(dict(row))
+    carbon_solve_eval09_11_path = out / "python_zone1_carbon_solve_path_eval09_11_T73198p4K.csv"
+    _write_rows(carbon_solve_eval09_11_path, carbon_solve_eval09_11_rows)
+
     stage_totals_path = out / "python_zone1_carbon_stage_totals_T73198p4K.csv"
     stage_total_rows = extract_python_carbon_stage_totals(
         target_result, evaluation_index=target_eval
     )
     _write_rows(stage_totals_path, stage_total_rows)
+
+    carbon_solve_stage_eval09_11_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        if 9 <= evaluation_index <= 11 and evaluation.fixed_state_result is not None:
+            for row in extract_python_carbon_stage_totals(
+                evaluation.fixed_state_result, evaluation_index=evaluation_index
+            ):
+                if int(row.get("phase_code", 0)) in (41, 90, 100):
+                    carbon_solve_stage_eval09_11_rows.append(dict(row))
+    carbon_solve_stage_eval09_11_path = out / "python_zone1_carbon_solve_stage_totals_eval09_11_T73198p4K.csv"
+    _write_rows(carbon_solve_stage_eval09_11_path, carbon_solve_stage_eval09_11_rows)
     alias_path = out / "python_zone1_carbon_alias_boundaries_T73198p4K.csv"
     alias_rows = extract_python_carbon_alias_boundaries(
         target_result, evaluation_index=target_eval
@@ -1375,7 +1404,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.88",
+        "diagnostic_release": "0.4.91",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -1396,7 +1425,9 @@ def write_zone1_python_diagnostic_products(
         "type59_literal_pre_swap_reverse_zeroing_corrected": True,
         "n_civ_preliminary_record_rows": len(civ_records),
         "n_carbon_state_path_rows": len(state_path_rows),
+        "n_carbon_solve_path_eval09_11_rows": len(carbon_solve_eval09_11_rows),
         "n_carbon_stage_total_rows": len(stage_total_rows),
+        "n_carbon_solve_stage_total_eval09_11_rows": len(carbon_solve_stage_eval09_11_rows),
         "n_carbon_alias_rows": len(alias_rows),
         "n_hydrogen_state_rows": len(hydrogen_rows),
         "n_electron_fraction_path_rows": len(electron_rows),
@@ -1433,7 +1464,9 @@ def write_zone1_python_diagnostic_products(
         "topology_csv": topology_path,
         "initial_population_csv": initial_population_path,
         "carbon_state_path_csv": state_path,
+        "carbon_solve_path_eval09_11_csv": carbon_solve_eval09_11_path,
         "carbon_stage_totals_csv": stage_totals_path,
+        "carbon_solve_stage_totals_eval09_11_csv": carbon_solve_stage_eval09_11_path,
         "carbon_alias_boundaries_csv": alias_path,
         "hydrogen_state_path_csv": hydrogen_path,
         "electron_fraction_path_csv": electron_path,
