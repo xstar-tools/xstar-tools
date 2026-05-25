@@ -16,6 +16,15 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
+
+# NumPy 2.4 removed np.in1d after deprecating it in NumPy 2.0.
+# Some Astropy releases still reference np.in1d while constructing FITS
+# binary table HDUs.  The output writer only needs Astropy for FITS I/O;
+# install the source-equivalent alias before Astropy imports its table/units
+# stack so 142_run_xstar_python.py remains usable on newer NumPy runtimes.
+if not hasattr(np, "in1d"):
+    np.in1d = np.isin  # type: ignore[attr-defined]
+
 from astropy.io import fits
 
 from .state import XSTARPythonState
