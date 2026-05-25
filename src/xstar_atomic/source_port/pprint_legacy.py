@@ -58,6 +58,41 @@ NLPRNT = (
     22, 11, 1, 23, 24, 16, 27, 15, 19, 5, 14, 21, 7, 10, 26, 0, 4, 6, 18, 29, 30, 28
 )
 
+ELEMENT_FULL_NAMES = (
+    "hydrogen", "helium", "lithium", "beryllium", "boron",
+    "carbon", "nitrogen", "oxygen", "fluorine", "neon",
+    "sodium", "magnesium", "aluminum", "silicon", "phosphorus",
+    "sulfur", "chlorine", "argon", "potassium", "calcium",
+    "scandium", "titanium", "vanadium", "chromium", "manganese",
+    "iron", "cobalt", "nickel", "copper", "zinc",
+)
+ELEMENT_SYMBOL_TO_FULL_NAME = {
+    "H": "hydrogen", "HE": "helium", "LI": "lithium", "BE": "beryllium",
+    "B": "boron", "C": "carbon", "N": "nitrogen", "O": "oxygen",
+    "F": "fluorine", "NE": "neon", "NA": "sodium", "MG": "magnesium",
+    "AL": "aluminum", "SI": "silicon", "P": "phosphorus", "S": "sulfur",
+    "CL": "chlorine", "AR": "argon", "K": "potassium", "CA": "calcium",
+    "SC": "scandium", "TI": "titanium", "V": "vanadium", "CR": "chromium",
+    "MN": "manganese", "FE": "iron", "CO": "cobalt", "NI": "nickel",
+    "CU": "copper", "ZN": "zinc",
+}
+
+
+def _pprint_element_column_name(item: PprintElementMetadata) -> str:
+    """Return source ``pprint(11)`` elemental column names for heat/cool tables.
+
+    XSTAR's ``xout_abund1.fits`` HEATING and COOLING extensions use full
+    element names (``hydrogen``, ``helium``, ...), while the input-abundance
+    report and ion labels may use element symbols.  Keep the physical metadata
+    unchanged and translate only the FITS table column headers here.
+    """
+    index = int(item.element_index)
+    if 1 <= index <= len(ELEMENT_FULL_NAMES):
+        return ELEMENT_FULL_NAMES[index - 1]
+    label = str(item.element_label).strip()
+    mapped = ELEMENT_SYMBOL_TO_FULL_NAME.get(label.upper())
+    return (mapped or label).replace(" ", "_")
+
 
 @dataclass(frozen=True)
 class PprintIonMetadata:
@@ -507,7 +542,7 @@ def write_xout_abund1(
     # kunits(6) is first assigned cm**(-3) and then overwritten by pressure.
     base_units = ("cm", "cm", "erg*cm/s", "", "", "dynes/cm**2", "10**4 K", "")
     ion_names = tuple(item.ion_label.strip().replace(" ", "_") for item in metadata.ions)
-    element_names = tuple(item.element_label.strip().replace(" ", "_") for item in metadata.thermal_elements)
+    element_names = tuple(_pprint_element_column_name(item) for item in metadata.thermal_elements)
 
     def columns_for(matrix: np.ndarray, names: Sequence[str], units: Sequence[str]) -> list[fits.Column]:
         return [

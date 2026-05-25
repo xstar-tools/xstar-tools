@@ -1,3 +1,7 @@
+## v0.4.98 xout_abund1 element-column header hotfix
+
+v0.4.98 fixes the legacy `pprint(11)` FITS column names for the `HEATING` and `COOLING` extensions of `xout_abund1.fits`. XSTAR uses full element names (`hydrogen`, `helium`, `lithium`, ...), while the Python writer had emitted element symbols (`H`, `He`, `Li`, ...). The fix only changes FITS table headers; abundance values, radial stepping, spectra, DSEC, rates, solvers, and diagnostics are unchanged.
+
 
 ## v0.4.87 diagnostic helper link hotfix
 
