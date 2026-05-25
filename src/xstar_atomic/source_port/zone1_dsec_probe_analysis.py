@@ -1137,6 +1137,66 @@ def analyze_xstar_zone1_probe(
     carbon_solve_eval09_11_path = out / "xstar_zone1_carbon_solve_path_eval09_11_T73198p4K.csv"
     _write(carbon_solve_eval09_11_path, carbon_solve_eval09_11_rows)
 
+    carbon_inner_eval11_rows: list[dict[str, Any]] = []
+    for row in _read_optional(root / "xstar_zone1_carbon_msolvelucy_inner_probe.csv"):
+        call_id = _int_field(row, "calc_hmc_all_call_id")
+        evaluation = call_to_eval.get(call_id)
+        if evaluation != 11:
+            continue
+        if _int_field(row, "outer_iteration") != 1:
+            continue
+        item = {
+            "source": "xstar",
+            "evaluation_index": evaluation,
+            "element_z": _int_field(row, "element_z"),
+            "outer_iteration": _int_field(row, "outer_iteration"),
+            "row_kind": row.get("row_kind", ""),
+            "physical_identity": row.get("physical_identity", ""),
+            "shared_compact_index": _int_field(row, "shared_compact_index"),
+            "shared_superlevel": _int_field(row, "shared_superlevel"),
+            "compact_index": _int_field(row, "compact_index"),
+            "superlevel": _int_field(row, "superlevel"),
+            "ion_counter": _int_field(row, "ion_counter"),
+            "ion_stage": _int_field(row, "ion_stage"),
+            "row_superlevel": _int_field(row, "row_superlevel"),
+            "column_superlevel": _int_field(row, "column_superlevel"),
+            "term_index": _int_field(row, "term_index"),
+            "source_row": _int_field(row, "source_row"),
+            "source_column": _int_field(row, "source_column"),
+            "source_record": _int_field(row, "source_record"),
+            "rate_type": _int_field(row, "rate_type"),
+            "data_type": _int_field(row, "data_type"),
+            "roles": row.get("roles", ""),
+            "population": _float_field(row, "population"),
+            "population_before_condensed_solve": _float_field(row, "population_before_condensed_solve"),
+            "population_after_condensed_solve": _float_field(row, "population_after_condensed_solve"),
+            "raw_matrix_value": _float_field(row, "raw_matrix_value"),
+            "normalized_matrix_value": _float_field(row, "normalized_matrix_value"),
+            "rr": _float_field(row, "rr"),
+            "population_outer_start": _float_field(row, "population_outer_start"),
+            "population_after_condensed": _float_field(row, "population_after_condensed"),
+            "population_after_fixed_point": _float_field(row, "population_after_fixed_point"),
+            "xm_before_normalization": _float_field(row, "xm_before_normalization"),
+            "normalization_denominator": _float_field(row, "normalization_denominator"),
+            "population_before": _float_field(row, "population_before"),
+            "riu": _float_field(row, "riu"),
+            "rui": _float_field(row, "rui"),
+            "ril": _float_field(row, "ril"),
+            "rli": _float_field(row, "rli"),
+            "population_unnormalized": _float_field(row, "population_unnormalized"),
+            "population_after": _float_field(row, "population_after"),
+            "aj1": _float_field(row, "aj1"),
+            "aj2": _float_field(row, "aj2"),
+            "rr_mm": _float_field(row, "rr_mm"),
+            "rr_nn": _float_field(row, "rr_nn"),
+            "offdiag_contribution": _float_field(row, "offdiag_contribution"),
+            "diag_contribution": _float_field(row, "diag_contribution"),
+            "importance": _float_field(row, "importance"),
+        }
+        carbon_inner_eval11_rows.append(item)
+    carbon_inner_eval11_path = out / "xstar_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv"
+    _write(carbon_inner_eval11_path, carbon_inner_eval11_rows)
+
     carbon_correlation_rows: list[dict[str, Any]] = []
     direct_carbon_correlation = _read_optional(root / "xstar_zone1_carbon_stage_correlation_probe.csv")
     if direct_carbon_correlation:
@@ -1258,8 +1318,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.91",
-        "probe_contract_version": "0.4.91",
+        "diagnostic_release": "0.4.92",
+        "probe_contract_version": "0.4.92",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -1287,6 +1347,7 @@ def analyze_xstar_zone1_probe(
         "n_electron_fraction_path_rows": len(electron_fraction_rows),
         "n_carbon_state_path_rows": len(carbon_state_rows),
         "n_carbon_solve_path_eval09_11_rows": len(carbon_solve_eval09_11_rows),
+        "n_carbon_msolvelucy_inner_eval11_outer1_rows": len(carbon_inner_eval11_rows),
         "n_carbon_stage_total_rows": len(carbon_stage_total_rows),
         "n_carbon_solve_stage_total_eval09_11_rows": len(carbon_solve_stage_eval09_11_rows),
         "n_carbon_stage_correlation_rows": len(carbon_correlation_rows),
@@ -1329,6 +1390,7 @@ def analyze_xstar_zone1_probe(
         "electron_fraction_path_csv": electron_fraction_path,
         "carbon_state_path_csv": carbon_state_path,
         "carbon_solve_path_eval09_11_csv": carbon_solve_eval09_11_path,
+        "carbon_msolvelucy_inner_eval11_outer1_csv": carbon_inner_eval11_path,
         "carbon_stage_totals_csv": carbon_stage_totals_path,
         "carbon_solve_stage_totals_eval09_11_csv": carbon_solve_stage_eval09_11_path,
         "carbon_stage_correlation_csv": carbon_correlation_path,
@@ -2251,7 +2313,7 @@ def compare_zone1_probe_with_python(
         predicate=lambda row: not bool(row.get("within_tolerance", False)),
     )
 
-    # v0.4.91 diagnostic-only: compare the carbon solve path for evaluations
+    # v0.4.92 diagnostic-only: compare the carbon solve path for evaluations
     # 9--11 and isolate the physical C II-continuum / C III-ground shared row.
     # This deliberately avoids the generic next-ground stage-correlation field
     # that v0.4.90 identified as timing-sensitive on the XSTAR side.
@@ -2351,6 +2413,42 @@ def compare_zone1_probe_with_python(
     _write(carbon_cii_ciii_solve_path, carbon_cii_ciii_solve_rows)
     carbon_cii_ciii_first_tolerance_failure = _first_row(
         carbon_cii_ciii_solve_rows,
+        predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
+        and not bool(row.get("within_tolerance", False)),
+    )
+
+    # v0.4.92 diagnostic-only: inner msolvelucy audit for evaluation 11,
+    # outer iteration 1.  These rows compare the condensed matrix row,
+    # RHS/source vector, solved superlevel population, expansion/scatter,
+    # fixed-point normalization denominator, and ordered dominant
+    # contributions for the C II-continuum / C III-ground shared row.
+    py_inner_eval11 = _read_optional(py / "python_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv")
+    xs_inner_eval11 = _read_optional(xs / "xstar_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv")
+    inner_keys = (
+        "evaluation_index", "outer_iteration", "row_kind",
+        "compact_index", "superlevel", "ion_counter", "ion_stage",
+        "row_superlevel", "column_superlevel", "term_index",
+        "source_row", "source_column", "source_record", "rate_type", "data_type",
+    )
+    inner_fields = (
+        "population", "population_before_condensed_solve",
+        "population_after_condensed_solve", "raw_matrix_value",
+        "normalized_matrix_value", "rr", "population_outer_start",
+        "population_after_condensed", "population_after_fixed_point",
+        "xm_before_normalization", "normalization_denominator",
+        "population_before", "riu", "rui", "ril", "rli",
+        "population_unnormalized", "population_after", "aj1", "aj2",
+        "rr_mm", "rr_nn", "offdiag_contribution", "diag_contribution",
+        "importance",
+    )
+    carbon_inner_eval11_rows = _numeric_comparison_with_presence(
+        py_inner_eval11, xs_inner_eval11, keys=inner_keys, fields=inner_fields,
+        rtol=rtol, atol=atol,
+    ) if py_inner_eval11 or xs_inner_eval11 else []
+    carbon_inner_eval11_path = out / "zone1_carbon_msolvelucy_inner_eval11_outer1_comparison_T73198p4K.csv"
+    _write(carbon_inner_eval11_path, carbon_inner_eval11_rows)
+    carbon_inner_eval11_first_tolerance_failure = _first_row(
+        carbon_inner_eval11_rows,
         predicate=lambda row: str(row.get("comparison_status", "matched")) == "matched"
         and not bool(row.get("within_tolerance", False)),
     )
@@ -2503,8 +2601,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.91",
-        "probe_contract_version": "0.4.91",
+        "diagnostic_release": "0.4.92",
+        "probe_contract_version": "0.4.92",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
@@ -2578,6 +2676,8 @@ def compare_zone1_probe_with_python(
         "carbon_solve_stage_totals_eval09_11_ready": bool(carbon_solve_stage_eval09_11_rows),
         "carbon_cii_ciii_solve_path_eval09_11_ready": bool(carbon_cii_ciii_solve_rows),
         "carbon_cii_ciii_solve_path_eval09_11_first_tolerance_failure": _row_summary(carbon_cii_ciii_first_tolerance_failure),
+        "carbon_msolvelucy_inner_eval11_outer1_ready": bool(carbon_inner_eval11_rows),
+        "carbon_msolvelucy_inner_eval11_outer1_first_tolerance_failure": _row_summary(carbon_inner_eval11_first_tolerance_failure),
         "carbon_state_path_parity_ready": state_path_ready,
         "carbon_stage_totals_parity_ready": stage_totals_ready,
         "carbon_alias_boundary_parity_ready": alias_ready,
@@ -2636,6 +2736,7 @@ def compare_zone1_probe_with_python(
         "carbon_writeback_to_next_entry_eval09_12_csv": carbon_carryforward_path,
         "carbon_solve_path_eval09_11_comparison_csv": carbon_solve_eval09_11_path,
         "carbon_solve_stage_totals_eval09_11_comparison_csv": carbon_solve_stage_eval09_11_path,
+        "carbon_msolvelucy_inner_eval11_outer1_comparison_csv": carbon_inner_eval11_path,
         "carbon_cii_ciii_solve_path_eval09_11_csv": carbon_cii_ciii_solve_path,
         "carbon_alias_boundary_comparison_csv": alias_path,
         "summary_json": summary_path,

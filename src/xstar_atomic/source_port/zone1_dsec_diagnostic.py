@@ -788,6 +788,201 @@ def extract_python_carbon_stage_totals(
     )
 
 
+
+def extract_python_carbon_msolvelucy_inner_eval11_outer1(
+    result: FixedStateCalcHMCAllResult,
+    *,
+    evaluation_index: int,
+) -> tuple[dict[str, Any], ...]:
+    """Return v0.4.92 inner-Lucy audit rows for carbon evaluation 11.
+
+    This is diagnostic-only.  It observes the first condensed superlevel solve
+    where v0.4.91 localized the C II-continuum / C III-ground shared row drift.
+    The rows deliberately keep source-order term indices and compact-row
+    identities so the analyzer can separate matrix/RHS/solve/scatter and
+    normalization-denominator causes.
+    """
+    if int(evaluation_index) != 11:
+        return ()
+    carbon = next(
+        (item for item in result.element_results if int(item.request.element_z) == 6),
+        None,
+    )
+    if carbon is None or carbon.equilibrium.solve is None:
+        return ()
+    assembly = carbon.equilibrium.assembly
+    solve = carbon.equilibrium.solve
+    trace = solve.trace
+    if trace is None:
+        return ()
+    basis = assembly.basis
+    if basis.n_rows < 1:
+        return ()
+    shared_compact = 1
+    shared_row = basis.row(shared_compact)
+    shared_super = int(shared_row.superlevel)
+    shared_ion_counter = int(shared_row.ion_counter)
+    shared_stage = int(basis.ion_stage[shared_compact])
+    selected_compact: set[int] = {shared_compact}
+    for row in basis.rows:
+        for role in row.roles:
+            if int(role.get("ion_stage", 0)) == 3 and int(role.get("local_level", 0)) <= 7:
+                selected_compact.add(int(row.compact_index))
+    rr_by_compact: dict[int, float] = {}
+    outer_rows = [r for r in trace.outer_level_rows if int(r.get("outer_iteration", 0)) == 1]
+    for r in outer_rows:
+        rr_by_compact[int(r["compact_index"])] = float(r.get("rr", 0.0))
+    rows: list[dict[str, Any]] = []
+    base = {
+        "source": "python",
+        "evaluation_index": int(evaluation_index),
+        "element_z": 6,
+        "outer_iteration": 1,
+        "physical_identity": "C_II_continuum_equals_C_III_ground",
+        "shared_compact_index": shared_compact,
+        "shared_superlevel": shared_super,
+        "shared_ion_counter": shared_ion_counter,
+        "shared_ion_stage": shared_stage,
+    }
+    # Superlevel mapping for the shared row and neighboring C III rows.
+    for compact_index in sorted(selected_compact):
+        brow = basis.row(compact_index)
+        roles = ";".join(
+            f"ion_stage={int(role.get('ion_stage',0))}:local_level={int(role.get('local_level',0))}:global_index={int(role.get('global_index',0))}"
+            for role in brow.roles
+        )
+        row = dict(base)
+        row.update({
+            "row_kind": "superlevel_mapping",
+            "compact_index": compact_index,
+            "superlevel": int(brow.superlevel),
+            "ion_counter": int(brow.ion_counter),
+            "ion_stage": int(basis.ion_stage[compact_index]),
+            "roles": roles,
+            "population": float(assembly.initial_populations[compact_index]),
+        })
+        rows.append(row)
+    # Condensed RHS/source vector p before solve and p after leqt2f.
+    for r in trace.superlevel_rows:
+        if int(r.get("outer_iteration", 0)) != 1:
+            continue
+        sp = int(r.get("superlevel", 0))
+        if sp == shared_super or sp <= min(shared_super + 4, basis.n_superlevels):
+            row = dict(base)
+            row.update({
+                "row_kind": "condensed_rhs_and_solution",
+                "superlevel": sp,
+                "population_before_condensed_solve": float(r.get("population_before_condensed_solve", 0.0)),
+                "population_after_condensed_solve": float(r.get("population_after_condensed_solve", 0.0)),
+            })
+            rows.append(row)
+    # Raw and normalized condensed matrix row for the shared superlevel.
+    for r in trace.condensed_matrix_rows:
+        if int(r.get("outer_iteration", 0)) != 1:
+            continue
+        if int(r.get("row_superlevel", 0)) != shared_super:
+            continue
+        row = dict(base)
+        row.update({
+            "row_kind": "condensed_matrix_row_before_solve",
+            "row_superlevel": int(r.get("row_superlevel", 0)),
+            "column_superlevel": int(r.get("column_superlevel", 0)),
+            "raw_matrix_value": float(r.get("raw_matrix_value", 0.0)),
+            "normalized_matrix_value": float(r.get("normalized_matrix_value", 0.0)),
+        })
+        rows.append(row)
+    # Expansion/scatter back to compact rows from rr * p(superlevel).
+    for r in outer_rows:
+        ci = int(r.get("compact_index", 0))
+        if ci not in selected_compact:
+            continue
+        row = dict(base)
+        row.update({
+            "row_kind": "expansion_scatter_after_condensed",
+            "compact_index": ci,
+            "superlevel": int(r.get("superlevel", 0)),
+            "ion_counter": int(r.get("ion_counter", 0)),
+            "ion_stage": int(basis.ion_stage[ci]),
+            "rr": float(r.get("rr", 0.0)),
+            "population_outer_start": float(r.get("population_outer_start", 0.0)),
+            "population_after_condensed": float(r.get("population_after_condensed", 0.0)),
+            "population_after_fixed_point": float(r.get("population_after_fixed_point", 0.0)),
+        })
+        rows.append(row)
+    # Normalization denominator xm before phase 60 can be reconstructed from
+    # the fixed-point numerator/denominator before source normalization.
+    fixed1 = [r for r in trace.fixed_point_rows if int(r.get("outer_iteration",0)) == 1 and int(r.get("fixed_iteration",0)) == 1]
+    xm = 0.0
+    for r in fixed1:
+        denom = float(r.get("ril", 0.0)) + float(r.get("riu", 0.0)) + 1.0e-24
+        xm += (float(r.get("rli", 0.0)) + float(r.get("rui", 0.0))) / denom
+    row = dict(base)
+    row.update({"row_kind": "normalization_denominator_before_phase60", "xm_before_normalization": float(xm), "normalization_denominator": float(1.0e-24 + xm)})
+    rows.append(row)
+    for r in fixed1:
+        ci = int(r.get("compact_index",0))
+        if ci not in selected_compact:
+            continue
+        denom = float(r.get("ril", 0.0)) + float(r.get("riu", 0.0)) + 1.0e-24
+        unnormalized = (float(r.get("rli", 0.0)) + float(r.get("rui", 0.0))) / denom
+        row = dict(base)
+        row.update({
+            "row_kind": "fixed_point_row_before_after_normalization",
+            "compact_index": ci,
+            "superlevel": int(r.get("superlevel", 0)),
+            "ion_counter": int(r.get("ion_counter", 0)),
+            "ion_stage": int(basis.ion_stage[ci]),
+            "population_before": float(r.get("population_before", 0.0)),
+            "riu": float(r.get("riu", 0.0)),
+            "rui": float(r.get("rui", 0.0)),
+            "ril": float(r.get("ril", 0.0)),
+            "rli": float(r.get("rli", 0.0)),
+            "population_unnormalized": float(unnormalized),
+            "population_after": float(r.get("population_after", 0.0)),
+            "xm_before_normalization": float(xm),
+        })
+        rows.append(row)
+    # Ordered dominant contributions to the shared superlevel condensed row.
+    contributions: list[dict[str, Any]] = []
+    nsup = basis.nsup[1:]
+    for term_index, term in enumerate(assembly.terms, start=1):
+        mm = min(basis.n_rows, int(term.row)) - 1
+        nn = min(basis.n_rows, int(term.column)) - 1
+        spm = int(nsup[mm])
+        spn = int(nsup[nn])
+        if spm != shared_super or spm == spn or spm <= 0 or spn <= 0:
+            continue
+        if not (abs(float(term.aj1)) > 1.0e-48 or abs(float(term.aj2)) > 1.0e-48):
+            continue
+        rr_mm = rr_by_compact.get(mm + 1, 1.0)
+        rr_nn = rr_by_compact.get(nn + 1, 1.0)
+        offdiag = float(term.aj1) * rr_nn
+        diag = -float(term.aj2) * rr_mm
+        contributions.append({
+            "term_index": term_index,
+            "source_record": int(getattr(term, "record", 0)),
+            "rate_type": int(getattr(term, "rate_type", 0)),
+            "data_type": int(getattr(term, "data_type", 0)),
+            "source_row": int(term.row),
+            "source_column": int(term.column),
+            "row_superlevel": spm,
+            "column_superlevel": spn,
+            "aj1": float(term.aj1),
+            "aj2": float(term.aj2),
+            "rr_mm": float(rr_mm),
+            "rr_nn": float(rr_nn),
+            "offdiag_contribution": offdiag,
+            "diag_contribution": diag,
+            "importance": abs(offdiag) + abs(diag),
+        })
+    contributions.sort(key=lambda item: (-float(item["importance"]), int(item["term_index"])))
+    for item in contributions[:80]:
+        row = dict(base)
+        row.update({"row_kind": "ordered_dominant_matrix_contribution", **item})
+        rows.append(row)
+    return tuple(rows)
+
+
 def extract_python_carbon_alias_boundaries(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1298,7 +1493,7 @@ def write_zone1_python_diagnostic_products(
     )
     _write_rows(state_path, state_path_rows)
 
-    # v0.4.91 diagnostic-only: keep the historical target-temperature
+    # v0.4.92 diagnostic-only: keep the historical target-temperature
     # state-path product above unchanged, but also export the full carbon
     # solve path for evaluations 9--11.  These are the evaluations where
     # v0.4.90 showed the C II-continuum / C III-ground boundary crossing
@@ -1314,6 +1509,17 @@ def write_zone1_python_diagnostic_products(
                     carbon_solve_eval09_11_rows.append(dict(row))
     carbon_solve_eval09_11_path = out / "python_zone1_carbon_solve_path_eval09_11_T73198p4K.csv"
     _write_rows(carbon_solve_eval09_11_path, carbon_solve_eval09_11_rows)
+
+    carbon_inner_eval11_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        if evaluation_index == 11 and evaluation.fixed_state_result is not None:
+            carbon_inner_eval11_rows.extend(
+                extract_python_carbon_msolvelucy_inner_eval11_outer1(
+                    evaluation.fixed_state_result, evaluation_index=evaluation_index
+                )
+            )
+    carbon_inner_eval11_path = out / "python_zone1_carbon_msolvelucy_inner_eval11_outer1_T73198p4K.csv"
+    _write_rows(carbon_inner_eval11_path, carbon_inner_eval11_rows)
 
     stage_totals_path = out / "python_zone1_carbon_stage_totals_T73198p4K.csv"
     stage_total_rows = extract_python_carbon_stage_totals(
@@ -1404,7 +1610,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.91",
+        "diagnostic_release": "0.4.92",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),
@@ -1426,6 +1632,7 @@ def write_zone1_python_diagnostic_products(
         "n_civ_preliminary_record_rows": len(civ_records),
         "n_carbon_state_path_rows": len(state_path_rows),
         "n_carbon_solve_path_eval09_11_rows": len(carbon_solve_eval09_11_rows),
+        "n_carbon_msolvelucy_inner_eval11_outer1_rows": len(carbon_inner_eval11_rows),
         "n_carbon_stage_total_rows": len(stage_total_rows),
         "n_carbon_solve_stage_total_eval09_11_rows": len(carbon_solve_stage_eval09_11_rows),
         "n_carbon_alias_rows": len(alias_rows),
@@ -1465,6 +1672,7 @@ def write_zone1_python_diagnostic_products(
         "initial_population_csv": initial_population_path,
         "carbon_state_path_csv": state_path,
         "carbon_solve_path_eval09_11_csv": carbon_solve_eval09_11_path,
+        "carbon_msolvelucy_inner_eval11_outer1_csv": carbon_inner_eval11_path,
         "carbon_stage_totals_csv": stage_totals_path,
         "carbon_solve_stage_totals_eval09_11_csv": carbon_solve_stage_eval09_11_path,
         "carbon_alias_boundaries_csv": alias_path,
