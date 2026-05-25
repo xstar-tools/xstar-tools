@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.4.96 - 2026-05-25
+
+- Source-code correction for Python `leqt2f` solver parity.
+- Replaced NumPy dot/matrix-vector accumulation in `ludcmp`, `lubksb`, `mprove`, and `leqt2f` residual checks with explicit source-order loops matching the original Fortran routines.
+- Retained v0.4.95 NumPy/Astropy output-writer compatibility fix.
+- No original-XSTAR source changes.
+
 ## 0.4.87 - 2026-05-24
 
 - Fix the diagnostic-only v0.4.86 original-XSTAR state-path helper link failure.

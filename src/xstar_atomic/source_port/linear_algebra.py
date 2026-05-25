@@ -24,80 +24,115 @@ class LinearSolveResult:
     solution: np.ndarray
     residual: np.ndarray
     max_scaled_residual: float
-    method: str = "leqt2f_ludcmp_lubksb_mprove"
+    method: str = "leqt2f_ludcmp_lubksb_mprove_source_order"
+
+
+def _source_row_product(matrix: np.ndarray, row: int, vector: np.ndarray, n: int) -> float:
+    """Fortran-order row dot product using explicit left-to-right accumulation."""
+    total = 0.0
+    for col in range(n):
+        total = total + float(matrix[row, col]) * float(vector[col])
+    return float(total)
 
 
 def ludcmp(a: np.ndarray, *, tiny: float = 1.0e-20) -> LUDecomposition:
-    """Translate ``ludcmp.f90`` with zero-based NumPy storage."""
+    """Translate ``ludcmp.f90`` with explicit source-order loops."""
     lu = np.asarray(a, dtype=float).copy()
     if lu.ndim != 2 or lu.shape[0] != lu.shape[1]:
         raise ValueError("ludcmp requires a square matrix")
     n = lu.shape[0]
     vv = np.zeros(n, dtype=float)
     singular = []
+
+    # Fortran lines 38-51: row scaling vector, left-to-right scan.
     for i in range(n):
-        aamax = float(np.max(np.abs(lu[i, :]))) if n else 0.0
+        aamax = 0.0
+        for j in range(n):
+            value = abs(float(lu[i, j]))
+            if value > aamax:
+                aamax = value
         if aamax == 0.0:
             singular.append(i + 1)
-            vv[i] = 1.0
-        else:
-            vv[i] = 1.0 / aamax
+            # The Fortran routine returns immediately.  Python returns a
+            # status object so callers can fail explicitly instead of
+            # consuming uninitialized pivots.
+            return LUDecomposition(
+                lu=lu,
+                pivots=np.zeros(n, dtype=np.int64),
+                determinant_sign=1.0,
+                singular_rows=tuple(singular),
+            )
+        vv[i] = 1.0 / aamax
+
     pivots = np.zeros(n, dtype=np.int64)
     d = 1.0
+    # Fortran lines 52-102: Numerical Recipes LU decomposition with >= pivot tie.
     for j in range(n):
-        for i in range(j):
-            value = lu[i, j]
-            if i > 0:
-                value -= float(np.dot(lu[i, :i], lu[:i, j]))
-            lu[i, j] = value
+        if j > 0:
+            for i in range(j):
+                total = float(lu[i, j])
+                if i > 0:
+                    for k in range(i):
+                        total = total - float(lu[i, k]) * float(lu[k, j])
+                    lu[i, j] = total
         aamax = 0.0
-        imax = j
+        imax = -1
         for i in range(j, n):
-            value = lu[i, j]
+            total = float(lu[i, j])
             if j > 0:
-                value -= float(np.dot(lu[i, :j], lu[:j, j]))
-            lu[i, j] = value
-            dum = vv[i] * abs(value)
+                for k in range(j):
+                    total = total - float(lu[i, k]) * float(lu[k, j])
+                lu[i, j] = total
+            dum = float(vv[i]) * abs(total)
             if dum >= aamax:
                 imax = i
                 aamax = dum
+        if imax < 0:
+            imax = 0
         if j != imax:
-            lu[[j, imax], :] = lu[[imax, j], :]
+            for k in range(n):
+                dum = float(lu[imax, k])
+                lu[imax, k] = lu[j, k]
+                lu[j, k] = dum
             d = -d
             vv[imax] = vv[j]
         pivots[j] = imax
         if j != n - 1:
             if lu[j, j] == 0.0:
                 lu[j, j] = tiny
-            lu[j + 1 :, j] /= lu[j, j]
+            dum = 1.0 / float(lu[j, j])
+            for i in range(j + 1, n):
+                lu[i, j] = float(lu[i, j]) * dum
     if n and lu[n - 1, n - 1] == 0.0:
         lu[n - 1, n - 1] = tiny
     return LUDecomposition(lu=lu, pivots=pivots, determinant_sign=d, singular_rows=tuple(singular))
 
 
 def lubksb(decomposition: LUDecomposition, b: np.ndarray) -> np.ndarray:
-    """Translate ``lubksb.f90`` forward/back substitution."""
+    """Translate ``lubksb.f90`` forward/back substitution in source order."""
     a = decomposition.lu
     pivots = decomposition.pivots
     x = np.asarray(b, dtype=float).copy()
     n = a.shape[0]
     if x.shape != (n,):
         raise ValueError("lubksb right-hand side has incompatible shape")
-    ii = -1
+    ii = 0  # Fortran uses 0 as unset sentinel.
     for i in range(n):
         ll = int(pivots[i])
-        value = x[ll]
+        total = float(x[ll])
         x[ll] = x[i]
-        if ii >= 0:
-            value -= float(np.dot(a[i, ii:i], x[ii:i]))
-        elif value != 0.0:
-            ii = i
-        x[i] = value
+        if ii != 0:
+            for j in range(ii - 1, i):
+                total = total - float(a[i, j]) * float(x[j])
+        elif total != 0.0:
+            ii = i + 1
+        x[i] = total
     for i in range(n - 1, -1, -1):
-        value = x[i]
+        total = float(x[i])
         if i < n - 1:
-            value -= float(np.dot(a[i, i + 1 :], x[i + 1 :]))
-        x[i] = value / a[i, i]
+            for j in range(i + 1, n):
+                total = total - float(a[i, j]) * float(x[j])
+        x[i] = total / float(a[i, i])
     return x
 
 
@@ -106,33 +141,59 @@ def mprove(a: np.ndarray, decomposition: LUDecomposition, b: np.ndarray, x: np.n
     original = np.asarray(a, dtype=float)
     rhs = np.asarray(b, dtype=float)
     improved = np.asarray(x, dtype=float).copy()
-    residual = original @ improved - rhs
+    n = improved.shape[0]
+    residual = np.zeros(n, dtype=float)
+    # Fortran lines 32-38: sdp starts at -b(i) and accumulates j=1..n.
+    for i in range(n):
+        sdp = -float(rhs[i])
+        for j in range(n):
+            sdp = sdp + float(original[i, j]) * float(improved[j])
+        residual[i] = sdp
     correction = lubksb(decomposition, residual)
-    improved -= correction
+    for i in range(n):
+        improved[i] = float(improved[i]) - float(correction[i])
     return improved
 
 
 def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
-    """Translate ``leqt2f.f90`` including LU solve and one improvement pass."""
+    """Translate ``leqt2f.f90`` using source-order LU/refinement loops."""
     original = np.asarray(a, dtype=float)
     rhs = np.asarray(b, dtype=float)
     if original.ndim != 2 or original.shape[0] != original.shape[1]:
         raise ValueError("leqt2f requires a square matrix")
     if rhs.shape != (original.shape[0],):
         raise ValueError("leqt2f right-hand side has incompatible shape")
+    n = original.shape[0]
+
     decomposition = ludcmp(original)
     if decomposition.singular_rows:
-        # The original routine prints and returns from ludcmp.  A Python caller
-        # needs an explicit status so it cannot consume an uninitialized solve.
         raise XSTARLinearAlgebraError(
             "singular matrix rows in ludcmp: " + ",".join(map(str, decomposition.singular_rows))
         )
     x = lubksb(decomposition, rhs)
     x = mprove(original, decomposition, rhs, x)
+
     if clamp_source_range:
-        x = np.where(x < 1.0e-36, 0.0, x)
-        x = np.where(x > 1.0e36, 1.0e36, x)
-    residual = original @ x - rhs
-    scales = np.maximum(np.max(np.abs(original * x[np.newaxis, :]), axis=1), 1.0e-24)
-    max_scaled = float(np.max(np.abs(residual) / scales)) if residual.size else 0.0
-    return LinearSolveResult(solution=x, residual=residual, max_scaled_residual=max_scaled)
+        for i in range(n):
+            if x[i] < 1.0e-36:
+                x[i] = 0.0
+            if x[i] > 1.0e36:
+                x[i] = 1.0e36
+
+    residual = np.zeros(n, dtype=float)
+    max_scaled = 0.0
+    # Fortran leqt2f check uses max(0,btmp) and source-order accumulation.
+    for row in range(n):
+        total = 0.0
+        tmpmx = 0.0
+        for col in range(n):
+            btmp = float(x[col])
+            tmp = float(original[row, col]) * max(0.0, btmp)
+            if abs(tmp) >= tmpmx:
+                tmpmx = max(tmpmx, abs(tmp))
+            total = total + tmp
+        total = total - float(rhs[row])
+        residual[row] = total
+        err = total / max(1.0e-24, tmpmx)
+        max_scaled = max(max_scaled, abs(err))
+    return LinearSolveResult(solution=x, residual=residual, max_scaled_residual=float(max_scaled))
