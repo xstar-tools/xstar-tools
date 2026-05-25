@@ -594,6 +594,9 @@ def calc_hmc_all(
             nlev = int(nlevs[ion_index])
             total = 0.0
             continuum = 0.0
+            ground = 0.0
+            ground_global_index = 0
+            continuum_global_index = 0
             for local_level in range(1, nlev + 1):
                 global_index = int(
                     global_level_index_by_key.get(
@@ -605,10 +608,23 @@ def calc_hmc_all(
                     if 1 <= global_index <= values.size
                     else 0.0
                 )
+                if local_level == 1:
+                    ground = population
+                    ground_global_index = global_index
                 if local_level < nlev:
                     total += population
                 else:
                     continuum = population
+                    continuum_global_index = global_index
+            next_stage = stage + 1
+            next_ground_global_index = int(
+                global_level_index_by_key.get((int(element_z), next_stage, 1), 0)
+            )
+            next_ground_population = (
+                float(values[next_ground_global_index - 1])
+                if 1 <= next_ground_global_index <= values.size
+                else 0.0
+            )
             rows.append(
                 {
                     "source": "python",
@@ -618,9 +634,20 @@ def calc_hmc_all(
                     "ion_counter": 0,
                     "ion_stage": stage,
                     "ion_index": ion_index,
+                    "nlev": int(nlev),
+                    "ground_local_level": 1,
+                    "ground_global_index": int(ground_global_index),
+                    "continuum_local_level": int(nlev),
+                    "continuum_global_index": int(continuum_global_index),
+                    "next_ion_stage": int(next_stage),
+                    "next_ground_local_level": 1,
+                    "next_ground_global_index": int(next_ground_global_index),
                     "full_element_index": full_index_offset + 1,
                     "population_total": float(total),
+                    "ground_population": float(ground),
                     "continuum_population": float(continuum),
+                    "next_ground_population": float(next_ground_population),
+                    "continuum_next_ground_difference": float(abs(continuum - next_ground_population)),
                 }
             )
             full_index_offset += max(0, nlev - 1)

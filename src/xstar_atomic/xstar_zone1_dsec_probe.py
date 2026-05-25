@@ -523,11 +523,16 @@ subroutine xap_zone1_electron_fraction_path(element_z,element_abundance, &
 end subroutine xap_zone1_electron_fraction_path
 
 subroutine xap_zone1_carbon_stage_correlation(phase_code,ion_stage, &
-    ion_index,population_total,continuum_population)
+    ion_index,nlev,ground_global_index,continuum_global_index, &
+    next_ion_stage,next_ground_global_index,population_total, &
+    ground_population,continuum_population,next_ground_population)
   use xap_calc_hmc_probe_state
   implicit none
-  integer,intent(in) :: phase_code,ion_stage,ion_index
-  real(8),intent(in) :: population_total,continuum_population
+  integer,intent(in) :: phase_code,ion_stage,ion_index,nlev
+  integer,intent(in) :: ground_global_index,continuum_global_index
+  integer,intent(in) :: next_ion_stage,next_ground_global_index
+  real(8),intent(in) :: population_total,ground_population
+  real(8),intent(in) :: continuum_population,next_ground_population
   integer :: lun,ios
   logical :: exists
   if (xap_hmc_capture.ne.1 .and. xap_hmc_history_capture.ne.1) return
@@ -537,12 +542,19 @@ subroutine xap_zone1_carbon_stage_correlation(phase_code,ion_stage, &
        status='unknown',position='append',action='write',iostat=ios)
   if (ios.ne.0) return
   if (.not.exists) write(lun,'(A)') &
-    'calc_hmc_all_call_id,phase_code,ion_stage,ion_index,'// &
-    'population_total,continuum_population'
+    'calc_hmc_all_call_id,phase_code,ion_stage,ion_index,nlev,'// &
+    'ground_local_level,ground_global_index,continuum_local_level,'// &
+    'continuum_global_index,next_ion_stage,next_ground_local_level,'// &
+    'next_ground_global_index,population_total,ground_population,'// &
+    'continuum_population,next_ground_population,'// &
+    'continuum_next_ground_difference'
   write(lun,9108) xap_hmc_current_call,phase_code,ion_stage,ion_index, &
-    population_total,continuum_population
+    nlev,1,ground_global_index,nlev,continuum_global_index, &
+    next_ion_stage,1,next_ground_global_index,population_total, &
+    ground_population,continuum_population,next_ground_population, &
+    abs(continuum_population-next_ground_population)
   close(lun)
-9108 format(4(i12,','),es26.16e3,',',es26.16e3)
+9108 format(12(i12,','),4(es26.16e3,','),es26.16e3)
 end subroutine xap_zone1_carbon_stage_correlation
 
 subroutine xap_zone1_alias_candidate(ion_index,ion_stage,local_level,nlev, &
