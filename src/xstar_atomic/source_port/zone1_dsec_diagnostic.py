@@ -794,7 +794,7 @@ def extract_python_carbon_msolvelucy_inner_eval11_outer1(
     *,
     evaluation_index: int,
 ) -> tuple[dict[str, Any], ...]:
-    """Return v0.4.92 inner-Lucy audit rows for carbon evaluation 11.
+    """Return v0.4.93 inner-Lucy audit rows for carbon evaluation 11.
 
     This is diagnostic-only.  It observes the first condensed superlevel solve
     where v0.4.91 localized the C II-continuum / C III-ground shared row drift.
@@ -1493,7 +1493,7 @@ def write_zone1_python_diagnostic_products(
     )
     _write_rows(state_path, state_path_rows)
 
-    # v0.4.92 diagnostic-only: keep the historical target-temperature
+    # v0.4.93 diagnostic-only: keep the historical target-temperature
     # state-path product above unchanged, but also export the full carbon
     # solve path for evaluations 9--11.  These are the evaluations where
     # v0.4.90 showed the C II-continuum / C III-ground boundary crossing
@@ -1610,7 +1610,7 @@ def write_zone1_python_diagnostic_products(
     _write_rows(cooling_path, cooling_rows)
 
     summary = {
-        "diagnostic_release": "0.4.92",
+        "diagnostic_release": "0.4.93",
         "zone_index": 1,
         "n_evaluations": len(evaluations),
         "n_snapshots": len(snapshots),

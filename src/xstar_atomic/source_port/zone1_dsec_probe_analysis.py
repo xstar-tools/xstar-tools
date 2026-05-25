@@ -1318,8 +1318,8 @@ def analyze_xstar_zone1_probe(
     _write(carbon_alias_path, carbon_alias_rows)
 
     summary = {
-        "diagnostic_release": "0.4.92",
-        "probe_contract_version": "0.4.92",
+        "diagnostic_release": "0.4.93",
+        "probe_contract_version": "0.4.93",
         "dsec_call_id": 1,
         "n_evaluations": len(sequence_rows),
         "n_input_fingerprints": len(fingerprints),
@@ -2313,7 +2313,7 @@ def compare_zone1_probe_with_python(
         predicate=lambda row: not bool(row.get("within_tolerance", False)),
     )
 
-    # v0.4.92 diagnostic-only: compare the carbon solve path for evaluations
+    # v0.4.93 diagnostic-only: compare the carbon solve path for evaluations
     # 9--11 and isolate the physical C II-continuum / C III-ground shared row.
     # This deliberately avoids the generic next-ground stage-correlation field
     # that v0.4.90 identified as timing-sensitive on the XSTAR side.
@@ -2417,7 +2417,7 @@ def compare_zone1_probe_with_python(
         and not bool(row.get("within_tolerance", False)),
     )
 
-    # v0.4.92 diagnostic-only: inner msolvelucy audit for evaluation 11,
+    # v0.4.93 diagnostic-only: inner msolvelucy audit for evaluation 11,
     # outer iteration 1.  These rows compare the condensed matrix row,
     # RHS/source vector, solved superlevel population, expansion/scatter,
     # fixed-point normalization denominator, and ordered dominant
@@ -2601,8 +2601,8 @@ def compare_zone1_probe_with_python(
         and cooling_ready
     )
     summary = {
-        "diagnostic_release": "0.4.92",
-        "probe_contract_version": "0.4.92",
+        "diagnostic_release": "0.4.93",
+        "probe_contract_version": "0.4.93",
         "same_entry_replay_ready": same_entry_ready,
         "type15_record_level_proof_applicable": type15_record_level_proof_applicable,
         "type15_record_gate_passed": type15_record_gate_passed,
