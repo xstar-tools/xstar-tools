@@ -522,6 +522,23 @@ def calc_emis_ion(
                         ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
                         ptmp2 = pescl(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescl(tau1 + tau2) * context.covering_fraction
                         result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
+                        # Source handoff correction, v0.5.01.
+                        #
+                        # In the Fortran line branch, ucalc receives caller-owned
+                        # ``opakc``/``opakcont`` and may update the continuum-grid
+                        # opacity while the caller also stores the per-line opacity
+                        # in ``oplin``.  The previous Python translation preserved
+                        # the emitted line flux handoff but did not carry the line
+                        # opacity into either ``oplin`` or the continuum-grid
+                        # ``opakc`` seen by ``step.f90``.  That left the active
+                        # kappa above ``ectt`` nearly zero, so the radial Courant
+                        # limiter skipped the intermediate column substeps.  Bin the
+                        # line opacity at the same source ``nb1`` used for ``flinel``.
+                        line_opacity = float(result.opakab) * float(abund1)
+                        if line_index > 0 and line_index < context.workspace.base.oplin.size:
+                            context.workspace.base.oplin[line_index] = line_opacity
+                        if nb1 > 0 and nb1 <= context.workspace.base.opakc.size:
+                            context.workspace.base.opakc[nb1 - 1] += line_opacity
                         net = result.ans2 * abund2 - result.ans1 * abund1
                         context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
                         context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
