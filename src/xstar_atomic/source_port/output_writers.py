@@ -1196,10 +1196,13 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         ncn2=ncn2,
     )
     if bool(terminal_record):
-        # Source detail files retain a final all-zero shell extension after the
-        # last physical radial record.  Build from the same metadata/header so
-        # schema/order stay source-faithful, then zero only the payload arrays.
-        record = _zero_detail_shell_output(record)
+        # v0.5.10: source detail output does not zero the terminal shell.
+        # The terminal detail record reuses the caller-owned final radial
+        # state, like savd/fstepr*, and must be appended after the last
+        # physical shell record.  Abundance-table zero padding is handled
+        # separately by pprint/output formatting and must not be applied to
+        # xo01_detal*.fits payload arrays.
+        pass
     pass_index = int(state.transfer.pass_index)
     stores = state.outputs.get("detail_output_stores")
     if stores is None:
@@ -1213,7 +1216,11 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         stores[pass_index] = store
     if not isinstance(store, DetailOutputStore):
         raise OutputWriterPortError("detail output pass store has wrong type")
-    store.insert_after_hdu(hdunum, record)
+    if bool(terminal_record):
+        store.records.append(record)
+        store.inserted_after_hdus.append(int(hdunum))
+    else:
+        store.insert_after_hdu(hdunum, record)
     state.outputs["detail_output_store"] = store
     state.outputs.setdefault("detail_output_source_order", []).append(
         {
