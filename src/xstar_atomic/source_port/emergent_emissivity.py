@@ -362,6 +362,45 @@ def _parent_element_atomic_mass(master: Any, derived: Any, record: int) -> float
     return 1.0
 
 
+
+def _source_deleafnd_natural_width_eV(master: Any, derived: Any, ion_index: int, upper_level: int) -> float | None:
+    """Translate ``deleafnd.f90`` for the line-profile damping width.
+
+    Source label 50 calls ``deleafnd(jkion,idest1,...)`` before falling back to
+    the line record's own width.  The prior Python handoff skipped this search,
+    which meant Auger-damped/type-41 widths never reached ``linopac``.  Preserve
+    the source traversal over the type-41 chain for the current ion and return
+    the same eV width conversion used by XSTAR.
+    """
+    try:
+        jkk = int(ion_index)
+        lup = int(upper_level)
+        if jkk <= 0 or lup <= 0:
+            return None
+        npfi = getattr(derived, "npfi")
+        if npfi.shape[0] <= 41 or npfi.shape[1] <= jkk:
+            return None
+        ndtmp = int(npfi[41, jkk])
+        if ndtmp <= 0:
+            return None
+        npar = getattr(derived, "npar")
+        if ndtmp >= len(npar):
+            return None
+        parent = int(npar[ndtmp])
+        npnxt = getattr(derived, "npnxt")
+        while ndtmp > 0 and ndtmp < len(npar) and int(npar[ndtmp]) == parent:
+            ints = master.record_integers(ndtmp)
+            iltmp = int(ints[1]) if len(ints) > 1 else 0
+            if iltmp == lup:
+                reals = master.record_reals(ndtmp)
+                if len(reals) > 2:
+                    return float(reals[2]) * 4.136e-15
+                return None
+            ndtmp = int(npnxt[ndtmp]) if ndtmp < len(npnxt) else 0
+    except Exception:
+        return None
+    return None
+
 def _source_linopac_into_opakc(
     *,
     optpp: float,
@@ -702,13 +741,17 @@ def calc_emis_ion(
                             context.workspace.base.oplin[line_index] = opakb1
                         net = result.ans2 * abund2 - result.ans1 * abund1
                         atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
-                        natural_width = 0.0
-                        try:
-                            reals_for_line = context.master.record_reals(rec)
-                            if len(reals_for_line) > 2:
-                                natural_width = float(reals_for_line[2]) * 4.136e-15
-                        except Exception:
+                        natural_width = _source_deleafnd_natural_width_eV(
+                            context.master, context.derived, ion.ion_index, idest1
+                        )
+                        if natural_width is None:
                             natural_width = 0.0
+                            try:
+                                reals_for_line = context.master.record_reals(rec)
+                                if len(reals_for_line) > 2:
+                                    natural_width = float(reals_for_line[2]) * 4.136e-15
+                            except Exception:
+                                natural_width = 0.0
                         _source_linopac_into_opakc(
                             optpp=opakb1,
                             rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),

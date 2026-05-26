@@ -389,7 +389,7 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         "final_rrc_depth_retained_count": int(np.count_nonzero(final_rrc_depth_mask)),
         "final_rrc_union_retained_count": int(np.count_nonzero(final_rrc_lum_mask | final_rrc_depth_mask)),
     })
-    epi_for_retention = np.asarray(getattr(state.radiation, "epi_eV", ()), dtype=float).reshape(-1)
+    epi_for_retention = np.asarray(getattr(state.radiation, "epi_eV", getattr(state.radiation, "epi", ())), dtype=float).reshape(-1)
     high_energy_mask = epi_for_retention > 1400.0 if epi_for_retention.size else np.zeros(0, dtype=bool)
     z = np.asarray(workspace.zrems, dtype=float)
     rc = np.asarray(workspace.rccemis, dtype=float)
