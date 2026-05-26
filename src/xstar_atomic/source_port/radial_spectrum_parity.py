@@ -355,7 +355,7 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
                 bin4063_ranked_rrc_count = int(np.count_nonzero(cr[1:, 4063]))
     cemab = np.asarray(workspace.cemab_physical, dtype=float)
     opakab = np.asarray(workspace.opakab_physical, dtype=float).reshape(-1)
-    cabab = np.asarray(workspace.cabab_physical, dtype=float).reshape(-1)
+    cabab = np.asarray(workspace.emissivity.base.cabab[1:], dtype=float).reshape(-1)
     tauc = np.asarray(workspace.tauc, dtype=float)
     elumab = np.asarray(workspace.elumab, dtype=float)
     rrc_floor = 1.0e-36
