@@ -964,7 +964,18 @@ def save_radial_shell_state(
     if bool(state.control.get("output_writers_enabled", False)):
         lwri = int(state.control.get("lwri", 0))
         npass = int(state.control.get("npass", 1))
-        if lwri > 0 or npass > 1:
+        # v0.5.11: the source terminal savd call follows the same
+        # detail-output condition as ordinary shell savd calls.  In the
+        # Python runner, however, late writer-state normalization can leave
+        # the condition flags less informative than the existing caller-owned
+        # detail store.  If this pass already has detail records, append the
+        # terminal caller-owned state as well; do not synthesize a zero shell.
+        stores = state.outputs.get("detail_output_stores", {})
+        pass_has_detail_records = False
+        if isinstance(stores, dict):
+            store = stores.get(int(state.transfer.pass_index))
+            pass_has_detail_records = bool(getattr(store, "records", ()))
+        if lwri > 0 or npass > 1 or (bool(terminal_record) and pass_has_detail_records):
             from .output_writers import append_detail_output_from_state
 
             append_detail_output_from_state(state, hdunum=int(hdunum), terminal_record=bool(terminal_record))

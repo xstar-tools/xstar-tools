@@ -467,6 +467,34 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
             **counts,
         })
 
+    # v0.5.11: selected-step source-balance diagnostic.  The remaining
+    # radial/spectrum mismatch is dominated by the opacity-limited substep
+    # bin chosen by step.f90.  Record the exact caller-owned row values
+    # feeding heatt, stpcut, detail output, and final spectrum construction
+    # at that bin without using original-XSTAR outputs as runtime inputs.
+    selected_bin = int(getattr(step, "selected_bin_one_based", 0) or getattr(step, "min_tst_bin_one_based", 0) or 0) if step is not None else 0
+    if selected_bin > 0:
+        ii = selected_bin - 1
+        opcont_for_balance = np.asarray(workspace.opakcont, dtype=float).reshape(-1)
+        opacity_rows.append({
+            "row_kind": "step_selected_bin_source_balance",
+            "phase": "after_shell",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            "selected_bin_one_based": selected_bin,
+            "selected_energy_eV": float(epi_for_retention[ii]) if epi_for_retention.size > ii else 0.0,
+            "selected_opakc": float(op_for_retention[ii]) if op_for_retention.size > ii else 0.0,
+            "selected_opakcont": float(opcont_for_balance[ii]) if opcont_for_balance.size > ii else 0.0,
+            "selected_line_opacity": float(line_binned[ii]) if line_binned.size > ii else 0.0,
+            "selected_zrems1": float(z[0, ii]) if z.ndim == 2 and z.shape[0] > 0 and z.shape[1] > ii else 0.0,
+            "selected_zrems2": float(z[1, ii]) if z.ndim == 2 and z.shape[0] > 1 and z.shape[1] > ii else 0.0,
+            "selected_zrems3": float(z[2, ii]) if z.ndim == 2 and z.shape[0] > 2 and z.shape[1] > ii else 0.0,
+            "selected_zrems4": float(z[3, ii]) if z.ndim == 2 and z.shape[0] > 3 and z.shape[1] > ii else 0.0,
+            "selected_zrems5": float(z[4, ii]) if z.ndim == 2 and z.shape[0] > 4 and z.shape[1] > ii else 0.0,
+            "selected_rccemis_out": float(rc[0, ii]) if rc.ndim == 2 and rc.shape[0] > 0 and rc.shape[1] > ii else 0.0,
+            "selected_rccemis_in": float(rc[1, ii]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > ii else 0.0,
+        })
+
     for name, arr in (
         ("opakc", workspace.opakc),
         ("opakcont", workspace.opakcont),
