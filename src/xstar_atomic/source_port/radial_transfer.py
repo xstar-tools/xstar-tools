@@ -91,13 +91,34 @@ def _emit_progress(state: XSTARPythonState, event: str, **details: Any) -> None:
 
 @dataclass(frozen=True)
 class StepResult:
-    """Result of the literal ``step.f90`` zone-size calculation."""
+    """Result of the literal ``step.f90`` zone-size calculation.
+
+    The trace fields are source-order observables for the physical radial
+    runner.  They do not change the step calculation; they preserve the exact
+    selected opacity bin and limiting values needed to compare Python with the
+    original ``step.f90`` call at the missing intermediate-zone boundary.
+    """
 
     delr_cm: float
     selected_bin_one_based: int
     initial_delr_cm: float
     remaining_column_delr_cm: float
     radius_column_limit_cm: float
+    emult: float = 0.0
+    ectt_eV: float = 0.0
+    taumax: float = 0.0
+    selected_epi_eV: float = 0.0
+    selected_opakc_cm_inv: float = 0.0
+    selected_dpthc: float = 0.0
+    selected_zrems: float = 0.0
+    selected_tst_cm: float = 0.0
+    min_tst_bin_one_based: int = 0
+    min_tst_cm: float = 0.0
+    min_tst_epi_eV: float = 0.0
+    min_tst_opakc_cm_inv: float = 0.0
+    min_tst_dpthc: float = 0.0
+    min_tst_zrems: float = 0.0
+    opacity_limited_delr_cm: float = 0.0
     source_file: str = "xstar/xstarlib/src/step.f90"
 
 
@@ -367,6 +388,17 @@ def step(
     r19 = r * XSTAR_STEP_RADIUS_SCALE
     fpr2 = XSTAR_STEP_GEOMETRY_FACTOR * r19 * r19
     klmn = 1
+    min_tst = float("inf")
+    min_tst_bin = 0
+    min_tst_epi = 0.0
+    min_tst_opakc = 0.0
+    min_tst_dpthc = 0.0
+    min_tst_zrems = 0.0
+    selected_tst = 0.0
+    selected_epi = float(epi[0]) if n else 0.0
+    selected_opakc = max(float(opacity[0]), XSTAR_STEP_OPACITY_FLOOR) if n else 0.0
+    selected_dpthc = float(depths[0, 0]) if n else 0.0
+    selected_zrems = float(master[0, 0]) if n else 0.0
 
     for kl in range(1, n + 1):
         idx = kl - 1
@@ -381,23 +413,61 @@ def step(
         )
         del tst
         tst = float(emult) / optp2
-        if (
+        active = (
             float(epi[idx]) > float(ectt_eV)
             and float(depths[0, idx]) <= float(taumax)
             and float(master[0, idx]) > XSTAR_STEP_ZREMS_GATE
-        ):
+        )
+        if active and tst < min_tst:
+            min_tst = float(tst)
+            min_tst_bin = kl
+            min_tst_epi = float(epi[idx])
+            min_tst_opakc = float(optp2)
+            min_tst_dpthc = float(depths[0, idx])
+            min_tst_zrems = float(master[0, idx])
+        if active:
             if tst < delr:
                 klmn = kl
+                selected_tst = float(tst)
+                selected_epi = float(epi[idx])
+                selected_opakc = float(optp2)
+                selected_dpthc = float(depths[0, idx])
+                selected_zrems = float(master[0, idx])
             delr = min(delr, tst)
 
+    opacity_limited_delr = float(delr)
     delrmn = (float(column_limit_cm2) - float(column_cm2)) / xpx
     delr = min(delr, delrmn)
+    if not math.isfinite(min_tst):
+        min_tst = 0.0
+    if selected_tst == 0.0 and klmn >= 1 and klmn <= n:
+        idx = klmn - 1
+        selected_opakc = max(float(opacity[idx]), XSTAR_STEP_OPACITY_FLOOR)
+        selected_tst = float(emult) / selected_opakc
+        selected_epi = float(epi[idx])
+        selected_dpthc = float(depths[0, idx])
+        selected_zrems = float(master[0, idx])
     return StepResult(
         delr_cm=float(delr),
         selected_bin_one_based=int(klmn),
         initial_delr_cm=float(initial_delr),
         remaining_column_delr_cm=float(delrmn),
         radius_column_limit_cm=float(rmax),
+        emult=float(emult),
+        ectt_eV=float(ectt_eV),
+        taumax=float(taumax),
+        selected_epi_eV=float(selected_epi),
+        selected_opakc_cm_inv=float(selected_opakc),
+        selected_dpthc=float(selected_dpthc),
+        selected_zrems=float(selected_zrems),
+        selected_tst_cm=float(selected_tst),
+        min_tst_bin_one_based=int(min_tst_bin),
+        min_tst_cm=float(min_tst),
+        min_tst_epi_eV=float(min_tst_epi),
+        min_tst_opakc_cm_inv=float(min_tst_opakc),
+        min_tst_dpthc=float(min_tst_dpthc),
+        min_tst_zrems=float(min_tst_zrems),
+        opacity_limited_delr_cm=float(opacity_limited_delr),
     )
 
 

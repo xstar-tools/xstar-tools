@@ -235,8 +235,9 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
     workspace = state.control.get("radial_transfer_workspace")
     if not isinstance(workspace, RadialTransferWorkspace):
         return
-    data = state.outputs.setdefault("radial_spectrum_parity_v0499", {})
+    data = state.outputs.setdefault("radial_spectrum_parity_v0500", {})
     step_rows = data.setdefault("radial_stepping_rows", [])
+    step_probe_rows = data.setdefault("step_probe_rows", [])
     opacity_rows = data.setdefault("opacity_summary_rows", [])
     spectrum_rows = data.setdefault("spectrum_accumulation_rows", [])
     row_write_rows = data.setdefault("row_write_rows", [])
@@ -257,7 +258,9 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         "numrec": int(state.control.get("numrec", 0)),
         "nlsvn": int(state.control.get("nlsvn", 0)),
         "step_selected_bin_one_based": int(getattr(step, "selected_bin_one_based", 0)),
+        "step_min_tst_bin_one_based": int(getattr(step, "min_tst_bin_one_based", 0)),
         "step_initial_delr_cm": float(getattr(step, "initial_delr_cm", 0.0)),
+        "step_opacity_limited_delr_cm": float(getattr(step, "opacity_limited_delr_cm", 0.0)),
         "step_remaining_column_delr_cm": float(getattr(step, "remaining_column_delr_cm", 0.0)),
         "taulc_max_dpthc": float(np.max(np.asarray(workspace.dpthc[0], dtype=float))) if workspace.dpthc.size else 0.0,
         "dpthc_forward_max": float(np.max(np.asarray(workspace.dpthc[1], dtype=float))) if workspace.dpthc.size else 0.0,
@@ -268,6 +271,32 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         "tauc_reverse_max": float(np.max(np.asarray(workspace.tauc[0], dtype=float))) if workspace.tauc.size else 0.0,
         "stpcut_max_zone_continuum_depth": float(getattr(stpcut, "max_zone_continuum_depth", 0.0)),
     })
+    if step is not None:
+        step_probe_rows.append({
+            "row_kind": "step_f90_zone_probe",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            "direction": int(direction),
+            "emult": float(getattr(step, "emult", 0.0)),
+            "ectt_eV": float(getattr(step, "ectt_eV", 0.0)),
+            "taumax": float(getattr(step, "taumax", 0.0)),
+            "selected_kl": int(getattr(step, "selected_bin_one_based", 0)),
+            "selected_epi_eV": float(getattr(step, "selected_epi_eV", 0.0)),
+            "selected_opakc_cm_inv": float(getattr(step, "selected_opakc_cm_inv", 0.0)),
+            "selected_dpthc": float(getattr(step, "selected_dpthc", 0.0)),
+            "selected_zrems_row1": float(getattr(step, "selected_zrems", 0.0)),
+            "selected_tst_cm": float(getattr(step, "selected_tst_cm", 0.0)),
+            "min_tst_kl": int(getattr(step, "min_tst_bin_one_based", 0)),
+            "min_tst_cm": float(getattr(step, "min_tst_cm", 0.0)),
+            "min_tst_epi_eV": float(getattr(step, "min_tst_epi_eV", 0.0)),
+            "min_tst_opakc_cm_inv": float(getattr(step, "min_tst_opakc_cm_inv", 0.0)),
+            "min_tst_dpthc": float(getattr(step, "min_tst_dpthc", 0.0)),
+            "min_tst_zrems_row1": float(getattr(step, "min_tst_zrems", 0.0)),
+            "delr_initial_cm": float(getattr(step, "initial_delr_cm", 0.0)),
+            "delr_after_opacity_loop_cm": float(getattr(step, "opacity_limited_delr_cm", 0.0)),
+            "delr_remaining_column_cm": float(getattr(step, "remaining_column_delr_cm", 0.0)),
+            "delr_final_cm": float(getattr(step, "delr_cm", 0.0)),
+        })
     for name, arr in (
         ("opakc", workspace.opakc),
         ("opakcont", workspace.opakcont),
@@ -304,11 +333,12 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
 
 def write_python_runtime_radial_spectrum_diagnostics(state: Any, out_dir: str | Path) -> dict[str, str]:
     """Write Python runtime radial/spectrum diagnostic rows captured during 142."""
-    base = Path(out_dir) / "radial_spectrum_diagnostics_v0499"
-    data = state.outputs.get("radial_spectrum_parity_v0499", {})
+    base = Path(out_dir) / "radial_spectrum_diagnostics_v0500"
+    data = state.outputs.get("radial_spectrum_parity_v0500", {})
     products: dict[str, str] = {}
     tables = {
         "python_radial_stepping_csv": data.get("radial_stepping_rows", []),
+        "python_step_f90_zone_probe_csv": data.get("step_probe_rows", []),
         "python_opacity_attenuation_summary_csv": data.get("opacity_summary_rows", []),
         "python_spectrum_accumulation_summary_csv": data.get("spectrum_accumulation_rows", []),
         "python_row_write_trace_csv": data.get("row_write_rows", []),
@@ -329,7 +359,7 @@ def compare_radial_spectrum_products(
     """Compare radial row history and spectrum products from existing outputs."""
     original = Path(original_dir)
     python = Path(python_dir)
-    out = Path(out_dir) if out_dir is not None else python / "radial_spectrum_diagnostics_v0499"
+    out = Path(out_dir) if out_dir is not None else python / "radial_spectrum_diagnostics_v0500"
     out.mkdir(parents=True, exist_ok=True)
 
     radial_rows = _abundance_rows(python / "xout_abund1.fits", "python") + _abundance_rows(original / "xout_abund1.fits", "xstar")
