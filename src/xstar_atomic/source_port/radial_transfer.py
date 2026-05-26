@@ -967,7 +967,7 @@ def save_radial_shell_state(
         if lwri > 0 or npass > 1:
             from .output_writers import append_detail_output_from_state
 
-            append_detail_output_from_state(state, hdunum=int(hdunum))
+            append_detail_output_from_state(state, hdunum=int(hdunum), terminal_record=bool(terminal_record))
             output_record_written = True
     state.transfer.provenance.setdefault("saved_shell_records", []).append(
         {

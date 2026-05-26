@@ -934,15 +934,13 @@ def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray,
         i = r.continuum_index - 1
         if not (0 <= i < lum.shape[1]):
             continue
-        # v0.5.07: retain final RRC rows if any source output channel that
-        # writespectra4 exposes is active.  The literal source gate is the two
-        # elumab channels, but small retained continua can carry only depth in
-        # the Python path until the next shell updates luminosity.  Keeping the
-        # tauc-active rows preserves the source row identity/order without
-        # changing the physics arrays used by the calculation.
+        # v0.5.09: undo the v0.5.07 depth-only RRC retention experiment.
+        # Source writespectra4 selects final RRC rows from the two elumab
+        # luminosity channels; tauc/depth is payload for retained rows, not an
+        # independent row-selection predicate.  Depth-only retention over-wrote
+        # source row identity and produced extra zero-emission RRC rows.
         active_lum = lum[0, i] > FINAL_RRC_ACTIVITY_FLOOR or lum[1, i] > FINAL_RRC_ACTIVITY_FLOOR
-        active_depth = (depth.shape[1] > i) and (abs(depth[0, i]) > 0.0 or abs(depth[1, i]) > 0.0)
-        if active_lum or active_depth:
+        if active_lum:
             rows.append(r)
     values = {
         "index": np.asarray([r.continuum_index for r in rows], dtype=np.int32),
@@ -1140,7 +1138,36 @@ def _detail_level_vector(values: Sequence[float], metadata: SourceOutputMetadata
     return arr.copy()
 
 
-def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int) -> DetailShellOutput:
+def _zero_like_table(table: OutputTable) -> OutputTable:
+    values: dict[str, np.ndarray] = {}
+    for name in table.columns:
+        arr = np.asarray(table.values[name])
+        if np.issubdtype(arr.dtype, np.number):
+            values[name] = np.zeros_like(arr)
+        else:
+            values[name] = np.asarray(["" for _ in range(arr.shape[0])], dtype=arr.dtype)
+    return OutputTable(
+        extension_name=table.extension_name,
+        columns=table.columns,
+        units=table.units,
+        values=values,
+        formats=table.formats,
+        binary=table.binary,
+        header_keywords=table.header_keywords,
+        source_file=table.source_file,
+    )
+
+def _zero_detail_shell_output(record: DetailShellOutput) -> DetailShellOutput:
+    return DetailShellOutput(
+        levels=_zero_like_table(record.levels),
+        lines=_zero_like_table(record.lines),
+        rrcs=_zero_like_table(record.rrcs),
+        continuum=_zero_like_table(record.continuum),
+        source_order=record.source_order,
+        source_file=record.source_file,
+    )
+
+def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
     metadata = _metadata_from_control(state)
@@ -1168,6 +1195,11 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int) -> 
         dpthc=workspace.dpthc,
         ncn2=ncn2,
     )
+    if bool(terminal_record):
+        # Source detail files retain a final all-zero shell extension after the
+        # last physical radial record.  Build from the same metadata/header so
+        # schema/order stay source-faithful, then zero only the payload arrays.
+        record = _zero_detail_shell_output(record)
     pass_index = int(state.transfer.pass_index)
     stores = state.outputs.get("detail_output_stores")
     if stores is None:

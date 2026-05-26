@@ -427,6 +427,46 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         "bin4063_ranked_line_candidate_count": bin4063_ranked_line_count,
         "bin4063_has_ranked_line_candidates": bool(bin4063_ranked_line_count > 0),
     })
+
+    # v0.5.09: source accumulation/detail-output retention diagnostics.
+    # Track the exact rows/arrays feeding xo01_detal4 and writespectra3, with
+    # separate high-energy windows matching the observed XSTAR-only tails.
+    def _he_counts(threshold: float) -> dict[str, int | float]:
+        mask = epi_for_retention > float(threshold) if epi_for_retention.size else np.zeros(0, dtype=bool)
+        nn = min(mask.size, op_for_retention.size, z.shape[1] if z.ndim == 2 else 0, rc.shape[1] if rc.ndim == 2 else 0)
+        if nn <= 0:
+            return {
+                "threshold_eV": float(threshold), "bin_count": 0,
+                "opakc_nonzero": 0, "opakcont_nonzero": 0,
+                "zrems1_nonzero": 0, "zrems2_nonzero": 0, "zrems3_nonzero": 0,
+                "zrems4_nonzero": 0, "zrems5_nonzero": 0,
+                "rccemis_out_nonzero": 0, "rccemis_in_nonzero": 0,
+            }
+        mm = mask[:nn]
+        opcont = np.asarray(workspace.opakcont, dtype=float).reshape(-1)
+        return {
+            "threshold_eV": float(threshold),
+            "bin_count": int(np.count_nonzero(mm)),
+            "opakc_nonzero": int(np.count_nonzero(op_for_retention[:nn][mm])),
+            "opakcont_nonzero": int(np.count_nonzero(opcont[:nn][mm])) if opcont.size >= nn else 0,
+            "zrems1_nonzero": int(np.count_nonzero(z[0, :nn][mm])) if z.ndim == 2 and z.shape[0] > 0 else 0,
+            "zrems2_nonzero": int(np.count_nonzero(z[1, :nn][mm])) if z.ndim == 2 and z.shape[0] > 1 else 0,
+            "zrems3_nonzero": int(np.count_nonzero(z[2, :nn][mm])) if z.ndim == 2 and z.shape[0] > 2 else 0,
+            "zrems4_nonzero": int(np.count_nonzero(z[3, :nn][mm])) if z.ndim == 2 and z.shape[0] > 3 else 0,
+            "zrems5_nonzero": int(np.count_nonzero(z[4, :nn][mm])) if z.ndim == 2 and z.shape[0] > 4 else 0,
+            "rccemis_out_nonzero": int(np.count_nonzero(rc[0, :nn][mm])) if rc.ndim == 2 and rc.shape[0] > 0 else 0,
+            "rccemis_in_nonzero": int(np.count_nonzero(rc[1, :nn][mm])) if rc.ndim == 2 and rc.shape[0] > 1 else 0,
+        }
+    for threshold in (854.0, 1400.0):
+        counts = _he_counts(threshold)
+        opacity_rows.append({
+            "row_kind": "detail_source_accumulation_summary",
+            "phase": "after_shell",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            **counts,
+        })
+
     for name, arr in (
         ("opakc", workspace.opakc),
         ("opakcont", workspace.opakcont),
@@ -443,7 +483,9 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         ("transmitted_zrems_row2", workspace.zrems[1]),
         ("emit_inward_zrems_row3", workspace.zrems[2]),
         ("emit_outward_zrems_row4", workspace.zrems[3]),
+        ("continuum_emit_outward_zrems_row5", workspace.zrems[4]),
         ("zremso_emit_outward_row4", workspace.zremso[3]),
+        ("zremso_continuum_emit_outward_row5", workspace.zremso[4]),
         ("line_emit_outward_elum_row1", workspace.elum[0]),
         ("rrc_emit_outward_elumab_row1", workspace.elumab[0]),
     ):
