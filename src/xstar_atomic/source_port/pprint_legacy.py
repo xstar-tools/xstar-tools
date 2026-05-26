@@ -438,15 +438,16 @@ def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool 
     calls = ["pprint(9)"]
     if int(state.transfer.pass_index) == int(state.control.get("npass", 1)):
         zone_index = int(state.transfer.zone_index)
-        if terminal_record:
-            # v0.5.01: XSTAR's public abundance/heating/cooling products retain
-            # a trailing zero row after the final physical radial record.  Keep
-            # the terminal pprint(9) log line, but leave the numrec row of the
-            # structured FITS arrays unfilled so _rows_matrix writes zeros.
-            calls.append("pprint(12:terminal_zero_row)")
-        else:
-            _option12_accumulate(state, buf, zone_index=zone_index)
-            calls.append("pprint(12)")
+        # v0.5.02 hotfix: never replace the final physical pprint(12) record
+        # with a zero row.  v0.5.01 attempted to mirror XSTAR's trailing
+        # all-zero public FITS row at the terminal call site, but Python has not
+        # yet reproduced the missing intermediate physical radial substep.  With
+        # only three Python records available, leaving the terminal row unfilled
+        # turned row 3 into zeros and deleted the real final column-limited
+        # record.  Preserve every physical row here; a trailing zero row may be
+        # added only after the source-order physical row count matches XSTAR.
+        _option12_accumulate(state, buf, zone_index=zone_index)
+        calls.append("pprint(12)")
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
     return tuple(calls)
 
