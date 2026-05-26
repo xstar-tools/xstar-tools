@@ -437,17 +437,9 @@ def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool 
     _option9_zone_line(state, buf)
     calls = ["pprint(9)"]
     if int(state.transfer.pass_index) == int(state.control.get("npass", 1)):
-        if terminal_record:
-            # Source-order terminal pprint(12) writes the numrec row after the
-            # first-pass loop sets numrec=jkp+1.  Python's transfer.zone_index
-            # still names the last physical shell (jkp), so using it here
-            # overwrote row jkp and left row numrec as zeros.  Preserve the
-            # final column-limited physical state in the terminal numrec slot.
-            zone_index = int(state.control.get("numrec", state.transfer.zone_index))
-        else:
-            zone_index = int(state.transfer.zone_index)
+        zone_index = int(state.control.get("numrec", state.transfer.zone_index)) if terminal_record else int(state.transfer.zone_index)
         _option12_accumulate(state, buf, zone_index=zone_index)
-        calls.append("pprint(12)")
+        calls.append("pprint(12:terminal)" if terminal_record else "pprint(12)")
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
     return tuple(calls)
 

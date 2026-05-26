@@ -305,6 +305,58 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
             "delr_remaining_column_cm": float(getattr(step, "remaining_column_delr_cm", 0.0)),
             "delr_final_cm": float(getattr(step, "delr_cm", 0.0)),
         })
+    calc_emis_result = getattr(state.local_zone, "source_arrays", {}).get("calc_emis_all")
+    context = state.control.get("calc_emis_context")
+    line_rank = getattr(calc_emis_result, "line_rank_table", None)
+    n_ranked_line_bins = 0
+    bin4063_ranked_line_count = 0
+    if line_rank is not None:
+        lr = np.asarray(line_rank, dtype=int)
+        if lr.ndim == 2 and lr.shape[1] > 1:
+            n_ranked_line_bins = int(np.count_nonzero(np.any(lr[1:, 1:] != 0, axis=0)))
+            if lr.shape[1] > 4063:
+                bin4063_ranked_line_count = int(np.count_nonzero(lr[1:, 4063]))
+    line_traces = [
+        tr for tr in getattr(calc_emis_result, "record_traces", ())
+        if str(getattr(tr, "output_role", "")).startswith("strong_line_rate_type_")
+    ]
+    strongest = None
+    if line_traces:
+        strongest = max(line_traces, key=lambda tr: abs(float(getattr(tr, "opakb1", 0.0))))
+    oplin_arr = np.asarray(workspace.oplin_physical, dtype=float).reshape(-1)
+    opakc_arr = np.asarray(workspace.opakc, dtype=float).reshape(-1)
+    opakcont_arr = np.asarray(workspace.opakcont, dtype=float).reshape(-1)
+    line_binned = opakc_arr[: min(opakc_arr.size, opakcont_arr.size)] - opakcont_arr[: min(opakc_arr.size, opakcont_arr.size)]
+    strongest_index = int(getattr(strongest, "output_index", 0)) if strongest is not None else 0
+    strongest_energy = 0.0
+    strongest_nb1 = 0
+    if strongest_index > 0 and context is not None:
+        try:
+            wave = float(context.line_wavelength_angstrom[strongest_index])
+            if wave > 0.0:
+                strongest_energy = 12398.4016 / (wave + 1.0e-36)
+                epi = np.asarray(getattr(context.radiation, "epi_eV", getattr(context.radiation, "epi", ())), dtype=float).reshape(-1)
+                from .radiation import nbinc
+                strongest_nb1 = int(nbinc(strongest_energy, epi, int(epi.size))) if epi.size else 0
+        except Exception:
+            strongest_energy = 0.0
+            strongest_nb1 = 0
+    opacity_rows.append({
+        "row_kind": "line_opacity_handoff_summary",
+        "phase": "after_shell",
+        "pass_index": int(pass_index),
+        "zone_index": int(zone_index),
+        "line_opacity_nonzero_count": int(np.count_nonzero(oplin_arr)),
+        "max_oplin": float(np.max(np.abs(oplin_arr))) if oplin_arr.size else 0.0,
+        "max_line_opacity_binned_into_opakc": float(np.max(np.abs(line_binned))) if line_binned.size else 0.0,
+        "strongest_line_index": strongest_index,
+        "strongest_line_energy": strongest_energy,
+        "strongest_nb1": strongest_nb1,
+        "strongest_opakb1": float(getattr(strongest, "opakb1", 0.0)) if strongest is not None else 0.0,
+        "ranked_strong_line_bin_count": n_ranked_line_bins,
+        "bin4063_ranked_line_candidate_count": bin4063_ranked_line_count,
+        "bin4063_has_ranked_line_candidates": bool(bin4063_ranked_line_count > 0),
+    })
     for name, arr in (
         ("opakc", workspace.opakc),
         ("opakcont", workspace.opakcont),

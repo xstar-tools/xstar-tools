@@ -194,6 +194,7 @@ class CalcEmisRecordTrace:
     ans2: float
     ans3: float
     ans4: float
+    opakb1: float
     status: str
     output_role: str
 
@@ -348,37 +349,163 @@ def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int
     )
 
 
-def _bin_retained_continuum_opacity(
-    context: CalcEmisContext,
-    *,
-    retained_continuum_index: int,
-    opacity_cm_inv: float,
-    epi: np.ndarray,
-) -> int:
-    """Carry scalar RRC/photoabs opacity into the continuum grid used by step.f90.
+def _parent_element_atomic_mass(master: Any, derived: Any, record: int) -> float:
+    """Return the source parent-element atomic mass used by ``linopac``."""
+    try:
+        ion_record = int(derived.npar[int(record)])
+        element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
+        reals = master.record_reals(element_record) if element_record > 0 else ()
+        if len(reals) > 1 and float(reals[1]) > 0.0:
+            return float(reals[1])
+    except Exception:
+        pass
+    return 1.0
 
-    The original ucalc call receives caller-owned ``opakc`` and ``opakcont``
-    work arrays.  Some translated branches return only the scalar retained-RRC
-    opacity ``opakab``; without this bridge that opacity is visible in RRC
-    detail products but not in the continuum-grid ``opakc`` that the radial
-    Courant step reads on the next shell.
+
+def _source_linopac_into_opakc(
+    *,
+    optpp: float,
+    rcem1: float,
+    rcem2: float,
+    line_energy_eV: float,
+    vturb_km_s: float,
+    temperature_1e4K: float,
+    atomic_mass_amu: float,
+    natural_width_eV: float,
+    epi: np.ndarray,
+    opakc: np.ndarray,
+    rccemis: np.ndarray,
+    ncn2: int,
+) -> dict[str, float | int]:
+    """Bounded translation of ``linopac.f90`` for line-opacity handoff.
+
+    ``calc_emis_ion.f90`` calls ``ucalc`` for ranked lines and ``ucalc`` calls
+    ``linopac`` with ``lfasto=2``.  Earlier Python releases set only the
+    per-line ``oplin`` value or added the line-center opacity to one continuum
+    bin.  This helper preserves the source profile/rebinning path into the
+    continuum-grid ``opakc`` array used later by ``step.f90``.  It intentionally
+    does not update ``opakcont`` because the source documents that array as
+    continuum opacity with lines excluded.
     """
-    kkkl = int(retained_continuum_index)
-    if kkkl <= 0 or kkkl >= len(context.rrc_wavelength_angstrom):
-        return 0
-    wave = float(context.rrc_wavelength_angstrom[kkkl])
+    n = int(ncn2)
+    if n < 3 or optpp <= 0.0 or line_energy_eV <= 0.0:
+        return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": 0}
+    if line_energy_eV <= float(epi[0]) or line_energy_eV >= float(epi[n - 1]):
+        return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": 0}
+    nbtpp = 20000
+    dpcrit = 1.0e-6
+    ml1 = int(nbinc(line_energy_eV, epi, n))
+    ml1 = max(min(n - 1, ml1), 2)
+    mass = max(float(atomic_mass_amu), 1.0e-30)
+    vth = 12.9 * np.sqrt(float(temperature_1e4K) / mass)
+    vturb = float(vturb_km_s)
+    e0 = float(line_energy_eV)
+    deleturb = e0 * (vturb / 3.0e5)
+    deleth = e0 * (vth / 3.0e5)
+    dele = float(np.sqrt(deleth * deleth + deleturb * deleturb))
+    if dele <= 0.0:
+        return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": ml1}
+    aasmall = float(natural_width_eV) / (1.0e-24 + dele) / 12.56
+    e00 = float(epi[ml1 - 1])
+    etmp = e0
+    deleepi = float(epi[ml1] - epi[ml1 - 1])
+    ncut = int(deleepi / dele)
+    ncut = max(ncut, 1)
+    ncut = min(ncut, nbtpp // 10)
+    deleused = deleepi / float(ncut)
+    mlc = 0
+    ldir = 1
+    ldon = [0, 0]
+    mlmin = nbtpp
+    mlmax = 1
+    ml1min = n + 1
+    ml1max = 0
+    ml2 = nbtpp // 2
+    etpp = np.zeros(nbtpp, dtype=float)
+    optpp2 = np.zeros(nbtpp, dtype=float)
+
+    delet = (e00 - etmp) / dele
+    if aasmall > 1.0e-6:
+        from .output_writers import voigte
+        profile = voigte(abs(delet), aasmall) / 1.772
+    else:
+        profile = float(np.exp(-delet * delet) / 1.772)
+    etpp[ml2 - 1] = e00
+    optpp2[ml2 - 1] = float(optpp) * profile
+    tst = 1.0
+    while ldon[0] * ldon[1] == 0 and mlc < nbtpp // 2:
+        mlc += 1
+        for ij in range(2):
+            ldir = -ldir
+            if ldon[ij] == 1:
+                continue
+            mlm = ml2 + ldir * mlc
+            etptst = e00 + float(ldir * mlc) * deleused
+            if mlm <= nbtpp and mlm >= 1 and etptst > 0.0 and etptst < float(epi[n - 1]):
+                mlmin = min(mlm, mlmin)
+                mlmax = max(mlm, mlmax)
+                etpp[mlm - 1] = etptst
+                delet = (etptst - etmp) / dele
+                if aasmall > 1.0e-9:
+                    from .output_writers import voigte
+                    profile = voigte(abs(delet), aasmall) / 1.772
+                else:
+                    profile = float(np.exp(-delet * delet) / 1.772)
+                optpp2[mlm - 1] = float(optpp) * profile
+                tst = profile
+            delet_now = (etptst - etmp) / dele if dele != 0.0 else 0.0
+            if (
+                (tst < dpcrit or mlm <= 1 or mlm >= nbtpp or etptst <= 0.0 or etptst >= float(epi[n - 1]) or mlc > nbtpp or abs(delet_now) > max(50.0, 200.0 * aasmall))
+                and ml1min < ml1 - 2 and ml1max > ml1 + 2 and ml1min >= 1 and ml1max <= n
+            ):
+                ldon[ij] = 1
+    if mlmin > mlmax:
+        return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": ml1}
+    ml1min = int(nbinc(float(etpp[mlmin - 1]), epi, n))
+    ml1max = int(nbinc(float(etpp[mlmax - 1]), epi, n))
+    ml1m = ml1min
+    mlmin = max(mlmin, 2)
+    mlmax = min(mlmax, nbtpp)
+    sume = 0.0
+    opsum = 0.0
+    tmpop = 0.0
+    updated = 0
+    max_added = 0.0
+    for mlm in range(mlmin + 1, mlmax + 1):
+        tmpopo = tmpop
+        tmpop = float(optpp2[mlm - 1])
+        tmpe = abs(float(etpp[mlm - 1]) - float(etpp[mlm - 2]))
+        sume += tmpe
+        opsum += (tmpop + tmpopo) * tmpe / 2.0
+        if float(etpp[mlm - 1]) > float(epi[ml1m - 1]):
+            if sume > 1.0e-34:
+                optp2 = opsum / sume
+                while float(etpp[mlm - 1]) > float(epi[ml1m - 1]) and ml1m < n:
+                    opakc[ml1m - 1] += optp2
+                    if rccemis.shape[1] >= ml1m:
+                        rccemis[0, ml1m - 1] += float(rcem1) * 0.0
+                        rccemis[1, ml1m - 1] += float(rcem2) * 0.0
+                    updated += 1
+                    max_added = max(max_added, abs(float(optp2)))
+                    ml1m += 1
+            opsum = 0.0
+            sume = 0.0
+    return {"updated_bins": int(updated), "max_added_opacity": float(max_added), "center_bin_one_based": int(ml1)}
+
+
+def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: int, opakab: float, epi: np.ndarray) -> None:
+    """Carry retained continuum opacity into the active step grid."""
+    kk = int(continuum_index)
+    if kk <= 0 or kk >= len(context.rrc_wavelength_angstrom) or float(opakab) == 0.0:
+        return
+    wave = float(context.rrc_wavelength_angstrom[kk])
     if wave <= 0.0:
-        return 0
+        return
     energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / wave
-    if not (float(epi[0]) < energy < float(epi[-1])):
-        return 0
-    nb1 = int(nbinc(energy, epi, len(epi)))
-    if 1 <= nb1 <= context.workspace.base.opakc.size:
-        op = float(opacity_cm_inv)
-        context.workspace.base.opakc[nb1 - 1] += op
-        context.workspace.base.opakcont[nb1 - 1] += op
-        return nb1
-    return 0
+    nb1 = nbinc(energy, epi, len(epi))
+    if nb1 > 0 and nb1 <= context.workspace.base.opakc.size:
+        context.workspace.base.opakc[nb1 - 1] += float(opakab)
+        context.workspace.base.opakcont[nb1 - 1] += float(opakab)
 
 
 def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
@@ -478,15 +605,12 @@ def calc_emis_ion(
                             ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
                             result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                             context.workspace.base.opakab[retained_kkkl] = result.opakab
-                            _bin_retained_continuum_opacity(
-                                context, retained_continuum_index=retained_kkkl,
-                                opacity_cm_inv=float(result.opakab), epi=epi,
-                            )
+                            _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
                             record_traces.append(CalcEmisRecordTrace(
                                 rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                                 compact_offset, idest1, idest2, lower, upper, retained_kkkl,
                                 retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                                result.ans1, result.ans2, result.ans3, result.ans4,
+                                result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
                                 result.status.value, "strong_rrc_rate_type_7",
                             ))
 
@@ -506,15 +630,12 @@ def calc_emis_ion(
                     ptmp2 = (1.0 + context.covering_fraction) / 2.0
                     result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                     context.workspace.base.opakab[retained_kkkl] = result.opakab
-                    _bin_retained_continuum_opacity(
-                        context, retained_continuum_index=retained_kkkl,
-                        opacity_cm_inv=float(result.opakab), epi=epi,
-                    )
+                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, retained_kkkl,
                         retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                        result.ans1, result.ans2, result.ans3, result.ans4,
+                        result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
                         result.status.value, "rate_type_42_retained_continuum_pointer",
                     ))
 
@@ -531,15 +652,12 @@ def calc_emis_ion(
                     ptmp2 = pescl(0.0) * (1.0 - context.covering_fraction) + 2.0 * pescl(0.0) * context.covering_fraction
                     result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                     context.workspace.base.opakab[retained_kkkl] = result.opakab
-                    _bin_retained_continuum_opacity(
-                        context, retained_continuum_index=retained_kkkl,
-                        opacity_cm_inv=float(result.opakab), epi=epi,
-                    )
+                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, retained_kkkl,
                         retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                        result.ans1, result.ans2, result.ans3, result.ans4,
+                        result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
                         result.status.value, "rate_type_9_prepass",
                     ))
 
@@ -567,7 +685,7 @@ def calc_emis_ion(
                         ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
                         ptmp2 = pescl(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescl(tau1 + tau2) * context.covering_fraction
                         result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                        # Source handoff correction, v0.5.01.
+                        # Source handoff correction, v0.5.05.
                         #
                         # In the Fortran line branch, ucalc receives caller-owned
                         # ``opakc``/``opakcont`` and may update the continuum-grid
@@ -579,12 +697,32 @@ def calc_emis_ion(
                         # kappa above ``ectt`` nearly zero, so the radial Courant
                         # limiter skipped the intermediate column substeps.  Bin the
                         # line opacity at the same source ``nb1`` used for ``flinel``.
-                        line_opacity = float(result.opakab) * float(abund1)
+                        opakb1 = float(result.opakab) * float(abund1)
                         if line_index > 0 and line_index < context.workspace.base.oplin.size:
-                            context.workspace.base.oplin[line_index] = line_opacity
-                        if nb1 > 0 and nb1 <= context.workspace.base.opakc.size:
-                            context.workspace.base.opakc[nb1 - 1] += line_opacity
+                            context.workspace.base.oplin[line_index] = opakb1
                         net = result.ans2 * abund2 - result.ans1 * abund1
+                        atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
+                        natural_width = 0.0
+                        try:
+                            reals_for_line = context.master.record_reals(rec)
+                            if len(reals_for_line) > 2:
+                                natural_width = float(reals_for_line[2]) * 4.136e-15
+                        except Exception:
+                            natural_width = 0.0
+                        _source_linopac_into_opakc(
+                            optpp=opakb1,
+                            rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),
+                            rcem2=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0),
+                            line_energy_eV=energy,
+                            vturb_km_s=float(context.turbulent_velocity_km_s),
+                            temperature_1e4K=float(context.temperature_1e4K),
+                            atomic_mass_amu=atomic_mass,
+                            natural_width_eV=natural_width,
+                            epi=epi,
+                            opakc=context.workspace.base.opakc,
+                            rccemis=context.workspace.base.rccemis,
+                            ncn2=len(epi),
+                        )
                         context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
                         context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
                         width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
@@ -595,7 +733,7 @@ def calc_emis_ion(
                             rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                             compact_offset, idest1, idest2, lower, upper, line_index,
                             retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                            result.ans1, result.ans2, result.ans3, result.ans4,
+                            result.ans1, result.ans2, result.ans3, result.ans4, opakb1,
                             result.status.value, f"strong_line_rate_type_{rate_type}",
                         ))
 
