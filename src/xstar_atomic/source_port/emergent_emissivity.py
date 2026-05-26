@@ -348,6 +348,39 @@ def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int
     )
 
 
+def _bin_retained_continuum_opacity(
+    context: CalcEmisContext,
+    *,
+    retained_continuum_index: int,
+    opacity_cm_inv: float,
+    epi: np.ndarray,
+) -> int:
+    """Carry scalar RRC/photoabs opacity into the continuum grid used by step.f90.
+
+    The original ucalc call receives caller-owned ``opakc`` and ``opakcont``
+    work arrays.  Some translated branches return only the scalar retained-RRC
+    opacity ``opakab``; without this bridge that opacity is visible in RRC
+    detail products but not in the continuum-grid ``opakc`` that the radial
+    Courant step reads on the next shell.
+    """
+    kkkl = int(retained_continuum_index)
+    if kkkl <= 0 or kkkl >= len(context.rrc_wavelength_angstrom):
+        return 0
+    wave = float(context.rrc_wavelength_angstrom[kkkl])
+    if wave <= 0.0:
+        return 0
+    energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / wave
+    if not (float(epi[0]) < energy < float(epi[-1])):
+        return 0
+    nb1 = int(nbinc(energy, epi, len(epi)))
+    if 1 <= nb1 <= context.workspace.base.opakc.size:
+        op = float(opacity_cm_inv)
+        context.workspace.base.opakc[nb1 - 1] += op
+        context.workspace.base.opakcont[nb1 - 1] += op
+        return nb1
+    return 0
+
+
 def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
     """Create a duck-compatible view for shared ``ucalc`` helpers."""
     return CalcEmisabContext(
@@ -445,6 +478,10 @@ def calc_emis_ion(
                             ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
                             result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                             context.workspace.base.opakab[retained_kkkl] = result.opakab
+                            _bin_retained_continuum_opacity(
+                                context, retained_continuum_index=retained_kkkl,
+                                opacity_cm_inv=float(result.opakab), epi=epi,
+                            )
                             record_traces.append(CalcEmisRecordTrace(
                                 rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                                 compact_offset, idest1, idest2, lower, upper, retained_kkkl,
@@ -469,6 +506,10 @@ def calc_emis_ion(
                     ptmp2 = (1.0 + context.covering_fraction) / 2.0
                     result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                     context.workspace.base.opakab[retained_kkkl] = result.opakab
+                    _bin_retained_continuum_opacity(
+                        context, retained_continuum_index=retained_kkkl,
+                        opacity_cm_inv=float(result.opakab), epi=epi,
+                    )
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, retained_kkkl,
@@ -490,6 +531,10 @@ def calc_emis_ion(
                     ptmp2 = pescl(0.0) * (1.0 - context.covering_fraction) + 2.0 * pescl(0.0) * context.covering_fraction
                     result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
                     context.workspace.base.opakab[retained_kkkl] = result.opakab
+                    _bin_retained_continuum_opacity(
+                        context, retained_continuum_index=retained_kkkl,
+                        opacity_cm_inv=float(result.opakab), epi=epi,
+                    )
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, retained_kkkl,
