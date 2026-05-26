@@ -1991,13 +1991,33 @@ class SourceFaithfulUCalc:
         ):
             reason = str(ev.get("reason") or ev.get("energy_channel_status") or "missing_type50_energy_context")
             return self._base_result(r, s, UCalcStatus.CONTEXT_BLOCKED, reason=reason, diagnostics=ev)
+        # Source label 50 also returns the line-center opacity through the
+        # caller-owned ``opakb1`` argument and, when the lower-level population
+        # is nonzero, immediately sends ``opakb1 = sigma * abund1`` through
+        # ``linopac`` into the continuum-grid ``opakc`` array.  Earlier Python
+        # releases reproduced the population/thermal channels but left
+        # ``opakab`` at zero for type 50, so the v0.5.05 line handoff had no
+        # opacity to bin for the dominant bound-bound records.
+        opakab = 0.0
+        try:
+            wavelength = float(decoded.get("wavelength_A") or 0.0)
+            flin = float(decoded.get("f_osc_from_A") or 0.0)
+            mass = self._atomic_mass(r, c)
+            if wavelength > 0.0 and flin > 0.0 and mass is not None and mass > 0.0 and wavelength <= 0.99e9:
+                vtherm = math.sqrt((c.turbulent_velocity_km_s * 1.0e5) ** 2 + (1.29e6 / math.sqrt(max(float(mass) / c.t, 1.0e-48))) ** 2)
+                if vtherm > 0.0:
+                    opakab = 0.02655 * flin * wavelength * 1.0e-8 / vtherm
+        except Exception:
+            opakab = 0.0
+        diag = dict(ev)
+        diag["type50_line_center_opakab_cm2"] = opakab
         return self._ctx_result(
             r, s, ans1=float(ev["ans1_photoexcitation_s^-1"]),
             ans2=float(ev["ans2_escaped_decay_s^-1"]),
             ans3=float(ev["ans3_cooling_signed_erg_s^-1"]),
             ans4=float(ev["ans4_heating_signed_erg_s^-1"]),
-            idest1=id1, idest2=id2, diagnostics=ev,
-            context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels"),
+            idest1=id1, idest2=id2, opakab=opakab, diagnostics=diag,
+            context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels", "turbulent_velocity_km_s", "atomic_mass"),
         )
 
     def _collision_row(self, r: UCalcRecord, c: UCalcContext) -> tuple[dict, list[dict]]:
