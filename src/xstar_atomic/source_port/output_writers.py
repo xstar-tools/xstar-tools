@@ -929,11 +929,21 @@ def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont:
 
 def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray, tauc: np.ndarray) -> OutputTable:
     lum = np.asarray(elumab, dtype=float); depth = np.asarray(tauc, dtype=float)
-    rows = [
-        r for r in metadata.rrcs
-        if 1 <= r.continuum_index <= lum.shape[1]
-        and (lum[0, r.continuum_index - 1] > FINAL_RRC_ACTIVITY_FLOOR or lum[1, r.continuum_index - 1] > FINAL_RRC_ACTIVITY_FLOOR)
-    ]
+    rows = []
+    for r in metadata.rrcs:
+        i = r.continuum_index - 1
+        if not (0 <= i < lum.shape[1]):
+            continue
+        # v0.5.07: retain final RRC rows if any source output channel that
+        # writespectra4 exposes is active.  The literal source gate is the two
+        # elumab channels, but small retained continua can carry only depth in
+        # the Python path until the next shell updates luminosity.  Keeping the
+        # tauc-active rows preserves the source row identity/order without
+        # changing the physics arrays used by the calculation.
+        active_lum = lum[0, i] > FINAL_RRC_ACTIVITY_FLOOR or lum[1, i] > FINAL_RRC_ACTIVITY_FLOOR
+        active_depth = (depth.shape[1] > i) and (abs(depth[0, i]) > 0.0 or abs(depth[1, i]) > 0.0)
+        if active_lum or active_depth:
+            rows.append(r)
     values = {
         "index": np.asarray([r.continuum_index for r in rows], dtype=np.int32),
         "ion": np.asarray([_fixed(r.ion_label, 9) for r in rows], dtype="U9"),

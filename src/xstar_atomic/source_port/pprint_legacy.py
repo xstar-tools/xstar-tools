@@ -526,11 +526,17 @@ def write_xout_abund1(
     numrec = int(state.control.get("numrec", 0))
     if numrec < 1:
         raise LegacyPprintPortError("pprint(11) requires positive numrec")
+    # Source XSTAR leaves one terminal all-zero table record after the final
+    # physical row.  Keep the caller-owned physical rows indexed 1..numrec,
+    # and reserve row numrec+1 as the trailing zero record in the three
+    # multi-row FITS extensions.  The COLUMNS extension is an integrated
+    # single-row product and must integrate only the physical rows.
+    output_numrec = numrec + 1
     nions = len(metadata.ions)
     nelem = len(metadata.thermal_elements)
-    abund = _rows_matrix(buf.abundance_rows, numrec=numrec, width=8 + nions)
-    heat = _rows_matrix(buf.heating_rows, numrec=numrec, width=8 + nelem + 2)
-    cool = _rows_matrix(buf.cooling_rows, numrec=numrec, width=8 + nelem + 3)
+    abund = _rows_matrix(buf.abundance_rows, numrec=output_numrec, width=8 + nions)
+    heat = _rows_matrix(buf.heating_rows, numrec=output_numrec, width=8 + nelem + 2)
+    cool = _rows_matrix(buf.cooling_rows, numrec=output_numrec, width=8 + nelem + 3)
 
     base_names = (
         "radius", "delta_r", "ion_parameter", "x_e", "n_p", "pressure",

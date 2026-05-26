@@ -341,6 +341,76 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         except Exception:
             strongest_energy = 0.0
             strongest_nb1 = 0
+    # v0.5.07: RRC/continuum ranking and detail-retention diagnostics.
+    # These rows make the remaining xout_rrc1/xout_cont1/xo01_detal4 gaps
+    # visible without using original XSTAR products as runtime inputs.
+    continuum_rank = getattr(calc_emis_result, "continuum_rank_table", None)
+    n_ranked_rrc_bins = 0
+    bin4063_ranked_rrc_count = 0
+    if continuum_rank is not None:
+        cr = np.asarray(continuum_rank, dtype=int)
+        if cr.ndim == 2 and cr.shape[1] > 1:
+            n_ranked_rrc_bins = int(np.count_nonzero(np.any(cr[1:, 1:] != 0, axis=0)))
+            if cr.shape[1] > 4063:
+                bin4063_ranked_rrc_count = int(np.count_nonzero(cr[1:, 4063]))
+    cemab = np.asarray(workspace.cemab_physical, dtype=float)
+    opakab = np.asarray(workspace.opakab_physical, dtype=float).reshape(-1)
+    cabab = np.asarray(workspace.cabab_physical, dtype=float).reshape(-1)
+    tauc = np.asarray(workspace.tauc, dtype=float)
+    elumab = np.asarray(workspace.elumab, dtype=float)
+    rrc_floor = 1.0e-36
+    final_rrc_lum_mask = np.zeros(elumab.shape[1], dtype=bool) if elumab.ndim == 2 else np.zeros(0, dtype=bool)
+    final_rrc_depth_mask = np.zeros_like(final_rrc_lum_mask)
+    if elumab.ndim == 2 and elumab.shape[0] >= 2:
+        final_rrc_lum_mask = (elumab[0] > rrc_floor) | (elumab[1] > rrc_floor)
+    if tauc.ndim == 2 and tauc.shape[0] >= 2 and final_rrc_depth_mask.size:
+        ndepth = min(final_rrc_depth_mask.size, tauc.shape[1])
+        final_rrc_depth_mask[:ndepth] = (np.abs(tauc[0, :ndepth]) > 0.0) | (np.abs(tauc[1, :ndepth]) > 0.0)
+    opacity_rows.append({
+        "row_kind": "rrc_continuum_retention_summary",
+        "phase": "after_shell",
+        "pass_index": int(pass_index),
+        "zone_index": int(zone_index),
+        "ranked_strong_rrc_bin_count": n_ranked_rrc_bins,
+        "bin4063_ranked_rrc_candidate_count": bin4063_ranked_rrc_count,
+        "bin4063_has_ranked_rrc_candidates": bool(bin4063_ranked_rrc_count > 0),
+        "cemab_nonzero_count": int(np.count_nonzero(cemab)),
+        "cemab_gt_1e_minus36_count": int(np.count_nonzero(cemab > rrc_floor)),
+        "max_cemab": float(np.max(np.abs(cemab))) if cemab.size else 0.0,
+        "opakab_nonzero_count": int(np.count_nonzero(opakab)),
+        "max_opakab": float(np.max(np.abs(opakab))) if opakab.size else 0.0,
+        "cabab_nonzero_count": int(np.count_nonzero(cabab)),
+        "max_cabab": float(np.max(np.abs(cabab))) if cabab.size else 0.0,
+        "tauc_nonzero_count": int(np.count_nonzero(tauc)),
+        "max_tauc": float(np.max(np.abs(tauc))) if tauc.size else 0.0,
+        "elumab_nonzero_count": int(np.count_nonzero(elumab)),
+        "elumab_gt_1e_minus36_count": int(np.count_nonzero(elumab > rrc_floor)),
+        "final_rrc_lum_retained_count": int(np.count_nonzero(final_rrc_lum_mask)),
+        "final_rrc_depth_retained_count": int(np.count_nonzero(final_rrc_depth_mask)),
+        "final_rrc_union_retained_count": int(np.count_nonzero(final_rrc_lum_mask | final_rrc_depth_mask)),
+    })
+    epi_for_retention = np.asarray(getattr(state.radiation, "epi_eV", ()), dtype=float).reshape(-1)
+    high_energy_mask = epi_for_retention > 1400.0 if epi_for_retention.size else np.zeros(0, dtype=bool)
+    z = np.asarray(workspace.zrems, dtype=float)
+    rc = np.asarray(workspace.rccemis, dtype=float)
+    op_for_retention = np.asarray(workspace.opakc, dtype=float).reshape(-1)
+    nhe = min(high_energy_mask.size, op_for_retention.size, z.shape[1] if z.ndim == 2 else 0, rc.shape[1] if rc.ndim == 2 else 0)
+    if nhe > 0:
+        he = high_energy_mask[:nhe]
+        opacity_rows.append({
+            "row_kind": "continuum_detail_retention_summary",
+            "phase": "after_shell",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            "high_energy_threshold_eV": 1400.0,
+            "high_energy_bin_count": int(np.count_nonzero(he)),
+            "high_energy_opacity_nonzero_count": int(np.count_nonzero(op_for_retention[:nhe][he])),
+            "high_energy_zems_in_nonzero_count": int(np.count_nonzero(z[2, :nhe][he])) if z.ndim == 2 and z.shape[0] > 2 else 0,
+            "high_energy_zems_out_nonzero_count": int(np.count_nonzero(z[3, :nhe][he])) if z.ndim == 2 and z.shape[0] > 3 else 0,
+            "high_energy_rccemis_out_nonzero_count": int(np.count_nonzero(rc[0, :nhe][he])) if rc.ndim == 2 and rc.shape[0] > 0 else 0,
+            "high_energy_rccemis_in_nonzero_count": int(np.count_nonzero(rc[1, :nhe][he])) if rc.ndim == 2 and rc.shape[0] > 1 else 0,
+        })
+
     opacity_rows.append({
         "row_kind": "line_opacity_handoff_summary",
         "phase": "after_shell",

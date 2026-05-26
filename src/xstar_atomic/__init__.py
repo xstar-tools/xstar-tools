@@ -1,6 +1,6 @@
 """Python tools for reading and evaluating XSTAR's packed ``atdb.fits`` atomic database."""
 
-__version__ = "0.5.06"
+__version__ = "0.5.07"
 
 # Pure-Python public API infrastructure.  These remain importable even on
 # systems where astropy is not available yet.
