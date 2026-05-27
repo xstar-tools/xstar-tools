@@ -524,7 +524,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 3
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 4
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -595,6 +595,8 @@ def save_source_output_metadata_cache(
                 line_natural_rate_s=np.asarray([row.natural_rate_s for row in metadata.lines], dtype=np.float64),
                 line_auger_width_eV=np.asarray([row.auger_width_eV for row in metadata.lines], dtype=np.float64),
                 line_auger_rate_s=np.asarray([row.auger_rate_s for row in metadata.lines], dtype=np.float64),
+                line_type41_record=np.asarray([int(getattr(row, "type41_record", 0)) for row in metadata.lines], dtype=np.int64),
+                line_type41_found=np.asarray([bool(getattr(row, "type41_found", False)) for row in metadata.lines], dtype=np.bool_),
                 rrc_continuum_index=np.asarray([row.continuum_index for row in metadata.rrcs], dtype=np.int32),
                 rrc_level_global_index=np.asarray([row.level_global_index for row in metadata.rrcs], dtype=np.int32),
                 rrc_threshold_eV=np.asarray([row.threshold_eV for row in metadata.rrcs], dtype=np.float64),
@@ -634,12 +636,14 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 line_index=int(a), wavelength_angstrom=float(b), ion_label=str(c),
                 lower_level=str(d), upper_level=str(e), rate_type=int(f), data_type=int(g),
                 atomic_mass=float(h), natural_rate_s=float(i), auger_width_eV=float(j), auger_rate_s=float(k),
+                type41_record=int(l), type41_found=bool(m),
             )
-            for a, b, c, d, e, f, g, h, i, j, k in zip(
+            for a, b, c, d, e, f, g, h, i, j, k, l, m in zip(
                 z["line_index"], z["line_wavelength_angstrom"], z["line_ion_label"],
                 z["line_lower_level"], z["line_upper_level"], z["line_rate_type"],
                 z["line_data_type"], z["line_atomic_mass"], z["line_natural_rate_s"],
                 z["line_auger_width_eV"], z["line_auger_rate_s"],
+                z["line_type41_record"], z["line_type41_found"],
             )
         )
         rrcs = tuple(
@@ -689,6 +693,48 @@ def _record_to_ion_index(derived: Any) -> np.ndarray:
     result[ion_records[valid_ions]] = valid_ions.astype(np.int32)
     return result
 
+
+
+def _build_type41_damping_lookup(master: Any, derived: Any, pointers: np.ndarray) -> dict[tuple[int, int], tuple[float, float, int]]:
+    """Resolve ``binemis.f90`` type-41 damping records by ``(ion, upper)``.
+
+    Original ``binemis`` looks up ``derivedpointers%npfi(41,iion)`` for the
+    line's ion and walks the linked sibling records with the same parent until
+    ``idat1(np1i+1)`` matches the line upper level.  If found, the type-41
+    record supplies both Auger damping ``rdat1(np1r+2)`` and replacement
+    radiative/natural rate ``rdat1(np1r+3)`` used in the final Voigt profile.
+    """
+    lookup: dict[tuple[int, int], tuple[float, float, int]] = {}
+    npfi = np.asarray(derived.npfi, dtype=np.int64)
+    npar = np.asarray(derived.npar, dtype=np.int64)
+    npnxt = np.asarray(derived.npnxt, dtype=np.int64)
+    n_records = int(npar.size - 1)
+    n_ions = int(derived.n_ions)
+    if npfi.ndim != 2 or npfi.shape[0] <= 41:
+        return lookup
+    for ion in range(1, n_ions + 1):
+        if ion >= npfi.shape[1]:
+            break
+        rec = int(npfi[41, ion])
+        if rec <= 0 or rec > n_records:
+            continue
+        parent = int(npar[rec])
+        seen: set[int] = set()
+        while rec > 0 and rec <= n_records and rec not in seen and int(npar[rec]) == parent:
+            seen.add(rec)
+            row = pointers[rec - 1]
+            nreal = int(row[4])
+            nint = int(row[5])
+            rptr = int(row[7])
+            iptr = int(row[8])
+            if nint >= 2 and nreal >= 4:
+                upper = int(master.idat1.gather([iptr + 1], dtype=np.int64)[0])
+                auger_rate = float(master.rdat1.gather([rptr + 2], dtype=np.float64)[0])
+                replacement_natural = float(master.rdat1.gather([rptr + 3], dtype=np.float64)[0])
+                if upper > 0:
+                    lookup[(ion, upper)] = (auger_rate, replacement_natural, rec)
+            rec = int(npnxt[rec]) if rec < npnxt.size else 0
+    return lookup
 
 def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetadata:
     """Resolve packed ATDB pointers into writer metadata with vectorized reads.
@@ -815,6 +861,10 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
             dtype=np.float64,
         )
 
+    type41_lookup = _build_type41_damping_lookup(master, derived, pointers)
+    type41_found_count = 0
+    type41_missed_count = 0
+
     lines: list[LineOutputMetadata] = []
     for pos, (line_index, ion_index) in enumerate(zip(line_indices, line_ions)):
         ion = int(ion_index)
@@ -825,6 +875,16 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         up = int(upper[pos])
         low_row = levels_by_key.get((ion, low))
         up_row = levels_by_key.get((ion, up))
+        type41 = type41_lookup.get((ion, up))
+        type41_found = type41 is not None
+        auger_rate_s = 0.0
+        natural_rate_s = float(natural[pos])
+        type41_record = 0
+        if type41_found:
+            auger_rate_s, natural_rate_s, type41_record = type41
+            type41_found_count += 1
+        elif int(line_rows[pos, 1]) == 50:
+            type41_missed_count += 1
         lines.append(
             LineOutputMetadata(
                 line_index=int(line_index),
@@ -835,7 +895,10 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 rate_type=int(line_rows[pos, 2]),
                 data_type=int(line_rows[pos, 1]),
                 atomic_mass=float(ATOMIC_MASS[z - 1]),
-                natural_rate_s=float(natural[pos]),
+                natural_rate_s=float(natural_rate_s),
+                auger_rate_s=float(auger_rate_s),
+                type41_record=int(type41_record),
+                type41_found=bool(type41_found),
             )
         )
 
@@ -901,8 +964,11 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v3_source_local_ordinals_rrc_thresholds",
+            "metadata_builder": "vectorized_numpy_v4_source_local_ordinals_rrc_thresholds_type41_binemis",
             "metadata_cache_status": "built",
+            "type41_damping_lookup_entries": len(type41_lookup),
+            "type41_damping_line_matches": int(type41_found_count),
+            "type41_damping_line_misses": int(type41_missed_count),
         },
     )
 

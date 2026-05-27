@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import json
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -108,6 +109,8 @@ class LineOutputMetadata:
     natural_rate_s: float = 0.0
     auger_width_eV: float = 0.0
     auger_rate_s: float = 0.0
+    type41_record: int = 0
+    type41_found: bool = False
 
 
 @dataclass(frozen=True)
@@ -599,6 +602,7 @@ def build_binemis_spectrum(
     elum: np.ndarray,
     zrems: np.ndarray,
     zremsz: Sequence[float],
+    diagnostics: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Literal array translation of ``binemis.f90``.
 
@@ -648,6 +652,29 @@ def build_binemis_spectrum(
     by_index = {row.line_index: row for row in metadata.lines}
     gate = _source_real(1.0e-15) * float(xlum)
     dpcrit = _source_real(1.0e-6)
+    high_threshold_eV = 1400.0
+    high_mask = epi[:n] >= high_threshold_eV
+    line_high_outward: dict[int, float] = {}
+    line_high_inward: dict[int, float] = {}
+    type41_used: set[int] = set()
+    type41_missing_active = 0
+    if diagnostics is not None:
+        diagnostics["binemis_pre_high_energy_counts"] = {
+            "threshold_eV": high_threshold_eV,
+            "source_zrems_row2_nonzero": int(np.count_nonzero(np.asarray(original[1, :n])[high_mask])),
+            "source_zrems_row3_nonzero": int(np.count_nonzero(np.asarray(original[2, :n])[high_mask])),
+            "source_zrems_row4_nonzero": int(np.count_nonzero(np.asarray(original[3, :n])[high_mask])),
+            "source_zrems_row5_nonzero": int(np.count_nonzero(np.asarray(original[4, :n])[high_mask])),
+        }
+        diagnostics["binemis_elum_counts"] = {
+            "elum_row1_inward_nonzero": int(np.count_nonzero(lum[0, :] > gate)),
+            "elum_row2_outward_nonzero": int(np.count_nonzero(lum[1, :] > gate)),
+            "gate": float(gate),
+        }
+        diagnostics["binemis_type41_metadata_counts"] = {
+            "metadata_lines_with_type41": int(sum(1 for row in metadata.lines if bool(getattr(row, "type41_found", False)))),
+            "metadata_lines_without_type41": int(sum(1 for row in metadata.lines if not bool(getattr(row, "type41_found", False)))),
+        }
 
     for kl_one_based in range(1, n + 1):
         for mm_one_based in range(1, 11):
@@ -667,6 +694,10 @@ def build_binemis_spectrum(
                 and int(row.data_type) != 76
             ):
                 continue
+            if bool(getattr(row, "type41_found", False)):
+                type41_used.add(int(row.line_index))
+            elif int(row.data_type) == 50:
+                type41_missing_active += 1
             if nb1 >= n:
                 raise OutputWriterPortError("binemis source would read epi(nb1+1) beyond ncn2")
             if nbtpp < 20:
@@ -807,6 +838,16 @@ def build_binemis_spectrum(
             lo = max(1, ml1min)
             hi = min(n, ml1max)
             if lo <= hi:
+                if diagnostics is not None:
+                    segment = slice(lo - 1, hi)
+                    local_high = high_mask[segment]
+                    if np.any(local_high):
+                        outward_added = float(np.sum(temporary_binned[1, segment][local_high]))
+                        inward_added = float(np.sum(temporary_binned[0, segment][local_high]))
+                        if outward_added != 0.0:
+                            line_high_outward[int(row.line_index)] = line_high_outward.get(int(row.line_index), 0.0) + outward_added
+                        if inward_added != 0.0:
+                            line_high_inward[int(row.line_index)] = line_high_inward.get(int(row.line_index), 0.0) + inward_added
                 out[3, lo - 1 : hi] += temporary_binned[1, lo - 1 : hi]
                 out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
                 temporary_binned[:, lo - 1 : hi] = 0.0
@@ -819,6 +860,36 @@ def build_binemis_spectrum(
         out[4, kl] = saved[3, kl]
     if original.shape[1] > n:
         out[:, n:] = original[:, n:]
+    if diagnostics is not None:
+        def _top_lines(values: dict[int, float]) -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
+            for line_index, contribution in sorted(values.items(), key=lambda item: abs(item[1]), reverse=True)[:20]:
+                row = by_index.get(int(line_index))
+                rows.append({
+                    "line_index": int(line_index),
+                    "contribution": float(contribution),
+                    "energy_eV": float(_source_real(12398.4016) / (_source_real(1.0e-34) + abs(float(row.wavelength_angstrom)))) if row is not None else 0.0,
+                    "ion": str(row.ion_label) if row is not None else "",
+                    "upper_level": str(row.upper_level) if row is not None else "",
+                    "type41_record": int(getattr(row, "type41_record", 0)) if row is not None else 0,
+                    "type41_found": bool(getattr(row, "type41_found", False)) if row is not None else False,
+                    "auger_rate_s": float(getattr(row, "auger_rate_s", 0.0)) if row is not None else 0.0,
+                    "natural_rate_s": float(getattr(row, "natural_rate_s", 0.0)) if row is not None else 0.0,
+                })
+            return rows
+        diagnostics["binemis_post_high_energy_counts"] = {
+            "threshold_eV": high_threshold_eV,
+            "emit_inward_nonzero": int(np.count_nonzero(out[2, :n][high_mask])),
+            "emit_outward_nonzero": int(np.count_nonzero(out[3, :n][high_mask])),
+            "emit_inward_sum": float(np.sum(out[2, :n][high_mask])),
+            "emit_outward_sum": float(np.sum(out[3, :n][high_mask])),
+        }
+        diagnostics["binemis_type41_runtime_counts"] = {
+            "active_profile_lines_with_type41": int(len(type41_used)),
+            "active_profile_type50_lines_without_type41": int(type41_missing_active),
+        }
+        diagnostics["binemis_top_high_energy_outward_lines"] = _top_lines(line_high_outward)
+        diagnostics["binemis_top_high_energy_inward_lines"] = _top_lines(line_high_inward)
     return out
 
 def build_final_spectrum_table(
@@ -834,6 +905,7 @@ def build_final_spectrum_table(
     zrems: np.ndarray,
     zremsz: Sequence[float],
     lwri: int,
+    diagnostics: dict[str, Any] | None = None,
 ) -> OutputTable:
     if int(lwri) >= 0:
         mapped = build_binemis_spectrum(
@@ -841,7 +913,7 @@ def build_final_spectrum_table(
             temperature_1e4K=temperature_1e4K,
             turbulent_velocity_km_s=turbulent_velocity_km_s,
             epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum,
-            zrems=zrems, zremsz=zremsz,
+            zrems=zrems, zremsz=zremsz, diagnostics=diagnostics,
         )
     else:
         mapped = np.asarray(zrems, dtype=float).copy()
@@ -969,9 +1041,10 @@ def build_final_output_products(
     dpthc: np.ndarray, dpthcont: np.ndarray, elum: np.ndarray,
     elumab: np.ndarray, tau0: np.ndarray, tauc: np.ndarray,
     zrems: np.ndarray, zremsz: Sequence[float], lwri: int,
+    diagnostics: dict[str, Any] | None = None,
 ) -> FinalOutputProducts:
     return FinalOutputProducts(
-        spectrum=build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri),
+        spectrum=build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri, diagnostics=diagnostics),
         lines=build_final_line_table(metadata=metadata, elum=elum, tau0=tau0),
         continuum=build_final_continuum_table(epi_eV=epi_eV, ncn2=ncn2, dpthcont=dpthcont, zrems=zrems, zremsz=zremsz),
         rrcs=build_final_rrc_table(metadata=metadata, elumab=elumab, tauc=tauc),
@@ -1239,6 +1312,7 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
     t4 = _state_temperature_t4(state)
+    binemis_diagnostics: dict[str, Any] = {}
     products = build_final_output_products(
         metadata=metadata,
         xlum=float(state.control.get("xlum", 1.0)),
@@ -1255,7 +1329,9 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
         zrems=workspace.zrems,
         zremsz=workspace.zremsz,
         lwri=int(lwri),
+        diagnostics=binemis_diagnostics,
     )
+    state.outputs["binemis_final_output_diagnostics"] = binemis_diagnostics
     state.outputs["final_output_products"] = products
     return products
 
@@ -1432,6 +1508,11 @@ def run_output_writer_sequence(
                     lwri=level,
                 )
             )
+            diagnostics = state.outputs.get("binemis_final_output_diagnostics")
+            if isinstance(diagnostics, dict):
+                diag_path = Path(out_dir) / "binemis_final_output_diagnostics_v0514.json"
+                diag_path.write_text(json.dumps(diagnostics, indent=2, sort_keys=True))
+                paths[diag_path.name] = str(diag_path)
     state.outputs["output_writer_source_order"] = tuple(source_order)
     state.outputs["output_writer_paths"] = dict(paths)
     state.outputs["output_writers_executed"] = bool(writer_names or stores)
