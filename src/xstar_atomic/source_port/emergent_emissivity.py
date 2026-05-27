@@ -65,7 +65,7 @@ XSTAR_CALC_EMIS_FORCE_ALL_SENTINEL = 9_999_999
 
 # v0.5.18: focused diagnostic for the opacity-selected bins feeding step.f90.
 # These are one-based continuum bins; bin 3877 is the current c5_ne1 limiter.
-XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS = (3876, 3877, 3878)
+XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS = (3875, 3876, 3877, 3878, 3879)
 XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS = 2000
 
 
@@ -402,6 +402,7 @@ def _source_linopac_into_opakc(
     profile_opsum_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
     contribution_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
     optp2_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
+    source_opsum_over_sume_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
     if n < 3 or optpp <= 0.0 or line_energy_eV <= 0.0:
         return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": 0}
     if line_energy_eV <= float(epi[0]) or line_energy_eV >= float(epi[n - 1]):
@@ -513,6 +514,7 @@ def _source_linopac_into_opakc(
                     if ml1m in diagnostic_bin_set:
                         contribution_by_bin[ml1m] = float(contribution_by_bin.get(ml1m, 0.0)) + float(optp2)
                         optp2_by_bin[ml1m] = float(optp2)
+                        source_opsum_over_sume_by_bin[ml1m] = float(optp2)
                     if rccemis.shape[1] >= ml1m:
                         rccemis[0, ml1m - 1] += float(rcem1) * 0.0
                         rccemis[1, ml1m - 1] += float(rcem2) * 0.0
@@ -545,8 +547,10 @@ def _source_linopac_into_opakc(
         "profile_samples_by_bin": {str(k): int(v) for k, v in profile_samples_by_bin.items()},
         "profile_interval_width_by_bin": {str(k): float(v) for k, v in profile_interval_width_by_bin.items()},
         "profile_opsum_by_bin": {str(k): float(v) for k, v in profile_opsum_by_bin.items()},
+        "source_opsum_over_sume_by_bin": {str(k): float(v) for k, v in source_opsum_over_sume_by_bin.items()},
         "contribution_by_bin": {str(k): float(v) for k, v in contribution_by_bin.items()},
         "optp2_by_bin": {str(k): float(v) for k, v in optp2_by_bin.items()},
+        "fortran_source_compare": "linopac.f90 optp2=opsum/sume; Python source_opsum_over_sume_by_bin is the direct translated value",
         "contributes_to_diagnostic_bins": bool(any(abs(float(v)) > 0.0 for v in contribution_by_bin.values())),
     }
 
@@ -819,6 +823,8 @@ def calc_emis_ion(
                                     "temperature_1e4K": float(context.temperature_1e4K),
                                     "target_bin_additions": dict(_target_add),
                                     "final_contribution_to_opakc_3877": float(_target_add.get("3877", 0.0)),
+                                    "opsum_sume_track_priority": "line_410_411" if int(line_index) in (410, 411) else "other_line",
+                                    "python_vs_fortran_opsum_sume_contract": "compare linopac_source_opsum_over_sume_by_bin['3877'] with instrumented Fortran linopac.f90 opsum/sume for the same line",
                                     **{f"linopac_{k}": v for k, v in _linopac_diag.items()},
                                 })
                         context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)

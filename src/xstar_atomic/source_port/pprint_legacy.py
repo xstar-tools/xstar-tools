@@ -1,15 +1,15 @@
 """Source-faithful bounded translation of the legacy XSTAR ``pprint`` path.
 
 The original ``pprint.f90`` routine is a 30-way computed-GOTO report writer.
-The production/default XSTAR caller uses a coherent subset independent of the
-verbose ``lprint>0`` diagnostic reports:
+The production/default XSTAR caller uses a coherent subset for the physical
+products:
 
 ``3 -> 2 -> 17 -> [9,12 per final-pass shell] -> [9,12 terminal] -> 22 -> 11``.
 
-This module translates that default source-order contract.  It writes the
-legacy ``xout_step.log`` text product and ``xout_abund1.fits`` abundance,
-column, heating, and cooling tables.  Verbose ``lprint>0`` report branches are
-rejected explicitly rather than approximated.
+v0.5.20 also emits the first two verbose ``lprint=1`` terminal diagnostics
+that are useful for the current line-opacity audit: ``pprint(1)`` emission-line
+luminosities and ``pprint(23)`` line depths.  These are text-report diagnostics
+only; they do not change the FITS product path or any physical arrays.
 """
 
 from __future__ import annotations
@@ -292,7 +292,7 @@ def _option2_input_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
         " number of steps=" + _fmt_list_integer(int(state.control.get("numrec", 0))),
         " number of iterations=" + _fmt_list_integer(int(state.control.get("nlimd", 0))),
         " write switch (1=yes, 0=no)=" + _fmt_list_integer(int(state.control.get("lwri", 0))),
-        " print switch (1=yes, 0=no)=" + _fmt_list_integer(int(state.control.get("lpri", 0))),
+        " print switch (1=yes, 0=no)=" + _fmt_list_integer(int(state.control.get("requested_lpri", state.control.get("lpri", 0)))),
         " step size choice switch=" + _fmt_list_integer(int(state.control.get("lfix", 0))),
         " loop control (0=standalone)=" + _fmt_list_integer(int(state.control.get("nloopctl", 0))),
         " number of passes=" + _fmt_list_integer(int(state.control.get("npass", 1))),
@@ -443,6 +443,88 @@ def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool 
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
     return tuple(calls)
 
+
+
+
+def _line_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
+    """Return output line metadata without importing output_writers at module load."""
+    meta = state.control.get("output_atomic_metadata")
+    rows = getattr(meta, "lines", ())
+    return tuple(rows) if rows is not None else ()
+
+
+def _line_report_rank(rows: Sequence[Any], values: np.ndarray, *, limit: int = 500) -> list[Any]:
+    ranked: list[tuple[float, int, Any]] = []
+    arr = np.asarray(values, dtype=float)
+    for order, row in enumerate(rows):
+        idx = int(getattr(row, "line_index", 0)) - 1
+        if idx < 0 or idx >= arr.shape[-1]:
+            continue
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        rate_type = int(getattr(row, "rate_type", 50))
+        if rate_type in (9, 14) or wave <= 0.1 or wave >= 8.9e6:
+            continue
+        if arr.ndim == 2:
+            score = max(abs(float(arr[0, idx])), abs(float(arr[1, idx])))
+        else:
+            score = abs(float(arr[idx]))
+        if score <= 0.0:
+            continue
+        ranked.append((-score, order, row))
+    ranked.sort()
+    return [r for _, _, r in ranked[: int(limit)]]
+
+
+def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit the lprint=1 ``pprint(1)`` emission-line luminosity report."""
+    workspace = _workspace(state)
+    rows = _line_metadata_rows(state)
+    elum = np.asarray(getattr(workspace, "elum", np.zeros((2, 0))), dtype=float)
+    if elum.ndim != 2 or elum.shape[0] < 2:
+        return
+    buf.log_lines.extend([
+        " ",
+        " print option: 1",
+        " emission line luminosities (erg/sec/10**38))",
+        " index, ion, wavelength, reflected, transmitted",
+    ])
+    for out_index, row in enumerate(_line_report_rank(rows, elum, limit=500), start=1):
+        idx = int(getattr(row, "line_index", 0)) - 1
+        ion = str(getattr(row, "ion_label", ""))[:8]
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        reflected = float(elum[0, idx]) / 1.0e38
+        transmitted = float(elum[1, idx]) / 1.0e38
+        buf.log_lines.append(
+            f"{out_index:9d}{int(getattr(row, 'line_index', 0)):8d} {ion:<8s}"
+            f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
+        )
+    buf.source_calls.append("pprint(1)")
+
+
+def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit the lprint=1 ``pprint(23)`` line-depth report."""
+    workspace = _workspace(state)
+    rows = _line_metadata_rows(state)
+    tau0 = np.asarray(getattr(workspace, "tau0", np.zeros((2, 0))), dtype=float)
+    if tau0.ndim != 2 or tau0.shape[0] < 2:
+        return
+    buf.log_lines.extend([
+        " ",
+        " print option:23",
+        " line depths",
+        " index, ion, wavelength, reflected, transmitted",
+    ])
+    for out_index, row in enumerate(_line_report_rank(rows, tau0, limit=500), start=1):
+        idx = int(getattr(row, "line_index", 0)) - 1
+        ion = str(getattr(row, "ion_label", ""))[:8]
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        reflected = float(tau0[0, idx])
+        transmitted = float(tau0[1, idx])
+        buf.log_lines.append(
+            f"{out_index:9d}{int(getattr(row, 'line_index', 0)):8d} {ion:<8s}"
+            f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
+        )
+    buf.source_calls.append("pprint(23)")
 
 def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> tuple[str, str, str, str]:
     workspace = _workspace(state)
@@ -603,15 +685,11 @@ def finalize_legacy_pprint(
     if not bool(state.control.get("pprint_legacy_enabled", False)):
         return (), {}
     buf = initialize_legacy_pprint(state)
-    lpri = int(state.control.get("lpri", 0))
-    if lpri != 0:
-        nlnprnt = 10 if lpri == 1 else 15 if lpri == 2 else 18 if lpri == 3 else 21
-        requested = tuple(NLPRNT[1:nlnprnt])
-        raise LegacyPprintPortError(
-            "v0.4.70 translates the default lpri=0 pprint product path; "
-            f"verbose lpri={lpri} requests untranslated report options {requested}"
-        )
+    requested_lpri = int(state.control.get("requested_lpri", state.control.get("lpri", 0)))
     _option22_final_lines(state, buf)
+    if requested_lpri >= 1:
+        _option1_emission_line_luminosities(state, buf)
+        _option23_line_depths(state, buf)
     paths: dict[str, str] = {}
     if out_dir is not None:
         root = Path(out_dir)
@@ -626,7 +704,7 @@ def finalize_legacy_pprint(
     buf.final_written = True
     state.outputs["legacy_pprint_paths"] = dict(paths)
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
-    return ("pprint(22)", "pprint(11)"), paths
+    return tuple(buf.source_calls), paths
 
 
 def direct_fortran_pprint_reference() -> Mapping[str, Any]:

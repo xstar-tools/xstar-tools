@@ -421,6 +421,29 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
             _row["pass_index"] = int(pass_index)
             _row["zone_index"] = int(zone_index)
             opacity_rows.append(_row)
+            if int(_row.get("line_index", 0)) in (410, 411):
+                for _bin in (3875, 3876, 3877, 3878, 3879):
+                    _key = str(_bin)
+                    _opsum = _row.get("linopac_profile_opsum_by_bin", {})
+                    _sume = _row.get("linopac_profile_interval_width_by_bin", {})
+                    _ratio = _row.get("linopac_source_opsum_over_sume_by_bin", {})
+                    if isinstance(_opsum, dict) or isinstance(_sume, dict) or isinstance(_ratio, dict):
+                        opacity_rows.append({
+                            "row_kind": "linopac_opsum_sume_fortran_compare_track",
+                            "phase": "after_shell",
+                            "pass_index": int(pass_index),
+                            "zone_index": int(zone_index),
+                            "line_index": int(_row.get("line_index", 0)),
+                            "record": int(_row.get("record", 0)),
+                            "watched_bin_one_based": int(_bin),
+                            "fortran_source_file": "linopac.f90",
+                            "fortran_expression": "optp2=opsum/sume",
+                            "python_opsum": float(_opsum.get(_key, 0.0)) if isinstance(_opsum, dict) else 0.0,
+                            "python_sume": float(_sume.get(_key, 0.0)) if isinstance(_sume, dict) else 0.0,
+                            "python_opsum_over_sume": float(_ratio.get(_key, 0.0)) if isinstance(_ratio, dict) else 0.0,
+                            "python_final_contribution_to_opakc_bin": float(_row.get("target_bin_additions", {}).get(_key, 0.0)) if isinstance(_row.get("target_bin_additions", {}), dict) else 0.0,
+                            "compare_instruction": "instrument original linopac.f90 at the same line/bin and compare opsum, sume, opsum/sume",
+                        })
         except Exception:
             continue
 
@@ -485,10 +508,10 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
     # bin chosen by step.f90.  Record the exact caller-owned row values
     # feeding heatt, stpcut, detail output, and final spectrum construction
     # at that bin without using original-XSTAR outputs as runtime inputs.
+    opcont_for_balance = np.asarray(workspace.opakcont, dtype=float).reshape(-1)
     selected_bin = int(getattr(step, "selected_bin_one_based", 0) or getattr(step, "min_tst_bin_one_based", 0) or 0) if step is not None else 0
     if selected_bin > 0:
         ii = selected_bin - 1
-        opcont_for_balance = np.asarray(workspace.opakcont, dtype=float).reshape(-1)
         opacity_rows.append({
             "row_kind": "step_selected_bin_source_balance",
             "phase": "after_shell",
@@ -540,6 +563,36 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
                 "watched_rccemis_out": float(rc[0, wi]) if rc.ndim == 2 and rc.shape[0] > 0 and rc.shape[1] > wi else 0.0,
                 "watched_rccemis_in": float(rc[1, wi]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > wi else 0.0,
             })
+
+
+    # v0.5.20 secondary diagnostic: raw inward continuum emissivity feeding
+    # fstepr4.f90 column "emis in".  The detail writer uses rccemis(2,mm)
+    # directly, not heatt.f90's tmpc2 = rccemis(2,kl)+brems term.
+    raw_bins = list(range(1, 101)) + [3875, 3876, 3877, 3878, 3879]
+    seen_raw_bins: set[int] = set()
+    for wb in raw_bins:
+        if wb in seen_raw_bins:
+            continue
+        seen_raw_bins.add(wb)
+        wi = int(wb) - 1
+        if wi < 0:
+            continue
+        opacity_rows.append({
+            "row_kind": "raw_inward_continuum_emissivity_track",
+            "phase": "after_shell",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            "source_path": "calc_emis_all/calc_emis_ion/ucalc -> rccemis(2,mm) -> fstepr4 emis in",
+            "watched_bin_one_based": int(wb),
+            "energy_eV": float(epi_for_retention[wi]) if epi_for_retention.size > wi else 0.0,
+            "rccemis_out_raw": float(rc[0, wi]) if rc.ndim == 2 and rc.shape[0] > 0 and rc.shape[1] > wi else 0.0,
+            "rccemis_in_raw": float(rc[1, wi]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > wi else 0.0,
+            "fstepr4_emis_in_payload": float(rc[1, wi]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > wi else 0.0,
+            "opakc": float(op_for_retention[wi]) if op_for_retention.size > wi else 0.0,
+            "opakcont": float(opcont_for_balance[wi]) if opcont_for_balance.size > wi else 0.0,
+            "zrems3_emit_inward": float(z[2, wi]) if z.ndim == 2 and z.shape[0] > 2 and z.shape[1] > wi else 0.0,
+            "diagnostic_note": "early zero fstepr4 emis_in means raw rccemis(2,mm) is zero at this point",
+        })
 
     for name, arr in (
         ("opakc", workspace.opakc),
