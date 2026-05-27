@@ -468,12 +468,13 @@ def _source_linopac_into_opakc(
                 else:
                     profile = float(np.exp(-delet * delet) / 1.772)
                 optpp2[mlm - 1] = float(optpp) * profile
-                try:
-                    ml1m_probe = int(nbinc(float(etptst), epi, n))
-                    ml1min = min(ml1m_probe, ml1min)
-                    ml1max = max(ml1m_probe, ml1max)
-                except Exception:
-                    pass
+                # Source-faithful v0.5.19: linopac.f90 does *not* update
+                # ml1min/ml1max inside this temporary-grid construction loop.
+                # They remain at ncn+1/0 until after the loop, where they are
+                # recomputed from etpp(mlmin) and etpp(mlmax).  Earlier Python
+                # code updated them here, which enabled an early stop that the
+                # Fortran source cannot take.  Preserve the source order so the
+                # profile scan and rebinning window match linopac.f90.
                 tst = profile
             delet_now = (etptst - etmp) / dele if dele != 0.0 else 0.0
             if (
@@ -525,6 +526,8 @@ def _source_linopac_into_opakc(
         "max_added_opacity": float(max_added),
         "center_bin_one_based": int(ml1),
         "source_nbtpp": int(nbtpp),
+        "source_ml1_extrema_updated_inside_temp_loop": False,
+        "source_early_stop_enabled_by_ml1_extrema": False,
         "lfast_branch": "full_profile" if True else "single_bin",
         "e0_eV": float(e0),
         "elin_A": float(12398.4016 / max(float(e0), 1.0e-49)),

@@ -508,6 +508,39 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
             "selected_rccemis_in": float(rc[1, ii]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > ii else 0.0,
         })
 
+        # v0.5.19: watched-bin state around the type-50/linopac limiter.
+        # This separates “large opacity landed in a neighboring bin” from
+        # “bin was eligible in step.f90”.  The selected radial mismatch is
+        # dominated by bins 3876--3878 in the c5_ne1 benchmark.
+        watched_bins = (3875, 3876, 3877, 3878, 3879)
+        depths_for_balance = np.asarray(workspace.dpthc, dtype=float)
+        for wb in watched_bins:
+            wi = int(wb) - 1
+            if wi < 0:
+                continue
+            energy = float(epi_for_retention[wi]) if epi_for_retention.size > wi else 0.0
+            opv = float(op_for_retention[wi]) if op_for_retention.size > wi else 0.0
+            zv = float(z[0, wi]) if z.ndim == 2 and z.shape[0] > 0 and z.shape[1] > wi else 0.0
+            dv = float(depths_for_balance[0, wi]) if depths_for_balance.ndim == 2 and depths_for_balance.shape[0] > 0 and depths_for_balance.shape[1] > wi else 0.0
+            eligible = bool(energy > 1.0 and dv <= 5.0 and zv > 1.0e-12)
+            opacity_rows.append({
+                "row_kind": "step_watched_line_opacity_bin",
+                "phase": "after_shell",
+                "pass_index": int(pass_index),
+                "zone_index": int(zone_index),
+                "watched_bin_one_based": int(wb),
+                "watched_energy_eV": float(energy),
+                "watched_opakc": float(opv),
+                "watched_opakcont": float(opcont_for_balance[wi]) if opcont_for_balance.size > wi else 0.0,
+                "watched_line_opacity": float(line_binned[wi]) if line_binned.size > wi else 0.0,
+                "watched_dpthc": float(dv),
+                "watched_zrems1": float(zv),
+                "watched_step_eligible": bool(eligible),
+                "watched_tst_cm": float(getattr(step, "emult", 0.5)) / max(opv, 1.0e-49) if opv > 0.0 else 0.0,
+                "watched_rccemis_out": float(rc[0, wi]) if rc.ndim == 2 and rc.shape[0] > 0 and rc.shape[1] > wi else 0.0,
+                "watched_rccemis_in": float(rc[1, wi]) if rc.ndim == 2 and rc.shape[0] > 1 and rc.shape[1] > wi else 0.0,
+            })
+
     for name, arr in (
         ("opakc", workspace.opakc),
         ("opakcont", workspace.opakcont),
