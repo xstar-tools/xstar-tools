@@ -1296,12 +1296,35 @@ def run_output_writer_sequence(
     source_order: list[str] = []
     if final_local_recompute:
         from .driver import XSTARPythonDriver, XSTARSourceRoutine
-        from .radial_transfer import register_bounded_radial_source_routines
+        from .radial_transfer import RadialTransferWorkspace, register_bounded_radial_source_routines
 
         runner = driver or XSTARPythonDriver()
         if driver is None:
             register_bounded_radial_source_routines(runner)
         completed_before = len(state.provenance.get("completed_source_routines", []))
+
+        # Source-order carry-forward guard for the final nlimd=0 print pass.
+        # Original xstar.f90 performs a local recomputation with delr=1.d-15
+        # immediately before pprint/writespectra, but the escaping radiation
+        # arrays are caller-owned radial accumulators.  If the local recompute
+        # rebuilds emissivity workspaces and leaves a direction-specific
+        # accumulator row zero, preserve the pre-print accumulated radial value
+        # rather than treating the local recompute as a request to clear the
+        # escaping spectrum.  This is not a scale factor: nonzero final values
+        # from heatt still win; only zeroed rows are refilled from the
+        # caller-owned state present at the final-print source boundary.
+        radial_workspace = state.control.get("radial_transfer_workspace")
+        final_transfer_snapshot: dict[str, np.ndarray] = {}
+        if isinstance(radial_workspace, RadialTransferWorkspace):
+            final_transfer_snapshot = {
+                "zrems": np.asarray(radial_workspace.zrems, dtype=float).copy(),
+                "zremso": np.asarray(radial_workspace.zremso, dtype=float).copy(),
+                "elum": np.asarray(radial_workspace.elum, dtype=float).copy(),
+                "elumo": np.asarray(radial_workspace.elumo, dtype=float).copy(),
+                "elumab": np.asarray(radial_workspace.elumab, dtype=float).copy(),
+                "elumabo": np.asarray(radial_workspace.elumabo, dtype=float).copy(),
+            }
+
         source_delr = float(np.float32(1.0e-15))
         state.transfer.step_size = source_delr
         state.control["delr"] = source_delr
@@ -1311,6 +1334,27 @@ def run_output_writer_sequence(
         runner.run_source_routines(
             (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
         )
+
+        restored_counts: dict[str, int] = {}
+        radial_workspace_after = state.control.get("radial_transfer_workspace")
+        if final_transfer_snapshot and isinstance(radial_workspace_after, RadialTransferWorkspace):
+            for name in ("zrems", "elum", "elumab"):
+                target = np.asarray(getattr(radial_workspace_after, name), dtype=float)
+                before = final_transfer_snapshot.get(name)
+                old_name = {"zrems": "zremso", "elum": "elumo", "elumab": "elumabo"}[name]
+                old_before = final_transfer_snapshot.get(old_name)
+                if before is None:
+                    continue
+                source = before
+                if old_before is not None and old_before.shape == before.shape:
+                    source = np.where(np.abs(before) > 0.0, before, old_before)
+                if target.shape != source.shape:
+                    continue
+                mask = (np.abs(target) == 0.0) & (np.abs(source) > 0.0)
+                if np.any(mask):
+                    target[mask] = source[mask]
+                    restored_counts[name] = int(np.count_nonzero(mask))
+
         source_order.extend(
             state.provenance.get("completed_source_routines", [])[completed_before:]
         )
@@ -1320,6 +1364,7 @@ def run_output_writer_sequence(
             "nlimd": 0,
             "dsec_skipped": True,
             "source_order": list(source_order),
+            "source_order_transfer_carry_forward_counts": dict(restored_counts),
         }
 
     pprint_paths: dict[str, str] = {}
