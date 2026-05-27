@@ -389,7 +389,7 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         "final_rrc_depth_retained_count": int(np.count_nonzero(final_rrc_depth_mask)),
         "final_rrc_union_retained_count": int(np.count_nonzero(final_rrc_lum_mask | final_rrc_depth_mask)),
     })
-    epi_for_retention = np.asarray(getattr(state.radiation, "epi_eV", getattr(state.radiation, "epi", ())), dtype=float).reshape(-1)
+    epi_for_retention = np.asarray(getattr(state.radiation, "epi_eV", ()), dtype=float).reshape(-1)
     high_energy_mask = epi_for_retention > 1400.0 if epi_for_retention.size else np.zeros(0, dtype=bool)
     z = np.asarray(workspace.zrems, dtype=float)
     rc = np.asarray(workspace.rccemis, dtype=float)
@@ -410,6 +410,19 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
             "high_energy_rccemis_out_nonzero_count": int(np.count_nonzero(rc[0, :nhe][he])) if rc.ndim == 2 and rc.shape[0] > 0 else 0,
             "high_energy_rccemis_in_nonzero_count": int(np.count_nonzero(rc[1, :nhe][he])) if rc.ndim == 2 and rc.shape[0] > 1 else 0,
         })
+
+    # v0.5.18: focused source-order diagnostic for ucalc type-50 -> linopac
+    # profile/bin averaging into the selected step bins 3876-3878.
+    for _line_diag in getattr(getattr(calc_emis_result, "workspace", None), "line_opacity_bin_diagnostics", ()):
+        try:
+            _row = dict(_line_diag)
+            _row.setdefault("row_kind", "linopac_selected_bin_diagnostic")
+            _row["phase"] = "after_shell"
+            _row["pass_index"] = int(pass_index)
+            _row["zone_index"] = int(zone_index)
+            opacity_rows.append(_row)
+        except Exception:
+            continue
 
     opacity_rows.append({
         "row_kind": "line_opacity_handoff_summary",

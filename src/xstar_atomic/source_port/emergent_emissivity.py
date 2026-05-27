@@ -63,6 +63,12 @@ XSTAR_CALC_EMIS_DENSITY_COEFFICIENT = float(np.float32(1.38e-12))
 XSTAR_CALC_EMIS_DEFAULT_RANK_DEPTH = 100
 XSTAR_CALC_EMIS_FORCE_ALL_SENTINEL = 9_999_999
 
+# v0.5.18: focused diagnostic for the opacity-selected bins feeding step.f90.
+# These are one-based continuum bins; bin 3877 is the current c5_ne1 limiter.
+XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS = (3876, 3877, 3878)
+XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS = 2000
+
+
 
 class CalcEmisPortError(RuntimeError):
     """Raised when the translated ``calc_emis_all`` contract is invalid."""
@@ -362,45 +368,6 @@ def _parent_element_atomic_mass(master: Any, derived: Any, record: int) -> float
     return 1.0
 
 
-
-def _source_deleafnd_natural_width_eV(master: Any, derived: Any, ion_index: int, upper_level: int) -> float | None:
-    """Translate ``deleafnd.f90`` for the line-profile damping width.
-
-    Source label 50 calls ``deleafnd(jkion,idest1,...)`` before falling back to
-    the line record's own width.  The prior Python handoff skipped this search,
-    which meant Auger-damped/type-41 widths never reached ``linopac``.  Preserve
-    the source traversal over the type-41 chain for the current ion and return
-    the same eV width conversion used by XSTAR.
-    """
-    try:
-        jkk = int(ion_index)
-        lup = int(upper_level)
-        if jkk <= 0 or lup <= 0:
-            return None
-        npfi = getattr(derived, "npfi")
-        if npfi.shape[0] <= 41 or npfi.shape[1] <= jkk:
-            return None
-        ndtmp = int(npfi[41, jkk])
-        if ndtmp <= 0:
-            return None
-        npar = getattr(derived, "npar")
-        if ndtmp >= len(npar):
-            return None
-        parent = int(npar[ndtmp])
-        npnxt = getattr(derived, "npnxt")
-        while ndtmp > 0 and ndtmp < len(npar) and int(npar[ndtmp]) == parent:
-            ints = master.record_integers(ndtmp)
-            iltmp = int(ints[1]) if len(ints) > 1 else 0
-            if iltmp == lup:
-                reals = master.record_reals(ndtmp)
-                if len(reals) > 2:
-                    return float(reals[2]) * 4.136e-15
-                return None
-            ndtmp = int(npnxt[ndtmp]) if ndtmp < len(npnxt) else 0
-    except Exception:
-        return None
-    return None
-
 def _source_linopac_into_opakc(
     *,
     optpp: float,
@@ -415,7 +382,8 @@ def _source_linopac_into_opakc(
     opakc: np.ndarray,
     rccemis: np.ndarray,
     ncn2: int,
-) -> dict[str, float | int]:
+    diagnostic_bins_one_based: Sequence[int] | None = None,
+) -> dict[str, Any]:
     """Bounded translation of ``linopac.f90`` for line-opacity handoff.
 
     ``calc_emis_ion.f90`` calls ``ucalc`` for ranked lines and ``ucalc`` calls
@@ -427,6 +395,13 @@ def _source_linopac_into_opakc(
     continuum opacity with lines excluded.
     """
     n = int(ncn2)
+    diagnostic_bins = tuple(int(b) for b in (diagnostic_bins_one_based or ()))
+    diagnostic_bin_set = set(diagnostic_bins)
+    profile_samples_by_bin: dict[int, int] = {int(b): 0 for b in diagnostic_bins}
+    profile_interval_width_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
+    profile_opsum_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
+    contribution_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
+    optp2_by_bin: dict[int, float] = {int(b): 0.0 for b in diagnostic_bins}
     if n < 3 or optpp <= 0.0 or line_energy_eV <= 0.0:
         return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": 0}
     if line_energy_eV <= float(epi[0]) or line_energy_eV >= float(epi[n - 1]):
@@ -452,6 +427,8 @@ def _source_linopac_into_opakc(
     ncut = max(ncut, 1)
     ncut = min(ncut, nbtpp // 10)
     deleused = deleepi / float(ncut)
+    prftmp = 2.0 / (float(epi[ml1]) - float(epi[ml1 - 2])) if ml1 >= 2 and ml1 < len(epi) else 0.0
+    opsv4 = float(optpp) * float(dele)
     mlc = 0
     ldir = 1
     ldon = [0, 0]
@@ -491,6 +468,12 @@ def _source_linopac_into_opakc(
                 else:
                     profile = float(np.exp(-delet * delet) / 1.772)
                 optpp2[mlm - 1] = float(optpp) * profile
+                try:
+                    ml1m_probe = int(nbinc(float(etptst), epi, n))
+                    ml1min = min(ml1m_probe, ml1min)
+                    ml1max = max(ml1m_probe, ml1max)
+                except Exception:
+                    pass
                 tst = profile
             delet_now = (etptst - etmp) / dele if dele != 0.0 else 0.0
             if (
@@ -515,12 +498,20 @@ def _source_linopac_into_opakc(
         tmpop = float(optpp2[mlm - 1])
         tmpe = abs(float(etpp[mlm - 1]) - float(etpp[mlm - 2]))
         sume += tmpe
-        opsum += (tmpop + tmpopo) * tmpe / 2.0
+        interval_ops = (tmpop + tmpopo) * tmpe / 2.0
+        opsum += interval_ops
+        if ml1m in diagnostic_bin_set:
+            profile_samples_by_bin[ml1m] = int(profile_samples_by_bin.get(ml1m, 0)) + 1
+            profile_interval_width_by_bin[ml1m] = float(profile_interval_width_by_bin.get(ml1m, 0.0)) + float(tmpe)
+            profile_opsum_by_bin[ml1m] = float(profile_opsum_by_bin.get(ml1m, 0.0)) + float(interval_ops)
         if float(etpp[mlm - 1]) > float(epi[ml1m - 1]):
             if sume > 1.0e-34:
                 optp2 = opsum / sume
                 while float(etpp[mlm - 1]) > float(epi[ml1m - 1]) and ml1m < n:
                     opakc[ml1m - 1] += optp2
+                    if ml1m in diagnostic_bin_set:
+                        contribution_by_bin[ml1m] = float(contribution_by_bin.get(ml1m, 0.0)) + float(optp2)
+                        optp2_by_bin[ml1m] = float(optp2)
                     if rccemis.shape[1] >= ml1m:
                         rccemis[0, ml1m - 1] += float(rcem1) * 0.0
                         rccemis[1, ml1m - 1] += float(rcem2) * 0.0
@@ -529,7 +520,32 @@ def _source_linopac_into_opakc(
                     ml1m += 1
             opsum = 0.0
             sume = 0.0
-    return {"updated_bins": int(updated), "max_added_opacity": float(max_added), "center_bin_one_based": int(ml1)}
+    return {
+        "updated_bins": int(updated),
+        "max_added_opacity": float(max_added),
+        "center_bin_one_based": int(ml1),
+        "source_nbtpp": int(nbtpp),
+        "lfast_branch": "full_profile" if True else "single_bin",
+        "e0_eV": float(e0),
+        "elin_A": float(12398.4016 / max(float(e0), 1.0e-49)),
+        "optpp_input": float(optpp),
+        "dele_eV": float(dele),
+        "deleused_eV": float(deleused),
+        "ncut": int(ncut),
+        "prftmp": float(prftmp),
+        "opsv4": float(opsv4),
+        "ml1min": int(ml1min),
+        "ml1max": int(ml1max),
+        "mlmin": int(mlmin),
+        "mlmax": int(mlmax),
+        "diagnostic_bins_one_based": list(diagnostic_bins),
+        "profile_samples_by_bin": {str(k): int(v) for k, v in profile_samples_by_bin.items()},
+        "profile_interval_width_by_bin": {str(k): float(v) for k, v in profile_interval_width_by_bin.items()},
+        "profile_opsum_by_bin": {str(k): float(v) for k, v in profile_opsum_by_bin.items()},
+        "contribution_by_bin": {str(k): float(v) for k, v in contribution_by_bin.items()},
+        "optp2_by_bin": {str(k): float(v) for k, v in optp2_by_bin.items()},
+        "contributes_to_diagnostic_bins": bool(any(abs(float(v)) > 0.0 for v in contribution_by_bin.values())),
+    }
 
 
 def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: int, opakab: float, epi: np.ndarray) -> None:
@@ -741,18 +757,15 @@ def calc_emis_ion(
                             context.workspace.base.oplin[line_index] = opakb1
                         net = result.ans2 * abund2 - result.ans1 * abund1
                         atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
-                        natural_width = _source_deleafnd_natural_width_eV(
-                            context.master, context.derived, ion.ion_index, idest1
-                        )
-                        if natural_width is None:
+                        natural_width = 0.0
+                        try:
+                            reals_for_line = context.master.record_reals(rec)
+                            if len(reals_for_line) > 2:
+                                natural_width = float(reals_for_line[2]) * 4.136e-15
+                        except Exception:
                             natural_width = 0.0
-                            try:
-                                reals_for_line = context.master.record_reals(rec)
-                                if len(reals_for_line) > 2:
-                                    natural_width = float(reals_for_line[2]) * 4.136e-15
-                            except Exception:
-                                natural_width = 0.0
-                        _source_linopac_into_opakc(
+                        _line_opakc_before = context.workspace.base.opakc.copy()
+                        _linopac_diag = _source_linopac_into_opakc(
                             optpp=opakb1,
                             rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),
                             rcem2=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0),
@@ -765,7 +778,46 @@ def calc_emis_ion(
                             opakc=context.workspace.base.opakc,
                             rccemis=context.workspace.base.rccemis,
                             ncn2=len(epi),
+                            diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
                         )
+                        _line_opakc_after = context.workspace.base.opakc
+                        _target_add = {
+                            str(_b): (float(_line_opakc_after[_b - 1] - _line_opakc_before[_b - 1]) if 0 < _b <= _line_opakc_after.size else 0.0)
+                            for _b in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS
+                        }
+                        if any(abs(v) > 0.0 for v in _target_add.values()) or int(_linopac_diag.get("center_bin_one_based", 0)) in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS:
+                            _rows = getattr(context.workspace, "line_opacity_bin_diagnostics", None)
+                            if _rows is None:
+                                _rows = []
+                                setattr(context.workspace, "line_opacity_bin_diagnostics", _rows)
+                            if len(_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
+                                _rows.append({
+                                    "row_kind": "linopac_selected_bin_diagnostic",
+                                    "record": int(rec),
+                                    "line_index": int(line_index),
+                                    "ion_index": int(ion.ion_index),
+                                    "ion_stage": int(ion.ion_stage),
+                                    "rate_type": int(rate_type),
+                                    "data_type": int(header.data_type),
+                                    "idest1": int(idest1),
+                                    "idest2": int(idest2),
+                                    "lower_compact": int(lower),
+                                    "upper_compact": int(upper),
+                                    "abund1": float(abund1),
+                                    "abund2": float(abund2),
+                                    "elin_eV": float(energy),
+                                    "e0_eV": float(_linopac_diag.get("e0_eV", energy)),
+                                    "nbinc": int(nb1),
+                                    "oppp": float(opakb1),
+                                    "opakb1": float(opakb1),
+                                    "natural_width_eV": float(natural_width),
+                                    "atomic_mass_amu": float(atomic_mass),
+                                    "vturb_km_s": float(context.turbulent_velocity_km_s),
+                                    "temperature_1e4K": float(context.temperature_1e4K),
+                                    "target_bin_additions": dict(_target_add),
+                                    "final_contribution_to_opakc_3877": float(_target_add.get("3877", 0.0)),
+                                    **{f"linopac_{k}": v for k, v in _linopac_diag.items()},
+                                })
                         context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
                         context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
                         width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])

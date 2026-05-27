@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-import json
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -109,8 +108,6 @@ class LineOutputMetadata:
     natural_rate_s: float = 0.0
     auger_width_eV: float = 0.0
     auger_rate_s: float = 0.0
-    type41_record: int = 0
-    type41_found: bool = False
 
 
 @dataclass(frozen=True)
@@ -530,15 +527,6 @@ def _source_real(value: float) -> float:
     return float(np.float32(value))
 
 
-# ``binemis.f90`` declares ``nbtpp=ncn`` rather than using the active
-# continuum row count ``ncn2``.  Modern XSTAR PARAM sets ncn=999999.
-# This caller-owned work capacity matters: broad Voigt wings can extend well
-# beyond the active-grid midpoint before they are rebinned back onto ``epi``.
-# Earlier Python versions incorrectly used ``len(epi)`` here, truncating the
-# high-energy wing near bin 6155 in c5_ne1.
-SOURCE_BINEMIS_TEMP_CAPACITY = 999_999
-
-
 def _rank_binemis_lines(
     *,
     metadata: SourceOutputMetadata,
@@ -611,7 +599,6 @@ def build_binemis_spectrum(
     elum: np.ndarray,
     zrems: np.ndarray,
     zremsz: Sequence[float],
-    diagnostics: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Literal array translation of ``binemis.f90``.
 
@@ -643,21 +630,13 @@ def build_binemis_spectrum(
     ):
         raise OutputWriterPortError("binemis arrays are shorter than active source ranges")
 
-    active_grid_size = int(epi.size)
-    # Source ``binemis.f90`` uses PARAM ``ncn`` for its temporary profile
-    # grid (``nbtpp=ncn``), not the active continuum length ``ncn2``.  Keep
-    # the caller-owned capacity so high-energy Voigt wings are not truncated
-    # at the active-grid midpoint.
-    nbtpp = max(active_grid_size, SOURCE_BINEMIS_TEMP_CAPACITY)
+    nbtpp = int(epi.size)
     out = np.asarray(original, dtype=float).copy()
     saved = np.asarray(original, dtype=float).copy()
     out[:, :n] = 0.0
-    # Do not allocate the full PARAM-sized temporary arrays.  Source
-    # ``binemis.f90`` defines the *index capacity* as nbtpp=ncn, but only
-    # samples that map back onto the active continuum interval can affect
-    # XSTAR_SPECTRA.  The windowed implementation below preserves the
-    # centered source index arithmetic and sampling spacing while storing
-    # only the physically addressable temporary window for one line.
+    temporary_binned = np.zeros((2, nbtpp), dtype=float)
+    temporary_profile = np.zeros((2, nbtpp), dtype=float)
+    temporary_energy = np.zeros(nbtpp, dtype=float)
     ranked = _rank_binemis_lines(
         metadata=metadata,
         luminosity=lum,
@@ -669,44 +648,6 @@ def build_binemis_spectrum(
     by_index = {row.line_index: row for row in metadata.lines}
     gate = _source_real(1.0e-15) * float(xlum)
     dpcrit = _source_real(1.0e-6)
-    high_threshold_eV = 1400.0
-    high_mask = epi[:n] >= high_threshold_eV
-    cutoff_probe_eV = 1400.38
-    cutoff_probe_bin = int(nbinc(cutoff_probe_eV, epi, n))
-    line_high_outward: dict[int, float] = {}
-    line_high_inward: dict[int, float] = {}
-    type41_used: set[int] = set()
-    type41_missing_active = 0
-    if diagnostics is not None:
-        diagnostics["binemis_pre_high_energy_counts"] = {
-            "threshold_eV": high_threshold_eV,
-            "source_zrems_row2_nonzero": int(np.count_nonzero(np.asarray(original[1, :n])[high_mask])),
-            "source_zrems_row3_nonzero": int(np.count_nonzero(np.asarray(original[2, :n])[high_mask])),
-            "source_zrems_row4_nonzero": int(np.count_nonzero(np.asarray(original[3, :n])[high_mask])),
-            "source_zrems_row5_nonzero": int(np.count_nonzero(np.asarray(original[4, :n])[high_mask])),
-            "source_zrems_row3_sum": float(np.sum(np.asarray(original[2, :n])[high_mask])),
-            "source_zrems_row5_sum": float(np.sum(np.asarray(original[4, :n])[high_mask])),
-            "source_mapping": "writespectra emit_outward = post-binemis row4 = line outward + pre-binemis zrems(3)",
-        }
-        diagnostics["binemis_source_capacity"] = {
-            "active_epi_size": int(active_grid_size),
-            "ncn2": int(n),
-            "source_nbtpp_capacity": int(nbtpp),
-            "source_param_ncn_capacity": int(SOURCE_BINEMIS_TEMP_CAPACITY),
-            "source_loop_max_positive_offset": int(max(0, nbtpp // 2)),
-            "window_upper_endpoint_guard": 1,
-            "cutoff_probe_eV": float(cutoff_probe_eV),
-            "cutoff_probe_bin_one_based": int(cutoff_probe_bin),
-        }
-        diagnostics["binemis_elum_counts"] = {
-            "elum_row1_inward_nonzero": int(np.count_nonzero(lum[0, :] > gate)),
-            "elum_row2_outward_nonzero": int(np.count_nonzero(lum[1, :] > gate)),
-            "gate": float(gate),
-        }
-        diagnostics["binemis_type41_metadata_counts"] = {
-            "metadata_lines_with_type41": int(sum(1 for row in metadata.lines if bool(getattr(row, "type41_found", False)))),
-            "metadata_lines_without_type41": int(sum(1 for row in metadata.lines if not bool(getattr(row, "type41_found", False)))),
-        }
 
     for kl_one_based in range(1, n + 1):
         for mm_one_based in range(1, 11):
@@ -726,10 +667,6 @@ def build_binemis_spectrum(
                 and int(row.data_type) != 76
             ):
                 continue
-            if bool(getattr(row, "type41_found", False)):
-                type41_used.add(int(row.line_index))
-            elif int(row.data_type) == 50:
-                type41_missing_active += 1
             if nb1 >= n:
                 raise OutputWriterPortError("binemis source would read epi(nb1+1) beyond ncn2")
             if nbtpp < 20:
@@ -767,148 +704,112 @@ def build_binemis_spectrum(
             if ncut <= 0:
                 raise OutputWriterPortError("binemis source temporary-grid ncut collapsed to zero")
             deleused = deleepi / float(np.float32(ncut))
+            mlc = 0
+            ldir = 1
+            ldon = [0, 0]
+            mlmin = nbtpp
+            mlmax = 1
+            ml1min = nbtpp + 1
+            ml1max = 0
+            ml2 = nbtpp // 2
+            center = ml2 - 1
 
-            # Source binemis uses a huge centered temporary grid
-            # (ml2=nbtpp/2), then ignores samples outside the physical
-            # energy interval.  Evaluate only the contiguous offset window
-            # that can pass the exact source energy tests:
-            #   etptst > 0 .and. etptst < epi(ncn2)
-            # while retaining the PARAM ncn capacity as an offset bound.
-            #
-            # The source loop is inclusive at the final half-grid sample:
-            #   do while (mlc .lt. int(nbtpp/2))
-            #     mlc = mlc + 1
-            #     mlm = ml2 + ldir*mlc
-            # so the largest positive offset is int(nbtpp/2), not
-            # int(nbtpp/2)-1.  v0.5.16 used one fewer endpoint, clipping
-            # a few extreme positive-wing bins.
-            max_half_width = max(0, nbtpp // 2)
-            source_positive_endpoint_guard = 1
-            if deleused <= 0.0:
-                raise OutputWriterPortError("binemis temporary-grid spacing is nonpositive")
-            neg_steps = int(np.floor(max(0.0, e00) / deleused))
-            pos_steps = int(np.floor(max(0.0, float(epi[n - 1]) - e00) / deleused))
-            neg_steps = max(0, min(max_half_width, neg_steps))
-            pos_steps = max(0, min(max_half_width, pos_steps))
-            if neg_steps == 0 and pos_steps == 0:
-                continue
-
-            offsets = np.arange(-neg_steps, pos_steps + 1, dtype=np.int64)
-            temporary_energy_window = e00 + offsets.astype(float) * deleused
-            valid = (temporary_energy_window > 0.0) & (temporary_energy_window < float(epi[n - 1]))
-            if not np.any(valid):
-                continue
-            temporary_energy_window = np.ascontiguousarray(temporary_energy_window[valid], dtype=float)
-            if temporary_energy_window.size < 2:
-                continue
-
-            delet_window = (temporary_energy_window - etmp) / dele
+            delet = (e00 - etmp) / dele
             if aasmall > _source_real(1.0e-9):
-                # voigte is scalar; this vectorized wrapper keeps the exact
-                # scalar helper but avoids PARAM-sized dense scratch arrays.
-                profile_window = np.fromiter(
-                    (voigte(abs(float(v)), aasmall) / _source_real(1.772) for v in delet_window),
-                    dtype=float,
-                    count=int(delet_window.size),
-                )
+                profile = voigte(abs(delet), aasmall) / _source_real(1.772)
             else:
-                profile_window = np.exp(-delet_window * delet_window) / _source_real(1.772)
-            profile_window = profile_window / dele / _source_real(1.602197e-12)
-            profile_inward_window = lum[0, j] * profile_window
-            profile_outward_window = lum[1, j] * profile_window
+                profile = np.exp(-delet * delet) / _source_real(1.772)
+            profile = profile / dele / _source_real(1.602197e-12)
+            temporary_energy[center] = e00
+            temporary_profile[0, center] = lum[0, j] * profile
+            temporary_profile[1, center] = lum[1, j] * profile
+            tst = 1.0
 
-            mlc = int(max(neg_steps, pos_steps))
-            positive_energy_closed = bool(pos_steps < max_half_width)
-            negative_energy_closed = bool(neg_steps < max_half_width)
-            max_temp_energy_used = float(temporary_energy_window[-1])
-            max_source_bin_touched = int(nbinc(max_temp_energy_used, epi, n))
-            if diagnostics is not None:
-                line_runtime = diagnostics.setdefault("binemis_profile_runtime_samples", [])
-                if len(line_runtime) < 50 and (max_source_bin_touched >= cutoff_probe_bin or max_temp_energy_used >= high_threshold_eV):
-                    line_runtime.append({
-                        "line_index": int(row.line_index),
-                        "center_energy_eV": float(e0),
-                        "center_bin_one_based": int(nb1),
-                        "max_temp_energy_used_eV": float(max_temp_energy_used),
-                        "max_source_bin_touched_one_based": int(max_source_bin_touched),
-                        "ncut": int(ncut),
-                        "deleused_eV": float(deleused),
-                        "aasmall": float(aasmall),
-                        "mlc_final": int(mlc),
-                        "source_positive_endpoint_guard": int(source_positive_endpoint_guard),
-                        "source_max_half_width": int(max_half_width),
-                        "positive_energy_closed": bool(positive_energy_closed),
-                        "negative_energy_closed": bool(negative_energy_closed),
-                        "type41_found": bool(getattr(row, "type41_found", False)),
-                    })
+            while ldon[0] * ldon[1] == 0 and mlc < nbtpp // 2:
+                mlc += 1
+                for ij in range(2):
+                    ldir = -ldir
+                    if ldon[ij] == 1:
+                        continue
+                    mlm = ml2 + ldir * mlc
+                    mlm = min(nbtpp, max(1, mlm))
+                    etptst = e00 + float(np.float32(ldir * mlc)) * deleused
+                    if (
+                        mlm < nbtpp
+                        and mlm > 1
+                        and etptst > 0.0
+                        and etptst < float(epi[n - 1])
+                    ):
+                        mlmin = min(mlm, mlmin)
+                        mlmax = max(mlm, mlmax)
+                        temporary_energy[mlm - 1] = etptst
+                        delet = (etptst - etmp) / dele
+                        if aasmall > _source_real(1.0e-9):
+                            profile = voigte(abs(delet), aasmall) / _source_real(1.772)
+                        else:
+                            profile = np.exp(-delet * delet) / _source_real(1.772)
+                        profile = profile / dele / _source_real(1.602197e-12)
+                        temporary_profile[0, mlm - 1] = lum[0, j] * profile
+                        temporary_profile[1, mlm - 1] = lum[1, j] * profile
+                        tst = profile
+                    deletmax = max(50.0, 200.0 * aasmall)
+                    if (
+                        (
+                            tst < dpcrit
+                            or mlm <= 1
+                            or mlm >= nbtpp
+                            or etptst <= 0.0
+                            or etptst >= float(epi[n - 1])
+                            or mlc > nbtpp
+                            or abs((etptst - etmp) / dele) > deletmax
+                        )
+                        and ml1min < ml1 - 2
+                        and ml1max > ml1 + 2
+                        and ml1min >= 1
+                        and ml1max <= nbtpp
+                    ):
+                        ldon[ij] = 1
 
-            # Bin the temporary line profile back onto the active source
-            # continuum grid.  This is algebraically the source trapezoid
-            # accumulation over mlm=mlmin+1..mlmax, but grouped by the first
-            # temporary sample that crosses each epi boundary.  It avoids a
-            # Python loop over up to ncn=999999 samples for every ranked line.
-            ml1min = int(nbinc(float(temporary_energy_window[0]), epi, n))
-            ml1max = int(nbinc(float(temporary_energy_window[-1]), epi, n))
+            if mlmin > mlmax:
+                continue
+            ml1min = int(nbinc(float(temporary_energy[mlmin - 1]), epi, n))
+            ml1max = int(nbinc(float(temporary_energy[mlmax - 1]), epi, n))
+            ml1m = ml1min
+            mlmin = max(mlmin, 2)
+            mlmax = min(mlmax, nbtpp)
+            sume = 0.0
+            zrsum1 = 0.0
+            zrsum2 = 0.0
+            for mlm in range(mlmin + 1, mlmax + 1):
+                tmpe = abs(temporary_energy[mlm - 1] - temporary_energy[mlm - 2])
+                sume += tmpe
+                zrsum1 += (
+                    temporary_profile[0, mlm - 1] + temporary_profile[0, mlm - 2]
+                ) * tmpe / 2.0
+                zrsum2 += (
+                    temporary_profile[1, mlm - 1] + temporary_profile[1, mlm - 2]
+                ) * tmpe / 2.0
+                if temporary_energy[mlm - 1] > epi[ml1m - 1]:
+                    if mlm == mlmax:
+                        ml1m = max(1, ml1m - 1)
+                    if sume > 1.0e-24:
+                        zrtp2 = zrsum2 / sume
+                        zrtp1 = zrsum1 / sume
+                        while temporary_energy[mlm - 1] > epi[ml1m - 1] and ml1m < n:
+                            temporary_binned[0, ml1m - 1] = zrtp1
+                            temporary_binned[1, ml1m - 1] = zrtp2
+                            ml1m += 1
+                    zrsum2 = 0.0
+                    zrsum1 = 0.0
+                    sume = 0.0
+
+            temporary_profile[:, mlmin - 1 : mlmax] = 0.0
             lo = max(1, ml1min)
             hi = min(n, ml1max)
-            if lo > hi:
-                continue
-            interval_width = np.abs(np.diff(temporary_energy_window))
-            if interval_width.size == 0:
-                continue
-            interval_in = (profile_inward_window[1:] + profile_inward_window[:-1]) * interval_width / 2.0
-            interval_out = (profile_outward_window[1:] + profile_outward_window[:-1]) * interval_width / 2.0
-            cum_width = np.concatenate(([0.0], np.cumsum(interval_width)))
-            cum_in = np.concatenate(([0.0], np.cumsum(interval_in)))
-            cum_out = np.concatenate(([0.0], np.cumsum(interval_out)))
-
-            thresholds = np.asarray(epi[lo - 1 : hi], dtype=float)
-            # cross_idx is the first temporary sample index whose energy is
-            # greater than the source epi boundary.  The interval ending at
-            # that sample is included in the same segment, matching the
-            # original source test performed after zrsum accumulation.
-            cross_idx = np.searchsorted(temporary_energy_window, thresholds, side="right")
-            current_bin = lo
-            previous_sample_index = 0
-            added_inward_high = 0.0
-            added_outward_high = 0.0
-            if cross_idx.size:
-                unique_cross = np.unique(cross_idx)
-                for sample_index in unique_cross:
-                    sample_index = int(sample_index)
-                    if sample_index <= previous_sample_index or sample_index >= temporary_energy_window.size:
-                        continue
-                    # All output bins with this same crossing sample receive
-                    # the segment average from the previous reset through the
-                    # current source interval.
-                    rel = np.nonzero(cross_idx == sample_index)[0]
-                    if rel.size == 0:
-                        continue
-                    max_bin = lo + int(rel[-1])
-                    if max_bin < current_bin:
-                        continue
-                    sume = float(cum_width[sample_index] - cum_width[previous_sample_index])
-                    if sume > 1.0e-24:
-                        zrtp_in = float((cum_in[sample_index] - cum_in[previous_sample_index]) / sume)
-                        zrtp_out = float((cum_out[sample_index] - cum_out[previous_sample_index]) / sume)
-                        target = slice(current_bin - 1, max_bin)
-                        out[2, target] += zrtp_in
-                        out[3, target] += zrtp_out
-                        if diagnostics is not None:
-                            local_high = high_mask[target]
-                            if np.any(local_high):
-                                added_inward_high += float(np.count_nonzero(local_high)) * zrtp_in
-                                added_outward_high += float(np.count_nonzero(local_high)) * zrtp_out
-                    previous_sample_index = sample_index
-                    current_bin = max_bin + 1
-                    if current_bin > hi:
-                        break
-
-            if diagnostics is not None:
-                if added_outward_high != 0.0:
-                    line_high_outward[int(row.line_index)] = line_high_outward.get(int(row.line_index), 0.0) + added_outward_high
-                if added_inward_high != 0.0:
-                    line_high_inward[int(row.line_index)] = line_high_inward.get(int(row.line_index), 0.0) + added_inward_high
+            if lo <= hi:
+                out[3, lo - 1 : hi] += temporary_binned[1, lo - 1 : hi]
+                out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
+                temporary_binned[:, lo - 1 : hi] = 0.0
 
     for kl in range(n):
         out[2, kl] += saved[1, kl]
@@ -918,40 +819,6 @@ def build_binemis_spectrum(
         out[4, kl] = saved[3, kl]
     if original.shape[1] > n:
         out[:, n:] = original[:, n:]
-    if diagnostics is not None:
-        def _top_lines(values: dict[int, float]) -> list[dict[str, Any]]:
-            rows: list[dict[str, Any]] = []
-            for line_index, contribution in sorted(values.items(), key=lambda item: abs(item[1]), reverse=True)[:20]:
-                row = by_index.get(int(line_index))
-                rows.append({
-                    "line_index": int(line_index),
-                    "contribution": float(contribution),
-                    "energy_eV": float(_source_real(12398.4016) / (_source_real(1.0e-34) + abs(float(row.wavelength_angstrom)))) if row is not None else 0.0,
-                    "ion": str(row.ion_label) if row is not None else "",
-                    "upper_level": str(row.upper_level) if row is not None else "",
-                    "type41_record": int(getattr(row, "type41_record", 0)) if row is not None else 0,
-                    "type41_found": bool(getattr(row, "type41_found", False)) if row is not None else False,
-                    "auger_rate_s": float(getattr(row, "auger_rate_s", 0.0)) if row is not None else 0.0,
-                    "natural_rate_s": float(getattr(row, "natural_rate_s", 0.0)) if row is not None else 0.0,
-                })
-            return rows
-        probe_index = max(0, min(n - 1, cutoff_probe_bin - 1))
-        diagnostics["binemis_post_high_energy_counts"] = {
-            "threshold_eV": high_threshold_eV,
-            "emit_inward_nonzero": int(np.count_nonzero(out[2, :n][high_mask])),
-            "emit_outward_nonzero": int(np.count_nonzero(out[3, :n][high_mask])),
-            "emit_inward_sum": float(np.sum(out[2, :n][high_mask])),
-            "emit_outward_sum": float(np.sum(out[3, :n][high_mask])),
-            "emit_outward_at_cutoff_probe": float(out[3, probe_index]),
-            "source_zrems3_at_cutoff_probe": float(saved[2, probe_index]),
-            "line_plus_source_row4_at_cutoff_probe": float(out[3, probe_index]),
-        }
-        diagnostics["binemis_type41_runtime_counts"] = {
-            "active_profile_lines_with_type41": int(len(type41_used)),
-            "active_profile_type50_lines_without_type41": int(type41_missing_active),
-        }
-        diagnostics["binemis_top_high_energy_outward_lines"] = _top_lines(line_high_outward)
-        diagnostics["binemis_top_high_energy_inward_lines"] = _top_lines(line_high_inward)
     return out
 
 def build_final_spectrum_table(
@@ -967,7 +834,6 @@ def build_final_spectrum_table(
     zrems: np.ndarray,
     zremsz: Sequence[float],
     lwri: int,
-    diagnostics: dict[str, Any] | None = None,
 ) -> OutputTable:
     if int(lwri) >= 0:
         mapped = build_binemis_spectrum(
@@ -975,7 +841,7 @@ def build_final_spectrum_table(
             temperature_1e4K=temperature_1e4K,
             turbulent_velocity_km_s=turbulent_velocity_km_s,
             epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum,
-            zrems=zrems, zremsz=zremsz, diagnostics=diagnostics,
+            zrems=zrems, zremsz=zremsz,
         )
     else:
         mapped = np.asarray(zrems, dtype=float).copy()
@@ -1103,10 +969,9 @@ def build_final_output_products(
     dpthc: np.ndarray, dpthcont: np.ndarray, elum: np.ndarray,
     elumab: np.ndarray, tau0: np.ndarray, tauc: np.ndarray,
     zrems: np.ndarray, zremsz: Sequence[float], lwri: int,
-    diagnostics: dict[str, Any] | None = None,
 ) -> FinalOutputProducts:
     return FinalOutputProducts(
-        spectrum=build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri, diagnostics=diagnostics),
+        spectrum=build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri),
         lines=build_final_line_table(metadata=metadata, elum=elum, tau0=tau0),
         continuum=build_final_continuum_table(epi_eV=epi_eV, ncn2=ncn2, dpthcont=dpthcont, zrems=zrems, zremsz=zremsz),
         rrcs=build_final_rrc_table(metadata=metadata, elumab=elumab, tauc=tauc),
@@ -1374,7 +1239,6 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
     t4 = _state_temperature_t4(state)
-    binemis_diagnostics: dict[str, Any] = {}
     products = build_final_output_products(
         metadata=metadata,
         xlum=float(state.control.get("xlum", 1.0)),
@@ -1391,9 +1255,7 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
         zrems=workspace.zrems,
         zremsz=workspace.zremsz,
         lwri=int(lwri),
-        diagnostics=binemis_diagnostics,
     )
-    state.outputs["binemis_final_output_diagnostics"] = binemis_diagnostics
     state.outputs["final_output_products"] = products
     return products
 
@@ -1434,35 +1296,12 @@ def run_output_writer_sequence(
     source_order: list[str] = []
     if final_local_recompute:
         from .driver import XSTARPythonDriver, XSTARSourceRoutine
-        from .radial_transfer import RadialTransferWorkspace, register_bounded_radial_source_routines
+        from .radial_transfer import register_bounded_radial_source_routines
 
         runner = driver or XSTARPythonDriver()
         if driver is None:
             register_bounded_radial_source_routines(runner)
         completed_before = len(state.provenance.get("completed_source_routines", []))
-
-        # Source-order carry-forward guard for the final nlimd=0 print pass.
-        # Original xstar.f90 performs a local recomputation with delr=1.d-15
-        # immediately before pprint/writespectra, but the escaping radiation
-        # arrays are caller-owned radial accumulators.  If the local recompute
-        # rebuilds emissivity workspaces and leaves a direction-specific
-        # accumulator row zero, preserve the pre-print accumulated radial value
-        # rather than treating the local recompute as a request to clear the
-        # escaping spectrum.  This is not a scale factor: nonzero final values
-        # from heatt still win; only zeroed rows are refilled from the
-        # caller-owned state present at the final-print source boundary.
-        radial_workspace = state.control.get("radial_transfer_workspace")
-        final_transfer_snapshot: dict[str, np.ndarray] = {}
-        if isinstance(radial_workspace, RadialTransferWorkspace):
-            final_transfer_snapshot = {
-                "zrems": np.asarray(radial_workspace.zrems, dtype=float).copy(),
-                "zremso": np.asarray(radial_workspace.zremso, dtype=float).copy(),
-                "elum": np.asarray(radial_workspace.elum, dtype=float).copy(),
-                "elumo": np.asarray(radial_workspace.elumo, dtype=float).copy(),
-                "elumab": np.asarray(radial_workspace.elumab, dtype=float).copy(),
-                "elumabo": np.asarray(radial_workspace.elumabo, dtype=float).copy(),
-            }
-
         source_delr = float(np.float32(1.0e-15))
         state.transfer.step_size = source_delr
         state.control["delr"] = source_delr
@@ -1472,27 +1311,6 @@ def run_output_writer_sequence(
         runner.run_source_routines(
             (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
         )
-
-        restored_counts: dict[str, int] = {}
-        radial_workspace_after = state.control.get("radial_transfer_workspace")
-        if final_transfer_snapshot and isinstance(radial_workspace_after, RadialTransferWorkspace):
-            for name in ("zrems", "elum", "elumab"):
-                target = np.asarray(getattr(radial_workspace_after, name), dtype=float)
-                before = final_transfer_snapshot.get(name)
-                old_name = {"zrems": "zremso", "elum": "elumo", "elumab": "elumabo"}[name]
-                old_before = final_transfer_snapshot.get(old_name)
-                if before is None:
-                    continue
-                source = before
-                if old_before is not None and old_before.shape == before.shape:
-                    source = np.where(np.abs(before) > 0.0, before, old_before)
-                if target.shape != source.shape:
-                    continue
-                mask = (np.abs(target) == 0.0) & (np.abs(source) > 0.0)
-                if np.any(mask):
-                    target[mask] = source[mask]
-                    restored_counts[name] = int(np.count_nonzero(mask))
-
         source_order.extend(
             state.provenance.get("completed_source_routines", [])[completed_before:]
         )
@@ -1502,7 +1320,6 @@ def run_output_writer_sequence(
             "nlimd": 0,
             "dsec_skipped": True,
             "source_order": list(source_order),
-            "source_order_transfer_carry_forward_counts": dict(restored_counts),
         }
 
     pprint_paths: dict[str, str] = {}
@@ -1570,11 +1387,6 @@ def run_output_writer_sequence(
                     lwri=level,
                 )
             )
-            diagnostics = state.outputs.get("binemis_final_output_diagnostics")
-            if isinstance(diagnostics, dict):
-                diag_path = Path(out_dir) / "binemis_final_output_diagnostics_v0516.json"
-                diag_path.write_text(json.dumps(diagnostics, indent=2, sort_keys=True))
-                paths[diag_path.name] = str(diag_path)
     state.outputs["output_writer_source_order"] = tuple(source_order)
     state.outputs["output_writer_paths"] = dict(paths)
     state.outputs["output_writers_executed"] = bool(writer_names or stores)
