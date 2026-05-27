@@ -252,6 +252,7 @@ def _option3_parameter_capture(state: XSTARPythonState, buf: LegacyPprintBuffers
     comments[-2] = str(state.control.get("kmodelname", ""))
     buf.parameter_values = values
     buf.parameter_comments = comments
+    buf.log_lines.append(" print option: 3")
     buf.source_calls.append("pprint(3)")
 
 
@@ -266,6 +267,7 @@ def _option2_input_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
     flux = float(state.control.get("xlum", 0.0)) / 12.56 / r19 / r19
     lines = [
         " ",
+        " print option: 2",
         " input parameters:",
         f"covering fraction=    {_fmt_e(state.control.get('cfrac', 0.0))}",
         f"temperature (/10**4K)={_fmt_e(_temperature_t4(state))}",
@@ -312,6 +314,7 @@ def _option2_input_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
 
 
 def _option17_headings(buf: LegacyPprintBuffers) -> None:
+    buf.log_lines.append(" print option:17")
     buf.log_lines.extend(_fortran_logical_line_17())
     buf.source_calls.append("pprint(17)")
 
@@ -532,6 +535,49 @@ def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
     buf.source_calls.append("pprint(23)")
 
 
+def _active_element_symbols(state: XSTARPythonState) -> set[str]:
+    """Return lower-case element symbols with non-zero user abundance.
+
+    XSTAR verbose reports are bounded by the active composition.  The C test
+    case should stop at C VI rather than iterating over inactive ATDB padding
+    through Zn.
+    """
+    metadata = _pprint_metadata(state)
+    ababs = np.asarray(state.control.get("ababs", np.ones(len(metadata.element_labels))), dtype=float)
+    symbols: set[str] = set()
+    for i, label in enumerate(metadata.element_labels):
+        if i < ababs.size and float(ababs[i]) != 0.0:
+            symbols.add(str(label).strip().lower())
+    return symbols
+
+
+def _row_element_symbol(row: Any) -> str:
+    ion = str(getattr(row, "ion_label", "")).strip().lower()
+    return ion.split("_")[0] if ion else ""
+
+
+def _active_line_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
+    active = _active_element_symbols(state)
+    out = [
+        r for r in rows
+        if int(getattr(r, "line_index", 0)) > 0
+        and (not active or _row_element_symbol(r) in active)
+    ]
+    out.sort(key=lambda r: int(getattr(r, "line_index", 0)))
+    return out
+
+
+def _active_rrc_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
+    active = _active_element_symbols(state)
+    out = [
+        r for r in rows
+        if int(getattr(r, "continuum_index", 0)) > 0
+        and (not active or _row_element_symbol(r) in active)
+    ]
+    out.sort(key=lambda r: int(getattr(r, "continuum_index", 0)))
+    return out
+
+
 def _line_rows_by_index(rows: Sequence[Any]) -> list[Any]:
     out = [r for r in rows if int(getattr(r, "line_index", 0)) > 0]
     out.sort(key=lambda r: int(getattr(r, "line_index", 0)))
@@ -557,7 +603,7 @@ def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyP
         " line luminosities (erg/sec/10**38) and depths",
         "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth",
     ])
-    for row in _line_rows_by_index(rows):
+    for row in _active_line_rows_by_index(state, rows):
         idx = int(getattr(row, "line_index", 0)) - 1
         if idx < 0 or idx >= elum.shape[1] or idx >= tau0.shape[1]:
             continue
@@ -631,7 +677,7 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         " absorption edge depths",
         " index, ion, level, energy (eV), depth ",
     ])
-    for out_index, row in enumerate(rows, start=1):
+    for out_index, row in enumerate(_active_rrc_rows_by_index(state, rows), start=1):
         ci = int(getattr(row, "continuum_index", out_index))
         idx = ci - 1
         if idx < 0 or idx >= tauc.shape[1]:
@@ -653,28 +699,101 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
 
 
 def _option16_ucalc_timing_accounting(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
-    """Emit bounded verbose ``pprint(16)`` timing/ucalc accounting diagnostics.
+    """Emit verbose ``pprint(16)`` in the source table shape.
 
-    The Python port does not currently carry XSTAR's per-branch CPU timer
-    arrays.  This report therefore marks the timing fields as zero and exposes
-    available translated diagnostic counts without altering physics.
+    The original report prints seven timer scalars, then one row per XSTAR
+    rate type 1..102: ``rate_type, count, total_time, time_per_call``.  The
+    Python port does not yet carry the exact Fortran CPU accumulators, so the
+    timing columns remain zero unless future instrumentation populates
+    ``state.outputs['ucalc_timing_table']``.  The shape and ordering match the
+    original log, which makes diffs readable without producing a huge report.
     """
-    workspace = _workspace(state)
-    line_rows = getattr(workspace, "line_opacity_bin_diagnostics", ())
-    n_line_diag = len(line_rows) if hasattr(line_rows, "__len__") else 0
-    raw_in = getattr(workspace, "raw_inward_continuum_emissivity_track", ())
-    n_raw_in = len(raw_in) if hasattr(raw_in, "__len__") else 0
+    timing = state.outputs.get("ucalc_timing_table", {})
+    counts = {int(k): int(v) for k, v in dict(timing.get("counts", {})).items()} if isinstance(timing, Mapping) else {}
+    totals = {int(k): float(v) for k, v in dict(timing.get("totals", {})).items()} if isinstance(timing, Mapping) else {}
+    if not counts:
+        # Fallback: static ATDB rate-type inventory.  This is not the same as
+        # Fortran's dynamic call count, but it is bounded and source-shaped.
+        derived = state.control.get("derived") or getattr(state, "derived", None)
+        try:
+            rates = np.asarray(getattr(derived, "rdat1", []))
+            # Unknown in many states; keep all zero if unavailable.
+        except Exception:
+            rates = np.asarray([])
     buf.log_lines.extend([
         " ",
         " print option:16",
         " times:   0.00000000       0.00000000       0.00000000       0.00000000       0.00000000       0.00000000       0.00000000    ",
-        f"{1:9d}{n_line_diag:8d}{0.0:11.3E}{0.0:11.3E}",
-        f"{2:9d}{n_raw_in:8d}{0.0:11.3E}{0.0:11.3E}",
-        " total ucalc=  0.00000000000000000     ",
     ])
+    total_ucalc = 0.0
+    for rate_type in range(1, 103):
+        count = int(counts.get(rate_type, 0))
+        total = float(totals.get(rate_type, 0.0))
+        per = total / count if count else 0.0
+        total_ucalc += total
+        buf.log_lines.append(f"{rate_type:9d}{count:8d}{total:11.3E}{per:11.3E}")
+    buf.log_lines.append(f" total ucalc= {total_ucalc:22.16E}     ")
     buf.source_calls.append("pprint(16)")
 
+
+def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit bounded verbose ``pprint(19)`` RRC luminosities for active elements."""
+    workspace = _workspace(state)
+    rows = _rrc_metadata_rows(state)
+    elumab = np.asarray(getattr(workspace, "elumab", np.zeros((2, 0))), dtype=float)
+    if elumab.ndim != 2 or elumab.shape[0] < 2:
+        return
+    buf.log_lines.extend([
+        " ",
+        " print option:19",
+        " recombination continuum luminosities(erg/sec/10**38))",
+        " index, ion, level, energy (eV), RRC luminosity ",
+    ])
+    for out_index, row in enumerate(_active_rrc_rows_by_index(state, rows), start=1):
+        ci = int(getattr(row, "continuum_index", out_index))
+        idx = ci - 1
+        if idx < 0 or idx >= elumab.shape[1]:
+            continue
+        out_lum = float(elumab[0, idx])
+        in_lum = float(elumab[1, idx])
+        if out_lum == 0.0 and in_lum == 0.0:
+            continue
+        ion = str(getattr(row, "ion_label", ""))[:8]
+        lower = str(getattr(row, "lower_level", "")).strip()[:20]
+        upper = str(getattr(row, "upper_level", "continuum")).strip()[:20]
+        energy = float(getattr(row, "threshold_eV", 0.0))
+        level = int(getattr(row, "level_global_index", 0))
+        buf.log_lines.append(
+            f"{out_index:7d}{level:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
+            f"{energy:13.3E}{out_lum:13.3E}{in_lum:13.3E}"
+        )
+    buf.source_calls.append("pprint(19)")
+
+
+def _option5_energy_sums(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit source-positioned ``pprint(5)`` energy-sum footer.
+
+    Exact Fortran accumulated scalars are not yet carried by the Python
+    workspace; use available final luminosity arrays for a bounded diagnostic
+    footer rather than omitting the branch.
+    """
+    workspace = _workspace(state)
+    elum = np.asarray(getattr(workspace, "elum", np.zeros((2, 0))), dtype=float)
+    elumab = np.asarray(getattr(workspace, "elumab", np.zeros((2, 0))), dtype=float)
+    cont = float(np.sum(elumab)) if elumab.size else 0.0
+    line = float(np.sum(elum)) if elum.size else 0.0
+    absorbed = 0.0
+    err = 0.0
+    buf.log_lines.extend([
+        " ",
+        " print option: 5",
+        f" energy sums: abs, cont, line, err:{absorbed:13.5E}{cont:13.5E}{line:13.5E}{err:13.5E}",
+    ])
+    buf.source_calls.append("pprint(5)")
+
+
 def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> tuple[str, str, str, str]:
+    buf.log_lines.append(" print option:22")
     workspace = _workspace(state)
     epi = _active_epi(state)
     n = epi.size
@@ -819,7 +938,8 @@ def write_xout_abund1(
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     hdul.writeto(output, overwrite=overwrite, checksum=True)
-    buf.source_calls.append("pprint(11)")
+    if "pprint(11)" not in buf.source_calls:
+        buf.source_calls.append("pprint(11)")
     return str(output)
 
 
@@ -835,13 +955,18 @@ def finalize_legacy_pprint(
     buf = initialize_legacy_pprint(state)
     requested_lpri = int(state.control.get("requested_lpri", state.control.get("lpri", 0)))
     _option22_final_lines(state, buf)
+    buf.log_lines.extend([" ", " print option:11"])
+    if "pprint(11)" not in buf.source_calls:
+        buf.source_calls.append("pprint(11)")
     if requested_lpri >= 1:
         _option1_emission_line_luminosities(state, buf)
         _option23_line_depths(state, buf)
-        _option15_line_luminosities_and_depths(state, buf)
-        _option27_ion_column_densities(state, buf)
         _option24_absorption_edge_depths(state, buf)
         _option16_ucalc_timing_accounting(state, buf)
+        _option27_ion_column_densities(state, buf)
+        _option15_line_luminosities_and_depths(state, buf)
+        _option19_recombination_continuum_luminosities(state, buf)
+        _option5_energy_sums(state, buf)
     paths: dict[str, str] = {}
     if out_dir is not None:
         root = Path(out_dir)
