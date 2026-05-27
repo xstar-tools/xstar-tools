@@ -693,6 +693,8 @@ def build_binemis_spectrum(
             "ncn2": int(n),
             "source_nbtpp_capacity": int(nbtpp),
             "source_param_ncn_capacity": int(SOURCE_BINEMIS_TEMP_CAPACITY),
+            "source_loop_max_positive_offset": int(max(0, nbtpp // 2)),
+            "window_upper_endpoint_guard": 1,
             "cutoff_probe_eV": float(cutoff_probe_eV),
             "cutoff_probe_bin_one_based": int(cutoff_probe_bin),
         }
@@ -772,7 +774,16 @@ def build_binemis_spectrum(
             # that can pass the exact source energy tests:
             #   etptst > 0 .and. etptst < epi(ncn2)
             # while retaining the PARAM ncn capacity as an offset bound.
-            max_half_width = max(0, nbtpp // 2 - 1)
+            #
+            # The source loop is inclusive at the final half-grid sample:
+            #   do while (mlc .lt. int(nbtpp/2))
+            #     mlc = mlc + 1
+            #     mlm = ml2 + ldir*mlc
+            # so the largest positive offset is int(nbtpp/2), not
+            # int(nbtpp/2)-1.  v0.5.16 used one fewer endpoint, clipping
+            # a few extreme positive-wing bins.
+            max_half_width = max(0, nbtpp // 2)
+            source_positive_endpoint_guard = 1
             if deleused <= 0.0:
                 raise OutputWriterPortError("binemis temporary-grid spacing is nonpositive")
             neg_steps = int(np.floor(max(0.0, e00) / deleused))
@@ -824,6 +835,8 @@ def build_binemis_spectrum(
                         "deleused_eV": float(deleused),
                         "aasmall": float(aasmall),
                         "mlc_final": int(mlc),
+                        "source_positive_endpoint_guard": int(source_positive_endpoint_guard),
+                        "source_max_half_width": int(max_half_width),
                         "positive_energy_closed": bool(positive_energy_closed),
                         "negative_energy_closed": bool(negative_energy_closed),
                         "type41_found": bool(getattr(row, "type41_found", False)),
