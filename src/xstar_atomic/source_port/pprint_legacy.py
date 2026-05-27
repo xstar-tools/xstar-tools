@@ -6,10 +6,11 @@ products:
 
 ``3 -> 2 -> 17 -> [9,12 per final-pass shell] -> [9,12 terminal] -> 22 -> 11``.
 
-v0.5.20 also emits the first two verbose ``lprint=1`` terminal diagnostics
-that are useful for the current line-opacity audit: ``pprint(1)`` emission-line
-luminosities and ``pprint(23)`` line depths.  These are text-report diagnostics
-only; they do not change the FITS product path or any physical arrays.
+v0.5.21 emits the verbose ``lprint=1`` terminal diagnostics needed by the
+current source audit: ``pprint(1)``, ``pprint(23)``, ``pprint(15)``,
+``pprint(27)``, ``pprint(24)``, and ``pprint(16)``.  These are text-report
+diagnostics only; they do not change the FITS product path or any physical
+arrays.
 """
 
 from __future__ import annotations
@@ -492,8 +493,12 @@ def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPpri
         idx = int(getattr(row, "line_index", 0)) - 1
         ion = str(getattr(row, "ion_label", ""))[:8]
         wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
-        reflected = float(elum[0, idx]) / 1.0e38
-        transmitted = float(elum[1, idx]) / 1.0e38
+        # ``heatt.f90``/``pprint.f90`` already stores ``elum`` in the
+        # units printed by XSTAR (erg/sec/10**38).  Do not divide by 1e38
+        # again; doing so made the v0.5.20 verbose text misleading without
+        # changing the physical arrays.
+        reflected = float(elum[0, idx])
+        transmitted = float(elum[1, idx])
         buf.log_lines.append(
             f"{out_index:9d}{int(getattr(row, 'line_index', 0)):8d} {ion:<8s}"
             f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
@@ -525,6 +530,149 @@ def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
             f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
         )
     buf.source_calls.append("pprint(23)")
+
+
+def _line_rows_by_index(rows: Sequence[Any]) -> list[Any]:
+    out = [r for r in rows if int(getattr(r, "line_index", 0)) > 0]
+    out.sort(key=lambda r: int(getattr(r, "line_index", 0)))
+    return out
+
+
+def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit verbose ``pprint(15)``: line luminosities and depths.
+
+    This is diagnostic text coverage for the source log.  It intentionally
+    uses the same already-populated ``elum`` and ``tau0`` arrays as
+    ``pprint(1)`` and ``pprint(23)``; no physical arrays are altered.
+    """
+    workspace = _workspace(state)
+    rows = _line_metadata_rows(state)
+    elum = np.asarray(getattr(workspace, "elum", np.zeros((2, 0))), dtype=float)
+    tau0 = np.asarray(getattr(workspace, "tau0", np.zeros((2, 0))), dtype=float)
+    if elum.ndim != 2 or tau0.ndim != 2 or elum.shape[0] < 2 or tau0.shape[0] < 2:
+        return
+    buf.log_lines.extend([
+        " ",
+        " print option:15",
+        " line luminosities (erg/sec/10**38) and depths",
+        "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth",
+    ])
+    for row in _line_rows_by_index(rows):
+        idx = int(getattr(row, "line_index", 0)) - 1
+        if idx < 0 or idx >= elum.shape[1] or idx >= tau0.shape[1]:
+            continue
+        ion = str(getattr(row, "ion_label", ""))[:8]
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        lower = str(getattr(row, "lower_level", "")).strip()
+        upper = str(getattr(row, "upper_level", "")).strip()
+        label = (lower + "-" + upper).replace(" ", "")[:18]
+        buf.log_lines.append(
+            f"{int(getattr(row, 'line_index', 0)):10d}{wave:13.5E} {ion:<8s}"
+            f"{float(elum[0, idx]):13.5E}{float(elum[1, idx]):13.5E}"
+            f"{float(tau0[0, idx]):13.5E}{float(tau0[1, idx]):13.5E}{label}"
+        )
+    buf.source_calls.append("pprint(15)")
+
+
+def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit verbose ``pprint(27)`` ion column densities from pprint rows."""
+    metadata = _pprint_metadata(state)
+    numrec = int(state.control.get("numrec", 0))
+    nions = len(metadata.ions)
+    if numrec < 2 or not buf.abundance_rows or nions <= 0:
+        return
+    columns = np.zeros(nions, dtype=float)
+    ababs = np.asarray(state.control.get("ababs", np.ones(len(metadata.element_labels))), dtype=float)
+    for j in range(1, numrec):
+        prev = buf.abundance_rows.get(j)
+        curr = buf.abundance_rows.get(j + 1)
+        if prev is None or curr is None:
+            continue
+        prev = np.asarray(prev, dtype=float).reshape(-1)
+        curr = np.asarray(curr, dtype=float).reshape(-1)
+        if prev.size < 8 + nions or curr.size < 8 + nions:
+            continue
+        dr = float(curr[1] - prev[1])
+        for k, ion in enumerate(metadata.ions):
+            elem_ab = float(ion.elemental_abundance)
+            if 1 <= int(ion.element_index) <= ababs.size:
+                elem_ab = float(ababs[int(ion.element_index) - 1])
+            columns[k] += (curr[8 + k] * curr[4] + prev[8 + k] * prev[4]) * dr * elem_ab / 2.0
+    buf.log_lines.extend([
+        " ",
+        " print option:27",
+        " ion column densities",
+        " index, ion, column density",
+    ])
+    for k, ion in enumerate(metadata.ions):
+        value = float(columns[k])
+        if value == 0.0:
+            continue
+        buf.log_lines.append(f"{int(ion.ion_index):5d} {str(ion.ion_label)[:8]:<8s}{value:14.8E}")
+    buf.source_calls.append("pprint(27)")
+
+
+def _rrc_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
+    meta = state.control.get("output_atomic_metadata")
+    rows = getattr(meta, "rrcs", ())
+    return tuple(rows) if rows is not None else ()
+
+
+def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit verbose ``pprint(24)`` absorption edge depths from final RRC depths."""
+    workspace = _workspace(state)
+    rows = _rrc_metadata_rows(state)
+    tauc = np.asarray(getattr(workspace, "tauc", np.zeros((2, 0))), dtype=float)
+    if tauc.ndim != 2 or tauc.shape[0] < 2:
+        return
+    buf.log_lines.extend([
+        " ",
+        " print option:24",
+        " absorption edge depths",
+        " index, ion, level, energy (eV), depth ",
+    ])
+    for out_index, row in enumerate(rows, start=1):
+        ci = int(getattr(row, "continuum_index", out_index))
+        idx = ci - 1
+        if idx < 0 or idx >= tauc.shape[1]:
+            continue
+        backward = float(tauc[0, idx])
+        forward = float(tauc[1, idx])
+        if backward == 0.0 and forward == 0.0:
+            continue
+        ion = str(getattr(row, "ion_label", ""))[:8]
+        lower = str(getattr(row, "lower_level", "")).strip()[:20]
+        upper = str(getattr(row, "upper_level", "continuum")).strip()[:20]
+        energy = float(getattr(row, "threshold_eV", 0.0))
+        level = int(getattr(row, "level_global_index", 0))
+        buf.log_lines.append(
+            f"{ci:7d}{level:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
+            f"{energy:13.3E}{backward:13.3E}{forward:13.3E}"
+        )
+    buf.source_calls.append("pprint(24)")
+
+
+def _option16_ucalc_timing_accounting(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit bounded verbose ``pprint(16)`` timing/ucalc accounting diagnostics.
+
+    The Python port does not currently carry XSTAR's per-branch CPU timer
+    arrays.  This report therefore marks the timing fields as zero and exposes
+    available translated diagnostic counts without altering physics.
+    """
+    workspace = _workspace(state)
+    line_rows = getattr(workspace, "line_opacity_bin_diagnostics", ())
+    n_line_diag = len(line_rows) if hasattr(line_rows, "__len__") else 0
+    raw_in = getattr(workspace, "raw_inward_continuum_emissivity_track", ())
+    n_raw_in = len(raw_in) if hasattr(raw_in, "__len__") else 0
+    buf.log_lines.extend([
+        " ",
+        " print option:16",
+        " times:   0.00000000       0.00000000       0.00000000       0.00000000       0.00000000       0.00000000       0.00000000    ",
+        f"{1:9d}{n_line_diag:8d}{0.0:11.3E}{0.0:11.3E}",
+        f"{2:9d}{n_raw_in:8d}{0.0:11.3E}{0.0:11.3E}",
+        " total ucalc=  0.00000000000000000     ",
+    ])
+    buf.source_calls.append("pprint(16)")
 
 def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> tuple[str, str, str, str]:
     workspace = _workspace(state)
@@ -690,6 +838,10 @@ def finalize_legacy_pprint(
     if requested_lpri >= 1:
         _option1_emission_line_luminosities(state, buf)
         _option23_line_depths(state, buf)
+        _option15_line_luminosities_and_depths(state, buf)
+        _option27_ion_column_densities(state, buf)
+        _option24_absorption_edge_depths(state, buf)
+        _option16_ucalc_timing_accounting(state, buf)
     paths: dict[str, str] = {}
     if out_dir is not None:
         root = Path(out_dir)

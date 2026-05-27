@@ -67,6 +67,7 @@ XSTAR_CALC_EMIS_FORCE_ALL_SENTINEL = 9_999_999
 # These are one-based continuum bins; bin 3877 is the current c5_ne1 limiter.
 XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS = (3875, 3876, 3877, 3878, 3879)
 XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS = 2000
+XSTAR_TYPE50_LINE_STRENGTH_TARGET_LINES = (119, 120, 410, 411, 1983, 1984)
 
 
 
@@ -792,11 +793,79 @@ def calc_emis_ion(
                             str(_b): (float(_line_opakc_after[_b - 1] - _line_opakc_before[_b - 1]) if 0 < _b <= _line_opakc_after.size else 0.0)
                             for _b in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS
                         }
+                        _diag_rows = getattr(context.workspace, "line_opacity_bin_diagnostics", None)
+                        if _diag_rows is None:
+                            _diag_rows = []
+                            setattr(context.workspace, "line_opacity_bin_diagnostics", _diag_rows)
+                        if int(line_index) in XSTAR_TYPE50_LINE_STRENGTH_TARGET_LINES and len(_diag_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
+                            try:
+                                _rec_reals = tuple(float(x) for x in context.master.record_reals(rec))
+                            except Exception:
+                                _rec_reals = ()
+                            try:
+                                _rec_ints = tuple(int(x) for x in context.master.record_integers(rec))
+                            except Exception:
+                                _rec_ints = ()
+                            _local_lower = int(idest1 if e1 <= e2 else idest2)
+                            _local_upper = int(idest2 if e1 <= e2 else idest1)
+                            _lower_level = levels.get(_local_lower)
+                            _upper_level = levels.get(_local_upper)
+                            _lower_weight = float(getattr(_lower_level, "statistical_weight", 0.0) or 0.0)
+                            _upper_weight = float(getattr(_upper_level, "statistical_weight", 0.0) or 0.0)
+                            _flin = result.diagnostics.get("f_osc_from_A", result.diagnostics.get("flin", 0.0))
+                            _aij = result.diagnostics.get("A_s^-1", result.diagnostics.get("aij", 0.0))
+                            try:
+                                _flin = float(_flin or 0.0)
+                            except Exception:
+                                _flin = 0.0
+                            try:
+                                _aij = float(_aij or 0.0)
+                            except Exception:
+                                _aij = 0.0
+                            try:
+                                _vtherm = ((float(context.turbulent_velocity_km_s) * 1.0e5) ** 2 + (1.29e6 / max((float(atomic_mass) / max(float(context.temperature_1e4K), 1.0e-48)) ** 0.5, 1.0e-48)) ** 2) ** 0.5
+                            except Exception:
+                                _vtherm = 0.0
+                            _diag_rows.append({
+                                "row_kind": "type50_line_strength_mapping_track",
+                                "diagnostic_priority": "pre_linopac_opakb1_source_mapping",
+                                "line_index": int(line_index),
+                                "record": int(rec),
+                                "parent_record": int(getattr(header, "parent_record", 0) or 0),
+                                "next_record": int(getattr(header, "next_record", 0) or 0),
+                                "ltyp": int(header.data_type),
+                                "lrtyp": int(rate_type),
+                                "idest1": int(idest1),
+                                "idest2": int(idest2),
+                                "lower_level_id_local": int(_local_lower),
+                                "upper_level_id_local": int(_local_upper),
+                                "lower_compact": int(lower),
+                                "upper_compact": int(upper),
+                                "lower_statistical_weight": float(_lower_weight),
+                                "upper_statistical_weight": float(_upper_weight),
+                                "lower_energy_eV": float(e1 if e1 <= e2 else e2),
+                                "upper_energy_eV": float(e2 if e1 <= e2 else e1),
+                                "flin_as_read_from_ATDB_or_A": float(_flin),
+                                "aij_s_minus1": float(_aij),
+                                "elin_eV": float(energy),
+                                "wavelength_A": float(wave),
+                                "vtherm_cm_s": float(_vtherm),
+                                "sigma_cm2": float(result.opakab),
+                                "sigvtherm_cm2": float(result.opakab),
+                                "abund1": float(abund1),
+                                "abund2": float(abund2),
+                                "opakab": float(result.opakab),
+                                "opakb1": float(opakb1),
+                                "tau0_backward": float(tau1),
+                                "tau0_forward": float(tau2),
+                                "ans1_photoexcitation_s_minus1": float(result.ans1),
+                                "ans2_escaped_decay_s_minus1": float(result.ans2),
+                                "record_reals": list(_rec_reals[:12]),
+                                "record_integers": list(_rec_ints[:12]),
+                                "working_hypothesis": "compare 410/411,119/120,1983/1984 flin/statistical-weight/opakb1 before linopac; doublet inversion here cannot be fixed by linopac opsum/sume",
+                            })
                         if any(abs(v) > 0.0 for v in _target_add.values()) or int(_linopac_diag.get("center_bin_one_based", 0)) in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS:
-                            _rows = getattr(context.workspace, "line_opacity_bin_diagnostics", None)
-                            if _rows is None:
-                                _rows = []
-                                setattr(context.workspace, "line_opacity_bin_diagnostics", _rows)
+                            _rows = _diag_rows
                             if len(_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
                                 _rows.append({
                                     "row_kind": "linopac_selected_bin_diagnostic",
