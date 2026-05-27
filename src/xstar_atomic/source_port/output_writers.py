@@ -530,6 +530,15 @@ def _source_real(value: float) -> float:
     return float(np.float32(value))
 
 
+# ``binemis.f90`` declares ``nbtpp=ncn`` rather than using the active
+# continuum row count ``ncn2``.  Modern XSTAR PARAM sets ncn=999999.
+# This caller-owned work capacity matters: broad Voigt wings can extend well
+# beyond the active-grid midpoint before they are rebinned back onto ``epi``.
+# Earlier Python versions incorrectly used ``len(epi)`` here, truncating the
+# high-energy wing near bin 6155 in c5_ne1.
+SOURCE_BINEMIS_TEMP_CAPACITY = 999_999
+
+
 def _rank_binemis_lines(
     *,
     metadata: SourceOutputMetadata,
@@ -634,7 +643,12 @@ def build_binemis_spectrum(
     ):
         raise OutputWriterPortError("binemis arrays are shorter than active source ranges")
 
-    nbtpp = int(epi.size)
+    active_grid_size = int(epi.size)
+    # Source ``binemis.f90`` uses PARAM ``ncn`` for its temporary profile
+    # grid (``nbtpp=ncn``), not the active continuum length ``ncn2``.  Keep
+    # the caller-owned capacity so high-energy Voigt wings are not truncated
+    # at the active-grid midpoint.
+    nbtpp = max(active_grid_size, SOURCE_BINEMIS_TEMP_CAPACITY)
     out = np.asarray(original, dtype=float).copy()
     saved = np.asarray(original, dtype=float).copy()
     out[:, :n] = 0.0
@@ -654,6 +668,8 @@ def build_binemis_spectrum(
     dpcrit = _source_real(1.0e-6)
     high_threshold_eV = 1400.0
     high_mask = epi[:n] >= high_threshold_eV
+    cutoff_probe_eV = 1400.38
+    cutoff_probe_bin = int(nbinc(cutoff_probe_eV, epi, n))
     line_high_outward: dict[int, float] = {}
     line_high_inward: dict[int, float] = {}
     type41_used: set[int] = set()
@@ -665,6 +681,17 @@ def build_binemis_spectrum(
             "source_zrems_row3_nonzero": int(np.count_nonzero(np.asarray(original[2, :n])[high_mask])),
             "source_zrems_row4_nonzero": int(np.count_nonzero(np.asarray(original[3, :n])[high_mask])),
             "source_zrems_row5_nonzero": int(np.count_nonzero(np.asarray(original[4, :n])[high_mask])),
+            "source_zrems_row3_sum": float(np.sum(np.asarray(original[2, :n])[high_mask])),
+            "source_zrems_row5_sum": float(np.sum(np.asarray(original[4, :n])[high_mask])),
+            "source_mapping": "writespectra emit_outward = post-binemis row4 = line outward + pre-binemis zrems(3)",
+        }
+        diagnostics["binemis_source_capacity"] = {
+            "active_epi_size": int(active_grid_size),
+            "ncn2": int(n),
+            "source_nbtpp_capacity": int(nbtpp),
+            "source_param_ncn_capacity": int(SOURCE_BINEMIS_TEMP_CAPACITY),
+            "cutoff_probe_eV": float(cutoff_probe_eV),
+            "cutoff_probe_bin_one_based": int(cutoff_probe_bin),
         }
         diagnostics["binemis_elum_counts"] = {
             "elum_row1_inward_nonzero": int(np.count_nonzero(lum[0, :] > gate)),
@@ -755,6 +782,10 @@ def build_binemis_spectrum(
             temporary_profile[0, center] = lum[0, j] * profile
             temporary_profile[1, center] = lum[1, j] * profile
             tst = 1.0
+            positive_energy_closed = False
+            negative_energy_closed = False
+            max_temp_energy_used = e00
+            max_source_bin_touched = nb1
 
             while ldon[0] * ldon[1] == 0 and mlc < nbtpp // 2:
                 mlc += 1
@@ -765,6 +796,10 @@ def build_binemis_spectrum(
                     mlm = ml2 + ldir * mlc
                     mlm = min(nbtpp, max(1, mlm))
                     etptst = e00 + float(np.float32(ldir * mlc)) * deleused
+                    if ldir > 0 and etptst >= float(epi[n - 1]):
+                        positive_energy_closed = True
+                    if ldir < 0 and etptst <= 0.0:
+                        negative_energy_closed = True
                     if (
                         mlm < nbtpp
                         and mlm > 1
@@ -773,6 +808,9 @@ def build_binemis_spectrum(
                     ):
                         mlmin = min(mlm, mlmin)
                         mlmax = max(mlm, mlmax)
+                        if etptst > max_temp_energy_used:
+                            max_temp_energy_used = float(etptst)
+                            max_source_bin_touched = int(nbinc(float(etptst), epi, n))
                         temporary_energy[mlm - 1] = etptst
                         delet = (etptst - etmp) / dele
                         if aasmall > _source_real(1.0e-9):
@@ -800,6 +838,33 @@ def build_binemis_spectrum(
                         and ml1max <= nbtpp
                     ):
                         ldon[ij] = 1
+                # Fortran continues stepping until the PARAM ncn temporary
+                # capacity is exhausted when the ml1min/ml1max guard has not
+                # fired.  Once both directions are outside the physical
+                # energy interval, the remaining source iterations cannot
+                # write any additional temporary profile samples.  Breaking
+                # here preserves the output arrays while avoiding a massive
+                # no-op loop for the modern ncn=999999 capacity.
+                if positive_energy_closed and negative_energy_closed:
+                    break
+
+            if diagnostics is not None:
+                line_runtime = diagnostics.setdefault("binemis_profile_runtime_samples", [])
+                if len(line_runtime) < 50 and (max_source_bin_touched >= cutoff_probe_bin or max_temp_energy_used >= high_threshold_eV):
+                    line_runtime.append({
+                        "line_index": int(row.line_index),
+                        "center_energy_eV": float(e0),
+                        "center_bin_one_based": int(nb1),
+                        "max_temp_energy_used_eV": float(max_temp_energy_used),
+                        "max_source_bin_touched_one_based": int(max_source_bin_touched),
+                        "ncut": int(ncut),
+                        "deleused_eV": float(deleused),
+                        "aasmall": float(aasmall),
+                        "mlc_final": int(mlc),
+                        "positive_energy_closed": bool(positive_energy_closed),
+                        "negative_energy_closed": bool(negative_energy_closed),
+                        "type41_found": bool(getattr(row, "type41_found", False)),
+                    })
 
             if mlmin > mlmax:
                 continue
@@ -877,12 +942,16 @@ def build_binemis_spectrum(
                     "natural_rate_s": float(getattr(row, "natural_rate_s", 0.0)) if row is not None else 0.0,
                 })
             return rows
+        probe_index = max(0, min(n - 1, cutoff_probe_bin - 1))
         diagnostics["binemis_post_high_energy_counts"] = {
             "threshold_eV": high_threshold_eV,
             "emit_inward_nonzero": int(np.count_nonzero(out[2, :n][high_mask])),
             "emit_outward_nonzero": int(np.count_nonzero(out[3, :n][high_mask])),
             "emit_inward_sum": float(np.sum(out[2, :n][high_mask])),
             "emit_outward_sum": float(np.sum(out[3, :n][high_mask])),
+            "emit_outward_at_cutoff_probe": float(out[3, probe_index]),
+            "source_zrems3_at_cutoff_probe": float(saved[2, probe_index]),
+            "line_plus_source_row4_at_cutoff_probe": float(out[3, probe_index]),
         }
         diagnostics["binemis_type41_runtime_counts"] = {
             "active_profile_lines_with_type41": int(len(type41_used)),
