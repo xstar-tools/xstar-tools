@@ -221,9 +221,19 @@ def append_ucalc_continuum_side_effect_diagnostic(
     nb1 = diagnostics.get("nb1_1based", nested.get("nb1_1based", 0))
     klmax = diagnostics.get("klmax_1based", nested.get("klmax_1based", 0))
     mapping_status = diagnostics.get("mapping_status", nested.get("mapping_status", nested.get("status", "")))
+    mapping_base_status = diagnostics.get("mapping_base_status", nested.get("mapping_base_status", ""))
     threshold = diagnostics.get("threshold_eV", nested.get("threshold_eV", 0.0))
     rnist = diagnostics.get("rnist", nested.get("rnist", 0.0))
     lfast = diagnostics.get("lfast", nested.get("lfast", getattr(context, "lfast", 0)))
+    expected_full_grid_nb1 = diagnostics.get("expected_full_grid_nb1", nested.get("expected_full_grid_nb1", 0))
+    nb1_full_grid_delta = diagnostics.get("type53_nb1_full_grid_delta", nested.get("type53_nb1_full_grid_delta", 0))
+    full_grid_mismatch = diagnostics.get("type53_full_grid_mismatch", nested.get("type53_full_grid_mismatch", False))
+    full_grid_check_status = diagnostics.get("type53_full_grid_check_status", nested.get("type53_full_grid_check_status", ""))
+    full_grid_tolerance_bins = diagnostics.get("type53_full_grid_tolerance_bins", nested.get("type53_full_grid_tolerance_bins", 0))
+    type53_grid_policy = diagnostics.get("type53_grid_policy", nested.get("type53_grid_policy", ""))
+    type53_grid_source = diagnostics.get("type53_grid_source", nested.get("type53_grid_source", ""))
+    type53_full_grid_points = diagnostics.get("type53_full_grid_points", nested.get("type53_full_grid_points", 0))
+    type53_reduced_grid_points = diagnostics.get("type53_reduced_grid_points", nested.get("type53_reduced_grid_points", 0))
     row: dict[str, Any] = {
         "calc_emis_all_call": _finite_int(getattr(context, "diagnostic_call_index", 0)),
         "pass_index": _finite_int(getattr(context, "diagnostic_pass_index", 0)),
@@ -247,6 +257,16 @@ def append_ucalc_continuum_side_effect_diagnostic(
         "rnist": _finite_float(rnist),
         "lfast": _finite_int(lfast),
         "mapping_status": str(mapping_status),
+        "mapping_base_status": str(mapping_base_status),
+        "expected_full_grid_nb1": _finite_int(expected_full_grid_nb1),
+        "nb1_full_grid_delta": _finite_int(nb1_full_grid_delta),
+        "full_grid_mismatch": bool(full_grid_mismatch),
+        "full_grid_check_status": str(full_grid_check_status),
+        "full_grid_tolerance_bins": _finite_int(full_grid_tolerance_bins),
+        "type53_grid_policy": str(type53_grid_policy),
+        "type53_grid_source": str(type53_grid_source),
+        "type53_full_grid_points": _finite_int(type53_full_grid_points),
+        "type53_reduced_grid_points": _finite_int(type53_reduced_grid_points),
         "source_branch": str(diagnostics.get("source_branch", "")),
     }
     for key in side_keys:

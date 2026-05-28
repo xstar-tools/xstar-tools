@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.5.31 - Type-53 full-grid side-effect mapping - 2026-05-28
+
+- Route type-53 `phint53` continuum side-effect arrays through the full high-resolution `epi` / `bremsa` grid instead of the reduced `epim` / `bremsam` grid.
+- Keep reduced-grid radiation available for routines that require it; only the type-53 `opakc`, `opakcont`, and `rccemis(1:2)` side effects are changed.
+- Add diagnostics that compare the mapped `nb1` with the expected full-grid threshold bin and flag `mapping_status=grid_mismatch` when they diverge by more than three bins.
+
+# Changelog
+
 ## v0.4.96 - 2026-05-25
 
 - Source-code correction for Python `leqt2f` solver parity.

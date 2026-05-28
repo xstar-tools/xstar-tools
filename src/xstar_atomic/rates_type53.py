@@ -1,9 +1,13 @@
 """Source-aligned XSTAR data-type 53 photoionization/Milne evaluator.
 
 This module ports the rate-grid kernel in ``xstarlib/src/phint53.f90`` and the
-surrounding type-53 branch in ``ucalc.f90``.  It deliberately consumes the live
-reduced radiation state produced by ``bremsmap``: ``epim``, ``bremsam`` and
-``bremsint``.  No analytic or empirical continuum normalization is accepted.
+surrounding type-53 branch in ``ucalc.f90``.  For the continuum side effects
+that populate ``opakc``, ``opakcont`` and ``rccemis(1:2)``, the physical runner
+supplies the live high-resolution radiation state: ``epi``, ``bremsa`` and
+``bremsint``.  The dataclass field name ``epim_eV`` is retained for compatibility
+with older callers, but the production type-53 path must not use the reduced
+``epim``/``bremsam`` grid.  No analytic or empirical continuum normalization is
+accepted.
 
 The matrix gate primarily uses ``ans1`` (photoionization) and ``ans2`` (Milne
 recombination).  The implementation also returns the two heating/cooling pairs
@@ -37,11 +41,13 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
 
 @dataclass(frozen=True)
 class Type53LiveRadiationState:
-    """One exact reduced-grid radiation state supplied to ``phint53``.
+    """One exact radiation state supplied to ``phint53``.
 
-    ``bremsint`` is carried as a first-class array because it is part of the
-    XSTAR ``calc_hmc_ion`` call state, although the current ``phint53.f90``
-    implementation consumes ``epim`` and ``bremsam`` directly.
+    In production this is the full high-resolution continuum grid used by
+    ``fstepr4``/``xoNN_detal4``.  ``bremsint`` is carried as a first-class array
+    because it is part of the XSTAR call state, although the current
+    ``phint53.f90`` implementation consumes the energy grid and radiation field
+    directly.
     """
 
     epim_eV: tuple[float, ...]
@@ -76,6 +82,10 @@ class Type53LiveRadiationState:
             "all_values_finite": finite,
             "bremsam_nonnegative": nonnegative,
             "ready": bool(n >= 3 and same and monotonic and finite and nonnegative),
+            "type53_grid_policy": str(self.metadata.get("type53_grid_policy", "unspecified")),
+            "type53_grid_source": str(self.metadata.get("type53_grid_source", "unspecified")),
+            "type53_reduced_grid_points": int(self.metadata.get("type53_reduced_grid_points", 0) or 0),
+            "type53_full_grid_points": int(self.metadata.get("type53_full_grid_points", n) or n),
         }
 
 
@@ -112,6 +122,67 @@ def _lower_bracket_index(energy: float, grid: Sequence[float], usable_n: int) ->
     if grid[hi] <= energy:
         return hi
     return lo
+
+
+def _metadata_grid(metadata: Mapping[str, Any], *keys: str) -> tuple[float, ...]:
+    """Extract an optional diagnostic energy grid from metadata."""
+    for key in keys:
+        values = metadata.get(key)
+        if values is None:
+            continue
+        try:
+            out = tuple(float(v) for v in values)
+        except Exception:
+            continue
+        if len(out) >= 3 and all(math.isfinite(v) for v in out):
+            return out
+    return ()
+
+
+def _full_grid_mapping_diagnostics(
+    *,
+    threshold_eV: float,
+    mapped_nb1_1based: int,
+    live_radiation: Type53LiveRadiationState,
+    tolerance_bins: int = 3,
+) -> dict[str, Any]:
+    """Compare the mapped threshold bin with the full ``epi`` grid.
+
+    This catches the historical bug where type-53 side-effect arrays were
+    mapped on the reduced ``epim``/``bremsam`` grid and then accumulated into
+    the full 9999-bin detail workspace.
+    """
+    metadata = live_radiation.metadata
+    grid_source = str(metadata.get("type53_grid_source", "unspecified"))
+    full_grid = _metadata_grid(
+        metadata,
+        "type53_full_epi_eV",
+        "type53_expected_full_epi_eV",
+        "full_epi_eV",
+    )
+    if not full_grid and grid_source == "full_epi_bremsa":
+        full_grid = tuple(float(v) for v in live_radiation.epim_eV)
+    if not full_grid:
+        return {
+            "expected_full_grid_nb1": 0,
+            "type53_nb1_full_grid_delta": 0,
+            "type53_full_grid_mismatch": False,
+            "type53_full_grid_check_status": "not_available",
+            "type53_full_grid_tolerance_bins": int(tolerance_bins),
+        }
+    n_full = len(full_grid)
+    numcon2 = max(2, n_full // 50)
+    usable_n = max(1, n_full - numcon2)
+    expected = _lower_bracket_index(float(threshold_eV), full_grid, usable_n) + 1
+    delta = int(mapped_nb1_1based) - int(expected)
+    mismatch = abs(delta) > int(tolerance_bins)
+    return {
+        "expected_full_grid_nb1": int(expected),
+        "type53_nb1_full_grid_delta": int(delta),
+        "type53_full_grid_mismatch": bool(mismatch),
+        "type53_full_grid_check_status": "checked",
+        "type53_full_grid_tolerance_bins": int(tolerance_bins),
+    }
 
 
 def _map_cross_section_phint53(
@@ -264,9 +335,21 @@ def evaluate_phint53_exact(
         threshold_eV=float(threshold_eV),
         epim_eV=epi,
     )
+    grid_diag = _full_grid_mapping_diagnostics(
+        threshold_eV=float(threshold_eV),
+        mapped_nb1_1based=int(mapdiag.get("nb1_1based", nb1 + 1)),
+        live_radiation=live_radiation,
+    )
+    mapping_base_status = str(mapdiag.get("status", ""))
+    mapping_status = "grid_mismatch" if bool(grid_diag.get("type53_full_grid_mismatch")) else mapping_base_status
     if mapdiag.get("status") != "mapped" or nb1 >= klmax or nb1 >= n:
         return Type53PhintResult(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, zeros, zeros, zeros, zeros, {
-            "status": "evaluated_zero_outside_rate_grid", **validation, **mapdiag
+            "status": "evaluated_zero_outside_rate_grid",
+            **validation,
+            **mapdiag,
+            **grid_diag,
+            "mapping_base_status": mapping_base_status,
+            "mapping_status": mapping_status,
         })
 
     t = float(temperature_1e4K)
@@ -364,7 +447,9 @@ def evaluate_phint53_exact(
         diagnostics={
             **validation,
             **mapdiag,
-            "mapping_status": mapdiag.get("status", ""),
+            **grid_diag,
+            "mapping_base_status": mapping_base_status,
+            "mapping_status": mapping_status,
             "status": "evaluated_source_aligned_phint53",
             "n_integration_intervals": intervals,
             "threshold_eV": float(threshold_eV),
@@ -376,6 +461,10 @@ def evaluate_phint53_exact(
             "lfast": int(lfast),
             "bremsint_carried_as_live_state": True,
             "bremsint_consumed_by_phint53_source": False,
+            "type53_grid_policy": str(live_radiation.metadata.get("type53_grid_policy", "unspecified")),
+            "type53_grid_source": str(live_radiation.metadata.get("type53_grid_source", "unspecified")),
+            "type53_reduced_grid_points": int(live_radiation.metadata.get("type53_reduced_grid_points", 0) or 0),
+            "type53_full_grid_points": int(live_radiation.metadata.get("type53_full_grid_points", len(epi)) or len(epi)),
         },
     )
 

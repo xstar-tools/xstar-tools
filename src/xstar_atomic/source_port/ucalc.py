@@ -1229,10 +1229,74 @@ class SourceFaithfulUCalc:
         return float(level.energy_ev) if level is not None else float(fallback)
 
     def _live_type53_state(self, context: UCalcContext) -> Any:
+        """Return the radiation state used by type-53 ``phint53`` side effects.
+
+        Most ``ucalc`` continuum-rate helpers consume the reduced ``epim`` /
+        ``bremsam`` grid.  The type-53 ``phint53`` side effects are different:
+        they add directly to the full ``opakc``, ``opakcont`` and
+        ``rccemis(1:2)`` arrays that are later written by ``fstepr4``.  Using the
+        reduced grid here compresses threshold bins by about a factor of ten in
+        the normal 9999-bin run, which is the observed ``xo01_detal4.emis in``
+        failure mode.
+        """
         from xstar_atomic.rates_type53 import Type53LiveRadiationState
-        epi,brem,bint=_radiation_arrays(context.radiation)
-        if isinstance(context.radiation,Type53LiveRadiationState): return context.radiation
-        return Type53LiveRadiationState.from_sequences(epi,brem,bint,metadata=getattr(context.radiation,"metadata",{}))
+
+        radiation = context.radiation
+        if isinstance(radiation, Type53LiveRadiationState):
+            return radiation
+        cached = getattr(radiation, "_type53_full_live_state", None)
+        if isinstance(cached, Type53LiveRadiationState):
+            return cached
+
+        base_metadata = dict(getattr(radiation, "metadata", {}) or {})
+        if not base_metadata:
+            base_metadata = dict(getattr(radiation, "provenance", {}) or {})
+
+        full_epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=float).reshape(-1)
+        full_bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
+        full_bremsint = np.asarray(getattr(radiation, "bremsint", ()), dtype=float).reshape(-1)
+        reduced_epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
+
+        full_ready = (
+            full_epi.size >= 3
+            and full_bremsa.size >= full_epi.size
+            and np.all(np.isfinite(full_epi))
+            and np.all(np.isfinite(full_bremsa[: full_epi.size]))
+            and np.all(np.diff(full_epi) > 0.0)
+        )
+        if full_ready:
+            if full_bremsint.size >= full_epi.size:
+                bint = full_bremsint[: full_epi.size]
+            else:
+                bint = np.zeros(full_epi.size, dtype=float)
+            metadata = {
+                **base_metadata,
+                "type53_grid_policy": "full_high_resolution_epi_bremsa_for_side_effects",
+                "type53_grid_source": "full_epi_bremsa",
+                "type53_full_grid_points": int(full_epi.size),
+                "type53_reduced_grid_points": int(reduced_epi.size),
+            }
+            state = Type53LiveRadiationState.from_sequences(
+                full_epi, full_bremsa[: full_epi.size], bint, metadata=metadata
+            )
+        else:
+            epi, brem, bint = _radiation_arrays(radiation)
+            metadata = {
+                **base_metadata,
+                "type53_grid_policy": "fallback_reduced_grid_due_to_missing_full_epi_bremsa",
+                "type53_grid_source": "fallback_reduced_epim_bremsam",
+                "type53_full_grid_points": int(full_epi.size),
+                "type53_reduced_grid_points": int(epi.size),
+            }
+            if full_epi.size >= 3 and np.all(np.isfinite(full_epi)) and np.all(np.diff(full_epi) > 0.0):
+                metadata["type53_full_epi_eV"] = tuple(float(v) for v in full_epi)
+            state = Type53LiveRadiationState.from_sequences(epi, brem, bint, metadata=metadata)
+
+        try:
+            setattr(radiation, "_type53_full_live_state", state)
+        except Exception:
+            pass
+        return state
 
     def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False) -> UCalcResult:
         from xstar_atomic.rates_type53 import evaluate_type53_ucalc_record
