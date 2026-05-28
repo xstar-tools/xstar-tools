@@ -851,21 +851,25 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     continuum_nint = np.asarray(continuum_rows[:, 5], dtype=np.int64)
     continuum_rptr = np.asarray(continuum_rows[:, 7], dtype=np.int64)
     continuum_iptr = np.asarray(continuum_rows[:, 8], dtype=np.int64)
-    # Type-7 RRC records carry the recombining bound level and the
-    # continuum/destination level as the final two integer fields.  XSTAR
-    # pprint(19) prints the *local* ion-level ordinals for both columns
-    # (e.g. c_vi 32 33), while the FITS RRC metadata also needs the global
-    # level index for table linkage.
+    # Type-7 RRC source semantics from pprint.f90:
+    #   idest1 = idat(np1i+nidt-2)
+    #   idest2 = nlevp + idat(np1i-1+nidt-3) - 1
+    # In zero-based gather coordinates this means the displayed lower local
+    # bound level is the second-to-last INTEGER field, while the displayed
+    # continuum/destination local level is nlevs(ion) plus the fourth-to-last
+    # INTEGER field minus one.  v0.5.25 accidentally printed the final INTEGER
+    # field (the ion/parent marker for this database) as the second local level,
+    # producing e.g. c_vi 32 21 instead of source-like c_vi 32 33.
     continuum_local = np.zeros(continuum_records.size, dtype=np.int64)
-    continuum_upper_local = np.zeros(continuum_records.size, dtype=np.int64)
-    continuum_has_local = continuum_nint >= 2
+    continuum_upper_seed = np.zeros(continuum_records.size, dtype=np.int64)
+    continuum_has_local = continuum_nint >= 4
     if np.any(continuum_has_local):
         continuum_local[continuum_has_local] = master.idat1.gather(
             continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 2,
             dtype=np.int64,
         )
-        continuum_upper_local[continuum_has_local] = master.idat1.gather(
-            continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 1,
+        continuum_upper_seed[continuum_has_local] = master.idat1.gather(
+            continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 4,
             dtype=np.int64,
         )
     fallback_threshold = np.zeros(continuum_records.size, dtype=np.float64)
@@ -876,14 +880,15 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         )
 
     rrcs: list[RRCOutputMetadata] = []
-    for pos, (continuum_index, ion_index, local, upper_local) in enumerate(
-        zip(continuum_indices, continuum_ions, continuum_local, continuum_upper_local)
+    for pos, (continuum_index, ion_index, local, upper_seed) in enumerate(
+        zip(continuum_indices, continuum_ions, continuum_local, continuum_upper_seed)
     ):
         ion = int(ion_index)
         local_index = int(local)
-        upper_local_index = int(upper_local)
-        if ion <= 0 or continuum_nint[pos] < 2:
+        upper_seed_index = int(upper_seed)
+        if ion <= 0 or continuum_nint[pos] < 4:
             continue
+        upper_local_index = int(nlevs[ion]) + upper_seed_index - 1 if upper_seed_index > 0 else 0
         level = levels_by_key.get((ion, local_index))
         # fstepr3.f90 writes ``eth = rlev(4,idest1)-rlev(1,idest1)``.
         # Type-13 level records store those as the fourth and first REAL
@@ -918,7 +923,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v3_source_local_ordinals_rrc_thresholds",
+            "metadata_builder": "vectorized_numpy_v4_rrc_fortran_idest2_local_continuum",
             "metadata_cache_status": "built",
         },
     )

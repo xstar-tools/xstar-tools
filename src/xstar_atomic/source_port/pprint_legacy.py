@@ -441,7 +441,12 @@ def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool 
     _option9_zone_line(state, buf)
     calls = ["pprint(9)"]
     if int(state.transfer.pass_index) == int(state.control.get("npass", 1)):
-        zone_index = int(state.control.get("numrec", state.transfer.zone_index)) if terminal_record else int(state.transfer.zone_index)
+        # xstar.f90 sets numrec=jkp+1 after the first-pass loop, but then the
+        # terminal pprint(12) call is still made with jkstep=jkp.  Therefore
+        # the final radial state overwrites the last in-loop row and the extra
+        # numrec row remains zero padding.  Do not write terminal abundance data
+        # to numrec; that creates a spurious extra xout_abund1 row.
+        zone_index = int(state.transfer.zone_index)
         _option12_accumulate(state, buf, zone_index=zone_index)
         calls.append("pprint(12:terminal)" if terminal_record else "pprint(12)")
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
