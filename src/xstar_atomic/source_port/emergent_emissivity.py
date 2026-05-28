@@ -812,8 +812,8 @@ def calc_emis_ion(
                             _upper_level = levels.get(_local_upper)
                             _lower_weight = float(getattr(_lower_level, "statistical_weight", 0.0) or 0.0)
                             _upper_weight = float(getattr(_upper_level, "statistical_weight", 0.0) or 0.0)
-                            _flin = result.diagnostics.get("f_osc_from_A", result.diagnostics.get("flin", 0.0))
-                            _aij = result.diagnostics.get("A_s^-1", result.diagnostics.get("aij", 0.0))
+                            _flin = result.diagnostics.get("f_osc_from_A", result.diagnostics.get("oscillator_strength", result.diagnostics.get("flin", 0.0)))
+                            _aij = result.diagnostics.get("A_s^-1", result.diagnostics.get("aij_s^-1", result.diagnostics.get("aij", 0.0)))
                             try:
                                 _flin = float(_flin or 0.0)
                             except Exception:
@@ -843,6 +843,11 @@ def calc_emis_ion(
                                 "upper_compact": int(upper),
                                 "lower_statistical_weight": float(_lower_weight),
                                 "upper_statistical_weight": float(_upper_weight),
+                                "source_upper_id_after_energy_swap": int(result.diagnostics.get("source_upper_id_after_energy_swap", 0) or 0),
+                                "source_lower_id_after_energy_swap": int(result.diagnostics.get("source_lower_id_after_energy_swap", 0) or 0),
+                                "source_upper_statistical_weight": float(result.diagnostics.get("source_upper_statistical_weight", 0.0) or 0.0),
+                                "source_lower_statistical_weight": float(result.diagnostics.get("source_lower_statistical_weight", 0.0) or 0.0),
+                                "source_swapped_endpoints_for_type50_flin": bool(result.diagnostics.get("source_swapped_endpoints_for_type50_flin", False)),
                                 "lower_energy_eV": float(e1 if e1 <= e2 else e2),
                                 "upper_energy_eV": float(e2 if e1 <= e2 else e1),
                                 "flin_as_read_from_ATDB_or_A": float(_flin),

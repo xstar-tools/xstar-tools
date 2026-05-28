@@ -1950,15 +1950,49 @@ class SourceFaithfulUCalc:
             wavelength = abs(float(r.reals[0])) if r.reals else None
             aij = float(r.reals[2]) if len(r.reals) > 2 else None
             flin = None
+            source_upper_id = id1
+            source_lower_id = id2
+            source_upper_weight = None
+            source_lower_weight = None
+            source_swapped_endpoints = False
             if wavelength and aij is not None and id1 > 0 and id2 > 0:
-                ggup = c.levels.weight(id1)
-                gglo = c.levels.weight(id2)
+                # Source-faithful label-50 endpoint handling.  ucalc.f90 first
+                # reads idest1/idest2, then compares level energies and swaps
+                # the endpoint ids when idest1 is lower in energy:
+                #
+                #   eeup=rlev(1,idest1); eelo=rlev(1,idest2)
+                #   if (eeup.lt.eelo) swap(idest1,idest2)
+                #   ggup=rlev(2,idest1); gglo=rlev(2,idest2)
+                #   flin=1e-16*aij*ggup*elin**2/(0.667274*gglo)
+                #
+                # Earlier Python used the raw record order for ggup/gglo.  For
+                # the H-like/He-like resonance doublets this inverted the
+                # statistical-weight factor before linopac, making the lower-J
+                # component too strong and the upper-J component too weak.
+                try:
+                    e1 = c.levels.energy(id1)
+                    e2 = c.levels.energy(id2)
+                    if e1 < e2:
+                        source_upper_id, source_lower_id = id2, id1
+                        source_swapped_endpoints = True
+                except Exception:
+                    source_upper_id, source_lower_id = id1, id2
+                    source_swapped_endpoints = False
+                ggup = c.levels.weight(source_upper_id)
+                gglo = c.levels.weight(source_lower_id)
+                source_upper_weight = ggup
+                source_lower_weight = gglo
                 if ggup > 0.0 and gglo > 0.0:
                     flin = 1.0e-16 * aij * ggup * wavelength * wavelength / (0.667274 * gglo)
             decoded = {
                 "A_s^-1": aij,
                 "f_osc_from_A": flin,
                 "wavelength_A": wavelength,
+                "source_upper_id_after_energy_swap": source_upper_id,
+                "source_lower_id_after_energy_swap": source_lower_id,
+                "source_upper_statistical_weight": source_upper_weight,
+                "source_lower_statistical_weight": source_lower_weight,
+                "source_swapped_endpoints_for_type50_flin": source_swapped_endpoints,
             }
         bremsa = c.extras.get("bremsa_nb1")
         # Source label 50 samples bremsa at the line energy.  This context is
