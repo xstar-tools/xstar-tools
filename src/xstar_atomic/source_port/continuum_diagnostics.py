@@ -17,6 +17,14 @@ import numpy as np
 
 
 DIAGNOSTIC_BINS_ONE_BASED: tuple[int, ...] = (
+    # H I Lyman-edge / pprint(22) taulc neighborhood for the 9999-bin
+    # c5_ne1 grid.  ``pprint(22)`` samples dpthc(1, nbinc(13.6 eV)+1),
+    # which is bin 3169 for this benchmark.
+    3167,
+    3168,
+    3169,
+    3170,
+    # Historical high-energy/detail-tail probes.
     548,
     3877,
     5835,

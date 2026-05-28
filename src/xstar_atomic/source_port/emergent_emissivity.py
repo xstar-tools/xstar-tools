@@ -562,18 +562,24 @@ def _source_linopac_into_opakc(
 
 
 def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: int, opakab: float, epi: np.ndarray) -> None:
-    """Carry retained continuum opacity into the active step grid."""
-    kk = int(continuum_index)
-    if kk <= 0 or kk >= len(context.rrc_wavelength_angstrom) or float(opakab) == 0.0:
-        return
-    wave = float(context.rrc_wavelength_angstrom[kk])
-    if wave <= 0.0:
-        return
-    energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / wave
-    nb1 = nbinc(energy, epi, len(epi))
-    if nb1 > 0 and nb1 <= context.workspace.base.opakc.size:
-        context.workspace.base.opakc[nb1 - 1] += float(opakab)
-        context.workspace.base.opakcont[nb1 - 1] += float(opakab)
+    """Do not re-bin ``opakab`` into the continuum optical-depth grid.
+
+    In source XSTAR, ``calc_emis_ion.f90`` passes ``opakc``/``opakcont`` and
+    ``rccemis`` into ``ucalc``.  Bound-free branches such as type 53 update
+    those full-grid arrays inside ``ucalc``/``phint53``.  The scalar
+    ``opakab(kkkl)`` is retained separately for RRC/edge optical depths and is
+    later accumulated by ``stpcut`` into ``tauc``; the caller does not add it
+    a second time to ``opakc``.
+
+    Earlier Python releases added ``opakab`` into the nearest continuum bin as
+    a convenience carry.  After type-53 was moved to the correct full grid,
+    that extra carry became visible as source-nonexistent threshold spikes,
+    especially around the H I Lyman edge used by ``pprint(22)`` as ``taulc``.
+    Keep this function as a documented no-op so older call sites remain
+    harmless while preserving the Fortran ownership split.
+    """
+    del context, continuum_index, opakab, epi
+    return
 
 
 def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:

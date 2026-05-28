@@ -625,6 +625,44 @@ def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyP
     buf.source_calls.append("pprint(15)")
 
 
+def _compute_ion_column_values(
+    *,
+    abundance_rows: Mapping[int, np.ndarray],
+    metadata: PprintAtomicMetadata,
+    numrec: int,
+    ababs: Sequence[float],
+) -> np.ndarray:
+    """Compute source ``pprint(27)`` / ``xout_abund1`` ion columns.
+
+    XSTAR sets ``numrec=jkp+1`` and leaves the final row as an all-zero
+    sentinel.  The FITS COLUMNS writer already honors that row by first
+    constructing the full ``numrec`` matrix.  The text log must use the same
+    matrix rather than walking only explicitly populated rows; otherwise the
+    last physical interval is integrated to the last physical row instead of
+    to the source zero-padding row, producing approximately doubled
+    ``pprint(27)`` columns in the thin one-pass benchmark.
+    """
+    nions = len(metadata.ions)
+    columns = np.zeros(nions, dtype=float)
+    if int(numrec) < 2 or nions <= 0:
+        return columns
+    abund = _rows_matrix(abundance_rows, numrec=int(numrec), width=8 + nions)
+    elem_abundances = np.asarray(ababs, dtype=float).reshape(-1)
+    for j in range(1, int(numrec)):
+        r0 = float(abund[j - 1, 1])
+        r1 = float(abund[j, 1])
+        dr = r1 - r0
+        for k, ion in enumerate(metadata.ions):
+            element_abundance = float(ion.elemental_abundance)
+            if 1 <= int(ion.element_index) <= elem_abundances.size:
+                element_abundance = float(elem_abundances[int(ion.element_index) - 1])
+            columns[k] += (
+                float(abund[j, 8 + k]) * float(abund[j, 4])
+                + float(abund[j - 1, 8 + k]) * float(abund[j - 1, 4])
+            ) * dr * element_abundance / 2.0
+    return columns
+
+
 def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit verbose ``pprint(27)`` ion column densities from pprint rows."""
     metadata = _pprint_metadata(state)
@@ -632,23 +670,12 @@ def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuf
     nions = len(metadata.ions)
     if numrec < 2 or not buf.abundance_rows or nions <= 0:
         return
-    columns = np.zeros(nions, dtype=float)
-    ababs = np.asarray(state.control.get("ababs", np.ones(len(metadata.element_labels))), dtype=float)
-    for j in range(1, numrec):
-        prev = buf.abundance_rows.get(j)
-        curr = buf.abundance_rows.get(j + 1)
-        if prev is None or curr is None:
-            continue
-        prev = np.asarray(prev, dtype=float).reshape(-1)
-        curr = np.asarray(curr, dtype=float).reshape(-1)
-        if prev.size < 8 + nions or curr.size < 8 + nions:
-            continue
-        dr = float(curr[1] - prev[1])
-        for k, ion in enumerate(metadata.ions):
-            elem_ab = float(ion.elemental_abundance)
-            if 1 <= int(ion.element_index) <= ababs.size:
-                elem_ab = float(ababs[int(ion.element_index) - 1])
-            columns[k] += (curr[8 + k] * curr[4] + prev[8 + k] * prev[4]) * dr * elem_ab / 2.0
+    columns = _compute_ion_column_values(
+        abundance_rows=buf.abundance_rows,
+        metadata=metadata,
+        numrec=numrec,
+        ababs=state.control.get("ababs", np.ones(len(metadata.element_labels))),
+    )
     buf.log_lines.extend([
         " ",
         " print option:27",
@@ -951,17 +978,12 @@ def write_xout_abund1(
     abund_columns = columns_for(abund, base_names + ion_names, base_units + ("",) * nions)
 
     columns_values = np.zeros((1, 8 + nions), dtype=np.float32)
-    ababs = np.asarray(state.control.get("ababs", np.ones(len(metadata.element_labels))), dtype=float)
-    for j in range(1, numrec):
-        r0 = abund[j - 1, 1]
-        r1 = abund[j, 1]
-        for k, ion in enumerate(metadata.ions):
-            element_abundance = float(ion.elemental_abundance)
-            if 1 <= ion.element_index <= ababs.size:
-                element_abundance = float(ababs[ion.element_index - 1])
-            columns_values[0, 8 + k] += (
-                abund[j, 8 + k] * abund[j, 4] + abund[j - 1, 8 + k] * abund[j - 1, 4]
-            ) * (r1 - r0) * element_abundance / 2.0
+    columns_values[0, 8:] = _compute_ion_column_values(
+        abundance_rows=buf.abundance_rows,
+        metadata=metadata,
+        numrec=numrec,
+        ababs=state.control.get("ababs", np.ones(len(metadata.element_labels))),
+    ).astype(np.float32, copy=False)
     column_columns = columns_for(columns_values, base_names + ion_names, base_units + ("",) * nions)
 
     heat_names = base_names + element_names + ("compton", "total")
