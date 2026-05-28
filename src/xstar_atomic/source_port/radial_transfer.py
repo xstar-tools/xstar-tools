@@ -795,6 +795,9 @@ def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
         "turbulent_velocity_km_s": result.turbulent_velocity_km_s,
         "vtherm_cm_s": result.vtherm_cm_s,
     }
+    from .continuum_diagnostics import append_phase_snapshot
+
+    append_phase_snapshot(state, "gsmooth")
     return result
 
 
@@ -863,6 +866,10 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
         "n_continua": result.n_continua,
         "compton_coefficients_source_initialized": result.compton_coefficients_source_initialized,
     }
+    from .continuum_diagnostics import append_phase_snapshot
+
+    phase = "final heatt" if state.control.get("continuum_phase_context") == "final" else "heatt"
+    append_phase_snapshot(state, phase)
     return result
 
 
@@ -991,6 +998,13 @@ def save_radial_shell_state(
             "storage": "caller-owned in-memory REAL(4) shell state",
             "output_writer_executed": bool(output_record_written),
         }
+    )
+    from .continuum_diagnostics import append_phase_snapshot
+
+    append_phase_snapshot(
+        state,
+        "savd/detail snapshot",
+        note=f"after_hdu={int(hdunum)} inserted_hdu={int(inserted_hdu)} terminal={bool(terminal_record)}",
     )
     return inserted_hdu
 
@@ -1174,6 +1188,10 @@ def apply_stpcut_to_state(state: XSTARPythonState) -> StpcutResult:
         "n_lines": result.n_lines,
         "n_continua": result.n_continua,
     }
+    from .continuum_diagnostics import append_phase_snapshot
+
+    phase = "final stpcut" if state.control.get("continuum_phase_context") == "final" else "stpcut"
+    append_phase_snapshot(state, phase)
     return result
 
 
@@ -1203,6 +1221,9 @@ def apply_trnfrn_to_state(state: XSTARPythonState) -> TrnfrnResult:
         "n_lines": result.n_lines,
         "n_continua": result.n_continua,
     }
+    from .continuum_diagnostics import append_phase_snapshot
+
+    append_phase_snapshot(state, "trnfrn")
     return result
 
 

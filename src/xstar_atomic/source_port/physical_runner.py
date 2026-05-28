@@ -44,6 +44,7 @@ from .compton import Comp2Context, comp2_continuum_result, load_compton_table
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
+from .continuum_diagnostics import write_continuum_diagnostics
 from .emissivity import CalcEmisabContext
 from .free_free import FreeFreeContext, freef_continuum_result
 from .local_zone import FixedStateCalcHMCAllResult, FixedStateElementRequest
@@ -1793,6 +1794,8 @@ def _build_initial_state(
             "enlum": photon_number_luminosity(zremsz, epi),
             "output_writers_enabled": True,
             "pprint_legacy_enabled": True,
+            "continuum_phase_snapshot_enabled": True,
+            "ucalc_continuum_side_effect_diagnostics_enabled": True,
             "ntotit": 0,
             "lnerrd": 0,
             "atcredate": str(getattr(built.master, "creation_date", "")),
@@ -2000,6 +2003,14 @@ def run_xstar_from_parameters(
             progress_callback,
             "output_writer_done",
             source_order=list(writer.source_order),
+        )
+        continuum_diag_products = write_continuum_diagnostics(state, out)
+        if continuum_diag_products:
+            state.outputs["continuum_diagnostics_products_v0530"] = continuum_diag_products
+        _emit_progress(
+            progress_callback,
+            "continuum_diagnostic_done",
+            product_count=len(continuum_diag_products),
         )
         present, missing = products_present(out)
         products = {name: out / name for name in present}

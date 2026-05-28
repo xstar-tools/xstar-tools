@@ -1299,6 +1299,7 @@ def run_output_writer_sequence(
     if final_local_recompute:
         from .driver import XSTARPythonDriver, XSTARSourceRoutine
         from .radial_transfer import register_bounded_radial_source_routines
+        from .continuum_diagnostics import append_phase_snapshot
 
         runner = driver or XSTARPythonDriver()
         if driver is None:
@@ -1309,10 +1310,19 @@ def run_output_writer_sequence(
         state.control["delr"] = source_delr
         state.control["nlimd"] = 0
         state.control["nlimdt"] = 0
-        runner.run_xstarcalc(state, fixed_state=False)
-        runner.run_source_routines(
-            (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
-        )
+        previous_phase_context = state.control.get("continuum_phase_context")
+        state.control["continuum_phase_context"] = "final"
+        try:
+            runner.run_xstarcalc(state, fixed_state=False)
+            append_phase_snapshot(state, "final xstarcalc")
+            runner.run_source_routines(
+                (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
+            )
+        finally:
+            if previous_phase_context is None:
+                state.control.pop("continuum_phase_context", None)
+            else:
+                state.control["continuum_phase_context"] = previous_phase_context
         source_order.extend(
             state.provenance.get("completed_source_routines", [])[completed_before:]
         )
@@ -1359,6 +1369,9 @@ def run_output_writer_sequence(
     final: FinalOutputProducts | None = None
     writer_names: list[str] = []
     if level >= -1:
+        from .continuum_diagnostics import append_phase_snapshot
+
+        append_phase_snapshot(state, "before writespectra", note=f"lwri={level}")
         final = build_final_output_from_state(state, lwri=level)
         writer_names.append("writespectra")
         if level >= 0:

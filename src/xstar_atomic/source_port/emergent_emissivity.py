@@ -53,6 +53,11 @@ from .free_free import FreeFreeResult, freef
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
+from .continuum_diagnostics import (
+    append_phase_snapshot,
+    append_ucalc_continuum_side_effect_diagnostic,
+    UCALC_SIDE_EFFECT_KEY,
+)
 
 
 XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM = float(np.float32(12398.4016))
@@ -60,7 +65,7 @@ XSTAR_CALC_EMIS_RANK_FLOOR = float(np.float32(1.0e-37))
 XSTAR_CALC_EMIS_WAVELENGTH_FLOOR = float(np.float32(1.0e-34))
 XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR = 1.0e-36
 XSTAR_CALC_EMIS_DENSITY_COEFFICIENT = float(np.float32(1.38e-12))
-XSTAR_CALC_EMIS_DEFAULT_RANK_DEPTH = 100
+XSTAR_CALC_EMIS_DEFAULT_RANK_DEPTH = 10
 XSTAR_CALC_EMIS_FORCE_ALL_SENTINEL = 9_999_999
 
 # v0.5.18: focused diagnostic for the opacity-selected bins feeding step.f90.
@@ -637,6 +642,16 @@ def calc_emis_ion(
             ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
         ))
         calls += 1
+        append_ucalc_continuum_side_effect_diagnostic(
+            context,
+            result,
+            ion=ion,
+            record=rec,
+            ptmp1=ptmp1,
+            ptmp2=ptmp2,
+            abund1=abund1,
+            abund2=abund2,
+        )
         if result.ready:
             _accumulate_ucalc_continuum(context.workspace.base, result)
         return result
@@ -1055,7 +1070,24 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
     context = state.control.get("calc_emis_context")
     if not isinstance(context, CalcEmisContext):
         raise CalcEmisPortError("state.control['calc_emis_context'] must be CalcEmisContext")
+
+    call_index = int(state.control.get("calc_emis_all_call_counter", 0)) + 1
+    state.control["calc_emis_all_call_counter"] = call_index
+    setattr(context, "diagnostic_call_index", call_index)
+    setattr(context, "diagnostic_pass_index", int(getattr(state.transfer, "pass_index", 0)))
+    setattr(context, "diagnostic_zone_index", int(getattr(state.transfer, "zone_index", 0)))
+    setattr(
+        context,
+        "ucalc_continuum_side_effect_diagnostics_enabled",
+        bool(state.control.get("ucalc_continuum_side_effect_diagnostics_enabled", True)),
+    )
+    setattr(context, "ucalc_continuum_side_effect_diagnostics", [])
+
     result = calc_emis_all(context)
+    rows = list(getattr(context, "ucalc_continuum_side_effect_diagnostics", ()))
+    if rows:
+        state.outputs.setdefault(UCALC_SIDE_EFFECT_KEY, []).extend(rows)
+
     state.plasma.xpx = result.hydrogen_density_cm3
     state.plasma.electron_density = result.electron_density_cm3
     state.local_zone.emissivity_ready = True
@@ -1064,7 +1096,13 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
         "source_file": result.source_file,
         "n_elements": len(result.element_traces),
         "n_records": len(result.record_traces),
+        "rank_depth": int(context.rank_depth),
+        "diagnostic_call_index": int(call_index),
+        "ucalc_continuum_side_effect_rows": int(len(rows)),
     }
+    phase_context = str(state.control.get("continuum_phase_context", ""))
+    phase = "final calc_emis_all" if phase_context == "final" else "calc_emis_all"
+    append_phase_snapshot(state, phase, note=f"calc_emis_all_call={call_index}")
     return result
 
 
