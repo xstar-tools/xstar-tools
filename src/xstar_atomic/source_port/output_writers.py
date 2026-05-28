@@ -984,28 +984,82 @@ def build_final_output_products(
     )
 
 
+def _fits_ascii_width(fmt: str) -> int | None:
+    """Return the FITS ASCII/character width for an A-format column.
+
+    Binary tables use repeat-before-code forms such as ``8A``; ASCII tables
+    use code-before-width forms such as ``A9``.
+    """
+    text = str(fmt).strip().upper()
+    if text.endswith("A"):
+        prefix = text[:-1]
+        if prefix.isdigit() and int(prefix) > 0:
+            return int(prefix)
+    if text.startswith("A"):
+        suffix = text[1:]
+        if suffix.isdigit() and int(suffix) > 0:
+            return int(suffix)
+    return None
+
+
 def _fits_column(name: str, fmt: str, unit: str, values: np.ndarray) -> fits.Column:
     # Astropy expects binary string widths as e.g. 8A and numeric source forms
     # without the Fortran leading repeat for scalar columns.  For A-format
-    # columns, pass exact-width byte strings so the on-disk FITS payload is
-    # space-padded like XSTAR/Fortran rather than carrying NUL padding from
-    # NumPy Unicode/fixed-byte buffers.
+    # columns, provide exact-width bytes.  A second byte-level sanitizer below
+    # is still required because NumPy/Astropy fixed-byte table storage may pad
+    # shorter scalar strings with NUL bytes internally before FITS serialization.
     f = fmt
     if f in {"1J", "1I", "1E"}:
         f = f[1:]
     arr = np.asarray(values)
-    if f.endswith("A"):
-        width_text = f[:-1]
-        if width_text.isdigit():
-            width = int(width_text)
+    width = _fits_ascii_width(f)
+    if width is not None:
 
-            def _as_text(item: object) -> str:
-                if isinstance(item, (bytes, bytearray, np.bytes_)):
-                    return bytes(item).decode("ascii", "replace")
-                return str(item)
+        def _as_text(item: object) -> str:
+            if isinstance(item, (bytes, bytearray, np.bytes_)):
+                return bytes(item).decode("ascii", "replace").replace("\x00", "")
+            return str(item).replace("\x00", "")
 
-            arr = np.asarray([_fixed(_as_text(item), width).encode("ascii", "replace") for item in arr], dtype=f"S{width}")
+        arr = np.asarray([_fixed(_as_text(item), width).encode("ascii", "replace") for item in arr], dtype=f"S{width}")
     return fits.Column(name=name, format=f, unit=(unit or None), array=arr)
+
+
+def _space_pad_ascii_table_columns(hdu: fits.hdu.base.ExtensionHDU, table: OutputTable) -> None:
+    """Force FITS A-format table columns to use trailing spaces, not NULs.
+
+    Astropy normally presents A-format fields as fixed-size byte strings, but
+    NumPy's scalar string storage can carry NUL-filled trailing bytes.  XSTAR's
+    Fortran writers blank-pad character columns, and strict binary comparisons
+    are noisy when the Python detail tables retain those NUL bytes.  Mutating
+    the underlying field bytes after HDU construction but before checksum
+    generation gives the on-disk binary table the source-like blank padding.
+    """
+    data = getattr(hdu, "data", None)
+    if data is None:
+        return
+    names = set(getattr(data, "names", None) or [])
+    for name, fmt in zip(table.columns, table.formats):
+        width = _fits_ascii_width(fmt)
+        if width is None or name not in names:
+            continue
+        field = data[name]
+        try:
+            raw = np.asarray(field).view(np.uint8).reshape(len(field), -1)
+        except Exception:
+            continue
+        if raw.shape[1] < width:
+            continue
+        raw[:, :width] = ord(" ")
+        original_values = np.asarray(table.values[name]).reshape(-1)
+        count = min(len(original_values), raw.shape[0])
+        for row_index in range(count):
+            item = original_values[row_index]
+            if isinstance(item, (bytes, bytearray, np.bytes_)):
+                text = bytes(item).decode("ascii", "replace")
+            else:
+                text = str(item)
+            payload = _fixed(text.replace("\x00", ""), width).encode("ascii", "replace")
+            raw[row_index, :width] = np.frombuffer(payload, dtype=np.uint8, count=width)
 
 
 def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
@@ -1017,6 +1071,7 @@ def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
         hdu = fits.BinTableHDU.from_columns(cols, name=table.extension_name)
     else:
         hdu = fits.TableHDU.from_columns(cols, name=table.extension_name)
+    _space_pad_ascii_table_columns(hdu, table)
     for key, value in table.header_keywords.items():
         # Long internal diagnostic keys are written as HIERARCH cards.
         hdu.header[key] = value

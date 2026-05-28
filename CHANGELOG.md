@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.5.34 - 2026-05-28
+
+- Force FITS A-format binary-table fields to be space-padded at the byte level before checksum generation.
+  This removes residual NUL padding from detail string columns such as `ion` and `ion_level`.
+- Carries forward the v0.5.33 reporting cleanups for `xo01_detail.fits ion_index`, `pprint(24)`, and ignored `pprint(16)` timing/accounting output.
+
 ## 0.5.33 - Detail/reporting cleanup - 2026-05-28
 
 - Make `xo01_detail.fits` `ion_index` source-like by writing the element/atomic-number value instead of the package-global ion ordinal.
