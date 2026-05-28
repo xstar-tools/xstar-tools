@@ -227,6 +227,63 @@ def _summarize_array(name: str, arr: Any, *, row_kind: str, pass_index: int, zon
     }
 
 
+
+def _append_pprint27_shell_column_contributions(state: Any, opacity_rows: list[dict[str, Any]], *, zone_index: int, pass_index: int, direction: int) -> None:
+    """Record per-shell ion-column contributions for the verbose pprint(27) audit.
+
+    These rows explain why the final ion-column report differs from original
+    XSTAR: if the shell thicknesses are wrong, the integrated columns are
+    wrong even when local ion fractions are reasonable.  The formula mirrors
+    the bounded pprint(27) trapezoidal integration over adjacent abundance
+    rows.
+    """
+    try:
+        from .pprint_legacy import LegacyPprintBuffers, PprintAtomicMetadata
+    except Exception:
+        return
+    buf = state.outputs.get("legacy_pprint_buffers")
+    metadata = state.control.get("pprint_atomic_metadata")
+    if not isinstance(buf, LegacyPprintBuffers) or not isinstance(metadata, PprintAtomicMetadata):
+        return
+    j = int(zone_index)
+    prev = buf.abundance_rows.get(j - 1)
+    curr = buf.abundance_rows.get(j)
+    if prev is None or curr is None:
+        return
+    prev = np.asarray(prev, dtype=float).reshape(-1)
+    curr = np.asarray(curr, dtype=float).reshape(-1)
+    nions = len(metadata.ions)
+    if prev.size < 8 + nions or curr.size < 8 + nions:
+        return
+    dr = float(curr[1] - prev[1])
+    ababs = np.asarray(state.control.get("ababs", np.ones(len(metadata.element_labels))), dtype=float)
+    for k, ion in enumerate(metadata.ions):
+        elem_ab = float(ion.elemental_abundance)
+        if 1 <= int(ion.element_index) <= ababs.size:
+            elem_ab = float(ababs[int(ion.element_index) - 1])
+        local = float((curr[8 + k] * curr[4] + prev[8 + k] * prev[4]) * dr * elem_ab / 2.0)
+        if local == 0.0:
+            continue
+        opacity_rows.append({
+            "row_kind": "pprint27_shell_ion_column_contribution",
+            "pass_index": int(pass_index),
+            "zone_index": int(zone_index),
+            "direction": int(direction),
+            "ion_index": int(ion.ion_index),
+            "ion_label": str(ion.ion_label),
+            "element_index": int(ion.element_index),
+            "shell_delta_r_cm": float(dr),
+            "prev_rdel_cm": float(prev[1]),
+            "curr_rdel_cm": float(curr[1]),
+            "prev_density_cm3": float(prev[4]),
+            "curr_density_cm3": float(curr[4]),
+            "prev_ion_fraction": float(prev[8 + k]),
+            "curr_ion_fraction": float(curr[8 + k]),
+            "element_abundance": float(elem_ab),
+            "shell_column_contribution_cm2": float(local),
+            "diagnostic_note": "pprint(27) trapezoid contribution; inflated if radial shell thickness is inflated",
+        })
+
 def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_index: int, direction: int) -> None:
     """Capture Python radial state after one bounded radial shell."""
     if not bool(state.control.get("radial_spectrum_parity_diagnostic_enabled", False)):
@@ -617,6 +674,14 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
         ("rrc_emit_outward_elumab_row1", workspace.elumab[0]),
     ):
         spectrum_rows.append(_summarize_array(name, arr, row_kind="spectrum_accumulation", pass_index=pass_index, zone_index=zone_index, phase="after_shell"))
+    _append_pprint27_shell_column_contributions(
+        state,
+        opacity_rows,
+        zone_index=int(zone_index),
+        pass_index=int(pass_index),
+        direction=int(direction),
+    )
+
     row_write_rows.append({
         "pass_index": int(pass_index),
         "zone_index": int(zone_index),

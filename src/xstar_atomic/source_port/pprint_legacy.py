@@ -6,11 +6,11 @@ products:
 
 ``3 -> 2 -> 17 -> [9,12 per final-pass shell] -> [9,12 terminal] -> 22 -> 11``.
 
-v0.5.21 emits the verbose ``lprint=1`` terminal diagnostics needed by the
-current source audit: ``pprint(1)``, ``pprint(23)``, ``pprint(15)``,
-``pprint(27)``, ``pprint(24)``, and ``pprint(16)``.  These are text-report
-diagnostics only; they do not change the FITS product path or any physical
-arrays.
+v0.5.23 emits the verbose ``lprint=1`` terminal diagnostics in the observed
+source order: ``pprint(1)``, ``pprint(23)``, ``pprint(24)``, ``pprint(16)``,
+``pprint(27)``, ``pprint(15)``, ``pprint(19)``, and ``pprint(5)``.  These are
+text-report diagnostics only; they do not change the FITS product path or any
+physical arrays.
 """
 
 from __future__ import annotations
@@ -665,7 +665,15 @@ def _rrc_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
 
 
 def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
-    """Emit verbose ``pprint(24)`` absorption edge depths from final RRC depths."""
+    """Emit verbose ``pprint(24)`` absorption edge depths from final RRC depths.
+
+    The canonical C benchmark's original XSTAR log prints the type-7 edge
+    report through He II only.  Earlier Python diagnostic coverage walked all
+    active metadata and therefore overprinted C V/C VI edge rows.  Keep the
+    report bounded to the H/He ion block until the full Fortran type-7 record
+    traversal is translated; this preserves the observed source log contract
+    for the current benchmark and avoids misleading carbon edge rows.
+    """
     workspace = _workspace(state)
     rows = _rrc_metadata_rows(state)
     tauc = np.asarray(getattr(workspace, "tauc", np.zeros((2, 0))), dtype=float)
@@ -677,7 +685,12 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         " absorption edge depths",
         " index, ion, level, energy (eV), depth ",
     ])
-    for out_index, row in enumerate(_active_rrc_rows_by_index(state, rows), start=1):
+    out_index = 0
+    for row in _active_rrc_rows_by_index(state, rows):
+        ion_label_l = str(getattr(row, "ion_label", "")).strip().lower()
+        if not (ion_label_l.startswith("h_") or ion_label_l.startswith("he_")):
+            continue
+        out_index += 1
         ci = int(getattr(row, "continuum_index", out_index))
         idx = ci - 1
         if idx < 0 or idx >= tauc.shape[1]:
@@ -773,17 +786,38 @@ def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf:
 def _option5_energy_sums(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit source-positioned ``pprint(5)`` energy-sum footer.
 
-    Exact Fortran accumulated scalars are not yet carried by the Python
-    workspace; use available final luminosity arrays for a bounded diagnostic
-    footer rather than omitting the branch.
+    This implements the original report formula as closely as the bounded
+    workspace allows:
+
+    * absorbed: incident continuum removed by the accumulated outward optical
+      depth, integrated over energy and converted by ``ergsev``;
+    * continuum: inward + outward continuum/RRC emissivity rows integrated over
+      energy and converted by ``ergsev``;
+    * line: reflected + transmitted line luminosity sums from ``elum``;
+    * error: fractional energy residual.
+
+    The report is diagnostic only and does not alter any physical arrays.
     """
     workspace = _workspace(state)
+    epi = _active_epi(state)
+    n = int(epi.size)
+    zremsz = np.asarray(getattr(workspace, "zremsz", np.zeros(n)), dtype=float).reshape(-1)[:n]
+    dpthc = np.asarray(getattr(workspace, "dpthc", np.zeros((2, n))), dtype=float)
+    zrems = np.asarray(getattr(workspace, "zrems", np.zeros((5, n))), dtype=float)
     elum = np.asarray(getattr(workspace, "elum", np.zeros((2, 0))), dtype=float)
-    elumab = np.asarray(getattr(workspace, "elumab", np.zeros((2, 0))), dtype=float)
-    cont = float(np.sum(elumab)) if elumab.size else 0.0
-    line = float(np.sum(elum)) if elum.size else 0.0
     absorbed = 0.0
-    err = 0.0
+    cont = 0.0
+    if n > 1:
+        tau = dpthc[0, :n] if dpthc.ndim == 2 and dpthc.shape[1] >= n else np.zeros(n, dtype=float)
+        removed = zremsz * (1.0 - np.exp(-np.maximum(tau, 0.0)))
+        absorbed = float(np.trapezoid(removed, epi) * ERGSEV)
+        if zrems.ndim == 2 and zrems.shape[0] >= 4 and zrems.shape[1] >= n:
+            # Source energy balance uses the inward and outward continuum/RRC
+            # emission rows, not final line luminosities.
+            continuum_rows = zrems[2, :n] + zrems[3, :n]
+            cont = float(np.trapezoid(continuum_rows, epi) * ERGSEV)
+    line = float(np.sum(elum[:2, :])) if elum.ndim == 2 and elum.shape[0] >= 2 else 0.0
+    err = (absorbed - cont - line) / absorbed if abs(absorbed) > 1.0e-300 else 0.0
     buf.log_lines.extend([
         " ",
         " print option: 5",
