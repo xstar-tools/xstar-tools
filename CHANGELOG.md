@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.5.36 - 2026-05-28
+
+- Add `--diagnostics {full,summary,none}` to the physical runner CLI.
+- Preserve v0.5.35 behavior by default (`full`).
+- Allow smoke tests to suppress high-volume radial/continuum CSV/JSONL diagnostics with `--diagnostics none`.
+- Remove stale optional diagnostic artifacts on overwrite reruns.
+
 # v0.5.35 - 2026-05-28
 
 - Fix v0.5.34 FITS write failure caused by mutating Astropy string table fields before serialization.

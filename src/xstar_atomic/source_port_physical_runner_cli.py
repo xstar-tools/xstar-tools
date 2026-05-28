@@ -48,6 +48,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rebuild-cache", action="store_true", help="rebuild both source-port NPZ caches")
     parser.add_argument("--summary-json", help="write machine-readable run/parity summary")
     parser.add_argument(
+        "--diagnostics",
+        choices=("full", "summary", "none"),
+        default="full",
+        help=(
+            "optional Python diagnostic products: full preserves v0.5.35 "
+            "CSV/JSONL runtime diagnostics; summary suppresses high-volume "
+            "runtime files but keeps compact in-memory parity summaries; none "
+            "suppresses optional diagnostics while still writing ordinary XSTAR products"
+        ),
+    )
+    parser.add_argument(
         "--diagnostics-dir",
         help=(
             "after an original/Python parity run, write compact structural, "
@@ -94,6 +105,7 @@ def _print_run(summary: dict[str, object]) -> None:
     ):
         if key in provenance:
             print(f"{key}={provenance.get(key)}")
+    print("diagnostics=" + str(summary.get("provenance", {}).get("diagnostics_mode", "unknown")))
     warnings = summary.get("warnings", [])
     if warnings:
         print("warnings=" + repr(warnings))
@@ -124,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
                 use_cache=not args.no_cache,
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
+                diagnostics_mode=args.diagnostics,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -148,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{key}={summary[key]}")
                 print(f"python_output_dir={result.python_run.output_dir}")
                 print(f"original_run_dir={result.original_run_dir}")
+                print(f"diagnostics={args.diagnostics}")
                 if args.diagnostics_dir is not None:
                     print(f"diagnostics_dir={Path(args.diagnostics_dir).resolve()}")
         elif args.run_script is not None:
@@ -161,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 use_cache=not args.no_cache,
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
+                diagnostics_mode=args.diagnostics,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -176,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
                 use_cache=not args.no_cache,
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
+                diagnostics_mode=args.diagnostics,
             )
             summary = result.as_dict()
             if args.print_summary:

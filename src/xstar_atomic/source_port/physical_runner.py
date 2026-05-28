@@ -18,6 +18,7 @@ from hashlib import sha256
 import json
 import math
 import os
+import shutil
 import tempfile
 import time
 import zipfile
@@ -108,6 +109,48 @@ def _emit_progress(
 ) -> None:
     if callback is not None:
         callback(str(event), details)
+
+
+def _remove_optional_diagnostic_products(out: Path) -> None:
+    """Remove optional diagnostic products so reruns cannot retain stale files."""
+    for dirname in (
+        "radial_spectrum_diagnostics_v0499",
+        "radial_spectrum_diagnostics_v0500",
+    ):
+        target = out / dirname
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+    for name in (
+        "xstar_atomic_phase_snapshots.csv",
+        "xstar_atomic_phase_snapshots.jsonl",
+        "xstar_atomic_ucalc_continuum_side_effects.csv",
+        "xstar_atomic_ucalc_continuum_side_effects.jsonl",
+        "xstar_atomic_continuum_diagnostics_summary.json",
+    ):
+        target = out / name
+        if target.exists():
+            target.unlink()
+
+
+def _normalize_diagnostics_mode(value: str | None) -> str:
+    """Return the supported optional-diagnostic mode.
+
+    ``full`` preserves the v0.5.35 behavior and writes high-volume runtime
+    CSV/JSONL diagnostics.  ``summary`` keeps compact in-memory summary/parity
+    information but suppresses high-volume runtime diagnostic products.
+    ``none`` suppresses all optional runtime/parity diagnostic products while
+    leaving the ten ordinary XSTAR products and main parity gate unchanged.
+    """
+    mode = "full" if value is None else str(value).strip().lower()
+    if mode in {"on", "yes", "true", "1"}:
+        return "full"
+    if mode in {"off", "no", "false", "0"}:
+        return "none"
+    if mode not in {"full", "summary", "none"}:
+        raise XSTARPythonRunnerError(
+            f"invalid diagnostics mode {value!r}; expected full, summary, or none"
+        )
+    return mode
 
 
 ERGSEV = 1.602197e-12
@@ -1923,8 +1966,10 @@ def run_xstar_from_parameters(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
+    diagnostics_mode: str = "full",
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
+    diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     del input_dir  # Reserved for spectrum/density-file source branches.
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
     normalized = normalize_xstar_parameters(
@@ -1952,6 +1997,7 @@ def run_xstar_from_parameters(
             target = out / name
             if target.exists():
                 target.unlink()
+        _remove_optional_diagnostic_products(out)
 
     state, built = _build_initial_state(
         normalized,
@@ -1963,7 +2009,11 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
-    state.control["radial_spectrum_parity_diagnostic_enabled"] = True
+    high_volume_diagnostics = diagnostics_mode == "full"
+    state.control["diagnostics_mode"] = diagnostics_mode
+    state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
+    state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
+    state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = high_volume_diagnostics
     try:
         _emit_progress(
             progress_callback,
@@ -1982,13 +2032,22 @@ def run_xstar_from_parameters(
             completed_passes=len(radial.pass_results),
             completed_zones=sum(len(item.shell_results) for item in radial.pass_results),
         )
-        radial_diag_products = write_python_runtime_radial_spectrum_diagnostics(state, out)
-        state.outputs["radial_spectrum_diagnostics_v0499_products"] = radial_diag_products
-        _emit_progress(
-            progress_callback,
-            "radial_spectrum_diagnostic_done",
-            product_count=len(radial_diag_products),
-        )
+        if high_volume_diagnostics:
+            radial_diag_products = write_python_runtime_radial_spectrum_diagnostics(state, out)
+            state.outputs["radial_spectrum_diagnostics_v0499_products"] = radial_diag_products
+            _emit_progress(
+                progress_callback,
+                "radial_spectrum_diagnostic_done",
+                product_count=len(radial_diag_products),
+            )
+        else:
+            radial_diag_products = {}
+            state.outputs["radial_spectrum_diagnostics_v0499_products"] = radial_diag_products
+            _emit_progress(
+                progress_callback,
+                "radial_spectrum_diagnostic_skipped",
+                diagnostics_mode=diagnostics_mode,
+            )
         _emit_progress(progress_callback, "output_writer_start", output_dir=str(out))
         writer = run_output_writer_sequence(
             state,
@@ -2004,14 +2063,23 @@ def run_xstar_from_parameters(
             "output_writer_done",
             source_order=list(writer.source_order),
         )
-        continuum_diag_products = write_continuum_diagnostics(state, out)
-        if continuum_diag_products:
+        if high_volume_diagnostics:
+            continuum_diag_products = write_continuum_diagnostics(state, out)
+            if continuum_diag_products:
+                state.outputs["continuum_diagnostics_products_v0530"] = continuum_diag_products
+            _emit_progress(
+                progress_callback,
+                "continuum_diagnostic_done",
+                product_count=len(continuum_diag_products),
+            )
+        else:
+            continuum_diag_products = {}
             state.outputs["continuum_diagnostics_products_v0530"] = continuum_diag_products
-        _emit_progress(
-            progress_callback,
-            "continuum_diagnostic_done",
-            product_count=len(continuum_diag_products),
-        )
+            _emit_progress(
+                progress_callback,
+                "continuum_diagnostic_skipped",
+                diagnostics_mode=diagnostics_mode,
+            )
         present, missing = products_present(out)
         products = {name: out / name for name in present}
         completed_zones = sum(len(item.shell_results) for item in radial.pass_results)
@@ -2042,6 +2110,8 @@ def run_xstar_from_parameters(
                 "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
                 "strict_ten_product_contract": True,
                 "xstar_outputs_used_as_python_inputs": False,
+                "diagnostics_mode": diagnostics_mode,
+                "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),
                 "atdb_path": str(resolved_atdb),
                 "pointer_cache_path": str(pointer_cache_path),
                 "pointer_cache_status": str(built.derived.provenance.get("pointer_cache_status", "not_used")),
@@ -2082,6 +2152,7 @@ def run_xstar_python(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
+    diagnostics_mode: str = "full",
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -2112,6 +2183,7 @@ def run_xstar_python(
         use_cache=use_cache,
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
+        diagnostics_mode=diagnostics_mode,
     )
 
 
@@ -2134,6 +2206,7 @@ def run_xstar_python_command(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
+    diagnostics_mode: str = "full",
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2147,6 +2220,7 @@ def run_xstar_python_command(
         use_cache=use_cache,
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
+        diagnostics_mode=diagnostics_mode,
     )
 
 
@@ -2161,6 +2235,7 @@ def run_xstar_python_script(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
+    diagnostics_mode: str = "full",
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2176,6 +2251,7 @@ def run_xstar_python_script(
         use_cache=use_cache,
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
+        diagnostics_mode=diagnostics_mode,
     )
 
 
@@ -2353,6 +2429,7 @@ def run_c5_ne1_acceptance(
     use_cache: bool = True,
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
+    diagnostics_mode: str = "full",
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2364,7 +2441,9 @@ def run_c5_ne1_acceptance(
         use_cache=use_cache,
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
+        diagnostics_mode=diagnostics_mode,
     )
+    diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)
     _present, missing = products_present(original)
     available = not missing
@@ -2391,19 +2470,28 @@ def run_c5_ne1_acceptance(
             parity_run=bool(parity.parity_run),
             all_files_match=bool(parity.all_files_ready),
         )
-        radial_spectrum = compare_radial_spectrum_products(
-            original,
-            python_run.output_dir,
-            out_dir=Path(python_run.output_dir) / "radial_spectrum_diagnostics_v0499",
-        )
-        python_run.final_state.outputs["radial_spectrum_parity_v0499_summary"] = radial_spectrum
-        _emit_progress(
-            progress_callback,
-            "radial_spectrum_parity_done",
-            row_count_match=bool(radial_spectrum.get("radial_row_summary", {}).get("row_count_match", False)),
-            python_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("python_abundance_rows", 0)),
-            xstar_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("xstar_abundance_rows", 0)),
-        )
+        if diagnostics_mode != "none":
+            radial_spectrum = compare_radial_spectrum_products(
+                original,
+                python_run.output_dir,
+                out_dir=Path(python_run.output_dir) / "radial_spectrum_diagnostics_v0499",
+                write_files=(diagnostics_mode == "full"),
+            )
+            python_run.final_state.outputs["radial_spectrum_parity_v0499_summary"] = radial_spectrum
+            _emit_progress(
+                progress_callback,
+                "radial_spectrum_parity_done",
+                row_count_match=bool(radial_spectrum.get("radial_row_summary", {}).get("row_count_match", False)),
+                python_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("python_abundance_rows", 0)),
+                xstar_abundance_rows=int(radial_spectrum.get("radial_row_summary", {}).get("xstar_abundance_rows", 0)),
+                write_files=bool(diagnostics_mode == "full"),
+            )
+        else:
+            _emit_progress(
+                progress_callback,
+                "radial_spectrum_parity_skipped",
+                diagnostics_mode=diagnostics_mode,
+            )
     result = C5NE1AcceptanceResult(
         python_run=python_run,
         original_run_dir=original,

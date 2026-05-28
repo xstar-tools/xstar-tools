@@ -719,20 +719,24 @@ def compare_radial_spectrum_products(
     python_dir: str | Path,
     *,
     out_dir: str | Path | None = None,
+    write_files: bool = True,
 ) -> dict[str, Any]:
     """Compare radial row history and spectrum products from existing outputs."""
     original = Path(original_dir)
     python = Path(python_dir)
     out = Path(out_dir) if out_dir is not None else python / "radial_spectrum_diagnostics_v0500"
-    out.mkdir(parents=True, exist_ok=True)
+    if write_files:
+        out.mkdir(parents=True, exist_ok=True)
 
     radial_rows = _abundance_rows(python / "xout_abund1.fits", "python") + _abundance_rows(original / "xout_abund1.fits", "xstar")
     radial_csv = out / "xout_abund1_radial_row_comparison.csv"
-    _write_csv(radial_csv, radial_rows)
+    if write_files:
+        _write_csv(radial_csv, radial_rows)
 
     spec_rows, spec_summary = _spectra_comparison_rows(python / "xout_spect1.fits", original / "xout_spect1.fits")
     spec_csv = out / "xout_spect1_emit_outward_comparison.csv"
-    _write_csv(spec_csv, spec_rows)
+    if write_files:
+        _write_csv(spec_csv, spec_rows)
 
     py_count = len([r for r in radial_rows if r.get("source") == "python"])
     xo_count = len([r for r in radial_rows if r.get("source") == "xstar"])
@@ -748,18 +752,21 @@ def compare_radial_spectrum_products(
         "original_dir": str(original),
         "radial_row_summary": row_summary,
         "spectrum_summary": spec_summary,
-        "products": {
+        "products": {},
+        "diagnostic_files_written": bool(write_files),
+    }
+    if write_files:
+        summary["products"].update({
             "radial_row_comparison_csv": str(radial_csv),
             "spectrum_emit_outward_comparison_csv": str(spec_csv),
-        },
-    }
-    summary_path = out / "radial_spectrum_parity_summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
-    summary["products"]["summary_json"] = str(summary_path)
-    summary_rows = [{"section": "radial", **row_summary}, {"section": "spectrum", **spec_summary}]
-    summary_csv = out / "radial_spectrum_parity_summary.csv"
-    _write_csv(summary_csv, summary_rows)
-    summary["products"]["summary_csv"] = str(summary_csv)
+        })
+        summary_path = out / "radial_spectrum_parity_summary.json"
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
+        summary["products"]["summary_json"] = str(summary_path)
+        summary_rows = [{"section": "radial", **row_summary}, {"section": "spectrum", **spec_summary}]
+        summary_csv = out / "radial_spectrum_parity_summary.csv"
+        _write_csv(summary_csv, summary_rows)
+        summary["products"]["summary_csv"] = str(summary_csv)
     return summary
 
 
