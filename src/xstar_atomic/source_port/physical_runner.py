@@ -524,7 +524,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 4
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 5
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -879,6 +879,20 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
             continuum_rptr[continuum_has_real], dtype=np.float64,
         )
 
+    # ``pprint.f90`` option 19 uses ``nlevp`` returned by
+    # ``calc_rates_level_lte`` for the parent ion, not the packed global
+    # level-count table.  In these compact ions ``nlevp`` includes the
+    # continuum/superlevel endpoint and is one larger than the highest
+    # bound local level present in type-7 records.  Using the packed count
+    # caused C VI superlevel rows to print ``32 21`` instead of the source
+    # local endpoint pair ``32 33``.
+    rrc_local_max_by_ion: dict[int, int] = {}
+    for ion_value, local_value in zip(continuum_ions, continuum_local):
+        ion_int = int(ion_value)
+        local_int = int(local_value)
+        if ion_int > 0 and local_int > 0:
+            rrc_local_max_by_ion[ion_int] = max(rrc_local_max_by_ion.get(ion_int, 0), local_int)
+
     rrcs: list[RRCOutputMetadata] = []
     for pos, (continuum_index, ion_index, local, upper_seed) in enumerate(
         zip(continuum_indices, continuum_ions, continuum_local, continuum_upper_seed)
@@ -888,7 +902,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         upper_seed_index = int(upper_seed)
         if ion <= 0 or continuum_nint[pos] < 4:
             continue
-        upper_local_index = int(nlevs[ion]) + upper_seed_index - 1 if upper_seed_index > 0 else 0
+        source_nlevp = int(rrc_local_max_by_ion.get(ion, int(nlevs[ion]))) + 1
+        upper_local_index = source_nlevp + upper_seed_index - 1 if upper_seed_index > 0 else 0
         level = levels_by_key.get((ion, local_index))
         # fstepr3.f90 writes ``eth = rlev(4,idest1)-rlev(1,idest1)``.
         # Type-13 level records store those as the fourth and first REAL
@@ -923,7 +938,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v4_rrc_fortran_idest2_local_continuum",
+            "metadata_builder": "vectorized_numpy_v5_rrc_pprint19_source_nlevp",
             "metadata_cache_status": "built",
         },
     )
