@@ -1,5 +1,1836 @@
 # CHANGELOG
 
+# v0.5.35 - 2026-05-28
+
+- Fix v0.5.34 FITS write failure caused by mutating Astropy string table fields before serialization.
+- Move XSTAR-style blank padding for binary-table A columns to a post-write byte-level pass that touches only character-column spans, leaving numeric binary data untouched.
+- Preserve v0.5.33/v0.5.34 reporting cleanup behavior: atomic-number ion_index in xo01_detail, pprint(24) endpoint layout, and pprint(16:ignored).
+
+
+## v0.5.34
+
+- Force FITS A-format binary-table fields to be space-padded at the byte level before checksum generation.
+  This removes residual NUL padding from detail string columns such as `ion` and `ion_level`.
+- Carries forward the v0.5.33 reporting cleanups for `xo01_detail.fits ion_index`, `pprint(24)`, and ignored `pprint(16)` timing/accounting output.
+
+## 0.5.33 - Detail/reporting cleanup
+
+- Make `xo01_detail.fits` `ion_index` source-like by writing the element/atomic-number value instead of the package-global ion ordinal.
+- Centralize FITS A-column handling so string payloads are exact-width, space-padded ASCII bytes rather than NUL-padded buffers.
+- Add the local endpoint/index column to the verbose `pprint(24)` absorption-edge text layout while preserving the existing edge-depth values.
+- Explicitly ignore `pprint(16)` when no real timing/count instrumentation is available, avoiding misleading all-zero placeholder timing rows.
+- Bump package metadata consistently to 0.5.33.
+
+
+## 0.5.31 - Type-53 full-grid side-effect mapping
+
+- Route type-53 `phint53` continuum side-effect arrays through the full high-resolution `epi` / `bremsa` grid instead of the reduced `epim` / `bremsam` grid.
+- Keep reduced-grid radiation available for routines that require it; only the type-53 `opakc`, `opakcont`, and `rccemis(1:2)` side effects are changed.
+- Add diagnostics that compare the mapped `nb1` with the expected full-grid threshold bin and flag `mapping_status=grid_mismatch` when they diverge by more than three bins.
+
+# Changelog
+
+## 0.4.87
+
+- Fix the diagnostic-only v0.4.86 original-XSTAR state-path helper link failure.
+- Export `xap_zone1_alias_reset` as an external subroutine that uses the private alias-state module internally, matching the existing external call in `calc_hmc_all.f90`.
+- Add a real `gfortran` compile/link regression for the generated helper symbol.
+- No production rates, matrices, populations, solver behavior, DSEC control, radial physics, writers, tolerances, or cache schemas changed.
+
+## v0.4.86 — diagnostic-only exact source-order carbon state path
+
+- Adds matching Python and original-XSTAR observations for live hydrogen entry state, incoming carbon global mapping, compact pre-solve state, every Lucy outer/fixed iteration, final vector and stage totals, element/global writeback, and continuum/ground aliases.
+- Emits four new Python products, four original probe products, and four comparison CSVs.
+- Reports a structured `source_order_first_divergence` with phase, source locus, row identity, and numerical difference.
+- Keeps new state-path comparisons diagnostic-only and outside the existing thermal acceptance gate.
+- Preserves compatibility with older v0.4.79 probe directories where the new files are absent.
+- Reconciles the v0.4.78 audit: all six old production/solver “Still open” items were fixed in v0.4.85; input-fingerprint canonicalization remains open diagnostic work.
+- Makes no production rate, matrix, solver, DSEC, radial, FITS, tolerance, cache-schema, or empirical-correction change.
+
+## v0.4.85 — live hydrogen charge-exchange state and strict production `msolvelucy`
+
+- Reconstructs `xh0=xpx*xilevg(1)*abel(1)` and `xh1=xpx*(1-xilevg(1))*abel(1)` from the incoming dense global H I population at every `calc_hmc_all` call.
+- Passes the same live hydrogen densities to preliminary ion balance and detailed element equilibrium.
+- Makes production `msolvelucy` source-strict: no NumPy least-squares fallback and no dense full-matrix rescue.
+- Uses literal ordered `xm` accumulation, `1.d-24+xm` normalization, and capped one-based `diff2`/`diff` loops.
+- Reproduces the literal rate-type-5 `falpha(3,mm)=falpha(3,nn)+...` assignment.
+- Keeps recovery behavior only in explicitly diagnostic standalone contexts.
+- Adds live-H, strict-solver, no-rescue, no-lstsq, and ordered-sum regression tests.
+- No original-XSTAR, atomic-data, DSEC, radial, FITS, tolerance, or empirical-correction change.
+
+## v0.4.84 — preliminary lfpi, literal type-59 grid, and cache recovery
+
+- Uses the successful v0.4.83 production run as the acceptance baseline: Python now follows the original 24-evaluation DSEC path and converges to 73206.20 K versus 73198.41 K.
+- Restores the literal `calc_ion_rates.f90` caller-owned `lfpi=1`; the preliminary pass no longer inherits the detailed second-pass `lfast=2` setting. This removes non-source Milne/inverse fields from preliminary type-53 records.
+- Replaces conventional lower-bracket continuum indexing in `phintfo` and type 59 with the original one-based logarithmic-nearest `huntf -> nbinc -> enxt` traversal, including the threshold-nearest bin even when it lies below the nominal threshold.
+- Uses the resolved excited-parent statistical weight for type-59 `swrat` while retaining the current-record threshold passed to `phintfo`, matching source label 59.
+- Canonicalizes fixed-state logical carbon-cooling keys by record, data/rate type, role, and physical endpoints; raw `idest1/idest2` orientation remains diagnostic metadata rather than a false gate key.
+- Treats CRC, ZIP, EOF, and NumPy member-read failures in both derived-pointer and output-metadata NPZ caches as cache misses, rebuilds from `atdb.fits`, and atomically replaces the damaged sidecar.
+- Adds regression tests that corrupt `npfi.npy` and `line_upper_level.npy` inside otherwise valid NPZ archives and require a successful rebuild followed by a cache hit.
+- No original-XSTAR, matrix, solver, DSEC, radial-transfer, FITS-writer, tolerance, or empirical-correction change.
+- Validation: 400 source-port tests passed before packaging.
+
+## v0.4.83 — type-59 source-guard normal zero return
+
+- Fixes the status semantics of `if (idest4.gt.idest3+1) go to 9000` at
+  original `ucalc.f90` label 59.
+- Preserves the guard but returns a ready zero-rate result instead of
+  `SOURCE_REJECTED`, preventing strict `calc_ion_rates` from aborting on
+  legitimate ATDB record 5386.
+- Keeps `ans1..ans6` and `idest1/idest2` zero while retaining decoded
+  `idest3/idest4`, matching source initialization and branch order.
+- Applies the same pre-`indonly` guard ordering to index-only evaluation.
+- Leaves the v0.4.82 type-59 coefficient, continuum-offset, and ans-order
+  corrections unchanged.
+- No original-XSTAR, other rate-family, matrix, solver, DSEC, radial, FITS,
+  tolerance, cache, or empirical-correction change.
+- Validation: 396 source-port tests passed.
+
+## v0.4.82 — C IV data-type-59 compact-layout and ans-order correction
+
+- Uses the completed original/Python C IV record comparison to identify data
+  type 59 record 6077 as the `4.037108e10 s^-1` Python outlier; original XSTAR
+  returns `1.190480e-10 s^-1`.
+- Corrects compact six-real decoding from `reals[:5]` to `reals[1:6]`.
+- Corrects the type-59 continuum offset from the third to the fourth packed
+  integer from the end; `idest4` remains the distinct third-from-end field.
+- Preserves the literal `idest4 <= idest3 + 1` source gate and returns both
+  endpoint fields in the Python contract.
+- Corrects reverse-rate zeroing order: XSTAR zeroes pre-swap
+  `ans2/ans4/ans6`, which correspond to post-swap `ans2/ans3/ans5`; forward
+  photo-heating remains in `ans4/ans6`.
+- Applies the endpoint correction to index-only decoding, public type-59
+  photoionization summaries, and legacy audit helpers.
+- Adds a dedicated type-59 record proof to the zone-1 comparator.
+- Adds focused tests for compact coefficient mapping, endpoint mapping,
+  pre-swap zero semantics, and the source endpoint guard.
+- No original-XSTAR, other rate-family, matrix, solver, DSEC, radial, FITS,
+  tolerance, cache, or empirical-correction change.
+
+## v0.4.81 — optional lazy data-type-15 probe handling
+
+- Fixes an analyzer error that unconditionally required the lazily-created
+  type-15 shell and call-site CSV files.
+- Distinguishes XSTAR data type from rate type: data type 95 / rate type 15 does
+  not require data-type-15 shell products.
+- Requires the shell/effective files only when a selected C IV record actually
+  has `data_type == 15`.
+- Adds explicit `type15_record_level_proof_applicable` and
+  `type15_record_gate_passed` summary fields.
+- Does not falsely claim a type-15 proof when it is not exercised, and does not
+  block the independent C IV record/topology/population/cooling gates.
+- No production-physics or original-XSTAR source changes.
+- Validation: 391 source-port tests passed.
+
+## v0.4.80 — constant-memory zone-1 analyzer hotfix
+
+- Replaces full-file materialization of original-XSTAR probe CSVs with
+  incremental constant-memory fingerprints that preserve the same SHA-256 and
+  numerical summary contract.
+- Streams and target-filters the remaining raw probe products.
+- Adds `--skip-input-fingerprints` because the full-capacity fingerprints are
+  observational and are not part of the ten physical acceptance gates.
+- Adds `--progress` reporting for large analyzer stages and files.
+- Reports the dominant Python C IV preliminary record in the parity summary.
+- Establishes from the uploaded Python v0.4.79 products that data type 59
+  record 6077, not type 15, produces the `4.037108e10 s^-1` outlier.
+- Makes no production-physics, Fortran-probe, tolerance, cache, radial, or FITS
+  change relative to v0.4.79.
+
+## v0.4.79 — C IV preliminary type-15 record proof and literal shell-threshold correction
+
+- Corrects the sole production-physics discrepancy in this release: data type
+  15 now passes the final shell-loop `ett` and `ddd` to `bkhsgo`, and the same
+  final `ett` to `phintfo`, exactly as `ucalc.f90` does.
+- Retains parent threshold, all shell thresholds/`d` values, final effective
+  threshold/`d`, and the explicit `bkhsgo`/`phintfo` threshold provenance.
+- Adds preliminary C IV `calc_ion_rates` record instrumentation with `ans1..6`,
+  endpoints, parent record, and before/contribution/after `pirti` and `rrrti`.
+- Correlates type-15 shell rows only with the active preliminary C IV record,
+  preventing duplicate rows from later detailed matrix evaluations.
+- Adds carbon topology, complete compact initial-vector, condensed
+  normalization-row, selected C V population, and logical carbon-cooling
+  products on both original-XSTAR and Python sides.
+- Replaces the conflated v0.4.78 matrix/cooling gate with ten coverage-strict
+  gates, including exactly 932 logical C V rows and zero compact row/column
+  offset.
+- Enables Lucy trace capture only for the fixed target-state carbon replay used
+  by the diagnostic; ordinary production execution is unchanged.
+- Adds focused v0.4.79 unit and synthetic ten-gate tests.
+- Validation: all 388 source-port tests, Python byte compilation, and compilation of the four helper modules plus the four newly instrumented original-XSTAR routines.
+- Does not modify any other rate family, matrix formula, solver branch, DSEC
+  condition, radial/output code, tolerance, empirical factor, or cache schema.
+
+## v0.4.78 — bounded zone-1 DSEC source-state and carbon-cooling parity gate
+
+- Adds an observation-only original-XSTAR probe for the complete first-zone DSEC evaluation sequence.
+- Fingerprints every represented mutable `calc_hmc_all` input before every trial.
+- Adds exact same-entry deterministic replay for every captured Python state.
+- Compares C IV/C V/C VI rates at the original state nearest `73198.4 K`.
+- Audits every C V matrix record and scaling factor touching local levels `4-6`, `10-12`, and `20`.
+- Adds term-by-term carbon cooling comparison before DSEC may commit a mismatching trial.
+- Preserves all production rates, source branches, tolerances, NPZ caches, and physical-output comparators; no empirical correction is introduced.
+- Validation: 43 focused tests, all 385 source-port tests, byte-compilation, Fortran helper compilation, and extracted-sdist tests.
+
+## v0.4.76 first completed all-ATDB run diagnostics and source radial/output fidelity
+
+v0.4.76 is driven by the first completed real all-ATDB `c5_ne1` Python run.
+The v0.4.75 runner loaded both NPZ caches in about six seconds, completed all
+translated local/radial routines, wrote all ten products in about four minutes,
+and reached the independent comparator. Physical parity did not yet pass.
+
+The release restores the literal XSTAR first-pass stop predicate rather than
+using `nsteps` as an exact shell count; makes the kelvin/source-`10^4 K`
+boundary explicit; retains `trad`; removes the detail-array one-based guard;
+and reconstructs source-local level ownership before assigning global output
+rows. It also corrects excited-state RRC thresholds to source
+`ionization_limit - excitation_energy` semantics. The output-metadata cache
+format is v3, so old metadata sidecars rebuild automatically while the pointer
+cache remains valid.
+
+Current one-integer step rows are emitted and normalized against optional
+legacy two-integer rows. FITS `TBCOL*` layout cards are excluded from physical
+header comparison.
+
+The standalone/CLI mismatch diagnostics now include native per-DSEC-evaluation
+progress and compact internal reports for thermal residuals, carbon ion
+fractions/cooling, and the dominant carbon diagonal rate terms with ATDB
+provenance. The v0.4.75 products localize the remaining leading mismatch to C V
+population balance: first-zone carbon cooling is about `6.039e3` too large and
+the Python thermal solution reaches `1.93676e4 K` instead of `7.31984e4 K`.
+No rate is fitted, suppressed, or rescaled in v0.4.76.
+
+Validation: 30 focused tests, all 372 source-port tests, byte-compilation, and
+all 372 tests from the extracted source distribution pass.
+
+## v0.4.73 vectorized ATDB caches, sparse-slice speedup, progress, and live-radiation tail fix
+
+v0.4.73 corrects the production physical-runner startup behavior exposed by
+the user's first all-ATDB c5_ne1 execution. `FortranPackedVector.slice()` now
+uses a lazily cached sorted NumPy override index plus `searchsorted` and vector
+assignment instead of scanning every line-wavelength override for every packed
+record. The metadata builder uses vectorized packed gathers and one-time
+ion/level maps.
+
+The physical runner now automatically reads and writes validated, uncompressed
+NumPy NPZ sidecars for the exact source-port `setptrs` arrays and the complete
+writer metadata. `prepare_xstar_python_cache()` and example 143 prepare these
+caches explicitly; alternate cache directories support read-only ATDB installs.
+The separate high-level `atdb.fits.xstar_atomic_index.npz` cache remains
+unchanged because it does not contain the literal source-port pointer arrays.
+
+Native progress callbacks and CLI `--progress` report ATDB/cache, metadata,
+pass, zone, writer, and parity boundaries.
+
+The real v0.4.72 run also exposed the literal `bremsint(ncn2m+1)` caller tail.
+v0.4.73 allocates the reduced arrays at their source extents and lets `ucalc`
+consume only active rows `1:ncn2m`, eliminating the false
+`invalid live radiation arrays` failure at the first H I ion-balance record.
+No physical equations, rate formulae, matrix topology, transfer equations, or
+writer persistence rules changed. Physical c5_ne1 product parity remains to be
+rerun against the independently generated original-XSTAR directory.
+
+## v0.4.72 public physical Python runner API and c5_ne1 acceptance gate
+
+v0.4.72 adds the first public end-to-end execution API for the translated
+Python XSTAR call graph:
+
+- `run_xstar_python(**parameters)` accepts ordinary XSTAR keyword arguments;
+- `run_xstar_python_command(command)` parses a literal `xstar key=value ...`
+  command and runs Python only;
+- `run_xstar_python_script(run_xstar.sh)` reads the script as data without
+  sourcing or executing it;
+- `run_xstar_from_parameters(parameters)` is the common typed execution path.
+
+The runner resolves `atdb.fits` through the package data-path policy, applies
+the source `rread1` pressure/density/radius setup, builds the literal `ener`
+grid and built-in power-law spectrum, initializes caller-owned local/radial
+state, executes the translated radial/pass calculation, and writes the strict
+ten-product set. Original XSTAR products are never calculation inputs.
+
+The direct Python convenience API supports sparse abundance shorthand. A call
+that supplies only `habund`, `heabund`, and `cabund` sets all unspecified
+elements to zero. Literal command and script APIs retain XSTAR parameter-file
+defaults unless every abundance is supplied explicitly.
+
+The FITS `PARAMETERS` extension now uses the literal 56-row
+`xstar.f90 -> pprint(3) -> fparmlist` name/type/comment order, including string
+values in the source comment column and REAL(4) persistence. The input
+`lprint=1` value is retained in that table. The untranslated verbose terminal
+`pprint` reports are not emitted; all structured FITS products and the
+comparator-visible zone/final rows of `xout_step.log` remain enabled.
+
+`run_c5_ne1_acceptance()` provides the strict gate requested for
+`helike_type69/c5_ne1`: it first generates all ten Python products independently,
+then compares them directly against the original-XSTAR directory using the
+existing schema/value comparator. The gate cannot pass when an original product
+is missing, and never uses original outputs to seed Python state.
+
+The uploaded `original_xstar.tar.gz` intentionally omits the generated products,
+and the release environment does not contain the production `atdb.fits` or an
+installed XSTAR executable. Consequently, package-level API/gate tests pass, but
+physical all-ATDB c5_ne1 output parity is not claimed in this release. The next
+acceptance action is to run the new API on the user's production ATDB after
+regenerating the ten original products.
+
+Run the Python case and strict comparison with:
+
+```bash
+PYTHONPATH=src python examples/142_run_xstar_python.py \
+  --run-script original_xstar/helike_type69/c5_ne1/run_xstar.sh \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --output-dir python_xstar/helike_type69/c5_ne1 \
+  --original-run-dir original_xstar/helike_type69/c5_ne1 \
+  --summary-json c5_ne1_physical_parity_v0472.json \
+  --print-summary
+```
+
+## v0.4.71 original-XSTAR physical benchmark suite
+
+v0.4.71 turns the supplied `original_xstar` run-script tree into a strict,
+reproducible physical-output benchmark. The new harness parses the literal
+`xstar key=value ...` commands without sourcing shell scripts, inventories all
+62 cases, identifies the canonical C V / O VII / Mg XI / Ca XIX four-case
+acceptance subset, and records duplicate physical parameter groups.
+
+The harness can optionally regenerate original XSTAR products by invoking the
+parsed argv directly, and it compares mirrored original/Python case directories
+using an explicit ten-product contract:
+
+```text
+xo01_detail.fits  xo01_detal2.fits  xo01_detal3.fits  xo01_detal4.fits
+xout_abund1.fits xout_spect1.fits xout_lines1.fits xout_cont1.fits
+xout_rrc1.fits   xout_step.log
+```
+
+Case, file, HDU, and column diagnostics are written to JSON, Markdown, and CSV.
+A case passes only when every required file is present and every schema/value
+comparison passes. Original XSTAR outputs remain diagnostic oracles and are
+never used to seed Python state.
+
+The uploaded archive intentionally omits the ten physical products, and the
+general input-parameter-to-live-state Python runner is not yet implemented.
+Therefore v0.4.71 validates the benchmark definition and strict gate but does
+not claim physical all-ATDB parity. The next target is the independent Python
+physical runner for the canonical four cases.
+
+The package dependency markers also prevent the Astropy/NumPy combination that
+failed when older Astropy called the removed `numpy.in1d`: Python 3.11+ now
+requires Astropy 7.2 or newer, while older Python retains NumPy below 2.4.
+
+Run the attached suite inventory with:
+
+```bash
+PYTHONPATH=src python examples/141_benchmark_original_xstar_outputs.py \
+  --suite-archive original_xstar.tar.gz \
+  --out-dir xstar_physical_benchmark_v0471 \
+  --selection canonical-four \
+  --print-summary
+```
+
+## v0.4.70 legacy `pprint` products and physical output-parity harness
+
+v0.4.70 replaces the final non-writing `pprint` handler for the source-default
+`lpri=0` path. The bounded radial caller now preserves the default legacy
+sequence:
+
+```text
+pprint(3) -> pprint(2)
+per pass: pprint(17)
+per shell: pprint(9) -> [final pass: pprint(12)]
+terminal shell state: pprint(9) -> [final pass: pprint(12)]
+final local recompute: pprint(22) -> pprint(11)
+```
+
+The translated path writes `xout_step.log` and `xout_abund1.fits` with the
+source `ABUNDANCES`, `COLUMNS`, `HEATING`, and `COOLING` extensions. It
+preserves final-pass-only accumulation, the terminal `numrec` row, source
+REAL(4) persistence through `E13.5` ASCII columns, the ion-column trapezoid,
+and the option-11 `n_p` unit-field typo. Verbose `lpri>0` diagnostic report
+branches fail explicitly rather than being approximated.
+
+A new independent output comparator checks HDU names, table schemas, row
+counts, strings, every numeric column, pass-specific detail files, and the
+structured zone/final rows of `xout_step.log`. XSTAR products remain diagnostic
+oracles only and never become production inputs. The comparator self-test
+passes on the bounded product set.
+
+Physical all-ATDB standard-benchmark parity is **not claimed in this release**:
+the release environment did not contain a paired original-XSTAR and Python
+physical benchmark run. Supply both directories to execute the open gate:
+
+```bash
+PYTHONPATH=src python examples/140_validate_xstar_pprint_physical_output.py \
+  --out-dir xstar_output_writer_source_validation_v0470 \
+  --xstar-run-dir /path/to/original_xstar_run \
+  --python-run-dir /path/to/python_run \
+  --print-summary
+```
+
+Without the two physical directories, the command validates the bounded source
+translation and records that physical parity was not run.
+
+## v0.4.69 detail and final FITS output writers
+
+v0.4.69 translates the bounded output sequence after the accepted radial
+control path. Per-shell saving now composes
+`savd -> fstepr -> fstepr2 -> fstepr3 -> fstepr4` into caller-owned per-pass
+detail stores and writes the source pass-specific FITS names. The final caller
+executes `xstarcalc(nlimd=0) -> heatt -> stpcut`, records the literal `pprint`
+boundary, and then runs `writespectra -> writespectra2 -> writespectra3 ->
+writespectra4` under the source `lwri` gates.
+
+The port preserves REAL(4) persistence, one-based HDU insertion and shifting,
+level/line/RRC activity gates, the 600-line limit, transmitted continuum, the
+five-field `writespectra` scattered-column omission, caller-owned state
+identity, and FITS checksums. Direct references cover original `voigte`, the
+strong-line `binemis` chain, and detail/final row construction.
+
+Legacy `pprint` ASCII reports remain an explicit source-state handler and are
+not fabricated. Physical all-ATDB standard-benchmark output parity remains the
+next acceptance stage.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/139_validate_xstar_output_writers.py \
+  --out-dir xstar_output_writer_source_validation_v0469 \
+  --print-summary
+```
+
+## v0.4.68 tabulated radial density and fixed pass-control contract
+
+v0.4.68 closes the remaining bounded radial-control path before output writers.
+It translates the inline `radexp < -99` branch in `xstar.f90` and makes the
+source pass-convergence contract explicit.
+
+The caller-owned `TabulatedRadialDensityState` reproduces the sequential
+`density.dat` unit. The first radius/density pair is consumed before the pass
+loop. One further pair is read after every shell, after the saved-state boundary
+and before `stpcut`. The source assignment order is preserved:
+
+```text
+read rnew, dennew
+-> delr = rnew - r
+-> reject delr < 0 as "radius error"
+-> r = rnew
+-> xpx = dennew
+-> rdel = rdel + delr
+-> xcol = xcol + xpx*delr
+```
+
+At end of file, the sequential read returns nonzero `iostat` while retaining the
+previous `rnew` and `dennew`. This gives a final zero-width update and terminates
+the next literal shell-loop test. The Python path does not rewind the density
+stream or invent additional rows.
+
+The pass contract now records that XSTAR uses a fixed requested number of
+passes, directions `ldir=(-1)**kk`, and no adaptive comparison between
+successive passes. `numrec <= 0` forces `npass=1`. The exact first-pass and
+repeated-pass predicates are exposed in provenance. Output writers remain
+excluded.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/138_validate_xstar_radial_density_pass_control.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0468 \
+  --print-summary
+```
+
+## v0.4.67 translated `unsavd` and bounded repeated radial passes
+
+v0.4.67 translates `unsavd.f90`, validates its caller-visible restoration
+against the unmodified original Fortran, and adds the caller-owned saved
+shell/pass state required by the radial driver. The bounded model now executes
+three alternating passes without entering any output writer:
+
+```text
+pass 1, ldir=-1: initialize -> shells -> saved REAL(4) records
+pass 2, ldir=+1: unsavd -> shell calculation, with nlimdt=0
+pass 3, ldir=-1: unsavd -> shell calculation, with nlimdt=nlimd
+```
+
+The in-memory persistence contract reproduces the source `savd`/`unsavd`
+interface rather than the FITS output mechanism: values are rounded through
+REAL(4), HDUs 1--2 are reserved, each record is inserted after the requested
+one-based HDU, and later records shift exactly as CFITSIO `ftcrhd` would shift
+them. For the two-shell fixture, pass 1 stores shell 1 at HDU 3, inserts the
+terminal record at HDU 4, and shifts shell 2 to HDU 5. Passes 2 and 3 therefore
+restore HDUs `5, 4, 3` in source order.
+
+`unsavd` restores the saved scalars, populations, line/RRC/continuum arrays,
+and only the optical-depth row owned by the current direction. The saved
+`zrems` table is read into a local temporary and intentionally does not replace
+the caller array, matching the original source. Tabulated radial density,
+explicit pass-convergence control, and output writers remain unported.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/137_validate_xstar_unsavd_multipass.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0467 \
+  --print-summary
+```
+
+## v0.4.66 translated `gsmooth` and nonzero-turbulence radial branch
+
+v0.4.66 translates `gsmooth.f90` and `gsmooth2.f90`, validates the combined
+thermal/turbulent velocity and all four smoothed arrays against the unmodified
+original Fortran, and closes the optional source branch before `heatt`:
+
+```text
+[first-pass zones > 1: step]
+-> trnfrc
+-> xstarcalc
+-> [gsmooth when vturbi > 1.e-34]
+-> heatt
+-> inline radius/density/radial-depth/column update
+-> stpcut
+-> trnfrn
+```
+
+The translation preserves the wrapper order
+`brcems -> rccemis(1) -> rccemis(2) -> opakc`, bins 1--2, the 20-keV
+pass-through, plus/minus trapezoid walks, literal stopping tests, binary32
+source constants, and caller-owned tails. The same caller arrays are smoothed
+before translated `heatt` consumes them.
+
+Reverse passes still fail at missing `unsavd`; multipass restoration, tabulated
+radial density, and output writers remain explicitly unported.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/136_validate_xstar_gsmooth_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0466 \
+  --print-summary
+```
+
+## v0.4.65 translated `heatt` and bounded radial composition
+
+v0.4.65 translates `heatt.f90`, validates its caller-visible continuum, line,
+RRC, and mutable-level-workspace outputs against the unmodified original
+Fortran, and replaces the v0.4.64 handler at the same radial source slot:
+
+```text
+[first-pass zones > 1: step]
+-> trnfrc
+-> xstarcalc
+-> [gsmooth when vturbi > 1.e-34]
+-> heatt
+-> inline radius/density/column update
+-> stpcut
+-> trnfrn
+```
+
+The translation preserves active-range mutation and caller-owned tails, old
+versus current luminosity-array ownership, the source's retained final
+continuum-only `optp2` value in the first inward line term, packed
+source-order RRC traversal, and partial `leveltemp` overwrite. The original
+routine's local `cmp1` and `cmp2` are uninitialized and affect only local
+Compton diagnostic totals; the Python result marks that diagnostic as
+source-uninitialized instead of inventing values.
+
+`gsmooth`, `unsavd`, reverse/multipass restoration, and output writers remain
+explicitly unported. Nonzero turbulent velocity and reverse passes continue to
+fail at their exact source boundaries.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/135_validate_xstar_heatt_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0465 \
+  --print-summary
+```
+
+## v0.4.64 bounded radial-shell caller and transfer kernels
+
+v0.4.64 begins Milestone 5 without opening output writers. It translates the
+four radial kernels with no unresolved atomic-data dependency:
+
+```text
+step
+trnfrc
+stpcut
+trnfrn
+```
+
+and composes them around the accepted local caller in the exact first-pass
+sequence:
+
+```text
+[step for zones > 1] -> trnfrc -> xstarcalc -> [gsmooth if vturbi > 0]
+-> heatt -> inline radius/column update -> stpcut -> trnfrn
+```
+
+`heatt` remains an explicit source-state handler. Reverse/multipass shells fail
+at missing `unsavd`, and nonzero turbulent velocity fails at missing `gsmooth`;
+neither path is approximated. The direct kernel fixture uses outputs generated
+by compiling the unmodified XSTAR routines with only dimension/module stubs.
+The expanded caller fixture confirms zone-1 `step` skipping, later-zone `step`,
+shared caller-owned arrays, the exact failure boundaries, and exclusion of all
+output writers.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/134_validate_xstar_bounded_radial_shell.py \
+  --out-dir xstar_bounded_radial_shell_source_validation_v0464 \
+  --print-summary
+```
+
+## v0.4.63 complete local `xstarcalc` assembly
+
+The user-side v0.4.62 validation confirms the complete `calc_emis_all` source
+chain. v0.4.63 assembles the accepted local-zone routines in literal
+`xstarcalc.f90` order:
+
+```text
+bremsmap -> [dsec] -> calc_hmc_all -> calc_emisab_all -> calc_emis_all
+```
+
+The brackets denote the source `nlimdt == 0` skip branch. The driver now also
+preserves `lpri` save/zero/restore and the final
+`nry = nbinc(13.6, epi, ncn2) + 2` assignment.
+
+Composition exposed one real ownership correction: `calc_emisab_all` consumes
+the reduced `epim(1:ncn2m)` grid while continuum arrays remain dimensioned on
+the full caller grid. The port now requires capacity for the active reduced
+range and preserves all higher caller-owned rows. The bounded complete-local
+fixture passes call-order, skip, shared-workspace, reduced/full-grid, ranking,
+array-continuity, and final-state gates. Radial transfer and output are next.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/133_validate_xstar_complete_local_xstarcalc.py \
+  --out-dir xstar_complete_local_xstarcalc_source_validation_v0463 \
+  --print-summary
+```
+
+## v0.4.62 source-faithful `calc_emis_all`
+
+The user-side v0.4.61 validation confirms the complete `calc_emisab_all`
+source chain. v0.4.62 translates `calc_emis_all.f90`, `rlbin.f90`,
+`calc_emis_element.f90`, `calc_emis_ion.f90`, and the final `freef.f90` and
+`bremem.f90` source slots.
+
+The translation preserves the pre-reset ranking dependency on `calc_emisab_all`
+line/RRC products, literal `rlbin` insertion ordering, the effective
+`nrank-1` source retention behavior, source-owned continuum reset, caller-owned
+`fline/flinel`, all-ion compact aliases, inactive-ion offsets, active-ion
+`leveltemp` writes, rate-type-7 strong RRC output, rate-type-9's two `ucalc`
+invocations, rate-type-42 reuse of the retained continuum pointer, strong-line
+`fline/flinel` formulas, and `ucalc` continuum side effects.
+
+The bounded fixture exercises all of those ownership and control-flow details,
+plus the final `freef` and `bremem` calls. `calc_emis_all` is accepted and the
+next source-order target is the complete local `xstarcalc` sequence.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/132_validate_xstar_calc_emis_all.py \
+  --out-dir xstar_calc_emis_all_source_validation_v0462 \
+  --print-summary
+```
+
+## v0.4.61 source-faithful `calc_emisab_all`
+
+The user-side v0.4.60 validation confirms the complete `bremsmap -> nbinc ->
+huntf` gate. v0.4.61 advances one source-order step and translates
+`calc_emisab_all.f90 -> calc_emisab_element.f90 -> calc_emisab_ion.f90`.
+
+The translation preserves the two source density overrides, the distinction
+between arrays cleared by `calc_emisab_all` and continuum arrays carried into
+`ucalc`, source-order all-ion compact population mapping, repeated
+continuum/next-ion-ground aliases, inactive-ion compact offsets, mutable
+`leveltemp` writes only for active ions, one-based line/RRC pointers, and the
+rate-type 4/7/9/14 branches. The type-53 live evaluator now exposes its
+per-record `opakc`, `opakcont`, and inward/outward `rccemis` increments so the
+caller can reproduce `ucalc` side effects instead of using only scalar
+`ans1..ans6` values.
+
+The bounded validation uses an independent synthetic ATDB/pointer state that
+contains two aliased ions while only the first ion is active. It exercises all
+four source branches and verifies output ownership and source record order.
+`calc_emis_all` is the next source-order target.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
+  --out-dir xstar_calc_emisab_all_source_validation_v0461 \
+  --print-summary
+```
+
+## v0.4.60 source-faithful `bremsmap`
+
+The v0.4.59 offline acceptance run confirms `ready_to_advance_to_bremsmap=True`.
+v0.4.60 translates the exact `xstarcalc.f90 -> bremsmap.f90 -> nbinc.f90 ->
+huntf.f90` path.  The implementation preserves the reduced `nbinc` search
+extent, binary32-rounded default-real constants, caller-owned `bremsam` tail,
+the literal descending `1:ncn2m` `bremsint` update, and the incoming
+`bremsint(ncn2m+1)` tail boundary inherited from `trnfrc`.
+
+Two frozen cases were generated by compiling the unmodified XSTAR routines
+with only minimal `globaldata/constants` stubs.  Python reproduces every mapped
+`bremsam` value and every mutated `bremsint` value within `2e-15` relative
+tolerance.  The source routine can now mutate `XSTARPythonState.radiation` and
+register as the `BREMSMAP` driver routine.  `calc_emisab_all` is the next
+source-order target.
+
+Run:
+
+```bash
+PYTHONPATH=src python examples/130_validate_xstar_bremsmap.py \
+  --out-dir xstar_bremsmap_source_validation_v0460 \
+  --print-summary
+```
+
+## v0.4.59 final normalized-residual source semantics
+
+The user-side v0.4.58 exact post-`dsec` replay reproduces the complete captured
+call-entry runtime and continuum state.  Every underlying fixed-state quantity
+passes: runtime, continuum components, primary and secondary heating/cooling
+totals, electron contribution, charge residual, and charge identity.  The only
+strict failure is `hmctot`, whose relative difference is amplified by cancellation
+near thermal equilibrium.
+
+Python and XSTAR independently reproduce the literal `heatf.f90` expression
+
+```text
+hmctot = 2 * (httot - cltot) / (1e-37 + httot + cltot)
+```
+
+with values `6.007235133655397e-5` and `8.259870956279396e-5`.  Both satisfy
+XSTAR's actual `dsec.f90` convergence condition `abs(hmctot) <= 1.e-4`.
+Therefore the strict residual mismatch does not change the source convergence
+decision and is retained as a diagnostic rather than a physics blocker.
+
+v0.4.59 adds:
+
+- source-expression and source-convergence classification for the exact final
+  replay;
+- `examples/129_validate_xstar_dsec_final_residual_semantics.py`;
+- `xstar-atomic-validate-dsec-final-residual-semantics`;
+- an offline reanalysis path that consumes a completed v0.4.58 result tree and
+  requires no ATDB read, XSTAR rebuild, or 33-evaluation rerun; and
+- separate strict and source-semantic final-state fields.
+
+The O VII local-zone Milestone-4 `dsec` gate is source-semantically accepted.
+Strict floating-point trajectory, transition-array, natural-root, and normalized
+residual differences remain visible.  `bremsmap` is now the next source-order
+translation target.  Production defaults remain `dense-source`,
+`reset-per-call`, and `source-zero`.
+
+## v0.4.58 exact post-`dsec` final-call replay
+
+The user-side v0.4.57 unrestricted run converged naturally in the same 33
+`calc_hmc_all` evaluations as XSTAR and preserved the complete event sequence,
+integer controls, and thermal/charge residual signs.  The only thermal trajectory
+row outside the 0.5% relative gate was evaluation 24 `hmctot`, where both codes
+remain negative and differ by `2.180338e-5` in a normalized residual close to
+zero.  Every underlying heating/cooling component passes; the largest component
+differences are only a few `1e-12`.
+
+The naturally converged Python root is `T4=7.664826496730516`, versus the XSTAR
+post-`dsec` input `T4=7.665518557731817` (about `9.03e-5` relative).  This small
+root displacement explains the strict runtime and continuum-workspace failures
+in the natural post-`dsec` fixed-state comparison, while all primary/secondary
+thermal totals, charge quantities, and `hmctot` pass their physical tolerances.
+
+v0.4.58 adds:
+
+- `--post-dsec-input-mode natural|compare-both` to the physical runner;
+- exact replay of the correlated XSTAR post-`dsec` call-entry runtime, radiation,
+  escape arrays, continuum workspaces, dense global populations, and `leveltemp`;
+- `examples/128_validate_xstar_dsec_post_final_replay.py`;
+- `xstar-atomic-validate-dsec-post-final-replay`;
+- source-semantic trajectory classification that treats event/integer/residual-
+  sign parity separately from normalized near-zero residual magnitude; and
+- a final gate that requires the exact post-`dsec` replay to reproduce the fixed
+  state before `bremsmap` is unlocked.
+
+Production defaults remain `dense-source`, `reset-per-call`, and `source-zero`.
+No XSTAR rebuild or new capture is required.
+
+## v0.4.57
+
+v0.4.57 consumes the user-side v0.4.56 natural source-zero four-evaluation
+prefix.  The bounded source-semantic gate passes: all four thermal evaluations,
+source event and integer-control branches, thermal/charge residual decisions,
+evaluation-2 Lucy entry and active final populations, source-order `xtot`,
+thermal families, and element arrays agree with XSTAR within the established
+acceptance tolerances.
+
+Strict trajectory parity remains false because ten carried charge-workspace rows
+differ by about `2.0e-11`; the differences propagate from `elctrh` into the
+charge secant `xee`/`elctrl` values without changing any source branch or
+residual decision.  The natural evaluation-2 dense global arrays also remain
+outside the intentionally extreme `5e-12` transition tolerance, while the
+source-used `leveltemp`, complete solver path, and thermal result pass.
+
+New example 127 and `xstar-atomic-validate-dsec-source-zero-unrestricted` run the
+natural source-zero physical solve without a prefix limit, compare every
+captured XSTAR evaluation, execute the correlated post-`dsec` `calc_hmc_all`
+call, and report strict floating-point parity separately from source-semantic
+local-zone acceptance.  A successful result is the gate for advancing in source
+order to `bremsmap`.  No physical formula, rate, matrix, tolerance, XSTAR source,
+or probe capture changes in this release.
+
+## v0.4.56
+
+v0.4.56 consumes the user-side v0.4.55 terminal-seed causality result.  The
+literal `calc_hmc_element.f90` terminal write `x(ipmat2+1)=0.` is confirmed as
+the primary cause of the evaluation-2 cooling discrepancy.  Under exact XSTAR
+transition replay, `source-zero` makes the initial Lucy vector, final active
+populations, outer-iteration entry, source-order `xtot`, thermal families, and
+element heating/cooling arrays pass.  The evaluation-2 pre-continuum cooling
+relative difference falls from `9.60070043e-3` to `5.69511833e-7`, and the
+`hmctot` relative difference falls from `8.35736580e-3` to `1.29364826e-6`.
+
+The remaining physical-run exit code is not a thermal or branch failure.  The
+strict trajectory gate rejects only the carried `elctrh` work bound at two
+events, with an absolute difference of about `2.03e-11`; event order, integer
+control state, residual signs/values, and final prefix state pass.
+
+New example 126 and `xstar-atomic-validate-dsec-source-zero-prefix` run four
+natural evaluations without exact transition replay.  They compare the natural
+evaluation-2 entry and internals against XSTAR and report strict runtime parity
+separately from source branch/residual parity.  This is a bounded diagnostic and
+acceptance step before the unrestricted 33-evaluation `dsec` run.  Production
+physics remains `dense-source`, `reset-per-call`, and `source-zero`; no XSTAR
+source change or rebuild is required.
+
+## v0.4.55
+
+v0.4.55 corrects the terminal compact-continuum population seed passed into
+`msolvelucy`.  The user-side v0.4.54 internal comparison found exactly one
+failed solver-entry row for each of H, He, and O: the final compact row.  XSTAR
+has exact zero there, while Python retained the incoming global continuum or
+next-ion-ground population.
+
+The source performs all selected-ion `xileve -> x` mappings first and then
+executes `x(ipmat2+1)=0.` immediately before `msolvelucy`.  Python now mirrors
+that order through the production default `--terminal-continuum-seed-mode
+source-zero`; `legacy-global` remains available only for causality and
+historical diagnostic reproduction.
+
+New example 125 and `xstar-atomic-validate-dsec-terminal-seed` compare both
+seeds under exact evaluation-2 replay and the complete same-call internal
+audit.  No XSTAR source change, rebuild, or new run is required.  Dense native
+writeback, per-call `leveltemp` reset, rates, matrices, thermal formulas, and
+frozen acceptance gates are otherwise unchanged.
+
+## v0.4.54
+
+v0.4.54 consumes the user-side v0.4.53 exact-replay result.  Exact XSTAR
+evaluation-2 call-entry state passes, but it removes only about `2.2e-6` of the
+pre-continuum cooling discrepancy, which rules out evaluation-1 population
+writeback and transition-state ownership as the cause of the remaining error.
+
+The physical runner can now apply the existing complete same-call
+`calc_hmc_all` parity audit to a selected internal `dsec` evaluation through
+`--compare-transition-internals`.  The audit covers pre-matrix ion rates and
+selection, full and active matrix topology/coefficient closure, initial and
+final Lucy populations, outer-iteration entry, source-order `xtot`, thermal
+data/rate families, and element heating/cooling arrays.
+
+New example 124 and `xstar-atomic-validate-dsec-eval2-internals` force exact
+evaluation-2 replay, run the internal audit, and classify the first failed
+source layer.  The diagnostic reuses the v0.4.51 evaluation-2 probe directory;
+no XSTAR source change, rebuild, or new XSTAR run is required when its detailed
+products are present.  Production physics, dense native writeback, per-call
+`leveltemp` reset, and all frozen acceptance gates are unchanged.
+
+## v0.4.53
+
+v0.4.53 adds a diagnostic-only exact XSTAR-seeded replay for a selected later
+internal `dsec` evaluation.  The physical runner can now replace evaluation-2
+call-entry runtime, radiation, escape arrays, continuum workspaces, dense
+`xilevg`/`bilevg`/`rnisg`, and `leveltemp` with the captured XSTAR state while
+Python still computes all rates, matrices, Lucy populations, cooling, and
+residuals.  Use `--transition-input-mode replay-exact`.
+
+New example 123 and `xstar-atomic-validate-dsec-exact-replay` run the normal
+Python transition and exact XSTAR-seeded transition side by side.  Every
+physical run now writes per-evaluation, per-element thermal and Lucy-solver
+diagnostics.  The wrapper classifies whether the remaining evaluation-2
+cooling discrepancy was produced by evaluation 1 or lies inside evaluation 2.
+No XSTAR rebuild or production physics change is required.
+
+## v0.4.52
+
+v0.4.52 corrects the two mutable-state ownership failures isolated by the
+call-correlated evaluation-2 diagnostic.
+
+First, repeated physical `dsec` calls now carry authoritative dense native
+`xilevg`, `bilevg`, and `rnisg` arrays indexed by the original XSTAR global
+level index.  `calc_hmc_all` reconstructs the full source-order element
+workspace for every ion, including inactive boundary ions, applies the
+`ipmat += nlev - 1` continuum/next-ground overlap, and replays both distinct
+global writes.  The lower-ion continuum retains the literal `1d-48`
+departure-coefficient floor while ordinary/ground rows use `1e-37`.  Logical
+`(Z, stage, local_level)` maps remain diagnostic views rather than owners of
+mutable state.
+
+Second, the physical `dsec` path now resets the shared `leveltemp` workspace to
+the exact correlated `calc_hmc_all` entry state before every new evaluation.
+Within one call, all source-order writes from `levwkelement` and the second
+`calc_hmc_ion` pass, partial overwrites, retained higher columns, and owner
+provenance are unchanged.  The final within-call workspace is retained as a
+diagnostic snapshot but is not carried into the next evaluation.
+
+A controlled four-mode causality scan was added:
+
+- A: legacy selected-role writeback plus cross-call `leveltemp` carry;
+- B: per-call `leveltemp` reset only;
+- C: dense native alias writeback only;
+- D: both production corrections.
+
+Use `examples/122_validate_xstar_dsec_transition_causality.py` or
+`xstar-atomic-validate-dsec-causality`.  The ordinary physical runner defaults
+to mode D and exposes `--global-writeback-mode` and `--leveltemp-lifecycle` for
+bounded diagnosis.  No XSTAR rebuild is required; reuse the v0.4.48
+instrumented executable and the evaluation-2 probe products.
+
+The frozen v0.4.44 complete fixed-state regression remains mandatory.  Full
+physical `dsec` acceptance is not claimed until the user runs the four-mode
+scan and the corrected complete trajectory against XSTAR.
+
+## v0.4.51
+
+v0.4.51 adds a bounded evaluation-transition diagnostic for the physical
+`dsec` workflow. The call-correlated evaluation-1 state and thermal
+decomposition pass, but the v0.4.50 prefix first exceeds the thermal tolerance
+at evaluation 2. The new path captures the Python state immediately before a
+selected `calc_hmc_all` evaluation and compares it with the exact XSTAR entry
+state captured for that same `dsec_call_id`, evaluation index, phase, and global
+`calc_hmc_all` call ID.
+
+New coverage includes runtime and geometry scalars, continuum/radiation arrays,
+line and continuum optical-depth arrays, carried `opakc`/`brcems` workspaces, global `xilevg`/`bilevg`/`rnisg`, and
+the `leveltemp` slots actually read by `ucalc.f90`. Raw all-slot `leveltemp`,
+`nlpt`, and `iltp` values are retained in diagnostic products. The matching
+loader now maps orbital angular momentum from source `ilev(3)` and preserves
+source threshold `rlev(4)`. Snapshots are opt-in and restricted to requested
+evaluation indices to avoid deep-copy overhead during ordinary full runs.
+
+Added `examples/121_validate_xstar_dsec_transition_state.py` and the
+`xstar-atomic-validate-dsec-transition` command. No scientific XSTAR source or
+helper change is required; the v0.4.48 instrumented executable can capture
+evaluation 2 through its existing environment selection. Physical bounded
+`dsec` acceptance remains open.
+
+## v0.4.50
+
+v0.4.50 is a Python-only progress-reporting hotfix for the call-correlated
+physical `dsec` runner.  With `--progress`, example 119 incorrectly tried to
+read `item.equilibrium.basis.n_rows`; the actual source-owned basis is at
+`item.equilibrium.assembly.basis.n_rows`.  The physical calculation completed
+its first evaluation, but the optional callback raised `AttributeError` before
+prefix products could be written.
+
+The reporter now reads the assembly basis through a small tested formatter.
+No solver state, rates, matrices, thermal decomposition, call correlation,
+trajectory data, acceptance tolerance, or XSTAR source changed.
+
+## v0.4.49
+
+v0.4.49 is a Python-only hotfix for the call-correlated physical `dsec`
+runner.  The exact first internal `dsec` state has a source-valid all-zero
+`xilevg` population vector.  v0.4.48 correctly taught the matrix solver to
+accept that state, but the same-call population probe loader still rejected it
+before example 119 could start.
+
+The general fixed-state loader remains strict by default.  A new explicit
+`allow_zero_sum`/`allow_zero_initial_population_sum` path is enabled only by
+example 119 when the correlated matching input proves that incoming global
+`xilevg` is exactly zero.  No XSTAR source, probe helper, rates, matrices,
+thermal physics, or control-flow semantics changed.
+
+## v0.4.48
+
+v0.4.48 is a bounded call-correlation and matching-state correction for the
+physical `dsec` runner. The v0.4.47 production run proved that the translated
+control sequence agreed with XSTAR through event 88, but it mixed `dsec` call 1
+with the unrelated historical `calc_hmc_all` call-73 radiation/escape/workspace
+state. This release removes that ambiguity rather than relaxing tolerances.
+
+- Adds a shared diagnostic Fortran correlation module linking every global
+  `calc_hmc_all` call to `dsec_call_id`, internal evaluation index, and phase
+  (`dsec_internal`, `post_dsec`, or `outside_dsec`).
+- Captures the exact state entering the correlated first internal
+  `calc_hmc_all` call: continuum grid and radiation arrays, line/continuum
+  optical depths, global `xilevg/bilevg/rnisg`, complete `leveltemp`, geometry,
+  density mode, pressure, covering fraction, turbulence, and `critf`.
+- Separates the input and post-`dsec` probe directories/call IDs in example 119.
+  Call IDs may be resolved automatically from the correlation CSV.
+- Adds an XSTAR thermal-decomposition row after every internal `calc_hmc_all`
+  evaluation, including pre-continuum totals, Compton, free-free, bremsstrahlung,
+  final totals, `hmctot`, and `elcter`. Python writes the same owned quantities
+  and compares them evaluation by evaluation.
+- Adds `--maximum-evaluations N` fast prefix mode and `--progress`. Prefix mode
+  validates the first N physical evaluations against the corresponding XSTAR
+  trajectory/thermal prefix without waiting for the full nonlinear solve.
+- Adds `examples/120_prepare_xstar_dsec_matching_probe.py` and the
+  `xstar-atomic-prepare-dsec-matching-probe` console command.
+- Keeps v0.4.44 fixed-state acceptance frozen and keeps v0.4.45 bounded dsec
+  acceptance pending the new instrumented production rerun.
+- No emissivity, transfer, radial-zone, or atomic-rate physics is added.
+
+## v0.4.47
+
+v0.4.47 is a bounded physical-`dsec` state-ownership correction after the
+first production execution of example 119. The v0.4.46 runner incorrectly
+replayed the converged 607-row oxygen compact vector at the initial `T4=100`
+trial, where `istruc` selected a 367-row oxygen basis. XSTAR does not carry a
+basis-sized vector between trials: it carries the global `xilevg` workspace and
+remaps that workspace after every new active-ion selection.
+
+- Adds explicit mutable global-level population state keyed by
+  `(element_z, ion_stage, local_level)`.
+- Initializes the first physical `dsec` call from the exact `init.f90` state:
+  all global `xilevg` entries are zero.
+- Remaps global populations onto each current compact basis in literal
+  `calc_hmc_all.f90` ion/level order, including overwrite of each shared
+  parent-continuum/next-ion-ground alias by the later ion ground state.
+- Preserves inactive global rows across trials so a later expanding ion range
+  sees the same stale global values as Fortran.
+- Allows the source-valid all-zero first `msolvelucy` seed; the translated Lucy
+  solver then uses the original `rr=1` zero-superlevel fallback and imposes
+  number conservation in the condensed solve.
+- Retains compact population vectors only as diagnostics; they are no longer
+  reused across dynamic `dsec` basis changes.
+- Adds focused regressions for shared-alias remapping, zero initialization,
+  zero-seed Lucy behavior, stale inactive-row retention, and suppression of the
+  invalid 607-to-367 compact replay.
+- Bounds the zero-initialized physical runner to `dsec_call_id=1`; later calls
+  require a captured/restored incoming global population workspace.
+- No XSTAR rebuild or probe change is required. Reuse the v0.4.45 twelve-hook
+  `dsec` build and rerun example 119.
+
+## v0.4.46
+
+v0.4.46 adds the missing physical example-119 runner needed to exercise the
+translated `dsec` algorithm with the real source-faithful `calc_hmc_all`
+evaluator. It does not claim physical acceptance by itself and adds no
+emissivity, transfer, or radial-zone physics.
+
+- Adds `PhysicalDsecInitialState`, `PhysicalDsecContinuumTemplate`, and
+  `PhysicalDsecCalcKwargsFactory`.
+- Adds `examples/119_validate_xstar_dsec_complete.py` and the
+  `xstar-atomic-validate-dsec-physical` console entry point.
+- Resolves the initial temperature, electron fraction, hydrogen density,
+  `nlim`, and `tinf` from the selected XSTAR `begin` trajectory row by default,
+  with checked and explicit override modes.
+- Builds the H/He/O source-order element requests from the accepted call-73
+  plan and carries compact populations plus the shared `leveltemp` workspace
+  from one physical `calc_hmc_all` trial to the next.
+- Recomputes `comp2 -> freef -> bremem -> heatf` contexts at every trial using
+  the current temperature, density, and electron fraction. The incident
+  continuum and geometry remain fixed same-zone inputs.
+- Carries caller-visible `opakc`/`brcems` scratch workspaces between trials,
+  with explicit zero or call-73-probe first-call policies.
+- Runs the Python trajectory, compares it directly with one instrumented XSTAR
+  `dsec` call, performs the source-order post-`dsec` `calc_hmc_all` call,
+  compares that Python fixed state with the accepted call-73 final-state probe, and writes the complete bounded acceptance products in the
+  same process so the final `FixedStateCalcHMCAllResult` is retained.
+- Strengthens the bounded acceptance gate with
+  `final_fixed_state_parity_ready`.
+- Adds a `--prepare-only` mode for validating all input/provenance resolution
+  before the expensive physical run.
+- Physical `v0445_bounded_dsec_acceptance_ready=True` remains pending the
+  user's production execution of example 119.
+
+## v0.4.45
+
+v0.4.45 starts the stateful local-equilibrium stage after the accepted v0.4.44
+complete fixed-state `calc_hmc_all` milestone. It translates the exact
+`dsec.f90` nested charge/thermal control algorithm and adds the mutable state
+needed to carry one `calc_hmc_all` trial into the next. No emissivity, transfer,
+or radial-zone physics is added.
+
+- Adds `DsecMutableRuntimeState`, which owns native XSTAR `T/1e4`, `xee`, the
+  resolved hydrogen density, source-order element request templates, the final
+  compact population vector for every active element, the shared mutable
+  `leveltemp` workspace with per-column ownership, and caller-visible global
+  arrays/work arrays.
+- Extends `ElementEquilibriumContext`, `ElementMatrixAssembly`,
+  `FixedStateCalcHMCAllResult`, and `calc_hmc_all` so the complete shared
+  `leveltemp` state may be supplied, overwritten in source order, returned, and
+  replayed in the next element or `dsec` trial. Legacy one-call behavior remains
+  unchanged when no incoming workspace is supplied.
+- Translates the literal `dsec.f90` double-secant/bracketing path, including
+  positive/negative/zero `nlim`, the `tinf*1.01` gate, default-real rounding of
+  `1.e-4`, `2.e-9`, `1.2`, `0.9`, and `1.e30`, source branch order, doubled
+  far-from-equilibrium temperature steps, charge and temperature secants,
+  stagnation handling, iteration counters, and `lnerr` semantics.
+- Adds `CalcHMCAllDsecEvaluator`; every trial rebuilds its element requests from
+  the previous final compact populations and reuses the same dispatcher and
+  mutable workspace rather than restarting from the original call-73 seed.
+- Adds a diagnostic-only XSTAR trajectory helper and twelve documented
+  insertion hooks covering entry, each post-`calc_hmc_all` state, charge
+  multiply/divide/secant branches, charge-loop exit, temperature
+  multiply/divide/secant/stagnation branches, iteration exhaustion, and return.
+- Adds trajectory CSV/JSON/Markdown writers, XSTAR and Python trajectory
+  loaders, exact event/integer-state comparison, strict runtime-state parity,
+  and residual validation that requires both value agreement and sign parity.
+  Near equilibrium, absolute tolerances replace ill-conditioned relative-only
+  tests.
+- Bundles the accepted v0.4.44 complete fixed-state summary as an immutable
+  prerequisite gate.
+- Adds `xstar-atomic-port-dsec`, `xstar-atomic-prepare-dsec-probe`, examples 117
+  and 118, and synthetic branch tests.
+- The physical `v0445_bounded_dsec_acceptance_ready=True` claim is deliberately
+  deferred until the new XSTAR trajectory is captured and compared. The next
+  source sequence after that gate is `bremsmap -> calc_emisab_all ->
+  calc_emis_all -> complete xstarcalc`.
+
+## v0.4.44
+
+v0.4.44 is a bounded state-ownership and validator correction for the complete
+fixed-state `calc_hmc_all` milestone. No XSTAR physics routine or probe hook is
+changed. The existing seventeen-hook v0.4.43 production capture remains the
+physical oracle.
+
+- Adds explicit `httot_pre_continuum`, `cltot_pre_continuum`,
+  `httot2_pre_continuum`, and `cltot2_pre_continuum` fields to
+  `FixedStateCalcHMCAllResult`.
+- Captures those values immediately after the positive-abundance H/He/O element
+  loop and before `comp2 -> freef -> bremem -> heatf`.
+- Retains `httot`, `cltot`, `httot2`, and `cltot2` as the final post-`heatf`
+  caller-visible state.
+- Corrects `compare_calc_hmc_all_pre_continuum_probe` to compare the explicit
+  pre-continuum snapshot against XSTAR's pre-continuum probe. A compatibility
+  fallback may use the older `*_before_heatf` diagnostics, but a complete
+  continuum result never falls back to final totals.
+- Adds synthetic and physical call-73 regression tests proving that each final
+  total minus its pre-continuum owner equals the translated continuum increment.
+- Updates example 116 and the complete-fixed-state CLI to report v0.4.44
+  acceptance while reusing the existing v0.4.43 XSTAR probe directory.
+- No XSTAR rebuild is required. `dsec` remains deferred until the corrected
+  complete fixed-state acceptance gate passes.
+
+## v0.4.43
+
+v0.4.43 closes the translated fixed-state `calc_hmc_all` source sequence
+without adding a new physical leaf. It executes the accepted element loop and
+`comp2 -> freef -> bremem -> heatf` chain in literal source order, commits the
+final primary and secondary heating/cooling totals, and validates the
+caller-visible electron contribution and charge residual before return.
+
+A new final-state parity layer compares one same-call XSTAR row containing
+`enelec`, `elcter`, `htfreef`, `cmp1`, `cmp2`, `htcomp`, `clcomp`, `clbrems`,
+`httot`, `cltot`, `httot2`, `cltot2`, and `hmctot`. Runtime and continuum
+components use strict source-level tolerances; final thermal and charge totals
+use the established all-element acceptance tolerance because the translated
+pre-continuum element totals are already accepted at that tolerance.
+
+The bounded helper expands from sixteen to seventeen hooks with a final
+post-`heatf`, pre-return `xap_hmc_final_state` call. Example 116 and CLI
+`xstar-atomic-port-complete-fixed-state` execute the full H/He/O fixed-state
+calculation and require current same-call pre-continuum, Compton, free--free,
+bremsstrahlung, heatf, final thermal, and charge parity, while preserving the
+frozen v0.4.34, v0.4.38, v0.4.39, v0.4.40, v0.4.41, and v0.4.42 regressions.
+Physical call-73 acceptance requires a rebuilt seventeen-hook XSTAR run.
+`dsec` remains untranslated until that gate passes.
+
+## v0.4.42
+
+v0.4.42 translates XSTAR `heatf.f90` as the first bounded Milestone-4
+subsystem that accumulates the translated continuum terms into local thermal
+totals. The implementation preserves default-real literal rounding, the
+source-order trapezoidal integration of `brcems` into `clbrems`,
+`htcomp=cmp1*(xpx*xee)*ergsev`, `clcomp=ekt*cmp2*(xpx*xee)*ergsev`, the
+left-to-right updates of `httot`, `cltot`, `httot2`, and `cltot2`, and the
+source `hmctot` normalization floor. Incoming element heating/cooling totals
+are explicit and retained.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2 -> freef -> bremem
+-> heatf` and return complete continuum accumulation. The result is marked
+continuum-complete only when all four translated contexts are present, and the
+exact final totals from `heatf` are committed without re-associating floating
+point additions.
+
+The bounded XSTAR helper expands from thirteen to sixteen hooks. A pre-`heatf`
+hook captures incoming thermal totals and continuum coefficients; a loop-local
+hook captures exact cumulative `clbrems`; and a post-`heatf` hook records
+`htcomp`, `clcomp`, `clbrems`, both final total pairs, and `hmctot`. Example 115
+and CLI `xstar-atomic-port-heatf` require exact integral and accumulation parity
+while preserving the frozen v0.4.34 oxygen, v0.4.38 H/He/O, v0.4.39 Compton,
+v0.4.40 free--free, and v0.4.41 bremsstrahlung regressions. Physical call-73
+acceptance requires a rebuilt sixteen-hook XSTAR production run.
+
+## v0.4.41
+
+v0.4.41 translates XSTAR `bremem.f90` as the next bounded Milestone-4
+subsystem after the accepted v0.4.40 free--free gate. The implementation
+preserves default-real literal rounding, source temperature conventions,
+`xnx=xpx*xee`, `enz2=1.4*xnx`, `cc=1.032e-13`, `zz=1`, the current unity Gaunt
+factor, complete clearing of `brcems(1:ncn2)`, source-order emissivity
+construction, `bbee=0`, and the inactive/commented opacity branch. The incoming
+`opakc` workspace is preserved exactly.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2`, `freef`, and
+`bremem` in source order, exporting Compton coefficients, `htfreef`, final
+`brcems`, and final `opakc`. These remain unaccumulated until `heatf` is
+translated.
+
+The bounded XSTAR helper expands from eleven to thirteen hooks. A post-`freef`,
+pre-`bremem` hook captures incoming `brcems` and `opakc`; a loop-local hook in
+`bremem.f90` captures exact `brtmp`, final `brcems`, `bbee`, and unchanged
+`opakc`. Example 114 and CLI `xstar-atomic-port-bremem` require exact
+emissivity, reset, and opacity-preservation parity while preserving the frozen
+v0.4.34 oxygen, v0.4.38 H/He/O, v0.4.39 Compton, and v0.4.40 free--free
+regressions. Physical call-73 acceptance requires a rebuilt thirteen-hook XSTAR
+production run. `heatf` remains deferred.
+
+## v0.4.40
+
+v0.4.40 translates XSTAR `freef.f90` as the next bounded Milestone-4 source
+subsystem after the accepted v0.4.39 Compton gate. The implementation preserves
+default-real literal rounding, the source `t`/`t6` temperature conventions,
+`xnx=xpx*xee`, `enz2=1.4*xnx`, the current unity Gaunt factor, stimulated
+free--free absorption, in-place mutation of the caller-owned `opakc` array, and
+the source-order trapezoidal accumulation of `htfreef` over `epi` and `bremsa`.
+The incoming opacity is explicit state and is never assumed to be zero.
+
+The fixed-state `calc_hmc_all` path can now execute `comp2` followed by `freef`,
+exporting `cmp1`, `cmp2`, `htcomp`, `clcomp`, `htfreef`, and the updated
+continuum opacity workspace. None of these terms is accumulated into complete
+thermal totals until `heatf` is translated. `bremem` and `heatf` remain
+explicitly deferred.
+
+The bounded XSTAR helper expands from nine to eleven hooks. A pre-`freef` hook
+captures the incoming opacity array, and a loop-local hook in `freef.f90`
+captures the exact source `opaff`, updated `opakc`, and cumulative `htfreef`
+without reconstructing small increments by subtraction. Example 113 and CLI
+`xstar-atomic-port-freef` require exact opacity-increment, opacity-mutation, and
+`htfreef` parity while preserving the frozen v0.4.34 oxygen, v0.4.38 H/He/O,
+and accepted v0.4.39 Compton regressions. Physical call-73 acceptance requires
+a rebuilt eleven-hook XSTAR production run.
+
+## v0.4.39
+
+v0.4.39 translates the coherent relativistic Compton subsystem in source order:
+`calc_hmc_all -> comp2 -> cmpfnc -> hunt3`, together with the global
+`coheat.dat` table state initialized by `xstarsetup.f90`. The implementation
+preserves the source `ncomp=101` grids, `decomp(sx_index,energy_index)` table
+orientation, one-based `hunt3` boundary behavior, bilinear `cmpfnc`
+interpolation, low-energy analytic branch, source-rounded default-real
+constants, and the `comp2` trapezoidal continuum integrations over `epi` and
+`bremsa`.
+
+The translated fixed-state `calc_hmc_all` path can now execute `comp2` and
+export `cmp1`, `cmp2`, and the corresponding `heatf` Compton heating/cooling
+coefficients without yet accumulating them into complete thermal totals;
+`freef`, `bremem`, and `heatf` remain untranslated. The exact source
+`coheat.dat` table is packaged as runtime data, and the accepted v0.4.34 oxygen
+and v0.4.38 H/He/O pre-continuum results are frozen as mandatory regression
+gates.
+
+The bounded XSTAR helper expands from eight to nine hooks. A new insertion
+immediately after `call comp2` captures the exact same-call continuum grid,
+`cmp1`, `cmp2`, `ekt`, and derived Compton heating/cooling coefficients.
+Example 112 and CLI `xstar-atomic-port-compton` validate the requested v0.4.39
+gates. Package tests and an independent original-Fortran driver validate the
+translation, but physical call-73 acceptance is intentionally pending a rebuilt
+nine-hook XSTAR production run.
+
+## v0.4.38
+
+v0.4.38 closes the single blocker isolated by the complete v0.4.37 H/He/O
+call-73 rerun. The type-77 source gate is confirmed correct: all H/He type-77
+terms pass, all active final and outer-start populations pass, all source
+`xtot` rows pass, and every thermal family passes. The remaining row was H I
+`global_ion_xiin`, where Python exported the final-outer-start `xo` total
+(`3.1712826766e-6`) while XSTAR exports the returned final `x` total
+(`3.2072205404e-6`).
+
+The fixed-state `calc_hmc_all` loop now preserves both source vectors with their
+literal roles: `xiin`, charge accounting, and the fully stripped residual use
+`calc_hmc_element`'s returned final-`x` ion total; `xtotg` remains the separate
+`msolvelucy` diagnostic accumulated from `xo` at the start of the final outer
+iteration. A compatibility fallback is retained only for synthetic test doubles
+that predate the explicit final-vector total. Example 111 validates the split
+semantics and the complete H/He/O pre-continuum gate. No XSTAR source change,
+helper replacement, or rebuild is required.
+
+## v0.4.37
+
+v0.4.37 closes the single source-semantic blocker isolated by the complete
+v0.4.36 H/He/O production rerun. XSTAR `ucalc.f90` label 77 returns exact
+zero before `calt77` when the mutable endpoint energy separation is below
+1 eV. Python now applies that gate in source order while retaining valid
+endpoints and the normal four zero-valued matrix roles. The correction targets
+22 H records/88 terms and 26 He records/104 terms; the hydrogen `xiin` blocker
+was traced specifically to record 572.
+
+The data-path round-trip test now removes both supported environment aliases,
+`XSTAR_ATDB_FITS` and `XSTAR_ATDB`, so a configured user shell no longer
+invalidates the isolated test. Runtime path precedence is unchanged. A new
+example 110 validates type-77 parity and the complete all-element gate. No
+XSTAR rebuild is required.
+
+## v0.4.36
+
+v0.4.36 is narrowly bounded to the hydrogen and all-element differences exposed
+by the complete v0.4.35 H/He/O call-73 probe. It translates XSTAR data type 62
+through the native label-60/`calt6062` path, restoring H I records 488--491 and
+their 16 four-role matrix terms. It adds a source diagnostic for their packed
+endpoints, quantum numbers, fit coefficients, rates, and insertion status.
+
+Matrix parity now joins terms by `(element_z, source_record, role)` and retains
+Python/XSTAR term indexes only as call-order diagnostics, preventing one omitted
+record from shifting the rest of an element. Same-call initial-population parity
+is generalized to H, He, and O, covering 718 compact rows with per-element
+readiness. The all-element reports add solver, `xtot`, thermal, blocker, and
+detailed-readiness fields for each selected element.
+
+The release defines `all_element_pre_continuum_acceptance_ready`, requiring the
+frozen oxygen call-73 regression, complete detailed H/He/O state and active
+solver parity, all thermal families, and zero milestone-blocking rows. A packaged
+hydrogen target manifest and example 109 validate the exact 4-record/16-term/
+718-row/33-H-row/9-blocker/4-thermal inventory. No XSTAR rebuild is required; physical acceptance still requires rerunning example 108 with the existing v0.4.35 all-element raw probes. Validation passed with 8 focused tests, 137 source-port tests, and the complete suite with 450 passed and 22 skipped.
+
+## v0.4.35
+
+v0.4.35 starts the full source-order, positive-abundance fixed-state
+`calc_hmc_all` element scope while retaining the accepted v0.4.34 oxygen
+call-73 result as a mandatory packaged regression gate. The new
+`all_element_fixed_state` module derives the active source element list from
+positive-abundance type-11 probe rows, preserves source order and `mml/mmu`,
+tracks per-element same-call seed/matrix/final/thermal/workspace coverage, and
+executes the complete pre-continuum element loop with explicit charge-scope
+accounting. Initial-population policies are `use-available`, `require-all`, and
+`ignore`.
+
+The release adds CLI `xstar-atomic-port-all-elements`, example 108, and
+all-element scope CSV/JSON/Markdown products. The existing probe can start the
+H/He/O loop with exact oxygen state plus autonomous H/He fallback. The generated
+eight-hook helper now treats `XSTAR_ATOMIC_HMC_TARGET_ELEMENT=0` as detailed
+all-abundant-element capture; insertion locations are unchanged, but a helper
+replacement and XSTAR rebuild are required for complete all-element parity.
+Continuum leaves remain intentionally untranslated.
+
+Validation passed with 6 focused v0.4.35 tests, 129 source-port tests, and the complete historical suite with 442 passed and 22 skipped. The clean source distribution passed all 129 source-port tests; `compileall`, sdist/wheel builds, installed-wheel checks, packaged oxygen-gate checks, and GNU Fortran helper compilation also passed. The existing call-73 plan resolves H, He, and O, with detailed same-call coverage presently available only for oxygen. No full all-element physical parity is claimed until a new `TARGET_ELEMENT=0` XSTAR capture is run.
+
+## v0.4.34
+
+v0.4.34 is a bounded Milestone-4 source-semantics correction release. It
+preserves the LTE `rnise` vector independently from the same-call `xileve`
+solver seed, creates the complete zero-initialized `leveltemp` workspace through
+source `ndl=5000`, and reproduces the cached-branch stale-`atmp22` behavior of
+`phint53hunt.f90`. These corrections target exactly 35 `rnisg` rows, 349
+`bilevg` rows, 205 type-53 exact workspace reads, 196 type-53 `cj2` records,
+seven type-99 `ans5` records, and two thermal-family rows isolated from the
+complete v0.4.33 oxygen diagnosis. A new focused gate module, example 107, and
+frozen benchmark manifest reproduce the `35/349/205/196/7/2` baseline target
+set and require all zeros on the v0.4.34 rerun. Validation passed with 5 focused
+tests, 123 source-port tests, and the complete suite with 436 passed and 22
+skipped, plus build/install checks. No XSTAR rebuild is required; physical
+oxygen acceptance still requires rerunning example 105 and obtaining
+`oxygen_pre_continuum_acceptance_ready=True`.
+
+## v0.4.33
+
+v0.4.33 is a bounded Milestone-4 state-history and diagnostic release based on
+the production v0.4.32 oxygen result. It corrects the initial population state
+passed to the translated `msolvelucy`: source `calc_hmc_element.f90` maps the
+incoming global `xileve/xilevg` vector into compact `x`, whereas Python had
+used the LTE `rnise` vector from `levwkelement`. The eight-hook bounded XSTAR
+probe now captures the complete same-call compact input vector, and the
+fixed-state parity CLI replays it explicitly as source state while reporting
+that the vector is a regression input rather than a production coefficient.
+
+The mutable `leveltemp` implementation now replays the complete active-ion
+write sequence performed by `levwkelement`, then overwrites only `1:nlev`
+during each second-pass `calc_hmc_ion` call. Diagnostic owner metadata and a
+write/read trace identify which ion last wrote each retained column. A new
+post-`ucalc` XSTAR hook records the exact `leveltemp%rlev(1,idest1)` and
+`leveltemp%rlev(1,idest2)` read by every selected type-49/type-53/type-99
+rate-7 record, together with `ans1..ans6`. The oxygen gate requires exact
+same-call input-state parity, exact mutable-workspace parity including type 53,
+final/xo population parity, source `xtot`, thermal-family closure, and the
+existing O III--O V reassessment.
+
+Validation passed: 6 focused v0.4.33 tests, 118 source-port tests, 127
+source-port/package/API/documentation tests with 2 optional skips, the complete
+historical suite with 431 passed and 22 skipped, and 118 source-port tests from
+a clean source distribution. `compileall`, source/wheel builds, installed-wheel
+checks, and GNU Fortran compilation of the generated helper also passed. A
+fresh production XSTAR run is still required. Closure of the previously
+observed 11 final populations, 18 outer-start populations, O III/O IV/O VI
+`xtot`, eight thermal-family rows, and one `cll2` row is not claimed without
+those new probe products.
+
+## v0.4.32
+
+v0.4.32 is a bounded Milestone-4 correction release based on the production v0.4.31 oxygen probe. It preserves source `nionp` counters across inactive ion stages and repairs source-slot `xtot` aggregation; replaces the over-strict Python/XSTAR iteration-count comparison with an internal synchronized-snapshot gate; corrects type-54 to use the dimensionless `DeltaE/kT` energy channel; and preserves the mutable `leveltemp` higher-column workspace used by type 49, 53, and 99 electron-energy corrections. Focused v0.4.32 tests pass (8); the source-port regression selection passes (112); and the source-port/package/API/documentation selection passes (147 with 2 optional skips). Clean-sdist, wheel, compileall, installed-wheel, and GNU Fortran helper checks pass. The complete historical suite exceeded the 150-second execution limit. A fresh production oxygen rerun remains required before all-element expansion.
+
+## v0.4.31
+
+v0.4.31 is a bounded Milestone-4 oxygen pre-continuum parity release. It completes the type-71 post-swap energy channels, corrects type-72 packed endpoints from `[-3],[-2]` to `[-4],[-3]`, adds record-resolved rate-7 `cj2` diagnosis with a dedicated type-53 gate, and introduces a synchronized seven-hook XSTAR capture of the final effective `msolvelucy` matrix, returned population vector, and final-outer-start vector.
+
+Source review also corrected the returned ion totals: XSTAR `xtot` is formed from the population vector at the start of the final Lucy outer iteration and excludes the final compact row. Python now exports that source value separately from totals reconstructed from the returned final vector. The strict oxygen acceptance gate combines the synchronized final-solver checks with the existing active-level, global-ion, thermal-family, and matrix-closure gates and emits an explicit O III--O V/O III--O IV reassessment CSV. Probe values remain diagnostic-only. Production oxygen acceptance is not claimed until the new instrumented XSTAR run is supplied.
+
+## v0.4.30
+
+v0.4.30 is a probe-I/O compatibility hotfix for the v0.4.29 oxygen
+pre-continuum acceptance workflow. Some XSTAR Fortran exponential formats
+omit the `E` when the exponent has three digits, for example
+`-3.1564610560130326-107`. Python probe readers now accept standard `E`,
+Fortran `D`, and omitted-`E` representations without changing the captured
+value. Newly generated calc_hmc_all probes use explicit three-digit exponent
+formats (`ES26.16E3`) so future CSVs are directly readable by standard tools.
+The production operator, type-50 thermal correction, same-call matrix gates,
+and all physical acceptance semantics are unchanged from v0.4.29.
+
+## v0.4.29
+
+v0.4.29 is a bounded Milestone-4 oxygen pre-continuum parity release. It
+restores the missing type-50 line-energy channels and adds same-call XSTAR
+thermal-family and matrix-coefficient probes. Probe products remain diagnostic
+only: captured XSTAR values are never substituted into the production Python
+operator or native solve.
+
+## 1. Complete type-50 thermal channels
+
+The source-port type-50 evaluator now reproduces the post-swap XSTAR `ucalc`
+energy channels using the actual endpoint-level energy difference:
+
+```text
+ans1 = lower-to-upper photoexcitation rate
+ans2 = upper-to-lower escaped-decay rate
+ans3 = -ans2 * abs(Eupper-Elower) * 1.602176634e-12
+ans4 = -ans1 * abs(Eupper-Elower) * 1.602176634e-12
+```
+
+The endpoint energy controls `ans3/ans4`; the stored wavelength remains in the
+line-profile, oscillator-strength, and radiation-grid path. This restores the
+bound-bound line-cooling contribution that was absent from the v0.4.28 `cl`
+channel. The exact current XSTAR `constants.f90` eV-to-erg constant is used.
+
+## 2. XSTAR thermal-family probe
+
+The bounded XSTAR helper now captures the `msolvelucy` thermal accumulators for
+the selected element and call:
+
+```text
+xstar_calc_hmc_all_thermal_data_type_probe.csv
+xstar_calc_hmc_all_thermal_rate_type_probe.csv
+```
+
+The files record heating, cooling, heating2, and cooling2 by XSTAR data type
+(`rntpsv`) and rate type (`rltpsv`). Python compares these rows against its
+per-abundance family sums. This directly identifies the family responsible for
+any remaining `cl/cl2` discrepancy instead of inferring it from four element
+totals.
+
+## 3. Same-call matrix-coefficient probe and comparison
+
+The helper also captures the exact sparse term list passed to the selected
+`msolvelucy` call:
+
+```text
+xstar_calc_hmc_all_matrix_terms_probe.csv
+```
+
+Each row includes term index, source record, raw and compact endpoints, and
+`aj1`, `aj2`, `cj`, and `cj2`. The Python comparator checks:
+
+- exact term-count and topology parity;
+- all-strict coefficient parity;
+- `(A_python-A_XSTAR) @ x_XSTAR` on active compact rows;
+- family-level coefficient differences;
+- the dominant population-weighted coefficient difference on every failing
+  active row.
+
+New products include:
+
+```text
+xstar_calc_hmc_all_same_call_matrix_term_parity.csv
+xstar_calc_hmc_all_same_call_matrix_family_parity.csv
+xstar_calc_hmc_all_same_call_active_row_attribution.csv
+```
+
+## 4. Active population and ion residual classification
+
+The existing population-weighted attribution is extended with the captured
+same-call XSTAR coefficient. A dedicated table joins the remaining active
+`xilevg/alphag` and global-ion failures to the matrix comparison:
+
+```text
+xstar_calc_hmc_all_active_population_ion_matrix_resolution.csv
+```
+
+Rows are classified using coefficient, topology, active closure, solver,
+superlevel, normalization, and population-propagation evidence. The comparison
+is diagnostic only and does not alter the source-faithful operator.
+
+## 5. Acceptance and strict gates
+
+v0.4.29 deliberately separates three matrix results:
+
+```text
+xstar_same_call_matrix_topology_ready
+xstar_same_call_matrix_coefficient_ready
+xstar_same_call_matrix_active_closure_ready
+```
+
+The oxygen milestone matrix gate requires exact topology and zero
+out-of-tolerance active rows in:
+
+```text
+(A_python-A_XSTAR) @ x_XSTAR
+```
+
+All tiny coefficient differences remain visible through the independent strict
+coefficient gate. The overall milestone acceptance gate requires:
+
+```text
+pre-matrix parity
+runtime-state parity
+global-ion parity
+active-level parity
+element-array parity
+same-call topology and active operator closure
+thermal-family parity
+applicable all-element summary parity
+```
+
+The all-strict gate additionally requires every compared matrix coefficient and
+all strict level products to pass.
+
+## 6. Probe installation
+
+The v0.4.29 helper uses six bounded insertion hooks:
+
+1. start of `calc_hmc_all`;
+2. element pre-matrix state in `calc_hmc_element`;
+3. element post-solve thermal arrays in `calc_hmc_all`;
+4. matrix-term capture immediately before `msolvelucy`;
+5. thermal-family capture after the `msolvelucy` thermal accumulation loop;
+6. all-element pre-continuum state immediately before `comp2`.
+
+The resulting probe directory contains seven CSV products: summary, ion, level,
+element, matrix-term, thermal-data-type, and thermal-rate-type tables.
+
+## 7. Validation
+
+Completed before packaging:
+
+```text
+focused v0.4.29 tests                 5 passed
+complete source-port suite           95 passed
+API/CLI/package/documentation suite  35 passed, 2 skipped
+compileall                            passed
+```
+
+The clean source distribution repeats the complete 95-test source-port pass.
+The source distribution and wheel build successfully. An isolated wheel install
+confirms v0.4.29, the same-call matrix and thermal-family APIs, both local-zone
+and probe CLIs, and access to the bundled oxygen benchmark. The generated
+helper and the complete patched `calc_hmc_all.f90`, `calc_hmc_element.f90`, and
+`msolvelucy.f90` compile with GNU Fortran 14.2; only the two pre-existing
+single-precision `1.e-48` underflow warnings are emitted.
+
+The complete historical suite was attempted under a 150-second bound and did
+not complete, so it is not claimed as fully passed. Final archive integrity and
+SHA-256 verification are part of the release handoff.
+
+A production example-105 run with a newly rebuilt six-hook XSTAR executable is
+the scientific acceptance oracle.
+
+## 8. Next order
+
+```text
+v0.4.29 production oxygen rerun
+-> verify restored type-50 cooling and identify any residual cl2 family
+-> verify same-call topology, coefficient, and active-closure products
+-> close active level/global-ion residuals
+-> accept oxygen pre-continuum parity
+-> full all-element fixed-state scope
+-> comp2
+-> freef
+-> bremem
+-> heatf
+-> complete fixed-state calc_hmc_all parity
+-> dsec
+```
+
+
+## v0.4.28
+
+v0.4.28 adds abundance-aware element thermal parity and an XSTAR-vector matrix-closure audit. When `--abundance` is omitted and the bounded element probe is available, example 105 uses the captured XSTAR abundance and records requested/effective/source provenance. Element outputs now include `ht`, `cl`, `ht2`, and `cl2` per unit abundance as well as scaled values.
+
+The new diagnostic closure maps the captured XSTAR global-level populations back to the translated compact basis and evaluates `A_python @ x_XSTAR` without feeding probe values into the production solve. It writes row residuals, dominant matrix contributors, native-versus-XSTAR-vector thermal contributions, channel summaries, and data-type/rate-type family summaries. Each thermal channel is decomposed into the native Python value, the value from XSTAR populations with the same Python coefficients, the captured XSTAR value, the population-vector effect, and the remaining coefficient/source-semantic gap.
+
+The existing primary-strict, active-population, derived-strict, and all-strict level gates are retained. v0.4.28 adds a separate matrix-closure status, an element-thermal diagnostic status, an explicit milestone acceptance gate, and a separate all-strict readiness flag. The acceptance gate requires pre-matrix and runtime-state parity, global-ion parity, active-level parity, element-array parity, XSTAR-vector closure when available, and the applicable all-element summary gate.
+
+Validation: the focused abundance/closure selection passes 16 tests; the complete source-port suite passes 93 tests in both the development tree and clean source distribution; the selected API/CLI/package/documentation suite passes 44 tests with 2 optional skips; and `compileall` passes. Source and wheel builds, installed-wheel API/CLI and bundled-benchmark checks, and standalone Fortran probe-helper compilation pass. The complete historical suite was attempted under a 150-second bound and timed out, so it is not claimed as fully passed. Final archive integrity and SHA-256 verification are recorded in the release handoff.
+
+A fresh v0.4.28 production example-105 run remains the acceptance oracle because the ATDB, live radiation state, escape state, and bounded XSTAR probe directory reside in the user's environment.
+
+## v0.4.27
+
+v0.4.27 closes the next bounded `calc_hmc_all` parity layer.
+
+### Corrected
+
+- Reproduced XSTAR's two departure-coefficient floors: `1e-37` for spectroscopic `calc_hmc_element` rows and `1e-48` only for each ion's final continuum row.
+- Zeroed `igammamaxg/ialphamaxg` on final continuum rows, matching the source copy bounds.
+- Corrected type-77/rate-23 temperature flooring to use the actual endpoint-energy wavelength before `calt77`, while retaining the record-tail wavelength for detailed balance.
+
+### Added
+
+- A dedicated XSTAR element-array probe for `htt/cll/htt2/cll2`, abundance, and source element ordinal.
+- Separate strict-primary, active-level, derived, and all-level parity readiness fields.
+- `--xstar-calc-hmc-active-population-threshold` for the milestone gate; strict rows remain fully reported.
+- Population-weighted attribution for failing `xilevg/alphag` rows.
+- Diagnostic-only type-77 source-endpoint-floor versus legacy-record-floor impact CSV/JSON products.
+
+### Evidence and validation
+
+Offline application of the direct level-export semantics to the archived v0.4.26 run reduces strict failures from 301 to an estimated 268, including `bilevg` 180 to 160 and dominant-record IDs 14 to 1. The remaining milestone-blocking estimate is 32 rows before the type-77-corrected production re-solve. A fresh instrumented XSTAR run remains required for acceptance. The focused v0.4.27 tests pass 3/3, the complete source-port suite passes 90 tests, and the selected API/package/documentation suite passes 34 tests. The full historical suite exceeded the 150-second execution limit and is not claimed as fully passed.
+
+## v0.4.26
+
+v0.4.26 corrects the structural global-array mappings exposed by the first
+scope-aware `calc_hmc_all` pre-continuum comparison.
+
+### Corrected
+
+- Global level products now use the literal XSTAR pointer
+  `derivedpointers%npilev(local_ordinal, ion_index)`.  The source ordinal in the
+  ion's level traversal is no longer reconstructed from a packed local-level
+  label.
+- Preliminary `calc_ion_rates` `pirt/rrrt` values remain dedicated inputs to
+  `ioneqm/istruc`, while the selected ion stages now export the independent
+  second-pass `calc_hmc_ion` `pirt/rrrt` values used by `calc_hmc_all`.
+- Element-indexed `htt`, `cll`, `htt2`, and `cll2` parity now uses the source
+  element ordinal from the type-11 element table rather than assuming that the
+  array index equals atomic number `Z`.
+
+### Added
+
+- `IonAssemblySummary.second_pass_pirt` and `second_pass_rrrt`, accumulated with
+  the literal `calc_hmc_ion.f90` type and endpoint gates.
+- Separate preliminary and second-pass ion-rate columns in fixed-state products.
+- Source global-element and global-level index maps in the local-zone result and
+  diagnostics.
+- Regression coverage for irregular packed level labels, noncontiguous `npilev`
+  indices, source element ordinals, and preliminary/second-pass rate separation.
+
+### Validation and production status
+
+The source-port suite passes 87 tests.  A selected API/package/docs set passes 34 tests.  `compileall`, sdist/wheel builds, installed-wheel API/CLI checks, packaged benchmark access, and Fortran probe compilation pass.  The complete historical test suite was attempted but exceeded the 150-second execution limit and is not claimed as fully passed.  An offline reanalysis of the user's
+v0.4.25 products shows that the source-ordinal remap reduces global-level
+failures from 614 to 290; `rnisg` and `gammag` mapping failures disappear.  The
+second-pass O III--O VIII `pirt/rrrt` values reconstructed from the accepted
+matrix terms all agree with the captured XSTAR values within the 0.5% gate.
+
+A fresh global-array parity result is not claimed in the build environment,
+because the production `atdb.fits`, pointer cache, runtime probes, and escape
+state are available only in the user's XSTAR tree.  Example 105 is the
+production acceptance run for v0.4.26.
+
+### Next order
+
+`production oxygen global-array parity -> full all-element fixed-state scope ->
+comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity ->
+dsec`.
+
+## v0.4.25
+
+v0.4.25 completes the bounded pre-continuum parity layer for element-subset `calc_hmc_all` validation.
+
+### Corrected
+
+- The source-aligned default ion-selection threshold is now `critf=1e-7`.
+- When an XSTAR `calc_hmc_all` probe directory is supplied and `--critf` is omitted, example 105 reads the captured `critf` and selected call before constructing the Python element request.
+- CLI/runtime provenance now distinguishes `requested_critf`, `effective_critf`, and `critf_source`.
+- `mml`, `mmu`, and `critf` are compared once per element rather than once per ion-stage row.
+- All-element totals (`httot`, `cltot`, `httot2`, `cltot2`, `enelec`, and `elcter`) are no longer treated as failures for a one-element/partial-abundance calculation. Such runs report `not_comparable_subset_scope`.
+
+### Added
+
+- Native global-index maps from `(Z, ion_stage)` and `(Z, ion_stage, local_level)` into the XSTAR `xiin` and `xilevg` array indices.
+- Direct comparison of the XSTAR pre-continuum global ion arrays: `xiin`, `rrrt`, `pirt`, `stotg`, `atotg`, and `xtotg`.
+- Direct comparison of the element-indexed `htt`, `cll`, `htt2`, and `cll2` values carried in the ion probe.
+- Direct comparison of selected global level arrays: `xilevg`, `rnisg`, `bilevg`, `gammag`, `alphag`, `igammamaxg`, and `ialphamaxg`.
+- Separate readiness fields for the runtime state, all-element summary scope, global ion arrays, global level arrays, and the combined global-array gate.
+
+### Production evidence
+
+The user's v0.4.24 rerun with `--critf 1e-7` confirms exact source ion-stage selection (`mml=3`, `mmu=8`) and full pre-matrix readiness. The six remaining v0.4.24 failures are the expected all-element summary quantities compared against an oxygen-only calculation; v0.4.25 marks those quantities as out of scope and evaluates the oxygen ion/level arrays directly.
+
+### Next order
+
+`XSTAR oxygen pre-continuum global-array parity -> full all-element fixed-state driver -> comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec`.
+
+## v0.4.24
+
+v0.4.24 completes the missing pre-matrix half of the fixed-state `calc_hmc_all` source port.
+
+### Added
+
+- `xstar_atomic.source_port.ion_balance` with source-faithful `calc_ion_rates`, `ioneqm`, `istruc`, and `mml/mmu` selection.
+- Separate preliminary `pirt/rrrt` and post-solve population-weighted `stotg/atotg` products.
+- Source-derived ion-stage selection as the default fixed-state path, with an explicit-range regression override.
+- A bounded `calc_hmc_all` XSTAR probe generator and pre-continuum parity comparator.
+- `examples/106_prepare_xstar_calc_hmc_all_probe.py`.
+- Per-record `calc_ion_rates` diagnostics and preliminary ion-fraction columns in example 105 products.
+
+### Corrected
+
+- Global LTE level populations now use the one-based `rnise` compact index rather than a one-row-shifted zero-based lookup.
+- `pirt/rrrt` no longer incorrectly duplicate `msolvelucy` `stot/atot` flow totals.
+
+### Scope
+
+The pre-matrix translation is covered by source-branch, equilibrium, stage-limit, mapping, probe-generation, and comparator tests. Direct XSTAR pre-continuum parity remains pending until the generated probe is compiled and run. The next coherent sequence is `comp2 -> freef -> bremem -> heatf -> complete fixed-state calc_hmc_all parity -> dsec`.
+
+## v0.4.23
+
+v0.4.23 begins Milestone 4 after the frozen oxygen Milestone-3 benchmark. It closes the source-obvious type-49 destination bug, prepares an exact source-routine driver for `xstarcalc`, and adds the fixed-temperature/fixed-electron-fraction core of `calc_hmc_all`.
+
+## Type-49 packed-index correction
+
+The v0.4.22 production rerun confirmed type 56/rate 3 at exact parity and selected type 49/rate 7 as the first remaining strict matrix family. The family contained 251 records and 1,004 terms on each side, but only 260 terms matched topologically; 744 terms were Python-only and 744 were XSTAR-only.
+
+XSTAR label 49 uses:
+
+```fortran
+idest1=idat(np1i+nidt-2)
+idest4=idat(np1i+nidt-3)
+idest2=nlevp+max(0,idat(np1i-1+nidt-3))-1
+```
+
+For a zero-based Python packed integer tuple, the destination offset is `integers[-4]`. The adjacent `integers[-3]` field is the separate `idest4`/linked-field value. v0.4.22 incorrectly used `[-3]` for `idest2`, collapsing 251 records onto only four parent destinations.
+
+v0.4.23 corrects both the full evaluator and `indonly` path to use:
+
+```python
+idest1 = integers[-2]
+parent_offset = integers[-4]
+idest2 = nlevp + max(0, parent_offset) - 1
+```
+
+The label-49 `phint53` rate integration, threshold formula, source swaps, and heating/cooling correction remain unchanged. No empirical scale or probe coefficient is introduced.
+
+## Source-driver preparation
+
+The existing coarse `XSTARStage` driver remains backward compatible. A new source-routine layer records and executes the original nested call order:
+
+```text
+xstarcalc:
+    bremsmap
+    dsec
+    calc_hmc_all
+    calc_emisab_all
+    calc_emis_all
+
+zone/pass:
+    step
+    trnfrc
+    xstarcalc
+    heatt
+    stpcut
+    trnfrn
+```
+
+`XSTARPythonDriver.run_xstarcalc(fixed_state=True)` skips `dsec` and executes the captured-state Milestone-4 prefix. Missing source routines fail explicitly through `UnportedXSTARSourceRoutine`.
+
+## Fixed-state calc_hmc_all core
+
+The new `xstar_atomic.source_port.local_zone` module ports the outer fixed-state accounting of `calc_hmc_all.f90` while reusing the validated Milestone-3 element solver.
+
+Implemented source-shaped behavior includes:
+
+- literal `lcdd` entry density mutations;
+- abundance-filtered element requests;
+- one complete element solve per supplied element;
+- abundance-weighted `htt`, `cll`, `htt2`, and `cll2` accumulation;
+- ion fractions, photoionization rates, and recombination rates;
+- global role-keyed level populations, LTE populations, and departure coefficients;
+- `gammag`, `alphag`, fractional rate categories, and dominant-record indices;
+- `stotg`, `atotg`, `fstotg`, `fatotg`, and `xtotg` diagnostics;
+- source charge accounting and `elcter=xee-enelec`;
+- source heating/cooling residual `hmctot=2*(httot-cltot)/(1e-37+httot+cltot)`;
+- explicit readiness flags for element-loop, charge-scope, continuum, and complete fixed-state parity.
+
+The current implementation intentionally does **not** claim complete Milestone-4 parity. The continuum sequence
+
+```text
+comp2 -> freef -> bremem -> heatf
+```
+
+is represented by an explicit callback and defaults to a deferred, incomplete state. Full all-element coverage and an XSTAR fixed-state oracle are also still required. `dsec`, emissivity/opacity, transfer, and outputs remain unported.
+
+## New API and executable
+
+```python
+from xstar_atomic.source_port import (
+    FixedStateElementRequest,
+    calc_hmc_all,
+    write_fixed_state_calc_hmc_all_products,
+)
+```
+
+New executable and example:
+
+```text
+xstar-atomic-port-local-zone
+examples/105_port_xstar_calc_hmc_all_fixed_state.py
+```
+
+The oxygen captured-state development command is:
+
+```bash
+PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
+  --atdb /home/adanehka/mhd/xstar/xstar/data/atdb.fits \
+  --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz \
+  --element-z 8 \
+  --min-ion-stage 3 \
+  --max-ion-stage 8 \
+  --temperature-k 1.0e6 \
+  --hydrogen-density-cm3 1.0e8 \
+  --electron-fraction-xee 1.0 \
+  --live-rate-grid-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv \
+  --live-rate-grid-state last \
+  --escape-npz xstar_o7_escape_state_v045.npz \
+  --xstar-population-probe-csv xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv \
+  --xstar-population-solve-call-id 219 \
+  --population-probe-runtime-policy use \
+  --out-dir xstar_o_calc_hmc_all_fixed_state_v0423 \
+  --print-summary
+```
+
+This first run is expected to report `element_loop_ready=True` but `complete_fixed_state_ready=False`, because the O III--O VIII subset does not cover the complete oxygen charge distribution and the continuum leaves are still deferred.
+
+## Validation
+
+- focused v0.4.23 tests: 7 passed;
+- complete source-port test suite: 78 passed;
+- v0.4.22 freeze/type-56 regression subset: 14 passed;
+- source inventory regenerated: 179 files, 404 routines;
+- translation ledger: 17 validated, 3 partial, 7 unported, 1 scaffold;
+- `compileall` passed.
+
+
+## v0.4.22
+
+- Close XSTAR data type 56 / rate type 3 for the solve-call-219 oxygen benchmark by reproducing `hunt3.f90` edge-interval extrapolation instead of flat-clamping temperatures outside the tabulated collision-strength grid.
+- Preserve the source `max(1e-48, ...)` interpolation operands and final `cijpp=max(0,cijpp)` gate, yielding exact zero rates for O VIII records 22861--22863 at the captured temperature.
+- Add focused tests for below-grid, in-grid, above-grid, descending-grid, and single-point type-56 records plus full `SourceFaithfulUCalc` zero-channel behavior.
+- Regenerate the XSTAR source inventory and translation ledger. Milestones 1--3 are recorded as completed for their validated scope; Milestone 4 and `calc_hmc_all -> dsec -> calc_emis_all -> xstarcalc` are the next coherent target.
+- Freeze the accepted 607-row oxygen O III--O VIII Milestone-3 benchmark, including hash-locked v0.4.21 assembly, population-parity, and matrix-family products, and bundle it as package data.
+- No empirical rate scale, probe-derived coefficient, or captured population is inserted into the native operator.
+
 ## v0.5.34 - 2026-05-28
 
 - Force FITS A-format binary-table fields to be space-padded at the byte level before checksum generation.

@@ -1071,11 +1071,9 @@ def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
         hdu = fits.BinTableHDU.from_columns(cols, name=table.extension_name)
     else:
         hdu = fits.TableHDU.from_columns(cols, name=table.extension_name)
-    _space_pad_ascii_table_columns(hdu, table)
     for key, value in table.header_keywords.items():
         # Long internal diagnostic keys are written as HIERARCH cards.
         hdu.header[key] = value
-    hdu.add_checksum()
     return hdu
 
 
@@ -1085,6 +1083,108 @@ def _primary_hdu(*, model_name: str, atomic_data_date: str) -> fits.PrimaryHDU:
     hdu.header["MODEL"] = _fixed(model_name, 30).rstrip()
     hdu.header["ATDATA"] = str(atomic_data_date)[:63]
     return hdu
+
+
+
+
+def _fits_tform_binary_width(tform: str) -> int:
+    """Byte width of a simple FITS binary-table TFORM value."""
+    text = str(tform).strip().upper().replace(" ", "")
+    if not text:
+        return 0
+    digits = ""
+    i = 0
+    while i < len(text) and text[i].isdigit():
+        digits += text[i]
+        i += 1
+    repeat = int(digits) if digits else 1
+    code = text[i:i + 1]
+    scalar = {
+        "L": 1, "B": 1, "I": 2, "J": 4, "K": 8,
+        "A": 1, "E": 4, "D": 8, "C": 8, "M": 16,
+    }.get(code, 0)
+    if code == "X":
+        return (repeat + 7) // 8
+    return repeat * scalar
+
+
+def _rewrite_fits_ascii_null_padding(path: str | Path) -> None:
+    """Replace NUL bytes only inside binary-table A columns with blanks.
+
+    The v0.5.34 pre-write sanitizer mutated Astropy's table fields and could
+    corrupt unicode-scaled columns before ``writeto``.  This routine instead
+    scans the already-written FITS blocks, computes binary-table character
+    column spans from TFORM cards, and edits only those spans.  Numeric table
+    zeros are never touched.
+    """
+    file_path = Path(path)
+    data = bytearray(file_path.read_bytes())
+    raw = bytes(data)
+    changed = False
+    pos = 0
+    total = len(raw)
+    while pos + 80 <= total:
+        header_start = pos
+        cards: list[str] = []
+        end_pos = None
+        while pos + 80 <= total:
+            card = raw[pos:pos + 80].decode("ascii", "ignore")
+            cards.append(card)
+            pos += 80
+            if card.startswith("END"):
+                end_pos = pos
+                break
+        if end_pos is None:
+            break
+        header_len = ((end_pos - header_start + 2879) // 2880) * 2880
+        data_start = header_start + header_len
+
+        def _card_value(key: str) -> str | None:
+            prefix = key.ljust(8) + "="
+            for card in cards:
+                if card.startswith(prefix):
+                    value = card[10:80].split("/", 1)[0].strip()
+                    return value.strip("'").strip()
+            return None
+
+        xtension = (_card_value("XTENSION") or "").upper()
+        naxis1 = int(_card_value("NAXIS1") or "0")
+        naxis2 = int(_card_value("NAXIS2") or "0")
+        pcount = int(_card_value("PCOUNT") or "0")
+        gcount = int(_card_value("GCOUNT") or "1")
+        tfields = int(_card_value("TFIELDS") or "0")
+        if "BINTABLE" in xtension and naxis1 > 0 and naxis2 > 0 and tfields > 0:
+            col_offset = 0
+            for idx in range(1, tfields + 1):
+                tform = (_card_value(f"TFORM{idx}") or "").upper().replace(" ", "")
+                width = _fits_tform_binary_width(tform)
+                if tform.endswith("A") and width > 0:
+                    for row in range(naxis2):
+                        start = data_start + row * naxis1 + col_offset
+                        stop = start + width
+                        for byte_index in range(start, stop):
+                            if data[byte_index] == 0:
+                                data[byte_index] = 32
+                                changed = True
+                col_offset += width
+        data_size = ((naxis1 * naxis2 + pcount) * gcount)
+        pos = data_start + ((data_size + 2879) // 2880) * 2880
+        if pos <= header_start:
+            break
+    if changed:
+        file_path.write_bytes(data)
+
+
+def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, *, overwrite: bool) -> None:
+    """Write a FITS file, then blank-pad binary A columns without Astropy re-encoding.
+
+    Astropy serializes some fixed-width byte/unicode arrays with NUL-filled
+    storage.  Mutating the already-written table bytes avoids the write-time
+    Unicode failure seen in v0.5.34 and keeps numeric binary-table zero bytes
+    intact.
+    """
+    hdul.writeto(path, overwrite=overwrite, checksum=False)
+    _rewrite_fits_ascii_null_padding(path)
 
 
 def write_final_output_files(
@@ -1116,7 +1216,7 @@ def write_final_output_files(
             _table_hdu(parameter_table),
             _table_hdu(table),
         ])
-        hdul.writeto(path, overwrite=overwrite, checksum=True)
+        _write_hdul_with_xstar_string_padding(hdul, path, overwrite=overwrite)
         paths[filename] = str(path)
     return paths
 
@@ -1158,7 +1258,7 @@ def write_detail_output_files(
         ]
         hdus.extend(_table_hdu(getattr(record, attr)) for record in store.records)
         path = output / filename
-        fits.HDUList(hdus).writeto(path, overwrite=overwrite, checksum=True)
+        _write_hdul_with_xstar_string_padding(fits.HDUList(hdus), path, overwrite=overwrite)
         paths[filename] = str(path)
     return paths
 
