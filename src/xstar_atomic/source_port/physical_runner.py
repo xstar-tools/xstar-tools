@@ -524,7 +524,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 5
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 6
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -880,18 +880,14 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         )
 
     # ``pprint.f90`` option 19 uses ``nlevp`` returned by
-    # ``calc_rates_level_lte`` for the parent ion, not the packed global
-    # level-count table.  In these compact ions ``nlevp`` includes the
-    # continuum/superlevel endpoint and is one larger than the highest
-    # bound local level present in type-7 records.  Using the packed count
-    # caused C VI superlevel rows to print ``32 21`` instead of the source
-    # local endpoint pair ``32 33``.
-    rrc_local_max_by_ion: dict[int, int] = {}
-    for ion_value, local_value in zip(continuum_ions, continuum_local):
-        ion_int = int(ion_value)
-        local_int = int(local_value)
-        if ion_int > 0 and local_int > 0:
-            rrc_local_max_by_ion[ion_int] = max(rrc_local_max_by_ion.get(ion_int, 0), local_int)
+    # ``calc_rates_level_lte`` for the parent ion.  Source ``nlevp`` is the
+    # ion level count used by ``leveltemp``; for RRC destination labels the
+    # source then prints ``idest2 = nlevp + seed - 1``.  v0.5.27 estimated
+    # ``nlevp`` from the maximum local level that appears in type-7 RRC rows.
+    # That happened to fix H-like ions, but it was too small for He-like and
+    # C V ions because their level blocks contain additional local levels not
+    # referenced by the active type-7 rows.  Use the derived source level count
+    # plus the continuum endpoint, matching the Fortran ``nlev`` semantics.
 
     rrcs: list[RRCOutputMetadata] = []
     for pos, (continuum_index, ion_index, local, upper_seed) in enumerate(
@@ -902,7 +898,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         upper_seed_index = int(upper_seed)
         if ion <= 0 or continuum_nint[pos] < 4:
             continue
-        source_nlevp = int(rrc_local_max_by_ion.get(ion, int(nlevs[ion]))) + 1
+        source_nlevp = int(nlevs[ion]) + 1
         upper_local_index = source_nlevp + upper_seed_index - 1 if upper_seed_index > 0 else 0
         level = levels_by_key.get((ion, local_index))
         # fstepr3.f90 writes ``eth = rlev(4,idest1)-rlev(1,idest1)``.
@@ -938,7 +934,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v5_rrc_pprint19_source_nlevp",
+            "metadata_builder": "vectorized_numpy_v6_rrc_pprint19_source_nlevp_from_nlevs",
             "metadata_cache_status": "built",
         },
     )
