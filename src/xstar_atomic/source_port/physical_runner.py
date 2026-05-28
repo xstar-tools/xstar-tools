@@ -524,7 +524,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 3
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 4
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -601,6 +601,8 @@ def save_source_output_metadata_cache(
                 rrc_ion_label=_string_array([row.ion_label for row in metadata.rrcs]),
                 rrc_lower_level=_string_array([row.lower_level for row in metadata.rrcs]),
                 rrc_upper_level=_string_array([row.upper_level for row in metadata.rrcs]),
+                rrc_lower_local_index=np.asarray([row.lower_local_index for row in metadata.rrcs], dtype=np.int32),
+                rrc_upper_local_index=np.asarray([row.upper_local_index for row in metadata.rrcs], dtype=np.int32),
             )
         os.replace(temporary_name, target)
     except Exception:
@@ -646,10 +648,12 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
             RRCOutputMetadata(
                 continuum_index=int(a), level_global_index=int(b), threshold_eV=float(c),
                 ion_label=str(d), lower_level=str(e), upper_level=str(f),
+                lower_local_index=int(g), upper_local_index=int(h),
             )
-            for a, b, c, d, e, f in zip(
+            for a, b, c, d, e, f, g, h in zip(
                 z["rrc_continuum_index"], z["rrc_level_global_index"], z["rrc_threshold_eV"],
                 z["rrc_ion_label"], z["rrc_lower_level"], z["rrc_upper_level"],
+                z["rrc_lower_local_index"], z["rrc_upper_local_index"],
             )
         )
     return SourceOutputMetadata(
@@ -847,11 +851,21 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     continuum_nint = np.asarray(continuum_rows[:, 5], dtype=np.int64)
     continuum_rptr = np.asarray(continuum_rows[:, 7], dtype=np.int64)
     continuum_iptr = np.asarray(continuum_rows[:, 8], dtype=np.int64)
+    # Type-7 RRC records carry the recombining bound level and the
+    # continuum/destination level as the final two integer fields.  XSTAR
+    # pprint(19) prints the *local* ion-level ordinals for both columns
+    # (e.g. c_vi 32 33), while the FITS RRC metadata also needs the global
+    # level index for table linkage.
     continuum_local = np.zeros(continuum_records.size, dtype=np.int64)
+    continuum_upper_local = np.zeros(continuum_records.size, dtype=np.int64)
     continuum_has_local = continuum_nint >= 2
     if np.any(continuum_has_local):
         continuum_local[continuum_has_local] = master.idat1.gather(
             continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 2,
+            dtype=np.int64,
+        )
+        continuum_upper_local[continuum_has_local] = master.idat1.gather(
+            continuum_iptr[continuum_has_local] + continuum_nint[continuum_has_local] - 1,
             dtype=np.int64,
         )
     fallback_threshold = np.zeros(continuum_records.size, dtype=np.float64)
@@ -862,11 +876,12 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         )
 
     rrcs: list[RRCOutputMetadata] = []
-    for pos, (continuum_index, ion_index, local) in enumerate(
-        zip(continuum_indices, continuum_ions, continuum_local)
+    for pos, (continuum_index, ion_index, local, upper_local) in enumerate(
+        zip(continuum_indices, continuum_ions, continuum_local, continuum_upper_local)
     ):
         ion = int(ion_index)
         local_index = int(local)
+        upper_local_index = int(upper_local)
         if ion <= 0 or continuum_nint[pos] < 2:
             continue
         level = levels_by_key.get((ion, local_index))
@@ -892,6 +907,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 threshold_eV=float(threshold),
                 ion_label=ion_labels[ion],
                 lower_level=(level.level_label if level else f"level_{local_index}"),
+                lower_local_index=local_index,
+                upper_local_index=upper_local_index,
             )
         )
     return SourceOutputMetadata(

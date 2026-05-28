@@ -776,8 +776,14 @@ def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf:
         upper = str(getattr(row, "upper_level", "continuum")).strip()[:20]
         energy = float(getattr(row, "threshold_eV", 0.0))
         level = int(getattr(row, "level_global_index", 0))
+        lower_local = int(getattr(row, "lower_local_index", 0) or 0)
+        upper_local = int(getattr(row, "upper_local_index", 0) or 0)
+        # Source-faithful pprint(19): after the ATDB continuum index and ion
+        # label, XSTAR prints the local bound-level ordinal and the local
+        # continuum/destination ordinal, not the global packed level index.
+        # Keep the global level only as an internal metadata field.
         buf.log_lines.append(
-            f"{out_index:7d}{level:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
+            f"{out_index:7d}{level:6d} {ion:<8s}{lower_local:8d}{upper_local:6d} {lower:<20s} {upper:<20s}"
             f"{energy:13.3E}{out_lum:13.3E}{in_lum:13.3E}"
         )
     buf.source_calls.append("pprint(19)")

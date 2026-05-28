@@ -118,6 +118,8 @@ class RRCOutputMetadata:
     ion_label: str
     lower_level: str
     upper_level: str = "continuum"
+    lower_local_index: int = 0
+    upper_local_index: int = 0
 
 
 @dataclass(frozen=True)
