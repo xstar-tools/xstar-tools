@@ -524,7 +524,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 6
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 7
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -888,6 +888,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     # C V ions because their level blocks contain additional local levels not
     # referenced by the active type-7 rows.  Use the derived source level count
     # plus the continuum endpoint, matching the Fortran ``nlev`` semantics.
+    # v0.5.28 added one extra level to nlevs, making every displayed
+    # destination column one too high (34 instead of 33, 57 instead of 56).
 
     rrcs: list[RRCOutputMetadata] = []
     for pos, (continuum_index, ion_index, local, upper_seed) in enumerate(
@@ -898,7 +900,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         upper_seed_index = int(upper_seed)
         if ion <= 0 or continuum_nint[pos] < 4:
             continue
-        source_nlevp = int(nlevs[ion]) + 1
+        source_nlevp = int(nlevs[ion])
         upper_local_index = source_nlevp + upper_seed_index - 1 if upper_seed_index > 0 else 0
         level = levels_by_key.get((ion, local_index))
         # fstepr3.f90 writes ``eth = rlev(4,idest1)-rlev(1,idest1)``.
@@ -934,7 +936,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v6_rrc_pprint19_source_nlevp_from_nlevs",
+            "metadata_builder": "vectorized_numpy_v7_rrc_pprint19_nlev_no_extra_offset",
             "metadata_cache_status": "built",
         },
     )
