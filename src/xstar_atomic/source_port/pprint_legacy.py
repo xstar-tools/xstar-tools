@@ -715,7 +715,7 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         " ",
         " print option:24",
         " absorption edge depths",
-        " index, ion, level, energy (eV), depth ",
+        " index, local endpoint, ion, level, energy (eV), depth ",
     ])
     out_index = 0
     for row in _active_rrc_rows_by_index(state, rows):
@@ -736,8 +736,9 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         upper = str(getattr(row, "upper_level", "continuum")).strip()[:20]
         energy = float(getattr(row, "threshold_eV", 0.0))
         level = int(getattr(row, "level_global_index", 0))
+        local_endpoint = int(getattr(row, "lower_local_index", 0) or getattr(row, "upper_local_index", 0) or level)
         buf.log_lines.append(
-            f"{ci:7d}{level:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
+            f"{ci:7d}{local_endpoint:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
             f"{energy:13.3E}{backward:13.3E}{forward:13.3E}"
         )
     buf.source_calls.append("pprint(24)")
@@ -765,6 +766,19 @@ def _option16_ucalc_timing_accounting(state: XSTARPythonState, buf: LegacyPprint
             # Unknown in many states; keep all zero if unavailable.
         except Exception:
             rates = np.asarray([])
+    if not counts and not totals:
+        # Explicitly ignore this bookkeeping-only report rather than printing
+        # 102 all-zero placeholder rows that look like measured source timing.
+        # If future instrumentation populates state.outputs['ucalc_timing_table'],
+        # the source-shaped table below is emitted unchanged.
+        buf.log_lines.extend([
+            " ",
+            " print option:16",
+            " ucalc timing/accounting report intentionally ignored: ",
+            " Python port does not carry source CPU accumulators or dynamic per-rate call counts. ",
+        ])
+        buf.source_calls.append("pprint(16:ignored)")
+        return
     buf.log_lines.extend([
         " ",
         " print option:16",

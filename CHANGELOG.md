@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.5.33 - Detail/reporting cleanup - 2026-05-28
+
+- Make `xo01_detail.fits` `ion_index` source-like by writing the element/atomic-number value instead of the package-global ion ordinal.
+- Centralize FITS A-column handling so string payloads are exact-width, space-padded ASCII bytes rather than NUL-padded buffers.
+- Add the local endpoint/index column to the verbose `pprint(24)` absorption-edge text layout while preserving the existing edge-depth values.
+- Explicitly ignore `pprint(16)` when no real timing/count instrumentation is available, avoiding misleading all-zero placeholder timing rows.
+- Bump package metadata consistently to 0.5.33.
+
 ## 0.5.31 - Type-53 full-grid side-effect mapping - 2026-05-28
 
 - Route type-53 `phint53` continuum side-effect arrays through the full high-resolution `epi` / `bremsa` grid instead of the reduced `epim` / `bremsam` grid.

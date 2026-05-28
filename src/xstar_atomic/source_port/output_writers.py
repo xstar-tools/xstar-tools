@@ -284,7 +284,11 @@ def build_detail_level_table(
     ]
     values = {
         "index": np.asarray([r.global_index for r in rows], dtype=np.int32),
-        "ion_index": np.asarray([r.ion_index for r in rows], dtype=np.int16),
+        # XSTAR fstepr writes the element/atomic-number-like value in this
+        # column, not the package-global ion ordinal.  Keep the separate
+        # atomic_number column for source table shape even though the two now
+        # intentionally agree.
+        "ion_index": np.asarray([r.atomic_number for r in rows], dtype=np.int16),
         "e_excitation": _r4_array([r.excitation_eV for r in rows]),
         "ion": np.asarray([_fixed(r.ion_label, 8) for r in rows], dtype="U8"),
         "atomic_number": np.asarray([r.atomic_number for r in rows], dtype=np.int16),
@@ -982,11 +986,26 @@ def build_final_output_products(
 
 def _fits_column(name: str, fmt: str, unit: str, values: np.ndarray) -> fits.Column:
     # Astropy expects binary string widths as e.g. 8A and numeric source forms
-    # without the Fortran leading repeat for scalar columns.
+    # without the Fortran leading repeat for scalar columns.  For A-format
+    # columns, pass exact-width byte strings so the on-disk FITS payload is
+    # space-padded like XSTAR/Fortran rather than carrying NUL padding from
+    # NumPy Unicode/fixed-byte buffers.
     f = fmt
     if f in {"1J", "1I", "1E"}:
         f = f[1:]
-    return fits.Column(name=name, format=f, unit=(unit or None), array=values)
+    arr = np.asarray(values)
+    if f.endswith("A"):
+        width_text = f[:-1]
+        if width_text.isdigit():
+            width = int(width_text)
+
+            def _as_text(item: object) -> str:
+                if isinstance(item, (bytes, bytearray, np.bytes_)):
+                    return bytes(item).decode("ascii", "replace")
+                return str(item)
+
+            arr = np.asarray([_fixed(_as_text(item), width).encode("ascii", "replace") for item in arr], dtype=f"S{width}")
+    return fits.Column(name=name, format=f, unit=(unit or None), array=arr)
 
 
 def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
