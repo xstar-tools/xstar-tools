@@ -5,10 +5,10 @@ LDFLAGS ?= -shared
 TARGET := libxstar_solver.so
 SRC := level_population.cpp
 # Runtime package directory used by xstar_atomic.source_port.solver_backend.
-# This Makefile lives under src/xstar_atomic/source_port/cpp/xstar_solver.
+# This Makefile lives under src/xstar_atomic/source_port/cpp.
 # Keep a copy beside solver_backend.py so PYTHONPATH=src runs can load it,
 # while also leaving the local build artifact in this directory.
-DESTDIR ?= ../..
+DESTDIR ?= ..
 DEST := $(DESTDIR)/$(TARGET)
 
 .PHONY: all clean install runtime-copy

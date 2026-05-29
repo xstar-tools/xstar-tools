@@ -80,13 +80,19 @@ def _candidate_library_paths() -> list[Path]:
     for name in names:
         paths.append(here / name)
 
-    # Source-tree build location after v0.5.43.  This lets a developer run:
+    # Source-tree build location after v0.5.45.  This lets a developer run:
     #   PYTHONPATH=src python ...
-    # immediately after building under src/xstar_atomic/source_port/cpp/xstar_solver
+    # immediately after building under src/xstar_atomic/source_port/cpp
     # even if the runtime copy step was skipped.
-    source_tree_cpp_dir = here / "cpp" / "xstar_solver"
+    source_tree_cpp_dir = here / "cpp"
     for name in names:
         paths.append(source_tree_cpp_dir / name)
+
+
+    # Backward-compatible fallback for v0.5.43-v0.5.44 package-internal builds.
+    old_source_tree_cpp_dir = here / "cpp" / "xstar_solver"
+    for name in names:
+        paths.append(old_source_tree_cpp_dir / name)
 
     # Backward-compatible fallback for older v0.5.39-v0.5.42 trees that kept
     # cpp/xstar_solver at repository root.  This can be removed after the

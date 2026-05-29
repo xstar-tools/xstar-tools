@@ -744,11 +744,11 @@ src/xstar_atomic/source_port/v0442_regression.py
 src/xstar_atomic/source_port/xstarcalc.py
 src/xstar_atomic/source_port/zone1_dsec_diagnostic.py
 src/xstar_atomic/source_port/zone1_dsec_probe_analysis.py
-src/xstar_atomic/source_port/cpp/xstar_solver/Makefile
-src/xstar_atomic/source_port/cpp/xstar_solver/README.md
-src/xstar_atomic/source_port/cpp/xstar_solver/build_lib.sh
-src/xstar_atomic/source_port/cpp/xstar_solver/level_population.cpp
-src/xstar_atomic/source_port/cpp/xstar_solver/libxstar_solver.so
+src/xstar_atomic/source_port/cpp/Makefile
+src/xstar_atomic/source_port/cpp/README.md
+src/xstar_atomic/source_port/cpp/build_lib.sh
+src/xstar_atomic/source_port/cpp/level_population.cpp
+src/xstar_atomic/source_port/cpp/libxstar_solver.so
 src/xstar_atomic/source_port/data/coheat.dat
 tests/test_absolute_response_density_grid_example.py
 tests/test_absolute_response_fit_example.py
