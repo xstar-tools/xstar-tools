@@ -1048,6 +1048,7 @@ def calc_emis_element(
     continuum_rank_table: np.ndarray,
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisRecordTrace],
+    epi: Optional[np.ndarray] = None,
 ) -> CalcEmisElementTrace:
     ipmat = 0
     ion_traces: list[CalcEmisIonTrace] = []
@@ -1150,6 +1151,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
                     xpx=xpx, xh0=xh0, xh1=xh1,
                     line_rank_table=line_rank, continuum_rank_table=continuum_rank,
                     leveltemp_workspace=leveltemp, record_traces=record_traces,
+                    epi=epi,
                 )
             if retain_traces:
                 element_traces.append(trace)
