@@ -296,6 +296,8 @@ def calc_hmc_all(
     source_global_alias_writeback: bool = False,
     active_subset: Optional[Any] = None,
     profile_control: Optional[Mapping[str, Any]] = None,
+    retain_diagnostic_arrays: bool = True,
+    retain_element_results: bool = True,
 ) -> FixedStateCalcHMCAllResult:
     """Run the fixed-state element/charge/heating core of ``calc_hmc_all``.
 
@@ -377,6 +379,8 @@ def calc_hmc_all(
                 + ",".join(str(z) for z in sorted(unknown))
             )
     charge_scope_complete = bool(required_element_z_set) and requested_element_z == required_element_z_set
+    retain_diagnostic_arrays = bool(retain_diagnostic_arrays)
+    retain_element_results = bool(retain_element_results)
 
     # Preserve the native XSTAR global array indices so bounded probe products
     # can be compared without guessing from element/stage/local-level labels.
@@ -1220,8 +1224,9 @@ def calc_hmc_all(
             ion_fractions[(z, stage)] = fraction
             stotg[(z, stage)] = float(solve.ionization_totals[ion_slot])
             atotg[(z, stage)] = float(solve.recombination_totals[ion_slot])
-            fstotg[(z, stage)] = np.asarray(solve.ionization_components[:, ion_slot], dtype=float).copy()
-            fatotg[(z, stage)] = np.asarray(solve.recombination_components[:, ion_slot], dtype=float).copy()
+            if retain_diagnostic_arrays:
+                fstotg[(z, stage)] = np.asarray(solve.ionization_components[:, ion_slot], dtype=float).copy()
+                fatotg[(z, stage)] = np.asarray(solve.recombination_components[:, ion_slot], dtype=float).copy()
             xtotg[(z, stage)] = float(source_xtot[ion_slot])
             enelec += fraction * float(stage - 1) * abundance
 
@@ -1267,8 +1272,9 @@ def calc_hmc_all(
                     )
                 gammag[key] = float(solve.gamma[idx])
                 alphag[key] = float(solve.alpha[idx])
-                fgammag[key] = np.asarray(solve.fgamma[:, idx], dtype=float).copy()
-                falphag[key] = np.asarray(solve.falpha[:, idx], dtype=float).copy()
+                if retain_diagnostic_arrays:
+                    fgammag[key] = np.asarray(solve.fgamma[:, idx], dtype=float).copy()
+                    falphag[key] = np.asarray(solve.falpha[:, idx], dtype=float).copy()
                 # calc_hmc_all copies the dominant-record indices only for
                 # mm=1..nlev-1. The final continuum row retains its zeroed
                 # global-array value even though gamma/alpha are copied.
@@ -1522,39 +1528,40 @@ def calc_hmc_all(
                 }
             )
 
-        element_results.append(
-            FixedStateElementResult(
-                request=effective_request,
-                equilibrium=equilibrium,
-                calc_ion_rates=calc_rates_by_stage,
-                preliminary_pirt={stage: float(item.pirti) for stage, item in calc_rates_by_stage.items()},
-                preliminary_rrrt={stage: float(item.rrrti) for stage, item in calc_rates_by_stage.items()},
-                second_pass_pirt=second_pass_pirt,
-                second_pass_rrrt=second_pass_rrrt,
-                preliminary_istruc=preliminary,
-                source_limits=source_limits,
-                selected_min_ion_stage=selected_min,
-                selected_max_ion_stage=selected_max,
-                ion_fractions=stage_fractions,
-                preliminary_ion_fractions={
-                    stage: float(preliminary.fractions[stage])
-                    for stage in range(1, preliminary.n_rates + 2)
-                },
-                fully_stripped_fraction=fully_stripped,
-                heating=element_ht,
-                cooling=element_cl,
-                heating2=element_ht2,
-                cooling2=element_cl2,
-                heating_per_abundance=float(solve.heating),
-                cooling_per_abundance=float(solve.cooling),
-                heating2_per_abundance=float(solve.heating2),
-                cooling2_per_abundance=float(solve.cooling2),
-                electron_contribution=sum(
-                    value * float(stage - 1) * abundance
-                    for stage, value in stage_fractions.items()
-                ) + fully_stripped * float(z) * abundance,
+        if retain_element_results:
+            element_results.append(
+                FixedStateElementResult(
+                    request=effective_request,
+                    equilibrium=equilibrium,
+                    calc_ion_rates=calc_rates_by_stage,
+                    preliminary_pirt={stage: float(item.pirti) for stage, item in calc_rates_by_stage.items()},
+                    preliminary_rrrt={stage: float(item.rrrti) for stage, item in calc_rates_by_stage.items()},
+                    second_pass_pirt=second_pass_pirt,
+                    second_pass_rrrt=second_pass_rrrt,
+                    preliminary_istruc=preliminary,
+                    source_limits=source_limits,
+                    selected_min_ion_stage=selected_min,
+                    selected_max_ion_stage=selected_max,
+                    ion_fractions=stage_fractions,
+                    preliminary_ion_fractions={
+                        stage: float(preliminary.fractions[stage])
+                        for stage in range(1, preliminary.n_rates + 2)
+                    },
+                    fully_stripped_fraction=fully_stripped,
+                    heating=element_ht,
+                    cooling=element_cl,
+                    heating2=element_ht2,
+                    cooling2=element_cl2,
+                    heating_per_abundance=float(solve.heating),
+                    cooling_per_abundance=float(solve.cooling),
+                    heating2_per_abundance=float(solve.heating2),
+                    cooling2_per_abundance=float(solve.cooling2),
+                    electron_contribution=sum(
+                        value * float(stage - 1) * abundance
+                        for stage, value in stage_fractions.items()
+                    ) + fully_stripped * float(z) * abundance,
+                )
             )
-        )
 
     if not source_global_alias_writeback:
         # Backward-compatible logical selected-role writeback.  Populate the
@@ -1895,6 +1902,8 @@ def calc_hmc_all(
             "second_pass_calc_hmc_ion_rates_translated": True,
             "global_level_mapping_source": "derivedpointers.npilev(local_ordinal,ion_index)",
             "global_element_index_source": global_element_index_source,
+            "retain_diagnostic_arrays": bool(retain_diagnostic_arrays),
+            "retain_element_results": bool(retain_element_results),
             "continuum_complete": bool(continuum.complete),
             "charge_scope_reference": charge_scope_reference,
             "required_element_z": sorted(required_element_z_set),

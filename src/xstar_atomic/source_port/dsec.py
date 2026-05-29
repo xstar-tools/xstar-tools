@@ -90,7 +90,9 @@ class DsecMutableRuntimeState:
     retain_source_arrays: bool = True
     source_arrays: Dict[str, Any] = field(default_factory=dict)
     work_arrays: Dict[str, Any] = field(default_factory=dict)
-    last_calc_hmc_all: Optional[FixedStateCalcHMCAllResult] = None
+    last_calc_hmc_all: Optional[Any] = None
+    last_hmctot: float = float("nan")
+    last_elcter: float = float("nan")
     calc_hmc_all_call_count: int = 0
     provenance: Dict[str, Any] = field(default_factory=dict)
 
@@ -197,7 +199,21 @@ class DsecMutableRuntimeState:
         self.temperature_t4 = float(result.temperature_k) / 1.0e4
         self.electron_fraction_xee = float(result.electron_fraction_xee)
         self.hydrogen_density_cm3 = float(result.hydrogen_density_cm3)
-        self.last_calc_hmc_all = result
+        self.last_hmctot = float(result.hmctot)
+        self.last_elcter = float(result.elcter)
+        # v0.5.42: in production diagnostics=none mode, do not retain the full
+        # FixedStateCalcHMCAllResult for every DSEC trial.  It contains large
+        # element assemblies and diagnostic arrays.  Dense native arrays below
+        # carry the source state needed by the next trial.
+        if bool(self.retain_source_arrays):
+            self.last_calc_hmc_all = result
+        else:
+            from types import SimpleNamespace
+            self.last_calc_hmc_all = SimpleNamespace(
+                hmctot=float(result.hmctot),
+                elcter=float(result.elcter),
+                complete_fixed_state_ready=bool(result.complete_fixed_state_ready),
+            )
         self.calc_hmc_all_call_count += 1
 
         for item in result.element_results:
@@ -244,17 +260,26 @@ class DsecMutableRuntimeState:
                 }
             )
 
-        self.last_leveltemp_workspace = result.leveltemp_workspace
-        self.last_leveltemp_owner_by_column = {
-            int(index): dict(owner)
-            for index, owner in result.leveltemp_owner_by_column.items()
-        }
-        if not self.reset_leveltemp_each_calc_hmc_all:
-            self.leveltemp_workspace = result.leveltemp_workspace
-            self.leveltemp_owner_by_column = {
+        if bool(self.reset_leveltemp_each_calc_hmc_all) and not bool(self.retain_source_arrays):
+            # Production DSEC does not carry leveltemp between trials.  Do not
+            # retain the large leveltemp workspace after the dense global state
+            # has been committed.
+            self.last_leveltemp_workspace = None
+            self.last_leveltemp_owner_by_column = {}
+            self.leveltemp_workspace = None
+            self.leveltemp_owner_by_column = {}
+        else:
+            self.last_leveltemp_workspace = result.leveltemp_workspace
+            self.last_leveltemp_owner_by_column = {
                 int(index): dict(owner)
                 for index, owner in result.leveltemp_owner_by_column.items()
             }
+            if not self.reset_leveltemp_each_calc_hmc_all:
+                self.leveltemp_workspace = result.leveltemp_workspace
+                self.leveltemp_owner_by_column = {
+                    int(index): dict(owner)
+                    for index, owner in result.leveltemp_owner_by_column.items()
+                }
         if self.retain_source_arrays:
             self.source_arrays = {
                 "xiin": dict(result.ion_fractions),
@@ -637,6 +662,8 @@ class DsecResult:
 
     @property
     def final_hmctot(self) -> float:
+        if math.isfinite(float(getattr(self.state, "last_hmctot", float("nan")))):
+            return float(self.state.last_hmctot)
         if self.state.last_calc_hmc_all is not None:
             return float(self.state.last_calc_hmc_all.hmctot)
         for event in reversed(self.trajectory):
@@ -646,6 +673,8 @@ class DsecResult:
 
     @property
     def final_elcter(self) -> float:
+        if math.isfinite(float(getattr(self.state, "last_elcter", float("nan")))):
+            return float(self.state.last_elcter)
         if self.state.last_calc_hmc_all is not None:
             return float(self.state.last_calc_hmc_all.elcter)
         for event in reversed(self.trajectory):

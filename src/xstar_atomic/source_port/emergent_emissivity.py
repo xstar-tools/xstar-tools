@@ -157,6 +157,7 @@ class CalcEmisContext:
     ucalc_engine: Optional[SourceFaithfulUCalc] = None
     ucalc_evaluator: Optional[Callable[[int, Any], UCalcResult]] = None
     initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
+    retain_traces: bool = True
 
     @property
     def temperature_k(self) -> float:
@@ -989,6 +990,12 @@ def calc_emis_element(
     )
 
 
+class _TraceSink(list):
+    """List-like sink used in production runs to avoid retaining trace rows."""
+    def append(self, value: Any) -> None:  # type: ignore[override]
+        return None
+
+
 def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     """Execute ``calc_emis_all.f90`` in literal source order."""
     epi, bremsa, _ = _high_resolution_radiation(context.radiation)
@@ -1020,8 +1027,9 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     xh0 = xpx * h_ground * h_abundance
     xh1 = xpx * (1.0 - h_ground) * h_abundance
     leveltemp = _copy_or_initialize_leveltemp(context.initial_leveltemp_workspace)
+    retain_traces = bool(getattr(context, "retain_traces", True))
     element_traces: list[CalcEmisElementTrace] = []
-    record_traces: list[CalcEmisRecordTrace] = []
+    record_traces: list[CalcEmisRecordTrace] | _TraceSink = [] if retain_traces else _TraceSink()
 
     shared = _as_emisab_context(context)
     element_record = int(context.derived.npfirst[11])
@@ -1034,18 +1042,21 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         if abundance > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR:
             ions = _iter_ion_descriptors(shared, element_record, z)
             compact_x, _, _ = _compact_element_populations(shared, ions)
-            element_traces.append(calc_emis_element(
+            trace = calc_emis_element(
                 context, element_record=element_record, element_z=z,
                 element_abundance=abundance, ions=ions, compact_xileve=compact_x,
                 xpx=xpx, xh0=xh0, xh1=xh1,
                 line_rank_table=line_rank, continuum_rank_table=continuum_rank,
                 leveltemp_workspace=leveltemp, record_traces=record_traces,
-            ))
+            )
+            if retain_traces:
+                element_traces.append(trace)
         else:
-            element_traces.append(CalcEmisElementTrace(
-                element_record=element_record, element_z=z, abundance=abundance,
-                abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
-            ))
+            if retain_traces:
+                element_traces.append(CalcEmisElementTrace(
+                    element_record=element_record, element_z=z, abundance=abundance,
+                    abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
+                ))
         element_record = int(context.derived.npnxt[element_record])
 
     ff = freef(
@@ -1105,6 +1116,7 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
         "rank_depth": int(context.rank_depth),
         "diagnostic_call_index": int(call_index),
         "ucalc_continuum_side_effect_rows": int(len(rows)),
+        "retain_traces": bool(getattr(context, "retain_traces", True)),
     }
     phase_context = str(state.control.get("continuum_phase_context", ""))
     phase = "final calc_emis_all" if phase_context == "final" else "calc_emis_all"

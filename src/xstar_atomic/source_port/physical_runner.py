@@ -135,6 +135,37 @@ def _remove_optional_diagnostic_products(out: Path) -> None:
             target.unlink()
 
 
+
+
+def _append_xout_step_timing_footer(
+    out: Path,
+    *,
+    timing: Mapping[str, float],
+) -> None:
+    """Append source-like runtime accounting to ``xout_step.log``.
+
+    This footer is intentionally independent of high-volume diagnostics.  It
+    mirrors the original XSTAR convention closely enough for smoke/full
+    benchmark tracking while keeping the values as reporting only.
+    """
+    path = out / "xout_step.log"
+    if not path.exists():
+        return
+    total = float(timing.get("total", 0.0))
+    minutes = int(total // 60.0)
+    seconds = total - 60.0 * minutes
+    lines = [
+        "",
+        f"after writespectra {float(timing.get('writespectra', 0.0)):.9g}",
+        f"after writespectra2 {float(timing.get('writespectra2', 0.0)):.9g}",
+        f"after writespectra3 {float(timing.get('writespectra3', 0.0)):.9g}",
+        f"after writespectra4 {float(timing.get('writespectra4', 0.0)):.9g}",
+        f"total time {total:.9g}",
+        f"total time human {minutes:d} min {seconds:.3f} sec",
+    ]
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
 def _normalize_diagnostics_mode(value: str | None) -> str:
     """Return the supported optional-diagnostic mode.
 
@@ -1203,11 +1234,17 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             ncn2=n,
             source="run_xstar_python:heatf",
         )
+        production_mode = str(state.control.get("diagnostics_mode", "full")).lower() == "none"
         payload = {
             "compton_context": comp,
             "free_free_context": free,
             "bremem_context": bremem,
             "heatf_context": heat,
+            # v0.5.42: production Mg/Ca runs should not copy source-sized
+            # per-level/per-ion diagnostic spectra inside every repeated dsec
+            # evaluation.  Dense native state arrays remain authoritative.
+            "retain_diagnostic_arrays": not production_mode,
+            "retain_element_results": not production_mode,
         }
         active_subset = state.control.get("active_atdb_subset")
         if active_subset is not None:
@@ -1356,9 +1393,12 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
         lfast=2,
         strict_ucalc=True,
         initial_leveltemp_workspace=result.leveltemp_workspace,
+        retain_traces=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
     )
+    emisab_common = dict(common)
+    emisab_common.pop("retain_traces", None)
     state.control["calc_emisab_context"] = CalcEmisabContext(
-        **common,
+        **emisab_common,
         workspace=workspace.emissivity.base,
     )
     state.control["calc_emis_context"] = CalcEmisContext(
@@ -2002,6 +2042,7 @@ def run_xstar_from_parameters(
     profile_components: bool = False,
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
+    total_start_time = time.perf_counter()
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     del input_dir  # Reserved for spectrum/density-file source branches.
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
@@ -2084,6 +2125,7 @@ def run_xstar_from_parameters(
                 diagnostics_mode=diagnostics_mode,
             )
         _emit_progress(progress_callback, "output_writer_start", output_dir=str(out))
+        writer_start_time = time.perf_counter()
         writer = run_output_writer_sequence(
             state,
             out_dir=out,
@@ -2093,10 +2135,25 @@ def run_xstar_from_parameters(
             atomic_data_date=str(getattr(built.master, "creation_date", "")),
             final_local_recompute=True,
         )
+        writer_elapsed = time.perf_counter() - writer_start_time
+        # The current writer API builds/writes the four final products as one
+        # source-sequence call.  Record the exact aggregate elapsed time on
+        # writespectra and explicit zeroes for the subordinate product writers
+        # until they are split into separately timed calls.
+        timing_footer = {
+            "writespectra": float(writer_elapsed),
+            "writespectra2": 0.0,
+            "writespectra3": 0.0,
+            "writespectra4": 0.0,
+            "total": float(time.perf_counter() - total_start_time),
+        }
+        _append_xout_step_timing_footer(out, timing=timing_footer)
+        state.outputs["xout_step_timing_footer"] = dict(timing_footer)
         _emit_progress(
             progress_callback,
             "output_writer_done",
             source_order=list(writer.source_order),
+            writer_elapsed_seconds=float(writer_elapsed),
         )
         if high_volume_diagnostics:
             continuum_diag_products = write_continuum_diagnostics(state, out)
@@ -2151,6 +2208,7 @@ def run_xstar_from_parameters(
                 "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
                 "profile_components_enabled": bool(profile_components),
                 "performance_profile_summary": summarize_profile(state.control),
+                "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
                 "solver_backend": solver_backend_status(),
                 "atdb_path": str(resolved_atdb),
                 "pointer_cache_path": str(pointer_cache_path),
