@@ -15,7 +15,7 @@ fixed-state local-zone parity is not yet ready.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -726,6 +726,9 @@ def calc_hmc_all(
                 )
             )
 
+        _profile_map = profile_control if isinstance(profile_control, MutableMapping) else None
+        _work_cache = (_profile_map.setdefault("calc_hmc_all_work_arrays", {}) if _profile_map is not None else None)
+        _diagnostics_mode = str((_profile_map or {}).get("diagnostics_mode", "full")).lower()
         ion_rate_context = CalcIonRatesContext(
             temperature_k=float(temperature_k),
             hydrogen_density_cm3=xpx,
@@ -737,6 +740,8 @@ def calc_hmc_all(
             ionized_h_density_cm3=float(effective_request.ionized_h_density_cm3),
             lfast=int(effective_request.lfast),
             strict_context=bool(effective_request.strict_context),
+            retain_contributions=(_diagnostics_mode != "none"),
+            reusable_work_arrays=_work_cache,
         )
         with profile_component(
             profile_control or {},

@@ -428,12 +428,31 @@ def _record_label(master: XSTARMasterData, record: int) -> str:
         return ""
 
 
+_LEVEL_TABLE_CACHE: Dict[Tuple[int, int, int], UCalcLevelTable] = {}
+
+
+def clear_level_table_cache() -> None:
+    """Clear the process-local level-table cache used by hot Mg/Ca loops."""
+    _LEVEL_TABLE_CACHE.clear()
+
+
 def build_level_table(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
     ion_index: int,
 ) -> UCalcLevelTable:
-    """Translate ``calc_rates_level_lte`` record unpacking for one ion."""
+    """Translate ``calc_rates_level_lte`` record unpacking for one ion.
+
+    v0.5.46 caches the immutable per-ion level table by the master/derived
+    object identity and ion index.  Mg/Ca high-density runs repeatedly rebuild
+    the same Z=12/Z=20 level tables inside ``calc_hmc_all`` and
+    ``calc_emis_all``; caching preserves source semantics while removing a
+    pure Python record-scan from the hottest element loops.
+    """
+    cache_key = (id(master), id(derived), int(ion_index))
+    cached = _LEVEL_TABLE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     nlev = int(derived.nlevs[ion_index])
     ion_record = int(derived.ion_records[ion_index])
     levels: Dict[int, UCalcLevel] = {}
@@ -466,7 +485,9 @@ def build_level_table(
             f"ion index {ion_index} is missing level records {missing[:8]}"
             + ("..." if len(missing) > 8 else "")
         )
-    return UCalcLevelTable(levels=levels, nlev=nlev)
+    table = UCalcLevelTable(levels=levels, nlev=nlev)
+    _LEVEL_TABLE_CACHE[cache_key] = table
+    return table
 
 
 def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:

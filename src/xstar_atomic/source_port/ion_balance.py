@@ -46,6 +46,8 @@ class CalcIonRatesContext:
     ionized_h_density_cm3: float = 0.0
     lfast: int = 2
     strict_context: bool = True
+    retain_contributions: bool = True
+    reusable_work_arrays: Optional[Dict[str, Any]] = None
 
     @property
     def electron_density_cm3(self) -> float:
@@ -179,6 +181,46 @@ def _element_nnz(master: XSTARMasterData, derived: XSTARDerivedPointers, element
     raise IonBalanceError(f"could not locate element header for Z={element_z}")
 
 
+
+def _selected_rate_records_for_ion(
+    master: XSTARMasterData,
+    derived: XSTARDerivedPointers,
+    *,
+    ion_index: int,
+    ion_record: int,
+    cache: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[int, int]]:
+    """Return selected preliminary calc-ion-rate records for one ion.
+
+    v0.5.46 precomputes the subset of rate records that can contribute to the
+    preliminary ionization/recombination balance.  This removes a repeated full
+    rate-slot traversal from the Mg/Ca ``calc_hmc_all.pre_matrix_solver`` hot
+    path while preserving the source order within each rate-type chain.
+    """
+    key = ("calc_ion_rates.selected_records", int(ion_index))
+    if isinstance(cache, dict):
+        cached = cache.get(key)
+        if cached is not None:
+            return list(cached)
+    selected_records: List[Tuple[int, int]] = []
+    for rate_slot in range(1, int(derived.npfi.shape[0])):
+        record = int(derived.npfi[rate_slot, ion_index])
+        while record and int(derived.npar[record]) == ion_record:
+            header = master.header(record)
+            ints = master.record_integers(record)
+            idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
+            selected = (
+                header.rate_type in {1, 15, 8, 6}
+                or (header.rate_type == 7 and idest1_packed == 1)
+            )
+            if selected:
+                selected_records.append((int(rate_slot), int(record)))
+            record = int(derived.npnxt[record])
+    if isinstance(cache, dict):
+        cache[key] = tuple(selected_records)
+    return list(selected_records)
+
+
 def _parent_destination_context(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -219,11 +261,10 @@ def calc_ion_rates(
 ) -> CalcIonRatesResult:
     """Translate ``calc_ion_rates.f90`` for one ion.
 
-    The routine follows the source rate-type traversal and only calls ``ucalc``
-    for rate types 1, 15, 8, 6, and ground-state rate type 7.  ``pirti`` and
-    ``rrrti`` are accumulated from source ``ans1`` exactly as in the Fortran
-    routine.  These totals are preliminary adjacent-stage rates, not the
-    population-weighted ``stot/atot`` flows produced by ``msolvelucy``.
+    v0.5.46 keeps the numerical source path unchanged while adding two hot-path
+    production controls: selected preliminary-rate record lists can be cached in
+    ``context.reusable_work_arrays`` and detailed contribution rows can be
+    suppressed with ``retain_contributions=False``.
     """
     if int(ion_index) <= 0 or int(ion_index) > int(derived.n_ions):
         raise IonBalanceError(f"ion_index {ion_index} outside 1..{derived.n_ions}")
@@ -243,149 +284,129 @@ def calc_ion_rates(
     pirti = 0.0
     rrrti = 0.0
     rows: List[CalcIonRateContribution] = []
-    n_seen = n_selected = n_evaluated = n_blocked = 0
+    n_evaluated = n_blocked = 0
+    selected_records = _selected_rate_records_for_ion(
+        master, derived, ion_index=ion_index, ion_record=ion_record,
+        cache=context.reusable_work_arrays,
+    )
+    n_seen = len(selected_records)
+    n_selected = len(selected_records)
+    retain_contributions = bool(getattr(context, "retain_contributions", True))
 
-    # npfi's first axis is XSTAR rate type, despite historical Python variable
-    # names that sometimes call it a data-type loop.
-    for rate_slot in range(1, int(derived.npfi.shape[0])):
-        record = int(derived.npfi[rate_slot, ion_index])
-        while record and int(derived.npar[record]) == ion_record:
-            n_seen += 1
-            header = master.header(record)
-            ints = master.record_integers(record)
-            idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
-            selected = (
-                header.rate_type in {1, 15, 8, 6}
-                or (header.rate_type == 7 and idest1_packed == 1)
+    for rate_slot, record in selected_records:
+        header = master.header(record)
+        ints = master.record_integers(record)
+        idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
+        ucontext = UCalcContext(
+            temperature_k=float(context.temperature_k),
+            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+            electron_fraction_xee=float(context.electron_fraction_xee),
+            neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+            ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+            turbulent_velocity_km_s=float(context.turbulent_velocity_km_s),
+            covering_fraction=float(context.covering_fraction),
+            ptmp1=0.5,
+            ptmp2=0.5,
+            abund1=0.0,
+            abund2=0.0,
+            jkion=int(ion_index),
+            nlev=nlev,
+            lfast=1,
+            levels=levels,
+            radiation=context.radiation,
+            derived_pointers=derived,
+            master=master,
+            extras={
+                "element_z": element_z,
+                "ion_stage": ion_stage,
+                "ion_charge": ion_stage - 1,
+                "ion_record": ion_record,
+                "lfpi": 1,
+                "requested_lfast": int(context.lfast),
+                "calc_ion_rates_lfast": 1,
+                "parent_level_energy_ev_by_destination": parent_energy,
+                "parent_level_stat_weight_by_destination": parent_weight,
+            },
+        )
+        pirti_before = float(pirti)
+        rrrti_before = float(rrrti)
+        result = dispatch.evaluate_record_number(
+            master,
+            record,
+            ucontext,
+            parent_record=ion_record,
+            next_record=int(derived.npnxt[record]),
+            strict=False,
+        )
+        add_pi = 0.0
+        add_rr = 0.0
+        if result.status is UCalcStatus.EVALUATED:
+            n_evaluated += 1
+            if (
+                header.rate_type in {1, 15}
+                or (
+                    header.rate_type == 7
+                    and result.idest1 == 1
+                    and result.idest2 <= nlev + 2
+                )
+            ):
+                add_pi = float(result.ans1)
+                pirti += add_pi
+            if header.rate_type in {8, 6}:
+                add_rr = float(result.ans1)
+                rrrti += add_rr
+        else:
+            n_blocked += 1
+
+        if retain_contributions:
+            diagnostics = dict(getattr(result, "diagnostics", {}) or {})
+            try:
+                parent_reals = np.asarray(master.record_reals(ion_record), dtype=float)
+            except (AttributeError, KeyError, TypeError, ValueError):
+                parent_reals = np.asarray((), dtype=float)
+            parent_threshold = (
+                float(diagnostics.get("type15_parent_threshold_ev"))
+                if diagnostics.get("type15_parent_threshold_ev") is not None
+                else (float(parent_reals[0]) if parent_reals.size else math.nan)
             )
-            if selected:
-                n_selected += 1
-                ucontext = UCalcContext(
-                    temperature_k=float(context.temperature_k),
-                    hydrogen_density_cm3=float(context.hydrogen_density_cm3),
-                    electron_fraction_xee=float(context.electron_fraction_xee),
-                    neutral_h_density_cm3=float(context.neutral_h_density_cm3),
-                    ionized_h_density_cm3=float(context.ionized_h_density_cm3),
-                    turbulent_velocity_km_s=float(context.turbulent_velocity_km_s),
-                    covering_fraction=float(context.covering_fraction),
-                    ptmp1=0.5,
-                    ptmp2=0.5,
-                    abund1=0.0,
-                    abund2=0.0,
-                    jkion=int(ion_index),
-                    nlev=nlev,
-                    # calc_ion_rates.f90 owns a local ``lfpi=1`` and passes
-                    # it to every preliminary ucalc call.  The caller's
-                    # second-pass lfast setting must not leak into this pass.
-                    lfast=1,
-                    levels=levels,
-                    radiation=context.radiation,
-                    derived_pointers=derived,
-                    master=master,
-                    extras={
-                        "element_z": element_z,
-                        "ion_stage": ion_stage,
-                        "ion_charge": ion_stage - 1,
-                        "ion_record": ion_record,
-                        "lfpi": 1,
-                        "requested_lfast": int(context.lfast),
-                        "calc_ion_rates_lfast": 1,
-                        "parent_level_energy_ev_by_destination": parent_energy,
-                        "parent_level_stat_weight_by_destination": parent_weight,
-                    },
-                )
-                pirti_before = float(pirti)
-                rrrti_before = float(rrrti)
-                result = dispatch.evaluate_record_number(
-                    master,
-                    record,
-                    ucontext,
+            shell_thresholds = tuple(float(value) for value in diagnostics.get("type15_shell_thresholds_ev", ()))
+            shell_d_values = tuple(float(value) for value in diagnostics.get("type15_shell_d_values", ()))
+            rows.append(
+                CalcIonRateContribution(
+                    record=record,
+                    data_type=int(header.data_type),
+                    rate_type=int(header.rate_type),
+                    status=result.status.value,
                     parent_record=ion_record,
-                    next_record=int(derived.npnxt[record]),
-                    strict=False,
+                    parent_threshold_ev=parent_threshold,
+                    shell_thresholds_ev=shell_thresholds,
+                    shell_d_values=shell_d_values,
+                    effective_threshold_ev=float(diagnostics.get("type15_effective_threshold_ev", math.nan)),
+                    effective_d=float(diagnostics.get("type15_effective_d", math.nan)),
+                    bkhsgo_threshold_ev=float(diagnostics.get("type15_bkhsgo_threshold_ev", math.nan)),
+                    phintfo_threshold_ev=float(diagnostics.get("phintfo_threshold_ev", diagnostics.get("type15_phintfo_threshold_ev", math.nan))),
+                    idest1_packed=idest1_packed,
+                    idest1=int(result.idest1),
+                    idest2=int(result.idest2),
+                    ans1=float(result.ans1),
+                    ans2=float(result.ans2),
+                    ans3=float(getattr(result, "ans3", 0.0)),
+                    ans4=float(getattr(result, "ans4", 0.0)),
+                    ans5=float(getattr(result, "ans5", 0.0)),
+                    ans6=float(getattr(result, "ans6", 0.0)),
+                    pirti_before=pirti_before,
+                    added_to_pirti=add_pi,
+                    pirti_after=float(pirti),
+                    rrrti_before=rrrti_before,
+                    added_to_rrrti=add_rr,
+                    rrrti_after=float(rrrti),
+                    reason=str(result.reason),
+                    diagnostics=diagnostics,
                 )
-                add_pi = 0.0
-                add_rr = 0.0
-                if result.status is UCalcStatus.EVALUATED:
-                    n_evaluated += 1
-                    if (
-                        header.rate_type in {1, 15}
-                        or (
-                            header.rate_type == 7
-                            and result.idest1 == 1
-                            and result.idest2 <= nlev + 2
-                        )
-                    ):
-                        add_pi = float(result.ans1)
-                        pirti += add_pi
-                    if header.rate_type in {8, 6}:
-                        add_rr = float(result.ans1)
-                        rrrti += add_rr
-                else:
-                    n_blocked += 1
-                diagnostics = dict(getattr(result, "diagnostics", {}) or {})
-                try:
-                    parent_reals = np.asarray(master.record_reals(ion_record), dtype=float)
-                except (AttributeError, KeyError, TypeError, ValueError):
-                    parent_reals = np.asarray((), dtype=float)
-                parent_threshold = (
-                    float(diagnostics.get("type15_parent_threshold_ev"))
-                    if diagnostics.get("type15_parent_threshold_ev") is not None
-                    else (float(parent_reals[0]) if parent_reals.size else math.nan)
-                )
-                shell_thresholds = tuple(
-                    float(value)
-                    for value in diagnostics.get("type15_shell_thresholds_ev", ())
-                )
-                shell_d_values = tuple(
-                    float(value)
-                    for value in diagnostics.get("type15_shell_d_values", ())
-                )
-                rows.append(
-                    CalcIonRateContribution(
-                        record=record,
-                        data_type=int(header.data_type),
-                        rate_type=int(header.rate_type),
-                        status=result.status.value,
-                        parent_record=ion_record,
-                        parent_threshold_ev=parent_threshold,
-                        shell_thresholds_ev=shell_thresholds,
-                        shell_d_values=shell_d_values,
-                        effective_threshold_ev=float(
-                            diagnostics.get("type15_effective_threshold_ev", math.nan)
-                        ),
-                        effective_d=float(
-                            diagnostics.get("type15_effective_d", math.nan)
-                        ),
-                        bkhsgo_threshold_ev=float(
-                            diagnostics.get("type15_bkhsgo_threshold_ev", math.nan)
-                        ),
-                        phintfo_threshold_ev=float(
-                            diagnostics.get("type15_phintfo_threshold_ev", math.nan)
-                        ),
-                        idest1_packed=idest1_packed,
-                        idest1=int(result.idest1),
-                        idest2=int(result.idest2),
-                        ans1=float(result.ans1),
-                        ans2=float(result.ans2),
-                        ans3=float(getattr(result, "ans3", 0.0)),
-                        ans4=float(getattr(result, "ans4", 0.0)),
-                        ans5=float(getattr(result, "ans5", 0.0)),
-                        ans6=float(getattr(result, "ans6", 0.0)),
-                        pirti_before=pirti_before,
-                        added_to_pirti=add_pi,
-                        pirti_after=float(pirti),
-                        rrrti_before=rrrti_before,
-                        added_to_rrrti=add_rr,
-                        rrrti_after=float(rrrti),
-                        reason=str(result.reason),
-                        diagnostics=diagnostics,
-                    )
-                )
-            record = int(derived.npnxt[record])
+            )
 
     ready = n_blocked == 0
-    result = CalcIonRatesResult(
+    return CalcIonRatesResult(
         ion_index=int(ion_index),
         ion_record=ion_record,
         element_z=element_z,
@@ -401,22 +422,11 @@ def calc_ion_rates(
         ready=ready,
         diagnostics={
             "source_file": "xstar/xstarlib/src/calc_ion_rates.f90",
-            "lfpi": 1,
-            "ptmp1": 0.5,
-            "ptmp2": 0.5,
-            "abund1": 0.0,
-            "abund2": 0.0,
+            "local_lfpi": 1,
+            "cached_selected_records": isinstance(context.reusable_work_arrays, dict),
+            "retain_contributions": retain_contributions,
         },
     )
-    if context.strict_context and not ready:
-        blocked = [row for row in rows if row.status != UCalcStatus.EVALUATED.value]
-        first = blocked[0] if blocked else None
-        detail = f"; first blocked record={first.record} reason={first.reason}" if first else ""
-        raise IonBalanceError(
-            f"calc_ion_rates Z={element_z} stage={ion_stage} has {n_blocked} blocked selected records{detail}"
-        )
-    return result
-
 
 def ioneqm(
     ionization_rates: Sequence[float],

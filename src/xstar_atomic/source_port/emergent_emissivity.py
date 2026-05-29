@@ -674,6 +674,32 @@ def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
     )
 
 
+
+def _calc_emis_record_sequence_for_ion(context: CalcEmisContext, ion: _IonDescriptor) -> list[tuple[int, int]]:
+    """Return the source-ordered calc_emis_ion record sequence for one ion.
+
+    v0.5.46 caches this sequence for active Mg/Ca-style element loops.  The
+    sequence still includes all records for each rate type in source traversal
+    order; the downstream rate-type conditions remain authoritative.
+    """
+    cache = getattr(context, "reusable_work_arrays", None)
+    key = ("calc_emis_all.record_sequence", int(ion.ion_index))
+    if isinstance(cache, MutableMapping):
+        cached = cache.get(key)
+        if cached is not None:
+            return list(cached)
+    max_rate_type = min(int(context.derived.max_rate_type), int(context.derived.npfi.shape[0] - 1))
+    seq: list[tuple[int, int]] = []
+    for rate_type in range(1, max_rate_type + 1):
+        rec = int(context.derived.npfi[rate_type, ion.ion_index])
+        while rec and int(context.derived.npar[rec]) == ion.ion_record:
+            seq.append((int(rate_type), int(rec)))
+            rec = int(context.derived.npnxt[rec])
+    if isinstance(cache, MutableMapping):
+        cache[key] = tuple(seq)
+    return list(seq)
+
+
 def calc_emis_ion(
     context: CalcEmisContext,
     *,
@@ -688,17 +714,23 @@ def calc_emis_ion(
     continuum_rank_table: np.ndarray,
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisRecordTrace],
+    epi: Optional[np.ndarray] = None,
 ) -> CalcEmisIonTrace:
     """Translate one call to ``calc_emis_ion.f90``."""
     shared = _as_emisab_context(context)
     current_levels = build_level_table(context.master, context.derived, ion.ion_index)
     _overwrite_leveltemp(leveltemp_workspace, current_levels)
-    levels = UCalcLevelTable(levels=dict(leveltemp_workspace.levels), nlev=ion.nlev)
-    epi, _, _ = _high_resolution_radiation(context.radiation)
+    # leveltemp_workspace is caller-owned, but within one ion it is read-only
+    # after the source-faithful overwrite.  Avoid copying the full level dict
+    # on every Mg/Ca emissivity pass.
+    levels = leveltemp_workspace
+    if epi is None:
+        epi, _, _ = _high_resolution_radiation(context.radiation)
     visited = 0
     calls = 0
     retained_kkkl = 0
-    max_rate_type = min(int(context.derived.max_rate_type), int(context.derived.npfi.shape[0] - 1))
+    record_sequence = _calc_emis_record_sequence_for_ion(context, ion)
+    diagnostics_enabled = bool(getattr(context, "retain_traces", True))
 
     def evaluate(rec: int, ptmp1: float, ptmp2: float, abund1: float, abund2: float) -> UCalcResult:
         nonlocal calls
@@ -721,281 +753,278 @@ def calc_emis_ion(
             _accumulate_ucalc_continuum(context.workspace.base, result)
         return result
 
-    for rate_type in range(1, max_rate_type + 1):
-        rec = int(context.derived.npfi[rate_type, ion.ion_index])
-        while rec and int(context.derived.npar[rec]) == ion.ion_record:
-            visited += 1
-            header = context.master.header(rec)
-            ints = context.master.record_integers(rec)
+    for rate_type, rec in record_sequence:
+        visited += 1
+        header = context.master.header(rec)
+        ints = context.master.record_integers(rec)
 
-            if rate_type == 7 and len(ints) >= 4:
-                idest1 = int(ints[-2])
-                idest2 = ion.nlev + int(ints[-4]) - 1
-                retained_kkkl = int(context.derived.npconi2[rec])
-                if 0 < retained_kkkl <= int(context.derived.ncsvn) and idest1 > 0:
-                    wave = float(context.rrc_wavelength_angstrom[retained_kkkl])
-                    if wave > float(epi[0]) and wave < float(epi[-1]):
-                        energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / wave
-                        nb1 = nbinc(energy, epi, len(epi))
-                        if _feature_is_ranked(continuum_rank_table, retained_kkkl, nb1):
-                            lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                            abund1 = float(compact_xileve[lower]) * element_abundance
-                            abund2 = float(compact_xileve[upper]) * element_abundance
-                            tau1, tau2 = context.escape.continuum_taus(retained_kkkl)
-                            tau1 = 0.0 if tau1 is None else float(tau1)
-                            tau2 = 0.0 if tau2 is None else float(tau2)
-                            ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
-                            ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
-                            result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                            context.workspace.base.opakab[retained_kkkl] = result.opakab
-                            _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
-                            record_traces.append(CalcEmisRecordTrace(
-                                rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
-                                compact_offset, idest1, idest2, lower, upper, retained_kkkl,
-                                retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                                result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
-                                result.status.value, "strong_rrc_rate_type_7",
-                            ))
-
-            if rate_type == 42 and len(ints) >= 4:
-                idest1 = int(ints[-2])
-                idest2 = int(ints[-4])
-                if idest1 > 0:
-                    if retained_kkkl <= 0 or retained_kkkl > int(context.derived.ncsvn):
-                        raise CalcEmisPortError("rate type 42 reached before a valid retained kkkl continuum pointer")
-                    lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                    abund1 = float(compact_xileve[lower]) * element_abundance
-                    abund2 = float(compact_xileve[upper]) * element_abundance
-                    tau1, tau2 = context.escape.continuum_taus(retained_kkkl)
-                    tau1 = 0.0 if tau1 is None else float(tau1)
-                    tau2 = 0.0 if tau2 is None else float(tau2)
-                    ptmp1 = (1.0 - context.covering_fraction) / 2.0
-                    ptmp2 = (1.0 + context.covering_fraction) / 2.0
-                    result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                    context.workspace.base.opakab[retained_kkkl] = result.opakab
-                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
-                    record_traces.append(CalcEmisRecordTrace(
-                        rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
-                        compact_offset, idest1, idest2, lower, upper, retained_kkkl,
-                        retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                        result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
-                        result.status.value, "rate_type_42_retained_continuum_pointer",
-                    ))
-
-            if rate_type == 9 and len(ints) >= 2:
-                reals = context.master.record_reals(rec)
-                idest1, idest2 = int(ints[0]), int(ints[1])
-                if len(reals) and float(reals[0]) > 0.01 and 0 < idest1 < ion.nlev and 0 < idest2 < ion.nlev:
-                    if retained_kkkl <= 0 or retained_kkkl > int(context.derived.ncsvn):
-                        raise CalcEmisPortError("rate type 9 prepass reached before a valid retained kkkl continuum pointer")
-                    lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                    abund1 = float(compact_xileve[lower]) * element_abundance * xpx
-                    abund2 = float(compact_xileve[upper]) * element_abundance * xpx
-                    ptmp1 = pescl(0.0) * (1.0 - context.covering_fraction)
-                    ptmp2 = pescl(0.0) * (1.0 - context.covering_fraction) + 2.0 * pescl(0.0) * context.covering_fraction
-                    result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                    context.workspace.base.opakab[retained_kkkl] = result.opakab
-                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
-                    record_traces.append(CalcEmisRecordTrace(
-                        rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
-                        compact_offset, idest1, idest2, lower, upper, retained_kkkl,
-                        retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                        result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
-                        result.status.value, "rate_type_9_prepass",
-                    ))
-
-            if rate_type in (4, 9) and len(ints) >= 2:
-                idest1, idest2 = int(ints[0]), int(ints[1])
-                line_index = int(context.derived.nplini[rec])
-                if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
-                    wave = float(context.line_wavelength_angstrom[line_index])
-                    energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
+        if rate_type == 7 and len(ints) >= 4:
+            idest1 = int(ints[-2])
+            idest2 = ion.nlev + int(ints[-4]) - 1
+            retained_kkkl = int(context.derived.npconi2[rec])
+            if 0 < retained_kkkl <= int(context.derived.ncsvn) and idest1 > 0:
+                wave = float(context.rrc_wavelength_angstrom[retained_kkkl])
+                if wave > float(epi[0]) and wave < float(epi[-1]):
+                    energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / wave
                     nb1 = nbinc(energy, epi, len(epi))
-                    if _feature_is_ranked(line_rank_table, line_index, nb1):
-                        if not (1 <= idest2 <= ion.nlev):
-                            raise CalcEmisPortError(f"line endpoint {idest2} outside ion nlev={ion.nlev}")
-                        tau1, tau2 = context.escape.line_taus(line_index)
+                    if _feature_is_ranked(continuum_rank_table, retained_kkkl, nb1):
+                        lower, upper = idest1 + compact_offset, idest2 + compact_offset
+                        abund1 = float(compact_xileve[lower]) * element_abundance
+                        abund2 = float(compact_xileve[upper]) * element_abundance
+                        tau1, tau2 = context.escape.continuum_taus(retained_kkkl)
                         tau1 = 0.0 if tau1 is None else float(tau1)
                         tau2 = 0.0 if tau2 is None else float(tau2)
-                        e1 = levels.require(idest1).energy_ev
-                        e2 = levels.require(idest2).energy_ev
-                        if e1 < e2:
-                            lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                        else:
-                            lower, upper = idest2 + compact_offset, idest1 + compact_offset
-                        abund1 = float(compact_xileve[lower]) * xpx * element_abundance
-                        abund2 = float(compact_xileve[upper]) * xpx * element_abundance
-                        ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
-                        ptmp2 = pescl(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescl(tau1 + tau2) * context.covering_fraction
+                        ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
+                        ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
                         result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                        # Source handoff correction, v0.5.05.
-                        #
-                        # In the Fortran line branch, ucalc receives caller-owned
-                        # ``opakc``/``opakcont`` and may update the continuum-grid
-                        # opacity while the caller also stores the per-line opacity
-                        # in ``oplin``.  The previous Python translation preserved
-                        # the emitted line flux handoff but did not carry the line
-                        # opacity into either ``oplin`` or the continuum-grid
-                        # ``opakc`` seen by ``step.f90``.  That left the active
-                        # kappa above ``ectt`` nearly zero, so the radial Courant
-                        # limiter skipped the intermediate column substeps.  Bin the
-                        # line opacity at the same source ``nb1`` used for ``flinel``.
-                        opakb1 = float(result.opakab) * float(abund1)
-                        if line_index > 0 and line_index < context.workspace.base.oplin.size:
-                            context.workspace.base.oplin[line_index] = opakb1
-                        net = result.ans2 * abund2 - result.ans1 * abund1
-                        atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
-                        natural_width = 0.0
-                        try:
-                            reals_for_line = context.master.record_reals(rec)
-                            if len(reals_for_line) > 2:
-                                natural_width = float(reals_for_line[2]) * 4.136e-15
-                        except Exception:
-                            natural_width = 0.0
-                        _line_opakc_before = context.workspace.base.opakc.copy()
-                        _linopac_diag = _source_linopac_into_opakc(
-                            optpp=opakb1,
-                            rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),
-                            rcem2=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0),
-                            line_energy_eV=energy,
-                            vturb_km_s=float(context.turbulent_velocity_km_s),
-                            temperature_1e4K=float(context.temperature_1e4K),
-                            atomic_mass_amu=atomic_mass,
-                            natural_width_eV=natural_width,
-                            epi=epi,
-                            opakc=context.workspace.base.opakc,
-                            rccemis=context.workspace.base.rccemis,
-                            ncn2=len(epi),
-                            diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
-                        )
-                        _line_opakc_after = context.workspace.base.opakc
-                        _target_add = {
-                            str(_b): (float(_line_opakc_after[_b - 1] - _line_opakc_before[_b - 1]) if 0 < _b <= _line_opakc_after.size else 0.0)
-                            for _b in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS
-                        }
-                        _diag_rows = getattr(context.workspace, "line_opacity_bin_diagnostics", None)
-                        if _diag_rows is None:
-                            _diag_rows = []
-                            setattr(context.workspace, "line_opacity_bin_diagnostics", _diag_rows)
-                        if int(line_index) in XSTAR_TYPE50_LINE_STRENGTH_TARGET_LINES and len(_diag_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
-                            try:
-                                _rec_reals = tuple(float(x) for x in context.master.record_reals(rec))
-                            except Exception:
-                                _rec_reals = ()
-                            try:
-                                _rec_ints = tuple(int(x) for x in context.master.record_integers(rec))
-                            except Exception:
-                                _rec_ints = ()
-                            _local_lower = int(idest1 if e1 <= e2 else idest2)
-                            _local_upper = int(idest2 if e1 <= e2 else idest1)
-                            _lower_level = levels.get(_local_lower)
-                            _upper_level = levels.get(_local_upper)
-                            _lower_weight = float(getattr(_lower_level, "statistical_weight", 0.0) or 0.0)
-                            _upper_weight = float(getattr(_upper_level, "statistical_weight", 0.0) or 0.0)
-                            _flin = result.diagnostics.get("f_osc_from_A", result.diagnostics.get("oscillator_strength", result.diagnostics.get("flin", 0.0)))
-                            _aij = result.diagnostics.get("A_s^-1", result.diagnostics.get("aij_s^-1", result.diagnostics.get("aij", 0.0)))
-                            try:
-                                _flin = float(_flin or 0.0)
-                            except Exception:
-                                _flin = 0.0
-                            try:
-                                _aij = float(_aij or 0.0)
-                            except Exception:
-                                _aij = 0.0
-                            try:
-                                _vtherm = ((float(context.turbulent_velocity_km_s) * 1.0e5) ** 2 + (1.29e6 / max((float(atomic_mass) / max(float(context.temperature_1e4K), 1.0e-48)) ** 0.5, 1.0e-48)) ** 2) ** 0.5
-                            except Exception:
-                                _vtherm = 0.0
-                            _diag_rows.append({
-                                "row_kind": "type50_line_strength_mapping_track",
-                                "diagnostic_priority": "pre_linopac_opakb1_source_mapping",
-                                "line_index": int(line_index),
-                                "record": int(rec),
-                                "parent_record": int(getattr(header, "parent_record", 0) or 0),
-                                "next_record": int(getattr(header, "next_record", 0) or 0),
-                                "ltyp": int(header.data_type),
-                                "lrtyp": int(rate_type),
-                                "idest1": int(idest1),
-                                "idest2": int(idest2),
-                                "lower_level_id_local": int(_local_lower),
-                                "upper_level_id_local": int(_local_upper),
-                                "lower_compact": int(lower),
-                                "upper_compact": int(upper),
-                                "lower_statistical_weight": float(_lower_weight),
-                                "upper_statistical_weight": float(_upper_weight),
-                                "source_upper_id_after_energy_swap": int(result.diagnostics.get("source_upper_id_after_energy_swap", 0) or 0),
-                                "source_lower_id_after_energy_swap": int(result.diagnostics.get("source_lower_id_after_energy_swap", 0) or 0),
-                                "source_upper_statistical_weight": float(result.diagnostics.get("source_upper_statistical_weight", 0.0) or 0.0),
-                                "source_lower_statistical_weight": float(result.diagnostics.get("source_lower_statistical_weight", 0.0) or 0.0),
-                                "source_swapped_endpoints_for_type50_flin": bool(result.diagnostics.get("source_swapped_endpoints_for_type50_flin", False)),
-                                "lower_energy_eV": float(e1 if e1 <= e2 else e2),
-                                "upper_energy_eV": float(e2 if e1 <= e2 else e1),
-                                "flin_as_read_from_ATDB_or_A": float(_flin),
-                                "aij_s_minus1": float(_aij),
-                                "elin_eV": float(energy),
-                                "wavelength_A": float(wave),
-                                "vtherm_cm_s": float(_vtherm),
-                                "sigma_cm2": float(result.opakab),
-                                "sigvtherm_cm2": float(result.opakab),
-                                "abund1": float(abund1),
-                                "abund2": float(abund2),
-                                "opakab": float(result.opakab),
-                                "opakb1": float(opakb1),
-                                "tau0_backward": float(tau1),
-                                "tau0_forward": float(tau2),
-                                "ans1_photoexcitation_s_minus1": float(result.ans1),
-                                "ans2_escaped_decay_s_minus1": float(result.ans2),
-                                "record_reals": list(_rec_reals[:12]),
-                                "record_integers": list(_rec_ints[:12]),
-                                "working_hypothesis": "compare 410/411,119/120,1983/1984 flin/statistical-weight/opakb1 before linopac; doublet inversion here cannot be fixed by linopac opsum/sume",
-                            })
-                        if any(abs(v) > 0.0 for v in _target_add.values()) or int(_linopac_diag.get("center_bin_one_based", 0)) in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS:
-                            _rows = _diag_rows
-                            if len(_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
-                                _rows.append({
-                                    "row_kind": "linopac_selected_bin_diagnostic",
-                                    "record": int(rec),
-                                    "line_index": int(line_index),
-                                    "ion_index": int(ion.ion_index),
-                                    "ion_stage": int(ion.ion_stage),
-                                    "rate_type": int(rate_type),
-                                    "data_type": int(header.data_type),
-                                    "idest1": int(idest1),
-                                    "idest2": int(idest2),
-                                    "lower_compact": int(lower),
-                                    "upper_compact": int(upper),
-                                    "abund1": float(abund1),
-                                    "abund2": float(abund2),
-                                    "elin_eV": float(energy),
-                                    "e0_eV": float(_linopac_diag.get("e0_eV", energy)),
-                                    "nbinc": int(nb1),
-                                    "oppp": float(opakb1),
-                                    "opakb1": float(opakb1),
-                                    "natural_width_eV": float(natural_width),
-                                    "atomic_mass_amu": float(atomic_mass),
-                                    "vturb_km_s": float(context.turbulent_velocity_km_s),
-                                    "temperature_1e4K": float(context.temperature_1e4K),
-                                    "target_bin_additions": dict(_target_add),
-                                    "final_contribution_to_opakc_3877": float(_target_add.get("3877", 0.0)),
-                                    "opsum_sume_track_priority": "line_410_411" if int(line_index) in (410, 411) else "other_line",
-                                    "python_vs_fortran_opsum_sume_contract": "compare linopac_source_opsum_over_sume_by_bin['3877'] with instrumented Fortran linopac.f90 opsum/sume for the same line",
-                                    **{f"linopac_{k}": v for k, v in _linopac_diag.items()},
-                                })
-                        context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
-                        context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
-                        width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
-                        context.workspace.flinel[nb1 - 1] += (
-                            context.workspace.fline[0, line_index] + context.workspace.fline[1, line_index]
-                        ) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
+                        context.workspace.base.opakab[retained_kkkl] = result.opakab
+                        _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
                         record_traces.append(CalcEmisRecordTrace(
                             rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
-                            compact_offset, idest1, idest2, lower, upper, line_index,
+                            compact_offset, idest1, idest2, lower, upper, retained_kkkl,
                             retained_kkkl, abund1, abund2, ptmp1, ptmp2,
-                            result.ans1, result.ans2, result.ans3, result.ans4, opakb1,
-                            result.status.value, f"strong_line_rate_type_{rate_type}",
+                            result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
+                            result.status.value, "strong_rrc_rate_type_7",
                         ))
 
-            rec = int(context.derived.npnxt[rec])
+        if rate_type == 42 and len(ints) >= 4:
+            idest1 = int(ints[-2])
+            idest2 = int(ints[-4])
+            if idest1 > 0:
+                if retained_kkkl <= 0 or retained_kkkl > int(context.derived.ncsvn):
+                    raise CalcEmisPortError("rate type 42 reached before a valid retained kkkl continuum pointer")
+                lower, upper = idest1 + compact_offset, idest2 + compact_offset
+                abund1 = float(compact_xileve[lower]) * element_abundance
+                abund2 = float(compact_xileve[upper]) * element_abundance
+                tau1, tau2 = context.escape.continuum_taus(retained_kkkl)
+                tau1 = 0.0 if tau1 is None else float(tau1)
+                tau2 = 0.0 if tau2 is None else float(tau2)
+                ptmp1 = (1.0 - context.covering_fraction) / 2.0
+                ptmp2 = (1.0 + context.covering_fraction) / 2.0
+                result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
+                context.workspace.base.opakab[retained_kkkl] = result.opakab
+                _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                record_traces.append(CalcEmisRecordTrace(
+                    rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
+                    compact_offset, idest1, idest2, lower, upper, retained_kkkl,
+                    retained_kkkl, abund1, abund2, ptmp1, ptmp2,
+                    result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
+                    result.status.value, "rate_type_42_retained_continuum_pointer",
+                ))
+
+        if rate_type == 9 and len(ints) >= 2:
+            reals = context.master.record_reals(rec)
+            idest1, idest2 = int(ints[0]), int(ints[1])
+            if len(reals) and float(reals[0]) > 0.01 and 0 < idest1 < ion.nlev and 0 < idest2 < ion.nlev:
+                if retained_kkkl <= 0 or retained_kkkl > int(context.derived.ncsvn):
+                    raise CalcEmisPortError("rate type 9 prepass reached before a valid retained kkkl continuum pointer")
+                lower, upper = idest1 + compact_offset, idest2 + compact_offset
+                abund1 = float(compact_xileve[lower]) * element_abundance * xpx
+                abund2 = float(compact_xileve[upper]) * element_abundance * xpx
+                ptmp1 = pescl(0.0) * (1.0 - context.covering_fraction)
+                ptmp2 = pescl(0.0) * (1.0 - context.covering_fraction) + 2.0 * pescl(0.0) * context.covering_fraction
+                result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
+                context.workspace.base.opakab[retained_kkkl] = result.opakab
+                _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                record_traces.append(CalcEmisRecordTrace(
+                    rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
+                    compact_offset, idest1, idest2, lower, upper, retained_kkkl,
+                    retained_kkkl, abund1, abund2, ptmp1, ptmp2,
+                    result.ans1, result.ans2, result.ans3, result.ans4, result.opakab,
+                    result.status.value, "rate_type_9_prepass",
+                ))
+
+        if rate_type in (4, 9) and len(ints) >= 2:
+            idest1, idest2 = int(ints[0]), int(ints[1])
+            line_index = int(context.derived.nplini[rec])
+            if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
+                wave = float(context.line_wavelength_angstrom[line_index])
+                energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
+                nb1 = nbinc(energy, epi, len(epi))
+                if _feature_is_ranked(line_rank_table, line_index, nb1):
+                    if not (1 <= idest2 <= ion.nlev):
+                        raise CalcEmisPortError(f"line endpoint {idest2} outside ion nlev={ion.nlev}")
+                    tau1, tau2 = context.escape.line_taus(line_index)
+                    tau1 = 0.0 if tau1 is None else float(tau1)
+                    tau2 = 0.0 if tau2 is None else float(tau2)
+                    e1 = levels.require(idest1).energy_ev
+                    e2 = levels.require(idest2).energy_ev
+                    if e1 < e2:
+                        lower, upper = idest1 + compact_offset, idest2 + compact_offset
+                    else:
+                        lower, upper = idest2 + compact_offset, idest1 + compact_offset
+                    abund1 = float(compact_xileve[lower]) * xpx * element_abundance
+                    abund2 = float(compact_xileve[upper]) * xpx * element_abundance
+                    ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
+                    ptmp2 = pescl(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescl(tau1 + tau2) * context.covering_fraction
+                    result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
+                    # Source handoff correction, v0.5.05.
+                    #
+                    # In the Fortran line branch, ucalc receives caller-owned
+                    # ``opakc``/``opakcont`` and may update the continuum-grid
+                    # opacity while the caller also stores the per-line opacity
+                    # in ``oplin``.  The previous Python translation preserved
+                    # the emitted line flux handoff but did not carry the line
+                    # opacity into either ``oplin`` or the continuum-grid
+                    # ``opakc`` seen by ``step.f90``.  That left the active
+                    # kappa above ``ectt`` nearly zero, so the radial Courant
+                    # limiter skipped the intermediate column substeps.  Bin the
+                    # line opacity at the same source ``nb1`` used for ``flinel``.
+                    opakb1 = float(result.opakab) * float(abund1)
+                    if line_index > 0 and line_index < context.workspace.base.oplin.size:
+                        context.workspace.base.oplin[line_index] = opakb1
+                    net = result.ans2 * abund2 - result.ans1 * abund1
+                    atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
+                    natural_width = 0.0
+                    try:
+                        reals_for_line = context.master.record_reals(rec)
+                        if len(reals_for_line) > 2:
+                            natural_width = float(reals_for_line[2]) * 4.136e-15
+                    except Exception:
+                        natural_width = 0.0
+                    _line_opakc_before = context.workspace.base.opakc.copy() if diagnostics_enabled else None
+                    _linopac_diag = _source_linopac_into_opakc(
+                        optpp=opakb1,
+                        rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),
+                        rcem2=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0),
+                        line_energy_eV=energy,
+                        vturb_km_s=float(context.turbulent_velocity_km_s),
+                        temperature_1e4K=float(context.temperature_1e4K),
+                        atomic_mass_amu=atomic_mass,
+                        natural_width_eV=natural_width,
+                        epi=epi,
+                        opakc=context.workspace.base.opakc,
+                        rccemis=context.workspace.base.rccemis,
+                        ncn2=len(epi),
+                        diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+                    )
+                    _line_opakc_after = context.workspace.base.opakc
+                    _target_add = ({
+                        str(_b): (float(_line_opakc_after[_b - 1] - _line_opakc_before[_b - 1]) if _line_opakc_before is not None and 0 < _b <= _line_opakc_after.size else 0.0)
+                        for _b in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS
+                    } if diagnostics_enabled else {})
+                    _diag_rows = getattr(context.workspace, "line_opacity_bin_diagnostics", None)
+                    if _diag_rows is None:
+                        _diag_rows = []
+                        setattr(context.workspace, "line_opacity_bin_diagnostics", _diag_rows)
+                    if diagnostics_enabled and int(line_index) in XSTAR_TYPE50_LINE_STRENGTH_TARGET_LINES and len(_diag_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
+                        try:
+                            _rec_reals = tuple(float(x) for x in context.master.record_reals(rec))
+                        except Exception:
+                            _rec_reals = ()
+                        try:
+                            _rec_ints = tuple(int(x) for x in context.master.record_integers(rec))
+                        except Exception:
+                            _rec_ints = ()
+                        _local_lower = int(idest1 if e1 <= e2 else idest2)
+                        _local_upper = int(idest2 if e1 <= e2 else idest1)
+                        _lower_level = levels.get(_local_lower)
+                        _upper_level = levels.get(_local_upper)
+                        _lower_weight = float(getattr(_lower_level, "statistical_weight", 0.0) or 0.0)
+                        _upper_weight = float(getattr(_upper_level, "statistical_weight", 0.0) or 0.0)
+                        _flin = result.diagnostics.get("f_osc_from_A", result.diagnostics.get("oscillator_strength", result.diagnostics.get("flin", 0.0)))
+                        _aij = result.diagnostics.get("A_s^-1", result.diagnostics.get("aij_s^-1", result.diagnostics.get("aij", 0.0)))
+                        try:
+                            _flin = float(_flin or 0.0)
+                        except Exception:
+                            _flin = 0.0
+                        try:
+                            _aij = float(_aij or 0.0)
+                        except Exception:
+                            _aij = 0.0
+                        try:
+                            _vtherm = ((float(context.turbulent_velocity_km_s) * 1.0e5) ** 2 + (1.29e6 / max((float(atomic_mass) / max(float(context.temperature_1e4K), 1.0e-48)) ** 0.5, 1.0e-48)) ** 2) ** 0.5
+                        except Exception:
+                            _vtherm = 0.0
+                        _diag_rows.append({
+                            "row_kind": "type50_line_strength_mapping_track",
+                            "diagnostic_priority": "pre_linopac_opakb1_source_mapping",
+                            "line_index": int(line_index),
+                            "record": int(rec),
+                            "parent_record": int(getattr(header, "parent_record", 0) or 0),
+                            "next_record": int(getattr(header, "next_record", 0) or 0),
+                            "ltyp": int(header.data_type),
+                            "lrtyp": int(rate_type),
+                            "idest1": int(idest1),
+                            "idest2": int(idest2),
+                            "lower_level_id_local": int(_local_lower),
+                            "upper_level_id_local": int(_local_upper),
+                            "lower_compact": int(lower),
+                            "upper_compact": int(upper),
+                            "lower_statistical_weight": float(_lower_weight),
+                            "upper_statistical_weight": float(_upper_weight),
+                            "source_upper_id_after_energy_swap": int(result.diagnostics.get("source_upper_id_after_energy_swap", 0) or 0),
+                            "source_lower_id_after_energy_swap": int(result.diagnostics.get("source_lower_id_after_energy_swap", 0) or 0),
+                            "source_upper_statistical_weight": float(result.diagnostics.get("source_upper_statistical_weight", 0.0) or 0.0),
+                            "source_lower_statistical_weight": float(result.diagnostics.get("source_lower_statistical_weight", 0.0) or 0.0),
+                            "source_swapped_endpoints_for_type50_flin": bool(result.diagnostics.get("source_swapped_endpoints_for_type50_flin", False)),
+                            "lower_energy_eV": float(e1 if e1 <= e2 else e2),
+                            "upper_energy_eV": float(e2 if e1 <= e2 else e1),
+                            "flin_as_read_from_ATDB_or_A": float(_flin),
+                            "aij_s_minus1": float(_aij),
+                            "elin_eV": float(energy),
+                            "wavelength_A": float(wave),
+                            "vtherm_cm_s": float(_vtherm),
+                            "sigma_cm2": float(result.opakab),
+                            "sigvtherm_cm2": float(result.opakab),
+                            "abund1": float(abund1),
+                            "abund2": float(abund2),
+                            "opakab": float(result.opakab),
+                            "opakb1": float(opakb1),
+                            "tau0_backward": float(tau1),
+                            "tau0_forward": float(tau2),
+                            "ans1_photoexcitation_s_minus1": float(result.ans1),
+                            "ans2_escaped_decay_s_minus1": float(result.ans2),
+                            "record_reals": list(_rec_reals[:12]),
+                            "record_integers": list(_rec_ints[:12]),
+                            "working_hypothesis": "compare 410/411,119/120,1983/1984 flin/statistical-weight/opakb1 before linopac; doublet inversion here cannot be fixed by linopac opsum/sume",
+                        })
+                    if diagnostics_enabled and (any(abs(v) > 0.0 for v in _target_add.values()) or int(_linopac_diag.get("center_bin_one_based", 0)) in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS):
+                        _rows = _diag_rows
+                        if len(_rows) < XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS:
+                            _rows.append({
+                                "row_kind": "linopac_selected_bin_diagnostic",
+                                "record": int(rec),
+                                "line_index": int(line_index),
+                                "ion_index": int(ion.ion_index),
+                                "ion_stage": int(ion.ion_stage),
+                                "rate_type": int(rate_type),
+                                "data_type": int(header.data_type),
+                                "idest1": int(idest1),
+                                "idest2": int(idest2),
+                                "lower_compact": int(lower),
+                                "upper_compact": int(upper),
+                                "abund1": float(abund1),
+                                "abund2": float(abund2),
+                                "elin_eV": float(energy),
+                                "e0_eV": float(_linopac_diag.get("e0_eV", energy)),
+                                "nbinc": int(nb1),
+                                "oppp": float(opakb1),
+                                "opakb1": float(opakb1),
+                                "natural_width_eV": float(natural_width),
+                                "atomic_mass_amu": float(atomic_mass),
+                                "vturb_km_s": float(context.turbulent_velocity_km_s),
+                                "temperature_1e4K": float(context.temperature_1e4K),
+                                "target_bin_additions": dict(_target_add),
+                                "final_contribution_to_opakc_3877": float(_target_add.get("3877", 0.0)),
+                                "opsum_sume_track_priority": "line_410_411" if int(line_index) in (410, 411) else "other_line",
+                                "python_vs_fortran_opsum_sume_contract": "compare linopac_source_opsum_over_sume_by_bin['3877'] with instrumented Fortran linopac.f90 opsum/sume for the same line",
+                                **{f"linopac_{k}": v for k, v in _linopac_diag.items()},
+                            })
+                    context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
+                    context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
+                    width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
+                    context.workspace.flinel[nb1 - 1] += (
+                        context.workspace.fline[0, line_index] + context.workspace.fline[1, line_index]
+                    ) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
+                    record_traces.append(CalcEmisRecordTrace(
+                        rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
+                        compact_offset, idest1, idest2, lower, upper, line_index,
+                        retained_kkkl, abund1, abund2, ptmp1, ptmp2,
+                        result.ans1, result.ans2, result.ans3, result.ans4, opakb1,
+                        result.status.value, f"strong_line_rate_type_{rate_type}",
+                    ))
+
 
     return CalcEmisIonTrace(
         ion_record=ion.ion_record, ion_index=ion.ion_index, ion_stage=ion.ion_stage,
@@ -1031,6 +1060,7 @@ def calc_emis_element(
                 xpx=xpx, xh0=xh0, xh1=xh1,
                 line_rank_table=line_rank_table, continuum_rank_table=continuum_rank_table,
                 leveltemp_workspace=leveltemp_workspace, record_traces=record_traces,
+                epi=epi,
             )
         else:
             trace = CalcEmisIonTrace(
