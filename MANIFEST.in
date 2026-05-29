@@ -379,8 +379,8 @@ include examples/run_v0488_zone1_analysis.sh
 recursive-include scripts *.sh
 
 include setup.py
-recursive-include cpp *.cpp *.hpp *.h *.md
-
 recursive-include src/xstar_atomic/source_port *.so *.dylib *.dll
 
-recursive-include cpp Makefile *.sh
+
+# Optional C++ shared-library solver backend sources/build helpers
+recursive-include src/xstar_atomic/source_port/cpp/xstar_solver *

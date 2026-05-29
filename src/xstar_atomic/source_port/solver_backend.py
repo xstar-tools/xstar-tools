@@ -64,6 +64,10 @@ def _candidate_library_paths() -> list[Path]:
     paths: list[Path] = []
     if env_path:
         paths.append(Path(env_path).expanduser())
+
+    # Runtime loader anchor.  This works both for installed packages and for
+    # source-tree execution such as ``PYTHONPATH=src python ...`` because
+    # ``__file__`` points at ``src/xstar_atomic/source_port/solver_backend.py``.
     here = Path(__file__).resolve().parent
     names = (
         "libxstar_solver.so",
@@ -71,9 +75,35 @@ def _candidate_library_paths() -> list[Path]:
         "libxstar_solver.dylib",
         "xstar_solver.dll",
     )
+
+    # Preferred runtime copy beside this module.
     for name in names:
         paths.append(here / name)
-    return paths
+
+    # Source-tree build location after v0.5.43.  This lets a developer run:
+    #   PYTHONPATH=src python ...
+    # immediately after building under src/xstar_atomic/source_port/cpp/xstar_solver
+    # even if the runtime copy step was skipped.
+    source_tree_cpp_dir = here / "cpp" / "xstar_solver"
+    for name in names:
+        paths.append(source_tree_cpp_dir / name)
+
+    # Backward-compatible fallback for older v0.5.39-v0.5.42 trees that kept
+    # cpp/xstar_solver at repository root.  This can be removed after the
+    # xstar_tools layout transition.
+    repo_root_cpp_dir = here.parents[2] / "cpp" / "xstar_solver" if len(here.parents) >= 3 else here / "cpp" / "xstar_solver"
+    for name in names:
+        paths.append(repo_root_cpp_dir / name)
+
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
 
 
 def _load_cpp_library() -> ctypes.CDLL | None:

@@ -291,8 +291,6 @@ benchmarks/oxygen_milestone3_v0422/v0421_population_parity_summary.json
 benchmarks/oxygen_v0434_correction_targets/README.md
 benchmarks/oxygen_v0434_correction_targets/source_archive.sha256
 benchmarks/oxygen_v0434_correction_targets/v0433_baseline_target_gate.json
-cpp/xstar_solver/README.md
-cpp/xstar_solver/level_population.cpp
 docs/TODO.md
 docs/example_to_source_api_map.md
 docs/helike_benchmark_diagnosis.md
@@ -682,6 +680,7 @@ src/xstar_atomic/benchmarks/oxygen_v0434_correction_targets/README.md
 src/xstar_atomic/benchmarks/oxygen_v0434_correction_targets/source_archive.sha256
 src/xstar_atomic/benchmarks/oxygen_v0434_correction_targets/v0433_baseline_target_gate.json
 src/xstar_atomic/source_port/__init__.py
+src/xstar_atomic/source_port/active_subsets.py
 src/xstar_atomic/source_port/all_element_fixed_state.py
 src/xstar_atomic/source_port/atomic_database.py
 src/xstar_atomic/source_port/bremsstrahlung.py
@@ -709,12 +708,14 @@ src/xstar_atomic/source_port/inventory.py
 src/xstar_atomic/source_port/ion_balance.py
 src/xstar_atomic/source_port/ledger.py
 src/xstar_atomic/source_port/leveltemp_energy_parity.py
+src/xstar_atomic/source_port/libxstar_solver.so
 src/xstar_atomic/source_port/linear_algebra.py
 src/xstar_atomic/source_port/local_zone.py
 src/xstar_atomic/source_port/msolvelucy_final_snapshot.py
 src/xstar_atomic/source_port/msolvelucy_initial_state.py
 src/xstar_atomic/source_port/msolvelucy_state_parity.py
 src/xstar_atomic/source_port/output_writers.py
+src/xstar_atomic/source_port/performance.py
 src/xstar_atomic/source_port/physical_benchmark_suite.py
 src/xstar_atomic/source_port/physical_output_diagnostics.py
 src/xstar_atomic/source_port/physical_output_parity.py
@@ -743,6 +744,11 @@ src/xstar_atomic/source_port/v0442_regression.py
 src/xstar_atomic/source_port/xstarcalc.py
 src/xstar_atomic/source_port/zone1_dsec_diagnostic.py
 src/xstar_atomic/source_port/zone1_dsec_probe_analysis.py
+src/xstar_atomic/source_port/cpp/xstar_solver/Makefile
+src/xstar_atomic/source_port/cpp/xstar_solver/README.md
+src/xstar_atomic/source_port/cpp/xstar_solver/build_lib.sh
+src/xstar_atomic/source_port/cpp/xstar_solver/level_population.cpp
+src/xstar_atomic/source_port/cpp/xstar_solver/libxstar_solver.so
 src/xstar_atomic/source_port/data/coheat.dat
 tests/test_absolute_response_density_grid_example.py
 tests/test_absolute_response_fit_example.py
@@ -998,5 +1004,4 @@ xstar_test_run/o7_xi15/xout_lines1.fits
 xstar_test_run/o7_xi15_highdens/xout_lines1.fits
 xstar_test_run/o_ne_xi3/xout_lines1.fits
 xstar_test_run/si_xi30/xout_lines1.fits
-xstar_test_run/si_xi40/xout_lines1.fitssrc/xstar_atomic/source_port/performance.py
-src/xstar_atomic/source_port/active_subsets.py
+xstar_test_run/si_xi40/xout_lines1.fits
