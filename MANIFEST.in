@@ -382,3 +382,5 @@ include setup.py
 recursive-include cpp *.cpp *.hpp *.h *.md
 
 recursive-include src/xstar_atomic/source_port *.so *.dylib *.dll
+
+recursive-include cpp Makefile *.sh
