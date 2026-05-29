@@ -19,6 +19,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
+from .performance import profile_component
+
 from .element_equilibrium import (
     ElementEquilibriumContext,
     ElementEquilibriumResult,
@@ -292,6 +294,8 @@ def calc_hmc_all(
     initial_global_bilevg_by_index: Optional[Sequence[float]] = None,
     initial_global_rnisg_by_index: Optional[Sequence[float]] = None,
     source_global_alias_writeback: bool = False,
+    active_subset: Optional[Any] = None,
+    profile_control: Optional[Mapping[str, Any]] = None,
 ) -> FixedStateCalcHMCAllResult:
     """Run the fixed-state element/charge/heating core of ``calc_hmc_all``.
 
@@ -376,57 +380,82 @@ def calc_hmc_all(
 
     # Preserve the native XSTAR global array indices so bounded probe products
     # can be compared without guessing from element/stage/local-level labels.
-    global_ion_index_by_key: Dict[Tuple[int, int], int] = {}
-    ion_record_to_index: Dict[int, int] = {}
+    # v0.5.41 can reuse a per-case active subset instead of rebuilding these
+    # maps during every repeated dsec evaluation.
     n_ions = int(getattr(derived, "n_ions", 0))
     ion_records = np.asarray(getattr(derived, "ion_records", ()), dtype=int).reshape(-1)
     ion_stages = np.asarray(getattr(derived, "ion_stage", ()), dtype=int).reshape(-1)
     ion_elements = np.asarray(getattr(derived, "ion_element_z", ()), dtype=int).reshape(-1)
-    for ion_index in range(1, min(n_ions + 1, ion_records.size, ion_stages.size, ion_elements.size)):
-        ion_record_to_index[int(ion_records[ion_index])] = ion_index
-        key = (int(ion_elements[ion_index]), int(ion_stages[ion_index]))
-        if key[0] in requested_element_z and key[0] > 0 and key[1] > 0:
-            global_ion_index_by_key[key] = ion_index
-
-    # Element arrays such as htt/cll are indexed by source element ordinal
-    # ``jk``, not by atomic number.  Decode the exact ordinal from the packed
-    # rate-type-11 element headers.
-    global_element_index_by_z: Dict[int, int] = {}
-    global_element_index_source = "packed_type11_element_ordinal"
-    element_records = np.asarray(getattr(derived, "element_records", ()), dtype=int).reshape(-1)
-    for element_index in range(1, element_records.size):
-        element_record = int(element_records[element_index])
-        if element_record <= 0 or not hasattr(master, "record_integers"):
-            continue
-        integers = np.asarray(master.record_integers(element_record), dtype=int).reshape(-1)
-        if integers.size and int(integers[0]) > 0:
-            global_element_index_by_z[int(integers[0])] = element_index
-    # Synthetic/minimal tests may omit packed element headers.  Preserve a
-    # deterministic fallback without using it in production provenance.
-    if not global_element_index_by_z:
-        global_element_index_source = "synthetic_sorted_element_fallback"
-        for element_index, z in enumerate(sorted(available_element_z), start=1):
-            global_element_index_by_z[int(z)] = element_index
-
-    # Global level arrays use the source ordinal ``mm`` in
-    # derivedpointers%npilev(mm,jkk).  Packed local level labels are metadata
-    # and are not valid substitutes for this ordinal.
-    global_level_index_by_key: Dict[Tuple[int, int, int], int] = {}
     npilev = np.asarray(getattr(derived, "npilev", ()), dtype=int)
     nlevs = np.asarray(getattr(derived, "nlevs", ()), dtype=int).reshape(-1)
-    if npilev.ndim == 2:
-        for ion_index in range(1, min(n_ions + 1, ion_stages.size, ion_elements.size, nlevs.size)):
-            z = int(ion_elements[ion_index])
-            stage = int(ion_stages[ion_index])
-            if z not in requested_element_z or stage <= 0:
+    if active_subset is not None:
+        global_ion_index_by_key = {
+            (int(k[0]), int(k[1])): int(v)
+            for k, v in dict(getattr(active_subset, "global_ion_index_by_key", {})).items()
+            if int(k[0]) in requested_element_z
+        }
+        ion_record_to_index = {
+            int(k): int(v)
+            for k, v in dict(getattr(active_subset, "ion_record_to_index", {})).items()
+        }
+        global_element_index_by_z = {
+            int(k): int(v)
+            for k, v in dict(getattr(active_subset, "global_element_index_by_z", {})).items()
+        }
+        global_element_index_source = str(
+            getattr(active_subset, "global_element_index_source", "active_subset")
+        )
+        global_level_index_by_key = {
+            (int(k[0]), int(k[1]), int(k[2])): int(v)
+            for k, v in dict(getattr(active_subset, "global_level_index_by_key", {})).items()
+            if int(k[0]) in requested_element_z
+        }
+    else:
+        global_ion_index_by_key: Dict[Tuple[int, int], int] = {}
+        ion_record_to_index: Dict[int, int] = {}
+        for ion_index in range(1, min(n_ions + 1, ion_records.size, ion_stages.size, ion_elements.size)):
+            ion_record_to_index[int(ion_records[ion_index])] = ion_index
+            key = (int(ion_elements[ion_index]), int(ion_stages[ion_index]))
+            if key[0] in requested_element_z and key[0] > 0 and key[1] > 0:
+                global_ion_index_by_key[key] = ion_index
+
+        # Element arrays such as htt/cll are indexed by source element ordinal
+        # ``jk``, not by atomic number.  Decode the exact ordinal from the packed
+        # rate-type-11 element headers.
+        global_element_index_by_z: Dict[int, int] = {}
+        global_element_index_source = "packed_type11_element_ordinal"
+        element_records = np.asarray(getattr(derived, "element_records", ()), dtype=int).reshape(-1)
+        for element_index in range(1, element_records.size):
+            element_record = int(element_records[element_index])
+            if element_record <= 0 or not hasattr(master, "record_integers"):
                 continue
-            nlev = int(nlevs[ion_index])
-            for local_ordinal in range(1, min(nlev + 1, npilev.shape[0])):
-                if ion_index >= npilev.shape[1]:
-                    break
-                global_level_index = int(npilev[local_ordinal, ion_index])
-                if global_level_index > 0:
-                    global_level_index_by_key[(z, stage, local_ordinal)] = global_level_index
+            integers = np.asarray(master.record_integers(element_record), dtype=int).reshape(-1)
+            if integers.size and int(integers[0]) > 0:
+                global_element_index_by_z[int(integers[0])] = element_index
+        # Synthetic/minimal tests may omit packed element headers.  Preserve a
+        # deterministic fallback without using it in production provenance.
+        if not global_element_index_by_z:
+            global_element_index_source = "synthetic_sorted_element_fallback"
+            for element_index, z in enumerate(sorted(available_element_z), start=1):
+                global_element_index_by_z[int(z)] = element_index
+
+        # Global level arrays use the source ordinal ``mm`` in
+        # derivedpointers%npilev(mm,jkk).  Packed local level labels are metadata
+        # and are not valid substitutes for this ordinal.
+        global_level_index_by_key: Dict[Tuple[int, int, int], int] = {}
+        if npilev.ndim == 2:
+            for ion_index in range(1, min(n_ions + 1, ion_stages.size, ion_elements.size, nlevs.size)):
+                z = int(ion_elements[ion_index])
+                stage = int(ion_stages[ion_index])
+                if z not in requested_element_z or stage <= 0:
+                    continue
+                nlev = int(nlevs[ion_index])
+                for local_ordinal in range(1, min(nlev + 1, npilev.shape[0])):
+                    if ion_index >= npilev.shape[1]:
+                        break
+                    global_level_index = int(npilev[local_ordinal, ion_index])
+                    if global_level_index > 0:
+                        global_level_index_by_key[(z, stage, local_ordinal)] = global_level_index
 
     n_global_levels = max(
         [
@@ -447,6 +476,9 @@ def calc_hmc_all(
                 if initial_global_rnisg_by_index is not None
                 else 0
             ),
+            int(getattr(active_subset, "n_global_levels_active", 0) or 0)
+            if active_subset is not None
+            else 0,
         ]
     )
 
@@ -702,14 +734,19 @@ def calc_hmc_all(
             lfast=int(effective_request.lfast),
             strict_context=bool(effective_request.strict_context),
         )
-        calc_rates_by_stage, preliminary, source_limits = pre_matrix_solver(
-            master,
-            derived,
-            element_z=z,
-            context=ion_rate_context,
-            critf=float(effective_request.critf),
-            dispatcher=dispatcher,
-        )
+        with profile_component(
+            profile_control or {},
+            "calc_hmc_all.pre_matrix_solver",
+            element_z=int(z),
+        ):
+            calc_rates_by_stage, preliminary, source_limits = pre_matrix_solver(
+                master,
+                derived,
+                element_z=z,
+                context=ion_rate_context,
+                critf=float(effective_request.critf),
+                dispatcher=dispatcher,
+            )
         pre_matrix_ok = all(item.ready for item in calc_rates_by_stage.values())
         all_pre_matrix_ready &= pre_matrix_ok
         if effective_request.use_source_ion_limits:
@@ -777,13 +814,18 @@ def calc_hmc_all(
             initial_leveltemp_workspace=leveltemp_workspace,
             initial_leveltemp_owner_by_column=leveltemp_owner_by_column,
         )
-        equilibrium = element_solver(
-            master,
-            derived,
-            element_z=z,
-            context=context,
-            dispatcher=dispatcher,
-        )
+        with profile_component(
+            profile_control or {},
+            "calc_hmc_all.element_solver",
+            element_z=int(z),
+        ):
+            equilibrium = element_solver(
+                master,
+                derived,
+                element_z=z,
+                context=context,
+                dispatcher=dispatcher,
+            )
         solve = equilibrium.solve
         ready = bool(equilibrium.full_element_direct_solve_ready and solve is not None)
         all_ready &= ready
@@ -1560,12 +1602,13 @@ def calc_hmc_all(
         bremem_result = None
         heatf_result = None
         if compton_context is not None:
-            comp2_result, comp2_diagnostics = comp2_continuum_result(
-                compton_context,
-                temperature_k=float(temperature_k),
-                hydrogen_density_cm3=xpx,
-                electron_fraction_xee=float(electron_fraction_xee),
-            )
+            with profile_component(profile_control or {}, "calc_hmc_all.comp2"):
+                comp2_result, comp2_diagnostics = comp2_continuum_result(
+                    compton_context,
+                    temperature_k=float(temperature_k),
+                    hydrogen_density_cm3=xpx,
+                    electron_fraction_xee=float(electron_fraction_xee),
+                )
             htcomp = float(comp2_diagnostics["htcomp"])
             clcomp = float(comp2_diagnostics["clcomp"])
             diagnostics.update(comp2_diagnostics)
@@ -1574,12 +1617,13 @@ def calc_hmc_all(
         else:
             diagnostics["comp2_translated"] = False
         if free_free_context is not None:
-            freef_result, freef_diagnostics = freef_continuum_result(
-                free_free_context,
-                temperature_k=float(temperature_k),
-                hydrogen_density_cm3=xpx,
-                electron_fraction_xee=float(electron_fraction_xee),
-            )
+            with profile_component(profile_control or {}, "calc_hmc_all.freef"):
+                freef_result, freef_diagnostics = freef_continuum_result(
+                    free_free_context,
+                    temperature_k=float(temperature_k),
+                    hydrogen_density_cm3=xpx,
+                    electron_fraction_xee=float(electron_fraction_xee),
+                )
             htfreef = float(freef_result.htfreef_erg_cm3_s)
             opakc = np.asarray(freef_result.opakc_after_cm_inv, dtype=float)
             diagnostics.update(freef_diagnostics)
@@ -1606,12 +1650,13 @@ def calc_hmc_all(
                     raise CalcHMCAllError(
                         "bremem incoming opakc does not match preceding freef output"
                     )
-            bremem_result, bremem_diagnostics = bremem_continuum_result(
-                bremem_context,
-                temperature_k=float(temperature_k),
-                hydrogen_density_cm3=xpx,
-                electron_fraction_xee=float(electron_fraction_xee),
-            )
+            with profile_component(profile_control or {}, "calc_hmc_all.bremem"):
+                bremem_result, bremem_diagnostics = bremem_continuum_result(
+                    bremem_context,
+                    temperature_k=float(temperature_k),
+                    hydrogen_density_cm3=xpx,
+                    electron_fraction_xee=float(electron_fraction_xee),
+                )
             brcems = np.asarray(bremem_result.brcems_after, dtype=float)
             opakc = np.asarray(bremem_result.opakc_after_cm_inv, dtype=float)
             diagnostics.update(bremem_diagnostics)
@@ -1651,23 +1696,24 @@ def calc_hmc_all(
                     "calc_hmc_all_pre_continuum_state_owned_explicitly": True,
                 }
             )
-            heatf_result = heatf(
-                bremem_result.epi_eV,
-                bremem_result.brcems_after,
-                temperature_k=float(temperature_k),
-                radius_cm=float(heatf_context.radius_cm),
-                zone_thickness_cm=float(heatf_context.zone_thickness_cm),
-                hydrogen_density_cm3=xpx,
-                electron_fraction_xee=float(electron_fraction_xee),
-                htfreef_erg_cm3_s=htfreef,
-                cmp1=float(comp2_result.cmp1),
-                cmp2=float(comp2_result.cmp2),
-                httot_before=httot,
-                cltot_before=cltot,
-                httot2_before=httot2,
-                cltot2_before=cltot2,
-                ncn2=heatf_n,
-            )
+            with profile_component(profile_control or {}, "calc_hmc_all.heatf"):
+                heatf_result = heatf(
+                    bremem_result.epi_eV,
+                    bremem_result.brcems_after,
+                    temperature_k=float(temperature_k),
+                    radius_cm=float(heatf_context.radius_cm),
+                    zone_thickness_cm=float(heatf_context.zone_thickness_cm),
+                    hydrogen_density_cm3=xpx,
+                    electron_fraction_xee=float(electron_fraction_xee),
+                    htfreef_erg_cm3_s=htfreef,
+                    cmp1=float(comp2_result.cmp1),
+                    cmp2=float(comp2_result.cmp2),
+                    httot_before=httot,
+                    cltot_before=cltot,
+                    httot2_before=httot2,
+                    cltot2_before=cltot2,
+                    ncn2=heatf_n,
+                )
             htcomp = float(heatf_result.htcomp_erg_cm3_s)
             clcomp = float(heatf_result.clcomp_erg_cm3_s)
             clbrems = float(heatf_result.clbrems_erg_cm3_s)

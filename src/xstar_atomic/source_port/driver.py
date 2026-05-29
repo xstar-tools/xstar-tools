@@ -9,6 +9,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence
 import numpy as np
 
 from .state import XSTARPythonState
+from .performance import profile_component
 
 
 class XSTARSourceRoutine(str, Enum):
@@ -195,7 +196,8 @@ class XSTARPythonDriver:
             handler = self.routine_handlers.get(routine)
             if handler is None:
                 raise UnportedXSTARSourceRoutine(routine, state=result)
-            handler(result)
+            with profile_component(result.control, routine.value):
+                handler(result)
             result.provenance.setdefault("completed_source_routines", []).append(routine.value)
         return result
 
@@ -227,7 +229,13 @@ class XSTARPythonDriver:
             handler = self.routine_handlers.get(routine)
             if handler is None:
                 raise UnportedXSTARSourceRoutine(routine, state=result)
-            handler(result)
+            with profile_component(
+                result.control,
+                routine.value,
+                pass_index=int(result.transfer.pass_index),
+                zone_index=int(result.transfer.zone_index),
+            ):
+                handler(result)
             result.provenance.setdefault("completed_source_routines", []).append(
                 routine.value
             )
@@ -331,7 +339,13 @@ class XSTARPythonDriver:
             handler = self.routine_handlers.get(routine)
             if handler is None:
                 raise UnportedXSTARSourceRoutine(routine, state=result)
-            handler(result)
+            with profile_component(
+                result.control,
+                routine.value,
+                pass_index=int(result.transfer.pass_index),
+                zone_index=int(result.transfer.zone_index),
+            ):
+                handler(result)
             result.provenance.setdefault("completed_source_routines", []).append(
                 routine.value
             )

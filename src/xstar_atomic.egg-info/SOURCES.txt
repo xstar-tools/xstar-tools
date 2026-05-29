@@ -998,4 +998,5 @@ xstar_test_run/o7_xi15/xout_lines1.fits
 xstar_test_run/o7_xi15_highdens/xout_lines1.fits
 xstar_test_run/o_ne_xi3/xout_lines1.fits
 xstar_test_run/si_xi30/xout_lines1.fits
-xstar_test_run/si_xi40/xout_lines1.fits
+xstar_test_run/si_xi40/xout_lines1.fitssrc/xstar_atomic/source_port/performance.py
+src/xstar_atomic/source_port/active_subsets.py

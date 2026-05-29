@@ -42,8 +42,10 @@ from .bremsstrahlung import (
     bremem_continuum_result,
 )
 from .compton import Comp2Context, comp2_continuum_result, load_compton_table
+from .active_subsets import build_active_atdb_subset
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
+from .performance import profile_component, summarize_profile
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -1201,12 +1203,18 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             ncn2=n,
             source="run_xstar_python:heatf",
         )
-        return {
+        payload = {
             "compton_context": comp,
             "free_free_context": free,
             "bremem_context": bremem,
             "heatf_context": heat,
         }
+        active_subset = state.control.get("active_atdb_subset")
+        if active_subset is not None:
+            payload["active_subset"] = active_subset
+        if bool(state.control.get("profile_components", False)):
+            payload["profile_control"] = state.control
+        return payload
     return factory
 
 
@@ -1513,6 +1521,16 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
     master = state.atomic.master
     derived = state.atomic.derived
     required = tuple(z for z, value in enumerate(parameters.physical_abundances, start=1) if value > 1.0e-24)
+    if bool(state.control.get("active_subset_enabled", True)):
+        with profile_component(
+            state.control,
+            "active_subset_build",
+            pass_index=int(state.transfer.pass_index),
+            zone_index=int(state.transfer.zone_index),
+        ):
+            active_subset = build_active_atdb_subset(master, derived, required)
+        state.control["active_atdb_subset"] = active_subset
+        state.provenance["active_atdb_subset"] = active_subset.as_summary()
     calc_kwargs_factory = _calc_kwargs_factory(state, compton_table)
 
     def build_runtime() -> DsecMutableRuntimeState:
@@ -1534,6 +1552,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             leveltemp_owner_by_column={},
             source_global_alias_writeback=True,
             reset_leveltemp_each_calc_hmc_all=True,
+            retain_source_arrays=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
         )
 
     def dsec_handler(runtime_state: XSTARPythonState) -> Any:
@@ -1684,7 +1703,13 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             derived=derived,
             calc_kwargs_factory=calc_kwargs_factory,
         )
-        evaluation = evaluator(runtime)
+        with profile_component(
+            runtime_state.control,
+            "calc_hmc_all_final",
+            pass_index=int(runtime_state.transfer.pass_index),
+            zone_index=int(runtime_state.transfer.zone_index),
+        ):
+            evaluation = evaluator(runtime)
         if evaluation.fixed_state_result is None:
             raise XSTARPythonRunnerError("calc_hmc_all evaluator returned no fixed-state result")
         result = evaluation.fixed_state_result
@@ -1973,6 +1998,8 @@ def run_xstar_from_parameters(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    active_subset: bool = True,
+    profile_components: bool = False,
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
@@ -2017,6 +2044,8 @@ def run_xstar_from_parameters(
     )
     high_volume_diagnostics = diagnostics_mode == "full"
     state.control["diagnostics_mode"] = diagnostics_mode
+    state.control["active_subset_enabled"] = bool(active_subset)
+    state.control["profile_components"] = bool(profile_components)
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
     state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = high_volume_diagnostics
@@ -2118,6 +2147,10 @@ def run_xstar_from_parameters(
                 "xstar_outputs_used_as_python_inputs": False,
                 "diagnostics_mode": diagnostics_mode,
                 "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),
+                "active_subset_enabled": bool(active_subset),
+                "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
+                "profile_components_enabled": bool(profile_components),
+                "performance_profile_summary": summarize_profile(state.control),
                 "solver_backend": solver_backend_status(),
                 "atdb_path": str(resolved_atdb),
                 "pointer_cache_path": str(pointer_cache_path),
@@ -2160,6 +2193,8 @@ def run_xstar_python(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    active_subset: bool = True,
+    profile_components: bool = False,
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -2191,6 +2226,8 @@ def run_xstar_python(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        active_subset=active_subset,
+        profile_components=profile_components,
     )
 
 
@@ -2214,6 +2251,8 @@ def run_xstar_python_command(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    active_subset: bool = True,
+    profile_components: bool = False,
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2228,6 +2267,8 @@ def run_xstar_python_command(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        active_subset=active_subset,
+        profile_components=profile_components,
     )
 
 
@@ -2243,6 +2284,8 @@ def run_xstar_python_script(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    active_subset: bool = True,
+    profile_components: bool = False,
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2259,6 +2302,8 @@ def run_xstar_python_script(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        active_subset=active_subset,
+        profile_components=profile_components,
     )
 
 
@@ -2437,6 +2482,8 @@ def run_c5_ne1_acceptance(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    active_subset: bool = True,
+    profile_components: bool = False,
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2449,6 +2496,8 @@ def run_c5_ne1_acceptance(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        active_subset=active_subset,
+        profile_components=profile_components,
     )
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)

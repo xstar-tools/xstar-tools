@@ -115,6 +115,22 @@ def build_parser() -> argparse.ArgumentParser:
             "and auto uses C++ when available with Python fallback"
         ),
     )
+    parser.add_argument(
+        "--no-active-subset",
+        action="store_true",
+        help=(
+            "disable per-case active ATDB subset precomputation; by default "
+            "the runner caches active element/ion/level maps to reduce repeated radial-solve work"
+        ),
+    )
+    parser.add_argument(
+        "--profile-components",
+        action="store_true",
+        help=(
+            "record per-component wall time and RSS for radial hot routines "
+            "such as calc_hmc_all, calc_emisab_all, calc_emis_all, heatt, and stpcut"
+        ),
+    )
     return parser
 
 
@@ -204,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
                 diagnostics_mode=args.diagnostics,
+                active_subset=not args.no_active_subset,
+                profile_components=args.profile_components,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -244,6 +262,8 @@ def main(argv: list[str] | None = None) -> int:
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
                 diagnostics_mode=args.diagnostics,
+                active_subset=not args.no_active_subset,
+                profile_components=args.profile_components,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -260,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
                 rebuild_cache=args.rebuild_cache,
                 progress_callback=progress_callback,
                 diagnostics_mode=args.diagnostics,
+                active_subset=not args.no_active_subset,
+                profile_components=args.profile_components,
             )
             summary = result.as_dict()
             if args.print_summary:

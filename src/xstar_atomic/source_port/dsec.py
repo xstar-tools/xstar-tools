@@ -28,6 +28,7 @@ import numpy as np
 
 from .fortran_numbers import parse_fortran_float
 from .local_zone import FixedStateCalcHMCAllResult, FixedStateElementRequest, calc_hmc_all
+from .performance import profile_component
 
 
 class DsecPortError(RuntimeError):
@@ -86,6 +87,7 @@ class DsecMutableRuntimeState:
     last_leveltemp_owner_by_column: Dict[int, Dict[str, Any]] = field(default_factory=dict)
     source_global_alias_writeback: bool = False
     reset_leveltemp_each_calc_hmc_all: bool = False
+    retain_source_arrays: bool = True
     source_arrays: Dict[str, Any] = field(default_factory=dict)
     work_arrays: Dict[str, Any] = field(default_factory=dict)
     last_calc_hmc_all: Optional[FixedStateCalcHMCAllResult] = None
@@ -253,23 +255,31 @@ class DsecMutableRuntimeState:
                 int(index): dict(owner)
                 for index, owner in result.leveltemp_owner_by_column.items()
             }
-        self.source_arrays = {
-            "xiin": dict(result.ion_fractions),
-            "rrrt": dict(result.rrrt),
-            "pirt": dict(result.pirt),
-            "htt": dict(result.htt),
-            "cll": dict(result.cll),
-            "htt2": dict(result.htt2),
-            "cll2": dict(result.cll2),
-            "xilevg": dict(result.xilevg),
-            "rnisg": dict(result.rnisg),
-            "bilevg": dict(result.bilevg),
-            "gammag": dict(result.gammag),
-            "alphag": dict(result.alphag),
-            "stotg": dict(result.stotg),
-            "atotg": dict(result.atotg),
-            "xtotg": dict(result.xtotg),
-        }
+        if self.retain_source_arrays:
+            self.source_arrays = {
+                "xiin": dict(result.ion_fractions),
+                "rrrt": dict(result.rrrt),
+                "pirt": dict(result.pirt),
+                "htt": dict(result.htt),
+                "cll": dict(result.cll),
+                "htt2": dict(result.htt2),
+                "cll2": dict(result.cll2),
+                "xilevg": dict(result.xilevg),
+                "rnisg": dict(result.rnisg),
+                "bilevg": dict(result.bilevg),
+                "gammag": dict(result.gammag),
+                "alphag": dict(result.alphag),
+                "stotg": dict(result.stotg),
+                "atotg": dict(result.atotg),
+                "xtotg": dict(result.xtotg),
+            }
+        else:
+            self.source_arrays = {
+                "htt": dict(result.htt),
+                "cll": dict(result.cll),
+                "htt2": dict(result.htt2),
+                "cll2": dict(result.cll2),
+            }
         self.work_arrays = {
             "opakc": (
                 None
@@ -298,6 +308,7 @@ class DsecMutableRuntimeState:
                 "source_global_alias_writeback": bool(
                     self.source_global_alias_writeback
                 ),
+                "retain_source_arrays": bool(self.retain_source_arrays),
                 "calc_hmc_all_call_count": self.calc_hmc_all_call_count,
             }
         )
@@ -498,32 +509,38 @@ class CalcHMCAllDsecEvaluator:
             )
             self.input_snapshots.append(snapshot)
 
-        result = calc_hmc_all(
-            self.master,
-            self.derived,
-            elements=requests,
-            temperature_k=state.temperature_k,
-            hydrogen_density_cm3=state.hydrogen_density_cm3,
-            electron_fraction_xee=state.electron_fraction_xee,
-            pressure=state.pressure,
-            lcdd=state.lcdd,
-            required_element_z=state.required_element_z,
-            initial_leveltemp_workspace=state.leveltemp_workspace,
-            initial_leveltemp_owner_by_column=state.leveltemp_owner_by_column,
-            initial_global_xilevg_by_index=getattr(
-                state, "global_xilevg_by_index", None
-            ),
-            initial_global_bilevg_by_index=getattr(
-                state, "global_bilevg_by_index", None
-            ),
-            initial_global_rnisg_by_index=getattr(
-                state, "global_rnisg_by_index", None
-            ),
-            source_global_alias_writeback=bool(
-                getattr(state, "source_global_alias_writeback", False)
-            ),
-            **kwargs,
-        )
+        profile_control = kwargs.get("profile_control")
+        with profile_component(
+            profile_control or {},
+            "dsec.calc_hmc_all",
+            evaluation_index=int(evaluation_index),
+        ):
+            result = calc_hmc_all(
+                self.master,
+                self.derived,
+                elements=requests,
+                temperature_k=state.temperature_k,
+                hydrogen_density_cm3=state.hydrogen_density_cm3,
+                electron_fraction_xee=state.electron_fraction_xee,
+                pressure=state.pressure,
+                lcdd=state.lcdd,
+                required_element_z=state.required_element_z,
+                initial_leveltemp_workspace=state.leveltemp_workspace,
+                initial_leveltemp_owner_by_column=state.leveltemp_owner_by_column,
+                initial_global_xilevg_by_index=getattr(
+                    state, "global_xilevg_by_index", None
+                ),
+                initial_global_bilevg_by_index=getattr(
+                    state, "global_bilevg_by_index", None
+                ),
+                initial_global_rnisg_by_index=getattr(
+                    state, "global_rnisg_by_index", None
+                ),
+                source_global_alias_writeback=bool(
+                    getattr(state, "source_global_alias_writeback", False)
+                ),
+                **kwargs,
+            )
         if self.evaluation_gate_callback is not None:
             if snapshot is None:
                 raise DsecPortError("evaluation_gate_callback requires an input snapshot")
