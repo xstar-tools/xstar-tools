@@ -16,10 +16,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+import time
 
 import numpy as np
 
-from .performance import profile_component
+from .performance import profile_component, record_profile_event
 
 from .element_equilibrium import (
     ElementEquilibriumContext,
@@ -822,6 +823,7 @@ def calc_hmc_all(
             allow_dense_matrix_rescue=bool(effective_request.allow_dense_matrix_rescue),
             initial_leveltemp_workspace=leveltemp_workspace,
             initial_leveltemp_owner_by_column=leveltemp_owner_by_column,
+            profile_control=_profile_map,
         )
         with profile_component(
             profile_control or {},
@@ -1207,6 +1209,7 @@ def calc_hmc_all(
         httot2 += element_ht2
         cltot2 += element_cl2
 
+        _population_commit_t0 = time.perf_counter() if int(z) == 12 else 0.0
         stage_fractions: Dict[int, float] = {}
         source_xtot = np.asarray(solve.ion_population_totals, dtype=float)
         final_xii = np.asarray(
@@ -1531,6 +1534,15 @@ def calc_hmc_all(
                     "electron_contribution_increment": float(element_electron_increment),
                     "electron_contribution_after_element": float(enelec),
                 }
+            )
+
+        if int(z) == 12:
+            record_profile_event(
+                profile_control or {},
+                "calc_hmc_all.element_solver.population_state_commit",
+                time.perf_counter() - _population_commit_t0,
+                element_z=int(z),
+                source_routine="calc_hmc_all_writeback",
             )
 
         if retain_element_results:

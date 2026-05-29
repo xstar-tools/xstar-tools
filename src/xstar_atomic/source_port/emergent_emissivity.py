@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from collections.abc import MutableMapping
 import json
 import math
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -51,7 +52,7 @@ from .emissivity import (
     resolve_calc_emisab_density,
 )
 from .free_free import FreeFreeResult, freef
-from .performance import profile_component
+from .performance import profile_component, record_profile_event
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
@@ -731,6 +732,12 @@ def calc_emis_ion(
     retained_kkkl = 0
     record_sequence = _calc_emis_record_sequence_for_ion(context, ion)
     diagnostics_enabled = bool(getattr(context, "retain_traces", True))
+    profile_control = getattr(context, "profile_control", None) or {}
+    progress_callback = getattr(context, "progress_callback", None)
+    is_mg_profile = int(getattr(ion, "element_z", 0)) == 12
+    _ion_t0 = time.perf_counter() if is_mg_profile else 0.0
+    _record_type_elapsed: dict[str, float] = {}
+    _rate_type_elapsed: dict[int, float] = {}
 
     def evaluate(rec: int, ptmp1: float, ptmp2: float, abund1: float, abund2: float) -> UCalcResult:
         nonlocal calls
@@ -755,6 +762,7 @@ def calc_emis_ion(
 
     for rate_type, rec in record_sequence:
         visited += 1
+        _record_t0 = time.perf_counter() if is_mg_profile else 0.0
         header = context.master.header(rec)
         ints = context.master.record_integers(rec)
 
@@ -1025,6 +1033,60 @@ def calc_emis_ion(
                         result.status.value, f"strong_line_rate_type_{rate_type}",
                     ))
 
+        if is_mg_profile:
+            _elapsed = time.perf_counter() - _record_t0
+            if int(rate_type) in (4, 9):
+                _kind = "line"
+            elif int(rate_type) == 7:
+                _kind = "rrc"
+            elif int(rate_type) == 42:
+                _kind = "continuum"
+            else:
+                _kind = "other"
+            _record_type_elapsed[_kind] = _record_type_elapsed.get(_kind, 0.0) + _elapsed
+            _rate_type_elapsed[int(rate_type)] = _rate_type_elapsed.get(int(rate_type), 0.0) + _elapsed
+
+    if is_mg_profile:
+        _ion_elapsed = time.perf_counter() - _ion_t0
+        record_profile_event(
+            profile_control,
+            "calc_emis_all.element.ion_total",
+            _ion_elapsed,
+            emit_progress=progress_callback,
+            element_z=int(ion.element_z),
+            ion_stage=int(ion.ion_stage),
+            ion_index=int(ion.ion_index),
+            source_routine="calc_emis_ion",
+        )
+        for _kind, _elapsed in sorted(_record_type_elapsed.items()):
+            component = {
+                "line": "calc_emis_all.element.line_emissivity",
+                "rrc": "calc_emis_all.element.rrc_emissivity",
+                "continuum": "calc_emis_all.element.continuum_opacity_emissivity",
+            }.get(_kind, "calc_emis_all.element.other_record_loop")
+            record_profile_event(
+                profile_control,
+                component,
+                _elapsed,
+                emit_progress=progress_callback,
+                element_z=int(ion.element_z),
+                ion_stage=int(ion.ion_stage),
+                ion_index=int(ion.ion_index),
+                record_type=_kind,
+                source_routine="calc_emis_ion",
+            )
+        for _rtype, _elapsed in sorted(_rate_type_elapsed.items()):
+            record_profile_event(
+                profile_control,
+                "calc_emis_all.element.by_rate_type",
+                _elapsed,
+                emit_progress=progress_callback,
+                element_z=int(ion.element_z),
+                ion_stage=int(ion.ion_stage),
+                ion_index=int(ion.ion_index),
+                record_type=int(_rtype),
+                source_routine="calc_emis_ion",
+            )
 
     return CalcEmisIonTrace(
         ion_record=ion.ion_record, ion_index=ion.ion_index, ion_stage=ion.ion_stage,
@@ -1100,7 +1162,12 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     # Ranking consumes the calc_emisab products before continuum reset.
     profile_control = getattr(context, "profile_control", None) or {}
     progress_callback = getattr(context, "progress_callback", None)
-    with profile_component(profile_control, "calc_emis_all.rank_features", emit_progress=progress_callback):
+    with profile_component(
+        profile_control,
+        "calc_emis_all.rank_features",
+        emit_progress=progress_callback,
+        source_routine="rlbin/build_feature_rank_tables",
+    ):
         line_rank, continuum_rank, rank_traces, active_feature_summary = build_feature_rank_tables(context, epi)
 
     xpx = resolve_calc_emis_density(

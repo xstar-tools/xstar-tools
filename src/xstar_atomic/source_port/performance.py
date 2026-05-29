@@ -35,6 +35,37 @@ def performance_enabled(control: MutableMapping[str, Any]) -> bool:
     return bool(control.get("profile_components", False))
 
 
+def record_profile_event(
+    control: MutableMapping[str, Any],
+    name: str,
+    elapsed_seconds: float,
+    *,
+    emit_progress: Any = None,
+    **metadata: Any,
+) -> None:
+    """Append one pre-measured timing/RSS row when profiling is enabled.
+
+    This is used for low-overhead nested hot-path profiling where a context
+    manager around every tiny record branch would add too much noise.  It is
+    observational only and never mutates physics state.
+    """
+    if not performance_enabled(control):
+        return
+    record: dict[str, Any] = {
+        "component": str(name),
+        "elapsed_seconds": float(elapsed_seconds),
+    }
+    rss = current_rss_mb()
+    if rss is not None:
+        record["rss_end_mb"] = float(rss)
+    record.update(metadata)
+    _append_profile(control, record)
+    callback = emit_progress or control.get("progress_callback")
+    if callable(callback):
+        details = {k: v for k, v in record.items() if k != "component"}
+        callback("profile_component", {"component": str(name), **details})
+
+
 @contextmanager
 def profile_component(
     control: MutableMapping[str, Any],
@@ -96,6 +127,9 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         return {"rows": 0, "components": {}, "top_components": [], "by_element": {}}
     grouped: dict[str, dict[str, float]] = {}
     by_element: dict[str, dict[str, float]] = {}
+    by_ion: dict[str, dict[str, float]] = {}
+    by_record_type: dict[str, dict[str, float]] = {}
+    by_source_routine: dict[str, dict[str, float]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -104,6 +138,19 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         if "element_z" in row:
             key = f"{name}:Z{int(row['element_z'])}"
             _add_grouped(by_element, key, row)
+        if "element_z" in row and "ion_stage" in row:
+            ion_index = row.get("ion_index")
+            if ion_index is None:
+                key = f"{name}:Z{int(row['element_z'])}:ion{int(row['ion_stage'])}"
+            else:
+                key = f"{name}:Z{int(row['element_z'])}:ion{int(row['ion_stage'])}:idx{int(ion_index)}"
+            _add_grouped(by_ion, key, row)
+        if "record_type" in row:
+            key = f"{name}:record_type:{row['record_type']}"
+            _add_grouped(by_record_type, key, row)
+        if "source_routine" in row:
+            key = f"{name}:source:{row['source_routine']}"
+            _add_grouped(by_source_routine, key, row)
     top_components = [
         {"component": name, **values}
         for name, values in sorted(
@@ -120,10 +167,40 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
             reverse=True,
         )[:30]
     ]
+    top_by_ion = [
+        {"component_ion": name, **values}
+        for name, values in sorted(
+            by_ion.items(),
+            key=lambda kv: float(kv[1].get("elapsed_seconds", 0.0)),
+            reverse=True,
+        )[:50]
+    ]
+    top_by_record_type = [
+        {"component_record_type": name, **values}
+        for name, values in sorted(
+            by_record_type.items(),
+            key=lambda kv: float(kv[1].get("elapsed_seconds", 0.0)),
+            reverse=True,
+        )[:50]
+    ]
+    top_by_source_routine = [
+        {"component_source_routine": name, **values}
+        for name, values in sorted(
+            by_source_routine.items(),
+            key=lambda kv: float(kv[1].get("elapsed_seconds", 0.0)),
+            reverse=True,
+        )[:50]
+    ]
     return {
         "rows": len(rows),
         "components": grouped,
         "top_components": top_components,
         "by_element": by_element,
         "top_by_element": top_by_element,
+        "by_ion": by_ion,
+        "top_by_ion": top_by_ion,
+        "by_record_type": by_record_type,
+        "top_by_record_type": top_by_record_type,
+        "by_source_routine": by_source_routine,
+        "top_by_source_routine": top_by_source_routine,
     }

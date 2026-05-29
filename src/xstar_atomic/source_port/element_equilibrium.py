@@ -24,11 +24,13 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping,
 import csv
 import json
 import math
+import time
 
 import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
+from .performance import profile_component, record_profile_event
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -227,6 +229,9 @@ class ElementEquilibriumContext:
     # initialization.
     initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
     initial_leveltemp_owner_by_column: Optional[Mapping[int, Mapping[str, Any]]] = None
+    # Optional low-overhead profiling sink supplied by calc_hmc_all.  It is
+    # observational only and is normally active only for Mg Z=12 hot-path runs.
+    profile_control: Optional[MutableMapping[str, Any]] = None
 
     @property
     def electron_density_cm3(self) -> float:
@@ -1012,14 +1017,32 @@ def assemble_element_matrix(
 ) -> ElementMatrixAssembly:
     """Translate ``calc_hmc_ion`` and ``calc_hmc_element`` matrix assembly."""
     dispatcher = dispatcher or default_source_faithful_ucalc()
-    basis = build_element_compact_basis(
-        master,
-        derived,
-        element_z=element_z,
-        min_ion_stage=context.min_ion_stage,
-        max_ion_stage=context.max_ion_stage,
-    )
-    rnise_lte, level_tables = levwkelement(master, derived, basis, context)
+    profile_control = context.profile_control or {}
+    is_mg_profile = int(element_z) == 12
+    if is_mg_profile:
+        with profile_component(
+            profile_control,
+            "calc_hmc_all.element_solver.level_table_setup",
+            element_z=int(element_z),
+            source_routine="levwkelement/build_element_compact_basis",
+        ):
+            basis = build_element_compact_basis(
+                master,
+                derived,
+                element_z=element_z,
+                min_ion_stage=context.min_ion_stage,
+                max_ion_stage=context.max_ion_stage,
+            )
+            rnise_lte, level_tables = levwkelement(master, derived, basis, context)
+    else:
+        basis = build_element_compact_basis(
+            master,
+            derived,
+            element_z=element_z,
+            min_ion_stage=context.min_ion_stage,
+            max_ion_stage=context.max_ion_stage,
+        )
+        rnise_lte, level_tables = levwkelement(master, derived, basis, context)
     # Source ``rnise`` and the compact solver seed are independent arrays.
     # ``levwkelement`` owns the LTE vector used later for ``rnisg``/``bilevg``;
     # ``calc_hmc_element`` maps the incoming global ``xileve`` state into
@@ -1104,6 +1127,10 @@ def assemble_element_matrix(
     n_source_clamps = 0
 
     for block in basis.blocks:
+            _ion_loop_t0 = time.perf_counter() if is_mg_profile else 0.0
+            _ion_rate_elapsed = 0.0
+            _ion_matrix_elapsed = 0.0
+            _ion_records_by_type: Dict[int, float] = {}
             current_levels = level_tables[block.ion_index]
             second_pass_write_sequence += 1
             previous_max_column = max(leveltemp_workspace.levels, default=0)
@@ -1210,6 +1237,7 @@ def assemble_element_matrix(
                         record = int(derived.npnxt[record])
                         continue
 
+                    _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
                     result = dispatcher.evaluate_record_number(
                         master,
                         record,
@@ -1218,6 +1246,10 @@ def assemble_element_matrix(
                         next_record=int(derived.npnxt[record]),
                         strict=False,
                     )
+                    if is_mg_profile:
+                        _dt = time.perf_counter() - _rate_t0
+                        _ion_rate_elapsed += _dt
+                        _ion_records_by_type[int(header.rate_type)] = _ion_records_by_type.get(int(header.rate_type), 0.0) + _dt
                     row = result.to_dict()
                     destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
                     source_leveltemp_destination = levels.get(int(result.idest2))
@@ -1286,6 +1318,7 @@ def assemble_element_matrix(
                             record = int(derived.npnxt[record])
                             continue
                         try:
+                            _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                             new_terms = _matrix_terms_for_result(
                                 result=result,
                                 basis=basis,
@@ -1294,6 +1327,8 @@ def assemble_element_matrix(
                                 term_start=len(terms) + 1,
                                 xpx=context.hydrogen_density_cm3,
                             )
+                            if is_mg_profile:
+                                _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
                         except (ElementEquilibriumError, IndexError) as exc:
                             n_unmapped += 1
                             summary.n_records_invalid_endpoint += 1
@@ -1313,7 +1348,48 @@ def assemble_element_matrix(
                             summary.n_matrix_terms += len(new_terms)
                     record = int(derived.npnxt[record])
             ion_summaries.append(summary)
+            if is_mg_profile:
+                _ion_total = time.perf_counter() - _ion_loop_t0
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.ion_loop",
+                    _ion_total,
+                    element_z=int(element_z),
+                    ion_stage=int(block.ion_stage),
+                    ion_index=int(block.ion_index),
+                    source_routine="calc_hmc_ion",
+                )
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.rate_construction",
+                    _ion_rate_elapsed,
+                    element_z=int(element_z),
+                    ion_stage=int(block.ion_stage),
+                    ion_index=int(block.ion_index),
+                    source_routine="ucalc",
+                )
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.matrix_assembly",
+                    _ion_matrix_elapsed,
+                    element_z=int(element_z),
+                    ion_stage=int(block.ion_stage),
+                    ion_index=int(block.ion_index),
+                    source_routine="calc_hmc_ion_matrix_terms",
+                )
+                for _rtype, _elapsed in sorted(_ion_records_by_type.items()):
+                    record_profile_event(
+                        profile_control,
+                        "calc_hmc_all.element_solver.rate_construction.by_rate_type",
+                        _elapsed,
+                        element_z=int(element_z),
+                        ion_stage=int(block.ion_stage),
+                        ion_index=int(block.ion_index),
+                        record_type=int(_rtype),
+                        source_routine="ucalc",
+                    )
 
+    _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
     dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
     heat = np.zeros_like(dense)
     heat2 = np.zeros_like(dense)
@@ -1326,6 +1402,14 @@ def assemble_element_matrix(
     rhs = np.zeros(basis.n_rows, dtype=float)
     normalized[basis.normalization_row - 1, :] = 1.0
     rhs[basis.normalization_row - 1] = 1.0
+    if is_mg_profile:
+        record_profile_event(
+            profile_control,
+            "calc_hmc_all.element_solver.dense_matrix_fill",
+            time.perf_counter() - _dense_t0,
+            element_z=int(element_z),
+            source_routine="calc_hmc_element_matrix_fill",
+        )
 
     strict_ready = n_blocked == 0 and n_unmapped == 0 and len(terms) > 0
     terminal_global_population = 0.0
@@ -1789,17 +1873,42 @@ def solve_element_statistical_equilibrium(
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> ElementEquilibriumResult:
     """Run the complete translated element source sequence."""
-    assembly = assemble_element_matrix(
-        master,
-        derived,
-        element_z=element_z,
-        context=context,
-        dispatcher=dispatcher,
-    )
+    profile_control = context.profile_control or {}
+    if int(element_z) == 12:
+        with profile_component(
+            profile_control,
+            "calc_hmc_all.element_solver.level_matrix_assembly_total",
+            element_z=int(element_z),
+            source_routine="assemble_element_matrix",
+        ):
+            assembly = assemble_element_matrix(
+                master,
+                derived,
+                element_z=element_z,
+                context=context,
+                dispatcher=dispatcher,
+            )
+    else:
+        assembly = assemble_element_matrix(
+            master,
+            derived,
+            element_z=element_z,
+            context=context,
+            dispatcher=dispatcher,
+        )
     solve: Optional[LucySolveResult] = None
     if assembly.strict_assembly_ready or not context.strict_context:
         if assembly.terms:
-            solve = msolvelucy(assembly, context)
+            if int(element_z) == 12:
+                with profile_component(
+                    profile_control,
+                    "calc_hmc_all.element_solver.solver_call",
+                    element_z=int(element_z),
+                    source_routine="msolvelucy/leqt2f",
+                ):
+                    solve = msolvelucy(assembly, context)
+            else:
+                solve = msolvelucy(assembly, context)
     ready = bool(
         assembly.strict_assembly_ready
         and solve is not None
