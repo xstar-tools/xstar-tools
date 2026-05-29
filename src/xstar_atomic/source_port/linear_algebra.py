@@ -206,8 +206,9 @@ def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> 
 
     Backend selection is process-wide via ``XSTAR_ATOMIC_SOLVER_BACKEND`` or
     ``set_solver_backend`` from :mod:`solver_backend`.  ``python`` remains the
-    reference.  ``auto`` uses the C++ extension when it is importable and falls
-    back to Python.  ``cpp`` requires the extension and raises if it is missing.
+    reference.  ``auto`` uses the C++ shared-object library when it is loadable
+    and falls back to Python.  ``cpp`` requires the shared library and raises if
+    it is missing.
     """
     backend = get_solver_backend()
     if backend in ("cpp", "auto"):
@@ -219,7 +220,7 @@ def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> 
                 solution=np.asarray(solution, dtype=float),
                 residual=np.asarray(residual, dtype=float),
                 max_scaled_residual=float(max_scaled),
-                method="leqt2f_cpp_source_order",
+                method="leqt2f_cpp_so_source_order",
             )
         except Exception:
             if backend == "cpp":
@@ -236,4 +237,7 @@ def solver_backend_status() -> dict[str, object]:
         "active": status.active,
         "cpp_available": status.cpp_available,
         "cpp_import_error": status.cpp_import_error,
+        "cpp_library_path": status.cpp_library_path,
+        "cpp_backend_name": status.cpp_backend_name,
+        "cpp_abi_version": status.cpp_abi_version,
     }
