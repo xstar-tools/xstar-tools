@@ -377,6 +377,11 @@ class CalcHMCAllDsecEvaluator:
     pre_matrix_solver: Optional[Any] = None
     pre_evaluation_callback: Optional[Callable[[int, DsecMutableRuntimeState], None]] = None
     progress_callback: Optional[Callable[[int, DsecMutableRuntimeState, FixedStateCalcHMCAllResult], None]] = None
+    # Production memory control: repeated DSEC calls can create large
+    # FixedStateCalcHMCAllResult objects for Mg/Ca.  Full diagnostic modes keep
+    # the per-evaluation result history; production runs can retain only small
+    # residual rows and the current mutable state.
+    retain_fixed_state_results: bool = True
     capture_input_snapshot_indices: Tuple[int, ...] = ()
     capture_all_input_snapshots: bool = False
     # Diagnostic-only: request Lucy/state-path traces for selected elements
@@ -529,7 +534,7 @@ class CalcHMCAllDsecEvaluator:
         evaluation = DsecEvaluation(
             hmctot=float(result.hmctot),
             elcter=float(result.elcter),
-            fixed_state_result=result,
+            fixed_state_result=(result if self.retain_fixed_state_results else None),
             diagnostics={
                 "complete_fixed_state_ready": bool(result.complete_fixed_state_ready),
                 "leveltemp_workspace_carried": bool(

@@ -4,16 +4,36 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import sys
 
-from .source_port.physical_output_diagnostics import diagnose_physical_output_mismatch
-from .source_port.physical_runner import (
-    XSTARPythonRunnerError,
-    run_c5_ne1_acceptance,
-    run_xstar_python_command,
-    run_xstar_python_script,
-)
+
+def _apply_thread_limit(value: int | None) -> None:
+    """Set BLAS/OpenMP thread caps before importing NumPy-heavy runner code."""
+    if value is None:
+        return
+    threads = max(1, int(value))
+    for name in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "BLIS_NUM_THREADS",
+    ):
+        os.environ[name] = str(threads)
+    os.environ.setdefault("MALLOC_ARENA_MAX", "2")
+
+
+def _rss_mb() -> float | None:
+    try:
+        for line in Path("/proc/self/status").read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmRSS:"):
+                return float(line.split()[1]) / 1024.0
+    except OSError:
+        return None
+    return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,13 +91,34 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print live ATDB/cache/pass/zone/writer/comparator progress",
     )
+    parser.add_argument(
+        "--progress-memory",
+        action="store_true",
+        help="include current process RSS in progress lines",
+    )
+    parser.add_argument(
+        "--blas-threads",
+        type=int,
+        default=None,
+        help=(
+            "cap BLAS/OpenMP numerical-library threads before importing NumPy; "
+            "use 1 for memory-safe Mg/Ca benchmark runs"
+        ),
+    )
     return parser
 
 
-def _progress_printer(event: str, details: dict[str, object]) -> None:
-    stamp = datetime.now().isoformat(timespec="seconds")
-    payload = " ".join(f"{key}={value}" for key, value in sorted(details.items()))
-    print(f"[{stamp}] {event}" + (f" {payload}" if payload else ""), flush=True)
+def _make_progress_printer(*, include_memory: bool = False):
+    def _progress_printer(event: str, details: dict[str, object]) -> None:
+        stamp = datetime.now().isoformat(timespec="seconds")
+        merged = dict(details)
+        if include_memory:
+            rss = _rss_mb()
+            if rss is not None:
+                merged["rss_mb"] = f"{rss:.1f}"
+        payload = " ".join(f"{key}={value}" for key, value in sorted(merged.items()))
+        print(f"[{stamp}] {event}" + (f" {payload}" if payload else ""), flush=True)
+    return _progress_printer
 
 
 def _load_command(args: argparse.Namespace) -> str:
@@ -113,7 +154,21 @@ def _print_run(summary: dict[str, object]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    progress_callback = _progress_printer if args.progress else None
+    _apply_thread_limit(args.blas_threads)
+    # Import NumPy-heavy runner modules only after thread caps are set.
+    from .source_port.physical_output_diagnostics import diagnose_physical_output_mismatch
+    from .source_port.physical_runner import (
+        XSTARPythonRunnerError,
+        run_c5_ne1_acceptance,
+        run_xstar_python_command,
+        run_xstar_python_script,
+    )
+
+    progress_callback = (
+        _make_progress_printer(include_memory=args.progress_memory)
+        if args.progress
+        else None
+    )
     try:
         if args.original_run_dir is not None:
             if args.run_script is None:

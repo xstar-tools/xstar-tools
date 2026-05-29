@@ -1557,11 +1557,15 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                 carbon_cooling=carbon_cooling,
             )
 
+        retain_dsec_results = str(
+            runtime_state.control.get("diagnostics_mode", "full")
+        ).lower() != "none"
         evaluator = CalcHMCAllDsecEvaluator(
             master=master,
             derived=derived,
             calc_kwargs_factory=calc_kwargs_factory,
             progress_callback=dsec_progress,
+            retain_fixed_state_results=retain_dsec_results,
             capture_all_input_snapshots=bool(
                 runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
             ),
@@ -1654,7 +1658,8 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                     runtime_state.control.get("zone1_dsec_xstar_target_state_used", False)
                 ),
             }
-        _compact_dsec_diagnostics(runtime_state, evaluator, result)
+        if str(runtime_state.control.get("diagnostics_mode", "full")).lower() != "none":
+            _compact_dsec_diagnostics(runtime_state, evaluator, result)
         runtime_state.control["physical_dsec_runtime"] = result.state
         runtime_state.control["physical_calc_evaluator"] = evaluator
         runtime_state.plasma.temperature = result.state.temperature_k
