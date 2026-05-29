@@ -76,24 +76,54 @@ def profile_component(
             callback("profile_component", {"component": str(name), **details})
 
 
+def _add_grouped(grouped: dict[str, dict[str, float]], name: str, row: dict[str, Any]) -> None:
+    item = grouped.setdefault(
+        name,
+        {"count": 0.0, "elapsed_seconds": 0.0, "max_rss_end_mb": 0.0, "max_rss_delta_mb": 0.0},
+    )
+    item["count"] += 1.0
+    item["elapsed_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
+    if "rss_end_mb" in row:
+        item["max_rss_end_mb"] = max(item["max_rss_end_mb"], float(row["rss_end_mb"]))
+    if "rss_delta_mb" in row:
+        item["max_rss_delta_mb"] = max(item["max_rss_delta_mb"], float(row["rss_delta_mb"]))
+
+
 def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
-    """Return compact totals grouped by component name."""
+    """Return compact timing/RSS totals grouped by component and element."""
     rows = control.get("performance_profile", [])
     if not isinstance(rows, list):
-        return {"rows": 0, "components": {}}
+        return {"rows": 0, "components": {}, "top_components": [], "by_element": {}}
     grouped: dict[str, dict[str, float]] = {}
+    by_element: dict[str, dict[str, float]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
         name = str(row.get("component", "unknown"))
-        item = grouped.setdefault(
-            name,
-            {"count": 0.0, "elapsed_seconds": 0.0, "max_rss_end_mb": 0.0, "max_rss_delta_mb": 0.0},
-        )
-        item["count"] += 1.0
-        item["elapsed_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
-        if "rss_end_mb" in row:
-            item["max_rss_end_mb"] = max(item["max_rss_end_mb"], float(row["rss_end_mb"]))
-        if "rss_delta_mb" in row:
-            item["max_rss_delta_mb"] = max(item["max_rss_delta_mb"], float(row["rss_delta_mb"]))
-    return {"rows": len(rows), "components": grouped}
+        _add_grouped(grouped, name, row)
+        if "element_z" in row:
+            key = f"{name}:Z{int(row['element_z'])}"
+            _add_grouped(by_element, key, row)
+    top_components = [
+        {"component": name, **values}
+        for name, values in sorted(
+            grouped.items(),
+            key=lambda kv: float(kv[1].get("elapsed_seconds", 0.0)),
+            reverse=True,
+        )[:20]
+    ]
+    top_by_element = [
+        {"component_element": name, **values}
+        for name, values in sorted(
+            by_element.items(),
+            key=lambda kv: float(kv[1].get("elapsed_seconds", 0.0)),
+            reverse=True,
+        )[:30]
+    ]
+    return {
+        "rows": len(rows),
+        "components": grouped,
+        "top_components": top_components,
+        "by_element": by_element,
+        "top_by_element": top_by_element,
+    }

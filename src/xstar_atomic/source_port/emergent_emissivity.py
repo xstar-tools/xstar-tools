@@ -20,6 +20,7 @@ by rate types 9 and 42.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import MutableMapping
 import json
 import math
 from pathlib import Path
@@ -50,6 +51,7 @@ from .emissivity import (
     resolve_calc_emisab_density,
 )
 from .free_free import FreeFreeResult, freef
+from .performance import profile_component
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
@@ -158,6 +160,12 @@ class CalcEmisContext:
     ucalc_evaluator: Optional[Callable[[int, Any], UCalcResult]] = None
     initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
     retain_traces: bool = True
+    active_element_z: Optional[Sequence[int]] = None
+    active_line_indices: Optional[Sequence[int]] = None
+    active_continuum_indices: Optional[Sequence[int]] = None
+    reusable_work_arrays: Optional[MutableMapping[str, Any]] = None
+    profile_control: Optional[MutableMapping[str, Any]] = None
+    progress_callback: Optional[Callable[[str, Mapping[str, Any]], None]] = None
 
     @property
     def temperature_k(self) -> float:
@@ -251,6 +259,7 @@ class CalcEmisResult:
     bremsstrahlung_result: BremsstrahlungResult
     workspace: CalcEmisWorkspace
     source_file: str = "xstar/xstarlib/src/calc_emis_all.f90"
+    active_feature_summary: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _high_resolution_radiation(radiation: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -326,30 +335,79 @@ def rlbin_insert(
     return FeatureRankTrace(feature_kind, jkk1, wave, energy, nb1, mm, True, "stored")
 
 
-def build_feature_rank_tables(context: CalcEmisContext, epi: np.ndarray) -> tuple[np.ndarray, np.ndarray, tuple[FeatureRankTrace, ...]]:
+def _feature_indices_from_context(context: CalcEmisContext, kind: str) -> np.ndarray:
+    """Return one-based feature indices for ranking.
+
+    In production active-subset mode, these lists are precomputed once per run
+    from nplin/npcon ownership.  Empty or missing lists deliberately fall back
+    to the source-full range, preserving old behavior for synthetic tests and
+    unusual ATDB schemas.
+    """
+    if kind == "line":
+        values = getattr(context, "active_line_indices", None)
+        limit = int(context.derived.nlsvn)
+    else:
+        values = getattr(context, "active_continuum_indices", None)
+        limit = int(context.derived.ncsvn)
+    if values is None:
+        return np.arange(1, limit + 1, dtype=np.int64)
+    arr = np.asarray(values, dtype=np.int64).reshape(-1)
+    arr = arr[(arr >= 1) & (arr <= limit)]
+    if arr.size == 0:
+        return np.arange(1, limit + 1, dtype=np.int64)
+    return arr
+
+
+def _cached_rank_table(context: CalcEmisContext, key: str, shape: tuple[int, int]) -> np.ndarray:
+    cache = getattr(context, "reusable_work_arrays", None)
+    if isinstance(cache, MutableMapping):
+        arr = cache.get(key)
+        if isinstance(arr, np.ndarray) and arr.shape == shape and arr.dtype.kind in ("i", "u"):
+            arr.fill(0)
+            return arr
+        arr = np.zeros(shape, dtype=int)
+        cache[key] = arr
+        return arr
+    return np.zeros(shape, dtype=int)
+
+
+def build_feature_rank_tables(context: CalcEmisContext, epi: np.ndarray) -> tuple[np.ndarray, np.ndarray, tuple[FeatureRankTrace, ...], dict[str, Any]]:
     n = int(epi.size)
     nrank = int(context.rank_depth)
     if nrank < 2:
         raise CalcEmisPortError("calc_emis_all rank_depth must be at least 2")
-    line_table = np.zeros((nrank + 1, n + 1), dtype=int)
-    continuum_table = np.zeros((nrank + 1, n + 1), dtype=int)
-    traces: list[FeatureRankTrace] = []
-    for index in range(1, int(context.derived.ncsvn) + 1):
+    line_table = _cached_rank_table(context, "calc_emis_all.line_rank_table", (nrank + 1, n + 1))
+    continuum_table = _cached_rank_table(context, "calc_emis_all.continuum_rank_table", (nrank + 1, n + 1))
+    retain = bool(getattr(context, "retain_traces", True))
+    traces: list[FeatureRankTrace] | _TraceSink = [] if retain else _TraceSink()
+    continuum_indices = _feature_indices_from_context(context, "continuum")
+    line_indices = _feature_indices_from_context(context, "line")
+    for index in continuum_indices:
         traces.append(rlbin_insert(
-            feature_kind="continuum", feature_index=index,
+            feature_kind="continuum", feature_index=int(index),
             wavelengths_angstrom=np.asarray(context.rrc_wavelength_angstrom, dtype=float),
             emissivity=context.workspace.base.cemab, opacity=context.workspace.base.opakab,
             epi_eV=epi, ncn2=n, rank_table=continuum_table, rank_by_opacity=True,
         ))
-    for index in range(1, int(context.derived.nlsvn) + 1):
+    for index in line_indices:
         traces.append(rlbin_insert(
-            feature_kind="line", feature_index=index,
+            feature_kind="line", feature_index=int(index),
             wavelengths_angstrom=np.asarray(context.line_wavelength_angstrom, dtype=float),
             emissivity=context.workspace.base.rcem, opacity=context.workspace.base.oplin,
             epi_eV=epi, ncn2=n, rank_table=line_table, rank_by_opacity=False,
         ))
-    return line_table, continuum_table, tuple(traces)
-
+    summary = {
+        "active_subset_used": bool(
+            getattr(context, "active_line_indices", None) is not None
+            or getattr(context, "active_continuum_indices", None) is not None
+        ),
+        "n_ranked_line_candidates": int(line_indices.size),
+        "n_ranked_continuum_candidates": int(continuum_indices.size),
+        "n_total_lines": int(context.derived.nlsvn),
+        "n_total_continua": int(context.derived.ncsvn),
+        "active_element_z": [int(z) for z in (getattr(context, "active_element_z", None) or ())],
+    }
+    return line_table, continuum_table, tuple(traces) if retain else tuple(), summary
 
 def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int) -> bool:
     mm = 1
@@ -1009,7 +1067,10 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         raise CalcEmisPortError("RRC wavelength array lacks one-based entries")
 
     # Ranking consumes the calc_emisab products before continuum reset.
-    line_rank, continuum_rank, rank_traces = build_feature_rank_tables(context, epi)
+    profile_control = getattr(context, "profile_control", None) or {}
+    progress_callback = getattr(context, "progress_callback", None)
+    with profile_component(profile_control, "calc_emis_all.rank_features", emit_progress=progress_callback):
+        line_rank, continuum_rank, rank_traces, active_feature_summary = build_feature_rank_tables(context, epi)
 
     xpx = resolve_calc_emis_density(
         xpx=context.hydrogen_density_cm3, pressure=context.pressure_dyn_cm2,
@@ -1032,6 +1093,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     record_traces: list[CalcEmisRecordTrace] | _TraceSink = [] if retain_traces else _TraceSink()
 
     shared = _as_emisab_context(context)
+    active_element_filter = {int(z) for z in (getattr(context, "active_element_z", None) or ()) if int(z) > 0}
     element_record = int(context.derived.npfirst[11])
     while element_record:
         ints = context.master.record_integers(element_record)
@@ -1039,16 +1101,26 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
             raise CalcEmisPortError(f"element record {element_record} has no integer payload")
         z = int(ints[0])
         abundance = context.abundance(z) if z > 0 else 0.0
-        if abundance > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR:
+        if active_element_filter and z not in active_element_filter:
+            if retain_traces:
+                element_traces.append(CalcEmisElementTrace(
+                    element_record=element_record, element_z=z, abundance=abundance,
+                    abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
+                ))
+        elif abundance > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR:
             ions = _iter_ion_descriptors(shared, element_record, z)
             compact_x, _, _ = _compact_element_populations(shared, ions)
-            trace = calc_emis_element(
-                context, element_record=element_record, element_z=z,
-                element_abundance=abundance, ions=ions, compact_xileve=compact_x,
-                xpx=xpx, xh0=xh0, xh1=xh1,
-                line_rank_table=line_rank, continuum_rank_table=continuum_rank,
-                leveltemp_workspace=leveltemp, record_traces=record_traces,
-            )
+            with profile_component(
+                profile_control, "calc_emis_all.element",
+                emit_progress=progress_callback, element_z=int(z),
+            ):
+                trace = calc_emis_element(
+                    context, element_record=element_record, element_z=z,
+                    element_abundance=abundance, ions=ions, compact_xileve=compact_x,
+                    xpx=xpx, xh0=xh0, xh1=xh1,
+                    line_rank_table=line_rank, continuum_rank_table=continuum_rank,
+                    leveltemp_workspace=leveltemp, record_traces=record_traces,
+                )
             if retain_traces:
                 element_traces.append(trace)
         else:
@@ -1080,6 +1152,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         rank_traces=rank_traces, element_traces=tuple(element_traces),
         record_traces=tuple(record_traces), leveltemp_workspace=leveltemp,
         free_free_result=ff, bremsstrahlung_result=br, workspace=context.workspace,
+        active_feature_summary=active_feature_summary,
     )
 
 
@@ -1117,6 +1190,7 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
         "diagnostic_call_index": int(call_index),
         "ucalc_continuum_side_effect_rows": int(len(rows)),
         "retain_traces": bool(getattr(context, "retain_traces", True)),
+        "active_feature_summary": dict(getattr(result, "active_feature_summary", {})),
     }
     phase_context = str(state.control.get("continuum_phase_context", ""))
     phase = "final calc_emis_all" if phase_context == "final" else "calc_emis_all"

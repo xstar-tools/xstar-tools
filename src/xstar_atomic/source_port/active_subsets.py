@@ -2,9 +2,8 @@
 
 The first implementation is deliberately conservative: it precomputes and
 caches source-identical lookup maps for the active elements/ions/levels.  The
-runtime still uses the full ATDB arrays for physics, but repeated DSEC calls no
-longer rebuild the same element/ion/level maps by scanning the full ATDB each
-trial.  This module is structured so a future ``xstar_tools.xstar.solver`` or
+runtime uses these indexes in selected hot paths such as calc_emis_all
+feature ranking, while preserving source-indexed output arrays for writers.  This module is structured so a future ``xstar_tools.xstar.solver`` or
 ``xstar_tools.atomic.indexes`` move can keep the same object boundary.
 """
 
@@ -122,23 +121,44 @@ def build_active_atdb_subset(master: Any, derived: Any, active_element_z: Sequen
     if npilev.size:
         capacity = max(capacity, int(np.max(npilev)))
 
-    # Conservative record-level masks.  Attribute names differ across historic
-    # cache schemas, so these arrays are best-effort summaries today and become
-    # hard acceleration inputs later.
-    continuum_indices = np.zeros(0, dtype=np.int64)
-    for name in ("continuum_element_z", "rrc_element_z", "cont_element_z"):
-        values = getattr(derived, name, None)
-        if values is not None:
-            arr = np.asarray(values, dtype=np.int64).reshape(-1)
-            continuum_indices = _one_based_indices(np.isin(arr, list(active_set)))
-            break
+    # v0.5.44: Build hard active feature lists from source pointer ownership.
+    # Lines and continua are indexed by nplin/npcon; their parent chain leads
+    # to the owning ion record, and ion_record_to_index gives the element Z.
+    # This lets calc_emis_all rank only features for H, He, and the active
+    # abundance element instead of walking every ATDB line/RRC every zone.
     line_indices = np.zeros(0, dtype=np.int64)
-    for name in ("line_element_z", "lines_element_z"):
-        values = getattr(derived, name, None)
-        if values is not None:
-            arr = np.asarray(values, dtype=np.int64).reshape(-1)
-            line_indices = _one_based_indices(np.isin(arr, list(active_set)))
-            break
+    try:
+        n_lines = int(getattr(derived, "nlsvn", 0))
+        nplin = np.asarray(getattr(derived, "nplin", ()), dtype=np.int64).reshape(-1)
+        npar = np.asarray(getattr(derived, "npar", ()), dtype=np.int64).reshape(-1)
+        values: list[int] = []
+        for line_index in range(1, min(n_lines + 1, nplin.size)):
+            rec = int(nplin[line_index])
+            ion_rec = int(npar[rec]) if 0 < rec < npar.size else 0
+            ion_index = int(ion_record_to_index.get(ion_rec, 0))
+            z = int(ion_elements[ion_index]) if 0 < ion_index < ion_elements.size else 0
+            if z in active_set:
+                values.append(line_index)
+        line_indices = np.asarray(values, dtype=np.int64)
+    except Exception:
+        line_indices = np.zeros(0, dtype=np.int64)
+
+    continuum_indices = np.zeros(0, dtype=np.int64)
+    try:
+        n_cont = int(getattr(derived, "ncsvn", 0))
+        npcon = np.asarray(getattr(derived, "npcon", ()), dtype=np.int64).reshape(-1)
+        npar = np.asarray(getattr(derived, "npar", ()), dtype=np.int64).reshape(-1)
+        values = []
+        for continuum_index in range(1, min(n_cont + 1, npcon.size)):
+            rec = int(npcon[continuum_index])
+            ion_rec = int(npar[rec]) if 0 < rec < npar.size else 0
+            ion_index = int(ion_record_to_index.get(ion_rec, 0))
+            z = int(ion_elements[ion_index]) if 0 < ion_index < ion_elements.size else 0
+            if z in active_set:
+                values.append(continuum_index)
+        continuum_indices = np.asarray(values, dtype=np.int64)
+    except Exception:
+        continuum_indices = np.zeros(0, dtype=np.int64)
 
     return ActiveATDBSubset(
         active_element_z=active,

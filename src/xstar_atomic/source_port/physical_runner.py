@@ -1394,9 +1394,22 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
         strict_ucalc=True,
         initial_leveltemp_workspace=result.leveltemp_workspace,
         retain_traces=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
+        profile_control=state.control,
+        progress_callback=state.control.get("progress_callback"),
     )
+    active_subset = state.control.get("active_atdb_subset")
+    if active_subset is not None:
+        common["active_element_z"] = tuple(int(z) for z in getattr(active_subset, "active_element_z", ()))
+        common["active_line_indices"] = np.asarray(getattr(active_subset, "line_indices", ()), dtype=np.int64)
+        common["active_continuum_indices"] = np.asarray(getattr(active_subset, "continuum_indices", ()), dtype=np.int64)
+        common["reusable_work_arrays"] = state.control.setdefault("calc_emis_all_work_arrays", {})
     emisab_common = dict(common)
-    emisab_common.pop("retain_traces", None)
+    for key in (
+        "retain_traces", "active_element_z", "active_line_indices",
+        "active_continuum_indices", "reusable_work_arrays",
+        "profile_control", "progress_callback",
+    ):
+        emisab_common.pop(key, None)
     state.control["calc_emisab_context"] = CalcEmisabContext(
         **emisab_common,
         workspace=workspace.emissivity.base,
@@ -2208,6 +2221,7 @@ def run_xstar_from_parameters(
                 "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
                 "profile_components_enabled": bool(profile_components),
                 "performance_profile_summary": summarize_profile(state.control),
+                "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
                 "solver_backend": solver_backend_status(),
                 "atdb_path": str(resolved_atdb),
