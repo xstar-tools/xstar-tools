@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]
+requires = ["setuptools>=77", "wheel", "numpy>=1.23"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.5.37"
+version = "0.5.38"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"

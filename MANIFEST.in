@@ -377,3 +377,6 @@ include examples/run_v0488_python_zone1_diagnostic.sh
 include examples/run_v0488_zone1_analysis.sh
 
 recursive-include scripts *.sh
+
+include setup.py
+recursive-include cpp *.cpp *.hpp *.h *.md

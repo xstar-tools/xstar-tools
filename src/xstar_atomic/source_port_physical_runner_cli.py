@@ -105,6 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
             "use 1 for memory-safe Mg/Ca benchmark runs"
         ),
     )
+    parser.add_argument(
+        "--solver-backend",
+        choices=("python", "cpp", "auto"),
+        default="python",
+        help=(
+            "level-population/ionization linear-solve backend: python is the "
+            "source-faithful reference, cpp requires the optional C++ extension, "
+            "and auto uses C++ when available with Python fallback"
+        ),
+    )
     return parser
 
 
@@ -147,6 +157,7 @@ def _print_run(summary: dict[str, object]) -> None:
         if key in provenance:
             print(f"{key}={provenance.get(key)}")
     print("diagnostics=" + str(summary.get("provenance", {}).get("diagnostics_mode", "unknown")))
+    print("solver_backend=" + str(summary.get("provenance", {}).get("solver_backend", "unknown")))
     warnings = summary.get("warnings", [])
     if warnings:
         print("warnings=" + repr(warnings))
@@ -155,7 +166,8 @@ def _print_run(summary: dict[str, object]) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _apply_thread_limit(args.blas_threads)
-    # Import NumPy-heavy runner modules only after thread caps are set.
+    os.environ["XSTAR_ATOMIC_SOLVER_BACKEND"] = str(args.solver_backend)
+    # Import NumPy-heavy runner modules only after thread caps/backend selection are set.
     from .source_port.physical_output_diagnostics import diagnose_physical_output_mismatch
     from .source_port.physical_runner import (
         XSTARPythonRunnerError,
@@ -217,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"python_output_dir={result.python_run.output_dir}")
                 print(f"original_run_dir={result.original_run_dir}")
                 print(f"diagnostics={args.diagnostics}")
+                print(f"solver_backend={args.solver_backend}")
                 if args.diagnostics_dir is not None:
                     print(f"diagnostics_dir={Path(args.diagnostics_dir).resolve()}")
         elif args.run_script is not None:

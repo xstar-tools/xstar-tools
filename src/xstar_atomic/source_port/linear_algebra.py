@@ -6,6 +6,8 @@ from typing import Tuple
 
 import numpy as np
 
+from .solver_backend import call_cpp_leqt2f, get_solver_backend, resolve_active_backend
+
 
 class XSTARLinearAlgebraError(RuntimeError):
     pass
@@ -155,8 +157,8 @@ def mprove(a: np.ndarray, decomposition: LUDecomposition, b: np.ndarray, x: np.n
     return improved
 
 
-def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
-    """Translate ``leqt2f.f90`` using source-order LU/refinement loops."""
+def _leqt2f_python(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
+    """Pure-Python source-order LU/refinement implementation."""
     original = np.asarray(a, dtype=float)
     rhs = np.asarray(b, dtype=float)
     if original.ndim != 2 or original.shape[0] != original.shape[1]:
@@ -197,3 +199,41 @@ def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> 
         err = total / max(1.0e-24, tmpmx)
         max_scaled = max(max_scaled, abs(err))
     return LinearSolveResult(solution=x, residual=residual, max_scaled_residual=float(max_scaled))
+
+
+def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
+    """Translate ``leqt2f.f90`` with optional C++ acceleration.
+
+    Backend selection is process-wide via ``XSTAR_ATOMIC_SOLVER_BACKEND`` or
+    ``set_solver_backend`` from :mod:`solver_backend`.  ``python`` remains the
+    reference.  ``auto`` uses the C++ extension when it is importable and falls
+    back to Python.  ``cpp`` requires the extension and raises if it is missing.
+    """
+    backend = get_solver_backend()
+    if backend in ("cpp", "auto"):
+        try:
+            solution, residual, max_scaled = call_cpp_leqt2f(
+                a, b, clamp_source_range=clamp_source_range
+            )
+            return LinearSolveResult(
+                solution=np.asarray(solution, dtype=float),
+                residual=np.asarray(residual, dtype=float),
+                max_scaled_residual=float(max_scaled),
+                method="leqt2f_cpp_source_order",
+            )
+        except Exception:
+            if backend == "cpp":
+                raise
+            # auto mode is explicitly opportunistic.  Keep the source-faithful
+            # Python solve as the correctness fallback.
+    return _leqt2f_python(a, b, clamp_source_range=clamp_source_range)
+
+
+def solver_backend_status() -> dict[str, object]:
+    status = resolve_active_backend()
+    return {
+        "requested": status.requested,
+        "active": status.active,
+        "cpp_available": status.cpp_available,
+        "cpp_import_error": status.cpp_import_error,
+    }

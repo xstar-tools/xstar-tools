@@ -43,6 +43,7 @@ from .bremsstrahlung import (
 )
 from .compton import Comp2Context, comp2_continuum_result, load_compton_table
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
+from .linear_algebra import solver_backend_status
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -2117,6 +2118,7 @@ def run_xstar_from_parameters(
                 "xstar_outputs_used_as_python_inputs": False,
                 "diagnostics_mode": diagnostics_mode,
                 "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),
+                "solver_backend": solver_backend_status(),
                 "atdb_path": str(resolved_atdb),
                 "pointer_cache_path": str(pointer_cache_path),
                 "pointer_cache_status": str(built.derived.provenance.get("pointer_cache_status", "not_used")),
