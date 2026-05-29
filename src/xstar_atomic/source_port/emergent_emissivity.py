@@ -52,7 +52,7 @@ from .emissivity import (
     resolve_calc_emisab_density,
 )
 from .free_free import FreeFreeResult, freef
-from .performance import profile_component, record_profile_event
+from .performance import profile_component, profile_level_at_least, record_profile_event
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
@@ -167,6 +167,7 @@ class CalcEmisContext:
     reusable_work_arrays: Optional[MutableMapping[str, Any]] = None
     profile_control: Optional[MutableMapping[str, Any]] = None
     progress_callback: Optional[Callable[[str, Mapping[str, Any]], None]] = None
+    mg_line_kernel: str = "python"
 
     @property
     def temperature_k(self) -> float:
@@ -701,6 +702,103 @@ def _calc_emis_record_sequence_for_ion(context: CalcEmisContext, ion: _IonDescri
     return list(seq)
 
 
+def _compact_mg_line_emissivity_table(
+    context: CalcEmisContext,
+    ion: _IonDescriptor,
+    record_sequence: Sequence[tuple[int, int]],
+    levels: UCalcLevelTable,
+    line_rank_table: np.ndarray,
+    epi: np.ndarray,
+) -> dict[int, dict[str, Any]]:
+    """Build a compact Mg record_type=4/9 line-emissivity lookup table.
+
+    This v0.5.49 table is deliberately conservative: it precomputes source-stable
+    metadata (line index, endpoints, energy/bin/rank decision, and energy-ordered
+    lower/upper local levels) but leaves the source-faithful ucalc/linopac update
+    loop in control of numerical side effects.  It is only used when
+    ``mg_line_kernel='numpy'`` and only for Mg Z=12.
+    """
+    cache = getattr(context, "reusable_work_arrays", None)
+    key = (
+        "calc_emis_all.mg_line_emissivity_table.v0549",
+        int(ion.ion_index),
+        id(line_rank_table),
+        id(epi),
+    )
+    if isinstance(cache, MutableMapping):
+        cached = cache.get(key)
+        if isinstance(cached, dict):
+            return cached
+    table: dict[int, dict[str, Any]] = {}
+    # Keep the source record order.  NumPy is used for compact array storage of
+    # the candidate fields; exact nbinc/source-rank decisions remain identical.
+    records: list[int] = []
+    rate_types: list[int] = []
+    idest1_values: list[int] = []
+    idest2_values: list[int] = []
+    line_indices: list[int] = []
+    for rate_type, rec in record_sequence:
+        if int(rate_type) not in (4, 9):
+            continue
+        ints = context.master.record_integers(int(rec))
+        if len(ints) < 2:
+            continue
+        idest1, idest2 = int(ints[0]), int(ints[1])
+        line_index = int(context.derived.nplini[int(rec)])
+        if not (line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0):
+            continue
+        records.append(int(rec))
+        rate_types.append(int(rate_type))
+        idest1_values.append(idest1)
+        idest2_values.append(idest2)
+        line_indices.append(line_index)
+    if not records:
+        if isinstance(cache, MutableMapping):
+            cache[key] = table
+        return table
+    records_arr = np.asarray(records, dtype=np.int64)
+    rate_type_arr = np.asarray(rate_types, dtype=np.int16)
+    idest1_arr = np.asarray(idest1_values, dtype=np.int32)
+    idest2_arr = np.asarray(idest2_values, dtype=np.int32)
+    line_index_arr = np.asarray(line_indices, dtype=np.int64)
+    wave_arr = np.asarray(context.line_wavelength_angstrom[line_index_arr], dtype=float)
+    energy_arr = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave_arr + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
+    for i, rec in enumerate(records_arr):
+        idest1 = int(idest1_arr[i])
+        idest2 = int(idest2_arr[i])
+        if not (1 <= idest2 <= int(ion.nlev)):
+            table[int(rec)] = {"valid": False, "reason": "line endpoint outside ion nlev"}
+            continue
+        e1 = levels.require(idest1).energy_ev
+        e2 = levels.require(idest2).energy_ev
+        if e1 < e2:
+            lower_local, upper_local = idest1, idest2
+        else:
+            lower_local, upper_local = idest2, idest1
+        energy = float(energy_arr[i])
+        nb1 = nbinc(energy, epi, len(epi))
+        line_index = int(line_index_arr[i])
+        ranked = bool(_feature_is_ranked(line_rank_table, line_index, nb1))
+        table[int(rec)] = {
+            "valid": True,
+            "rate_type": int(rate_type_arr[i]),
+            "idest1": idest1,
+            "idest2": idest2,
+            "line_index": line_index,
+            "wave": float(wave_arr[i]),
+            "energy": energy,
+            "nb1": int(nb1),
+            "ranked": ranked,
+            "e1": float(e1),
+            "e2": float(e2),
+            "lower_local": int(lower_local),
+            "upper_local": int(upper_local),
+        }
+    if isinstance(cache, MutableMapping):
+        cache[key] = table
+    return table
+
+
 def calc_emis_ion(
     context: CalcEmisContext,
     *,
@@ -727,14 +825,21 @@ def calc_emis_ion(
     levels = leveltemp_workspace
     if epi is None:
         epi, _, _ = _high_resolution_radiation(context.radiation)
+    record_sequence = _calc_emis_record_sequence_for_ion(context, ion)
+    mg_line_kernel = str(getattr(context, "mg_line_kernel", "python") or "python").strip().lower()
+    mg_line_table: dict[int, dict[str, Any]] = {}
+    if mg_line_kernel == "numpy" and int(getattr(ion, "element_z", 0)) == 12:
+        mg_line_table = _compact_mg_line_emissivity_table(
+            context, ion, record_sequence, levels, line_rank_table, epi
+        )
     visited = 0
     calls = 0
     retained_kkkl = 0
-    record_sequence = _calc_emis_record_sequence_for_ion(context, ion)
     diagnostics_enabled = bool(getattr(context, "retain_traces", True))
     profile_control = getattr(context, "profile_control", None) or {}
     progress_callback = getattr(context, "progress_callback", None)
-    is_mg_profile = int(getattr(ion, "element_z", 0)) == 12
+    is_mg_profile = int(getattr(ion, "element_z", 0)) == 12 and profile_level_at_least(profile_control, "nested")
+    is_mg_forensic_profile = int(getattr(ion, "element_z", 0)) == 12 and profile_level_at_least(profile_control, "forensic")
     _ion_t0 = time.perf_counter() if is_mg_profile else 0.0
     _record_type_elapsed: dict[str, float] = {}
     _rate_type_elapsed: dict[int, float] = {}
@@ -843,24 +948,44 @@ def calc_emis_ion(
                 ))
 
         if rate_type in (4, 9) and len(ints) >= 2:
-            idest1, idest2 = int(ints[0]), int(ints[1])
-            line_index = int(context.derived.nplini[rec])
+            line_meta = mg_line_table.get(int(rec)) if mg_line_table else None
+            if line_meta is not None:
+                if not bool(line_meta.get("valid", False)):
+                    raise CalcEmisPortError(str(line_meta.get("reason", "invalid Mg line endpoint")))
+                idest1 = int(line_meta["idest1"])
+                idest2 = int(line_meta["idest2"])
+                line_index = int(line_meta["line_index"])
+                wave = float(line_meta["wave"])
+                energy = float(line_meta["energy"])
+                nb1 = int(line_meta["nb1"])
+                ranked = bool(line_meta["ranked"])
+                e1 = float(line_meta["e1"])
+                e2 = float(line_meta["e2"])
+                lower = int(line_meta["lower_local"]) + compact_offset
+                upper = int(line_meta["upper_local"]) + compact_offset
+            else:
+                idest1, idest2 = int(ints[0]), int(ints[1])
+                line_index = int(context.derived.nplini[rec])
+                ranked = False
+                if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
+                    wave = float(context.line_wavelength_angstrom[line_index])
+                    energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
+                    nb1 = nbinc(energy, epi, len(epi))
+                    ranked = bool(_feature_is_ranked(line_rank_table, line_index, nb1))
+                    if ranked:
+                        if not (1 <= idest2 <= ion.nlev):
+                            raise CalcEmisPortError(f"line endpoint {idest2} outside ion nlev={ion.nlev}")
+                        e1 = levels.require(idest1).energy_ev
+                        e2 = levels.require(idest2).energy_ev
+                        if e1 < e2:
+                            lower, upper = idest1 + compact_offset, idest2 + compact_offset
+                        else:
+                            lower, upper = idest2 + compact_offset, idest1 + compact_offset
             if line_index and line_index <= int(context.derived.nlsvn) and idest1 > 0:
-                wave = float(context.line_wavelength_angstrom[line_index])
-                energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
-                nb1 = nbinc(energy, epi, len(epi))
-                if _feature_is_ranked(line_rank_table, line_index, nb1):
-                    if not (1 <= idest2 <= ion.nlev):
-                        raise CalcEmisPortError(f"line endpoint {idest2} outside ion nlev={ion.nlev}")
+                if ranked:
                     tau1, tau2 = context.escape.line_taus(line_index)
                     tau1 = 0.0 if tau1 is None else float(tau1)
                     tau2 = 0.0 if tau2 is None else float(tau2)
-                    e1 = levels.require(idest1).energy_ev
-                    e2 = levels.require(idest2).energy_ev
-                    if e1 < e2:
-                        lower, upper = idest1 + compact_offset, idest2 + compact_offset
-                    else:
-                        lower, upper = idest2 + compact_offset, idest1 + compact_offset
                     abund1 = float(compact_xileve[lower]) * xpx * element_abundance
                     abund2 = float(compact_xileve[upper]) * xpx * element_abundance
                     ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
@@ -1075,18 +1200,19 @@ def calc_emis_ion(
                 record_type=_kind,
                 source_routine="calc_emis_ion",
             )
-        for _rtype, _elapsed in sorted(_rate_type_elapsed.items()):
-            record_profile_event(
-                profile_control,
-                "calc_emis_all.element.by_rate_type",
-                _elapsed,
-                emit_progress=progress_callback,
-                element_z=int(ion.element_z),
-                ion_stage=int(ion.ion_stage),
-                ion_index=int(ion.ion_index),
-                record_type=int(_rtype),
-                source_routine="calc_emis_ion",
-            )
+        if is_mg_forensic_profile:
+            for _rtype, _elapsed in sorted(_rate_type_elapsed.items()):
+                record_profile_event(
+                    profile_control,
+                    "calc_emis_all.element.by_rate_type",
+                    _elapsed,
+                    emit_progress=progress_callback,
+                    element_z=int(ion.element_z),
+                    ion_stage=int(ion.ion_stage),
+                    ion_index=int(ion.ion_index),
+                    record_type=int(_rtype),
+                    source_routine="calc_emis_ion",
+                )
 
     return CalcEmisIonTrace(
         ion_record=ion.ion_record, ion_index=ion.ion_index, ion_stage=ion.ion_stage,

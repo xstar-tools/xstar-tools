@@ -31,8 +31,42 @@ def _append_profile(control: MutableMapping[str, Any], record: dict[str, Any]) -
         rows.append(record)
 
 
+PROFILE_LEVELS = {"none": 0, "summary": 1, "nested": 2, "forensic": 3}
+
+
+def normalize_profile_level(value: Any) -> str:
+    """Normalize profiling level for v0.5.49 timing controls.
+
+    Backward compatibility:
+    - True / "1" / "true" -> "summary"
+    - False / "0" / "false" / None -> "none"
+    """
+    if isinstance(value, bool):
+        return "summary" if value else "none"
+    if value is None:
+        return "none"
+    text = str(value).strip().lower()
+    if text in {"", "0", "false", "off", "no", "none"}:
+        return "none"
+    if text in {"1", "true", "on", "yes"}:
+        return "summary"
+    if text in PROFILE_LEVELS:
+        return text
+    return "summary"
+
+
+def profile_level(control: MutableMapping[str, Any]) -> str:
+    return normalize_profile_level(control.get("profile_components", False))
+
+
+def profile_level_at_least(control: MutableMapping[str, Any], minimum: str) -> bool:
+    current = PROFILE_LEVELS.get(profile_level(control), 0)
+    required = PROFILE_LEVELS.get(normalize_profile_level(minimum), 0)
+    return current >= required
+
+
 def performance_enabled(control: MutableMapping[str, Any]) -> bool:
-    return bool(control.get("profile_components", False))
+    return profile_level_at_least(control, "summary")
 
 
 def record_profile_event(

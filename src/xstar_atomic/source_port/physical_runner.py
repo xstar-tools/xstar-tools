@@ -45,7 +45,7 @@ from .compton import Comp2Context, comp2_continuum_result, load_compton_table
 from .active_subsets import build_active_atdb_subset
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
-from .performance import profile_component, summarize_profile
+from .performance import normalize_profile_level, profile_component, summarize_profile
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -1396,6 +1396,7 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
         retain_traces=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
         profile_control=state.control,
         progress_callback=state.control.get("progress_callback"),
+        mg_line_kernel=str(state.control.get("mg_line_kernel", "python")),
     )
     active_subset = state.control.get("active_atdb_subset")
     if active_subset is not None:
@@ -1407,7 +1408,7 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
     for key in (
         "retain_traces", "active_element_z", "active_line_indices",
         "active_continuum_indices", "reusable_work_arrays",
-        "profile_control", "progress_callback",
+        "profile_control", "progress_callback", "mg_line_kernel",
     ):
         emisab_common.pop(key, None)
     state.control["calc_emisab_context"] = CalcEmisabContext(
@@ -2052,7 +2053,8 @@ def run_xstar_from_parameters(
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
     active_subset: bool = True,
-    profile_components: bool = False,
+    profile_components: str | bool = "none",
+    mg_line_kernel: str = "python",
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     total_start_time = time.perf_counter()
@@ -2099,7 +2101,8 @@ def run_xstar_from_parameters(
     high_volume_diagnostics = diagnostics_mode == "full"
     state.control["diagnostics_mode"] = diagnostics_mode
     state.control["active_subset_enabled"] = bool(active_subset)
-    state.control["profile_components"] = bool(profile_components)
+    state.control["profile_components"] = normalize_profile_level(profile_components)
+    state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
     state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = high_volume_diagnostics
@@ -2219,7 +2222,9 @@ def run_xstar_from_parameters(
                 "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),
                 "active_subset_enabled": bool(active_subset),
                 "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
-                "profile_components_enabled": bool(profile_components),
+                "profile_components_enabled": normalize_profile_level(profile_components) != "none",
+                "profile_components_level": normalize_profile_level(profile_components),
+                "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "performance_profile_summary": summarize_profile(state.control),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
@@ -2266,7 +2271,8 @@ def run_xstar_python(
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
     active_subset: bool = True,
-    profile_components: bool = False,
+    profile_components: str | bool = "none",
+    mg_line_kernel: str = "python",
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -2300,6 +2306,7 @@ def run_xstar_python(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
+        mg_line_kernel=mg_line_kernel,
     )
 
 
@@ -2324,7 +2331,8 @@ def run_xstar_python_command(
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
     active_subset: bool = True,
-    profile_components: bool = False,
+    profile_components: str | bool = "none",
+    mg_line_kernel: str = "python",
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2341,6 +2349,7 @@ def run_xstar_python_command(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
+        mg_line_kernel=mg_line_kernel,
     )
 
 
@@ -2357,7 +2366,8 @@ def run_xstar_python_script(
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
     active_subset: bool = True,
-    profile_components: bool = False,
+    profile_components: str | bool = "none",
+    mg_line_kernel: str = "python",
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2376,6 +2386,7 @@ def run_xstar_python_script(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
+        mg_line_kernel=mg_line_kernel,
     )
 
 
@@ -2555,7 +2566,8 @@ def run_c5_ne1_acceptance(
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
     active_subset: bool = True,
-    profile_components: bool = False,
+    profile_components: str | bool = "none",
+    mg_line_kernel: str = "python",
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2570,6 +2582,7 @@ def run_c5_ne1_acceptance(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
+        mg_line_kernel=mg_line_kernel,
     )
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)

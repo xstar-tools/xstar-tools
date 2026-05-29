@@ -30,7 +30,7 @@ import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
-from .performance import profile_component, record_profile_event
+from .performance import profile_component, profile_level_at_least, record_profile_event
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1018,7 +1018,8 @@ def assemble_element_matrix(
     """Translate ``calc_hmc_ion`` and ``calc_hmc_element`` matrix assembly."""
     dispatcher = dispatcher or default_source_faithful_ucalc()
     profile_control = context.profile_control or {}
-    is_mg_profile = int(element_z) == 12
+    is_mg_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "nested")
+    is_mg_forensic_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "forensic")
     if is_mg_profile:
         with profile_component(
             profile_control,
@@ -1377,17 +1378,18 @@ def assemble_element_matrix(
                     ion_index=int(block.ion_index),
                     source_routine="calc_hmc_ion_matrix_terms",
                 )
-                for _rtype, _elapsed in sorted(_ion_records_by_type.items()):
-                    record_profile_event(
-                        profile_control,
-                        "calc_hmc_all.element_solver.rate_construction.by_rate_type",
-                        _elapsed,
-                        element_z=int(element_z),
-                        ion_stage=int(block.ion_stage),
-                        ion_index=int(block.ion_index),
-                        record_type=int(_rtype),
-                        source_routine="ucalc",
-                    )
+                if is_mg_forensic_profile:
+                    for _rtype, _elapsed in sorted(_ion_records_by_type.items()):
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.rate_construction.by_rate_type",
+                            _elapsed,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            record_type=int(_rtype),
+                            source_routine="ucalc",
+                        )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
     dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)

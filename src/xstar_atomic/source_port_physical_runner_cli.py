@@ -125,10 +125,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--profile-components",
-        action="store_true",
+        nargs="?",
+        const="summary",
+        default="none",
+        choices=("none", "summary", "nested", "forensic"),
         help=(
-            "record per-component wall time and RSS for radial hot routines "
-            "such as calc_hmc_all, calc_emisab_all, calc_emis_all, heatt, and stpcut"
+            "profiling detail level. summary records coarse component timings; "
+            "nested adds selected Mg ion/category totals; forensic enables the "
+            "v0.5.48-style per-ion/per-record detail. Supplying the flag without "
+            "a value is equivalent to summary."
+        ),
+    )
+    parser.add_argument(
+        "--mg-line-kernel",
+        choices=("python", "numpy"),
+        default="python",
+        help=(
+            "Mg Z=12 record_type=4 line-emissivity kernel. python is the "
+            "source-faithful reference; numpy enables the guarded compact-array path "
+            "where available and falls back to python otherwise."
         ),
     )
     return parser
@@ -222,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                mg_line_kernel=args.mg_line_kernel,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -264,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                mg_line_kernel=args.mg_line_kernel,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -282,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                mg_line_kernel=args.mg_line_kernel,
             )
             summary = result.as_dict()
             if args.print_summary:
