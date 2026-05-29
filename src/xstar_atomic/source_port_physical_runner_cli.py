@@ -137,6 +137,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--profile-rss",
+        action="store_true",
+        help=(
+            "include RSS start/end/delta fields in stored profile_component rows. "
+            "This is independent of --progress-memory and is off by default for timing runs."
+        ),
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -144,6 +152,16 @@ def build_parser() -> argparse.ArgumentParser:
             "Mg Z=12 record_type=4 line-emissivity kernel. python is the "
             "source-faithful reference; numpy enables the guarded compact-array path "
             "where available and falls back to python otherwise."
+        ),
+    )
+    parser.add_argument(
+        "--mg-matrix-backend",
+        choices=("python", "cpp", "auto"),
+        default="python",
+        help=(
+            "Mg Z=12 compact matrix/rate assembly backend. python is the "
+            "source-faithful reference; cpp uses the optional shared-library "
+            "matrix-fill kernel; auto uses cpp when available with Python fallback."
         ),
     )
     return parser
@@ -237,7 +255,9 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
+                mg_matrix_backend=args.mg_matrix_backend,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -280,7 +300,9 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
+                mg_matrix_backend=args.mg_matrix_backend,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -299,7 +321,9 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
+                mg_matrix_backend=args.mg_matrix_backend,
             )
             summary = result.as_dict()
             if args.print_summary:

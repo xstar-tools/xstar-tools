@@ -30,6 +30,7 @@ import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
+from .solver_backend import call_cpp_fill_matrices, cpp_available
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .ucalc import (
     SourceFaithfulUCalc,
@@ -232,6 +233,10 @@ class ElementEquilibriumContext:
     # Optional low-overhead profiling sink supplied by calc_hmc_all.  It is
     # observational only and is normally active only for Mg Z=12 hot-path runs.
     profile_control: Optional[MutableMapping[str, Any]] = None
+    # Optional Mg Z=12 compact matrix backend.  v0.5.51 keeps Python as the
+    # source-faithful reference, while cpp/auto can scatter compact matrix
+    # terms into dense/rate arrays through the shared C++ backend.
+    mg_matrix_backend: str = "python"
 
     @property
     def electron_density_cm3(self) -> float:
@@ -1007,6 +1012,118 @@ def _matrix_terms_for_result(
     return out
 
 
+
+_MG_MATRIX_BUFFER_CACHE: Dict[Tuple[int, int], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+
+
+def clear_mg_matrix_buffer_cache() -> None:
+    """Clear reusable Mg compact matrix buffers used by the optional backend."""
+    _MG_MATRIX_BUFFER_CACHE.clear()
+
+
+def _compact_term_arrays(terms: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Pack Python MatrixTerm objects into compact C-contiguous arrays.
+
+    This is intentionally small and deterministic.  It keeps source-faithful
+    Python ucalc traversal unchanged while giving the C++ backend a compact
+    one-pass representation for dense matrix/rate scattering.
+    """
+    n_terms = len(terms)
+    rows = np.empty(n_terms, dtype=np.int32)
+    cols = np.empty(n_terms, dtype=np.int32)
+    aj1 = np.empty(n_terms, dtype=np.float64)
+    cj = np.empty(n_terms, dtype=np.float64)
+    cj2 = np.empty(n_terms, dtype=np.float64)
+    for i, term in enumerate(terms):
+        rows[i] = int(term.row)
+        cols[i] = int(term.column)
+        aj1[i] = float(term.aj1)
+        cj[i] = float(term.cj)
+        cj2[i] = float(term.cj2)
+    return rows, cols, aj1, cj, cj2
+
+
+def _reusable_mg_matrix_buffers(n_rows: int, n_terms: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return process-local Mg matrix buffers sized for the compact basis.
+
+    The key includes the term count so stale larger term arrays are not reused
+    accidentally.  Matrix buffers are overwritten by the backend each call.
+    """
+    key = (int(n_rows), int(n_terms))
+    cached = _MG_MATRIX_BUFFER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    shape = (int(n_rows), int(n_rows))
+    cached = (
+        np.empty(shape, dtype=np.float64),
+        np.empty(shape, dtype=np.float64),
+        np.empty(shape, dtype=np.float64),
+        np.empty(shape, dtype=np.float64),
+        np.empty(int(n_rows), dtype=np.float64),
+    )
+    _MG_MATRIX_BUFFER_CACHE[key] = cached
+    return cached
+
+
+def _fill_element_matrices(
+    *,
+    basis: ElementCompactBasis,
+    terms: Sequence[MatrixTerm],
+    element_z: int,
+    context: ElementEquilibriumContext,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]:
+    """Fill dense/rate matrices, optionally using the C++ Mg compact backend."""
+    backend = str(getattr(context, "mg_matrix_backend", "python") or "python").strip().lower()
+    if backend not in {"python", "cpp", "auto"}:
+        backend = "python"
+    use_cpp = int(element_z) == 12 and backend in {"cpp", "auto"}
+    if use_cpp:
+        try:
+            rows, cols, aj1, cj, cj2 = _compact_term_arrays(terms)
+            buffers = _reusable_mg_matrix_buffers(basis.n_rows, len(terms))
+            dense, heat, heat2, normalized, rhs = call_cpp_fill_matrices(
+                n=basis.n_rows,
+                rows_one_based=rows,
+                cols_one_based=cols,
+                aj1=aj1,
+                cj=cj,
+                cj2=cj2,
+                normalization_row_one_based=basis.normalization_row,
+                dense_out=buffers[0],
+                heat_out=buffers[1],
+                heat2_out=buffers[2],
+                normalized_out=buffers[3],
+                rhs_out=buffers[4],
+            )
+            # Return copies because the reusable buffers are overwritten on the
+            # next element solve while ElementMatrixAssembly owns its arrays.
+            return dense.copy(), heat.copy(), heat2.copy(), normalized.copy(), rhs.copy(), "cpp"
+        except Exception as exc:
+            if backend == "cpp":
+                raise
+            profile_control = context.profile_control or {}
+            record_profile_event(
+                profile_control,
+                "calc_hmc_all.element_solver.cpp_matrix_backend_fallback",
+                0.0,
+                element_z=int(element_z),
+                source_routine="xstar_solver_fill_matrices",
+                reason=f"{type(exc).__name__}: {exc}",
+            )
+    dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
+    heat = np.zeros_like(dense)
+    heat2 = np.zeros_like(dense)
+    for term in terms:
+        dense[term.row - 1, term.column - 1] += term.aj1
+        heat[term.row - 1, term.column - 1] += term.cj
+        heat2[term.row - 1, term.column - 1] += term.cj2
+    normalized = dense.copy()
+    rhs = np.zeros(basis.n_rows, dtype=float)
+    normalized[basis.normalization_row - 1, :] = 1.0
+    rhs[basis.normalization_row - 1] = 1.0
+    return dense, heat, heat2, normalized, rhs, "python"
+
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1392,18 +1509,12 @@ def assemble_element_matrix(
                         )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
-    dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
-    heat = np.zeros_like(dense)
-    heat2 = np.zeros_like(dense)
-    for term in terms:
-        dense[term.row - 1, term.column - 1] += term.aj1
-        heat[term.row - 1, term.column - 1] += term.cj
-        heat2[term.row - 1, term.column - 1] += term.cj2
-
-    normalized = dense.copy()
-    rhs = np.zeros(basis.n_rows, dtype=float)
-    normalized[basis.normalization_row - 1, :] = 1.0
-    rhs[basis.normalization_row - 1] = 1.0
+    dense, heat, heat2, normalized, rhs, matrix_backend_used = _fill_element_matrices(
+        basis=basis,
+        terms=terms,
+        element_z=int(element_z),
+        context=context,
+    )
     if is_mg_profile:
         record_profile_event(
             profile_control,
@@ -1411,6 +1522,9 @@ def assemble_element_matrix(
             time.perf_counter() - _dense_t0,
             element_z=int(element_z),
             source_routine="calc_hmc_element_matrix_fill",
+            matrix_backend=str(matrix_backend_used),
+            n_terms=int(len(terms)),
+            n_rows=int(basis.n_rows),
         )
 
     strict_ready = n_blocked == 0 and n_unmapped == 0 and len(terms) > 0
