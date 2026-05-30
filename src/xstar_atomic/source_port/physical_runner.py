@@ -44,6 +44,9 @@ from .bremsstrahlung import (
 )
 from .compton import Comp2Context, comp2_continuum_result, load_compton_table
 from .active_subsets import build_active_atdb_subset
+from .backend_config import BackendSelection, resolve_backend_selection, install_backend_environment
+from .compact_active_atdb import export_compact_active_atdb
+from .cpp_backend_rates import rates_backend_status
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
 from .performance import normalize_profile_level, profile_component, summarize_profile
@@ -2108,10 +2111,23 @@ def run_xstar_from_parameters(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     mg_line_kernel: str = "python",
+    backend: str = "python",
+    rates_backend: str | None = None,
+    matrix_backend: str | None = None,
+    emissivity_backend: str | None = None,
+    compact_atdb_export: str | Path | None = None,
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     total_start_time = time.perf_counter()
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
+    backend_selection = resolve_backend_selection(
+        global_backend=backend,
+        solver_backend=os.environ.get("XSTAR_ATOMIC_SOLVER_BACKEND", "python"),
+        rates_backend=rates_backend,
+        matrix_backend=matrix_backend,
+        emissivity_backend=emissivity_backend,
+    )
+    install_backend_environment(backend_selection)
     del input_dir  # Reserved for spectrum/density-file source branches.
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
     normalized = normalize_xstar_parameters(
@@ -2151,6 +2167,27 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
+    state.control["backend_selection"] = backend_selection.as_dict()
+    state.provenance["backend_selection"] = backend_selection.as_dict()
+    compact_export_summary = None
+    if compact_atdb_export is not None:
+        active_subset_obj = state.control.get("active_atdb_subset")
+        _emit_progress(progress_callback, "compact_atdb_export_start", path=str(compact_atdb_export))
+        compact_result = export_compact_active_atdb(
+            built.master,
+            built.derived,
+            compact_atdb_export,
+            active_subset=active_subset_obj,
+        )
+        compact_export_summary = compact_result.as_dict()
+        state.provenance["compact_active_atdb_export"] = compact_export_summary
+        _emit_progress(
+            progress_callback,
+            "compact_atdb_export_done",
+            path=str(compact_result.path),
+            n_active_ions=compact_result.n_active_ions,
+            n_active_rate_records=compact_result.n_active_rate_records,
+        )
     high_volume_diagnostics = diagnostics_mode == "full"
     state.control["diagnostics_mode"] = diagnostics_mode
     state.control["active_subset_enabled"] = bool(active_subset)
@@ -2279,6 +2316,11 @@ def run_xstar_from_parameters(
                 "profile_components_enabled": normalize_profile_level(profile_components) != "none",
                 "profile_components_level": normalize_profile_level(profile_components),
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
+                "backend_selection": backend_selection.as_dict(),
+                "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
+                "matrix_backend": {"requested": backend_selection.matrix_backend, "active": "python", "cpp_available": False, "status": "skeleton_not_yet_implemented"},
+                "emissivity_backend": {"requested": backend_selection.emissivity_backend, "active": "python", "cpp_available": False, "status": "skeleton_not_yet_implemented"},
+                "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
@@ -2327,6 +2369,11 @@ def run_xstar_python(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     mg_line_kernel: str = "python",
+    backend: str = "python",
+    rates_backend: str | None = None,
+    matrix_backend: str | None = None,
+    emissivity_backend: str | None = None,
+    compact_atdb_export: str | Path | None = None,
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -2361,6 +2408,11 @@ def run_xstar_python(
         active_subset=active_subset,
         profile_components=profile_components,
         mg_line_kernel=mg_line_kernel,
+        backend=backend,
+        rates_backend=rates_backend,
+        matrix_backend=matrix_backend,
+        emissivity_backend=emissivity_backend,
+        compact_atdb_export=compact_atdb_export,
     )
 
 
@@ -2387,6 +2439,11 @@ def run_xstar_python_command(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     mg_line_kernel: str = "python",
+    backend: str = "python",
+    rates_backend: str | None = None,
+    matrix_backend: str | None = None,
+    emissivity_backend: str | None = None,
+    compact_atdb_export: str | Path | None = None,
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2404,6 +2461,11 @@ def run_xstar_python_command(
         active_subset=active_subset,
         profile_components=profile_components,
         mg_line_kernel=mg_line_kernel,
+        backend=backend,
+        rates_backend=rates_backend,
+        matrix_backend=matrix_backend,
+        emissivity_backend=emissivity_backend,
+        compact_atdb_export=compact_atdb_export,
     )
 
 
@@ -2422,6 +2484,11 @@ def run_xstar_python_script(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     mg_line_kernel: str = "python",
+    backend: str = "python",
+    rates_backend: str | None = None,
+    matrix_backend: str | None = None,
+    emissivity_backend: str | None = None,
+    compact_atdb_export: str | Path | None = None,
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2441,6 +2508,11 @@ def run_xstar_python_script(
         active_subset=active_subset,
         profile_components=profile_components,
         mg_line_kernel=mg_line_kernel,
+        backend=backend,
+        rates_backend=rates_backend,
+        matrix_backend=matrix_backend,
+        emissivity_backend=emissivity_backend,
+        compact_atdb_export=compact_atdb_export,
     )
 
 
@@ -2622,6 +2694,11 @@ def run_c5_ne1_acceptance(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     mg_line_kernel: str = "python",
+    backend: str = "python",
+    rates_backend: str | None = None,
+    matrix_backend: str | None = None,
+    emissivity_backend: str | None = None,
+    compact_atdb_export: str | Path | None = None,
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2637,6 +2714,11 @@ def run_c5_ne1_acceptance(
         active_subset=active_subset,
         profile_components=profile_components,
         mg_line_kernel=mg_line_kernel,
+        backend=backend,
+        rates_backend=rates_backend,
+        matrix_backend=matrix_backend,
+        emissivity_backend=emissivity_backend,
+        compact_atdb_export=compact_atdb_export,
     )
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)

@@ -2,27 +2,27 @@ CXX ?= g++
 CXXFLAGS ?= -O3 -std=c++17 -fPIC -Wall -Wextra
 LDFLAGS ?= -shared
 
-TARGET := libxstar_solver.so
-SRC := level_population.cpp
-# Runtime package directory used by xstar_atomic.source_port.solver_backend.
-# This Makefile lives under src/xstar_atomic/source_port/cpp.
-# Keep a copy beside solver_backend.py so PYTHONPATH=src runs can load it,
-# while also leaving the local build artifact in this directory.
 DESTDIR ?= ..
-DEST := $(DESTDIR)/$(TARGET)
+SOLVER_TARGET := libxstar_solver.so
+RATES_TARGET := libxstar_rates.so
+TARGETS := $(SOLVER_TARGET) $(RATES_TARGET)
 
 .PHONY: all clean install runtime-copy
 
-all: $(TARGET) runtime-copy
+all: $(TARGETS) runtime-copy
 
-$(TARGET): $(SRC)
+$(SOLVER_TARGET): level_population.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
-runtime-copy: $(TARGET)
+$(RATES_TARGET): rate_kernels.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
+
+runtime-copy: $(TARGETS)
 	mkdir -p $(DESTDIR)
-	cp $(TARGET) $(DEST)
+	cp $(SOLVER_TARGET) $(DESTDIR)/$(SOLVER_TARGET)
+	cp $(RATES_TARGET) $(DESTDIR)/$(RATES_TARGET)
 
 install: runtime-copy
 
 clean:
-	rm -f $(TARGET) $(DEST)
+	rm -f $(TARGETS) $(DESTDIR)/$(SOLVER_TARGET) $(DESTDIR)/$(RATES_TARGET)

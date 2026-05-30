@@ -384,3 +384,5 @@ recursive-include src/xstar_atomic/source_port *.so *.dylib *.dll
 
 # Optional C++ shared-library solver backend sources/build helpers
 recursive-include src/xstar_atomic/source_port/cpp *
+
+include XSTAR_SOURCE_CHANGES_v0.5.53.md

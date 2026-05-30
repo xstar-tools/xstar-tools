@@ -71,3 +71,22 @@ move later into the accepted `xstar_tools.xstar.solver` package layout.
 ## v0.5.45 path change
 
 The C++ sources and build files now live directly under `src/xstar_atomic/source_port/cpp/`. The extra `xstar_solver/` subdirectory was removed because the shared-library name `libxstar_solver.so` already identifies the backend purpose. The loader searches both `src/xstar_atomic/source_port/libxstar_solver.so` and `src/xstar_atomic/source_port/cpp/libxstar_solver.so` for source-tree runs.
+
+## v0.5.53 modular rates backend skeleton
+
+The source tree now builds a second plain shared library:
+
+```bash
+cd src/xstar_atomic/source_port/cpp
+./build_lib.sh
+# or: make
+```
+
+Artifacts copied beside the Python runtime modules:
+
+- `libxstar_solver.so` — existing level-population solver backend
+- `libxstar_rates.so` — new skeleton rates backend ABI
+
+The rates ABI currently verifies loading and dimensions only.  It is the stable
+entry point for future compact-array Mg rate-construction kernels and can later
+be linked into a standalone `xstar_tools_engine` executable.

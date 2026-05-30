@@ -116,6 +116,40 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--backend",
+        choices=("python", "cpp", "auto"),
+        default="python",
+        help=(
+            "global backend default for modular kernels. Per-kernel flags below "
+            "override this value. Python remains the source-faithful reference."
+        ),
+    )
+    parser.add_argument(
+        "--rates-backend",
+        choices=("python", "cpp", "auto"),
+        default=None,
+        help="rate-construction backend selection for future compact C++ kernels",
+    )
+    parser.add_argument(
+        "--matrix-backend",
+        choices=("python", "cpp", "auto"),
+        default=None,
+        help="matrix-assembly backend selection for future compact C++ kernels",
+    )
+    parser.add_argument(
+        "--emissivity-backend",
+        choices=("python", "cpp", "auto"),
+        default=None,
+        help="emissivity/opacity backend selection for future compact C++ kernels",
+    )
+    parser.add_argument(
+        "--compact-atdb-export",
+        help=(
+            "write a compact active-ATDB NPZ for the active H/He/Mg subset; "
+            "used by modular C++ backend development and Athena++ post-processing"
+        ),
+    )
+    parser.add_argument(
         "--no-active-subset",
         action="store_true",
         help=(
@@ -189,6 +223,10 @@ def _print_run(summary: dict[str, object]) -> None:
             print(f"{key}={provenance.get(key)}")
     print("diagnostics=" + str(summary.get("provenance", {}).get("diagnostics_mode", "unknown")))
     print("solver_backend=" + str(summary.get("provenance", {}).get("solver_backend", "unknown")))
+    print("backend_selection=" + repr(summary.get("provenance", {}).get("backend_selection", {})))
+    compact = summary.get("provenance", {}).get("compact_active_atdb_export")
+    if compact:
+        print("compact_active_atdb_export=" + repr(compact))
     warnings = summary.get("warnings", [])
     if warnings:
         print("warnings=" + repr(warnings))
@@ -197,7 +235,14 @@ def _print_run(summary: dict[str, object]) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _apply_thread_limit(args.blas_threads)
+    os.environ["XSTAR_ATOMIC_BACKEND"] = str(args.backend)
     os.environ["XSTAR_ATOMIC_SOLVER_BACKEND"] = str(args.solver_backend)
+    if args.rates_backend is not None:
+        os.environ["XSTAR_ATOMIC_RATES_BACKEND"] = str(args.rates_backend)
+    if args.matrix_backend is not None:
+        os.environ["XSTAR_ATOMIC_MATRIX_BACKEND"] = str(args.matrix_backend)
+    if args.emissivity_backend is not None:
+        os.environ["XSTAR_ATOMIC_EMISSIVITY_BACKEND"] = str(args.emissivity_backend)
     # Import NumPy-heavy runner modules only after thread caps/backend selection are set.
     from .source_port.physical_output_diagnostics import diagnose_physical_output_mismatch
     from .source_port.physical_runner import (
@@ -238,6 +283,11 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 mg_line_kernel=args.mg_line_kernel,
+                backend=args.backend,
+                rates_backend=args.rates_backend,
+                matrix_backend=args.matrix_backend,
+                emissivity_backend=args.emissivity_backend,
+                compact_atdb_export=args.compact_atdb_export,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -264,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"original_run_dir={result.original_run_dir}")
                 print(f"diagnostics={args.diagnostics}")
                 print(f"solver_backend={args.solver_backend}")
+                print(f"backend={args.backend}")
+                print(f"rates_backend={args.rates_backend or args.backend}")
                 if args.diagnostics_dir is not None:
                     print(f"diagnostics_dir={Path(args.diagnostics_dir).resolve()}")
         elif args.run_script is not None:
@@ -281,6 +333,11 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 mg_line_kernel=args.mg_line_kernel,
+                backend=args.backend,
+                rates_backend=args.rates_backend,
+                matrix_backend=args.matrix_backend,
+                emissivity_backend=args.emissivity_backend,
+                compact_atdb_export=args.compact_atdb_export,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -300,6 +357,11 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 mg_line_kernel=args.mg_line_kernel,
+                backend=args.backend,
+                rates_backend=args.rates_backend,
+                matrix_backend=args.matrix_backend,
+                emissivity_backend=args.emissivity_backend,
+                compact_atdb_export=args.compact_atdb_export,
             )
             summary = result.as_dict()
             if args.print_summary:
