@@ -24,6 +24,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping,
 import csv
 import json
 import math
+import os
 import time
 
 import numpy as np
@@ -31,6 +32,7 @@ import numpy as np
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
+from .cpp_backend_rates import build_mg_type7_terms_cpp, rates_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -942,6 +944,51 @@ def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int
     return lower, upper
 
 
+
+def _rates_cpp_active_for_mg() -> bool:
+    """Return true when the optional C++ rates backend should own Mg batches."""
+    try:
+        status = rates_backend_status(os.environ.get("XSTAR_ATOMIC_RATES_BACKEND"))
+    except Exception:
+        return False
+    if status.active != "cpp":
+        return False
+    flags = int(status.cpp_feature_flags or 0)
+    # Feature bit 2 is the v0.5.54 Mg type-7 term builder.
+    return bool(flags & 2)
+
+
+def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[MatrixTerm]:
+    out: List[MatrixTerm] = []
+    for row in rows:
+        out.append(
+            MatrixTerm(
+                term_index=int(row["term_index"]),
+                record=int(row["record"]),
+                data_type=int(row["data_type"]),
+                rate_type=int(row["rate_type"]),
+                ion_index=int(row["ion_index"]),
+                ion_stage=int(row["ion_stage"]),
+                role=str(row["role"]),
+                row=int(row["row"]),
+                column=int(row["column"]),
+                aj1=float(row["aj1"]),
+                aj2=float(row["aj2"]),
+                cj=float(row["cj"]),
+                cj2=float(row["cj2"]),
+                idest1=int(row["idest1"]),
+                idest2=int(row["idest2"]),
+                lower_endpoint=int(row["lower_endpoint"]),
+                upper_endpoint=int(row["upper_endpoint"]),
+                ucalc_status=str(row.get("ucalc_status", "evaluated")),
+                source_row_unclamped=int(row.get("source_row_unclamped", 0)),
+                source_column_unclamped=int(row.get("source_column_unclamped", 0)),
+                source_ipmat_clamped=bool(row.get("source_ipmat_clamped", False)),
+            )
+        )
+    return out
+
+
 def _matrix_terms_for_result(
     *,
     result: UCalcResult,
@@ -1020,6 +1067,7 @@ def assemble_element_matrix(
     profile_control = context.profile_control or {}
     is_mg_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "nested")
     is_mg_forensic_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "forensic")
+    use_cpp_mg_type7_rates = int(element_z) == 12 and _rates_cpp_active_for_mg()
     if is_mg_profile:
         with profile_component(
             profile_control,
@@ -1161,6 +1209,7 @@ def assemble_element_matrix(
                 ion_record=block.ion_record,
                 nlev=block.nlev,
             )
+            pending_cpp_type7: List[Tuple[UCalcResult, int]] = []
             for data_type in range(1, derived.npfi.shape[0]):
                 record = int(derived.npfi[data_type, block.ion_index])
                 while record and int(derived.npar[record]) == block.ion_record:
@@ -1318,36 +1367,118 @@ def assemble_element_matrix(
                             record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
                             record = int(derived.npnxt[record])
                             continue
+                        if use_cpp_mg_type7_rates and result.rate_type == 7:
+                            # Defer record_type=7 term construction to one compact C++
+                            # batch per Mg ion.  Python still owns source-faithful ucalc
+                            # physics for ans1..ans6 in this release.
+                            pending_cpp_type7.append((result, len(record_results) - 1))
+                        else:
+                            try:
+                                _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                                new_terms = _matrix_terms_for_result(
+                                    result=result,
+                                    basis=basis,
+                                    block=block,
+                                    levels=levels,
+                                    term_start=len(terms) + 1,
+                                    xpx=context.hydrogen_density_cm3,
+                                )
+                                if is_mg_profile:
+                                    _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+                            except (ElementEquilibriumError, IndexError) as exc:
+                                n_unmapped += 1
+                                summary.n_records_invalid_endpoint += 1
+                                blocked = {**row, "reason": str(exc), "status": "invalid_endpoint"}
+                                blocked_records.append(blocked)
+                                if context.strict_context:
+                                    n_blocked += 1
+                                    summary.n_records_blocked += 1
+                            else:
+                                if any(term.source_ipmat_clamped for term in new_terms):
+                                    n_source_clamps += 1
+                                    record_results[-1]["source_ipmat_endpoint_clamped"] = True
+                                    record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
+                                terms.extend(new_terms)
+                                n_eval += 1
+                                summary.n_records_evaluated += 1
+                                summary.n_matrix_terms += len(new_terms)
+                    record = int(derived.npnxt[record])
+            if pending_cpp_type7:
+                _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                cpp_input: List[Dict[str, Any]] = []
+                try:
+                    for pending_result, _record_row_index in pending_cpp_type7:
+                        cpp_input.append({
+                            "record": int(pending_result.record),
+                            "data_type": int(pending_result.data_type),
+                            "ion_index": int(block.ion_index),
+                            "ion_stage": int(block.ion_stage),
+                            "compact_start": int(block.compact_start),
+                            "idest1": int(pending_result.idest1),
+                            "idest2": int(pending_result.idest2),
+                            "ans1": float(pending_result.ans1),
+                            "ans2": float(pending_result.ans2),
+                            "ans3": float(pending_result.ans3),
+                            "ans4": float(pending_result.ans4),
+                            "ans5": float(pending_result.ans5),
+                            "ans6": float(pending_result.ans6),
+                        })
+                    cpp_rows, cpp_message = build_mg_type7_terms_cpp(
+                        cpp_input,
+                        basis_n_rows=basis.n_rows,
+                        term_start=len(terms) + 1,
+                        hydrogen_density_cm3=context.hydrogen_density_cm3,
+                    )
+                    new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
+                except Exception as exc:
+                    # Safe fallback: auto/cpp selection must never change physics
+                    # availability.  Fall back to the Python source-faithful term
+                    # builder for this ion and annotate diagnostic rows.
+                    for pending_result, record_row_index in pending_cpp_type7:
                         try:
-                            _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                             new_terms = _matrix_terms_for_result(
-                                result=result,
+                                result=pending_result,
                                 basis=basis,
                                 block=block,
                                 levels=levels,
                                 term_start=len(terms) + 1,
                                 xpx=context.hydrogen_density_cm3,
                             )
-                            if is_mg_profile:
-                                _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
-                        except (ElementEquilibriumError, IndexError) as exc:
+                        except (ElementEquilibriumError, IndexError) as inner_exc:
                             n_unmapped += 1
                             summary.n_records_invalid_endpoint += 1
-                            blocked = {**row, "reason": str(exc), "status": "invalid_endpoint"}
+                            blocked = {**record_results[record_row_index], "reason": str(inner_exc), "status": "invalid_endpoint"}
                             blocked_records.append(blocked)
                             if context.strict_context:
                                 n_blocked += 1
                                 summary.n_records_blocked += 1
                         else:
+                            record_results[record_row_index]["rates_backend"] = "python_fallback_after_cpp_error"
+                            record_results[record_row_index]["rates_backend_error"] = str(exc)
                             if any(term.source_ipmat_clamped for term in new_terms):
                                 n_source_clamps += 1
-                                record_results[-1]["source_ipmat_endpoint_clamped"] = True
-                                record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
+                                record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
+                                record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
                             terms.extend(new_terms)
                             n_eval += 1
                             summary.n_records_evaluated += 1
                             summary.n_matrix_terms += len(new_terms)
-                    record = int(derived.npnxt[record])
+                else:
+                    for offset, (_pending_result, record_row_index) in enumerate(pending_cpp_type7):
+                        group = new_terms[4 * offset : 4 * offset + 4]
+                        record_results[record_row_index]["rates_backend"] = "cpp_mg_type7_matrix_terms"
+                        record_results[record_row_index]["rates_backend_message"] = cpp_message
+                        if any(term.source_ipmat_clamped for term in group):
+                            n_source_clamps += 1
+                            record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
+                            record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
+                    terms.extend(new_terms)
+                    n_eval += len(pending_cpp_type7)
+                    summary.n_records_evaluated += len(pending_cpp_type7)
+                    summary.n_matrix_terms += len(new_terms)
+                if is_mg_profile:
+                    _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+
             ion_summaries.append(summary)
             if is_mg_profile:
                 _ion_total = time.perf_counter() - _ion_loop_t0

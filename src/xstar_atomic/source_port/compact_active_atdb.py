@@ -3,7 +3,7 @@
 The export intentionally preserves one-based XSTAR indices while packing only
 records owned by active elements/ions.  It is a bridge format for Python-driven
 Athena++ post-processing plus shared-library C++ kernels.  The arrays are
-source-faithful metadata only; v0.5.53 does not alter physics execution.
+source-faithful metadata only; v0.5.54 adds Mg record_type=7 compact subsets used by the first C++ rates kernel; source-faithful Python remains the physics reference path.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class CompactATDBExportResult:
     n_active_continua: int
     n_active_rate_records: int
     active_element_z: tuple[int, ...]
-    schema_version: int = 1
+    schema_version: int = 2
 
     def as_dict(self) -> dict[str, Any]:
         data = dict(asdict(self))
@@ -39,7 +39,7 @@ class CompactATDBExportResult:
 
 def _record_headers(master: Any, records: Sequence[int] | np.ndarray) -> np.ndarray:
     recs = np.asarray(records, dtype=np.int64).reshape(-1)
-    out = np.zeros((recs.size, 10), dtype=np.int64)
+    out = np.zeros((recs.size, 11), dtype=np.int64)
     for row, rec in enumerate(recs.tolist()):
         if int(rec) <= 0:
             continue
@@ -177,6 +177,33 @@ def _rate_record_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> np
     return data[order]
 
 
+
+def _mg_type7_payload_rows(master: Any, rate_record_rows: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return compact payload previews for Mg header rate_type=7 records."""
+    if rate_record_rows.size == 0:
+        return (
+            np.zeros((0, 12), dtype=np.int64),
+            np.zeros((0, 16), dtype=np.int64),
+            np.zeros((0, 16), dtype=np.float64),
+        )
+    data = np.asarray(rate_record_rows, dtype=np.int64).reshape((-1, 12))
+    mask = (data[:, 2] == 12) & (data[:, 6] == 7)
+    rows = data[mask].copy()
+    int_preview = np.zeros((rows.shape[0], 16), dtype=np.int64)
+    real_preview = np.zeros((rows.shape[0], 16), dtype=np.float64)
+    for row_idx, rec in enumerate(rows[:, 0].tolist()):
+        rec = int(rec)
+        if rec <= 0:
+            continue
+        ints = master.record_integers(rec, dtype=np.int64)
+        reals = master.record_reals(rec, dtype=np.float64)
+        if ints.size:
+            int_preview[row_idx, : min(16, ints.size)] = ints[: min(16, ints.size)]
+        if reals.size:
+            real_preview[row_idx, : min(16, reals.size)] = reals[: min(16, reals.size)]
+    return rows, int_preview, real_preview
+
+
 def build_compact_active_atdb(
     master: Any,
     derived: Any,
@@ -208,10 +235,11 @@ def build_compact_active_atdb(
     rate_headers = _record_headers(master, rate_record_rows[:, 0] if rate_record_rows.size else np.zeros(0, dtype=np.int64))
     line_headers = _record_headers(master, line_rows[:, 1] if line_rows.size else np.zeros(0, dtype=np.int64))
     continuum_headers = _record_headers(master, continuum_rows[:, 1] if continuum_rows.size else np.zeros(0, dtype=np.int64))
+    mg_type7_rate_record_rows, mg_type7_int_preview, mg_type7_real_preview = _mg_type7_payload_rows(master, rate_record_rows)
 
     manifest = {
         "schema": "xstar_atomic.compact_active_atdb",
-        "schema_version": 1,
+        "schema_version": 2,
         "source_indexing": "one_based_xstar_fortran_indices",
         "active_element_z": list(subset.active_element_z),
         "columns": {
@@ -221,6 +249,9 @@ def build_compact_active_atdb(
             "continuum_rows": ["continuum_index", "continuum_record", "ion_index", "element_z", "ion_stage", "int0", "int1", "int_last_minus_1", "int_last"],
             "rate_record_rows": ["record", "ion_index", "element_z", "ion_stage", "npfi_rate_type", "data_type", "header_rate_type", "continuation", "nreal", "nint", "real_ptr", "int_ptr"],
             "record_headers": ["record", "raw_pointer", "data_type", "rate_type", "continuation", "nreal", "nint", "nchar", "real_ptr", "int_ptr", "char_ptr"],
+            "mg_type7_rate_record_rows": ["record", "ion_index", "element_z", "ion_stage", "npfi_rate_type", "data_type", "header_rate_type", "continuation", "nreal", "nint", "real_ptr", "int_ptr"],
+            "mg_type7_int_preview": ["first_16_source_ints"],
+            "mg_type7_real_preview": ["first_16_source_reals"],
         },
         "counts": {
             "active_ions": int(ion_rows.shape[0]),
@@ -228,6 +259,10 @@ def build_compact_active_atdb(
             "active_lines": int(line_rows.shape[0]),
             "active_continua": int(continuum_rows.shape[0]),
             "active_rate_records": int(rate_record_rows.shape[0]),
+            "mg_type7_rate_records": int(mg_type7_rate_record_rows.shape[0]),
+        },
+        "kernel_notes": {
+            "v0.5.54": "mg_type7_* arrays are the compact payload preview for libxstar_rates.so; Python still evaluates ucalc formulas before C++ builds matrix/rate terms."
         },
     }
     return {
@@ -244,6 +279,9 @@ def build_compact_active_atdb(
         "rate_record_headers": rate_headers,
         "line_record_headers": line_headers,
         "continuum_record_headers": continuum_headers,
+        "mg_type7_rate_record_rows": mg_type7_rate_record_rows,
+        "mg_type7_int_preview": mg_type7_int_preview,
+        "mg_type7_real_preview": mg_type7_real_preview,
     }
 
 
@@ -280,6 +318,9 @@ def export_compact_active_atdb(
         rate_record_headers=payload["rate_record_headers"],
         line_record_headers=payload["line_record_headers"],
         continuum_record_headers=payload["continuum_record_headers"],
+        mg_type7_rate_record_rows=payload["mg_type7_rate_record_rows"],
+        mg_type7_int_preview=payload["mg_type7_int_preview"],
+        mg_type7_real_preview=payload["mg_type7_real_preview"],
     )
     summary_path: Path | None = None
     if write_summary_json:

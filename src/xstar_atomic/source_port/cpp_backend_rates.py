@@ -1,10 +1,12 @@
 """Optional C++ rates backend loader.
 
 This module intentionally exposes only a small status/probe interface in
-v0.5.53.  Real rate evaluation will be added after compact active-ATDB arrays
-are parity-checked.  Keeping the ABI as a plain C interface makes the same C++
-source usable from Python, hydrodynamic post-processing workflows, and a future
-standalone xstar_tools executable.
+v0.5.54 adds a conservative Mg record_type=7 batch kernel.  The
+source-faithful Python ucalc formulas still produce ans1..ans6; this module can
+then ask C++ to build the repeated calc_hmc_ion matrix/rate terms from compact
+arrays.  Keeping the ABI as a plain C interface makes the same C++ source usable
+from Python, hydrodynamic post-processing workflows, and a future standalone
+xstar_tools executable.
 """
 from __future__ import annotations
 
@@ -12,6 +14,9 @@ import ctypes
 from dataclasses import dataclass, asdict
 import os
 from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -88,6 +93,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 ctypes.c_size_t,
             ]
             lib.xstar_rates_eval_mg.restype = ctypes.c_int
+            i64p = np.ctypeslib.ndpointer(dtype=np.int64, ndim=1, flags="C_CONTIGUOUS")
+            f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
+            lib.xstar_rates_build_mg_type7_terms.argtypes = [
+                ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                i64p, i64p, i64p, i64p, i64p, i64p, i64p,
+                f64p, f64p, f64p, f64p, f64p, f64p,
+                ctypes.c_double,
+                i64p, f64p,
+                ctypes.c_char_p, ctypes.c_size_t,
+            ]
+            lib.xstar_rates_build_mg_type7_terms.restype = ctypes.c_int
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -175,3 +191,88 @@ def probe_cpp_mg_rates(*, n_ions: int = 0, n_records: int = 0) -> str:
     if rc != 0:
         raise RuntimeError(message or f"xstar_rates_eval_mg failed with code {rc}")
     return message
+
+
+_ROLE_BY_CODE = {
+    1: "forward_offdiag",
+    2: "reverse_offdiag",
+    3: "forward_diag_loss",
+    4: "reverse_diag_loss",
+}
+
+
+def build_mg_type7_terms_cpp(
+    records: list[dict[str, Any]],
+    *,
+    basis_n_rows: int,
+    term_start: int,
+    hydrogen_density_cm3: float,
+) -> tuple[list[dict[str, Any]], str]:
+    """Build Mg record_type=7 matrix terms with the C++ rates backend.
+
+    The input records must already contain source-faithful Python ``ucalc``
+    results for a single compact Mg ion block, including ans1..ans6, idest1,
+    idest2, compact_start, ion_index, and ion_stage.  C++ owns the repeated
+    calc_hmc_ion four-term construction and endpoint clamping.  It returns
+    dictionaries that map directly onto ``MatrixTerm`` fields, leaving physics
+    formulas in the Python reference path until the next parity milestone.
+    """
+    if not records:
+        return [], "no_records"
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ rates shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+
+    n = len(records)
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
+
+    out_i64 = np.zeros(n * 4 * 16, dtype=np.int64)
+    out_f64 = np.zeros(n * 4 * 4, dtype=np.float64)
+    errbuf = ctypes.create_string_buffer(512)
+    rc = lib.xstar_rates_build_mg_type7_terms(
+        ctypes.c_int(n),
+        ctypes.c_int(int(basis_n_rows)),
+        ctypes.c_int(int(term_start)),
+        i64("record"), i64("data_type"), i64("ion_index"), i64("ion_stage"), i64("compact_start"),
+        i64("idest1"), i64("idest2"),
+        f64("ans1"), f64("ans2"), f64("ans3"), f64("ans4"), f64("ans5"), f64("ans6"),
+        ctypes.c_double(float(hydrogen_density_cm3)),
+        out_i64, out_f64,
+        errbuf, ctypes.c_size_t(len(errbuf)),
+    )
+    message = errbuf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_rates_build_mg_type7_terms failed with code {rc}")
+
+    ints = out_i64.reshape((n * 4, 16))
+    floats = out_f64.reshape((n * 4, 4))
+    terms: list[dict[str, Any]] = []
+    for row_i, row_f in zip(ints, floats):
+        role_code = int(row_i[6])
+        terms.append({
+            "term_index": int(row_i[0]),
+            "record": int(row_i[1]),
+            "data_type": int(row_i[2]),
+            "rate_type": int(row_i[3]),
+            "ion_index": int(row_i[4]),
+            "ion_stage": int(row_i[5]),
+            "role": _ROLE_BY_CODE.get(role_code, f"role_{role_code}"),
+            "row": int(row_i[7]),
+            "column": int(row_i[8]),
+            "idest1": int(row_i[9]),
+            "idest2": int(row_i[10]),
+            "lower_endpoint": int(row_i[11]),
+            "upper_endpoint": int(row_i[12]),
+            "source_row_unclamped": int(row_i[13]),
+            "source_column_unclamped": int(row_i[14]),
+            "source_ipmat_clamped": bool(int(row_i[15])),
+            "aj1": float(row_f[0]),
+            "aj2": float(row_f[1]),
+            "cj": float(row_f[2]),
+            "cj2": float(row_f[3]),
+            "ucalc_status": "evaluated",
+        })
+    return terms, message
