@@ -190,7 +190,7 @@ int xstar_rates_build_mg_type7_terms(
 
 // Build per-line source scalar products for Mg record_type=4 line emissivity.
 // Python still owns source-faithful ucalc and linopac/profile side effects in
-// v0.5.58.  This C ABI owns the repeated scalar arithmetic after ucalc:
+// v0.5.58.  The v0.5.59 Python caller batches records before this C ABI owns the repeated scalar arithmetic after ucalc:
 //   opakb1 = opakab * abund_lower
 //   net = ans2 * abund_upper - ans1 * abund_lower
 //   rcem1/rcem2 = max(net * energy_eV * erg_per_ev * escape_prob, 0)

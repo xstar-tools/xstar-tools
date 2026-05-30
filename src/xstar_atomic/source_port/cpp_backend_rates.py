@@ -342,7 +342,7 @@ def build_mg_type4_line_emissivity_cpp_detailed(
     """Build Mg record_type=4 line-emissivity scalar products in C++.
 
     Python still evaluates source-faithful ``ucalc`` and applies the linopac
-    side effects in v0.5.58.  This backend owns the repeated scalar arithmetic
+    side effects.  v0.5.59 batches contiguous Mg type-4 records before this backend owns the repeated scalar arithmetic
     after ``ucalc`` for ranked Mg line records and returns values that map
     directly to fline/flinel/oplin inputs.
     """

@@ -816,7 +816,7 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
 
 
 def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -> None:
-    for key in ("records_batched", "cpp_calls", "packing_seconds", "cpp_kernel_seconds", "fallback_count", "emitted_matrix_terms"):
+    for key in ("records_batched", "cpp_calls", "packing_seconds", "cpp_kernel_seconds", "fallback_count", "emitted_matrix_terms", "batches_flushed"):
         try:
             total[key] = float(total.get(key, 0.0)) + float(stats.get(key, 0.0) or 0.0)
         except Exception:
@@ -866,7 +866,14 @@ def calc_emis_ion(
         "cpp_kernel_seconds": 0.0,
         "fallback_count": 0.0,
         "emitted_matrix_terms": 0.0,
+        "batches_flushed": 0.0,
     }
+    # v0.5.59: queue Mg record_type=4 scalar work and call the C++ kernel once
+    # per contiguous Mg line block, instead of once per individual line record.
+    # Python still owns ucalc and linopac side effects; this is the safe first
+    # coarse-grained step toward a full Mg calc_emis_all.element C++ backend.
+    pending_cpp_mg_type4_records: list[dict[str, Any]] = []
+    pending_cpp_mg_type4_jobs: list[dict[str, Any]] = []
     visited = 0
     calls = 0
     retained_kkkl = 0
@@ -900,7 +907,105 @@ def calc_emis_ion(
             _accumulate_ucalc_continuum(context.workspace.base, result)
         return result
 
+    def _apply_mg_type4_line_job(job: Mapping[str, Any], cpp_row: Mapping[str, Any] | None) -> None:
+        """Apply one source-ordered Mg line-emissivity side-effect bundle.
+
+        This mirrors the scalar tail of the type-4 line branch.  It is kept
+        intentionally small: no diagnostic-only line-opacity rows are emitted
+        from the batched path unless the backend falls back to the old Python
+        path in future.  Physical arrays and record traces are still updated in
+        source order.
+        """
+        rec0 = int(job["record"])
+        rate_type0 = int(job["rate_type"])
+        header_data_type = int(job["data_type"])
+        idest1_0 = int(job["idest1"])
+        idest2_0 = int(job["idest2"])
+        lower_0 = int(job["lower"])
+        upper_0 = int(job["upper"])
+        line_index_0 = int(job["line_index"])
+        nb1_0 = int(job["nb1"])
+        abund1_0 = float(job["abund1"])
+        abund2_0 = float(job["abund2"])
+        ptmp1_0 = float(job["ptmp1"])
+        ptmp2_0 = float(job["ptmp2"])
+        energy_0 = float(job["energy_ev"])
+        width_0 = float(job["bin_width_ev"])
+        result0 = job["result"]
+        if cpp_row is not None:
+            opakb1_0 = float(cpp_row["opakb1"])
+            rcem1_0 = float(cpp_row["rcem1"])
+            rcem2_0 = float(cpp_row["rcem2"])
+            flinel_delta_0 = float(cpp_row["flinel_delta"])
+        else:
+            opakb1_0 = float(result0.opakab) * float(abund1_0)
+            net_0 = float(result0.ans2) * float(abund2_0) - float(result0.ans1) * float(abund1_0)
+            rcem1_0 = max(net_0 * energy_0 * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1_0, 0.0)
+            rcem2_0 = max(net_0 * energy_0 * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2_0, 0.0)
+            flinel_delta_0 = (rcem1_0 + rcem2_0) * 2.0 / width_0 / XSTAR_CALC_EMISAB_ERG_PER_EV
+        if line_index_0 > 0 and line_index_0 < context.workspace.base.oplin.size:
+            context.workspace.base.oplin[line_index_0] = opakb1_0
+        atomic_mass_0 = _parent_element_atomic_mass(context.master, context.derived, rec0)
+        natural_width_0 = 0.0
+        try:
+            reals_for_line_0 = context.master.record_reals(rec0)
+            if len(reals_for_line_0) > 2:
+                natural_width_0 = float(reals_for_line_0[2]) * 4.136e-15
+        except Exception:
+            natural_width_0 = 0.0
+        _source_linopac_into_opakc(
+            optpp=opakb1_0,
+            rcem1=rcem1_0,
+            rcem2=rcem2_0,
+            line_energy_eV=energy_0,
+            vturb_km_s=float(context.turbulent_velocity_km_s),
+            temperature_1e4K=float(context.temperature_1e4K),
+            atomic_mass_amu=atomic_mass_0,
+            natural_width_eV=natural_width_0,
+            epi=epi,
+            opakc=context.workspace.base.opakc,
+            rccemis=context.workspace.base.rccemis,
+            ncn2=len(epi),
+            diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+        )
+        context.workspace.fline[0, line_index_0] = rcem1_0
+        context.workspace.fline[1, line_index_0] = rcem2_0
+        context.workspace.flinel[nb1_0 - 1] += flinel_delta_0
+        record_traces.append(CalcEmisRecordTrace(
+            rec0, rate_type0, header_data_type, ion.ion_index, ion.ion_stage,
+            compact_offset, idest1_0, idest2_0, lower_0, upper_0, line_index_0,
+            retained_kkkl, abund1_0, abund2_0, ptmp1_0, ptmp2_0,
+            float(result0.ans1), float(result0.ans2), float(result0.ans3), float(result0.ans4), opakb1_0,
+            result0.status.value, f"batched_strong_line_rate_type_{rate_type0}",
+        ))
+
+    def _flush_cpp_mg_type4_batch() -> None:
+        if not pending_cpp_mg_type4_records:
+            return
+        try:
+            cpp_rows, _cpp_message, _cpp_stats = build_mg_type4_line_emissivity_cpp_detailed(
+                pending_cpp_mg_type4_records,
+                erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV,
+            )
+            _cpp_stats = dict(_cpp_stats)
+            _cpp_stats["batches_flushed"] = 1.0
+            _add_cpp_counter_totals(cpp_mg_type4_stats, _cpp_stats)
+            for job, cpp_row in zip(pending_cpp_mg_type4_jobs, cpp_rows):
+                _apply_mg_type4_line_job(job, cpp_row)
+        except Exception:
+            _add_cpp_counter_totals(cpp_mg_type4_stats, {
+                "fallback_count": float(len(pending_cpp_mg_type4_records)),
+                "batches_flushed": 1.0,
+            })
+            for job in pending_cpp_mg_type4_jobs:
+                _apply_mg_type4_line_job(job, None)
+        finally:
+            pending_cpp_mg_type4_records.clear()
+            pending_cpp_mg_type4_jobs.clear()
+
     for rate_type, rec in record_sequence:
+        if pending_cpp_mg_type4_records and int(rate_type) != 4:
+            _flush_cpp_mg_type4_batch()
         visited += 1
         _record_t0 = time.perf_counter() if is_mg_profile else 0.0
         header = context.master.header(rec)
@@ -1029,33 +1134,46 @@ def calc_emis_ion(
                     width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
                     cpp_line_row = None
                     if use_cpp_mg_type4_line and int(rate_type) == 4:
-                        try:
-                            cpp_rows, _cpp_message, _cpp_stats = build_mg_type4_line_emissivity_cpp_detailed(
-                                [{
-                                    "record": int(rec),
-                                    "data_type": int(header.data_type),
-                                    "ion_index": int(ion.ion_index),
-                                    "ion_stage": int(ion.ion_stage),
-                                    "line_index": int(line_index),
-                                    "nb1": int(nb1),
-                                    "ans1": float(result.ans1),
-                                    "ans2": float(result.ans2),
-                                    "opakab": float(result.opakab),
-                                    "abund1": float(abund1),
-                                    "abund2": float(abund2),
-                                    "ptmp1": float(ptmp1),
-                                    "ptmp2": float(ptmp2),
-                                    "energy_ev": float(energy),
-                                    "bin_width_ev": float(width),
-                                }],
-                                erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV,
-                            )
-                            if cpp_rows:
-                                cpp_line_row = cpp_rows[0]
-                            _add_cpp_counter_totals(cpp_mg_type4_stats, _cpp_stats)
-                        except Exception:
-                            _add_cpp_counter_totals(cpp_mg_type4_stats, {"fallback_count": 1.0})
-                            cpp_line_row = None
+                        pending_cpp_mg_type4_records.append({
+                            "record": int(rec),
+                            "data_type": int(header.data_type),
+                            "ion_index": int(ion.ion_index),
+                            "ion_stage": int(ion.ion_stage),
+                            "line_index": int(line_index),
+                            "nb1": int(nb1),
+                            "ans1": float(result.ans1),
+                            "ans2": float(result.ans2),
+                            "opakab": float(result.opakab),
+                            "abund1": float(abund1),
+                            "abund2": float(abund2),
+                            "ptmp1": float(ptmp1),
+                            "ptmp2": float(ptmp2),
+                            "energy_ev": float(energy),
+                            "bin_width_ev": float(width),
+                        })
+                        pending_cpp_mg_type4_jobs.append({
+                            "record": int(rec),
+                            "rate_type": int(rate_type),
+                            "data_type": int(header.data_type),
+                            "idest1": int(idest1),
+                            "idest2": int(idest2),
+                            "lower": int(lower),
+                            "upper": int(upper),
+                            "line_index": int(line_index),
+                            "nb1": int(nb1),
+                            "abund1": float(abund1),
+                            "abund2": float(abund2),
+                            "ptmp1": float(ptmp1),
+                            "ptmp2": float(ptmp2),
+                            "energy_ev": float(energy),
+                            "bin_width_ev": float(width),
+                            "result": result,
+                        })
+                        if is_mg_profile:
+                            _elapsed = time.perf_counter() - _record_t0
+                            _record_type_elapsed["line"] = _record_type_elapsed.get("line", 0.0) + _elapsed
+                            _rate_type_elapsed[int(rate_type)] = _rate_type_elapsed.get(int(rate_type), 0.0) + _elapsed
+                        continue
                     # Source handoff correction, v0.5.05.
                     #
                     # In the Fortran line branch, ucalc receives caller-owned
@@ -1243,6 +1361,8 @@ def calc_emis_ion(
             _record_type_elapsed[_kind] = _record_type_elapsed.get(_kind, 0.0) + _elapsed
             _rate_type_elapsed[int(rate_type)] = _rate_type_elapsed.get(int(rate_type), 0.0) + _elapsed
 
+    _flush_cpp_mg_type4_batch()
+
     if any(float(v) != 0.0 for v in cpp_mg_type4_stats.values()):
         record_profile_event(
             profile_control,
@@ -1259,6 +1379,7 @@ def calc_emis_ion(
             cpp_kernel_seconds=float(cpp_mg_type4_stats.get("cpp_kernel_seconds", 0.0)),
             fallback_count=float(cpp_mg_type4_stats.get("fallback_count", 0.0)),
             emitted_matrix_terms=float(cpp_mg_type4_stats.get("emitted_matrix_terms", 0.0)),
+            batches_flushed=float(cpp_mg_type4_stats.get("batches_flushed", 0.0)),
             status="cpp_or_fallback",
         )
 

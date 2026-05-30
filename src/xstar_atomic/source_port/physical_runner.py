@@ -2324,7 +2324,7 @@ def run_xstar_from_parameters(
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
                 "matrix_backend": {"requested": backend_selection.matrix_backend, "active": "python", "cpp_available": False, "status": "skeleton_not_yet_implemented"},
-                "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_line_scalar_kernel_available_via_libxstar_rates"},
+                "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_line_block_batch_kernel_available_via_libxstar_rates"},
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "aggregate_timing_summary": summarize_profile(state.control),
