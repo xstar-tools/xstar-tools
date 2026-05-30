@@ -28,6 +28,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
+from .. import __version__ as XSTAR_ATOMIC_VERSION
 from ..data import resolve_atdb_path
 from ..xstar_run import XSTARInputParameters, parse_xstar_command
 from .atomic_database import (
@@ -165,6 +166,58 @@ def _append_xout_step_timing_footer(
     ]
     with path.open("a", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
+
+def _prepend_xout_step_startup_provenance(
+    out: Path,
+    *,
+    state: XSTARPythonState,
+    built: AtomicDatabaseBuildResult,
+) -> None:
+    """Prepend source-like version and ATDB provenance to ``xout_step.log``.
+
+    Original XSTAR writes this block before the runtime report.  The Python
+    product writer builds ``xout_step.log`` in one pass, so we prepend the
+    equivalent immutable provenance after the file is written.  The values are
+    reporting-only and do not alter physics arrays.
+    """
+    path = out / "xout_step.log"
+    if not path.exists():
+        return
+    try:
+        existing = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        existing = path.read_text(encoding="latin-1")
+    if "xstar_tools version" in existing or "xstar_atomic version" in existing:
+        return
+
+    master = built.master
+    derived = built.derived
+    ncn2 = int(state.control.get("ncn2", 9999))
+    nry = int(state.control.get("nry", 0))
+    if nry <= 0:
+        try:
+            nry = int(nbinc(13.6, state.radiation.epi, ncn2) + 2)
+        except Exception:
+            nry = 0
+    date = str(getattr(master, "creation_date", "") or state.control.get("atcredate", "")).strip()
+    lines = [
+        f" xstar_tools version {XSTAR_ATOMIC_VERSION} (xstar_atomic {XSTAR_ATOMIC_VERSION})",
+        f" nry={nry:12d}{ncn2:12d}",
+        f" xstar_tools version {XSTAR_ATOMIC_VERSION} (xstar_atomic {XSTAR_ATOMIC_VERSION})",
+        " Loading Atomic Database...",
+        f" Atomic Data Version: {date}",
+        " in readtbl:",
+        f" number of pointers={int(getattr(master, 'np2', 0)):12d}",
+        f" number of reals={int(getattr(master, 'np1r', 0)):12d}",
+        f" number of integers={int(getattr(master, 'np1i', 0)):12d}",
+        f" number of characters={int(getattr(master, 'np1k', 0)):12d}",
+        " initializng database...",
+        f" number of lines={int(getattr(derived, 'nlsvn', 0)):12d}",
+        f" number of rrcs={int(getattr(derived, 'ncsvn', 0)):12d}",
+        " done with setptrs",
+        "",
+    ]
+    path.write_text("\n".join(lines) + existing, encoding="utf-8")
 
 def _normalize_diagnostics_mode(value: str | None) -> str:
     """Return the supported optional-diagnostic mode.
@@ -2054,9 +2107,7 @@ def run_xstar_from_parameters(
     diagnostics_mode: str = "full",
     active_subset: bool = True,
     profile_components: str | bool = "none",
-    profile_rss: bool = False,
     mg_line_kernel: str = "python",
-    mg_matrix_backend: str = "python",
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     total_start_time = time.perf_counter()
@@ -2104,9 +2155,7 @@ def run_xstar_from_parameters(
     state.control["diagnostics_mode"] = diagnostics_mode
     state.control["active_subset_enabled"] = bool(active_subset)
     state.control["profile_components"] = normalize_profile_level(profile_components)
-    state.control["profile_rss"] = bool(profile_rss)
     state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
-    state.control["mg_matrix_backend"] = str(mg_matrix_backend).strip().lower()
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
     state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = high_volume_diagnostics
@@ -2156,6 +2205,7 @@ def run_xstar_from_parameters(
             final_local_recompute=True,
         )
         writer_elapsed = time.perf_counter() - writer_start_time
+        _prepend_xout_step_startup_provenance(out, state=state, built=built)
         # The current writer API builds/writes the four final products as one
         # source-sequence call.  Record the exact aggregate elapsed time on
         # writespectra and explicit zeroes for the subordinate product writers
@@ -2228,9 +2278,7 @@ def run_xstar_from_parameters(
                 "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
                 "profile_components_enabled": normalize_profile_level(profile_components) != "none",
                 "profile_components_level": normalize_profile_level(profile_components),
-                "profile_rss_enabled": bool(profile_rss),
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
-                "mg_matrix_backend": str(mg_matrix_backend).strip().lower(),
                 "performance_profile_summary": summarize_profile(state.control),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
@@ -2278,9 +2326,7 @@ def run_xstar_python(
     diagnostics_mode: str = "full",
     active_subset: bool = True,
     profile_components: str | bool = "none",
-    profile_rss: bool = False,
     mg_line_kernel: str = "python",
-    mg_matrix_backend: str = "python",
     **parameters: Any,
 ) -> XSTARPythonRunResult:
     """Run ported XSTAR using ordinary XSTAR keyword arguments.
@@ -2314,9 +2360,7 @@ def run_xstar_python(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
-        profile_rss=profile_rss,
         mg_line_kernel=mg_line_kernel,
-        mg_matrix_backend=mg_matrix_backend,
     )
 
 
@@ -2342,9 +2386,7 @@ def run_xstar_python_command(
     diagnostics_mode: str = "full",
     active_subset: bool = True,
     profile_components: str | bool = "none",
-    profile_rss: bool = False,
     mg_line_kernel: str = "python",
-    mg_matrix_backend: str = "python",
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2361,9 +2403,7 @@ def run_xstar_python_command(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
-        profile_rss=profile_rss,
         mg_line_kernel=mg_line_kernel,
-        mg_matrix_backend=mg_matrix_backend,
     )
 
 
@@ -2381,9 +2421,7 @@ def run_xstar_python_script(
     diagnostics_mode: str = "full",
     active_subset: bool = True,
     profile_components: str | bool = "none",
-    profile_rss: bool = False,
     mg_line_kernel: str = "python",
-    mg_matrix_backend: str = "python",
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2402,9 +2440,7 @@ def run_xstar_python_script(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
-        profile_rss=profile_rss,
         mg_line_kernel=mg_line_kernel,
-        mg_matrix_backend=mg_matrix_backend,
     )
 
 
@@ -2585,9 +2621,7 @@ def run_c5_ne1_acceptance(
     diagnostics_mode: str = "full",
     active_subset: bool = True,
     profile_components: str | bool = "none",
-    profile_rss: bool = False,
     mg_line_kernel: str = "python",
-    mg_matrix_backend: str = "python",
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2602,9 +2636,7 @@ def run_c5_ne1_acceptance(
         diagnostics_mode=diagnostics_mode,
         active_subset=active_subset,
         profile_components=profile_components,
-        profile_rss=profile_rss,
         mg_line_kernel=mg_line_kernel,
-        mg_matrix_backend=mg_matrix_backend,
     )
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)

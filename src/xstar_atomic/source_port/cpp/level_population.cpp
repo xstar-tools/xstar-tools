@@ -180,11 +180,11 @@ void write_error(char* err, size_t err_len, const std::string& msg) {
 extern "C" {
 
 int xstar_solver_abi_version() {
-    return 2;
+    return 1;
 }
 
 const char* xstar_solver_backend_name() {
-    return "xstar_solver_so_leqt2f_mg_matrix_v2";
+    return "xstar_solver_so_leqt2f_v1";
 }
 
 int xstar_solver_leqt2f(
@@ -213,74 +213,6 @@ int xstar_solver_leqt2f(
         return 1;
     } catch (...) {
         write_error(error_message, error_message_len, "unknown C++ exception in xstar_solver_leqt2f");
-        return 2;
-    }
-}
-
-
-int xstar_solver_fill_matrices(
-    int n,
-    int n_terms,
-    const int* rows_one_based,
-    const int* cols_one_based,
-    const double* aj1,
-    const double* cj,
-    const double* cj2,
-    int normalization_row_one_based,
-    double* dense,
-    double* heat,
-    double* heat2,
-    double* normalized,
-    double* rhs,
-    int zero_outputs,
-    char* error_message,
-    size_t error_message_len
-) {
-    try {
-        if (n <= 0) throw std::runtime_error("xstar_solver_fill_matrices requires n > 0");
-        if (n_terms < 0) throw std::runtime_error("xstar_solver_fill_matrices requires n_terms >= 0");
-        if (rows_one_based == nullptr || cols_one_based == nullptr || aj1 == nullptr || cj == nullptr || cj2 == nullptr) {
-            throw std::runtime_error("null compact term input pointer in xstar_solver_fill_matrices");
-        }
-        if (dense == nullptr || heat == nullptr || heat2 == nullptr || normalized == nullptr || rhs == nullptr) {
-            throw std::runtime_error("null matrix output pointer in xstar_solver_fill_matrices");
-        }
-        if (normalization_row_one_based < 1 || normalization_row_one_based > n) {
-            throw std::runtime_error("normalization row outside matrix dimension in xstar_solver_fill_matrices");
-        }
-        const size_t nn = static_cast<size_t>(n) * static_cast<size_t>(n);
-        if (zero_outputs != 0) {
-            std::fill(dense, dense + nn, 0.0);
-            std::fill(heat, heat + nn, 0.0);
-            std::fill(heat2, heat2 + nn, 0.0);
-            std::fill(normalized, normalized + nn, 0.0);
-            std::fill(rhs, rhs + static_cast<size_t>(n), 0.0);
-        }
-        for (int k = 0; k < n_terms; ++k) {
-            const int r = rows_one_based[k] - 1;
-            const int c = cols_one_based[k] - 1;
-            if (r < 0 || r >= n || c < 0 || c >= n) {
-                throw std::runtime_error("compact matrix term index outside matrix dimension at term " + std::to_string(k));
-            }
-            const size_t idx = static_cast<size_t>(r) * static_cast<size_t>(n) + static_cast<size_t>(c);
-            dense[idx] += aj1[k];
-            heat[idx] += cj[k];
-            heat2[idx] += cj2[k];
-        }
-        std::memcpy(normalized, dense, nn * sizeof(double));
-        const int norm_row = normalization_row_one_based - 1;
-        for (int c = 0; c < n; ++c) {
-            normalized[static_cast<size_t>(norm_row) * static_cast<size_t>(n) + static_cast<size_t>(c)] = 1.0;
-        }
-        std::fill(rhs, rhs + static_cast<size_t>(n), 0.0);
-        rhs[static_cast<size_t>(norm_row)] = 1.0;
-        write_error(error_message, error_message_len, "");
-        return 0;
-    } catch (const std::exception& exc) {
-        write_error(error_message, error_message_len, exc.what());
-        return 1;
-    } catch (...) {
-        write_error(error_message, error_message_len, "unknown C++ exception in xstar_solver_fill_matrices");
         return 2;
     }
 }

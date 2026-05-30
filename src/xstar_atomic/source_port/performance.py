@@ -69,23 +69,6 @@ def performance_enabled(control: MutableMapping[str, Any]) -> bool:
     return profile_level_at_least(control, "summary")
 
 
-def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
-    """Return whether profiling rows should include RSS fields.
-
-    This is intentionally separate from progress-memory.  ``--progress-memory``
-    controls only live progress-line RSS printing, while this flag controls
-    whether stored ``profile_component`` rows read /proc/self/status and carry
-    ``rss_start_mb``, ``rss_end_mb``, and ``rss_delta_mb`` fields.
-    Default benchmark timing should leave this off because per-row RSS sampling
-    adds noise and makes users think progress-memory is still enabled.
-    """
-    value = control.get("profile_rss", False)
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on", "memory", "rss"}
-
-
-
 def record_profile_event(
     control: MutableMapping[str, Any],
     name: str,
@@ -106,10 +89,9 @@ def record_profile_event(
         "component": str(name),
         "elapsed_seconds": float(elapsed_seconds),
     }
-    if profile_rss_enabled(control):
-        rss = current_rss_mb()
-        if rss is not None:
-            record["rss_end_mb"] = float(rss)
+    rss = current_rss_mb()
+    if rss is not None:
+        record["rss_end_mb"] = float(rss)
     record.update(metadata)
     _append_profile(control, record)
     callback = emit_progress or control.get("progress_callback")
@@ -135,13 +117,12 @@ def profile_component(
         yield
         return
     t0 = time.perf_counter()
-    use_rss = profile_rss_enabled(control)
-    rss0 = current_rss_mb() if use_rss else None
+    rss0 = current_rss_mb()
     try:
         yield
     finally:
         t1 = time.perf_counter()
-        rss1 = current_rss_mb() if use_rss else None
+        rss1 = current_rss_mb()
         record: dict[str, Any] = {
             "component": str(name),
             "elapsed_seconds": float(t1 - t0),

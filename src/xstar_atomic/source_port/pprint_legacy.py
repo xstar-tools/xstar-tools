@@ -620,7 +620,7 @@ def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyP
         buf.log_lines.append(
             f"{int(getattr(row, 'line_index', 0)):10d}{wave:13.5E} {ion:<8s}"
             f"{float(elum[0, idx]):13.5E}{float(elum[1, idx]):13.5E}"
-            f"{float(tau0[0, idx]):13.5E}{float(tau0[1, idx]):13.5E}{label}"
+            f"{float(tau0[0, idx]):13.5E}{float(tau0[1, idx]):13.5E} {label}"
         )
     buf.source_calls.append("pprint(15)")
 

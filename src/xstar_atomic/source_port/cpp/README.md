@@ -7,8 +7,8 @@ xstar_tools.xstar.solver.backend
 src/xstar_atomic/source_port/cpp/
 ```
 
-v0.5.51 keeps optional C++ kernels for the source-faithful dense
-`leqt2f` level-population solve and the Mg compact matrix fill path. The Python implementation remains the
+v0.5.45 keeps one optional C++ kernel for the source-faithful dense
+`leqt2f` level-population solve. The Python implementation remains the
 reference backend. Build/install environments without a C++ compiler keep the
 pure-Python path.
 
@@ -64,10 +64,7 @@ Python.
 
 Keep the C ABI small and stable. Python owns ATDB loading, runtime state,
 radial stepping, diagnostics, and FITS writing. C++ should receive compact
-numeric arrays and return compact numeric arrays. The Mg matrix backend follows
-this rule by receiving one-based compact term arrays and returning dense,
-heat, normalized, and RHS arrays while Python remains responsible for ATDB
-traversal and source-faithful rate evaluation. This makes the code easy to
+numeric arrays and return compact numeric arrays. This makes the code easy to
 move later into the accepted `xstar_tools.xstar.solver` package layout.
 
 

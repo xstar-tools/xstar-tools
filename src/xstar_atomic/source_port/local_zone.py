@@ -824,7 +824,6 @@ def calc_hmc_all(
             initial_leveltemp_workspace=leveltemp_workspace,
             initial_leveltemp_owner_by_column=leveltemp_owner_by_column,
             profile_control=_profile_map,
-            mg_matrix_backend=str((_profile_map or {}).get("mg_matrix_backend", "python")),
         )
         with profile_component(
             profile_control or {},
