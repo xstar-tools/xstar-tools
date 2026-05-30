@@ -31,7 +31,7 @@ import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
-from .performance import add_profile_counter, profile_backend_calls_enabled, profile_component, profile_level_at_least, record_profile_event
+from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
@@ -1433,10 +1433,14 @@ def assemble_element_matrix(
                     new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
                 except Exception as exc:
                     if is_mg_summary_profile:
-                        _stats_payload = dict(
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
+                            0.0,
                             element_z=int(element_z),
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_rates.so:xstar_rates_build_mg_type7_terms",
                             records_batched=float(len(pending_cpp_type7)),
                             cpp_calls=0.0,
@@ -1447,19 +1451,6 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
-                        add_profile_counter(
-                            profile_control,
-                            "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
-                            elapsed_seconds=0.0,
-                            **_stats_payload,
-                        )
-                        if profile_backend_calls_enabled(profile_control):
-                            record_profile_event(
-                                profile_control,
-                                "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
-                                0.0,
-                                **_stats_payload,
-                            )
                     # Safe fallback: auto/cpp selection must never change physics
                     # availability.  Fall back to the Python source-faithful term
                     # builder for this ion and annotate diagnostic rows.
@@ -1494,11 +1485,14 @@ def assemble_element_matrix(
                             summary.n_matrix_terms += len(new_terms)
                 else:
                     if is_mg_summary_profile:
-                        _stats_elapsed = float(cpp_stats.get("packing_seconds", 0.0)) + float(cpp_stats.get("cpp_kernel_seconds", 0.0))
-                        _stats_payload = dict(
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
+                            float(cpp_stats.get("packing_seconds", 0.0)) + float(cpp_stats.get("cpp_kernel_seconds", 0.0)),
                             element_z=int(element_z),
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_rates.so:xstar_rates_build_mg_type7_terms",
                             records_batched=float(cpp_stats.get("records_batched", len(pending_cpp_type7))),
                             cpp_calls=float(cpp_stats.get("cpp_calls", 1.0)),
@@ -1508,19 +1502,6 @@ def assemble_element_matrix(
                             emitted_matrix_terms=float(cpp_stats.get("emitted_matrix_terms", len(new_terms))),
                             status="cpp",
                         )
-                        add_profile_counter(
-                            profile_control,
-                            "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
-                            elapsed_seconds=_stats_elapsed,
-                            **_stats_payload,
-                        )
-                        if profile_backend_calls_enabled(profile_control):
-                            record_profile_event(
-                                profile_control,
-                                "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
-                                _stats_elapsed,
-                                **_stats_payload,
-                            )
                     for offset, (_pending_result, record_row_index) in enumerate(pending_cpp_type7):
                         group = new_terms[4 * offset : 4 * offset + 4]
                         record_results[record_row_index]["rates_backend"] = "cpp_mg_type7_matrix_terms"

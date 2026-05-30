@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from collections.abc import MutableMapping
 import json
 import math
+import os
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,6 +54,7 @@ from .emissivity import (
 )
 from .free_free import FreeFreeResult, freef
 from .performance import profile_component, profile_level_at_least, record_profile_event
+from .cpp_backend_rates import build_mg_type4_line_emissivity_cpp_detailed, rates_backend_status
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
@@ -799,6 +801,27 @@ def _compact_mg_line_emissivity_table(
     return table
 
 
+
+
+def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
+    requested = None
+    control = getattr(context, "profile_control", None)
+    if isinstance(control, MutableMapping):
+        backend_selection = control.get("backend_selection")
+        if isinstance(backend_selection, Mapping):
+            requested = str(backend_selection.get("emissivity_backend", "python"))
+    requested = requested or os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND") or "python"
+    status = rates_backend_status(requested=requested)
+    return bool(status.active == "cpp" and (int(status.cpp_feature_flags or 0) & 4))
+
+
+def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -> None:
+    for key in ("records_batched", "cpp_calls", "packing_seconds", "cpp_kernel_seconds", "fallback_count", "emitted_matrix_terms"):
+        try:
+            total[key] = float(total.get(key, 0.0)) + float(stats.get(key, 0.0) or 0.0)
+        except Exception:
+            total[key] = float(total.get(key, 0.0))
+
 def calc_emis_ion(
     context: CalcEmisContext,
     *,
@@ -832,6 +855,18 @@ def calc_emis_ion(
         mg_line_table = _compact_mg_line_emissivity_table(
             context, ion, record_sequence, levels, line_rank_table, epi
         )
+    use_cpp_mg_type4_line = (
+        int(getattr(ion, "element_z", 0)) == 12
+        and _emissivity_cpp_active_for_mg_type4(context)
+    )
+    cpp_mg_type4_stats: dict[str, float] = {
+        "records_batched": 0.0,
+        "cpp_calls": 0.0,
+        "packing_seconds": 0.0,
+        "cpp_kernel_seconds": 0.0,
+        "fallback_count": 0.0,
+        "emitted_matrix_terms": 0.0,
+    }
     visited = 0
     calls = 0
     retained_kkkl = 0
@@ -991,6 +1026,36 @@ def calc_emis_ion(
                     ptmp1 = pescl(tau1) * (1.0 - context.covering_fraction)
                     ptmp2 = pescl(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescl(tau1 + tau2) * context.covering_fraction
                     result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
+                    width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
+                    cpp_line_row = None
+                    if use_cpp_mg_type4_line and int(rate_type) == 4:
+                        try:
+                            cpp_rows, _cpp_message, _cpp_stats = build_mg_type4_line_emissivity_cpp_detailed(
+                                [{
+                                    "record": int(rec),
+                                    "data_type": int(header.data_type),
+                                    "ion_index": int(ion.ion_index),
+                                    "ion_stage": int(ion.ion_stage),
+                                    "line_index": int(line_index),
+                                    "nb1": int(nb1),
+                                    "ans1": float(result.ans1),
+                                    "ans2": float(result.ans2),
+                                    "opakab": float(result.opakab),
+                                    "abund1": float(abund1),
+                                    "abund2": float(abund2),
+                                    "ptmp1": float(ptmp1),
+                                    "ptmp2": float(ptmp2),
+                                    "energy_ev": float(energy),
+                                    "bin_width_ev": float(width),
+                                }],
+                                erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV,
+                            )
+                            if cpp_rows:
+                                cpp_line_row = cpp_rows[0]
+                            _add_cpp_counter_totals(cpp_mg_type4_stats, _cpp_stats)
+                        except Exception:
+                            _add_cpp_counter_totals(cpp_mg_type4_stats, {"fallback_count": 1.0})
+                            cpp_line_row = None
                     # Source handoff correction, v0.5.05.
                     #
                     # In the Fortran line branch, ucalc receives caller-owned
@@ -1003,10 +1068,20 @@ def calc_emis_ion(
                     # kappa above ``ectt`` nearly zero, so the radial Courant
                     # limiter skipped the intermediate column substeps.  Bin the
                     # line opacity at the same source ``nb1`` used for ``flinel``.
-                    opakb1 = float(result.opakab) * float(abund1)
+                    if cpp_line_row is not None:
+                        opakb1 = float(cpp_line_row["opakb1"])
+                        net = float(cpp_line_row["net"])
+                        rcem1 = float(cpp_line_row["rcem1"])
+                        rcem2 = float(cpp_line_row["rcem2"])
+                        flinel_delta = float(cpp_line_row["flinel_delta"])
+                    else:
+                        opakb1 = float(result.opakab) * float(abund1)
+                        net = result.ans2 * abund2 - result.ans1 * abund1
+                        rcem1 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
+                        rcem2 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
+                        flinel_delta = (rcem1 + rcem2) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
                     if line_index > 0 and line_index < context.workspace.base.oplin.size:
                         context.workspace.base.oplin[line_index] = opakb1
-                    net = result.ans2 * abund2 - result.ans1 * abund1
                     atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
                     natural_width = 0.0
                     try:
@@ -1018,8 +1093,8 @@ def calc_emis_ion(
                     _line_opakc_before = context.workspace.base.opakc.copy() if diagnostics_enabled else None
                     _linopac_diag = _source_linopac_into_opakc(
                         optpp=opakb1,
-                        rcem1=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0),
-                        rcem2=max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0),
+                        rcem1=rcem1,
+                        rcem2=rcem2,
                         line_energy_eV=energy,
                         vturb_km_s=float(context.turbulent_velocity_km_s),
                         temperature_1e4K=float(context.temperature_1e4K),
@@ -1144,12 +1219,9 @@ def calc_emis_ion(
                                 "python_vs_fortran_opsum_sume_contract": "compare linopac_source_opsum_over_sume_by_bin['3877'] with instrumented Fortran linopac.f90 opsum/sume for the same line",
                                 **{f"linopac_{k}": v for k, v in _linopac_diag.items()},
                             })
-                    context.workspace.fline[0, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
-                    context.workspace.fline[1, line_index] = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
-                    width = float(epi[nb1] - epi[max(1, nb1 - 1) - 1])
-                    context.workspace.flinel[nb1 - 1] += (
-                        context.workspace.fline[0, line_index] + context.workspace.fline[1, line_index]
-                    ) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
+                    context.workspace.fline[0, line_index] = rcem1
+                    context.workspace.fline[1, line_index] = rcem2
+                    context.workspace.flinel[nb1 - 1] += flinel_delta
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, line_index,
@@ -1170,6 +1242,25 @@ def calc_emis_ion(
                 _kind = "other"
             _record_type_elapsed[_kind] = _record_type_elapsed.get(_kind, 0.0) + _elapsed
             _rate_type_elapsed[int(rate_type)] = _rate_type_elapsed.get(int(rate_type), 0.0) + _elapsed
+
+    if any(float(v) != 0.0 for v in cpp_mg_type4_stats.values()):
+        record_profile_event(
+            profile_control,
+            "calc_emis_all.element.mg_type4_cpp_kernel",
+            float(cpp_mg_type4_stats.get("packing_seconds", 0.0)) + float(cpp_mg_type4_stats.get("cpp_kernel_seconds", 0.0)),
+            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+            element_z=int(ion.element_z),
+            ion_stage=int(ion.ion_stage),
+            ion_index=int(ion.ion_index),
+            source_routine="libxstar_rates.so:xstar_rates_build_mg_type4_line_emissivity",
+            records_batched=float(cpp_mg_type4_stats.get("records_batched", 0.0)),
+            cpp_calls=float(cpp_mg_type4_stats.get("cpp_calls", 0.0)),
+            packing_seconds=float(cpp_mg_type4_stats.get("packing_seconds", 0.0)),
+            cpp_kernel_seconds=float(cpp_mg_type4_stats.get("cpp_kernel_seconds", 0.0)),
+            fallback_count=float(cpp_mg_type4_stats.get("fallback_count", 0.0)),
+            emitted_matrix_terms=float(cpp_mg_type4_stats.get("emitted_matrix_terms", 0.0)),
+            status="cpp_or_fallback",
+        )
 
     if is_mg_profile:
         _ion_elapsed = time.perf_counter() - _ion_t0

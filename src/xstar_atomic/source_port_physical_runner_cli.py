@@ -178,10 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile-backend-calls",
         action="store_true",
-        help=(
-            "emit per-call backend profile rows to progress output; disabled by default. "
-            "Backend counters are still accumulated in memory and written once to summary JSON."
-        ),
+        help="emit per-call C++ backend profile rows to live progress; summary counters are still accumulated when this is disabled",
     )
     parser.add_argument(
         "--mg-line-kernel",

@@ -105,6 +105,19 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 ctypes.c_char_p, ctypes.c_size_t,
             ]
             lib.xstar_rates_build_mg_type7_terms.restype = ctypes.c_int
+            try:
+                lib.xstar_rates_build_mg_type4_line_emissivity.argtypes = [
+                    ctypes.c_int,
+                    i64p, i64p, i64p, i64p, i64p, i64p,
+                    f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double,
+                    i64p, f64p,
+                    ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_rates_build_mg_type4_line_emissivity.restype = ctypes.c_int
+            except AttributeError:
+                # Older v0.5.54-v0.5.57 libraries do not expose the line-emissivity kernel.
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -318,3 +331,105 @@ def build_mg_type7_terms_cpp(
         hydrogen_density_cm3=hydrogen_density_cm3,
     )
     return terms, message
+
+
+
+def build_mg_type4_line_emissivity_cpp_detailed(
+    records: list[dict[str, Any]],
+    *,
+    erg_per_ev: float,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Build Mg record_type=4 line-emissivity scalar products in C++.
+
+    Python still evaluates source-faithful ``ucalc`` and applies the linopac
+    side effects in v0.5.58.  This backend owns the repeated scalar arithmetic
+    after ``ucalc`` for ranked Mg line records and returns values that map
+    directly to fline/flinel/oplin inputs.
+    """
+    if not records:
+        return [], "no_records", {
+            "records_batched": 0.0,
+            "cpp_calls": 0.0,
+            "packing_seconds": 0.0,
+            "cpp_kernel_seconds": 0.0,
+            "fallback_count": 0.0,
+            "emitted_matrix_terms": 0.0,
+        }
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ rates shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    if not hasattr(lib, "xstar_rates_build_mg_type4_line_emissivity"):
+        raise RuntimeError("C++ rates shared library does not expose xstar_rates_build_mg_type4_line_emissivity")
+
+    n = len(records)
+    packing_t0 = time.perf_counter()
+
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
+
+    record_arr = i64("record")
+    data_type_arr = i64("data_type")
+    ion_index_arr = i64("ion_index")
+    ion_stage_arr = i64("ion_stage")
+    line_index_arr = i64("line_index")
+    nb1_arr = i64("nb1")
+    ans1_arr = f64("ans1")
+    ans2_arr = f64("ans2")
+    opakab_arr = f64("opakab")
+    abund1_arr = f64("abund1")
+    abund2_arr = f64("abund2")
+    ptmp1_arr = f64("ptmp1")
+    ptmp2_arr = f64("ptmp2")
+    energy_arr = f64("energy_ev")
+    width_arr = f64("bin_width_ev")
+    out_i64 = np.zeros(n * 8, dtype=np.int64)
+    out_f64 = np.zeros(n * 5, dtype=np.float64)
+    packing_seconds = time.perf_counter() - packing_t0
+
+    errbuf = ctypes.create_string_buffer(512)
+    cpp_t0 = time.perf_counter()
+    rc = lib.xstar_rates_build_mg_type4_line_emissivity(
+        ctypes.c_int(n),
+        record_arr, data_type_arr, ion_index_arr, ion_stage_arr, line_index_arr, nb1_arr,
+        ans1_arr, ans2_arr, opakab_arr, abund1_arr, abund2_arr, ptmp1_arr, ptmp2_arr,
+        energy_arr, width_arr,
+        ctypes.c_double(float(erg_per_ev)),
+        out_i64, out_f64,
+        errbuf, ctypes.c_size_t(len(errbuf)),
+    )
+    cpp_kernel_seconds = time.perf_counter() - cpp_t0
+    message = errbuf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_rates_build_mg_type4_line_emissivity failed with code {rc}")
+
+    ints = out_i64.reshape((n, 8))
+    floats = out_f64.reshape((n, 5))
+    rows: list[dict[str, Any]] = []
+    for row_i, row_f in zip(ints, floats):
+        rows.append({
+            "record": int(row_i[0]),
+            "data_type": int(row_i[1]),
+            "rate_type": int(row_i[2]),
+            "ion_index": int(row_i[3]),
+            "ion_stage": int(row_i[4]),
+            "line_index": int(row_i[5]),
+            "nb1": int(row_i[6]),
+            "status_code": int(row_i[7]),
+            "opakb1": float(row_f[0]),
+            "net": float(row_f[1]),
+            "rcem1": float(row_f[2]),
+            "rcem2": float(row_f[3]),
+            "flinel_delta": float(row_f[4]),
+        })
+    stats = {
+        "records_batched": float(n),
+        "cpp_calls": 1.0,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": 0.0,
+        "emitted_matrix_terms": 0.0,
+    }
+    return rows, message, stats
