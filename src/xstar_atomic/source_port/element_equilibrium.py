@@ -1406,6 +1406,13 @@ def assemble_element_matrix(
             if pending_cpp_type7:
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                 cpp_input: List[Dict[str, Any]] = []
+                cpp_stats: Dict[str, Any] = {
+                    "records_batched": int(len(pending_cpp_type7)),
+                    "cpp_calls": 0,
+                    "packing_seconds": 0.0,
+                    "cpp_kernel_seconds": 0.0,
+                    "emitted_matrix_terms": 0,
+                }
                 try:
                     for pending_result, _record_row_index in pending_cpp_type7:
                         cpp_input.append({
@@ -1423,17 +1430,19 @@ def assemble_element_matrix(
                             "ans5": float(pending_result.ans5),
                             "ans6": float(pending_result.ans6),
                         })
-                    cpp_rows, cpp_message = build_mg_type7_terms_cpp(
+                    cpp_rows, cpp_message, cpp_stats = build_mg_type7_terms_cpp(
                         cpp_input,
                         basis_n_rows=basis.n_rows,
                         term_start=len(terms) + 1,
                         hydrogen_density_cm3=context.hydrogen_density_cm3,
+                        return_stats=True,
                     )
                     new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
                 except Exception as exc:
                     # Safe fallback: auto/cpp selection must never change physics
                     # availability.  Fall back to the Python source-faithful term
                     # builder for this ion and annotate diagnostic rows.
+                    fallback_count_for_cpp_batch = len(pending_cpp_type7)
                     for pending_result, record_row_index in pending_cpp_type7:
                         try:
                             new_terms = _matrix_terms_for_result(
@@ -1464,6 +1473,7 @@ def assemble_element_matrix(
                             summary.n_records_evaluated += 1
                             summary.n_matrix_terms += len(new_terms)
                 else:
+                    fallback_count_for_cpp_batch = 0
                     for offset, (_pending_result, record_row_index) in enumerate(pending_cpp_type7):
                         group = new_terms[4 * offset : 4 * offset + 4]
                         record_results[record_row_index]["rates_backend"] = "cpp_mg_type7_matrix_terms"
@@ -1477,7 +1487,25 @@ def assemble_element_matrix(
                     summary.n_records_evaluated += len(pending_cpp_type7)
                     summary.n_matrix_terms += len(new_terms)
                 if is_mg_profile:
-                    _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+                    cpp_batch_elapsed = time.perf_counter() - _matrix_t0
+                    _ion_matrix_elapsed += cpp_batch_elapsed
+                    record_profile_event(
+                        profile_control,
+                        "calc_hmc_all.element_solver.mg_type7_cpp_kernel",
+                        float(cpp_stats.get("packing_seconds", 0.0) + cpp_stats.get("cpp_kernel_seconds", 0.0))
+                        if cpp_stats else cpp_batch_elapsed,
+                        element_z=int(element_z),
+                        ion_stage=int(block.ion_stage),
+                        ion_index=int(block.ion_index),
+                        record_type=7,
+                        source_routine="libxstar_rates.so:xstar_rates_build_mg_type7_terms",
+                        records_batched=int(len(pending_cpp_type7)),
+                        cpp_calls=int(cpp_stats.get("cpp_calls", 0)) if cpp_stats else 0,
+                        packing_seconds=float(cpp_stats.get("packing_seconds", 0.0)) if cpp_stats else 0.0,
+                        cpp_kernel_seconds=float(cpp_stats.get("cpp_kernel_seconds", 0.0)) if cpp_stats else 0.0,
+                        fallback_count=int(fallback_count_for_cpp_batch),
+                        emitted_matrix_terms=int(cpp_stats.get("emitted_matrix_terms", 0)) if cpp_stats else 0,
+                    )
 
             ion_summaries.append(summary)
             if is_mg_profile:

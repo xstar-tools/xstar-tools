@@ -13,6 +13,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass, asdict
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,7 @@ def probe_cpp_mg_rates(*, n_ions: int = 0, n_records: int = 0) -> str:
         errbuf,
         ctypes.c_size_t(len(errbuf)),
     )
+    cpp_kernel_seconds = time.perf_counter() - cpp_t0
     message = errbuf.value.decode("utf-8", errors="replace")
     if rc != 0:
         raise RuntimeError(message or f"xstar_rates_eval_mg failed with code {rc}")
@@ -207,7 +209,8 @@ def build_mg_type7_terms_cpp(
     basis_n_rows: int,
     term_start: int,
     hydrogen_density_cm3: float,
-) -> tuple[list[dict[str, Any]], str]:
+    return_stats: bool = False,
+) -> tuple[list[dict[str, Any]], str] | tuple[list[dict[str, Any]], str, dict[str, Any]]:
     """Build Mg record_type=7 matrix terms with the C++ rates backend.
 
     The input records must already contain source-faithful Python ``ucalc``
@@ -218,31 +221,49 @@ def build_mg_type7_terms_cpp(
     formulas in the Python reference path until the next parity milestone.
     """
     if not records:
-        return [], "no_records"
+        stats = {"records_batched": 0, "cpp_calls": 0, "packing_seconds": 0.0, "cpp_kernel_seconds": 0.0, "emitted_matrix_terms": 0}
+        return ([], "no_records", stats) if return_stats else ([], "no_records")
     lib = _load_cpp_library()
     if lib is None:
         raise RuntimeError("C++ rates shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
 
     n = len(records)
+    packing_t0 = time.perf_counter()
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
 
+    rec_record = i64("record")
+    rec_data_type = i64("data_type")
+    rec_ion_index = i64("ion_index")
+    rec_ion_stage = i64("ion_stage")
+    rec_compact_start = i64("compact_start")
+    rec_idest1 = i64("idest1")
+    rec_idest2 = i64("idest2")
+    rec_ans1 = f64("ans1")
+    rec_ans2 = f64("ans2")
+    rec_ans3 = f64("ans3")
+    rec_ans4 = f64("ans4")
+    rec_ans5 = f64("ans5")
+    rec_ans6 = f64("ans6")
     out_i64 = np.zeros(n * 4 * 16, dtype=np.int64)
     out_f64 = np.zeros(n * 4 * 4, dtype=np.float64)
     errbuf = ctypes.create_string_buffer(512)
+    packing_seconds = time.perf_counter() - packing_t0
+    cpp_t0 = time.perf_counter()
     rc = lib.xstar_rates_build_mg_type7_terms(
         ctypes.c_int(n),
         ctypes.c_int(int(basis_n_rows)),
         ctypes.c_int(int(term_start)),
-        i64("record"), i64("data_type"), i64("ion_index"), i64("ion_stage"), i64("compact_start"),
-        i64("idest1"), i64("idest2"),
-        f64("ans1"), f64("ans2"), f64("ans3"), f64("ans4"), f64("ans5"), f64("ans6"),
+        rec_record, rec_data_type, rec_ion_index, rec_ion_stage, rec_compact_start,
+        rec_idest1, rec_idest2,
+        rec_ans1, rec_ans2, rec_ans3, rec_ans4, rec_ans5, rec_ans6,
         ctypes.c_double(float(hydrogen_density_cm3)),
         out_i64, out_f64,
         errbuf, ctypes.c_size_t(len(errbuf)),
     )
+    cpp_kernel_seconds = time.perf_counter() - cpp_t0
     message = errbuf.value.decode("utf-8", errors="replace")
     if rc != 0:
         raise RuntimeError(message or f"xstar_rates_build_mg_type7_terms failed with code {rc}")
@@ -275,4 +296,11 @@ def build_mg_type7_terms_cpp(
             "cj2": float(row_f[3]),
             "ucalc_status": "evaluated",
         })
-    return terms, message
+    stats = {
+        "records_batched": int(n),
+        "cpp_calls": 1,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "emitted_matrix_terms": int(len(terms)),
+    }
+    return (terms, message, stats) if return_stats else (terms, message)

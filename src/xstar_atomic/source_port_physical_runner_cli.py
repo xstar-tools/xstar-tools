@@ -171,6 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--profile-rss",
+        action="store_true",
+        help=(
+            "include rss_start_mb/rss_end_mb/rss_delta_mb fields in stored "
+            "profile_component rows; independent of --progress-memory and off by default"
+        ),
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -282,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -332,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -356,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                 diagnostics_mode=args.diagnostics,
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
+                profile_rss=args.profile_rss,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,

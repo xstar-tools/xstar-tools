@@ -918,8 +918,8 @@ def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
         f" n_e={_fmt_e(xnx)} n_p={_fmt_e(xpx)}"
     )
     line2 = (
-        f"httot={_fmt_e(state.thermal.heating)} cltot={_fmt_e(state.thermal.cooling)}"
-        f"taulc={_fmt_e(dpthc[0, nry])}taulcb={_fmt_e(dpthc[1, nry])}"
+        f"httot={_fmt_e(state.thermal.heating)} cltot={_fmt_e(state.thermal.cooling)} "
+        f"taulc={_fmt_e(dpthc[0, nry])} taulcb={_fmt_e(dpthc[1, nry])}"
     )
     line3 = (
         f" log(Xi)={_fmt_e(zetac)} log(u1)={_fmt_e(np.log10(max(1.0e-24, uu1)))}"
