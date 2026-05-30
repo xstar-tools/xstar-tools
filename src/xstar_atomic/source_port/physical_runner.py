@@ -2111,6 +2111,7 @@ def run_xstar_from_parameters(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
+    profile_backend_calls: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2194,6 +2195,7 @@ def run_xstar_from_parameters(
     state.control["active_subset_enabled"] = bool(active_subset)
     state.control["profile_components"] = normalize_profile_level(profile_components)
     state.control["profile_rss"] = bool(profile_rss)
+    state.control["profile_backend_calls"] = bool(profile_backend_calls)
     state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
@@ -2318,6 +2320,7 @@ def run_xstar_from_parameters(
                 "profile_components_enabled": normalize_profile_level(profile_components) != "none",
                 "profile_components_level": normalize_profile_level(profile_components),
                 "profile_rss_enabled": bool(profile_rss),
+                    "profile_backend_calls_enabled": bool(profile_backend_calls),
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
@@ -2372,6 +2375,7 @@ def run_xstar_python(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
+    profile_backend_calls: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2412,6 +2416,7 @@ def run_xstar_python(
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
+        profile_backend_calls=profile_backend_calls,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2444,6 +2449,7 @@ def run_xstar_python_command(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
+    profile_backend_calls: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2467,6 +2473,7 @@ def run_xstar_python_command(
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
+        profile_backend_calls=profile_backend_calls,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2491,6 +2498,7 @@ def run_xstar_python_script(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
+    profile_backend_calls: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2516,6 +2524,7 @@ def run_xstar_python_script(
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
+        profile_backend_calls=profile_backend_calls,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2703,6 +2712,7 @@ def run_c5_ne1_acceptance(
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
+    profile_backend_calls: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2724,6 +2734,7 @@ def run_c5_ne1_acceptance(
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
+        profile_backend_calls=profile_backend_calls,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,

@@ -31,6 +31,12 @@ def _append_profile(control: MutableMapping[str, Any], record: dict[str, Any]) -
         rows.append(record)
 
 
+def _append_counter(control: MutableMapping[str, Any], record: dict[str, Any]) -> None:
+    rows = control.setdefault("performance_counters", [])
+    if isinstance(rows, list):
+        rows.append(record)
+
+
 PROFILE_LEVELS = {"none": 0, "summary": 1, "nested": 2, "forensic": 3}
 
 
@@ -76,6 +82,36 @@ def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def profile_backend_calls_enabled(control: MutableMapping[str, Any]) -> bool:
+    value = control.get("profile_backend_calls", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def add_profile_counter(
+    control: MutableMapping[str, Any],
+    name: str,
+    *,
+    elapsed_seconds: float = 0.0,
+    **metadata: Any,
+) -> None:
+    """Accumulate low-overhead counters without adding progress/profile rows.
+
+    This is for hot backend-call measurements where per-call progress lines would
+    pollute normal benchmark output and add avoidable I/O/formatting overhead.
+    The counters are summarized once by :func:`summarize_profile`.
+    """
+    if not performance_enabled(control):
+        return
+    record: dict[str, Any] = {
+        "component": str(name),
+        "elapsed_seconds": float(elapsed_seconds),
+    }
+    record.update(metadata)
+    _append_counter(control, record)
+
+
 def record_profile_event(
     control: MutableMapping[str, Any],
     name: str,
@@ -102,7 +138,7 @@ def record_profile_event(
             record["rss_end_mb"] = float(rss)
     record.update(metadata)
     _append_profile(control, record)
-    callback = emit_progress or control.get("progress_callback")
+    callback = None if emit_progress is False else (emit_progress or control.get("progress_callback"))
     if callable(callback):
         details = {k: v for k, v in record.items() if k != "component"}
         callback("profile_component", {"component": str(name), **details})
@@ -144,7 +180,7 @@ def profile_component(
             record["rss_delta_mb"] = float(rss1 - rss0)
         record.update(metadata)
         _append_profile(control, record)
-        callback = emit_progress or control.get("progress_callback")
+        callback = None if emit_progress is False else (emit_progress or control.get("progress_callback"))
         if callable(callback):
             details = {k: v for k, v in record.items() if k != "component"}
             callback("profile_component", {"component": str(name), **details})
@@ -166,8 +202,11 @@ def _add_grouped(grouped: dict[str, dict[str, float]], name: str, row: dict[str,
 def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     """Return compact timing/RSS totals grouped by component and element."""
     rows = control.get("performance_profile", [])
+    counter_rows = control.get("performance_counters", [])
     if not isinstance(rows, list):
-        return {"rows": 0, "components": {}, "top_components": [], "by_element": {}}
+        rows = []
+    if not isinstance(counter_rows, list):
+        counter_rows = []
     grouped: dict[str, dict[str, float]] = {}
     by_element: dict[str, dict[str, float]] = {}
     by_ion: dict[str, dict[str, float]] = {}
@@ -203,6 +242,19 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         if "source_routine" in row:
             key = f"{name}:source:{row['source_routine']}"
             _add_grouped(by_source_routine, key, row)
+        if any(field in row for field in counter_fields):
+            item = counter_totals.setdefault(name, {"count": 0.0, **{field: 0.0 for field in counter_fields}})
+            item["count"] += 1.0
+            for field in counter_fields:
+                if field in row:
+                    try:
+                        item[field] += float(row[field])
+                    except (TypeError, ValueError):
+                        pass
+    for row in counter_rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("component", "unknown"))
         if any(field in row for field in counter_fields):
             item = counter_totals.setdefault(name, {"count": 0.0, **{field: 0.0 for field in counter_fields}})
             item["count"] += 1.0
@@ -254,6 +306,7 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     ]
     return {
         "rows": len(rows),
+        "counter_rows": len(counter_rows),
         "components": grouped,
         "top_components": top_components,
         "by_element": by_element,

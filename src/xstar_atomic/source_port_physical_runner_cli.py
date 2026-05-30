@@ -176,6 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="include rss_start_mb/rss_end_mb/rss_delta_mb in performance profile rows; disabled by default",
     )
     parser.add_argument(
+        "--profile-backend-calls",
+        action="store_true",
+        help=(
+            "emit per-call backend profile rows to progress output; disabled by default. "
+            "Backend counters are still accumulated in memory and written once to summary JSON."
+        ),
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -288,6 +296,7 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
+                profile_backend_calls=args.profile_backend_calls,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -339,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
+                profile_backend_calls=args.profile_backend_calls,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -364,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
                 active_subset=not args.no_active_subset,
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
+                profile_backend_calls=args.profile_backend_calls,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
