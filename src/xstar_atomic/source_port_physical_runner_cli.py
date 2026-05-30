@@ -173,10 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile-rss",
         action="store_true",
-        help=(
-            "include rss_start_mb/rss_end_mb/rss_delta_mb fields in stored "
-            "profile_component rows; independent of --progress-memory and off by default"
-        ),
+        help="include rss_start_mb/rss_end_mb/rss_delta_mb in performance profile rows; disabled by default",
     )
     parser.add_argument(
         "--mg-line-kernel",

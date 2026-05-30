@@ -70,17 +70,10 @@ def performance_enabled(control: MutableMapping[str, Any]) -> bool:
 
 
 def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
-    """Return whether stored profile rows should include RSS fields.
-
-    This is separate from ``--progress-memory``.  Progress memory controls
-    live progress-line RSS only, while this flag controls whether
-    ``profile_component`` rows sample /proc/self/status and carry
-    ``rss_start_mb``, ``rss_end_mb``, and ``rss_delta_mb``.
-    """
     value = control.get("profile_rss", False)
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on", "memory", "rss"}
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def record_profile_event(
@@ -132,13 +125,13 @@ def profile_component(
         yield
         return
     t0 = time.perf_counter()
-    use_rss = profile_rss_enabled(control)
-    rss0 = current_rss_mb() if use_rss else None
+    rss_enabled = profile_rss_enabled(control)
+    rss0 = current_rss_mb() if rss_enabled else None
     try:
         yield
     finally:
         t1 = time.perf_counter()
-        rss1 = current_rss_mb() if use_rss else None
+        rss1 = current_rss_mb() if rss_enabled else None
         record: dict[str, Any] = {
             "component": str(name),
             "elapsed_seconds": float(t1 - t0),
@@ -180,6 +173,15 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     by_ion: dict[str, dict[str, float]] = {}
     by_record_type: dict[str, dict[str, float]] = {}
     by_source_routine: dict[str, dict[str, float]] = {}
+    counter_fields = (
+        "records_batched",
+        "cpp_calls",
+        "packing_seconds",
+        "cpp_kernel_seconds",
+        "fallback_count",
+        "emitted_matrix_terms",
+    )
+    counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -201,6 +203,15 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         if "source_routine" in row:
             key = f"{name}:source:{row['source_routine']}"
             _add_grouped(by_source_routine, key, row)
+        if any(field in row for field in counter_fields):
+            item = counter_totals.setdefault(name, {"count": 0.0, **{field: 0.0 for field in counter_fields}})
+            item["count"] += 1.0
+            for field in counter_fields:
+                if field in row:
+                    try:
+                        item[field] += float(row[field])
+                    except (TypeError, ValueError):
+                        pass
     top_components = [
         {"component": name, **values}
         for name, values in sorted(
@@ -253,4 +264,5 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "top_by_record_type": top_by_record_type,
         "by_source_routine": by_source_routine,
         "top_by_source_routine": top_by_source_routine,
+        "counter_totals": counter_totals,
     }
