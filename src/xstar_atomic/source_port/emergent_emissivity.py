@@ -54,7 +54,7 @@ from .emissivity import (
 )
 from .free_free import FreeFreeResult, freef
 from .performance import profile_component, profile_level_at_least, record_profile_event
-from .cpp_backend_rates import build_mg_type4_line_emissivity_cpp_detailed, rates_backend_status
+from .cpp_backend_rates import apply_linopac_profile_cpp, build_mg_type4_line_emissivity_cpp_detailed, rates_backend_status
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
@@ -867,6 +867,12 @@ def calc_emis_ion(
         "fallback_count": 0.0,
         "emitted_matrix_terms": 0.0,
         "batches_flushed": 0.0,
+        "linopac_cpp_calls": 0.0,
+        "linopac_cpp_kernel_seconds": 0.0,
+        "linopac_cpp_updated_bins": 0.0,
+        "linopac_cpp_fallback_count": 0.0,
+        "linopac_cpp_parity_checks": 0.0,
+        "linopac_cpp_parity_failures": 0.0,
     }
     # v0.5.59: queue Mg record_type=4 scalar work and call the C++ kernel once
     # per contiguous Mg line block, instead of once per individual line record.
@@ -906,6 +912,178 @@ def calc_emis_ion(
         if result.ready:
             _accumulate_ucalc_continuum(context.workspace.base, result)
         return result
+
+    def _linopac_cpp_parity_limit() -> int:
+        value = None
+        try:
+            value = profile_control.get("mg_type4_linopac_cpp_parity_records")
+        except Exception:
+            value = None
+        if value is None:
+            value = os.environ.get("MG_TYPE4_LINOPAC_CPP_PARITY_RECORDS", "16")
+        try:
+            return max(0, int(value))
+        except Exception:
+            return 16
+
+    linopac_cpp_gate: dict[str, Any] = {
+        "checked": 0,
+        "failed": False,
+        "parity_limit": _linopac_cpp_parity_limit(),
+    }
+
+    def _apply_linopac_with_cpp_gate(
+        *,
+        optpp: float,
+        rcem1: float,
+        rcem2: float,
+        line_energy_eV: float,
+        vturb_km_s: float,
+        temperature_1e4K: float,
+        atomic_mass_amu: float,
+        natural_width_eV: float,
+    ) -> dict[str, Any]:
+        """Apply Mg type-4 linopac side effects using C++ after a parity gate.
+
+        The gate compares the C++ Gaussian linopac update against the Python
+        source-faithful translation on copies for the first N records.  If any
+        mismatch or unsupported Voigt-profile case appears, the live path falls
+        back to Python for the rest of the ion.  This keeps v0.5.61 physically
+        conservative while moving the live side-effect update to C++ only after
+        agreement has been demonstrated.
+        """
+        if not use_cpp_mg_type4_line or linopac_cpp_gate.get("failed"):
+            cpp_mg_type4_stats["linopac_cpp_fallback_count"] = cpp_mg_type4_stats.get("linopac_cpp_fallback_count", 0.0) + 1.0
+            return _source_linopac_into_opakc(
+                optpp=optpp,
+                rcem1=rcem1,
+                rcem2=rcem2,
+                line_energy_eV=line_energy_eV,
+                vturb_km_s=vturb_km_s,
+                temperature_1e4K=temperature_1e4K,
+                atomic_mass_amu=atomic_mass_amu,
+                natural_width_eV=natural_width_eV,
+                epi=epi,
+                opakc=context.workspace.base.opakc,
+                rccemis=context.workspace.base.rccemis,
+                ncn2=len(epi),
+                diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+            )
+        parity_limit = int(linopac_cpp_gate.get("parity_limit", 16))
+        checked = int(linopac_cpp_gate.get("checked", 0))
+        if checked < parity_limit:
+            py_opakc = context.workspace.base.opakc.copy()
+            py_rcc = context.workspace.base.rccemis.copy()
+            cpp_opakc = context.workspace.base.opakc.copy()
+            cpp_rcc = context.workspace.base.rccemis.copy()
+            py_diag = _source_linopac_into_opakc(
+                optpp=optpp,
+                rcem1=rcem1,
+                rcem2=rcem2,
+                line_energy_eV=line_energy_eV,
+                vturb_km_s=vturb_km_s,
+                temperature_1e4K=temperature_1e4K,
+                atomic_mass_amu=atomic_mass_amu,
+                natural_width_eV=natural_width_eV,
+                epi=epi,
+                opakc=py_opakc,
+                rccemis=py_rcc,
+                ncn2=len(epi),
+                diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+            )
+            try:
+                cpp_diag, _msg, cpp_stats = apply_linopac_profile_cpp(
+                    optpp=optpp,
+                    rcem1=rcem1,
+                    rcem2=rcem2,
+                    line_energy_eV=line_energy_eV,
+                    vturb_km_s=vturb_km_s,
+                    temperature_1e4K=temperature_1e4K,
+                    atomic_mass_amu=atomic_mass_amu,
+                    natural_width_eV=natural_width_eV,
+                    epi=epi,
+                    opakc=cpp_opakc,
+                    rccemis=cpp_rcc,
+                    ncn2=len(epi),
+                )
+                _add_cpp_counter_totals(cpp_mg_type4_stats, cpp_stats)
+                cpp_mg_type4_stats["linopac_cpp_parity_checks"] = cpp_mg_type4_stats.get("linopac_cpp_parity_checks", 0.0) + 1.0
+                opakc_ok = bool(np.allclose(py_opakc, cpp_opakc, rtol=1.0e-10, atol=1.0e-30))
+                rcc_ok = bool(np.allclose(py_rcc, cpp_rcc, rtol=1.0e-10, atol=1.0e-30))
+                diag_ok = int(py_diag.get("updated_bins", -1)) == int(cpp_diag.get("updated_bins", -2))
+                if not (opakc_ok and rcc_ok and diag_ok):
+                    linopac_cpp_gate["failed"] = True
+                    cpp_mg_type4_stats["linopac_cpp_parity_failures"] = cpp_mg_type4_stats.get("linopac_cpp_parity_failures", 0.0) + 1.0
+                    cpp_mg_type4_stats["linopac_cpp_fallback_count"] = cpp_mg_type4_stats.get("linopac_cpp_fallback_count", 0.0) + 1.0
+                    return _source_linopac_into_opakc(
+                        optpp=optpp,
+                        rcem1=rcem1,
+                        rcem2=rcem2,
+                        line_energy_eV=line_energy_eV,
+                        vturb_km_s=vturb_km_s,
+                        temperature_1e4K=temperature_1e4K,
+                        atomic_mass_amu=atomic_mass_amu,
+                        natural_width_eV=natural_width_eV,
+                        epi=epi,
+                        opakc=context.workspace.base.opakc,
+                        rccemis=context.workspace.base.rccemis,
+                        ncn2=len(epi),
+                        diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+                    )
+                linopac_cpp_gate["checked"] = checked + 1
+            except Exception:
+                linopac_cpp_gate["failed"] = True
+                cpp_mg_type4_stats["linopac_cpp_fallback_count"] = cpp_mg_type4_stats.get("linopac_cpp_fallback_count", 0.0) + 1.0
+                return _source_linopac_into_opakc(
+                    optpp=optpp,
+                    rcem1=rcem1,
+                    rcem2=rcem2,
+                    line_energy_eV=line_energy_eV,
+                    vturb_km_s=vturb_km_s,
+                    temperature_1e4K=temperature_1e4K,
+                    atomic_mass_amu=atomic_mass_amu,
+                    natural_width_eV=natural_width_eV,
+                    epi=epi,
+                    opakc=context.workspace.base.opakc,
+                    rccemis=context.workspace.base.rccemis,
+                    ncn2=len(epi),
+                    diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+                )
+        try:
+            cpp_diag, _msg, cpp_stats = apply_linopac_profile_cpp(
+                optpp=optpp,
+                rcem1=rcem1,
+                rcem2=rcem2,
+                line_energy_eV=line_energy_eV,
+                vturb_km_s=vturb_km_s,
+                temperature_1e4K=temperature_1e4K,
+                atomic_mass_amu=atomic_mass_amu,
+                natural_width_eV=natural_width_eV,
+                epi=epi,
+                opakc=context.workspace.base.opakc,
+                rccemis=context.workspace.base.rccemis,
+                ncn2=len(epi),
+            )
+            _add_cpp_counter_totals(cpp_mg_type4_stats, cpp_stats)
+            return cpp_diag
+        except Exception:
+            linopac_cpp_gate["failed"] = True
+            cpp_mg_type4_stats["linopac_cpp_fallback_count"] = cpp_mg_type4_stats.get("linopac_cpp_fallback_count", 0.0) + 1.0
+            return _source_linopac_into_opakc(
+                optpp=optpp,
+                rcem1=rcem1,
+                rcem2=rcem2,
+                line_energy_eV=line_energy_eV,
+                vturb_km_s=vturb_km_s,
+                temperature_1e4K=temperature_1e4K,
+                atomic_mass_amu=atomic_mass_amu,
+                natural_width_eV=natural_width_eV,
+                epi=epi,
+                opakc=context.workspace.base.opakc,
+                rccemis=context.workspace.base.rccemis,
+                ncn2=len(epi),
+                diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
+            )
 
     def _apply_mg_type4_line_job(job: Mapping[str, Any], cpp_row: Mapping[str, Any] | None) -> None:
         """Apply one source-ordered Mg line-emissivity side-effect bundle.
@@ -953,7 +1131,7 @@ def calc_emis_ion(
                 natural_width_0 = float(reals_for_line_0[2]) * 4.136e-15
         except Exception:
             natural_width_0 = 0.0
-        _source_linopac_into_opakc(
+        _apply_linopac_with_cpp_gate(
             optpp=opakb1_0,
             rcem1=rcem1_0,
             rcem2=rcem2_0,
@@ -962,11 +1140,6 @@ def calc_emis_ion(
             temperature_1e4K=float(context.temperature_1e4K),
             atomic_mass_amu=atomic_mass_0,
             natural_width_eV=natural_width_0,
-            epi=epi,
-            opakc=context.workspace.base.opakc,
-            rccemis=context.workspace.base.rccemis,
-            ncn2=len(epi),
-            diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
         )
         context.workspace.fline[0, line_index_0] = rcem1_0
         context.workspace.fline[1, line_index_0] = rcem2_0

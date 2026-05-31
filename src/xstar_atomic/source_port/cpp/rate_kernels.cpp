@@ -12,12 +12,15 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
+#include <vector>
 
 namespace {
 constexpr int XSTAR_RATES_ABI_VERSION = 2;
 constexpr int XSTAR_RATES_FEATURE_SKELETON = 1;
 constexpr int XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS = 2;
 constexpr int XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY = 4;
+constexpr int XSTAR_RATES_FEATURE_LINOPAC_PROFILE = 8;
 
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (errbuf == nullptr || errbuf_size == 0) {
@@ -39,11 +42,11 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_v1";
+    return "xstar_rates_mg_type7_type4_linopac_v1";
 }
 
 int xstar_rates_feature_flags() {
-    return XSTAR_RATES_FEATURE_SKELETON | XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS | XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY;
+    return XSTAR_RATES_FEATURE_SKELETON | XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS | XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY | XSTAR_RATES_FEATURE_LINOPAC_PROFILE;
 }
 
 int xstar_rates_eval_mg(
@@ -273,6 +276,207 @@ int xstar_rates_build_mg_type4_line_emissivity(
         of[4] = flinel_delta;
     }
     write_message(errbuf, errbuf_size, "xstar_rates_build_mg_type4_line_emissivity evaluated");
+    return 0;
+}
+
+
+static int xstar_rates_huntf(const double* xx, int n, double x) {
+    if (!xx || n < 2) return 1;
+    const double floor = 1.0e-24;
+    const double xx1 = xx[0];
+    const double xx2 = xx[1];
+    const double xxn = xx[n - 1];
+    const double xf = x;
+    const double xtmp = std::max(xf, xx2);
+    int jlo = 1;
+    if (xf < floor || xx1 <= floor || xxn <= floor) return jlo;
+    jlo = static_cast<int>((n - 1) * std::log(xtmp / xx1) / std::log(xxn / xx1)) + 1;
+    if (jlo < n) {
+        const double tst = std::abs(std::log(xf / (floor + xx[jlo - 1])));
+        const double tst2 = std::abs(std::log(xf / (floor + xx[jlo])));
+        if (tst2 < tst) ++jlo;
+    }
+    if (jlo < 1) jlo = 1;
+    if (jlo > n) jlo = n;
+    return jlo;
+}
+
+static int xstar_rates_nbinc(double e, const double* epi, int ncn2) {
+    const int n = static_cast<int>(ncn2);
+    const int numcon2 = std::max(2, n / 50);
+    const int numcon3 = n - numcon2;
+    if (numcon3 < 2) return 1;
+    return xstar_rates_huntf(epi, numcon3, e);
+}
+
+// Apply the source linopac full-profile opacity handoff for one line.
+// This v0.5.61 C ABI intentionally supports only the Gaussian-profile branch.
+// If the natural-width Voigt branch is needed, it returns code 6 and the Python
+// caller falls back to the existing source-faithful Python linopac translation.
+int xstar_rates_apply_linopac_profile(
+    double optpp,
+    double rcem1,
+    double rcem2,
+    double line_energy_ev,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* out_i64,
+    double* out_f64,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    (void)rcem1;
+    (void)rcem2;
+    if (!epi || !opakc || !rccemis || !out_i64 || !out_f64) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_rates_apply_linopac_profile");
+        return 3;
+    }
+    const int n = static_cast<int>(ncn2);
+    if (n < 3 || !std::isfinite(optpp) || !std::isfinite(line_energy_ev) ||
+        !std::isfinite(vturb_km_s) || !std::isfinite(temperature_1e4k) ||
+        !std::isfinite(atomic_mass_amu) || !std::isfinite(natural_width_ev)) {
+        write_message(errbuf, errbuf_size, "invalid input to xstar_rates_apply_linopac_profile");
+        return 4;
+    }
+    for (int i = 0; i < 8; ++i) out_i64[i] = 0;
+    for (int i = 0; i < 12; ++i) out_f64[i] = 0.0;
+    if (optpp <= 0.0 || line_energy_ev <= 0.0 || line_energy_ev <= epi[0] || line_energy_ev >= epi[n - 1]) {
+        write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile no-op");
+        return 0;
+    }
+    const int nbtpp = 20000;
+    const double dpcrit = 1.0e-6;
+    int ml1 = xstar_rates_nbinc(line_energy_ev, epi, n);
+    if (ml1 < 2) ml1 = 2;
+    if (ml1 > n - 1) ml1 = n - 1;
+    const double mass = std::max(atomic_mass_amu, 1.0e-30);
+    const double vth = 12.9 * std::sqrt(temperature_1e4k / mass);
+    const double e0 = line_energy_ev;
+    const double deleturb = e0 * (vturb_km_s / 3.0e5);
+    const double deleth = e0 * (vth / 3.0e5);
+    const double dele = std::sqrt(deleth * deleth + deleturb * deleturb);
+    if (dele <= 0.0) {
+        out_i64[2] = ml1;
+        write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile no-width no-op");
+        return 0;
+    }
+    const double aasmall = natural_width_ev / (1.0e-24 + dele) / 12.56;
+    if (aasmall > 1.0e-9) {
+        write_message(errbuf, errbuf_size, "linopac Voigt branch not implemented in C++ v0.5.61");
+        return 6;
+    }
+    const double e00 = epi[ml1 - 1];
+    const double etmp = e0;
+    const double deleepi = epi[ml1] - epi[ml1 - 1];
+    int ncut = static_cast<int>(deleepi / dele);
+    if (ncut < 1) ncut = 1;
+    if (ncut > nbtpp / 10) ncut = nbtpp / 10;
+    const double deleused = deleepi / static_cast<double>(ncut);
+    const double prftmp = (ml1 >= 2 && ml1 < n) ? (2.0 / (epi[ml1] - epi[ml1 - 2])) : 0.0;
+    const double opsv4 = optpp * dele;
+    int mlc = 0;
+    int ldir = 1;
+    int ldon0 = 0;
+    int ldon1 = 0;
+    int mlmin = nbtpp;
+    int mlmax = 1;
+    int ml1min = n + 1;
+    int ml1max = 0;
+    const int ml2 = nbtpp / 2;
+    std::vector<double> etpp(nbtpp, 0.0);
+    std::vector<double> optpp2(nbtpp, 0.0);
+    double delet = (e00 - etmp) / dele;
+    double profile = std::exp(-delet * delet) / 1.772;
+    etpp[ml2 - 1] = e00;
+    optpp2[ml2 - 1] = optpp * profile;
+    double tst = 1.0;
+    while ((ldon0 * ldon1 == 0) && mlc < nbtpp / 2) {
+        ++mlc;
+        for (int ij = 0; ij < 2; ++ij) {
+            ldir = -ldir;
+            int& ldon = (ij == 0) ? ldon0 : ldon1;
+            if (ldon == 1) continue;
+            const int mlm = ml2 + ldir * mlc;
+            const double etptst = e00 + static_cast<double>(ldir * mlc) * deleused;
+            if (mlm <= nbtpp && mlm >= 1 && etptst > 0.0 && etptst < epi[n - 1]) {
+                if (mlm < mlmin) mlmin = mlm;
+                if (mlm > mlmax) mlmax = mlm;
+                etpp[mlm - 1] = etptst;
+                delet = (etptst - etmp) / dele;
+                profile = std::exp(-delet * delet) / 1.772;
+                optpp2[mlm - 1] = optpp * profile;
+                tst = profile;
+            }
+            const double delet_now = (dele != 0.0) ? ((etptst - etmp) / dele) : 0.0;
+            if ((tst < dpcrit || mlm <= 1 || mlm >= nbtpp || etptst <= 0.0 || etptst >= epi[n - 1] ||
+                 mlc > nbtpp || std::abs(delet_now) > std::max(50.0, 200.0 * aasmall)) &&
+                ml1min < ml1 - 2 && ml1max > ml1 + 2 && ml1min >= 1 && ml1max <= n) {
+                ldon = 1;
+            }
+        }
+    }
+    if (mlmin > mlmax) {
+        out_i64[2] = ml1;
+        write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile empty profile");
+        return 0;
+    }
+    ml1min = xstar_rates_nbinc(etpp[mlmin - 1], epi, n);
+    ml1max = xstar_rates_nbinc(etpp[mlmax - 1], epi, n);
+    int ml1m = ml1min;
+    if (mlmin < 2) mlmin = 2;
+    if (mlmax > nbtpp) mlmax = nbtpp;
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    long long updated = 0;
+    double max_added = 0.0;
+    for (int mlm = mlmin + 1; mlm <= mlmax; ++mlm) {
+        const double tmpopo = tmpop;
+        tmpop = optpp2[mlm - 1];
+        const double tmpe = std::abs(etpp[mlm - 1] - etpp[mlm - 2]);
+        sume += tmpe;
+        const double interval_ops = (tmpop + tmpopo) * tmpe / 2.0;
+        opsum += interval_ops;
+        if (etpp[mlm - 1] > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                const double optp2 = opsum / sume;
+                while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] += optp2;
+                    // Source Python also multiplies rcem contributions by zero for lfasto=2.
+                    rccemis[0 * n + (ml1m - 1)] += 0.0;
+                    rccemis[1 * n + (ml1m - 1)] += 0.0;
+                    ++updated;
+                    if (std::abs(optp2) > max_added) max_added = std::abs(optp2);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+    }
+    out_i64[0] = updated;
+    out_i64[1] = 1;
+    out_i64[2] = ml1;
+    out_i64[3] = nbtpp;
+    out_i64[4] = ncut;
+    out_i64[5] = ml1min;
+    out_i64[6] = ml1max;
+    out_i64[7] = mlmax - mlmin + 1;
+    out_f64[0] = max_added;
+    out_f64[1] = e0;
+    out_f64[2] = dele;
+    out_f64[3] = deleused;
+    out_f64[4] = prftmp;
+    out_f64[5] = opsv4;
+    out_f64[6] = aasmall;
+    out_f64[7] = optpp;
+    write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile evaluated");
     return 0;
 }
 

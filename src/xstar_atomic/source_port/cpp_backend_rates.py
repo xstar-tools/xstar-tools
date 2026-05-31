@@ -120,6 +120,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 # Older v0.5.54-v0.5.57 libraries do not expose the line-emissivity kernel.
                 pass
+            try:
+                lib.xstar_rates_apply_linopac_profile.argtypes = [
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    f64p, ctypes.c_int, f64p, f64p, i64p, f64p,
+                    ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_rates_apply_linopac_profile.restype = ctypes.c_int
+            except AttributeError:
+                # Older libraries do not expose the C++ linopac side-effect kernel.
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -435,3 +446,99 @@ def build_mg_type4_line_emissivity_cpp_detailed(
         "emitted_matrix_terms": 0.0,
     }
     return rows, message, stats
+
+
+
+def apply_linopac_profile_cpp(
+    *,
+    optpp: float,
+    rcem1: float,
+    rcem2: float,
+    line_energy_eV: float,
+    vturb_km_s: float,
+    temperature_1e4K: float,
+    atomic_mass_amu: float,
+    natural_width_eV: float,
+    epi: np.ndarray,
+    opakc: np.ndarray,
+    rccemis: np.ndarray,
+    ncn2: int,
+) -> tuple[dict[str, Any], str, dict[str, float]]:
+    """Apply the Mg line ``linopac`` profile side effect in C++.
+
+    v0.5.61 keeps this deliberately conservative: the C++ ABI owns the
+    full-profile Gaussian opacity handoff into ``opakc``.  If the source
+    natural-width Voigt branch is required, the C++ function returns an
+    unsupported status and the Python caller falls back to the source-faithful
+    Python implementation.
+    """
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ rates shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    if not hasattr(lib, "xstar_rates_apply_linopac_profile"):
+        raise RuntimeError("C++ rates shared library does not expose xstar_rates_apply_linopac_profile")
+    n = int(ncn2)
+    epi_arr = np.ascontiguousarray(epi[:n], dtype=np.float64)
+    opakc_arr = np.asarray(opakc, dtype=np.float64)
+    rcc_arr = np.asarray(rccemis, dtype=np.float64)
+    if not opakc_arr.flags.c_contiguous:
+        raise RuntimeError("opakc must be C-contiguous for the C++ linopac kernel")
+    if not rcc_arr.flags.c_contiguous:
+        raise RuntimeError("rccemis must be C-contiguous for the C++ linopac kernel")
+    if opakc_arr.size < n or rcc_arr.size < 2 * n:
+        raise RuntimeError("opakc/rccemis arrays are too small for the C++ linopac kernel")
+    out_i64 = np.zeros(8, dtype=np.int64)
+    out_f64 = np.zeros(12, dtype=np.float64)
+    errbuf = ctypes.create_string_buffer(512)
+    cpp_t0 = time.perf_counter()
+    rc = lib.xstar_rates_apply_linopac_profile(
+        ctypes.c_double(float(optpp)),
+        ctypes.c_double(float(rcem1)),
+        ctypes.c_double(float(rcem2)),
+        ctypes.c_double(float(line_energy_eV)),
+        ctypes.c_double(float(vturb_km_s)),
+        ctypes.c_double(float(temperature_1e4K)),
+        ctypes.c_double(float(atomic_mass_amu)),
+        ctypes.c_double(float(natural_width_eV)),
+        epi_arr,
+        ctypes.c_int(n),
+        opakc_arr,
+        rcc_arr.reshape(-1),
+        out_i64,
+        out_f64,
+        errbuf,
+        ctypes.c_size_t(len(errbuf)),
+    )
+    cpp_kernel_seconds = time.perf_counter() - cpp_t0
+    message = errbuf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_rates_apply_linopac_profile failed with code {rc}")
+    diag = {
+        "updated_bins": int(out_i64[0]),
+        "status_code": int(out_i64[1]),
+        "center_bin_one_based": int(out_i64[2]),
+        "source_nbtpp": int(out_i64[3]),
+        "ncut": int(out_i64[4]),
+        "ml1min": int(out_i64[5]),
+        "ml1max": int(out_i64[6]),
+        "profile_samples_total": int(out_i64[7]),
+        "max_added_opacity": float(out_f64[0]),
+        "e0_eV": float(out_f64[1]),
+        "dele_eV": float(out_f64[2]),
+        "deleused_eV": float(out_f64[3]),
+        "prftmp": float(out_f64[4]),
+        "opsv4": float(out_f64[5]),
+        "aasmall": float(out_f64[6]),
+        "optpp_input": float(out_f64[7]),
+        "lfast_branch": "full_profile_cpp_gaussian",
+        "fortran_source_compare": "linopac.f90 optp2=opsum/sume; C++ v0.5.61 Gaussian branch",
+    }
+    stats = {
+        "linopac_cpp_calls": 1.0,
+        "linopac_cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "linopac_cpp_updated_bins": float(diag["updated_bins"]),
+        "linopac_cpp_fallback_count": 0.0,
+        "linopac_cpp_parity_failures": 0.0,
+        "linopac_cpp_parity_checks": 0.0,
+    }
+    return diag, message, stats

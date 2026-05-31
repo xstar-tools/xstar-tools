@@ -207,6 +207,12 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "fallback_count",
         "emitted_matrix_terms",
         "batches_flushed",
+        "linopac_cpp_calls",
+        "linopac_cpp_kernel_seconds",
+        "linopac_cpp_updated_bins",
+        "linopac_cpp_fallback_count",
+        "linopac_cpp_parity_checks",
+        "linopac_cpp_parity_failures",
     )
     counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:
