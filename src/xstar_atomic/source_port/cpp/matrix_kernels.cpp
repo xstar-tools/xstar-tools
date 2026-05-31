@@ -32,12 +32,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type7_terms_v1";
+    return "xstar_matrix_mg_type7_terms_dense_v1";
 }
 
 int xstar_matrix_feature_flags() {
-    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction.
-    return 1 | 2;
+    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill.
+    return 1 | 2 | 4;
 }
 
 int xstar_matrix_probe(
@@ -173,5 +173,57 @@ int xstar_matrix_build_mg_type7_terms(
     write_message(errbuf, errbuf_size, "xstar_matrix_build_mg_type7_terms evaluated");
     return 0;
 }
+
+// Fill dense, heating, and secondary-heating matrices from emitted term arrays.
+// This is the first broader matrix-assembly loop moved into libxstar_matrix.so.
+// Rows/columns are one-based compact indices, matching MatrixTerm.row/column.
+int xstar_matrix_dense_fill_terms(
+    int n_terms,
+    int n_rows,
+    const long long* rows,
+    const long long* cols,
+    const double* aj1,
+    const double* cj,
+    const double* cj2,
+    double* dense,
+    double* heat,
+    double* heat2,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_terms < 0 || n_rows <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_dense_fill_terms");
+        return 2;
+    }
+    if (!rows || !cols || !aj1 || !cj || !cj2 || !dense || !heat || !heat2) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_dense_fill_terms");
+        return 3;
+    }
+    const std::size_t nn = static_cast<std::size_t>(n_rows) * static_cast<std::size_t>(n_rows);
+    for (std::size_t k = 0; k < nn; ++k) {
+        dense[k] = 0.0;
+        heat[k] = 0.0;
+        heat2[k] = 0.0;
+    }
+    for (int k = 0; k < n_terms; ++k) {
+        const long long r = rows[k];
+        const long long c = cols[k];
+        if (r <= 0 || c <= 0 || r > n_rows || c > n_rows) {
+            write_message(errbuf, errbuf_size, "matrix term index outside compact basis in xstar_matrix_dense_fill_terms");
+            return 4;
+        }
+        if (!std::isfinite(aj1[k]) || !std::isfinite(cj[k]) || !std::isfinite(cj2[k])) {
+            write_message(errbuf, errbuf_size, "non-finite matrix term passed to xstar_matrix_dense_fill_terms");
+            return 5;
+        }
+        const std::size_t idx = static_cast<std::size_t>(r - 1) * static_cast<std::size_t>(n_rows) + static_cast<std::size_t>(c - 1);
+        dense[idx] += aj1[k];
+        heat[idx] += cj[k];
+        heat2[idx] += cj2[k];
+    }
+    write_message(errbuf, errbuf_size, "xstar_matrix_dense_fill_terms evaluated");
+    return 0;
+}
+
 
 }  // extern "C"

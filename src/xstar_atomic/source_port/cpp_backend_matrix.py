@@ -98,6 +98,16 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 ctypes.c_char_p, ctypes.c_size_t,
             ]
             lib.xstar_matrix_build_mg_type7_terms.restype = ctypes.c_int
+            try:
+                lib.xstar_matrix_dense_fill_terms.argtypes = [
+                    ctypes.c_int, ctypes.c_int,
+                    i64p, i64p, f64p, f64p, f64p,
+                    f64p, f64p, f64p,
+                    ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_dense_fill_terms.restype = ctypes.c_int
+            except AttributeError:
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -267,3 +277,47 @@ def build_mg_type7_terms_matrix_cpp_detailed(
         "emitted_matrix_terms": float(len(rows)),
     }
     return rows, message, stats
+
+
+def dense_fill_terms_matrix_cpp(
+    terms: list[dict[str, Any]],
+    *,
+    n_rows: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, str, dict[str, float]]:
+    """Fill dense/heating matrices from one-based matrix terms in libxstar_matrix.so."""
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_dense_fill_terms"):
+        raise RuntimeError("C++ matrix dense-fill kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    n = int(len(terms))
+    nr = int(n_rows)
+    t0 = time.perf_counter()
+    rows = np.ascontiguousarray([int(t["row"]) for t in terms], dtype=np.int64)
+    cols = np.ascontiguousarray([int(t["column"]) for t in terms], dtype=np.int64)
+    aj1 = np.ascontiguousarray([float(t["aj1"]) for t in terms], dtype=np.float64)
+    cj = np.ascontiguousarray([float(t["cj"]) for t in terms], dtype=np.float64)
+    cj2 = np.ascontiguousarray([float(t["cj2"]) for t in terms], dtype=np.float64)
+    dense = np.zeros((nr, nr), dtype=np.float64, order="C")
+    heat = np.zeros((nr, nr), dtype=np.float64, order="C")
+    heat2 = np.zeros((nr, nr), dtype=np.float64, order="C")
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_dense_fill_terms(
+        n, nr, rows, cols, aj1, cj, cj2,
+        dense.ravel(), heat.ravel(), heat2.ravel(),
+        buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_dense_fill_terms failed with code {rc}")
+    stats = {
+        "records_batched": float(n),
+        "cpp_calls": 1.0,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": 0.0,
+        "matrix_dense_terms": float(n),
+        "matrix_dense_rows": float(nr),
+    }
+    return dense, heat, heat2, message, stats

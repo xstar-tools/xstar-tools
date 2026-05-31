@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1586,13 +1586,57 @@ def assemble_element_matrix(
                         )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
-    dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
-    heat = np.zeros_like(dense)
-    heat2 = np.zeros_like(dense)
-    for term in terms:
-        dense[term.row - 1, term.column - 1] += term.aj1
-        heat[term.row - 1, term.column - 1] += term.cj
-        heat2[term.row - 1, term.column - 1] += term.cj2
+    dense = heat = heat2 = None
+    dense_fill_cpp_used = False
+    if int(element_z) == 12 and _matrix_cpp_active_for_mg() and terms:
+        try:
+            dense, heat, heat2, dense_msg, dense_stats = dense_fill_terms_matrix_cpp(
+                [
+                    {"row": int(term.row), "column": int(term.column), "aj1": float(term.aj1), "cj": float(term.cj), "cj2": float(term.cj2)}
+                    for term in terms
+                ],
+                n_rows=basis.n_rows,
+            )
+            dense_fill_cpp_used = True
+            if is_mg_summary_profile:
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.dense_matrix_fill_cpp",
+                    float(dense_stats.get("packing_seconds", 0.0)) + float(dense_stats.get("cpp_kernel_seconds", 0.0)),
+                    element_z=int(element_z),
+                    emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                    source_routine="libxstar_matrix.so:xstar_matrix_dense_fill_terms",
+                    status="cpp",
+                    **dense_stats,
+                )
+        except Exception as exc:
+            if is_mg_summary_profile:
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.dense_matrix_fill_cpp",
+                    0.0,
+                    element_z=int(element_z),
+                    emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                    source_routine="libxstar_matrix.so:xstar_matrix_dense_fill_terms",
+                    status="fallback",
+                    records_batched=float(len(terms)),
+                    cpp_calls=0.0,
+                    packing_seconds=0.0,
+                    cpp_kernel_seconds=0.0,
+                    fallback_count=1.0,
+                    matrix_dense_terms=0.0,
+                    matrix_dense_rows=float(basis.n_rows),
+                    error=str(exc),
+                )
+            dense = heat = heat2 = None
+    if dense is None:
+        dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
+        heat = np.zeros_like(dense)
+        heat2 = np.zeros_like(dense)
+        for term in terms:
+            dense[term.row - 1, term.column - 1] += term.aj1
+            heat[term.row - 1, term.column - 1] += term.cj
+            heat2[term.row - 1, term.column - 1] += term.cj2
 
     normalized = dense.copy()
     rhs = np.zeros(basis.n_rows, dtype=float)
@@ -1604,7 +1648,8 @@ def assemble_element_matrix(
             "calc_hmc_all.element_solver.dense_matrix_fill",
             time.perf_counter() - _dense_t0,
             element_z=int(element_z),
-            source_routine="calc_hmc_element_matrix_fill",
+            source_routine=("libxstar_matrix.so:xstar_matrix_dense_fill_terms" if dense_fill_cpp_used else "calc_hmc_element_matrix_fill"),
+            backend=("cpp" if dense_fill_cpp_used else "python"),
         )
 
     strict_ready = n_blocked == 0 and n_unmapped == 0 and len(terms) > 0
