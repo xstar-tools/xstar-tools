@@ -76,6 +76,32 @@ def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def profile_terminal_enabled(control: MutableMapping[str, Any]) -> bool:
+    """Return whether profile rows should be mirrored to live terminal progress.
+
+    Timing rows are always accumulated in ``performance_profile`` when
+    profiling is enabled.  Printing every row is useful during debugging but
+    adds terminal I/O noise and can perturb wall-clock benchmarks, so it is
+    disabled by default as of v0.5.60.
+    """
+    value = control.get("profile_terminal", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _profile_callback(control: MutableMapping[str, Any], emit_progress: Any) -> Any:
+    if emit_progress is False:
+        return None
+    if emit_progress is True:
+        return control.get("progress_callback")
+    if callable(emit_progress):
+        return emit_progress if profile_terminal_enabled(control) else None
+    if emit_progress is None and profile_terminal_enabled(control):
+        return control.get("progress_callback")
+    return None
+
+
 def record_profile_event(
     control: MutableMapping[str, Any],
     name: str,
@@ -102,10 +128,7 @@ def record_profile_event(
             record["rss_end_mb"] = float(rss)
     record.update(metadata)
     _append_profile(control, record)
-    if emit_progress is False:
-        callback = None
-    else:
-        callback = emit_progress if emit_progress is not None else control.get("progress_callback")
+    callback = _profile_callback(control, emit_progress)
     if callable(callback):
         details = {k: v for k, v in record.items() if k != "component"}
         callback("profile_component", {"component": str(name), **details})
@@ -147,10 +170,7 @@ def profile_component(
             record["rss_delta_mb"] = float(rss1 - rss0)
         record.update(metadata)
         _append_profile(control, record)
-        if emit_progress is False:
-            callback = None
-        else:
-            callback = emit_progress if emit_progress is not None else control.get("progress_callback")
+        callback = _profile_callback(control, emit_progress)
         if callable(callback):
             details = {k: v for k, v in record.items() if k != "component"}
             callback("profile_component", {"component": str(name), **details})
@@ -186,6 +206,7 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "cpp_kernel_seconds",
         "fallback_count",
         "emitted_matrix_terms",
+        "batches_flushed",
     )
     counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:

@@ -38,7 +38,6 @@ src/xstar_atomic/source_port/cpp/libxstar_solver.so
 and copy it into the package runtime location:
 
 ```text
-src/xstar_atomic/source_port/libxstar_solver.so
 ```
 
 The package loader searches the runtime location by default. You can override
@@ -70,7 +69,7 @@ move later into the accepted `xstar_tools.xstar.solver` package layout.
 
 ## v0.5.45 path change
 
-The C++ sources and build files now live directly under `src/xstar_atomic/source_port/cpp/`. The extra `xstar_solver/` subdirectory was removed because the shared-library name `libxstar_solver.so` already identifies the backend purpose. The loader searches both `src/xstar_atomic/source_port/libxstar_solver.so` and `src/xstar_atomic/source_port/cpp/libxstar_solver.so` for source-tree runs.
+The C++ sources and build files now live directly under `src/xstar_atomic/source_port/cpp/`. The extra `xstar_solver/` subdirectory was removed because the shared-library name `libxstar_solver.so` already identifies the backend purpose. The loader now searches `src/xstar_atomic/source_port/cpp/libxstar_solver.so` first. Historical runtime copies beside `source_port/*.so` are only fallback paths.
 
 ## v0.5.53 modular rates backend skeleton
 

@@ -181,6 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="emit per-call C++ backend profile rows to live progress; summary counters are still accumulated when this is disabled",
     )
     parser.add_argument(
+        "--profile-terminal",
+        action="store_true",
+        help="mirror profile_component timing rows to live terminal progress; disabled by default because summary.json carries the same timings",
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -294,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
+                profile_terminal=args.profile_terminal,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -346,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
+                profile_terminal=args.profile_terminal,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -372,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_components=args.profile_components,
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
+                profile_terminal=args.profile_terminal,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,

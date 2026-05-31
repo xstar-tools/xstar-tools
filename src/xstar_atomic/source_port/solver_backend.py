@@ -76,18 +76,17 @@ def _candidate_library_paths() -> list[Path]:
         "xstar_solver.dll",
     )
 
-    # Preferred runtime copy beside this module.
-    for name in names:
-        paths.append(here / name)
-
-    # Source-tree build location after v0.5.45.  This lets a developer run:
-    #   PYTHONPATH=src python ...
-    # immediately after building under src/xstar_atomic/source_port/cpp
-    # even if the runtime copy step was skipped.
+    # Preferred source-tree/install location.  As of v0.5.60 the shared
+    # libraries live in one place under source_port/cpp; the historical copy
+    # beside this module is kept only as a backward-compatible fallback.
     source_tree_cpp_dir = here / "cpp"
     for name in names:
         paths.append(source_tree_cpp_dir / name)
 
+    # Backward-compatible fallback for v0.5.43-v0.5.59 runtime copies beside
+    # this module.
+    for name in names:
+        paths.append(here / name)
 
     # Backward-compatible fallback for v0.5.43-v0.5.44 package-internal builds.
     old_source_tree_cpp_dir = here / "cpp" / "xstar_solver"

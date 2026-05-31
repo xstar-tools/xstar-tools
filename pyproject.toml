@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-atomic"
-version = "0.5.59"
+version = "0.5.60"
 description = "Source-faithful Python port and atomic-physics audit tools for XSTAR"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -92,4 +92,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "xstar_atomic.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*"]
-"xstar_atomic.source_port" = ["data/coheat.dat", "*.so", "*.dylib", "*.dll", "cpp/*"]
+"xstar_atomic.source_port" = ["data/coheat.dat", "cpp/*"]
