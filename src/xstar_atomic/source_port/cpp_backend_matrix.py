@@ -108,6 +108,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 lib.xstar_matrix_dense_fill_terms.restype = ctypes.c_int
             except AttributeError:
                 pass
+            try:
+                lib.xstar_matrix_eval_simple_ucalc.argtypes = [
+                    ctypes.c_int,
+                    i64p, i64p, i64p, i64p, i64p,
+                    f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_longlong,
+                    f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_eval_simple_ucalc.restype = ctypes.c_int
+            except AttributeError:
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -321,3 +332,84 @@ def dense_fill_terms_matrix_cpp(
         "matrix_dense_rows": float(nr),
     }
     return dense, heat, heat2, message, stats
+
+
+def eval_simple_ucalc_matrix_cpp(
+    records: list[dict[str, Any]],
+    *,
+    temperature_1e4k: float,
+    electron_density_cm3: float,
+    neutral_h_density_cm3: float,
+    ionized_h_density_cm3: float,
+    nlevp: int,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Evaluate selected simple ucalc branches in libxstar_matrix.so.
+
+    Supported data_type values are 1, 2, 3, 7, 8, and 20.  The caller remains
+    responsible for parity-gating and for falling back to Python for all other
+    data types or any branch requiring level/radiation-grid context.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_eval_simple_ucalc"):
+        raise RuntimeError("C++ matrix simple-ucalc kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    n = int(len(records))
+    t0 = time.perf_counter()
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
+    record = i64("record")
+    data_type = i64("data_type")
+    rate_type = i64("rate_type")
+    int0 = i64("int0")
+    int1 = i64("int1")
+    r0 = f64("r0"); r1 = f64("r1"); r2 = f64("r2"); r3 = f64("r3")
+    r4 = f64("r4"); r5 = f64("r5"); r6 = f64("r6"); r7 = f64("r7")
+    out_ans = np.zeros(max(0, n) * 6, dtype=np.float64)
+    out_i64 = np.zeros(max(0, n) * 6, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_eval_simple_ucalc(
+        n, record, data_type, rate_type, int0, int1,
+        r0, r1, r2, r3, r4, r5, r6, r7,
+        float(temperature_1e4k), float(electron_density_cm3),
+        float(neutral_h_density_cm3), float(ionized_h_density_cm3), int(nlevp),
+        out_ans, out_i64, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_eval_simple_ucalc failed with code {rc}")
+    ans = out_ans.reshape((max(0, n), 6)) if n else np.zeros((0, 6), dtype=np.float64)
+    oi = out_i64.reshape((max(0, n), 6)) if n else np.zeros((0, 6), dtype=np.int64)
+    rows: list[dict[str, Any]] = []
+    applied = 0
+    for k in range(n):
+        status = int(oi[k, 5])
+        if status == 1:
+            applied += 1
+        rows.append({
+            "record": int(oi[k, 0]),
+            "data_type": int(oi[k, 1]),
+            "rate_type": int(oi[k, 2]),
+            "idest1": int(oi[k, 3]),
+            "idest2": int(oi[k, 4]),
+            "status_code": status,
+            "ans1": float(ans[k, 0]),
+            "ans2": float(ans[k, 1]),
+            "ans3": float(ans[k, 2]),
+            "ans4": float(ans[k, 3]),
+            "ans5": float(ans[k, 4]),
+            "ans6": float(ans[k, 5]),
+        })
+    stats = {
+        "records_batched": float(n),
+        "cpp_calls": 1.0 if n else 0.0,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "ucalc_cpp_applied": float(applied),
+        "ucalc_cpp_unsupported": float(n - applied),
+        "fallback_count": 0.0,
+    }
+    return rows, message, stats

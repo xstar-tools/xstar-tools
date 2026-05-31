@@ -1588,7 +1588,8 @@ def assemble_element_matrix(
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
     dense = heat = heat2 = None
     dense_fill_cpp_used = False
-    if int(element_z) == 12 and _matrix_cpp_active_for_mg() and terms:
+    dense_fill_cpp_enabled = str(os.environ.get("XSTAR_ATOMIC_MATRIX_DENSE_FILL_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if int(element_z) == 12 and _matrix_cpp_active_for_mg() and dense_fill_cpp_enabled and terms:
         try:
             dense, heat, heat2, dense_msg, dense_stats = dense_fill_terms_matrix_cpp(
                 [

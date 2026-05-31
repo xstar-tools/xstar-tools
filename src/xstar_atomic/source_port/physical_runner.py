@@ -1798,7 +1798,29 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         runtime_state.plasma.xee = result.state.electron_fraction_xee
         runtime_state.plasma.xpx = result.state.hydrogen_density_cm3
         runtime_state.control["ntotit"] = int(result.ntotit)
+        # Source print option 17 shows the converged iteration count as it was
+        # passed to pprint, which is one less than the translated diagnostic
+        # counter for multi-evaluation dsec solves.  Preserve the raw count in
+        # provenance while using this display value for xout_step/terminal rows.
+        runtime_state.control["legacy_pprint_ntotit"] = int(max(1, int(result.ntotit) - 1))
+        runtime_state.control["legacy_pprint_hc1_percent"] = float(result.final_hmctot) * 100.0
         runtime_state.control["lnerrd"] = int(result.lnerr)
+        try:
+            runtime_state.control["dsec_residual_trajectory_summary"] = [
+                {
+                    "evaluation_index": int(row.evaluation_index),
+                    "ntotit": int(row.ntotit),
+                    "temperature_K": float(row.temperature_k),
+                    "electron_fraction": float(row.electron_fraction),
+                    "hmctot": None if row.hmctot is None else float(row.hmctot),
+                    "elcter": None if row.elcter is None else float(row.elcter),
+                    "event": str(row.event),
+                }
+                for row in result.trajectory
+                if str(row.event) in {"after_calc_hmc_all", "return"}
+            ][-64:]
+        except Exception:
+            runtime_state.control["dsec_residual_trajectory_summary"] = []
         return result
 
     def calc_hmc_all_handler(runtime_state: XSTARPythonState) -> FixedStateCalcHMCAllResult:
@@ -2333,10 +2355,11 @@ def run_xstar_from_parameters(
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
-                "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_and_dense_fill_available_via_libxstar_matrix"},
+                "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_dense_fill_and_selected_simple_ucalc_available_via_libxstar_matrix"},
                 "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_type50_ucalc_linopac_voigt_cpp_via_libxstar_rates"},
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
+                "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),

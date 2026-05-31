@@ -376,6 +376,14 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
     zeta = np.log10(max(1.0e-24, skse))
     nry = int(nbinc(13.6, epi, n)) + 1
     nry0 = max(1, min(n, nry)) - 1
+    # The first h-c(%) column is the local thermal-balance residual.
+    # Keep the physical value by default, but allow the dsec handler to pass
+    # the exact source-display residual snapshot when available.  This avoids
+    # recomputing a display value from stale state during terminal/xout logging.
+    hc1_percent = float(state.control.get(
+        "legacy_pprint_hc1_percent",
+        float(state.thermal.residual) * 100.0,
+    ))
     values = (
         np.log10(r),
         np.log10(max(1.0e-36, min(99.0, rdel / r))),
@@ -384,16 +392,17 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
         xee,
         np.log10(xpx),
         np.log10(t4) + 4.0,
-        min(99.99, max(-99.99, float(state.thermal.residual) * 100.0)),
+        min(99.99, max(-99.99, hc1_percent)),
         min(99.99, max(-99.99, terr * 100.0)),
         np.log10(max(dpthc[0, nry0], 1.0e-10)),
         np.log10(max(dpthc[1, nry0], 1.0e-10)),
     )
     line = " " + "".join(f" {float(value):6.2f}" for value in values)
-    # The current source call supplies only ntotit to the historical 2i3
-    # FORMAT.  Match the observed xout_step.log rather than emitting the Python
-    # diagnostic lnerrd as an extra column.
-    line += f"{int(state.control.get('ntotit', 0)):3d}"
+    # XSTAR's print option 17 displays the count of completed thermal-balance
+    # evaluations used by the current radial row, not the Python diagnostic's
+    # increment-after-evaluator counter.  The first non-trivial solve therefore
+    # appears as ntotit-1 while the one-shot second row remains one.
+    line += f"{int(state.control.get('legacy_pprint_ntotit', state.control.get('ntotit', 0))):3d}"
     buf.log_lines.append(line)
     # Keep the exact source-like line available for terminal progress.  The
     # CLI should print this line rather than recomputing approximate values

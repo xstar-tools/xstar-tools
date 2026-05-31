@@ -32,12 +32,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type7_terms_dense_v1";
+    return "xstar_matrix_mg_type7_terms_dense_ucalc_v1";
 }
 
 int xstar_matrix_feature_flags() {
-    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill.
-    return 1 | 2 | 4;
+    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches.
+    return 1 | 2 | 4 | 8;
 }
 
 int xstar_matrix_probe(
@@ -222,6 +222,112 @@ int xstar_matrix_dense_fill_terms(
         heat2[idx] += cj2[k];
     }
     write_message(errbuf, errbuf_size, "xstar_matrix_dense_fill_terms evaluated");
+    return 0;
+}
+
+
+// Evaluate selected compact analytic ucalc branches used by matrix assembly.
+// This first ABI covers simple no-grid/no-level branches that depend only on
+// temperature and density.  It is a parity-gated building block for moving
+// larger rate-construction batches into libxstar_matrix.so.
+// Supported data_type values: 1, 2, 3, 7, 8, 20.
+int xstar_matrix_eval_simple_ucalc(
+    int n_records,
+    const long long* record,
+    const long long* data_type,
+    const long long* rate_type,
+    const long long* int0,
+    const long long* int1,
+    const double* r0,
+    const double* r1,
+    const double* r2,
+    const double* r3,
+    const double* r4,
+    const double* r5,
+    const double* r6,
+    const double* r7,
+    double t_1e4,
+    double electron_density_cm3,
+    double neutral_h_density_cm3,
+    double ionized_h_density_cm3,
+    long long nlevp,
+    double* out_ans,
+    long long* out_i64,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_records < 0 || !record || !data_type || !rate_type || !int0 || !int1 ||
+        !r0 || !r1 || !r2 || !r3 || !r4 || !r5 || !r6 || !r7 || !out_ans || !out_i64) {
+        write_message(errbuf, errbuf_size, "invalid input to xstar_matrix_eval_simple_ucalc");
+        return 2;
+    }
+    if (!std::isfinite(t_1e4) || t_1e4 <= 0.0 || !std::isfinite(electron_density_cm3) ||
+        !std::isfinite(neutral_h_density_cm3) || !std::isfinite(ionized_h_density_cm3)) {
+        write_message(errbuf, errbuf_size, "non-finite thermodynamic input to xstar_matrix_eval_simple_ucalc");
+        return 3;
+    }
+    const double kt_ev_per_1e4k = 0.861707;
+    const auto expo = [](double x) -> double {
+        if (x < -60.0) x = -60.0;
+        if (x > 60.0) x = 60.0;
+        return std::exp(x);
+    };
+    int applied = 0;
+    for (int k = 0; k < n_records; ++k) {
+        double* ans = out_ans + 6 * k;
+        long long* oi = out_i64 + 6 * k;
+        for (int j = 0; j < 6; ++j) ans[j] = 0.0;
+        oi[0] = record[k];
+        oi[1] = data_type[k];
+        oi[2] = rate_type[k];
+        oi[3] = 0; // idest1
+        oi[4] = 0; // idest2
+        oi[5] = 0; // status: 1 evaluated, 0 unsupported
+        const long long dt = data_type[k];
+        if (dt == 1) {
+            const double arad = r0[k];
+            const double eta = r1[k];
+            ans[0] = arad / std::pow(t_1e4, eta) * electron_density_cm3;
+            oi[3] = 1; oi[5] = 1; ++applied;
+        } else if (dt == 2) {
+            oi[3] = 1; oi[4] = nlevp;
+            if (t_1e4 <= 5.0) {
+                const double rate = r0[k] * expo(std::log(t_1e4) * r1[k]) *
+                    std::max(0.0, 1.0 + r2[k] * expo(r3[k] * t_1e4)) * 1.0e-9;
+                double a1 = rate * neutral_h_density_cm3;
+                double a2 = 0.0;
+                if (rate_type[k] == 5) { a2 = a1; a1 = 0.0; }
+                ans[0] = a1; ans[1] = a2;
+            }
+            oi[5] = 1; ++applied;
+        } else if (dt == 3) {
+            const double cai = r0[k];
+            const double eai = r1[k];
+            ans[0] = cai * expo(-eai / (kt_ev_per_1e4k * t_1e4)) /
+                     std::sqrt(t_1e4) * electron_density_cm3;
+            oi[3] = 1; oi[4] = 1; oi[5] = 1; ++applied;
+        } else if (dt == 7) {
+            const double rate = r0[k] * 1.0e-6 * expo(-r2[k] / t_1e4) *
+                (1.0 + r1[k] * expo(-r3[k] / t_1e4)) / (t_1e4 * std::sqrt(t_1e4));
+            ans[0] = rate * electron_density_cm3;
+            oi[3] = 1; oi[5] = 1; ++applied;
+        } else if (dt == 8) {
+            double rate = 0.0;
+            rate += r0[k] * expo(-r4[k] / (kt_ev_per_1e4k * t_1e4));
+            rate += r1[k] * expo(-r5[k] / (kt_ev_per_1e4k * t_1e4));
+            rate += r2[k] * expo(-r6[k] / (kt_ev_per_1e4k * t_1e4));
+            rate += r3[k] * expo(-r7[k] / (kt_ev_per_1e4k * t_1e4));
+            rate *= 1.0e-6 * std::pow(t_1e4, -1.5);
+            ans[0] = rate * electron_density_cm3;
+            oi[3] = 1; oi[5] = 1; ++applied;
+        } else if (dt == 20) {
+            const double rate = r0[k] * std::pow(t_1e4, r1[k]) *
+                (1.0 + r2[k] * expo(r3[k] * t_1e4)) * expo(-r4[k] / t_1e4) * 1.0e-9;
+            ans[0] = rate * ionized_h_density_cm3;
+            oi[3] = int0[k]; oi[4] = nlevp; oi[5] = 1; ++applied;
+        }
+    }
+    write_message(errbuf, errbuf_size, applied > 0 ? "xstar_matrix_eval_simple_ucalc evaluated" : "xstar_matrix_eval_simple_ucalc no supported records");
     return 0;
 }
 
