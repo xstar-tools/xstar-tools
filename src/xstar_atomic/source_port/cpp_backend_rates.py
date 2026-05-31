@@ -131,6 +131,19 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 # Older libraries do not expose the C++ linopac side-effect kernel.
                 pass
+            try:
+                lib.xstar_rates_apply_mg_type4_type50_coarse.argtypes = [
+                    ctypes.c_int,
+                    i64p, i64p, i64p, i64p, i64p, i64p,
+                    f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    f64p, f64p, ctypes.c_int, f64p, f64p, f64p, ctypes.c_int, f64p, ctypes.c_int, f64p,
+                    i64p, f64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_rates_apply_mg_type4_type50_coarse.restype = ctypes.c_int
+            except AttributeError:
+                # Older libraries do not expose the coarse selected type-50 backend.
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -447,6 +460,83 @@ def build_mg_type4_line_emissivity_cpp_detailed(
     }
     return rows, message, stats
 
+
+
+def apply_mg_type4_type50_coarse_cpp_detailed(
+    records: list[dict[str, Any]],
+    *,
+    cfrac: float,
+    hydrogen_density_cm3: float,
+    turbulent_velocity_km_s: float,
+    temperature_1e4K: float,
+    atomic_mass_amu: float,
+    erg_per_ev: float,
+    epi: np.ndarray,
+    opakc: np.ndarray,
+    rccemis: np.ndarray,
+    oplin: np.ndarray,
+    fline: np.ndarray,
+    flinel: np.ndarray,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Apply selected Mg type-4/data_type=50 ucalc+linopac+array updates in C++.
+
+    This is the first coarse per-ion/per-zone style line-emissivity backend: the
+    C++ call evaluates the selected type-50 ucalc branch and updates the live
+    opacity/emissivity arrays for all records in the batch.  Per-row status
+    values allow Python to replay unsupported records through the source path.
+    """
+    if not records:
+        return [], "no_records", {"records_batched": 0.0, "cpp_calls": 0.0, "packing_seconds": 0.0, "cpp_kernel_seconds": 0.0, "fallback_count": 0.0}
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ rates shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    if not hasattr(lib, "xstar_rates_apply_mg_type4_type50_coarse"):
+        raise RuntimeError("C++ rates shared library does not expose xstar_rates_apply_mg_type4_type50_coarse")
+    n = len(records)
+    packing_t0 = time.perf_counter()
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
+    record_arr=i64("record"); data_type_arr=i64("data_type"); ion_index_arr=i64("ion_index"); ion_stage_arr=i64("ion_stage"); line_index_arr=i64("line_index"); nb1_arr=i64("nb1")
+    wavelength_arr=f64("wavelength_A"); aij_arr=f64("aij_s"); gu_arr=f64("source_upper_weight"); gl_arr=f64("source_lower_weight"); endpoint_arr=f64("endpoint_energy_ev")
+    bremsa_arr=f64("bremsa_nb1"); ptmp1_arr=f64("ptmp1"); ptmp2_arr=f64("ptmp2"); abund1_arr=f64("abund1"); abund2_arr=f64("abund2"); width_arr=f64("bin_width_ev"); natural_arr=f64("natural_width_ev")
+    epi_arr=np.ascontiguousarray(epi, dtype=np.float64)
+    opakc_arr=np.asarray(opakc, dtype=np.float64); rcc_arr=np.asarray(rccemis, dtype=np.float64); oplin_arr=np.asarray(oplin, dtype=np.float64)
+    fline_arr=np.asarray(fline, dtype=np.float64); flinel_arr=np.asarray(flinel, dtype=np.float64)
+    if not (opakc_arr.flags.c_contiguous and rcc_arr.flags.c_contiguous and oplin_arr.flags.c_contiguous and fline_arr.flags.c_contiguous and flinel_arr.flags.c_contiguous):
+        raise RuntimeError("coarse type50 C++ arrays must be C-contiguous")
+    out_i64=np.zeros(n*12, dtype=np.int64); out_f64=np.zeros(n*12, dtype=np.float64)
+    packing_seconds=time.perf_counter()-packing_t0
+    errbuf=ctypes.create_string_buffer(512)
+    cpp_t0=time.perf_counter()
+    rc=lib.xstar_rates_apply_mg_type4_type50_coarse(
+        ctypes.c_int(n), record_arr, data_type_arr, ion_index_arr, ion_stage_arr, line_index_arr, nb1_arr,
+        wavelength_arr, aij_arr, gu_arr, gl_arr, endpoint_arr, bremsa_arr, ptmp1_arr, ptmp2_arr, abund1_arr, abund2_arr, width_arr,
+        ctypes.c_double(float(cfrac)), ctypes.c_double(float(hydrogen_density_cm3)), ctypes.c_double(float(turbulent_velocity_km_s)),
+        ctypes.c_double(float(temperature_1e4K)), ctypes.c_double(float(atomic_mass_amu)), ctypes.c_double(float(erg_per_ev)),
+        natural_arr, epi_arr, ctypes.c_int(int(epi_arr.size)), opakc_arr, rcc_arr.reshape(-1), oplin_arr, ctypes.c_int(int(oplin_arr.size)),
+        fline_arr.reshape(-1), ctypes.c_int(int(fline_arr.shape[1] if fline_arr.ndim == 2 else max(1, oplin_arr.size))), flinel_arr,
+        out_i64, out_f64, errbuf, ctypes.c_size_t(len(errbuf)))
+    cpp_kernel_seconds=time.perf_counter()-cpp_t0
+    message=errbuf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_rates_apply_mg_type4_type50_coarse failed with code {rc}")
+    ints=out_i64.reshape((n,12)); floats=out_f64.reshape((n,12))
+    rows=[]; applied=0; fallback=0; lin_bins=0
+    for row_i,row_f in zip(ints,floats):
+        status=int(row_i[7]); applied += 1 if status == 1 else 0; fallback += 0 if status == 1 else 1; lin_bins += int(row_i[8]) if status == 1 else 0
+        rows.append({
+            "record": int(row_i[0]), "data_type": int(row_i[1]), "rate_type": int(row_i[2]), "ion_index": int(row_i[3]), "ion_stage": int(row_i[4]),
+            "line_index": int(row_i[5]), "nb1": int(row_i[6]), "status_code": status, "linopac_updated_bins": int(row_i[8]), "center_bin_one_based": int(row_i[9]),
+            "ans1": float(row_f[0]), "ans2": float(row_f[1]), "ans3": float(row_f[2]), "ans4": float(row_f[3]), "opakab": float(row_f[4]),
+            "opakb1": float(row_f[5]), "net": float(row_f[6]), "rcem1": float(row_f[7]), "rcem2": float(row_f[8]), "flinel_delta": float(row_f[9]),
+            "oscillator_strength": float(row_f[10]), "vtherm_cm_s": float(row_f[11]),
+        })
+    stats={"records_batched": float(n), "cpp_calls": 1.0, "packing_seconds": float(packing_seconds), "cpp_kernel_seconds": float(cpp_kernel_seconds),
+           "fallback_count": float(fallback), "type50_coarse_cpp_applied": float(applied), "type50_coarse_cpp_fallback": float(fallback),
+           "linopac_cpp_calls": float(applied), "linopac_cpp_updated_bins": float(lin_bins)}
+    return rows, message, stats
 
 
 def apply_linopac_profile_cpp(

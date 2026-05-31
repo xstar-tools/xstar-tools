@@ -21,6 +21,7 @@ constexpr int XSTAR_RATES_FEATURE_SKELETON = 1;
 constexpr int XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS = 2;
 constexpr int XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY = 4;
 constexpr int XSTAR_RATES_FEATURE_LINOPAC_PROFILE = 8;
+constexpr int XSTAR_RATES_FEATURE_MG_TYPE4_TYPE50_COARSE = 16;
 
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (errbuf == nullptr || errbuf_size == 0) {
@@ -42,11 +43,11 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_linopac_v1";
+    return "xstar_rates_mg_type7_type4_linopac_type50_v1";
 }
 
 int xstar_rates_feature_flags() {
-    return XSTAR_RATES_FEATURE_SKELETON | XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS | XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY | XSTAR_RATES_FEATURE_LINOPAC_PROFILE;
+    return XSTAR_RATES_FEATURE_SKELETON | XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS | XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY | XSTAR_RATES_FEATURE_LINOPAC_PROFILE | XSTAR_RATES_FEATURE_MG_TYPE4_TYPE50_COARSE;
 }
 
 int xstar_rates_eval_mg(
@@ -477,6 +478,179 @@ int xstar_rates_apply_linopac_profile(
     out_f64[6] = aasmall;
     out_f64[7] = optpp;
     write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile evaluated");
+    return 0;
+}
+
+
+// Coarse selected Mg record_type=4/data_type=50 backend.
+// This evaluates the source type-50 ucalc branch, scalar line emissivity, and
+// linopac/oplin/fline/flinel array side effects in one C++ batch.  Unsupported
+// records are reported per-row so Python can fall back safely.
+int xstar_rates_apply_mg_type4_type50_coarse(
+    int n_records,
+    const long long* record,
+    const long long* data_type,
+    const long long* ion_index,
+    const long long* ion_stage,
+    const long long* line_index,
+    const long long* nb1,
+    const double* wavelength_a,
+    const double* aij_s,
+    const double* source_upper_weight,
+    const double* source_lower_weight,
+    const double* endpoint_energy_ev,
+    const double* bremsa_nb1,
+    const double* ptmp1,
+    const double* ptmp2,
+    const double* abund_lower,
+    const double* abund_upper,
+    const double* bin_width_ev,
+    double cfrac,
+    double hydrogen_density_cm3,
+    double turbulent_velocity_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double erg_per_ev,
+    const double* natural_width_ev,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    double* oplin,
+    int n_lines_capacity,
+    double* fline,
+    int fline_stride,
+    double* flinel,
+    long long* out_i64,
+    double* out_f64,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_records < 0 || ncn2 < 3 || n_lines_capacity < 1 || fline_stride < 1) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_rates_apply_mg_type4_type50_coarse");
+        return 2;
+    }
+    if (!record || !data_type || !ion_index || !ion_stage || !line_index || !nb1 ||
+        !wavelength_a || !aij_s || !source_upper_weight || !source_lower_weight ||
+        !endpoint_energy_ev || !bremsa_nb1 || !ptmp1 || !ptmp2 || !abund_lower ||
+        !abund_upper || !bin_width_ev || !natural_width_ev || !epi || !opakc ||
+        !rccemis || !oplin || !fline || !flinel || !out_i64 || !out_f64) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_rates_apply_mg_type4_type50_coarse");
+        return 3;
+    }
+    if (!std::isfinite(cfrac) || !std::isfinite(hydrogen_density_cm3) ||
+        !std::isfinite(turbulent_velocity_km_s) || !std::isfinite(temperature_1e4k) ||
+        !std::isfinite(atomic_mass_amu) || !std::isfinite(erg_per_ev) || erg_per_ev <= 0.0) {
+        write_message(errbuf, errbuf_size, "non-finite scalar passed to xstar_rates_apply_mg_type4_type50_coarse");
+        return 4;
+    }
+    const double cover = std::max(0.0, 1.0 - cfrac);
+    const double mass = std::max(atomic_mass_amu, 1.0e-30);
+    const double temp = std::max(temperature_1e4k, 1.0e-48);
+    const double vtherm = std::sqrt((turbulent_velocity_km_s * 1.0e5) * (turbulent_velocity_km_s * 1.0e5) +
+                                    (1.29e6 / std::sqrt(std::max(mass / temp, 1.0e-48))) *
+                                    (1.29e6 / std::sqrt(std::max(mass / temp, 1.0e-48))));
+    long long applied = 0;
+    long long unsupported = 0;
+    long long linopac_calls = 0;
+    long long linopac_updated = 0;
+    for (int k = 0; k < n_records; ++k) {
+        long long* oi = out_i64 + 12 * k;
+        double* of = out_f64 + 12 * k;
+        for (int j = 0; j < 12; ++j) { oi[j] = 0; of[j] = 0.0; }
+        oi[0] = record[k];
+        oi[1] = data_type[k];
+        oi[2] = 4;
+        oi[3] = ion_index[k];
+        oi[4] = ion_stage[k];
+        oi[5] = line_index[k];
+        oi[6] = nb1[k];
+        if (data_type[k] != 50) { oi[7] = -50; ++unsupported; continue; }
+        const double lam = wavelength_a[k];
+        const double aij = aij_s[k];
+        const double gu = source_upper_weight[k];
+        const double gl = source_lower_weight[k];
+        const double de = endpoint_energy_ev[k];
+        const double brem = bremsa_nb1[k];
+        const double p1 = ptmp1[k];
+        const double p2 = ptmp2[k];
+        const double ab1 = abund_lower[k];
+        const double ab2 = abund_upper[k];
+        const double width = bin_width_ev[k];
+        if (!finite6(lam, aij, gu, gl, de, brem) || !finite6(p1, p2, ab1, ab2, width, natural_width_ev[k]) ||
+            lam <= 0.0 || aij < 0.0 || gu <= 0.0 || gl <= 0.0 || de < 0.0 || width <= 0.0 || vtherm <= 0.0) {
+            oi[7] = -1; ++unsupported; continue;
+        }
+        const double flin = 1.0e-16 * aij * gu * lam * lam / (0.667274 * gl);
+        const double escaped_raw = aij * (p1 + p2);
+        const double escaped = std::max(escaped_raw, 1.0e-20 * hydrogen_density_cm3);
+        double photo = 0.0;
+        if (!(lam > 0.99e9) && cover > 0.0) {
+            photo = 0.02655 * flin * lam * 1.0e-8 * brem / 3.0e10 * cover;
+        }
+        double opakab = 0.0;
+        if (!(lam > 0.99e9)) {
+            opakab = 0.02655 * flin * lam * 1.0e-8 / vtherm;
+        }
+        const double opakb1 = opakab * ab1;
+        const double net = escaped * ab2 - photo * ab1;
+        double rcem1 = net * (12398.4016 / lam) * erg_per_ev * p1;
+        double rcem2 = net * (12398.4016 / lam) * erg_per_ev * p2;
+        if (rcem1 < 0.0) rcem1 = 0.0;
+        if (rcem2 < 0.0) rcem2 = 0.0;
+        const double flinel_delta = (rcem1 + rcem2) * 2.0 / width / erg_per_ev;
+        const int li = static_cast<int>(line_index[k]);
+        const int nb = static_cast<int>(nb1[k]);
+        if (li > 0 && li < n_lines_capacity) {
+            oplin[li] = opakb1;
+            fline[0 * fline_stride + li] = rcem1;
+            fline[1 * fline_stride + li] = rcem2;
+        }
+        if (nb > 0 && nb <= ncn2) {
+            flinel[nb - 1] += flinel_delta;
+        }
+        long long tmp_i[8] = {0,0,0,0,0,0,0,0};
+        double tmp_f[12] = {0.0};
+        int lrc = xstar_rates_apply_linopac_profile(
+            opakb1, rcem1, rcem2, 12398.4016 / lam,
+            turbulent_velocity_km_s, temperature_1e4k, atomic_mass_amu, natural_width_ev[k],
+            epi, ncn2, opakc, rccemis, tmp_i, tmp_f, errbuf, errbuf_size);
+        if (lrc == 0) {
+            ++linopac_calls;
+            linopac_updated += tmp_i[0];
+        } else {
+            // Keep the already computed scalar products but tell Python that the
+            // linopac part needs fallback/replay for this record.
+            oi[7] = -6;
+            ++unsupported;
+            continue;
+        }
+        oi[7] = 1;
+        oi[8] = tmp_i[0];
+        oi[9] = tmp_i[2];
+        of[0] = photo;
+        of[1] = escaped;
+        of[2] = -escaped * de * erg_per_ev;
+        of[3] = -photo * de * erg_per_ev;
+        of[4] = opakab;
+        of[5] = opakb1;
+        of[6] = net;
+        of[7] = rcem1;
+        of[8] = rcem2;
+        of[9] = flinel_delta;
+        of[10] = flin;
+        of[11] = vtherm;
+        ++applied;
+    }
+    if (n_records > 0) {
+        out_i64[10] = applied;
+        out_i64[11] = unsupported;
+        if (n_records > 1) {
+            out_i64[22] = linopac_calls;
+            out_i64[23] = linopac_updated;
+        }
+    }
+    write_message(errbuf, errbuf_size, "xstar_rates_apply_mg_type4_type50_coarse evaluated");
     return 0;
 }
 
