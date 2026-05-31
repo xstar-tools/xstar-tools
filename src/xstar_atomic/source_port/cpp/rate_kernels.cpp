@@ -43,7 +43,7 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_linopac_type50_v1";
+    return "xstar_rates_mg_type7_type4_linopac_type50_reasoned_v1";
 }
 
 int xstar_rates_feature_flags() {
@@ -601,14 +601,6 @@ int xstar_rates_apply_mg_type4_type50_coarse(
         const double flinel_delta = (rcem1 + rcem2) * 2.0 / width / erg_per_ev;
         const int li = static_cast<int>(line_index[k]);
         const int nb = static_cast<int>(nb1[k]);
-        if (li > 0 && li < n_lines_capacity) {
-            oplin[li] = opakb1;
-            fline[0 * fline_stride + li] = rcem1;
-            fline[1 * fline_stride + li] = rcem2;
-        }
-        if (nb > 0 && nb <= ncn2) {
-            flinel[nb - 1] += flinel_delta;
-        }
         long long tmp_i[8] = {0,0,0,0,0,0,0,0};
         double tmp_f[12] = {0.0};
         int lrc = xstar_rates_apply_linopac_profile(
@@ -616,18 +608,32 @@ int xstar_rates_apply_mg_type4_type50_coarse(
             turbulent_velocity_km_s, temperature_1e4k, atomic_mass_amu, natural_width_ev[k],
             epi, ncn2, opakc, rccemis, tmp_i, tmp_f, errbuf, errbuf_size);
         if (lrc == 0) {
+            if (li > 0 && li < n_lines_capacity) {
+                oplin[li] = opakb1;
+                fline[0 * fline_stride + li] = rcem1;
+                fline[1 * fline_stride + li] = rcem2;
+            }
+            if (nb > 0 && nb <= ncn2) {
+                flinel[nb - 1] += flinel_delta;
+            }
             ++linopac_calls;
             linopac_updated += tmp_i[0];
+            oi[7] = 1;
+            oi[8] = tmp_i[0];
+            oi[9] = tmp_i[2];
+        } else if (lrc == 6) {
+            // C++ evaluated the selected type-50 ucalc/scalar branch, but the
+            // linopac Voigt/natural-width profile is still owned by Python.
+            // Do not mutate line arrays here; Python applies the returned
+            // scalar products and source-faithful linopac fallback in order.
+            oi[7] = 2;
+            oi[8] = 0;
+            oi[9] = tmp_i[2];
         } else {
-            // Keep the already computed scalar products but tell Python that the
-            // linopac part needs fallback/replay for this record.
             oi[7] = -6;
             ++unsupported;
             continue;
         }
-        oi[7] = 1;
-        oi[8] = tmp_i[0];
-        oi[9] = tmp_i[2];
         of[0] = photo;
         of[1] = escaped;
         of[2] = -escaped * de * erg_per_ev;

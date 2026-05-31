@@ -523,19 +523,44 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
     if rc != 0:
         raise RuntimeError(message or f"xstar_rates_apply_mg_type4_type50_coarse failed with code {rc}")
     ints=out_i64.reshape((n,12)); floats=out_f64.reshape((n,12))
-    rows=[]; applied=0; fallback=0; lin_bins=0
+    def _status_reason(code: int) -> str:
+        return {
+            1: "full_cpp_applied",
+            2: "linopac_voigt_python_fallback",
+            -50: "unsupported_data_type",
+            -6: "linopac_cpp_failure",
+            -1: "invalid_or_nonfinite_input",
+        }.get(int(code), f"status_{int(code)}")
+
+    rows=[]; applied=0; full_applied=0; hybrid_applied=0; fallback=0; lin_bins=0
+    reason_counts: dict[str, float] = {}
     for row_i,row_f in zip(ints,floats):
-        status=int(row_i[7]); applied += 1 if status == 1 else 0; fallback += 0 if status == 1 else 1; lin_bins += int(row_i[8]) if status == 1 else 0
+        status=int(row_i[7])
+        reason = _status_reason(status)
+        reason_counts[reason] = reason_counts.get(reason, 0.0) + 1.0
+        if status in (1, 2):
+            applied += 1
+            if status == 1:
+                full_applied += 1
+                lin_bins += int(row_i[8])
+            else:
+                hybrid_applied += 1
+        else:
+            fallback += 1
         rows.append({
             "record": int(row_i[0]), "data_type": int(row_i[1]), "rate_type": int(row_i[2]), "ion_index": int(row_i[3]), "ion_stage": int(row_i[4]),
-            "line_index": int(row_i[5]), "nb1": int(row_i[6]), "status_code": status, "linopac_updated_bins": int(row_i[8]), "center_bin_one_based": int(row_i[9]),
+            "line_index": int(row_i[5]), "nb1": int(row_i[6]), "status_code": status, "status_reason": reason,
+            "linopac_updated_bins": int(row_i[8]), "center_bin_one_based": int(row_i[9]),
             "ans1": float(row_f[0]), "ans2": float(row_f[1]), "ans3": float(row_f[2]), "ans4": float(row_f[3]), "opakab": float(row_f[4]),
             "opakb1": float(row_f[5]), "net": float(row_f[6]), "rcem1": float(row_f[7]), "rcem2": float(row_f[8]), "flinel_delta": float(row_f[9]),
             "oscillator_strength": float(row_f[10]), "vtherm_cm_s": float(row_f[11]),
         })
     stats={"records_batched": float(n), "cpp_calls": 1.0, "packing_seconds": float(packing_seconds), "cpp_kernel_seconds": float(cpp_kernel_seconds),
-           "fallback_count": float(fallback), "type50_coarse_cpp_applied": float(applied), "type50_coarse_cpp_fallback": float(fallback),
-           "linopac_cpp_calls": float(applied), "linopac_cpp_updated_bins": float(lin_bins)}
+           "fallback_count": float(fallback), "type50_coarse_cpp_applied": float(applied), "type50_coarse_cpp_full_applied": float(full_applied),
+           "type50_coarse_cpp_hybrid_applied": float(hybrid_applied), "type50_coarse_cpp_fallback": float(fallback),
+           "linopac_cpp_calls": float(full_applied), "linopac_cpp_updated_bins": float(lin_bins)}
+    for reason, count in reason_counts.items():
+        stats[f"type50_reason_{reason}"] = float(count)
     return rows, message, stats
 
 

@@ -214,7 +214,14 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "linopac_cpp_parity_checks",
         "linopac_cpp_parity_failures",
         "type50_coarse_cpp_applied",
+        "type50_coarse_cpp_full_applied",
+        "type50_coarse_cpp_hybrid_applied",
         "type50_coarse_cpp_fallback",
+        "type50_reason_full_cpp_applied",
+        "type50_reason_linopac_voigt_python_fallback",
+        "type50_reason_unsupported_data_type",
+        "type50_reason_linopac_cpp_failure",
+        "type50_reason_invalid_or_nonfinite_input",
     )
     counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:

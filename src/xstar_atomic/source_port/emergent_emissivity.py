@@ -875,7 +875,14 @@ def calc_emis_ion(
         "linopac_cpp_parity_checks": 0.0,
         "linopac_cpp_parity_failures": 0.0,
         "type50_coarse_cpp_applied": 0.0,
+        "type50_coarse_cpp_full_applied": 0.0,
+        "type50_coarse_cpp_hybrid_applied": 0.0,
         "type50_coarse_cpp_fallback": 0.0,
+        "type50_reason_full_cpp_applied": 0.0,
+        "type50_reason_linopac_voigt_python_fallback": 0.0,
+        "type50_reason_unsupported_data_type": 0.0,
+        "type50_reason_linopac_cpp_failure": 0.0,
+        "type50_reason_invalid_or_nonfinite_input": 0.0,
     }
     # v0.5.62: queue selected Mg record_type=4/data_type=50 records for a coarse
     # C++ path that evaluates ucalc type-50, scalar line emissivity, linopac, and
@@ -1150,6 +1157,31 @@ def calc_emis_ion(
             result0.status.value, f"python_fallback_strong_line_rate_type_{rate_type0}",
         ))
 
+    def _record_type50_rejection_sample(job: Mapping[str, Any], row: Mapping[str, Any] | None, reason: str) -> None:
+        """Store compact examples of rejected Mg type-50 coarse records for summary JSON."""
+        try:
+            samples = profile_control.setdefault("mg_type4_type50_coarse_rejection_samples", [])
+        except Exception:
+            return
+        if not isinstance(samples, list) or len(samples) >= 16:
+            return
+        item = {
+            "record": int(job.get("record", -1)),
+            "rate_type": int(job.get("rate_type", -1)),
+            "data_type": int(job.get("data_type", -1)),
+            "ion_index": int(ion.ion_index),
+            "ion_stage": int(ion.ion_stage),
+            "line_index": int(job.get("line_index", -1)),
+            "nb1": int(job.get("nb1", -1)),
+            "reason": str(reason),
+        }
+        if row is not None:
+            item["status_code"] = int(row.get("status_code", 0))
+            item["status_reason"] = str(row.get("status_reason", reason))
+            item["linopac_updated_bins"] = int(row.get("linopac_updated_bins", 0))
+            item["center_bin_one_based"] = int(row.get("center_bin_one_based", 0))
+        samples.append(item)
+
     def _append_cpp_type50_trace(job: Mapping[str, Any], row: Mapping[str, Any]) -> None:
         rec0 = int(job["record"])
         line_index_0 = int(job["line_index"])
@@ -1186,15 +1218,25 @@ def calc_emis_ion(
             _cpp_stats["batches_flushed"] = 1.0
             _add_cpp_counter_totals(cpp_mg_type4_stats, _cpp_stats)
             for job, row in zip(pending_cpp_mg_type50_coarse_jobs, cpp_rows):
-                if int(row.get("status_code", 0)) == 1:
+                status_code = int(row.get("status_code", 0))
+                status_reason = str(row.get("status_reason", f"status_{status_code}"))
+                if status_code == 1:
                     _append_cpp_type50_trace(job, row)
+                elif status_code == 2:
+                    # C++ owned the selected type-50 ucalc/scalar products, but
+                    # Python still owns the source-faithful Voigt/natural-width
+                    # linopac side effect.  Apply the returned values in source
+                    # order without re-running ucalc.
+                    _record_type50_rejection_sample(job, row, status_reason)
+                    _apply_mg_type4_line_job(job, row)
                 else:
-                    cpp_mg_type4_stats["type50_coarse_cpp_fallback"] = cpp_mg_type4_stats.get("type50_coarse_cpp_fallback", 0.0) + 1.0
+                    _record_type50_rejection_sample(job, row, status_reason)
                     _apply_python_type4_line_job(job)
         except Exception:
             _add_cpp_counter_totals(cpp_mg_type4_stats, {"fallback_count": float(len(pending_cpp_mg_type50_coarse_records)), "batches_flushed": 1.0})
             cpp_mg_type4_stats["type50_coarse_cpp_fallback"] = cpp_mg_type4_stats.get("type50_coarse_cpp_fallback", 0.0) + float(len(pending_cpp_mg_type50_coarse_records))
             for job in pending_cpp_mg_type50_coarse_jobs:
+                _record_type50_rejection_sample(job, None, "cpp_batch_exception")
                 _apply_python_type4_line_job(job)
         finally:
             pending_cpp_mg_type50_coarse_records.clear()
@@ -1450,7 +1492,7 @@ def calc_emis_ion(
                             "record": int(rec), "rate_type": int(rate_type), "data_type": int(header.data_type), "idest1": int(idest1), "idest2": int(idest2),
                             "lower": int(lower), "upper": int(upper), "line_index": int(line_index), "nb1": int(nb1),
                             "abund1": float(abund1), "abund2": float(abund2), "ptmp1": float(ptmp1), "ptmp2": float(ptmp2),
-                            "energy_ev": float(energy), "bin_width_ev": float(width),
+                            "energy_ev": float(energy), "bin_width_ev": float(width), "result": result,
                         })
                         if is_mg_profile:
                             _elapsed = time.perf_counter() - _record_t0
@@ -1710,7 +1752,14 @@ def calc_emis_ion(
             linopac_cpp_calls=float(cpp_mg_type4_stats.get("linopac_cpp_calls", 0.0)),
             linopac_cpp_updated_bins=float(cpp_mg_type4_stats.get("linopac_cpp_updated_bins", 0.0)),
             type50_coarse_cpp_applied=float(cpp_mg_type4_stats.get("type50_coarse_cpp_applied", 0.0)),
+            type50_coarse_cpp_full_applied=float(cpp_mg_type4_stats.get("type50_coarse_cpp_full_applied", 0.0)),
+            type50_coarse_cpp_hybrid_applied=float(cpp_mg_type4_stats.get("type50_coarse_cpp_hybrid_applied", 0.0)),
             type50_coarse_cpp_fallback=float(cpp_mg_type4_stats.get("type50_coarse_cpp_fallback", 0.0)),
+            type50_reason_full_cpp_applied=float(cpp_mg_type4_stats.get("type50_reason_full_cpp_applied", 0.0)),
+            type50_reason_linopac_voigt_python_fallback=float(cpp_mg_type4_stats.get("type50_reason_linopac_voigt_python_fallback", 0.0)),
+            type50_reason_unsupported_data_type=float(cpp_mg_type4_stats.get("type50_reason_unsupported_data_type", 0.0)),
+            type50_reason_linopac_cpp_failure=float(cpp_mg_type4_stats.get("type50_reason_linopac_cpp_failure", 0.0)),
+            type50_reason_invalid_or_nonfinite_input=float(cpp_mg_type4_stats.get("type50_reason_invalid_or_nonfinite_input", 0.0)),
             status="cpp_or_fallback",
         )
 
