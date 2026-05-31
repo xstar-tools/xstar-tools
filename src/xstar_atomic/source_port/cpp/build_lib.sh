@@ -13,3 +13,4 @@ build_one() {
 
 build_one level_population.cpp libxstar_solver.so
 build_one rate_kernels.cpp libxstar_rates.so
+build_one matrix_kernels.cpp libxstar_matrix.so

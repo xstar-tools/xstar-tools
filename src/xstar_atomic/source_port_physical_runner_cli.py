@@ -214,8 +214,32 @@ def _format_float(value: object, width: int, precision: int) -> str:
     return f"{number:{width}.{precision}f}"
 
 
+def _source_package_version() -> str:
+    try:
+        from importlib.metadata import version
+        return str(version("xstar_atomic"))
+    except Exception:
+        try:
+            init_text = (Path(__file__).resolve().parent / "__init__.py").read_text(encoding="utf-8")
+            for line in init_text.splitlines():
+                if line.startswith("__version__"):
+                    return line.split("=", 1)[1].strip().strip("'\"")
+        except Exception:
+            pass
+    return "unknown"
+
+
 def _make_progress_printer(*, include_memory: bool = False, debug: bool = False):
+    _xstar_tools_version = _source_package_version()
+
+    printed_version = {"value": False}
     printed_radial_header = {"value": False}
+
+    def _print_version_once() -> None:
+        if not printed_version["value"]:
+            print(f" xstar_tools version {_xstar_tools_version}", flush=True)
+            print("", flush=True)
+            printed_version["value"] = True
 
     def _print_raw(event: str, details: dict[str, object]) -> None:
         stamp = datetime.now().isoformat(timespec="seconds")
@@ -228,6 +252,7 @@ def _make_progress_printer(*, include_memory: bool = False, debug: bool = False)
         print(f"[{stamp}] {event}" + (f" {payload}" if payload else ""), flush=True)
 
     def _print_xstar_header(details: dict[str, object]) -> None:
+        _print_version_once()
         print(
             f" pass number={int(details.get('pass_index', 0)):12d}"
             f"{int(details.get('direction', 0)):12d}",
@@ -243,6 +268,10 @@ def _make_progress_printer(*, include_memory: bool = False, debug: bool = False)
     def _print_zone_summary(details: dict[str, object]) -> None:
         if not printed_radial_header["value"]:
             _print_xstar_header(details)
+        source_line = str(details.get("legacy_pprint_line", "") or "")
+        if source_line.strip():
+            print(source_line, flush=True)
+            return
         line = (
             _format_float(details.get("log_radius_cm"), 8, 2)
             + _format_float(details.get("log_delta_r_over_r"), 7, 2)
@@ -267,10 +296,20 @@ def _make_progress_printer(*, include_memory: bool = False, debug: bool = False)
             _print_xstar_header(details)
         elif event == "radial_zone_summary":
             _print_zone_summary(details)
+        elif event == "radial_terminal_summary":
+            _print_zone_summary(details)
         elif event == "output_writer_start":
+            _print_version_once()
+            print(" final print:           1", flush=True)
             print(" xstar: Prepping to write spectral data", flush=True)
         elif event == "output_writer_done":
             print(" xstar: Done writing spectral data", flush=True)
+            timing = details.get("timing_footer")
+            if isinstance(timing, dict):
+                try:
+                    print(f" total time   {float(timing.get('total', 0.0))}", flush=True)
+                except Exception:
+                    pass
         elif event == "profile_component" and bool(details.get("emit_terminal", False)):
             _print_raw(event, details)
 

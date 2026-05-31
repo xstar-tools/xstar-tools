@@ -47,6 +47,7 @@ from .active_subsets import build_active_atdb_subset
 from .backend_config import BackendSelection, resolve_backend_selection, install_backend_environment
 from .compact_active_atdb import export_compact_active_atdb
 from .cpp_backend_rates import rates_backend_status
+from .cpp_backend_matrix import matrix_backend_status
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
 from .performance import normalize_profile_level, profile_component, summarize_profile
@@ -204,7 +205,7 @@ def _prepend_xout_step_startup_provenance(
             nry = 0
     date = str(getattr(master, "creation_date", "") or state.control.get("atcredate", "")).strip()
     lines = [
-        f" xstar_tools version {XSTAR_ATOMIC_VERSION} (xstar_atomic {XSTAR_ATOMIC_VERSION})",
+        f" xstar_tools version {XSTAR_ATOMIC_VERSION}",
         f" nry={nry:12d}{ncn2:12d}",
         " Loading Atomic Database...",
         f" Atomic Data Version: {date}",
@@ -2270,6 +2271,7 @@ def run_xstar_from_parameters(
             "output_writer_done",
             source_order=list(writer.source_order),
             writer_elapsed_seconds=float(writer_elapsed),
+            timing_footer=dict(timing_footer),
         )
         if high_volume_diagnostics:
             continuum_diag_products = write_continuum_diagnostics(state, out)
@@ -2331,7 +2333,7 @@ def run_xstar_from_parameters(
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
-                "matrix_backend": {"requested": backend_selection.matrix_backend, "active": "python", "cpp_available": False, "status": "skeleton_not_yet_implemented"},
+                "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_matrix_terms_available_via_libxstar_matrix"},
                 "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_type50_ucalc_linopac_voigt_cpp_via_libxstar_rates"},
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),

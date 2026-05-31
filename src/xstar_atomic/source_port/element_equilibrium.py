@@ -33,6 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -945,8 +946,21 @@ def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int
 
 
 
+def _matrix_cpp_active_for_mg() -> bool:
+    """Return true when libxstar_matrix.so should own Mg matrix-term batches."""
+    try:
+        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
+    except Exception:
+        return False
+    if status.active != "cpp":
+        return False
+    flags = int(status.cpp_feature_flags or 0)
+    # Feature bit 2 is the v0.5.67 Mg type-7 term builder in libxstar_matrix.so.
+    return bool(flags & 2)
+
+
 def _rates_cpp_active_for_mg() -> bool:
-    """Return true when the optional C++ rates backend should own Mg batches."""
+    """Return true when the legacy optional C++ rates backend should own Mg batches."""
     try:
         status = rates_backend_status(os.environ.get("XSTAR_ATOMIC_RATES_BACKEND"))
     except Exception:
@@ -1068,7 +1082,7 @@ def assemble_element_matrix(
     is_mg_summary_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "summary")
     is_mg_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "nested")
     is_mg_forensic_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "forensic")
-    use_cpp_mg_type7_rates = int(element_z) == 12 and _rates_cpp_active_for_mg()
+    use_cpp_mg_type7_rates = int(element_z) == 12 and (_matrix_cpp_active_for_mg() or _rates_cpp_active_for_mg())
     if is_mg_profile:
         with profile_component(
             profile_control,
@@ -1407,6 +1421,8 @@ def assemble_element_matrix(
             if pending_cpp_type7:
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                 cpp_input: List[Dict[str, Any]] = []
+                cpp_source_routine = "libxstar_matrix.so:xstar_matrix_build_mg_type7_terms" if _matrix_cpp_active_for_mg() else "libxstar_rates.so:xstar_rates_build_mg_type7_terms"
+                cpp_backend_label = "cpp_matrix_mg_type7_matrix_terms" if cpp_source_routine.startswith("libxstar_matrix") else "cpp_mg_type7_matrix_terms"
                 try:
                     for pending_result, _record_row_index in pending_cpp_type7:
                         cpp_input.append({
@@ -1424,12 +1440,21 @@ def assemble_element_matrix(
                             "ans5": float(pending_result.ans5),
                             "ans6": float(pending_result.ans6),
                         })
-                    cpp_rows, cpp_message, cpp_stats = build_mg_type7_terms_cpp_detailed(
-                        cpp_input,
-                        basis_n_rows=basis.n_rows,
-                        term_start=len(terms) + 1,
-                        hydrogen_density_cm3=context.hydrogen_density_cm3,
-                    )
+                    matrix_cpp_active = cpp_source_routine.startswith("libxstar_matrix")
+                    if matrix_cpp_active:
+                        cpp_rows, cpp_message, cpp_stats = build_mg_type7_terms_matrix_cpp_detailed(
+                            cpp_input,
+                            basis_n_rows=basis.n_rows,
+                            term_start=len(terms) + 1,
+                            hydrogen_density_cm3=context.hydrogen_density_cm3,
+                        )
+                    else:
+                        cpp_rows, cpp_message, cpp_stats = build_mg_type7_terms_cpp_detailed(
+                            cpp_input,
+                            basis_n_rows=basis.n_rows,
+                            term_start=len(terms) + 1,
+                            hydrogen_density_cm3=context.hydrogen_density_cm3,
+                        )
                     new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
                 except Exception as exc:
                     if is_mg_summary_profile:
@@ -1441,7 +1466,7 @@ def assemble_element_matrix(
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                            source_routine="libxstar_rates.so:xstar_rates_build_mg_type7_terms",
+                            source_routine=cpp_source_routine,
                             records_batched=float(len(pending_cpp_type7)),
                             cpp_calls=0.0,
                             packing_seconds=0.0,
@@ -1493,7 +1518,7 @@ def assemble_element_matrix(
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                            source_routine="libxstar_rates.so:xstar_rates_build_mg_type7_terms",
+                            source_routine=cpp_source_routine,
                             records_batched=float(cpp_stats.get("records_batched", len(pending_cpp_type7))),
                             cpp_calls=float(cpp_stats.get("cpp_calls", 1.0)),
                             packing_seconds=float(cpp_stats.get("packing_seconds", 0.0)),
@@ -1504,7 +1529,7 @@ def assemble_element_matrix(
                         )
                     for offset, (_pending_result, record_row_index) in enumerate(pending_cpp_type7):
                         group = new_terms[4 * offset : 4 * offset + 4]
-                        record_results[record_row_index]["rates_backend"] = "cpp_mg_type7_matrix_terms"
+                        record_results[record_row_index]["rates_backend"] = cpp_backend_label
                         record_results[record_row_index]["rates_backend_message"] = cpp_message
                         if any(term.source_ipmat_clamped for term in group):
                             n_source_clamps += 1

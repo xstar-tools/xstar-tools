@@ -141,6 +141,7 @@ def _radial_zone_summary_details(
         "pass_index": int(pass_index),
         "zone_index": int(zone_index),
         "direction": int(direction),
+        "legacy_pprint_line": str(state.outputs.get("latest_legacy_pprint9_line", "")),
         "log_radius_cm": _safe_log10(radius, floor=1.0e-99),
         "log_delta_r_over_r": _safe_log10(rel_step, floor=1.0e-36),
         "log_column_cm2": _safe_log10(column, floor=1.0e-10),
@@ -1588,8 +1589,20 @@ def run_bounded_radial_pass(
         from .pprint_legacy import legacy_pprint_after_heatt
 
         # The source terminal report reuses the final shell state and jkp, and
-        # final-pass pprint(12) writes the numrec row.
+        # final-pass pprint(12) writes the numrec row.  Emit the same source-like
+        # line to the terminal progress stream so the terminal output mirrors
+        # xout_step.log, including the final terminal pprint row.
         legacy_pprint_after_heatt(state, terminal_record=True)
+        _emit_progress(
+            state,
+            "radial_terminal_summary",
+            **_radial_zone_summary_details(
+                state,
+                pass_index=kk,
+                zone_index=shell_count + 1,
+                direction=ldir,
+            ),
+        )
     terminal_hdu = save_radial_shell_state(
         state, hdunum=shell_count + 1, terminal_record=True
     )

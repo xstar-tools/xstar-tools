@@ -395,6 +395,10 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
     # diagnostic lnerrd as an extra column.
     line += f"{int(state.control.get('ntotit', 0)):3d}"
     buf.log_lines.append(line)
+    # Keep the exact source-like line available for terminal progress.  The
+    # CLI should print this line rather than recomputing approximate values
+    # from transfer arrays, so terminal output and xout_step.log stay aligned.
+    state.outputs["latest_legacy_pprint9_line"] = line
     buf.source_calls.append("pprint(9)")
     return line
 

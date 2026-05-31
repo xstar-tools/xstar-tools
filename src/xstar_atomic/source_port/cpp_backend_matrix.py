@@ -1,0 +1,269 @@
+"""Optional C++ matrix backend loader.
+
+v0.5.67 starts ``libxstar_matrix.so`` as the dedicated shared library for
+thermal-balance/statistical-equilibrium matrix work.  The first real kernel
+owns Mg record_type=7 matrix-term construction after Python has evaluated the
+source-faithful ucalc ans1..ans6 values.  This duplicates the validated ABI
+shape from the older rates library but reports provenance as matrix work.
+"""
+from __future__ import annotations
+
+import ctypes
+from dataclasses import dataclass, asdict
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class MatrixBackendStatus:
+    requested: str
+    active: str
+    cpp_available: bool
+    cpp_import_error: str | None = None
+    cpp_library_path: str | None = None
+    cpp_backend_name: str | None = None
+    cpp_abi_version: int | None = None
+    cpp_feature_flags: int | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return dict(asdict(self))
+
+
+_CPP_LIB: ctypes.CDLL | None = None
+_CPP_LOAD_ERROR: BaseException | None = None
+_CPP_LIBRARY_PATH: str | None = None
+
+
+def _candidate_library_paths() -> list[Path]:
+    env_path = os.environ.get("XSTAR_ATOMIC_MATRIX_LIB")
+    paths: list[Path] = []
+    if env_path:
+        paths.append(Path(env_path).expanduser())
+    here = Path(__file__).resolve().parent
+    names = (
+        "libxstar_matrix.so",
+        "xstar_matrix.so",
+        "libxstar_matrix.dylib",
+        "xstar_matrix.dll",
+    )
+    for name in names:
+        paths.append(here / "cpp" / name)
+    for name in names:
+        paths.append(here / name)
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def _load_cpp_library() -> ctypes.CDLL | None:
+    global _CPP_LIB, _CPP_LOAD_ERROR, _CPP_LIBRARY_PATH
+    if _CPP_LIB is not None:
+        return _CPP_LIB
+    if _CPP_LOAD_ERROR is not None:
+        return None
+    attempted: list[str] = []
+    try:
+        for path in _candidate_library_paths():
+            attempted.append(str(path))
+            if not path.exists():
+                continue
+            lib = ctypes.CDLL(str(path))
+            lib.xstar_matrix_abi_version.argtypes = []
+            lib.xstar_matrix_abi_version.restype = ctypes.c_int
+            lib.xstar_matrix_backend_name.argtypes = []
+            lib.xstar_matrix_backend_name.restype = ctypes.c_char_p
+            lib.xstar_matrix_feature_flags.argtypes = []
+            lib.xstar_matrix_feature_flags.restype = ctypes.c_int
+            lib.xstar_matrix_probe.argtypes = [
+                ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t,
+            ]
+            lib.xstar_matrix_probe.restype = ctypes.c_int
+            i64p = np.ctypeslib.ndpointer(dtype=np.int64, ndim=1, flags="C_CONTIGUOUS")
+            f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
+            lib.xstar_matrix_build_mg_type7_terms.argtypes = [
+                ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                i64p, i64p, i64p, i64p, i64p, i64p, i64p,
+                f64p, f64p, f64p, f64p, f64p, f64p,
+                ctypes.c_double,
+                i64p, f64p,
+                ctypes.c_char_p, ctypes.c_size_t,
+            ]
+            lib.xstar_matrix_build_mg_type7_terms.restype = ctypes.c_int
+            _CPP_LIB = lib
+            _CPP_LIBRARY_PATH = str(path)
+            return _CPP_LIB
+        raise FileNotFoundError("no xstar_matrix shared library found; attempted: " + "; ".join(attempted))
+    except BaseException as exc:  # pragma: no cover - optional shared library
+        _CPP_LOAD_ERROR = exc
+        return None
+
+
+def cpp_import_error() -> str | None:
+    if _CPP_LOAD_ERROR is None:
+        return None
+    return f"{type(_CPP_LOAD_ERROR).__name__}: {_CPP_LOAD_ERROR}"
+
+
+def _backend_name(lib: ctypes.CDLL | None) -> str | None:
+    if lib is None:
+        return None
+    try:
+        raw = lib.xstar_matrix_backend_name()
+        return raw.decode("ascii", errors="replace") if raw else None
+    except Exception:
+        return None
+
+
+def _abi_version(lib: ctypes.CDLL | None) -> int | None:
+    if lib is None:
+        return None
+    try:
+        return int(lib.xstar_matrix_abi_version())
+    except Exception:
+        return None
+
+
+def _feature_flags(lib: ctypes.CDLL | None) -> int | None:
+    if lib is None:
+        return None
+    try:
+        return int(lib.xstar_matrix_feature_flags())
+    except Exception:
+        return None
+
+
+def matrix_backend_status(requested: str | None = None) -> MatrixBackendStatus:
+    req = (requested or os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND") or "python").strip().lower()
+    if req not in {"python", "cpp", "auto"}:
+        req = "python"
+    lib = _load_cpp_library()
+    if req == "python":
+        active = "python"
+    elif req == "cpp":
+        active = "cpp" if lib is not None else "unavailable"
+    else:
+        active = "cpp" if lib is not None else "python"
+    return MatrixBackendStatus(
+        requested=req,
+        active=active,
+        cpp_available=lib is not None,
+        cpp_import_error=cpp_import_error(),
+        cpp_library_path=_CPP_LIBRARY_PATH,
+        cpp_backend_name=_backend_name(lib),
+        cpp_abi_version=_abi_version(lib),
+        cpp_feature_flags=_feature_flags(lib),
+    )
+
+
+def probe_cpp_matrix(*, n_records: int = 0, n_basis_rows: int = 0) -> str:
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ matrix shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    buf = ctypes.create_string_buffer(512)
+    rc = lib.xstar_matrix_probe(int(n_records), int(n_basis_rows), buf, ctypes.sizeof(buf))
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_probe failed with code {rc}")
+    return message
+
+
+_ROLE = {
+    1: "forward_offdiag",
+    2: "reverse_offdiag",
+    3: "forward_diag_loss",
+    4: "reverse_diag_loss",
+}
+
+
+def build_mg_type7_terms_matrix_cpp_detailed(
+    records: list[dict[str, Any]],
+    *,
+    basis_n_rows: int,
+    term_start: int,
+    hydrogen_density_cm3: float,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Build calc_hmc_ion matrix terms for Mg type-7 records in libxstar_matrix.so."""
+    lib = _load_cpp_library()
+    if lib is None:
+        raise RuntimeError("C++ matrix shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    n = int(len(records))
+    t0 = time.perf_counter()
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
+    record = i64("record")
+    data_type = i64("data_type")
+    ion_index = i64("ion_index")
+    ion_stage = i64("ion_stage")
+    compact_start = i64("compact_start")
+    idest1 = i64("idest1")
+    idest2 = i64("idest2")
+    ans1 = f64("ans1")
+    ans2 = f64("ans2")
+    ans3 = f64("ans3")
+    ans4 = f64("ans4")
+    ans5 = f64("ans5")
+    ans6 = f64("ans6")
+    out_i64 = np.zeros(max(0, n) * 4 * 16, dtype=np.int64)
+    out_f64 = np.zeros(max(0, n) * 4 * 4, dtype=np.float64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_build_mg_type7_terms(
+        n, int(basis_n_rows), int(term_start),
+        record, data_type, ion_index, ion_stage, compact_start, idest1, idest2,
+        ans1, ans2, ans3, ans4, ans5, ans6,
+        float(hydrogen_density_cm3),
+        out_i64, out_f64, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_build_mg_type7_terms failed with code {rc}")
+    rows: list[dict[str, Any]] = []
+    oi = out_i64.reshape((max(0, n) * 4, 16)) if n else np.zeros((0, 16), dtype=np.int64)
+    of = out_f64.reshape((max(0, n) * 4, 4)) if n else np.zeros((0, 4), dtype=np.float64)
+    for j in range(max(0, n) * 4):
+        role_code = int(oi[j, 6])
+        rows.append({
+            "term_index": int(oi[j, 0]),
+            "record": int(oi[j, 1]),
+            "data_type": int(oi[j, 2]),
+            "rate_type": int(oi[j, 3]),
+            "ion_index": int(oi[j, 4]),
+            "ion_stage": int(oi[j, 5]),
+            "role": _ROLE.get(role_code, f"role_{role_code}"),
+            "row": int(oi[j, 7]),
+            "column": int(oi[j, 8]),
+            "idest1": int(oi[j, 9]),
+            "idest2": int(oi[j, 10]),
+            "lower_endpoint": int(oi[j, 11]),
+            "upper_endpoint": int(oi[j, 12]),
+            "source_row_unclamped": int(oi[j, 13]),
+            "source_column_unclamped": int(oi[j, 14]),
+            "source_ipmat_clamped": bool(int(oi[j, 15])),
+            "ucalc_status": "evaluated",
+            "aj1": float(of[j, 0]),
+            "aj2": float(of[j, 1]),
+            "cj": float(of[j, 2]),
+            "cj2": float(of[j, 3]),
+        })
+    stats = {
+        "records_batched": float(n),
+        "cpp_calls": 1.0 if n else 0.0,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": 0.0,
+        "emitted_matrix_terms": float(len(rows)),
+    }
+    return rows, message, stats
