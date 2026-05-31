@@ -1195,6 +1195,9 @@ def assemble_element_matrix(
             _ion_rate_elapsed = 0.0
             _ion_matrix_elapsed = 0.0
             _ion_records_by_type: Dict[int, float] = {}
+            _ion_records_by_data_type: Dict[int, float] = {}
+            _ion_records_by_rate_data_type: Dict[Tuple[int, int], float] = {}
+            _ion_record_counts_by_rate_data_type: Dict[Tuple[int, int], int] = {}
             current_levels = level_tables[block.ion_index]
             second_pass_write_sequence += 1
             previous_max_column = max(leveltemp_workspace.levels, default=0)
@@ -1314,7 +1317,25 @@ def assemble_element_matrix(
                     if is_mg_profile:
                         _dt = time.perf_counter() - _rate_t0
                         _ion_rate_elapsed += _dt
-                        _ion_records_by_type[int(header.rate_type)] = _ion_records_by_type.get(int(header.rate_type), 0.0) + _dt
+                        _rtype = int(header.rate_type)
+                        _dtype = int(header.data_type)
+                        _key = (_rtype, _dtype)
+                        _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
+                        _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
+                        _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
+                        _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
+                        if is_mg_forensic_profile:
+                            _samples = profile_control.setdefault("mg_matrix_ucalc_forensic_samples", [])
+                            if isinstance(_samples, list) and len(_samples) < 128:
+                                _samples.append({
+                                    "record": int(record),
+                                    "rate_type": _rtype,
+                                    "data_type": _dtype,
+                                    "ion_index": int(block.ion_index),
+                                    "ion_stage": int(block.ion_stage),
+                                    "elapsed_seconds": float(_dt),
+                                    "status": str(result.status.value if hasattr(result.status, "value") else result.status),
+                                })
                     row = result.to_dict()
                     destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
                     source_leveltemp_destination = levels.get(int(result.idest2))
@@ -1582,6 +1603,31 @@ def assemble_element_matrix(
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
                             record_type=int(_rtype),
+                            source_routine="ucalc",
+                        )
+                    for _dtype, _elapsed in sorted(_ion_records_by_data_type.items()):
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.rate_construction.by_data_type",
+                            _elapsed,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            data_type=int(_dtype),
+                            source_routine="ucalc",
+                        )
+                    for (_rtype, _dtype), _elapsed in sorted(_ion_records_by_rate_data_type.items()):
+                        _count = int(_ion_record_counts_by_rate_data_type.get((_rtype, _dtype), 0))
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.rate_construction.by_rate_data_type",
+                            _elapsed,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            record_type=int(_rtype),
+                            data_type=int(_dtype),
+                            records_seen=float(_count),
                             source_routine="ucalc",
                         )
 

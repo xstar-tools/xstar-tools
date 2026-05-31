@@ -198,6 +198,8 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     by_element: dict[str, dict[str, float]] = {}
     by_ion: dict[str, dict[str, float]] = {}
     by_record_type: dict[str, dict[str, float]] = {}
+    by_data_type: dict[str, dict[str, float]] = {}
+    by_rate_data_type: dict[str, dict[str, float]] = {}
     by_source_routine: dict[str, dict[str, float]] = {}
     counter_fields = (
         "records_batched",
@@ -222,6 +224,11 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "type50_reason_unsupported_data_type",
         "type50_reason_linopac_cpp_failure",
         "type50_reason_invalid_or_nonfinite_input",
+        "records_seen",
+        "ucalc_cpp_applied",
+        "ucalc_cpp_unsupported",
+        "matrix_dense_terms",
+        "matrix_dense_rows",
     )
     counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:
@@ -242,6 +249,12 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         if "record_type" in row:
             key = f"{name}:record_type:{row['record_type']}"
             _add_grouped(by_record_type, key, row)
+        if "data_type" in row:
+            key = f"{name}:data_type:{row['data_type']}"
+            _add_grouped(by_data_type, key, row)
+        if "record_type" in row and "data_type" in row:
+            key = f"{name}:record_type:{row['record_type']}:data_type:{row['data_type']}"
+            _add_grouped(by_rate_data_type, key, row)
         if "source_routine" in row:
             key = f"{name}:source:{row['source_routine']}"
             _add_grouped(by_source_routine, key, row)

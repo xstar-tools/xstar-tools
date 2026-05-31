@@ -1798,11 +1798,12 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         runtime_state.plasma.xee = result.state.electron_fraction_xee
         runtime_state.plasma.xpx = result.state.hydrogen_density_cm3
         runtime_state.control["ntotit"] = int(result.ntotit)
-        # Source print option 17 shows the converged iteration count as it was
-        # passed to pprint, which is one less than the translated diagnostic
-        # counter for multi-evaluation dsec solves.  Preserve the raw count in
-        # provenance while using this display value for xout_step/terminal rows.
-        runtime_state.control["legacy_pprint_ntotit"] = int(max(1, int(result.ntotit) - 1))
+        # Do not cosmetically adjust the source-style print option 17 iteration
+        # count.  If Python takes one more thermal-balance iteration than XSTAR,
+        # that is a physics/control-flow parity issue to diagnose, not a display
+        # issue to hide.  Keep the printed count identical to the translated raw
+        # ntotit until the extra iteration is removed at the source.
+        runtime_state.control["legacy_pprint_ntotit"] = int(result.ntotit)
         runtime_state.control["legacy_pprint_hc1_percent"] = float(result.final_hmctot) * 100.0
         runtime_state.control["lnerrd"] = int(result.lnerr)
         try:
@@ -1817,8 +1818,8 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                     "event": str(row.event),
                 }
                 for row in result.trajectory
-                if str(row.event) in {"after_calc_hmc_all", "return"}
-            ][-64:]
+                if str(row.event) in {"before_calc_hmc_all", "after_calc_hmc_all", "return"}
+            ][-128:]
         except Exception:
             runtime_state.control["dsec_residual_trajectory_summary"] = []
         return result
@@ -2360,6 +2361,7 @@ def run_xstar_from_parameters(
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),
+                "mg_matrix_ucalc_forensic_samples": list(state.control.get("mg_matrix_ucalc_forensic_samples", [])),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
