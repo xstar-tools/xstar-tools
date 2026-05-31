@@ -186,6 +186,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="mirror profile_component timing rows to live terminal progress; disabled by default because summary.json carries the same timings",
     )
     parser.add_argument(
+        "--progress-debug",
+        action="store_true",
+        help=(
+            "print raw high-volume progress events such as dsec_evaluation; "
+            "disabled by default so terminal output stays close to Fortran XSTAR"
+        ),
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -198,8 +206,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _make_progress_printer(*, include_memory: bool = False):
-    def _progress_printer(event: str, details: dict[str, object]) -> None:
+def _format_float(value: object, width: int, precision: int) -> str:
+    try:
+        number = float(value)
+    except Exception:
+        number = 0.0
+    return f"{number:{width}.{precision}f}"
+
+
+def _make_progress_printer(*, include_memory: bool = False, debug: bool = False):
+    printed_radial_header = {"value": False}
+
+    def _print_raw(event: str, details: dict[str, object]) -> None:
         stamp = datetime.now().isoformat(timespec="seconds")
         merged = dict(details)
         if include_memory:
@@ -208,6 +226,54 @@ def _make_progress_printer(*, include_memory: bool = False):
                 merged["rss_mb"] = f"{rss:.1f}"
         payload = " ".join(f"{key}={value}" for key, value in sorted(merged.items()))
         print(f"[{stamp}] {event}" + (f" {payload}" if payload else ""), flush=True)
+
+    def _print_xstar_header(details: dict[str, object]) -> None:
+        print(
+            f" pass number={int(details.get('pass_index', 0)):12d}"
+            f"{int(details.get('direction', 0)):12d}",
+            flush=True,
+        )
+        print(
+            "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)",
+            flush=True,
+        )
+        print("                                                                  fwd    rev", flush=True)
+        printed_radial_header["value"] = True
+
+    def _print_zone_summary(details: dict[str, object]) -> None:
+        if not printed_radial_header["value"]:
+            _print_xstar_header(details)
+        line = (
+            _format_float(details.get("log_radius_cm"), 8, 2)
+            + _format_float(details.get("log_delta_r_over_r"), 7, 2)
+            + _format_float(details.get("log_column_cm2"), 7, 2)
+            + _format_float(details.get("log_xi"), 7, 2)
+            + _format_float(details.get("electron_fraction"), 7, 2)
+            + _format_float(details.get("log_density_cm3"), 7, 2)
+            + _format_float(details.get("log_temperature_K"), 7, 2)
+            + _format_float(details.get("heat_cool_forward_percent"), 7, 2)
+            + _format_float(details.get("heat_cool_reverse_percent"), 7, 2)
+            + _format_float(details.get("log_tau_forward"), 7, 2)
+            + _format_float(details.get("log_tau_reverse"), 7, 2)
+            + f"{int(details.get('numrec', 0)):3d}"
+        )
+        print(line, flush=True)
+
+    def _progress_printer(event: str, details: dict[str, object]) -> None:
+        if debug:
+            _print_raw(event, details)
+            return
+        if event == "radial_pass_start":
+            _print_xstar_header(details)
+        elif event == "radial_zone_summary":
+            _print_zone_summary(details)
+        elif event == "output_writer_start":
+            print(" xstar: Prepping to write spectral data", flush=True)
+        elif event == "output_writer_done":
+            print(" xstar: Done writing spectral data", flush=True)
+        elif event == "profile_component" and bool(details.get("emit_terminal", False)):
+            _print_raw(event, details)
+
     return _progress_printer
 
 
@@ -268,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     progress_callback = (
-        _make_progress_printer(include_memory=args.progress_memory)
+        _make_progress_printer(include_memory=args.progress_memory, debug=args.progress_debug)
         if args.progress
         else None
     )
@@ -300,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
                 profile_terminal=args.profile_terminal,
+                progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -353,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
                 profile_terminal=args.profile_terminal,
+                progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,
@@ -380,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_rss=args.profile_rss,
                 profile_backend_calls=args.profile_backend_calls,
                 profile_terminal=args.profile_terminal,
+                progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
                 rates_backend=args.rates_backend,

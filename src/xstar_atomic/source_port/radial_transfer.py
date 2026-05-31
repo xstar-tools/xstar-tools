@@ -89,6 +89,73 @@ def _emit_progress(state: XSTARPythonState, event: str, **details: Any) -> None:
         callback(str(event), details)
 
 
+def _safe_log10(value: float, *, floor: float = 1.0e-10) -> float:
+    try:
+        val = float(value)
+    except Exception:
+        return float(math.log10(floor))
+    if not math.isfinite(val) or val <= 0.0:
+        val = float(floor)
+    return float(math.log10(max(val, float(floor))))
+
+
+def _max_tau_log10(value: object) -> float:
+    if value is None:
+        return -10.0
+    try:
+        arr = np.asarray(value, dtype=float)
+        if arr.size == 0:
+            return -10.0
+        finite = arr[np.isfinite(arr)]
+        if finite.size == 0:
+            return -10.0
+        return _safe_log10(float(np.max(np.abs(finite))), floor=1.0e-10)
+    except Exception:
+        return -10.0
+
+
+def _radial_zone_summary_details(
+    state: XSTARPythonState,
+    *,
+    pass_index: int,
+    zone_index: int,
+    direction: int,
+) -> dict[str, float | int]:
+    radius = float(getattr(state.transfer, "radius", 0.0) or 0.0)
+    step_size = float(getattr(state.transfer, "step_size", 0.0) or 0.0)
+    column = float(getattr(state.transfer, "column", 0.0) or 0.0)
+    density = float(getattr(state.plasma, "xpx", 0.0) or 0.0)
+    temperature = float(getattr(state.plasma, "temperature", 0.0) or 0.0)
+    electron_fraction = float(getattr(state.plasma, "xee", 0.0) or 0.0)
+    xi = float(state.control.get("xi", 0.0) or 0.0)
+    zeta = float(state.control.get("zeta", _safe_log10(xi)) or _safe_log10(xi))
+    residual_percent = float(getattr(state.thermal, "residual", 0.0) or 0.0) * 100.0
+    if int(direction) < 0:
+        hc_forward = residual_percent
+        hc_reverse = 0.0
+    else:
+        hc_forward = 0.0
+        hc_reverse = residual_percent
+    rel_step = abs(step_size / radius) if radius > 0.0 else 0.0
+    return {
+        "pass_index": int(pass_index),
+        "zone_index": int(zone_index),
+        "direction": int(direction),
+        "log_radius_cm": _safe_log10(radius, floor=1.0e-99),
+        "log_delta_r_over_r": _safe_log10(rel_step, floor=1.0e-36),
+        "log_column_cm2": _safe_log10(column, floor=1.0e-10),
+        "log_xi": zeta if math.isfinite(zeta) else _safe_log10(xi),
+        "electron_fraction": electron_fraction,
+        "log_density_cm3": _safe_log10(density, floor=1.0e-99),
+        "log_temperature_K": _safe_log10(temperature, floor=1.0e-99),
+        "heat_cool_forward_percent": hc_forward,
+        "heat_cool_reverse_percent": hc_reverse,
+        "log_tau_forward": _max_tau_log10(getattr(state.transfer, "tau_out", None)),
+        "log_tau_reverse": _max_tau_log10(getattr(state.transfer, "tau_in", None)),
+        "numrec": int(state.control.get("numrec", zone_index)),
+    }
+
+
 @dataclass(frozen=True)
 class StepResult:
     """Result of the literal ``step.f90`` zone-size calculation.
@@ -1295,6 +1362,13 @@ def run_bounded_radial_shell(
         step_executed=XSTARSourceRoutine.STEP.value in source_order,
         output_writers_executed=False,
     )
+    summary_details = _radial_zone_summary_details(
+        state,
+        pass_index=result.pass_index,
+        zone_index=result.zone_index,
+        direction=result.direction,
+    )
+    _emit_progress(state, "radial_zone_summary", **summary_details)
     _emit_progress(
         state,
         "radial_shell_done",

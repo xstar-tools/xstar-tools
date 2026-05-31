@@ -1672,6 +1672,8 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             mutable: DsecMutableRuntimeState,
             fixed: FixedStateCalcHMCAllResult,
         ) -> None:
+            if not bool(runtime_state.control.get("progress_debug", False)):
+                return
             carbon_cooling = float(fixed.cll.get(6, 0.0))
             _emit_progress(
                 runtime_state.control.get("progress_callback"),
@@ -2112,6 +2114,7 @@ def run_xstar_from_parameters(
     profile_rss: bool = False,
     profile_backend_calls: bool = False,
     profile_terminal: bool = False,
+    progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2197,6 +2200,7 @@ def run_xstar_from_parameters(
     state.control["profile_rss"] = bool(profile_rss)
     state.control["profile_backend_calls"] = bool(profile_backend_calls)
     state.control["profile_terminal"] = bool(profile_terminal)
+    state.control["progress_debug"] = bool(progress_debug)
     state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
@@ -2323,6 +2327,7 @@ def run_xstar_from_parameters(
                 "profile_rss_enabled": bool(profile_rss),
                 "profile_backend_calls_enabled": bool(profile_backend_calls),
                 "profile_terminal_enabled": bool(profile_terminal),
+                "progress_debug_enabled": bool(progress_debug),
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
@@ -2380,6 +2385,7 @@ def run_xstar_python(
     profile_rss: bool = False,
     profile_backend_calls: bool = False,
     profile_terminal: bool = False,
+    progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2422,6 +2428,7 @@ def run_xstar_python(
         profile_rss=profile_rss,
         profile_backend_calls=profile_backend_calls,
         profile_terminal=profile_terminal,
+        progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2456,6 +2463,7 @@ def run_xstar_python_command(
     profile_rss: bool = False,
     profile_backend_calls: bool = False,
     profile_terminal: bool = False,
+    progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2481,6 +2489,7 @@ def run_xstar_python_command(
         profile_rss=profile_rss,
         profile_backend_calls=profile_backend_calls,
         profile_terminal=profile_terminal,
+        progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2507,6 +2516,7 @@ def run_xstar_python_script(
     profile_rss: bool = False,
     profile_backend_calls: bool = False,
     profile_terminal: bool = False,
+    progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2534,6 +2544,7 @@ def run_xstar_python_script(
         profile_rss=profile_rss,
         profile_backend_calls=profile_backend_calls,
         profile_terminal=profile_terminal,
+        progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
@@ -2723,6 +2734,7 @@ def run_c5_ne1_acceptance(
     profile_rss: bool = False,
     profile_backend_calls: bool = False,
     profile_terminal: bool = False,
+    progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
     rates_backend: str | None = None,
@@ -2746,6 +2758,7 @@ def run_c5_ne1_acceptance(
         profile_rss=profile_rss,
         profile_backend_calls=profile_backend_calls,
         profile_terminal=profile_terminal,
+        progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
         rates_backend=rates_backend,
