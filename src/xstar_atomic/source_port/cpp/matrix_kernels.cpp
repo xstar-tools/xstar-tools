@@ -32,12 +32,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type7_terms_dense_ucalc_v1";
+    return "xstar_matrix_mg_type7_terms_dense_ucalc_type51_v1";
 }
 
 int xstar_matrix_feature_flags() {
     // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches.
-    return 1 | 2 | 4 | 8;
+    return 1 | 2 | 4 | 8 | 16;
 }
 
 int xstar_matrix_probe(
@@ -328,6 +328,127 @@ int xstar_matrix_eval_simple_ucalc(
         }
     }
     write_message(errbuf, errbuf_size, applied > 0 ? "xstar_matrix_eval_simple_ucalc evaluated" : "xstar_matrix_eval_simple_ucalc no supported records");
+    return 0;
+}
+
+
+// Batched source-faithful data_type=51 Burgess-Tully collision ucalc branch.
+// This covers the dominant Mg thermal-balance rate_construction group in the
+// forensic run: rate_type=3, data_type=51.  It returns ans1/ans2/ans5/ans6 and
+// source endpoints only; the existing matrix-term builder inserts the four
+// calc_hmc_ion matrix rows from those results.
+namespace {
+
+double xstar_matrix_expo_limited(double x) {
+    if (x < -60.0) x = -60.0;
+    if (x > 60.0) x = 60.0;
+    return std::exp(x);
+}
+
+double xstar_matrix_splinem5(const double* p, double x) {
+    const double s = 1.0 / 30.0;
+    const double s2 = 32.0 * s * (19.0*p[0] - 43.0*p[1] + 30.0*p[2] - 7.0*p[3] + p[4]);
+    const double s3 = 160.0 * s * (-p[0] + 7.0*p[1] - 12.0*p[2] + 7.0*p[3] - p[4]);
+    const double s4 = 32.0 * s * (p[0] - 7.0*p[1] + 30.0*p[2] - 43.0*p[3] + 19.0*p[4]);
+    double x0 = 0.0, t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
+    if (x <= 0.25) {
+        x0 = x - 0.125; t3 = 0.0; t2 = 0.5 * s2; t1 = 4.0 * (p[1] - p[0]); t0 = 0.5 * (p[0] + p[1]) - 0.015625 * t2;
+    } else if (x <= 0.5) {
+        x0 = x - 0.375; t3 = 20.0 * s * (s3 - s2); t2 = 0.25 * (s2 + s3); t1 = 4.0 * (p[2] - p[1]) - 0.015625 * t3; t0 = 0.5 * (p[1] + p[2]) - 0.015625 * t2;
+    } else if (x <= 0.75) {
+        x0 = x - 0.625; t3 = 20.0 * s * (s4 - s3); t2 = 0.25 * (s3 + s4); t1 = 4.0 * (p[3] - p[2]) - 0.015625 * t3; t0 = 0.5 * (p[2] + p[3]) - 0.015625 * t2;
+    } else {
+        x0 = x - 0.875; t3 = 0.0; t2 = 0.5 * s4; t1 = 4.0 * (p[4] - p[3]); t0 = 0.5 * (p[3] + p[4]) - 0.015625 * t2;
+    }
+    return t0 + x0 * (t1 + x0 * (t2 + x0 * t3));
+}
+
+bool xstar_matrix_type51_upsilon5(long long bt_type, double eij_ryd, double c_bt, const double* y, double temperature_k, double* out) {
+    if (!out || eij_ryd <= 0.0 || c_bt <= 0.0 || temperature_k <= 0.0) return false;
+    const double e = std::fabs(temperature_k / (1.57888e5 * eij_ryd));
+    double x = 0.0;
+    if (bt_type == 1 || bt_type == 4) {
+        const double denom = std::log(e + c_bt);
+        if (denom == 0.0 || !std::isfinite(denom)) return false;
+        x = std::log((e + c_bt) / c_bt) / denom;
+    } else if (bt_type == 2 || bt_type == 3) {
+        x = e / (e + c_bt);
+    } else {
+        return false;
+    }
+    double val = xstar_matrix_splinem5(y, x);
+    if (bt_type == 1) val *= std::log(e + 2.71828);
+    else if (bt_type == 3) val /= (e + 1.0);
+    else if (bt_type == 4) val *= std::log(e + c_bt);
+    if (!std::isfinite(val)) return false;
+    *out = val;
+    return true;
+}
+
+} // namespace
+
+extern "C" int xstar_matrix_eval_type51_ucalc_batch(
+    int n_records,
+    const long long* record,
+    const long long* ion_index,
+    const long long* ion_stage,
+    const long long* lower_level,
+    const long long* upper_level,
+    const long long* bt_type,
+    const long long* n_points,
+    const double* eij_ryd,
+    const double* c_bt,
+    const double* g_lower,
+    const double* g_upper,
+    const double* delta_e_ev,
+    const double* y_values,
+    double temperature_k,
+    double electron_density_cm3,
+    double* out_ans,
+    long long* out_i64,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_records < 0 || !record || !ion_index || !ion_stage || !lower_level || !upper_level || !bt_type || !n_points ||
+        !eij_ryd || !c_bt || !g_lower || !g_upper || !delta_e_ev || !y_values || !out_ans || !out_i64) {
+        write_message(errbuf, errbuf_size, "invalid input to xstar_matrix_eval_type51_ucalc_batch");
+        return 2;
+    }
+    if (!std::isfinite(temperature_k) || temperature_k <= 0.0 || !std::isfinite(electron_density_cm3) || electron_density_cm3 < 0.0) {
+        write_message(errbuf, errbuf_size, "invalid thermodynamic input to xstar_matrix_eval_type51_ucalc_batch");
+        return 3;
+    }
+    int applied = 0;
+    for (int k = 0; k < n_records; ++k) {
+        double* ans = out_ans + 6 * k;
+        long long* oi = out_i64 + 8 * k;
+        for (int j = 0; j < 6; ++j) ans[j] = 0.0;
+        oi[0] = record[k]; oi[1] = 51; oi[2] = 3; oi[3] = lower_level[k]; oi[4] = upper_level[k]; oi[5] = ion_index[k]; oi[6] = ion_stage[k]; oi[7] = 0;
+        if (n_points[k] != 5 || eij_ryd[k] <= 0.0 || c_bt[k] <= 0.0 || g_lower[k] <= 0.0 || g_upper[k] <= 0.0 || delta_e_ev[k] <= 0.0) continue;
+        double ups = 0.0;
+        const double* y = y_values + 9 * k;
+        const double eij_ev = eij_ryd[k] * 13.605692;
+        const double wavelength_a = 12398.4016 / eij_ev;
+        const double floor_k = 2.8777e6 / wavelength_a;
+        const double bt_temperature_k = std::max(temperature_k, floor_k);
+        if (!xstar_matrix_type51_upsilon5(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups)) continue;
+        const double t_xstar = temperature_k / 1.0e4;
+        const double tsq = std::sqrt(t_xstar);
+        const double ekt_ev = 0.861707 * t_xstar;
+        if (tsq <= 0.0 || ekt_ev <= 0.0) continue;
+        const double delta = eij_ev / ekt_ev;
+        const double q_deexc = 8.626e-8 * ups / tsq / g_upper[k];
+        const double q_exc = q_deexc * g_upper[k] * xstar_matrix_expo_limited(-delta) / g_lower[k];
+        const double ans1 = q_exc * electron_density_cm3;
+        const double ans2 = q_deexc * electron_density_cm3;
+        ans[0] = ans1;
+        ans[1] = ans2;
+        ans[4] = ans2 * delta_e_ev[k] * 1.602176634e-12;
+        ans[5] = ans1 * delta_e_ev[k] * 1.602176634e-12;
+        oi[7] = 1;
+        ++applied;
+    }
+    write_message(errbuf, errbuf_size, applied > 0 ? "xstar_matrix_eval_type51_ucalc_batch evaluated" : "xstar_matrix_eval_type51_ucalc_batch no supported records");
     return 0;
 }
 

@@ -119,6 +119,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 lib.xstar_matrix_eval_simple_ucalc.restype = ctypes.c_int
             except AttributeError:
                 pass
+            try:
+                lib.xstar_matrix_eval_type51_ucalc_batch.argtypes = [
+                    ctypes.c_int,
+                    i64p, i64p, i64p, i64p, i64p, i64p, i64p,
+                    f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double, ctypes.c_double,
+                    f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_eval_type51_ucalc_batch.restype = ctypes.c_int
+            except AttributeError:
+                pass
             _CPP_LIB = lib
             _CPP_LIBRARY_PATH = str(path)
             return _CPP_LIB
@@ -411,5 +422,95 @@ def eval_simple_ucalc_matrix_cpp(
         "ucalc_cpp_applied": float(applied),
         "ucalc_cpp_unsupported": float(n - applied),
         "fallback_count": 0.0,
+    }
+    return rows, message, stats
+
+
+
+def eval_type51_ucalc_matrix_cpp(
+    records: list[dict[str, Any]],
+    *,
+    temperature_k: float,
+    electron_density_cm3: float,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Evaluate batched data_type=51 Burgess-Tully collision ucalc in libxstar_matrix.so.
+
+    This is intentionally narrow: rate_type=3, data_type=51, five-point BT rows.
+    Unsupported rows are returned with status_code=0 so callers can fall back to
+    the source-faithful Python evaluator without changing physics.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_eval_type51_ucalc_batch"):
+        raise RuntimeError("C++ matrix type51 ucalc kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    n = int(len(records))
+    t0 = time.perf_counter()
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
+    record = i64("record")
+    ion_index = i64("ion_index")
+    ion_stage = i64("ion_stage")
+    lower_level = i64("lower_level")
+    upper_level = i64("upper_level")
+    bt_type = i64("bt_type")
+    n_points = i64("n_points")
+    eij_ryd = f64("eij_ryd")
+    c_bt = f64("c_bt")
+    g_lower = f64("g_lower")
+    g_upper = f64("g_upper")
+    delta_e_ev = f64("delta_e_ev")
+    y_values = np.zeros(max(0, n) * 9, dtype=np.float64)
+    for k, rec in enumerate(records):
+        vals = list(rec.get("y_values", []))[:9]
+        for j, val in enumerate(vals):
+            y_values[9*k + j] = float(val)
+    out_ans = np.zeros(max(0, n) * 6, dtype=np.float64)
+    out_i64 = np.zeros(max(0, n) * 8, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_eval_type51_ucalc_batch(
+        n, record, ion_index, ion_stage, lower_level, upper_level, bt_type, n_points,
+        eij_ryd, c_bt, g_lower, g_upper, delta_e_ev, y_values,
+        float(temperature_k), float(electron_density_cm3),
+        out_ans, out_i64, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_eval_type51_ucalc_batch failed with code {rc}")
+    ans = out_ans.reshape((max(0, n), 6)) if n else np.zeros((0, 6), dtype=np.float64)
+    oi = out_i64.reshape((max(0, n), 8)) if n else np.zeros((0, 8), dtype=np.int64)
+    rows: list[dict[str, Any]] = []
+    applied = 0
+    for k in range(n):
+        status = int(oi[k, 7])
+        if status == 1:
+            applied += 1
+        rows.append({
+            "record": int(oi[k, 0]),
+            "data_type": int(oi[k, 1]),
+            "rate_type": int(oi[k, 2]),
+            "idest1": int(oi[k, 3]),
+            "idest2": int(oi[k, 4]),
+            "ion_index": int(oi[k, 5]),
+            "ion_stage": int(oi[k, 6]),
+            "status_code": status,
+            "ans1": float(ans[k, 0]),
+            "ans2": float(ans[k, 1]),
+            "ans3": float(ans[k, 2]),
+            "ans4": float(ans[k, 3]),
+            "ans5": float(ans[k, 4]),
+            "ans6": float(ans[k, 5]),
+        })
+    stats = {
+        "records_batched": float(n),
+        "cpp_calls": 1.0 if n else 0.0,
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "ucalc_cpp_applied": float(applied),
+        "ucalc_cpp_unsupported": float(n - applied),
+        "fallback_count": float(n - applied),
     }
     return rows, message, stats

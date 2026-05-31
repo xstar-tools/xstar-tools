@@ -33,13 +33,14 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
     UCalcLevel,
     UCalcLevelTable,
     UCalcResult,
+    UCalcProvenance,
     UCalcStatus,
     default_source_faithful_ucalc,
 )
@@ -1228,6 +1229,95 @@ def assemble_element_matrix(
                 nlev=block.nlev,
             )
             pending_cpp_type7: List[Tuple[UCalcResult, int]] = []
+            type51_cpp_cache: Dict[int, UCalcResult] = {}
+            type51_cpp_stats_recorded = False
+            type51_cpp_enabled = bool(int(element_z) == 12 and _matrix_cpp_active_for_mg() and str(os.environ.get("XSTAR_ATOMIC_MATRIX_TYPE51_UCALC_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"})
+
+            def _build_type51_cpp_cache() -> None:
+                nonlocal type51_cpp_stats_recorded
+                if type51_cpp_cache or not type51_cpp_enabled:
+                    return
+                payload: List[Dict[str, Any]] = []
+                rec = int(derived.npfi[51, block.ion_index]) if 51 < derived.npfi.shape[0] else 0
+                while rec and int(derived.npar[rec]) == block.ion_record:
+                    h = master.header(rec)
+                    if int(h.rate_type) == 3 and int(h.data_type) == 51:
+                        ints = list(int(x) for x in master.record_integers(rec))
+                        reals = list(float(x) for x in master.record_reals(rec))
+                        if len(ints) >= 2 and len(reals) >= 7:
+                            a, b = int(ints[2] if len(ints) > 2 else ints[0]), int(ints[1])
+                            ea, eb = levels.energy(a), levels.energy(b)
+                            lower, upper = (a, b) if ea <= eb else (b, a)
+                            payload.append({
+                                "record": int(rec),
+                                "ion_index": int(block.ion_index),
+                                "ion_stage": int(block.ion_stage),
+                                "lower_level": int(lower),
+                                "upper_level": int(upper),
+                                "bt_type": int(ints[0]),
+                                "n_points": 5 if len(reals) == 7 else max(0, len(reals) - 2),
+                                "eij_ryd": float(reals[0]),
+                                "c_bt": float(reals[1]),
+                                "g_lower": float(levels.weight(lower)),
+                                "g_upper": float(levels.weight(upper)),
+                                "delta_e_ev": float(abs(levels.energy(upper) - levels.energy(lower))),
+                                "y_values": [float(x) for x in reals[2:11]],
+                            })
+                    rec = int(derived.npnxt[rec])
+                if not payload:
+                    return
+                try:
+                    cpp_rows, cpp_msg, cpp_stats = eval_type51_ucalc_matrix_cpp(
+                        payload,
+                        temperature_k=float(context.temperature_k),
+                        electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                    )
+                except Exception as exc:
+                    if is_mg_summary_profile and not type51_cpp_stats_recorded:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.matrix_type51_ucalc_cpp",
+                            0.0,
+                            element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_type51_ucalc_batch",
+                            status="fallback", error=str(exc), records_batched=float(len(payload)), cpp_calls=0.0, fallback_count=float(len(payload)),
+                        )
+                        type51_cpp_stats_recorded = True
+                    return
+                prov = UCalcProvenance(
+                    source_label=51,
+                    source_routines=("ucalc", "upsil", "splinem"),
+                    branch_name="op_chianti_burgess_tully_collision",
+                    implementation="cpp_batch_libxstar_matrix_type51",
+                    validation_status="parity_gated_selected_branch",
+                    context_fields_used=("temperature_k", "xee", "levels"),
+                    notes=("batched in libxstar_matrix.so",),
+                )
+                by_record = {int(r["record"]): r for r in cpp_rows}
+                for item in payload:
+                    row = by_record.get(int(item["record"]))
+                    if not row or int(row.get("status_code", 0)) != 1:
+                        continue
+                    type51_cpp_cache[int(item["record"])] = UCalcResult(
+                        record=int(item["record"]), data_type=51, rate_type=3, status=UCalcStatus.EVALUATED,
+                        ans1=float(row["ans1"]), ans2=float(row["ans2"]), ans3=float(row["ans3"]), ans4=float(row["ans4"]),
+                        ans5=float(row["ans5"]), ans6=float(row["ans6"]),
+                        idest1=int(row["idest1"]), idest2=int(row["idest2"]), idest3=int(block.ion_index), idest4=int(block.ion_index)+1,
+                        provenance=prov,
+                        diagnostics={"cpp_backend": "libxstar_matrix.so:xstar_matrix_eval_type51_ucalc_batch", "cpp_message": cpp_msg},
+                    )
+                if is_mg_summary_profile and not type51_cpp_stats_recorded:
+                    record_profile_event(
+                        profile_control,
+                        "calc_hmc_all.element_solver.matrix_type51_ucalc_cpp",
+                        float(cpp_stats.get("packing_seconds", 0.0)) + float(cpp_stats.get("cpp_kernel_seconds", 0.0)),
+                        element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
+                        source_routine="libxstar_matrix.so:xstar_matrix_eval_type51_ucalc_batch",
+                        status="cpp",
+                        **cpp_stats,
+                    )
+                    type51_cpp_stats_recorded = True
+
             for data_type in range(1, derived.npfi.shape[0]):
                 record = int(derived.npfi[data_type, block.ion_index])
                 while record and int(derived.npar[record]) == block.ion_record:
@@ -1306,14 +1396,29 @@ def assemble_element_matrix(
                         continue
 
                     _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
-                    result = dispatcher.evaluate_record_number(
-                        master,
-                        record,
-                        ucontext,
-                        parent_record=block.ion_record,
-                        next_record=int(derived.npnxt[record]),
-                        strict=False,
-                    )
+                    if type51_cpp_enabled and int(header.rate_type) == 3 and int(header.data_type) == 51:
+                        _build_type51_cpp_cache()
+                        result = type51_cpp_cache.get(int(record))
+                        if result is None:
+                            result = dispatcher.evaluate_record_number(
+                                master,
+                                record,
+                                ucontext,
+                                parent_record=block.ion_record,
+                                next_record=int(derived.npnxt[record]),
+                                strict=False,
+                            )
+                        else:
+                            result = replace(result, idest3=block.ion_index, idest4=block.ion_index + 1)
+                    else:
+                        result = dispatcher.evaluate_record_number(
+                            master,
+                            record,
+                            ucontext,
+                            parent_record=block.ion_record,
+                            next_record=int(derived.npnxt[record]),
+                            strict=False,
+                        )
                     if is_mg_profile:
                         _dt = time.perf_counter() - _rate_t0
                         _ion_rate_elapsed += _dt
