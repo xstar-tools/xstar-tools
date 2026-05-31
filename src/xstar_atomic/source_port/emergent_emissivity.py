@@ -816,11 +816,18 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
 
 
 def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -> None:
-    for key in ("records_batched", "cpp_calls", "packing_seconds", "cpp_kernel_seconds", "fallback_count", "emitted_matrix_terms", "batches_flushed"):
+    """Accumulate all numeric C++ backend statistics.
+
+    Earlier releases used a short whitelist and accidentally dropped new
+    coarse-backend counters such as type50_coarse_cpp_hybrid_applied.  Keep the
+    aggregator generic so future C++ kernels can expose counters without also
+    editing this helper.
+    """
+    for key, value in stats.items():
         try:
-            total[key] = float(total.get(key, 0.0)) + float(stats.get(key, 0.0) or 0.0)
+            total[str(key)] = float(total.get(str(key), 0.0)) + float(value or 0.0)
         except Exception:
-            total[key] = float(total.get(key, 0.0))
+            continue
 
 def calc_emis_ion(
     context: CalcEmisContext,

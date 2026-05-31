@@ -43,7 +43,7 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_linopac_type50_reasoned_v1";
+    return "xstar_rates_mg_type7_type4_linopac_type50_voigt_v1";
 }
 
 int xstar_rates_feature_flags() {
@@ -281,6 +281,55 @@ int xstar_rates_build_mg_type4_line_emissivity(
 }
 
 
+
+static double xstar_rates_voigte(double vs, double a) {
+    static const double ak[19] = {
+        -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
+        -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
+        0.554153432, 0.278711796, -0.188325687, 0.042991293,
+        -0.003278278, 0.979895023, -0.962846325, 0.532770573,
+        -0.122727278
+    };
+    const double sqp = 1.772453851;
+    const double sq2 = 1.414213562;
+    const double v = std::abs(vs);
+    const double aa = a;
+    const double u = aa + v;
+    const double v2 = v * v;
+    if (aa == 0.0) {
+        return v2 >= 100.0 ? 0.0 : std::exp(-v2);
+    }
+    if (aa <= 0.2 && v >= 5.0) {
+        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * v2 * v2 * v2 * sqp);
+    }
+    if (aa > 1.4 || u > 3.2) {
+        const double a2 = aa * aa;
+        const double uu = sq2 * (a2 + v2);
+        const double u2 = 1.0 / (uu * uu);
+        return sq2 / sqp * aa / uu * (1.0 + u2 * (3.0 * v2 - a2) + u2 * u2 * (15.0 * v2 * v2 - 30.0 * v2 * a2 + 3.0 * a2 * a2));
+    }
+    const double ex = v2 >= 100.0 ? 0.0 : std::exp(-v2);
+    double quo = 1.0;
+    int start = 0;
+    if (v >= 2.4) {
+        quo = 1.0 / (v2 - 1.5);
+        start = 10;
+    } else if (v >= 1.3) {
+        start = 5;
+    }
+    const double h1 = quo * (ak[start] + v * (ak[start + 1] + v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4]))));
+    if (aa <= 0.2) {
+        return h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * v2));
+    }
+    const double pqs = 2.0 / sqp;
+    const double h1p = h1 + pqs * ex;
+    const double h2p = pqs * h1p - 2.0 * v2 * ex;
+    const double h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * v2)) - 2.0 * v2 * h1p) / 3.0 + pqs * h2p;
+    const double h4p = (2.0 * v2 * v2 * ex - pqs * h1p) / 3.0 + pqs * h3p;
+    const double psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]));
+    return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))));
+}
+
 static int xstar_rates_huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
     const double floor = 1.0e-24;
@@ -311,9 +360,9 @@ static int xstar_rates_nbinc(double e, const double* epi, int ncn2) {
 }
 
 // Apply the source linopac full-profile opacity handoff for one line.
-// This v0.5.61 C ABI intentionally supports only the Gaussian-profile branch.
-// If the natural-width Voigt branch is needed, it returns code 6 and the Python
-// caller falls back to the existing source-faithful Python linopac translation.
+// v0.5.65 supports both the Gaussian branch and the source voigte.f90
+// natural-width/Voigt branch, so Mg type-4 data_type=50 can use the shared
+// library for the linopac side effect instead of returning a Python fallback.
 int xstar_rates_apply_linopac_profile(
     double optpp,
     double rcem1,
@@ -368,10 +417,7 @@ int xstar_rates_apply_linopac_profile(
         return 0;
     }
     const double aasmall = natural_width_ev / (1.0e-24 + dele) / 12.56;
-    if (aasmall > 1.0e-9) {
-        write_message(errbuf, errbuf_size, "linopac Voigt branch not implemented in C++ v0.5.61");
-        return 6;
-    }
+    const bool use_voigt = (aasmall > 1.0e-9);
     const double e00 = epi[ml1 - 1];
     const double etmp = e0;
     const double deleepi = epi[ml1] - epi[ml1 - 1];
@@ -393,7 +439,7 @@ int xstar_rates_apply_linopac_profile(
     std::vector<double> etpp(nbtpp, 0.0);
     std::vector<double> optpp2(nbtpp, 0.0);
     double delet = (e00 - etmp) / dele;
-    double profile = std::exp(-delet * delet) / 1.772;
+    double profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
     etpp[ml2 - 1] = e00;
     optpp2[ml2 - 1] = optpp * profile;
     double tst = 1.0;
@@ -410,7 +456,7 @@ int xstar_rates_apply_linopac_profile(
                 if (mlm > mlmax) mlmax = mlm;
                 etpp[mlm - 1] = etptst;
                 delet = (etptst - etmp) / dele;
-                profile = std::exp(-delet * delet) / 1.772;
+                profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;
             }
@@ -462,7 +508,7 @@ int xstar_rates_apply_linopac_profile(
         }
     }
     out_i64[0] = updated;
-    out_i64[1] = 1;
+    out_i64[1] = use_voigt ? 2 : 1;
     out_i64[2] = ml1;
     out_i64[3] = nbtpp;
     out_i64[4] = ncut;
@@ -477,7 +523,8 @@ int xstar_rates_apply_linopac_profile(
     out_f64[5] = opsv4;
     out_f64[6] = aasmall;
     out_f64[7] = optpp;
-    write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile evaluated");
+    out_f64[8] = use_voigt ? 1.0 : 0.0;
+    write_message(errbuf, errbuf_size, use_voigt ? "xstar_rates_apply_linopac_profile evaluated voigt" : "xstar_rates_apply_linopac_profile evaluated gaussian");
     return 0;
 }
 
@@ -620,14 +667,6 @@ int xstar_rates_apply_mg_type4_type50_coarse(
             linopac_updated += tmp_i[0];
             oi[7] = 1;
             oi[8] = tmp_i[0];
-            oi[9] = tmp_i[2];
-        } else if (lrc == 6) {
-            // C++ evaluated the selected type-50 ucalc/scalar branch, but the
-            // linopac Voigt/natural-width profile is still owned by Python.
-            // Do not mutate line arrays here; Python applies the returned
-            // scalar products and source-faithful linopac fallback in order.
-            oi[7] = 2;
-            oi[8] = 0;
             oi[9] = tmp_i[2];
         } else {
             oi[7] = -6;
