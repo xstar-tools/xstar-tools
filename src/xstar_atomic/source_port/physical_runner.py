@@ -2145,6 +2145,7 @@ def run_xstar_from_parameters(
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
     compact_atdb_export: str | Path | None = None,
+    output_final_recompute: bool = True,
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     total_start_time = time.perf_counter()
@@ -2225,6 +2226,7 @@ def run_xstar_from_parameters(
     state.control["profile_backend_calls"] = bool(profile_backend_calls)
     state.control["profile_terminal"] = bool(profile_terminal)
     state.control["progress_debug"] = bool(progress_debug)
+    state.control["output_final_recompute"] = bool(output_final_recompute)
     state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
     state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
     state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
@@ -2263,7 +2265,12 @@ def run_xstar_from_parameters(
                 "radial_spectrum_diagnostic_skipped",
                 diagnostics_mode=diagnostics_mode,
             )
-        _emit_progress(progress_callback, "output_writer_start", output_dir=str(out))
+        _emit_progress(
+            progress_callback,
+            "output_writer_start",
+            output_dir=str(out),
+            final_local_recompute=bool(output_final_recompute),
+        )
         writer_start_time = time.perf_counter()
         writer = run_output_writer_sequence(
             state,
@@ -2272,7 +2279,8 @@ def run_xstar_from_parameters(
             parameters=_output_parameters(normalized),
             model_name=str(normalized.get("modelname")),
             atomic_data_date=str(getattr(built.master, "creation_date", "")),
-            final_local_recompute=True,
+            final_local_recompute=bool(output_final_recompute),
+            progress_callback=progress_callback,
         )
         writer_elapsed = time.perf_counter() - writer_start_time
         _prepend_xout_step_startup_provenance(out, state=state, built=built)
@@ -2289,12 +2297,14 @@ def run_xstar_from_parameters(
         }
         _append_xout_step_timing_footer(out, timing=timing_footer)
         state.outputs["xout_step_timing_footer"] = dict(timing_footer)
+        state.outputs["output_writer_timing_breakdown"] = dict(getattr(writer, "timing_breakdown", {}) or {})
         _emit_progress(
             progress_callback,
             "output_writer_done",
             source_order=list(writer.source_order),
             writer_elapsed_seconds=float(writer_elapsed),
             timing_footer=dict(timing_footer),
+            timing_breakdown=dict(getattr(writer, "timing_breakdown", {}) or {}),
         )
         if high_volume_diagnostics:
             continuum_diag_products = write_continuum_diagnostics(state, out)
@@ -2462,6 +2472,7 @@ def run_xstar_python(
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
         compact_atdb_export=compact_atdb_export,
+        output_final_recompute=output_final_recompute,
     )
 
 
@@ -2497,6 +2508,7 @@ def run_xstar_python_command(
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
     compact_atdb_export: str | Path | None = None,
+    output_final_recompute: bool = True,
 ) -> XSTARPythonRunResult:
     """Parse a literal ``xstar key=value ...`` command and run Python only."""
     return run_xstar_from_parameters(
@@ -2523,6 +2535,7 @@ def run_xstar_python_command(
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
         compact_atdb_export=compact_atdb_export,
+        output_final_recompute=output_final_recompute,
     )
 
 
@@ -2550,6 +2563,7 @@ def run_xstar_python_script(
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
     compact_atdb_export: str | Path | None = None,
+    output_final_recompute: bool = True,
 ) -> XSTARPythonRunResult:
     """Read ``run_xstar.sh`` as data and execute the translated Python port."""
     path = Path(script)
@@ -2578,6 +2592,7 @@ def run_xstar_python_script(
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
         compact_atdb_export=compact_atdb_export,
+        output_final_recompute=output_final_recompute,
     )
 
 
@@ -2768,6 +2783,7 @@ def run_c5_ne1_acceptance(
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
     compact_atdb_export: str | Path | None = None,
+    output_final_recompute: bool = True,
 ) -> C5NE1AcceptanceResult:
     """Run the strict independent c5_ne1 ten-product parity acceptance gate."""
     python_run = run_xstar_python_script(
@@ -2792,6 +2808,7 @@ def run_c5_ne1_acceptance(
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
         compact_atdb_export=compact_atdb_export,
+        output_final_recompute=output_final_recompute,
     )
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     original = Path(original_run_dir)

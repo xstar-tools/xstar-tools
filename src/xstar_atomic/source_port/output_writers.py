@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+import time
 import numpy as np
 
 
@@ -227,6 +228,7 @@ class OutputWriterSequenceResult:
     final_local_recompute_executed: bool = False
     pprint_source_state_handler_ready: bool = False
     pprint_products_written: bool = False
+    timing_breakdown: Mapping[str, float] | None = None
     source_file: str = "xstar/src/xstar/xstar.f90"
 
     @property
@@ -1460,6 +1462,7 @@ def run_output_writer_sequence(
     atomic_data_date: str = "",
     final_local_recompute: bool = False,
     driver: Any | None = None,
+    progress_callback: Any | None = None,
 ) -> OutputWriterSequenceResult:
     """Execute the bounded detail/final writer sequence in caller order.
 
@@ -1470,11 +1473,18 @@ def run_output_writer_sequence(
     ``xout_abund1.fits``; otherwise the historical explicit handler remains.
     """
     source_order: list[str] = []
+    timing_breakdown: dict[str, float] = {}
+
+    def _emit(event: str, **details: Any) -> None:
+        if progress_callback is not None:
+            progress_callback(event, dict(details))
+
     if final_local_recompute:
         from .driver import XSTARPythonDriver, XSTARSourceRoutine
         from .radial_transfer import register_bounded_radial_source_routines
         from .continuum_diagnostics import append_phase_snapshot
 
+        _final_recompute_t0 = time.perf_counter()
         runner = driver or XSTARPythonDriver()
         if driver is None:
             register_bounded_radial_source_routines(runner)
@@ -1500,6 +1510,7 @@ def run_output_writer_sequence(
         source_order.extend(
             state.provenance.get("completed_source_routines", [])[completed_before:]
         )
+        timing_breakdown["final_local_recompute"] = float(time.perf_counter() - _final_recompute_t0)
         state.outputs["final_local_recompute"] = {
             "source_file": "xstar/src/xstar/xstar.f90",
             "delr": source_delr,
@@ -1513,12 +1524,14 @@ def run_output_writer_sequence(
     if bool(state.control.get("pprint_legacy_enabled", False)):
         from .pprint_legacy import finalize_legacy_pprint
 
+        _pprint_t0 = time.perf_counter()
         pprint_calls, generated_pprint_paths = finalize_legacy_pprint(
             state, out_dir=out_dir, overwrite=True
         )
         source_order.extend(pprint_calls)
         pprint_paths.update(generated_pprint_paths)
         pprint_products_written = bool(generated_pprint_paths)
+        timing_breakdown["pprint_legacy"] = float(time.perf_counter() - _pprint_t0)
         state.outputs["pprint_final_source_state_handler"] = {
             "source_file": "xstar/xstarlib/src/pprint.f90",
             "calls": list(pprint_calls),
@@ -1545,8 +1558,11 @@ def run_output_writer_sequence(
     if level >= -1:
         from .continuum_diagnostics import append_phase_snapshot
 
+        _emit("spectral_writer_start", lwri=int(level))
         append_phase_snapshot(state, "before writespectra", note=f"lwri={level}")
+        _final_build_t0 = time.perf_counter()
         final = build_final_output_from_state(state, lwri=level)
+        timing_breakdown["final_product_build"] = float(time.perf_counter() - _final_build_t0)
         writer_names.append("writespectra")
         if level >= 0:
             writer_names.extend(("writespectra2", "writespectra3", "writespectra4"))
@@ -1554,6 +1570,7 @@ def run_output_writer_sequence(
 
     paths: dict[str, str] = dict(pprint_paths)
     if out_dir is not None:
+        _detail_write_t0 = time.perf_counter()
         for pass_index in sorted(stores):
             paths.update(
                 write_detail_output_files(
@@ -1565,7 +1582,9 @@ def run_output_writer_sequence(
                     pass_index=pass_index,
                 )
             )
+        timing_breakdown["detail_fits_write"] = float(time.perf_counter() - _detail_write_t0)
         if final is not None:
+            _final_write_t0 = time.perf_counter()
             paths.update(
                 write_final_output_files(
                     final,
@@ -1576,6 +1595,9 @@ def run_output_writer_sequence(
                     lwri=level,
                 )
             )
+            timing_breakdown["final_fits_write"] = float(time.perf_counter() - _final_write_t0)
+            _emit("spectral_writer_done", lwri=int(level))
+    timing_breakdown["total"] = float(sum(timing_breakdown.values()))
     state.outputs["output_writer_source_order"] = tuple(source_order)
     state.outputs["output_writer_paths"] = dict(paths)
     state.outputs["output_writers_executed"] = bool(writer_names or stores)
@@ -1587,6 +1609,7 @@ def run_output_writer_sequence(
         final_local_recompute_executed=bool(final_local_recompute),
         pprint_source_state_handler_ready=True,
         pprint_products_written=pprint_products_written,
+        timing_breakdown=dict(timing_breakdown),
     )
 
 def direct_fortran_output_reference() -> dict[str, Any]:

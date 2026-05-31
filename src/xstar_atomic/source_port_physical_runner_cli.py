@@ -194,6 +194,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--skip-final-local-recompute",
+        action="store_true",
+        help=(
+            "build final FITS products from the saved radial state instead of "
+            "running the slow final xstarcalc/heatt/stpcut recompute; this is a "
+            "performance mode and is recorded in provenance"
+        ),
+    )
+    parser.add_argument(
         "--mg-line-kernel",
         choices=("python", "numpy"),
         default="python",
@@ -301,9 +310,12 @@ def _make_progress_printer(*, include_memory: bool = False, debug: bool = False)
         elif event == "output_writer_start":
             _print_version_once()
             print(" final print:           1", flush=True)
+        elif event == "spectral_writer_start":
+            _print_version_once()
             print(" xstar: Prepping to write spectral data", flush=True)
-        elif event == "output_writer_done":
+        elif event == "spectral_writer_done":
             print(" xstar: Done writing spectral data", flush=True)
+        elif event == "output_writer_done":
             timing = details.get("timing_footer")
             if isinstance(timing, dict):
                 try:
@@ -412,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
                 compact_atdb_export=args.compact_atdb_export,
+                output_final_recompute=not args.skip_final_local_recompute,
             )
             summary = result.as_dict()
             if args.diagnostics_dir is not None:
@@ -466,6 +479,7 @@ def main(argv: list[str] | None = None) -> int:
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
                 compact_atdb_export=args.compact_atdb_export,
+            output_final_recompute=not args.skip_final_local_recompute,
             )
             summary = result.as_dict()
             if args.print_summary:
@@ -494,6 +508,7 @@ def main(argv: list[str] | None = None) -> int:
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
                 compact_atdb_export=args.compact_atdb_export,
+            output_final_recompute=not args.skip_final_local_recompute,
             )
             summary = result.as_dict()
             if args.print_summary:
