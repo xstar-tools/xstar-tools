@@ -1233,36 +1233,66 @@ def assemble_element_matrix(
             type51_cpp_stats_recorded = False
             type51_cpp_enabled = bool(int(element_z) == 12 and _matrix_cpp_active_for_mg() and str(os.environ.get("XSTAR_ATOMIC_MATRIX_TYPE51_UCALC_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"})
 
-            def _build_type51_cpp_cache() -> None:
+            def _build_type51_cpp_cache(ucontext_for_payload: UCalcContext) -> None:
                 nonlocal type51_cpp_stats_recorded
                 if type51_cpp_cache or not type51_cpp_enabled:
                     return
+                # Build the C++ payload through the same decoded collision-row path
+                # used by Python _eval_type51.  The older v0.5.71-v0.5.74
+                # collector manually decoded the packed record and often produced
+                # no eligible payload even though the main loop evaluated many
+                # Mg rate_type=3/data_type=51 records.  This keeps the C++
+                # batch attached to the actual hot path and preserves the
+                # five- and nine-point BT grid conventions from rates_type51.py.
                 payload: List[Dict[str, Any]] = []
+                payload_records_seen = 0
+                payload_unsupported = 0
                 rec = int(derived.npfi[51, block.ion_index]) if 51 < derived.npfi.shape[0] else 0
                 while rec and int(derived.npar[rec]) == block.ion_record:
                     h = master.header(rec)
                     if int(h.rate_type) == 3 and int(h.data_type) == 51:
-                        ints = list(int(x) for x in master.record_integers(rec))
-                        reals = list(float(x) for x in master.record_reals(rec))
-                        if len(ints) >= 2 and len(reals) >= 7:
-                            a, b = int(ints[2] if len(ints) > 2 else ints[0]), int(ints[1])
-                            ea, eb = levels.energy(a), levels.energy(b)
-                            lower, upper = (a, b) if ea <= eb else (b, a)
+                        payload_records_seen += 1
+                        try:
+                            decoded = dispatcher.decode_record(
+                                master,
+                                rec,
+                                parent_record=block.ion_record,
+                                next_record=int(derived.npnxt[rec]),
+                            )
+                            row, grid = dispatcher._collision_row(decoded, ucontext_for_payload)
+                            points = [g for g in grid if str(g.get("grid_kind") or "") == "BT_scaled"]
+                            points.sort(key=lambda g: int(g.get("grid_index") or 0))
+                            bt_x = [float(g.get("bt_x", 0.0) or 0.0) for g in points]
+                            bt_y = [float(g.get("bt_y", 0.0) or 0.0) for g in points]
+                            n_points = len(bt_y)
+                            if n_points not in (5, 9):
+                                payload_unsupported += 1
+                                rec = int(derived.npnxt[rec])
+                                continue
+                            y_values = list(bt_y[:9])
+                            while len(y_values) < 9:
+                                y_values.append(0.0)
+                            x_values = list(bt_x[:9])
+                            while len(x_values) < 9:
+                                x_values.append(0.0)
                             payload.append({
                                 "record": int(rec),
                                 "ion_index": int(block.ion_index),
                                 "ion_stage": int(block.ion_stage),
-                                "lower_level": int(lower),
-                                "upper_level": int(upper),
-                                "bt_type": int(ints[0]),
-                                "n_points": 5 if len(reals) == 7 else max(0, len(reals) - 2),
-                                "eij_ryd": float(reals[0]),
-                                "c_bt": float(reals[1]),
-                                "g_lower": float(levels.weight(lower)),
-                                "g_upper": float(levels.weight(upper)),
-                                "delta_e_ev": float(abs(levels.energy(upper) - levels.energy(lower))),
-                                "y_values": [float(x) for x in reals[2:11]],
+                                "lower_level": int(row.get("lower_level") or 0),
+                                "upper_level": int(row.get("upper_level") or 0),
+                                "bt_type": int(row.get("bt_transition_type") or 0),
+                                "n_points": int(n_points),
+                                "eij_ryd": float(row.get("eij_rdat_Ryd") or 0.0),
+                                "c_bt": float(row.get("bt_scaling_c") or 0.0),
+                                "g_lower": float(row.get("g_lower") or 0.0),
+                                "g_upper": float(row.get("g_upper") or 0.0),
+                                "delta_e_ev": float(row.get("delta_e_level_eV") or 0.0),
+                                "x_values": x_values,
+                                "y_values": y_values,
                             })
+                        except Exception:
+                            payload_unsupported += 1
                     rec = int(derived.npnxt[rec])
                 if not payload:
                     if is_mg_summary_profile and not type51_cpp_stats_recorded:
@@ -1273,8 +1303,8 @@ def assemble_element_matrix(
                             element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
                             source_routine="libxstar_matrix.so:xstar_matrix_eval_type51_ucalc_batch",
                             status="no_payload",
-                            records_batched=0.0, cpp_calls=0.0, packing_seconds=0.0, cpp_kernel_seconds=0.0,
-                            ucalc_cpp_applied=0.0, ucalc_cpp_unsupported=0.0, fallback_count=0.0,
+                            records_batched=0.0, records_seen=float(payload_records_seen), cpp_calls=0.0, packing_seconds=0.0, cpp_kernel_seconds=0.0,
+                            ucalc_cpp_applied=0.0, ucalc_cpp_unsupported=float(payload_unsupported), fallback_count=0.0,
                         )
                         type51_cpp_stats_recorded = True
                     return
@@ -1409,7 +1439,7 @@ def assemble_element_matrix(
 
                     _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
                     if type51_cpp_enabled and int(header.rate_type) == 3 and int(header.data_type) == 51:
-                        _build_type51_cpp_cache()
+                        _build_type51_cpp_cache(ucontext)
                         result = type51_cpp_cache.get(int(record))
                         if result is None:
                             result = dispatcher.evaluate_record_number(

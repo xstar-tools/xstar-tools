@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 
 namespace {
 
@@ -32,7 +33,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type7_terms_dense_ucalc_type51_v1";
+    return "xstar_matrix_mg_type7_terms_dense_ucalc_type51_payload_v1";
 }
 
 int xstar_matrix_feature_flags() {
@@ -363,6 +364,63 @@ double xstar_matrix_splinem5(const double* p, double x) {
     return t0 + x0 * (t1 + x0 * (t2 + x0 * t3));
 }
 
+
+double xstar_matrix_spline9_natural(const double* y, double x) {
+    const int n = 9;
+    double xa[n];
+    for (int i = 0; i < n; ++i) xa[i] = 0.125 * static_cast<double>(i);
+    double y2[n] = {0.0};
+    double u[n] = {0.0};
+    for (int i = 1; i < n - 1; ++i) {
+        const double denom = xa[i + 1] - xa[i - 1];
+        if (denom == 0.0) continue;
+        const double sig = (xa[i] - xa[i - 1]) / denom;
+        const double pp = sig * y2[i - 1] + 2.0;
+        y2[i] = (sig - 1.0) / pp;
+        const double term = (y[i + 1] - y[i]) / (xa[i + 1] - xa[i]) - (y[i] - y[i - 1]) / (xa[i] - xa[i - 1]);
+        u[i] = (6.0 * term / denom - sig * u[i - 1]) / pp;
+    }
+    for (int k = n - 2; k >= 0; --k) y2[k] = y2[k] * y2[k + 1] + u[k];
+    if (x <= xa[0]) return y[0];
+    if (x >= xa[n - 1]) return y[n - 1];
+    int klo = 0, khi = n - 1;
+    while (khi - klo > 1) {
+        const int k = (khi + klo) / 2;
+        if (xa[k] > x) khi = k; else klo = k;
+    }
+    const double h = xa[khi] - xa[klo];
+    if (h == 0.0) return y[klo];
+    const double a = (xa[khi] - x) / h;
+    const double b = (x - xa[klo]) / h;
+    return a*y[klo] + b*y[khi] + ((a*a*a-a)*y2[klo] + (b*b*b-b)*y2[khi]) * h*h / 6.0;
+}
+
+bool xstar_matrix_type51_upsilon9(long long bt_type, double eij_ryd, double c_bt, const double* y, double temperature_k, double* out) {
+    if (!out || eij_ryd <= 0.0 || c_bt <= 0.0 || temperature_k <= 0.0) return false;
+    const double kte = temperature_k / eij_ryd / 1.57888e5;
+    double xt = 0.0;
+    if (bt_type == 1 || bt_type == 4) {
+        const double denom = std::log(kte + c_bt);
+        if (denom == 0.0 || !std::isfinite(denom)) return false;
+        xt = 1.0 - std::log(c_bt) / denom;
+    } else if (bt_type == 2 || bt_type == 3 || bt_type == 5 || bt_type == 6) {
+        xt = kte / (kte + c_bt);
+    } else {
+        return false;
+    }
+    double sups = xstar_matrix_spline9_natural(y, xt);
+    double val = sups;
+    if (bt_type == 1) val = sups * std::log(kte + std::exp(1.0));
+    else if (bt_type == 2) val = sups;
+    else if (bt_type == 3) val = sups / (kte + 1.0);
+    else if (bt_type == 4) val = sups * std::log(kte + c_bt);
+    else if (bt_type == 5) val = (kte != 0.0 ? sups / kte : std::numeric_limits<double>::quiet_NaN());
+    else if (bt_type == 6) val = std::pow(10.0, sups);
+    if (!std::isfinite(val)) return false;
+    *out = val;
+    return true;
+}
+
 bool xstar_matrix_type51_upsilon5(long long bt_type, double eij_ryd, double c_bt, const double* y, double temperature_k, double* out) {
     if (!out || eij_ryd <= 0.0 || c_bt <= 0.0 || temperature_k <= 0.0) return false;
     const double e = std::fabs(temperature_k / (1.57888e5 * eij_ryd));
@@ -424,14 +482,17 @@ extern "C" int xstar_matrix_eval_type51_ucalc_batch(
         long long* oi = out_i64 + 8 * k;
         for (int j = 0; j < 6; ++j) ans[j] = 0.0;
         oi[0] = record[k]; oi[1] = 51; oi[2] = 3; oi[3] = lower_level[k]; oi[4] = upper_level[k]; oi[5] = ion_index[k]; oi[6] = ion_stage[k]; oi[7] = 0;
-        if (n_points[k] != 5 || eij_ryd[k] <= 0.0 || c_bt[k] <= 0.0 || g_lower[k] <= 0.0 || g_upper[k] <= 0.0 || delta_e_ev[k] <= 0.0) continue;
+        if ((n_points[k] != 5 && n_points[k] != 9) || eij_ryd[k] <= 0.0 || c_bt[k] <= 0.0 || g_lower[k] <= 0.0 || g_upper[k] <= 0.0 || delta_e_ev[k] <= 0.0) continue;
         double ups = 0.0;
         const double* y = y_values + 9 * k;
         const double eij_ev = eij_ryd[k] * 13.605692;
         const double wavelength_a = 12398.4016 / eij_ev;
         const double floor_k = 2.8777e6 / wavelength_a;
         const double bt_temperature_k = std::max(temperature_k, floor_k);
-        if (!xstar_matrix_type51_upsilon5(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups)) continue;
+        bool ok = false;
+        if (n_points[k] == 5) ok = xstar_matrix_type51_upsilon5(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups);
+        else ok = xstar_matrix_type51_upsilon9(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups);
+        if (!ok) continue;
         const double t_xstar = temperature_k / 1.0e4;
         const double tsq = std::sqrt(t_xstar);
         const double ekt_ev = 0.861707 * t_xstar;
