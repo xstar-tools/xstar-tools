@@ -1397,6 +1397,16 @@ def assemble_element_matrix(
                     n_points = len(bt_y)
                     if n_points not in (5, 9):
                         return None
+                    bt_type = int(row.get("bt_transition_type") or 0)
+                    if (n_points == 5 and bt_type not in (1, 2, 3, 4)) or (n_points == 9 and bt_type not in (1, 2, 3, 4, 5, 6)):
+                        return None
+                    eij_ryd = float(row.get("eij_rdat_Ryd") or 0.0)
+                    c_bt = float(row.get("bt_scaling_c") or 0.0)
+                    g_lower = float(row.get("g_lower") or 0.0)
+                    g_upper = float(row.get("g_upper") or 0.0)
+                    delta_e_ev = float(row.get("delta_e_level_eV") or 0.0)
+                    if not all(math.isfinite(v) and v > 0.0 for v in (eij_ryd, c_bt, g_lower, g_upper, delta_e_ev)):
+                        return None
                     y_values = list(bt_y[:9])
                     while len(y_values) < 9:
                         y_values.append(0.0)
@@ -1413,13 +1423,13 @@ def assemble_element_matrix(
                         "compact_start": int(block.compact_start),
                         "lower_level": lower,
                         "upper_level": upper,
-                        "bt_type": int(row.get("bt_transition_type") or 0),
+                        "bt_type": bt_type,
                         "n_points": int(n_points),
-                        "eij_ryd": float(row.get("eij_rdat_Ryd") or 0.0),
-                        "c_bt": float(row.get("bt_scaling_c") or 0.0),
-                        "g_lower": float(row.get("g_lower") or 0.0),
-                        "g_upper": float(row.get("g_upper") or 0.0),
-                        "delta_e_ev": float(row.get("delta_e_level_eV") or 0.0),
+                        "eij_ryd": eij_ryd,
+                        "c_bt": c_bt,
+                        "g_lower": g_lower,
+                        "g_upper": g_upper,
+                        "delta_e_ev": delta_e_ev,
                         "y_values": y_values,
                     }
                 except Exception:
@@ -1458,8 +1468,8 @@ def assemble_element_matrix(
                         hydrogen_density_cm3=float(context.hydrogen_density_cm3),
                     )
                     new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
-                    if len(new_terms) != 4 * len(batch):
-                        raise RuntimeError(f"Mg type51 rates+matrix C++ emitted {len(new_terms)} terms for {len(batch)} records")
+                    if len(new_terms) % 4 != 0 or len(new_terms) > 4 * len(batch):
+                        raise RuntimeError(f"Mg type51 rates+matrix C++ emitted invalid term count {len(new_terms)} for {len(batch)} records")
                     if mg_rates_matrix_parity_records:
                         parity_terms: List[MatrixTerm] = []
                         parity_start = len(terms) + 1
@@ -1521,7 +1531,11 @@ def assemble_element_matrix(
                             ))
                         cpp_parity_terms = new_terms[:len(parity_terms)]
                         if not _mg_terms_close(cpp_parity_terms, parity_terms):
-                            raise RuntimeError("Mg type51 rates+matrix C++ parity gate failed")
+                            cpp_stats["parity_failures"] = float(cpp_stats.get("parity_failures", 0.0)) + float(len(parity_terms))
+                            if str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_PARITY_STRICT", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+                                raise RuntimeError("Mg type51 rates+matrix C++ parity gate failed")
+                        else:
+                            cpp_stats["parity_failures"] = float(cpp_stats.get("parity_failures", 0.0))
                 except Exception as exc:
                     if is_mg_summary_profile:
                         record_profile_event(

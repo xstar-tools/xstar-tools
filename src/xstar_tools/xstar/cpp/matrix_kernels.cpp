@@ -34,7 +34,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type51_rates_matrix_ucalc_v2";
+    return "xstar_matrix_mg_type51_rates_matrix_ucalc_v3";
 }
 
 int xstar_matrix_feature_flags() {
@@ -662,8 +662,8 @@ extern "C" int xstar_matrix_eval_type51_ucalc_batch(
         const double ans2 = q_deexc * electron_density_cm3;
         ans[0] = ans1;
         ans[1] = ans2;
-        ans[4] = ans2 * delta_e_ev[k] * 1.602176634e-12;
-        ans[5] = ans1 * delta_e_ev[k] * 1.602176634e-12;
+        ans[4] = ans2 * delta_e_ev[k] * 1.602197e-12;
+        ans[5] = ans1 * delta_e_ev[k] * 1.602197e-12;
         oi[7] = 1;
         ++applied;
     }
@@ -785,8 +785,8 @@ int xstar_matrix_build_mg_type51_rates_and_matrix(
         const double ans2 = q_deexc * electron_density_cm3;
         const double ans3 = 0.0;
         const double ans4 = 0.0;
-        const double ans5 = ans2 * delta_e_ev[k] * 1.602176634e-12;
-        const double ans6 = ans1 * delta_e_ev[k] * 1.602176634e-12;
+        const double ans5 = ans2 * delta_e_ev[k] * 1.602197e-12;
+        const double ans6 = ans1 * delta_e_ev[k] * 1.602197e-12;
         if (!finite6(ans1, ans2, ans3, ans4, ans5, ans6)) {
             ++fallback_nonfinite_answer;
             ++ucalc_cpp_unsupported;
