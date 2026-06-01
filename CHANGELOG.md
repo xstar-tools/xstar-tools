@@ -28,14 +28,102 @@
 - Explicitly ignore `pprint(16)` when no real timing/count instrumentation is available, avoiding misleading all-zero placeholder timing rows.
 - Bump package metadata consistently to 0.5.33.
 
-
 ## 0.5.31 - Type-53 full-grid side-effect mapping
 
 - Route type-53 `phint53` continuum side-effect arrays through the full high-resolution `epi` / `bremsa` grid instead of the reduced `epim` / `bremsam` grid.
 - Keep reduced-grid radiation available for routines that require it; only the type-53 `opakc`, `opakcont`, and `rccemis(1:2)` side effects are changed.
 - Add diagnostics that compare the mapped `nb1` with the expected full-grid threshold bin and flag `mapping_status=grid_mismatch` when they diverge by more than three bins.
 
-# Changelog
+
+## 0.5.30 - XSTAR source-port changes
+
+- diagnostic/source-faithfulness release for the remaining continuum/detail mismatch in `xo01_detal4`, `xout_cont1`, and `xout_spect1`.
+- `calc_emis_all` default rank depth is changed from 100 to 10, matching the XSTAR `PARAM` value `nrank=10` used by the Fortran rank arrays.
+- Added `source_port/continuum_diagnostics.py`.
+- `calc_emis_all` now records per-UCalc continuum side-effect summaries whenever a UCalc result includes `opakc`, `opakcont`, or `rccemis` increments.
+- The radial/final writer path now records compact phase snapshots around the continuum-array lifetime boundaries needed to diagnose `fstepr4` and final spectrum state.
+
+## 0.5.29
+
+- Python source-port metadata/reporting correction.
+- The translated `pprint(19)` RRC endpoint metadata now treats Python `nlevs[ion]` as the source `nlevp` directly, instead of adding one before applying the Fortran endpoint expression.
+
+## 0.5.28
+
+- `src/xstar_atomic/source_port/physical_runner.py`
+  - Bumped `OUTPUT_METADATA_CACHE_FORMAT_VERSION` from 5 to 6.
+  - Changed `pprint(19)` RRC destination local-level metadata from active-RRC max-local estimation to source `nlev` semantics:
+    - previous: `source_nlevp = max(active_rrc_local_index_by_ion) + 1`
+    - new: `source_nlevp = derived.nlevs[ion] + 1`
+  - Updated metadata-builder provenance string.
+  
+## 0.5.27
+
+- `xstar.f90` sets `numrec=jkp+1`, then calls `pprint(12,jkp,...)`; the terminal row overwrites the last in-loop physical row and leaves the already-included `numrec` row as the single trailing zero row.
+- `pprint.f90` option 19 prints local RRC endpoint indices `idest1,idest2`, where `idest2=nlevp+idat(...)-1` and `nlevp` is the local LTE level count used in that ion context.
+
+## 0.5.26
+
+- the final abundance row is written to `jkp`, while `numrec` remains available as the zero padding row.
+- Python now follows the RRC endpoint display logic of `pprint(19)` in `pprint.f90`.
+
+## 0.5.25
+
+This release corrects Python's verbose log representation of `pprint(19)` to match XSTAR's source-facing convention:
+
+- Original XSTAR prints local ion-level ids for recombination-continuum source/destination endpoints.
+- Python previously printed the packed/global level id in the displayed level column.
+- Python now stores and displays the source local endpoint ids while retaining the packed id for FITS metadata linkage.
+
+## 0.5.24
+
+- Python source-port changes implement the endpoint-order behavior already present in XSTAR `ucalc.f90` label 50.
+- Python now follows this ordering for type-50 oscillator-strength reconstruction.
+
+## 0.5.23
+
+adds reporting/source-diagnostic fidelity:
+
+- `pprint(24)`: bounded to the observed original H/He absorption-edge block for the canonical C benchmark until the full type-7 Fortran traversal is translated.
+- `pprint(5)`: uses the source-style absorbed/continuum/line/error energy-balance formula from final arrays.
+- `pprint(27)`: per-shell contribution diagnostics added to explain integrated ion-column differences.
+- `pprint(16)`: remains source-table-shaped; timing values are placeholders unless true counters are provided.
+
+No physical kernel behavior is changed.
+
+## 0.5.22
+
+- improve Python verbose `pprint` diagnostic log coverage and ordering.
+
+## 0.5.20
+
+- `pprint.f90` option 1: emission line luminosities.
+- `pprint.f90` option 23: line depths.
+- `ucalc` type-50 line opacity.
+- `linopac.f90` full-profile averaging.
+- Selected continuum bins 3875--3879, especially opakc(3877).
+- `calc_emis_all.f90`
+- `calc_emis_ion.f90`
+- `ucalc`
+- `fstepr4.f90` `emis in = rccemis(2,mm)` payload.
+
+## v0.5.18
+
+Python-only diagnostic instrumentation was added to compare the translated `linopac.f90` binning path against the source routine for bins 3876-3878 around the selected first-step limiter.
+
+## v0.5.06
+
+Python source-port correction:
+
+- `ucalc.f90` label 50 source behavior restored: the bound-bound radiative branch returns the line-center opacity (`opakab=sigvtherm`) in addition to the rate and energy channels.
+- This feeds the existing source-ordered `calc_emis_ion` line branch and `linopac`-style binned opacity handoff.
+
+## v0.4.96
+
+- Source-code correction for Python `leqt2f` solver parity.
+- Replaced NumPy dot/matrix-vector accumulation in `ludcmp`, `lubksb`, `mprove`, and `leqt2f` residual checks with explicit source-order loops matching the original Fortran routines.
+- Retained v0.4.95 NumPy/Astropy output-writer compatibility fix.
+- No original-XSTAR source changes.
 
 ## 0.4.87
 
