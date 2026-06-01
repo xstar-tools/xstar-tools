@@ -7,7 +7,7 @@
 - Allow smoke tests to suppress high-volume radial/continuum CSV/JSONL diagnostics with `--diagnostics none`.
 - Remove stale optional diagnostic artifacts on overwrite reruns.
 
-# v0.5.35 - 2026-05-28
+## v0.5.35 - 2026-05-28
 
 - Fix v0.5.34 FITS write failure caused by mutating Astropy string table fields before serialization.
 - Move XSTAR-style blank padding for binary-table A columns to a post-write byte-level pass that touches only character-column spans, leaving numeric binary data untouched.
