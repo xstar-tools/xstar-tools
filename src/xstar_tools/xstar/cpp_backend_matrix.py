@@ -146,6 +146,15 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 pass
             try:
+                lib.xstar_matrix_scan_mg_ion_source_records.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_longlong, ctypes.c_longlong,
+                    i64p, i64p, i64p, i64p, i64p,
+                    i64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_scan_mg_ion_source_records.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
                 lib.xstar_matrix_eval_simple_ucalc.argtypes = [
                     ctypes.c_int,
                     i64p, i64p, i64p, i64p, i64p,
@@ -567,7 +576,7 @@ def eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
     """Evaluate one Mg ion's supported type-51 rates+matrix rows in C++.
 
-    v0.6.0a7 widens the public ABI boundary to an ion-level call.  Python still
+    v0.6.0a8 widens the public ABI boundary to an ion-level call.  Python still
     decodes source records into compact payload rows in this release, but the
     caller now sends one ion block to C++ and receives ion-level counters.  This
     is the stable call site for moving source-pointer traversal into C++ next.
@@ -686,6 +695,86 @@ def eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
         "ion_records_batched": float(out_stats[11]) if out_stats.size > 11 else float(out_stats[2]),
     }
     return rows, message, stats
+
+
+def scan_mg_ion_source_records_cpp_detailed(
+    *,
+    master: Any,
+    derived: Any,
+    ion_index: int,
+    ion_record: int,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Traverse one Mg ion's source-pointer chains in C++.
+
+    This is the v0.6.0a8 boundary-widening step: C++ owns the
+    ``npfi -> npnxt`` linked-list traversal and returns source-ordered record
+    headers for Python fallback/evaluation.  It does not yet decode every
+    atomic payload, but it removes the Python pointer walk and provides the
+    stable ion-level ABI for moving more rate/data groups into C++.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_scan_mg_ion_source_records"):
+        raise RuntimeError("C++ Mg ion source scanner is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    t0 = time.perf_counter()
+    npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
+    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
+    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
+    ptrs = np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64)
+    n_records = int(ptrs.shape[0])
+    record_data_type = np.zeros(n_records + 1, dtype=np.int64)
+    record_rate_type = np.zeros(n_records + 1, dtype=np.int64)
+    if n_records:
+        record_data_type[1:] = ptrs[:, 1]
+        record_rate_type[1:] = ptrs[:, 2]
+    max_out = max(1, n_records)
+    out_i64 = np.zeros(max_out * 8, dtype=np.int64)
+    out_stats = np.zeros(12, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_scan_mg_ion_source_records(
+        int(npfi.size), int(n_records), int(ion_index), int(ion_record),
+        npfi, npar, npnxt, record_rate_type, record_data_type,
+        out_i64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_scan_mg_ion_source_records failed with code {rc}")
+    emitted = int(out_stats[4])
+    oi = out_i64[: emitted * 8].reshape((emitted, 8)) if emitted else np.zeros((0, 8), dtype=np.int64)
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted):
+        rows.append({
+            "ordinal": int(oi[j, 0]),
+            "record": int(oi[j, 1]),
+            "rate_type": int(oi[j, 2]),
+            "data_type": int(oi[j, 3]),
+            "data_type_chain": int(oi[j, 4]),
+            "next_record": int(oi[j, 5]),
+            "supported_mask": int(oi[j, 6]),
+            "skip_mask": int(oi[j, 7]),
+        })
+    stats = {
+        "records_seen": float(out_stats[0]),
+        "records_supported": float(out_stats[1]),
+        "records_batched": float(out_stats[2]),
+        "cpp_calls": float(out_stats[3]),
+        "emitted_records": float(emitted),
+        "mg_ion_source_traversal_cpp_calls": float(out_stats[3]),
+        "mg_ion_source_records_seen": float(out_stats[0]),
+        "mg_ion_source_records_supported": float(out_stats[1]),
+        "mg_ion_source_type51_records": float(out_stats[5]),
+        "mg_ion_source_type7_records": float(out_stats[6]),
+        "mg_ion_source_simple_records": float(out_stats[7]),
+        "mg_ion_source_skipped_records": float(out_stats[8]),
+        "mg_ion_source_loop_guard_hits": float(out_stats[9]),
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": 0.0,
+    }
+    return rows, message, stats
+
 
 def dense_fill_terms_matrix_cpp(
     terms: list[dict[str, Any]],

@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -972,6 +972,18 @@ def _matrix_mg_rates_matrix_active_for_mg() -> bool:
     return bool(flags & 32)
 
 
+def _matrix_mg_ion_source_scan_active_for_mg() -> bool:
+    """Return true when C++ can traverse Mg ion source-pointer chains."""
+    try:
+        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
+    except Exception:
+        return False
+    if status.active != "cpp":
+        return False
+    flags = int(status.cpp_feature_flags or 0)
+    return bool(flags & 128)
+
+
 def _rates_cpp_active_for_mg() -> bool:
     """Return true when the legacy optional C++ rates backend should own Mg batches."""
     try:
@@ -1252,6 +1264,11 @@ def assemble_element_matrix(
                 and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
             )
             mg_rates_matrix_parity_records = max(0, int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_PARITY_RECORDS", "16") or "0"))
+            mg_ion_source_scan_cpp_enabled = bool(
+                int(element_z) == 12
+                and _matrix_mg_ion_source_scan_active_for_mg()
+                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+            )
 
             def _build_type51_cpp_cache(ucontext_for_payload: UCalcContext) -> None:
                 nonlocal type51_cpp_stats_recorded
@@ -1837,168 +1854,210 @@ def assemble_element_matrix(
                 if is_mg_profile:
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
-            for data_type in range(1, derived.npfi.shape[0]):
-                record = int(derived.npfi[data_type, block.ion_index])
-                while record and int(derived.npar[record]) == block.ion_record:
-                    header = master.header(record)
-                    n_seen += 1
-                    summary.n_records_seen += 1
-                    # calc_hmc_ion source exclusions.
-                    if (header.rate_type == 1 and header.data_type == 53) or header.rate_type in {8, 15}:
-                        n_skipped += 1
-                        summary.n_records_skipped_by_calc_hmc_ion += 1
-                        record = int(derived.npnxt[record])
-                        continue
-
-                    ptmp1, ptmp2, escape_reason = _escape_factors(record, header.rate_type, derived, context)
-                    ucontext = UCalcContext(
-                        temperature_k=context.temperature_k,
-                        hydrogen_density_cm3=context.hydrogen_density_cm3,
-                        electron_fraction_xee=context.electron_fraction_xee,
-                        neutral_h_density_cm3=context.neutral_h_density_cm3,
-                        ionized_h_density_cm3=context.ionized_h_density_cm3,
-                        turbulent_velocity_km_s=context.turbulent_velocity_km_s,
-                        covering_fraction=context.covering_fraction,
-                        ptmp1=ptmp1,
-                        ptmp2=ptmp2,
-                        # calc_hmc_ion calls ucalc with zero level
-                        # abundances because this path assembles rates and
-                        # heating/cooling but not opacity or emissivity.
-                        abund1=0.0,
-                        abund2=0.0,
-                        jkion=block.ion_index,
-                        nlev=block.nlev,
-                        lfast=context.lfast,
-                        levels=levels,
-                        radiation=context.radiation,
-                        derived_pointers=derived,
+            source_record_iter: List[Tuple[int, int, int]] = []
+            source_scan_cpp_stats: Dict[str, float] = {}
+            source_scan_cpp_message = ""
+            if mg_ion_source_scan_cpp_enabled:
+                try:
+                    source_rows, source_scan_cpp_message, source_scan_cpp_stats = scan_mg_ion_source_records_cpp_detailed(
                         master=master,
-                        extras={
-                            "element_z": element_z,
-                            "element_symbol": __import__("xstar_tools.hierarchy", fromlist=["Z_TO_SYMBOL"]).Z_TO_SYMBOL.get(element_z, str(element_z)),
-                            "ion_stage": block.ion_stage,
-                            "ion_charge": block.ion_stage - 1,
-                            "ion_record": block.ion_record,
-                            "rnise": rnise_lte,
-                            "compact_start": block.compact_start,
-                            "parent_level_energy_ev_by_destination": parent_energy_map,
-                            "parent_level_stat_weight_by_destination": parent_weight_map,
-                            "leveltemp_workspace_persistent": True,
-                            "leveltemp_workspace_initialization": "replayed_levwkelement_active_ion_order",
-                            "leveltemp_workspace_retained_max_index": max(levels.levels, default=0),
-                            "leveltemp_owner_by_column": leveltemp_owner_by_column,
-                            "leveltemp_write_sequence": second_pass_write_sequence,
-                        },
+                        derived=derived,
+                        ion_index=int(block.ion_index),
+                        ion_record=int(block.ion_record),
                     )
-                    if escape_reason is not None:
-                        result = dispatcher.evaluate_record_number(
-                            master,
-                            record,
-                            replace(ucontext, indonly=True),
-                            parent_record=block.ion_record,
-                            next_record=int(derived.npnxt[record]),
-                            strict=False,
+                    source_record_iter = [
+                        (int(row["record"]), int(row["rate_type"]), int(row["data_type"]))
+                        for row in source_rows
+                    ]
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_source_traversal_cpp_kernel",
+                            float(source_scan_cpp_stats.get("packing_seconds", 0.0)) + float(source_scan_cpp_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_scan_mg_ion_source_records",
+                            status="cpp",
+                            **source_scan_cpp_stats,
                         )
-                        blocked = {
-                            **result.to_dict(),
-                            "status": UCalcStatus.CONTEXT_BLOCKED.value,
-                            "reason": escape_reason,
+                except Exception as exc:
+                    source_record_iter = []
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_source_traversal_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_scan_mg_ion_source_records",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="fallback",
+                            error=str(exc),
+                        )
+            if not source_record_iter:
+                for data_type in range(1, derived.npfi.shape[0]):
+                    rec = int(derived.npfi[data_type, block.ion_index])
+                    while rec and int(derived.npar[rec]) == block.ion_record:
+                        h = master.header(rec)
+                        source_record_iter.append((int(rec), int(h.rate_type), int(h.data_type)))
+                        rec = int(derived.npnxt[rec])
+
+            for record, _source_rate_type, _source_data_type in source_record_iter:
+                header = master.header(record)
+                n_seen += 1
+                summary.n_records_seen += 1
+                # calc_hmc_ion source exclusions.
+                if (header.rate_type == 1 and header.data_type == 53) or header.rate_type in {8, 15}:
+                    n_skipped += 1
+                    summary.n_records_skipped_by_calc_hmc_ion += 1
+                    record = int(derived.npnxt[record])
+                    continue
+
+                ptmp1, ptmp2, escape_reason = _escape_factors(record, header.rate_type, derived, context)
+                ucontext = UCalcContext(
+                    temperature_k=context.temperature_k,
+                    hydrogen_density_cm3=context.hydrogen_density_cm3,
+                    electron_fraction_xee=context.electron_fraction_xee,
+                    neutral_h_density_cm3=context.neutral_h_density_cm3,
+                    ionized_h_density_cm3=context.ionized_h_density_cm3,
+                    turbulent_velocity_km_s=context.turbulent_velocity_km_s,
+                    covering_fraction=context.covering_fraction,
+                    ptmp1=ptmp1,
+                    ptmp2=ptmp2,
+                    # calc_hmc_ion calls ucalc with zero level
+                    # abundances because this path assembles rates and
+                    # heating/cooling but not opacity or emissivity.
+                    abund1=0.0,
+                    abund2=0.0,
+                    jkion=block.ion_index,
+                    nlev=block.nlev,
+                    lfast=context.lfast,
+                    levels=levels,
+                    radiation=context.radiation,
+                    derived_pointers=derived,
+                    master=master,
+                    extras={
+                        "element_z": element_z,
+                        "element_symbol": __import__("xstar_tools.hierarchy", fromlist=["Z_TO_SYMBOL"]).Z_TO_SYMBOL.get(element_z, str(element_z)),
+                        "ion_stage": block.ion_stage,
+                        "ion_charge": block.ion_stage - 1,
+                        "ion_record": block.ion_record,
+                        "rnise": rnise_lte,
+                        "compact_start": block.compact_start,
+                        "parent_level_energy_ev_by_destination": parent_energy_map,
+                        "parent_level_stat_weight_by_destination": parent_weight_map,
+                        "leveltemp_workspace_persistent": True,
+                        "leveltemp_workspace_initialization": "replayed_levwkelement_active_ion_order",
+                        "leveltemp_workspace_retained_max_index": max(levels.levels, default=0),
+                        "leveltemp_owner_by_column": leveltemp_owner_by_column,
+                        "leveltemp_write_sequence": second_pass_write_sequence,
+                    },
+                )
+                if escape_reason is not None:
+                    result = dispatcher.evaluate_record_number(
+                        master,
+                        record,
+                        replace(ucontext, indonly=True),
+                        parent_record=block.ion_record,
+                        next_record=int(derived.npnxt[record]),
+                        strict=False,
+                    )
+                    blocked = {
+                        **result.to_dict(),
+                        "status": UCalcStatus.CONTEXT_BLOCKED.value,
+                        "reason": escape_reason,
+                        "ion_index": block.ion_index,
+                        "ion_stage": block.ion_stage,
+                    }
+                    blocked_records.append(blocked)
+                    record_results.append(blocked)
+                    n_blocked += 1
+                    summary.n_records_blocked += 1
+                    summary.blocked_reasons[escape_reason] = summary.blocked_reasons.get(escape_reason, 0) + 1
+                    record = int(derived.npnxt[record])
+                    continue
+
+                _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
+                if (
+                    mg_rates_matrix_cpp_enabled
+                    and int(header.rate_type) == 3
+                    and int(header.data_type) == 51
+                    and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_TYPE51_UCALC_IN_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+                ):
+                    payload_item = _build_mg_type51_payload(int(record), ucontext)
+                    if payload_item is not None:
+                        if is_mg_profile:
+                            _dt = time.perf_counter() - _rate_t0
+                            _ion_rate_elapsed += _dt
+                            _rtype = int(header.rate_type)
+                            _dtype = int(header.data_type)
+                            _key = (_rtype, _dtype)
+                            _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
+                            _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
+                            _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
+                            _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
+                            if is_mg_forensic_profile:
+                                _samples = profile_control.setdefault("mg_matrix_ucalc_forensic_samples", [])
+                                if isinstance(_samples, list) and len(_samples) < 128:
+                                    _samples.append({
+                                        "record": int(record),
+                                        "rate_type": _rtype,
+                                        "data_type": _dtype,
+                                        "ion_index": int(block.ion_index),
+                                        "ion_stage": int(block.ion_stage),
+                                        "elapsed_seconds": float(_dt),
+                                        "status": "cpp_deferred",
+                                    })
+                        row = {
+                            "record": int(record),
+                            "data_type": 51,
+                            "rate_type": 3,
+                            "status": UCalcStatus.EVALUATED.value,
+                            "ready": True,
+                            "ans1": 0.0, "ans2": 0.0, "ans3": 0.0, "ans4": 0.0, "ans5": 0.0, "ans6": 0.0,
+                            "idest1": int(payload_item["lower_level"]),
+                            "idest2": int(payload_item["upper_level"]),
+                            "idest3": int(block.ion_index),
+                            "idest4": int(block.ion_index) + 1,
+                            "opakab": 0.0,
+                            "reason": "",
+                            "source_file": "ucalc.f90",
+                            "source_label": 51,
+                            "source_routines": "ucalc;upsil;splinem",
+                            "branch_name": "op_chianti_burgess_tully_collision",
+                            "implementation": "cpp_batch_libxstar_matrix_mg_type51_rates_matrix",
+                            "validation_status": "parity_gated_selected_branch",
+                            "context_fields_used": "temperature_k;xee;levels",
+                            "notes": "type51 ucalc and matrix insertion deferred to libxstar_matrix.so",
                             "ion_index": block.ion_index,
                             "ion_stage": block.ion_stage,
+                            "nlev": block.nlev,
+                            "escape_factor_in": float(ptmp1),
+                            "escape_factor_out": float(ptmp2),
+                            "density_scale": float(context.hydrogen_density_cm3),
+                            "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
+                            "leveltemp_workspace_write_sequence": second_pass_write_sequence,
+                            "leveltemp_workspace_max_column": max(levels.levels, default=0),
+                            "rates_backend": "cpp_matrix_mg_type51_rates_matrix_pending",
+                            "ans1_after_calc_hmc_ion_filter": 0.0,
+                            "ans2_after_calc_hmc_ion_filter": 0.0,
                         }
-                        blocked_records.append(blocked)
-                        record_results.append(blocked)
-                        n_blocked += 1
-                        summary.n_records_blocked += 1
-                        summary.blocked_reasons[escape_reason] = summary.blocked_reasons.get(escape_reason, 0) + 1
+                        record_results.append(row)
+                        pending_cpp_mg_type51_payload.append((payload_item, len(record_results) - 1))
                         record = int(derived.npnxt[record])
                         continue
 
-                    _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
-                    if (
-                        mg_rates_matrix_cpp_enabled
-                        and int(header.rate_type) == 3
-                        and int(header.data_type) == 51
-                        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_TYPE51_UCALC_IN_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
-                    ):
-                        payload_item = _build_mg_type51_payload(int(record), ucontext)
-                        if payload_item is not None:
-                            if is_mg_profile:
-                                _dt = time.perf_counter() - _rate_t0
-                                _ion_rate_elapsed += _dt
-                                _rtype = int(header.rate_type)
-                                _dtype = int(header.data_type)
-                                _key = (_rtype, _dtype)
-                                _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
-                                _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
-                                _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
-                                _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
-                                if is_mg_forensic_profile:
-                                    _samples = profile_control.setdefault("mg_matrix_ucalc_forensic_samples", [])
-                                    if isinstance(_samples, list) and len(_samples) < 128:
-                                        _samples.append({
-                                            "record": int(record),
-                                            "rate_type": _rtype,
-                                            "data_type": _dtype,
-                                            "ion_index": int(block.ion_index),
-                                            "ion_stage": int(block.ion_stage),
-                                            "elapsed_seconds": float(_dt),
-                                            "status": "cpp_deferred",
-                                        })
-                            row = {
-                                "record": int(record),
-                                "data_type": 51,
-                                "rate_type": 3,
-                                "status": UCalcStatus.EVALUATED.value,
-                                "ready": True,
-                                "ans1": 0.0, "ans2": 0.0, "ans3": 0.0, "ans4": 0.0, "ans5": 0.0, "ans6": 0.0,
-                                "idest1": int(payload_item["lower_level"]),
-                                "idest2": int(payload_item["upper_level"]),
-                                "idest3": int(block.ion_index),
-                                "idest4": int(block.ion_index) + 1,
-                                "opakab": 0.0,
-                                "reason": "",
-                                "source_file": "ucalc.f90",
-                                "source_label": 51,
-                                "source_routines": "ucalc;upsil;splinem",
-                                "branch_name": "op_chianti_burgess_tully_collision",
-                                "implementation": "cpp_batch_libxstar_matrix_mg_type51_rates_matrix",
-                                "validation_status": "parity_gated_selected_branch",
-                                "context_fields_used": "temperature_k;xee;levels",
-                                "notes": "type51 ucalc and matrix insertion deferred to libxstar_matrix.so",
-                                "ion_index": block.ion_index,
-                                "ion_stage": block.ion_stage,
-                                "nlev": block.nlev,
-                                "escape_factor_in": float(ptmp1),
-                                "escape_factor_out": float(ptmp2),
-                                "density_scale": float(context.hydrogen_density_cm3),
-                                "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
-                                "leveltemp_workspace_write_sequence": second_pass_write_sequence,
-                                "leveltemp_workspace_max_column": max(levels.levels, default=0),
-                                "rates_backend": "cpp_matrix_mg_type51_rates_matrix_pending",
-                                "ans1_after_calc_hmc_ion_filter": 0.0,
-                                "ans2_after_calc_hmc_ion_filter": 0.0,
-                            }
-                            record_results.append(row)
-                            pending_cpp_mg_type51_payload.append((payload_item, len(record_results) - 1))
-                            record = int(derived.npnxt[record])
-                            continue
-
-                    if type51_cpp_enabled and int(header.rate_type) == 3 and int(header.data_type) == 51 and not mg_rates_matrix_cpp_enabled:
-                        _build_type51_cpp_cache(ucontext)
-                        result = type51_cpp_cache.get(int(record))
-                        if result is None:
-                            result = dispatcher.evaluate_record_number(
-                                master,
-                                record,
-                                ucontext,
-                                parent_record=block.ion_record,
-                                next_record=int(derived.npnxt[record]),
-                                strict=False,
-                            )
-                        else:
-                            result = replace(result, idest3=block.ion_index, idest4=block.ion_index + 1)
-                    else:
+                if type51_cpp_enabled and int(header.rate_type) == 3 and int(header.data_type) == 51 and not mg_rates_matrix_cpp_enabled:
+                    _build_type51_cpp_cache(ucontext)
+                    result = type51_cpp_cache.get(int(record))
+                    if result is None:
                         result = dispatcher.evaluate_record_number(
                             master,
                             record,
@@ -2007,140 +2066,151 @@ def assemble_element_matrix(
                             next_record=int(derived.npnxt[record]),
                             strict=False,
                         )
-                    if is_mg_profile:
-                        _dt = time.perf_counter() - _rate_t0
-                        _ion_rate_elapsed += _dt
-                        _rtype = int(header.rate_type)
-                        _dtype = int(header.data_type)
-                        _key = (_rtype, _dtype)
-                        _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
-                        _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
-                        _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
-                        _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
-                        if is_mg_forensic_profile:
-                            _samples = profile_control.setdefault("mg_matrix_ucalc_forensic_samples", [])
-                            if isinstance(_samples, list) and len(_samples) < 128:
-                                _samples.append({
-                                    "record": int(record),
-                                    "rate_type": _rtype,
-                                    "data_type": _dtype,
-                                    "ion_index": int(block.ion_index),
-                                    "ion_stage": int(block.ion_stage),
-                                    "elapsed_seconds": float(_dt),
-                                    "status": str(result.status.value if hasattr(result.status, "value") else result.status),
-                                })
-                    row = result.to_dict()
-                    destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
-                    source_leveltemp_destination = levels.get(int(result.idest2))
-                    source_leveltemp_bound = levels.get(int(result.idest1))
-                    row.update({
-                        "ion_index": block.ion_index,
-                        "ion_stage": block.ion_stage,
-                        "nlev": block.nlev,
-                        # Diagnostic provenance retained from the literal
-                        # calc_hmc_ion -> ucalc call.  These fields do not
-                        # participate in matrix assembly or any rate.
-                        "escape_factor_in": float(ptmp1),
-                        "escape_factor_out": float(ptmp2),
-                        "density_scale": float(context.hydrogen_density_cm3),
-                        "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
-                        "leveltemp_workspace_write_sequence": second_pass_write_sequence,
-                        "leveltemp_workspace_max_column": max(levels.levels, default=0),
-                        "leveltemp_idest1_energy_ev": (
-                            float(source_leveltemp_bound.energy_ev)
-                            if source_leveltemp_bound is not None else None
-                        ),
-                        "leveltemp_idest2_energy_ev": (
-                            float(source_leveltemp_destination.energy_ev)
-                            if source_leveltemp_destination is not None else None
-                        ),
-                        "leveltemp_idest2_owner_ion_index": destination_owner.get("ion_index"),
-                        "leveltemp_idest2_owner_ion_stage": destination_owner.get("ion_stage"),
-                        "leveltemp_idest2_owner_nlev": destination_owner.get("nlev"),
-                        "leveltemp_idest2_owner_write_sequence": destination_owner.get("write_sequence"),
-                        "leveltemp_idest2_owner_phase": destination_owner.get("phase"),
-                    })
-                    record_results.append(row)
-
-                    if result.status is UCalcStatus.SOURCE_NOOP:
-                        n_noop += 1
-                        summary.n_records_source_noop += 1
-                    elif result.status is not UCalcStatus.EVALUATED:
-                        n_blocked += 1
-                        summary.n_records_blocked += 1
-                        reason = result.reason or result.status.value
-                        summary.blocked_reasons[reason] = summary.blocked_reasons.get(reason, 0) + 1
-                        blocked_records.append(row)
                     else:
-                        # calc_hmc_ion applies this source filter before both
-                        # scalar pirt accumulation and matrix insertion.
-                        if result.rate_type == 1 and result.idest1 != 1:
-                            result = replace(result, ans1=0.0)
-                        record_results[-1]["ans1_after_calc_hmc_ion_filter"] = float(result.ans1)
-                        record_results[-1]["ans2_after_calc_hmc_ion_filter"] = float(result.ans2)
+                        result = replace(result, idest3=block.ion_index, idest4=block.ion_index + 1)
+                else:
+                    result = dispatcher.evaluate_record_number(
+                        master,
+                        record,
+                        ucontext,
+                        parent_record=block.ion_record,
+                        next_record=int(derived.npnxt[record]),
+                        strict=False,
+                    )
+                if is_mg_profile:
+                    _dt = time.perf_counter() - _rate_t0
+                    _ion_rate_elapsed += _dt
+                    _rtype = int(header.rate_type)
+                    _dtype = int(header.data_type)
+                    _key = (_rtype, _dtype)
+                    _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
+                    _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
+                    _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
+                    _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
+                    if is_mg_forensic_profile:
+                        _samples = profile_control.setdefault("mg_matrix_ucalc_forensic_samples", [])
+                        if isinstance(_samples, list) and len(_samples) < 128:
+                            _samples.append({
+                                "record": int(record),
+                                "rate_type": _rtype,
+                                "data_type": _dtype,
+                                "ion_index": int(block.ion_index),
+                                "ion_stage": int(block.ion_stage),
+                                "elapsed_seconds": float(_dt),
+                                "status": str(result.status.value if hasattr(result.status, "value") else result.status),
+                            })
+                row = result.to_dict()
+                destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
+                source_leveltemp_destination = levels.get(int(result.idest2))
+                source_leveltemp_bound = levels.get(int(result.idest1))
+                row.update({
+                    "ion_index": block.ion_index,
+                    "ion_stage": block.ion_stage,
+                    "nlev": block.nlev,
+                    # Diagnostic provenance retained from the literal
+                    # calc_hmc_ion -> ucalc call.  These fields do not
+                    # participate in matrix assembly or any rate.
+                    "escape_factor_in": float(ptmp1),
+                    "escape_factor_out": float(ptmp2),
+                    "density_scale": float(context.hydrogen_density_cm3),
+                    "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
+                    "leveltemp_workspace_write_sequence": second_pass_write_sequence,
+                    "leveltemp_workspace_max_column": max(levels.levels, default=0),
+                    "leveltemp_idest1_energy_ev": (
+                        float(source_leveltemp_bound.energy_ev)
+                        if source_leveltemp_bound is not None else None
+                    ),
+                    "leveltemp_idest2_energy_ev": (
+                        float(source_leveltemp_destination.energy_ev)
+                        if source_leveltemp_destination is not None else None
+                    ),
+                    "leveltemp_idest2_owner_ion_index": destination_owner.get("ion_index"),
+                    "leveltemp_idest2_owner_ion_stage": destination_owner.get("ion_stage"),
+                    "leveltemp_idest2_owner_nlev": destination_owner.get("nlev"),
+                    "leveltemp_idest2_owner_write_sequence": destination_owner.get("write_sequence"),
+                    "leveltemp_idest2_owner_phase": destination_owner.get("phase"),
+                })
+                record_results.append(row)
 
-                        # Literal calc_hmc_ion second-pass totals.  These are
-                        # what calc_hmc_element returns to calc_hmc_all after
-                        # the active ion range is selected; they must not be
-                        # confused with preliminary calc_ion_rates totals.
-                        if result.rate_type in {1, 7, 40, 42}:
-                            if result.idest1 == 1:
-                                summary.second_pass_pirt += float(result.ans1)
-                            if result.idest2 >= block.nlev:
-                                summary.second_pass_rrrt += float(result.ans2)
+                if result.status is UCalcStatus.SOURCE_NOOP:
+                    n_noop += 1
+                    summary.n_records_source_noop += 1
+                elif result.status is not UCalcStatus.EVALUATED:
+                    n_blocked += 1
+                    summary.n_records_blocked += 1
+                    reason = result.reason or result.status.value
+                    summary.blocked_reasons[reason] = summary.blocked_reasons.get(reason, 0) + 1
+                    blocked_records.append(row)
+                else:
+                    # calc_hmc_ion applies this source filter before both
+                    # scalar pirt accumulation and matrix insertion.
+                    if result.rate_type == 1 and result.idest1 != 1:
+                        result = replace(result, ans1=0.0)
+                    record_results[-1]["ans1_after_calc_hmc_ion_filter"] = float(result.ans1)
+                    record_results[-1]["ans2_after_calc_hmc_ion_filter"] = float(result.ans2)
 
-                        # Source branches with a missing endpoint do not enter
-                        # calc_hmc_ion's four-row matrix block.  They may still
-                        # contribute the scalar totals accumulated above.
-                        if result.idest1 <= 0 or result.idest2 <= 0:
-                            _flush_pending_mg_rates_matrix()
-                            record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
-                            record = int(derived.npnxt[record])
-                            continue
-                        if (
-                            mg_rates_matrix_cpp_enabled
-                            and int(result.rate_type) == 3
-                            and int(result.data_type) == 51
-                        ):
-                            pending_cpp_mg_rates_matrix.append((result, len(record_results) - 1))
-                        elif use_cpp_mg_type7_rates and result.rate_type == 7:
-                            _flush_pending_mg_rates_matrix()
-                            # Defer record_type=7 term construction to one compact C++
-                            # batch per Mg ion.  Python still owns source-faithful ucalc
-                            # physics for ans1..ans6 in this release.
-                            pending_cpp_type7.append((result, len(record_results) - 1))
+                    # Literal calc_hmc_ion second-pass totals.  These are
+                    # what calc_hmc_element returns to calc_hmc_all after
+                    # the active ion range is selected; they must not be
+                    # confused with preliminary calc_ion_rates totals.
+                    if result.rate_type in {1, 7, 40, 42}:
+                        if result.idest1 == 1:
+                            summary.second_pass_pirt += float(result.ans1)
+                        if result.idest2 >= block.nlev:
+                            summary.second_pass_rrrt += float(result.ans2)
+
+                    # Source branches with a missing endpoint do not enter
+                    # calc_hmc_ion's four-row matrix block.  They may still
+                    # contribute the scalar totals accumulated above.
+                    if result.idest1 <= 0 or result.idest2 <= 0:
+                        _flush_pending_mg_rates_matrix()
+                        record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
+                        record = int(derived.npnxt[record])
+                        continue
+                    if (
+                        mg_rates_matrix_cpp_enabled
+                        and int(result.rate_type) == 3
+                        and int(result.data_type) == 51
+                    ):
+                        pending_cpp_mg_rates_matrix.append((result, len(record_results) - 1))
+                    elif use_cpp_mg_type7_rates and result.rate_type == 7:
+                        _flush_pending_mg_rates_matrix()
+                        # Defer record_type=7 term construction to one compact C++
+                        # batch per Mg ion.  Python still owns source-faithful ucalc
+                        # physics for ans1..ans6 in this release.
+                        pending_cpp_type7.append((result, len(record_results) - 1))
+                    else:
+                        _flush_pending_mg_rates_matrix()
+                        try:
+                            _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                            new_terms = _matrix_terms_for_result(
+                                result=result,
+                                basis=basis,
+                                block=block,
+                                levels=levels,
+                                term_start=len(terms) + 1,
+                                xpx=context.hydrogen_density_cm3,
+                            )
+                            if is_mg_profile:
+                                _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+                        except (ElementEquilibriumError, IndexError) as exc:
+                            n_unmapped += 1
+                            summary.n_records_invalid_endpoint += 1
+                            blocked = {**row, "reason": str(exc), "status": "invalid_endpoint"}
+                            blocked_records.append(blocked)
+                            if context.strict_context:
+                                n_blocked += 1
+                                summary.n_records_blocked += 1
                         else:
-                            _flush_pending_mg_rates_matrix()
-                            try:
-                                _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
-                                new_terms = _matrix_terms_for_result(
-                                    result=result,
-                                    basis=basis,
-                                    block=block,
-                                    levels=levels,
-                                    term_start=len(terms) + 1,
-                                    xpx=context.hydrogen_density_cm3,
-                                )
-                                if is_mg_profile:
-                                    _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
-                            except (ElementEquilibriumError, IndexError) as exc:
-                                n_unmapped += 1
-                                summary.n_records_invalid_endpoint += 1
-                                blocked = {**row, "reason": str(exc), "status": "invalid_endpoint"}
-                                blocked_records.append(blocked)
-                                if context.strict_context:
-                                    n_blocked += 1
-                                    summary.n_records_blocked += 1
-                            else:
-                                if any(term.source_ipmat_clamped for term in new_terms):
-                                    n_source_clamps += 1
-                                    record_results[-1]["source_ipmat_endpoint_clamped"] = True
-                                    record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
-                                terms.extend(new_terms)
-                                n_eval += 1
-                                summary.n_records_evaluated += 1
-                                summary.n_matrix_terms += len(new_terms)
-                    record = int(derived.npnxt[record])
+                            if any(term.source_ipmat_clamped for term in new_terms):
+                                n_source_clamps += 1
+                                record_results[-1]["source_ipmat_endpoint_clamped"] = True
+                                record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
+                            terms.extend(new_terms)
+                            n_eval += 1
+                            summary.n_records_evaluated += 1
+                            summary.n_matrix_terms += len(new_terms)
+                record = int(derived.npnxt[record])
             _flush_pending_mg_rates_matrix()
             if pending_cpp_type7:
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0

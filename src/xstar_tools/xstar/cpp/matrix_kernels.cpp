@@ -34,12 +34,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_type51_rates_matrix_v4";
+    return "xstar_matrix_mg_ion_source_scan_rates_matrix_v5";
 }
 
 int xstar_matrix_feature_flags() {
     // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches; 16: data_type=51 ucalc; 32: Mg rates+matrix ABI.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64;
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128;
 }
 
 int xstar_matrix_probe(
@@ -875,7 +875,7 @@ int xstar_matrix_build_mg_type51_rates_and_matrix(
 
 // Mg ion-level C++ backend boundary.
 //
-// This v0.6.0a7 entry point intentionally keeps the flat cpp/ layout and
+// This v0.6.0a8 entry point intentionally keeps the flat cpp/ layout and
 // widens the ABI from a record-batch name to an ion-level name.  The payload
 // rows are still decoded by Python, but the call is now explicitly scoped to
 // one Mg ion block and returns ion-level accounting.  Future releases can move
@@ -949,6 +949,111 @@ int xstar_matrix_eval_mg_ion_type51_rates_and_matrix(
             "xstar_matrix_eval_mg_ion_type51_rates_and_matrix evaluated with ion metadata mismatch");
     }
     return rc;
+}
+
+
+// Traverse source-pointer chains for one Mg ion in C++.
+//
+// The Python source-faithful evaluator still owns unsupported payload decoding,
+// but this ABI moves the npfi/npnxt/npar linked-list traversal to C++ and
+// returns source-ordered record headers.  supported_mask bits:
+//   1: rate_type=3/data_type=51 type-51 collision group
+//   2: rate_type=7 continuum/rate matrix-term group
+//   4: selected simple ucalc data_type group (1,2,3,7,8,20)
+// skip_mask bits:
+//   1: calc_hmc_ion source exclusion (rate_type=1,data_type=53 or rate_type 8/15)
+int xstar_matrix_scan_mg_ion_source_records(
+    int n_data_types,
+    int n_records,
+    long long ion_index,
+    long long ion_record,
+    const long long* npfi_col,
+    const long long* npar,
+    const long long* npnxt,
+    const long long* record_rate_type,
+    const long long* record_data_type,
+    long long* out_i64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_data_types <= 0 || n_records <= 0 || ion_index <= 0 || ion_record <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_scan_mg_ion_source_records");
+        return 2;
+    }
+    if (!npfi_col || !npar || !npnxt || !record_rate_type || !record_data_type || !out_i64 || !out_stats) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_scan_mg_ion_source_records");
+        return 3;
+    }
+
+    long long seen = 0;
+    long long supported = 0;
+    long long emitted = 0;
+    long long type51 = 0;
+    long long type7 = 0;
+    long long simple = 0;
+    long long skipped = 0;
+    long long guard_hits = 0;
+
+    for (int data_chain = 1; data_chain < n_data_types; ++data_chain) {
+        long long rec = npfi_col[data_chain];
+        long long guard = 0;
+        while (rec > 0 && rec <= n_records && npar[rec] == ion_record) {
+            if (++guard > n_records) {
+                ++guard_hits;
+                break;
+            }
+            const long long rt = record_rate_type[rec];
+            const long long dt = record_data_type[rec];
+            long long support_mask = 0;
+            long long skip_mask = 0;
+            if ((rt == 1 && dt == 53) || rt == 8 || rt == 15) {
+                skip_mask |= 1LL;
+                ++skipped;
+            } else {
+                if (rt == 3 && dt == 51) {
+                    support_mask |= 1LL;
+                    ++type51;
+                }
+                if (rt == 7) {
+                    support_mask |= 2LL;
+                    ++type7;
+                }
+                if (dt == 1 || dt == 2 || dt == 3 || dt == 7 || dt == 8 || dt == 20) {
+                    support_mask |= 4LL;
+                    ++simple;
+                }
+                if (support_mask != 0) ++supported;
+            }
+            const long long base = emitted * 8;
+            out_i64[base + 0] = emitted + 1;
+            out_i64[base + 1] = rec;
+            out_i64[base + 2] = rt;
+            out_i64[base + 3] = dt;
+            out_i64[base + 4] = data_chain;
+            out_i64[base + 5] = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+            out_i64[base + 6] = support_mask;
+            out_i64[base + 7] = skip_mask;
+            ++emitted;
+            ++seen;
+            rec = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+        }
+    }
+
+    out_stats[0] = seen;
+    out_stats[1] = supported;
+    out_stats[2] = emitted;
+    out_stats[3] = emitted > 0 ? 1 : 0;
+    out_stats[4] = emitted;
+    out_stats[5] = type51;
+    out_stats[6] = type7;
+    out_stats[7] = simple;
+    out_stats[8] = skipped;
+    out_stats[9] = guard_hits;
+    out_stats[10] = ion_index;
+    out_stats[11] = ion_record;
+    write_message(errbuf, errbuf_size, "xstar_matrix_scan_mg_ion_source_records traversed ion source chains");
+    return 0;
 }
 
 
