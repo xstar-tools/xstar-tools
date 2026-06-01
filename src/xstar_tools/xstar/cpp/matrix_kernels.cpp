@@ -34,7 +34,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type51_rates_matrix_ucalc_v3";
+    return "xstar_matrix_mg_ion_type51_rates_matrix_v4";
 }
 
 int xstar_matrix_feature_flags() {
@@ -871,6 +871,85 @@ int xstar_matrix_build_mg_type51_rates_and_matrix(
     return 0;
 }
 
+
+
+// Mg ion-level C++ backend boundary.
+//
+// This v0.6.0a7 entry point intentionally keeps the flat cpp/ layout and
+// widens the ABI from a record-batch name to an ion-level name.  The payload
+// rows are still decoded by Python, but the call is now explicitly scoped to
+// one Mg ion block and returns ion-level accounting.  Future releases can move
+// source-pointer traversal into this function without changing Python's high
+// level call site.
+//
+// out_stats columns match xstar_matrix_build_mg_type51_rates_and_matrix:
+//   0 records_seen
+//   1 records_supported
+//   2 records_batched
+//   3 cpp_calls
+//   4 emitted_matrix_terms
+//   5 fallback_unsupported_rate_data
+//   6 fallback_nonpositive_endpoint
+//   7 fallback_nonfinite_answer
+//   8 ucalc_cpp_applied
+//   9 ucalc_cpp_unsupported
+//  10 ion_cpp_calls
+//  11 ion_records_batched
+int xstar_matrix_eval_mg_ion_type51_rates_and_matrix(
+    int n_records,
+    int basis_n_rows,
+    int term_start,
+    long long ion_index_expected,
+    long long ion_stage_expected,
+    long long nlev,
+    const long long* record,
+    const long long* ion_index,
+    const long long* ion_stage,
+    const long long* compact_start,
+    const long long* lower_level,
+    const long long* upper_level,
+    const long long* bt_type,
+    const long long* n_points,
+    const double* eij_ryd,
+    const double* c_bt,
+    const double* g_lower,
+    const double* g_upper,
+    const double* delta_e_ev,
+    const double* y_values,
+    double temperature_k,
+    double electron_density_cm3,
+    double hydrogen_density_cm3,
+    long long* out_i64,
+    double* out_f64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (nlev <= 0) {
+        write_message(errbuf, errbuf_size, "invalid nlev for xstar_matrix_eval_mg_ion_type51_rates_and_matrix");
+        return 2;
+    }
+    int rc = xstar_matrix_build_mg_type51_rates_and_matrix(
+        n_records, basis_n_rows, term_start,
+        record, ion_index, ion_stage, compact_start, lower_level, upper_level, bt_type, n_points,
+        eij_ryd, c_bt, g_lower, g_upper, delta_e_ev, y_values,
+        temperature_k, electron_density_cm3, hydrogen_density_cm3,
+        out_i64, out_f64, out_stats, errbuf, errbuf_size
+    );
+    if (out_stats) {
+        out_stats[10] = (n_records > 0 && rc == 0) ? 1 : 0;
+        out_stats[11] = n_records;
+    }
+    if (rc == 0 && errbuf && errbuf_size > 0) {
+        bool ion_ok = true;
+        if (ion_index && n_records > 0) ion_ok = ion_ok && (ion_index[0] == ion_index_expected);
+        if (ion_stage && n_records > 0) ion_ok = ion_ok && (ion_stage[0] == ion_stage_expected);
+        write_message(errbuf, errbuf_size, ion_ok ?
+            "xstar_matrix_eval_mg_ion_type51_rates_and_matrix evaluated" :
+            "xstar_matrix_eval_mg_ion_type51_rates_and_matrix evaluated with ion metadata mismatch");
+    }
+    return rc;
+}
 
 
 }  // extern "C"

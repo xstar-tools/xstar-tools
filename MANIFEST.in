@@ -111,265 +111,211 @@ include xstar_atomic_conversation_summary_v0435.md
 recursive-include benchmarks/oxygen_call73_v0434_acceptance *.md *.json *.sha256
 recursive-include src/xstar_tools/benchmarks/oxygen_call73_v0434_acceptance *.md *.json *.sha256
 
-include XSTAR_SOURCE_CHANGES_v0.4.35.md
 
 include xstar_atomic_v0.4.36.md
 include xstar_atomic_conversation_summary_v0436.md
-include XSTAR_SOURCE_CHANGES_v0.4.36.md
 recursive-include src/xstar_tools/benchmarks/hydrogen_v0436_targets *.md *.json
 
 include xstar_atomic_v0.4.37.md
 include xstar_atomic_conversation_summary_v0437.md
-include XSTAR_SOURCE_CHANGES_v0.4.37.md
 include xstar_all_calc_hmc_all_v0436_diagnosis_v0437.md
 
 include xstar_atomic_v0.4.38.md
 include xstar_atomic_conversation_summary_v0438.md
-include XSTAR_SOURCE_CHANGES_v0.4.38.md
 include xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 
 include xstar_atomic_v0.4.39.md
 include xstar_atomic_conversation_summary_v0439.md
-include XSTAR_SOURCE_CHANGES_v0.4.39.md
 recursive-include src/xstar_tools/benchmarks/all_element_call73_v0438_acceptance *.md *.json
 recursive-include src/xstar_tools/xstar/data coheat.dat
 
 include xstar_atomic_v0.4.40.md
 include xstar_atomic_conversation_summary_v0440.md
-include XSTAR_SOURCE_CHANGES_v0.4.40.md
 recursive-include src/xstar_tools/benchmarks/comp2_call73_v0439_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.41.md
 include xstar_atomic_conversation_summary_v0441.md
-include XSTAR_SOURCE_CHANGES_v0.4.41.md
 include src_v0441_update_report.md
 recursive-include src/xstar_tools/benchmarks/freef_call73_v0440_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.42.md
 include xstar_atomic_conversation_summary_v0442.md
-include XSTAR_SOURCE_CHANGES_v0.4.42.md
 include src_v0442_update_report.md
 recursive-include src/xstar_tools/benchmarks/bremem_call73_v0441_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.43.md
 include xstar_atomic_conversation_summary_v0443.md
-include XSTAR_SOURCE_CHANGES_v0.4.43.md
 include src_v0443_update_report.md
 recursive-include src/xstar_tools/benchmarks/heatf_call73_v0442_acceptance *.md *.json *.sha256
 include xstar_atomic_v0.4.44.md
 include xstar_atomic_conversation_summary_v0444.md
-include XSTAR_SOURCE_CHANGES_v0.4.44.md
 include src_v0444_update_report.md
 recursive-include src/xstar_tools/benchmarks/complete_fixed_state_v0443_state_ownership *.md *.json
 
 include xstar_atomic_v0.4.45.md
 include xstar_atomic_conversation_summary_v0445.md
-include XSTAR_SOURCE_CHANGES_v0.4.45.md
 include src_v0445_update_report.md
 recursive-include src/xstar_tools/benchmarks/complete_fixed_state_v0444_acceptance *.md *.json SHA256
 
 include xstar_atomic_v0.4.46.md
 include xstar_atomic_conversation_summary_v0446.md
-include XSTAR_SOURCE_CHANGES_v0.4.46.md
 include src_v0446_update_report.md
 
 include xstar_atomic_v0.4.47.md
 include xstar_atomic_conversation_summary_v0447.md
-include XSTAR_SOURCE_CHANGES_v0.4.47.md
 include src_v0447_update_report.md
 
 include xstar_atomic_v0.4.48.md
 include xstar_atomic_conversation_summary_v0448.md
-include XSTAR_SOURCE_CHANGES_v0.4.48.md
 include src_v0448_update_report.md
 
 include xstar_atomic_v0.4.49.md
 include xstar_atomic_conversation_summary_v0449.md
-include XSTAR_SOURCE_CHANGES_v0.4.49.md
 include src_v0449_update_report.md
 
 include xstar_atomic_v0.4.50.md
 include xstar_atomic_conversation_summary_v0450.md
-include XSTAR_SOURCE_CHANGES_v0.4.50.md
 include src_v0450_update_report.md
 
 include xstar_atomic_v0.4.51.md
 include xstar_atomic_conversation_summary_v0451.md
-include XSTAR_SOURCE_CHANGES_v0.4.51.md
 include src_v0451_update_report.md
 
 include xstar_atomic_v0.4.52.md
 include xstar_atomic_conversation_summary_v0452.md
-include XSTAR_SOURCE_CHANGES_v0.4.52.md
 include src_v0452_update_report.md
 
 include xstar_atomic_v0.4.53.md
 include xstar_atomic_conversation_summary_v0453.md
-include XSTAR_SOURCE_CHANGES_v0.4.53.md
 include src_v0453_update_report.md
 
 include xstar_atomic_v0.4.54.md
 include xstar_atomic_conversation_summary_v0454.md
-include XSTAR_SOURCE_CHANGES_v0.4.54.md
 include src_v0454_update_report.md
 include xstar_atomic_v0.4.55.md
 include xstar_atomic_conversation_summary_v0455.md
-include XSTAR_SOURCE_CHANGES_v0.4.55.md
 include src_v0455_update_report.md
 include xstar_atomic_v0.4.56.md
 include xstar_atomic_conversation_summary_v0456.md
-include XSTAR_SOURCE_CHANGES_v0.4.56.md
 include src_v0456_update_report.md
 include xstar_atomic_v0.4.57.md
 include xstar_atomic_conversation_summary_v0457.md
-include XSTAR_SOURCE_CHANGES_v0.4.57.md
 include src_v0457_update_report.md
 
 include xstar_atomic_v0.4.58.md
-include XSTAR_SOURCE_CHANGES_v0.4.58.md
 include src_v0458_update_report.md
 include xstar_atomic_conversation_summary_v0458.md
 
 include xstar_atomic_v0.4.59.md
-include XSTAR_SOURCE_CHANGES_v0.4.59.md
 include src_v0459_update_report.md
 include xstar_atomic_conversation_summary_v0459.md
 
 include xstar_atomic_v0.4.60.md
-include XSTAR_SOURCE_CHANGES_v0.4.60.md
 include src_v0460_update_report.md
 include xstar_atomic_conversation_summary_v0460.md
 
 include xstar_atomic_v0.4.61.md
-include XSTAR_SOURCE_CHANGES_v0.4.61.md
 include src_v0461_update_report.md
 include xstar_atomic_conversation_summary_v0461.md
 
 include xstar_atomic_v0.4.62.md
-include XSTAR_SOURCE_CHANGES_v0.4.62.md
 include src_v0462_update_report.md
 include xstar_atomic_conversation_summary_v0462.md
 
 include xstar_atomic_v0.4.63.md
-include XSTAR_SOURCE_CHANGES_v0.4.63.md
 include src_v0463_update_report.md
 include xstar_atomic_conversation_summary_v0463.md
 
 include xstar_atomic_v0.4.64.md
-include XSTAR_SOURCE_CHANGES_v0.4.64.md
 include src_v0464_update_report.md
 include xstar_atomic_conversation_summary_v0464.md
 
 include xstar_atomic_v0.4.65.md
-include XSTAR_SOURCE_CHANGES_v0.4.65.md
 include src_v0465_update_report.md
 include xstar_atomic_conversation_summary_v0465.md
 include xstar_atomic_v0.4.66.md
-include XSTAR_SOURCE_CHANGES_v0.4.66.md
 include src_v0466_update_report.md
 include xstar_atomic_conversation_summary_v0466.md
 
 include xstar_atomic_v0.4.67.md
 include xstar_atomic_conversation_summary_v0467.md
-include XSTAR_SOURCE_CHANGES_v0.4.67.md
 include src_v0467_update_report.md
 include xstar_atomic_v0.4.68.md
 include xstar_atomic_conversation_summary_v0468.md
-include XSTAR_SOURCE_CHANGES_v0.4.68.md
 include src_v0468_update_report.md
 recursive-include docs/validation/v0468_fortran_density_reference *
 include xstar_atomic_v0.4.69.md
 include xstar_atomic_conversation_summary_v0469.md
-include XSTAR_SOURCE_CHANGES_v0.4.69.md
 include src_v0469_update_report.md
 
 include xstar_atomic_v0.4.70.md
 include xstar_atomic_conversation_summary_v0470.md
-include XSTAR_SOURCE_CHANGES_v0.4.70.md
 include src_v0470_update_report.md
 recursive-include docs/validation/v0470_fortran_pprint_reference *
 
 include xstar_atomic_v0.4.71.md
 include xstar_atomic_conversation_summary_v0471.md
-include XSTAR_SOURCE_CHANGES_v0.4.71.md
 include src_v0471_update_report.md
 
 include xstar_atomic_v0.4.72.md
 include xstar_atomic_conversation_summary_v0472.md
-include XSTAR_SOURCE_CHANGES_v0.4.72.md
 include src_v0472_update_report.md
 include xstar_atomic_v0.4.73.md
-include XSTAR_SOURCE_CHANGES_v0.4.73.md
 include src_v0473_update_report.md
 include xstar_atomic_v0.4.74.md
-include XSTAR_SOURCE_CHANGES_v0.4.74.md
 include src_v0474_update_report.md
 include xstar_atomic_v0.4.75.md
-include XSTAR_SOURCE_CHANGES_v0.4.75.md
 include src_v0475_update_report.md
 include xstar_atomic_v0.4.76.md
-include XSTAR_SOURCE_CHANGES_v0.4.76.md
 include src_v0476_update_report.md
 include xstar_atomic_v0.4.77.md
-include XSTAR_SOURCE_CHANGES_v0.4.77.md
 include src_v0477_update_report.md
 
 include xstar_atomic_v0.4.78.md
-include XSTAR_SOURCE_CHANGES_v0.4.78.md
 include src_v0478_update_report.md
 include V0478_ZONE1_DSEC_WORKFLOW.md
 include xstar_atomic_conversation_summary_v0478.md
 
 include xstar_atomic_v0.4.79.md
-include XSTAR_SOURCE_CHANGES_v0.4.79.md
 include src_v0479_update_report.md
 include V0479_TYPE15_WORKFLOW.md
 
 include V0480_MEMORY_SAFE_ANALYZER.md
-include XSTAR_SOURCE_CHANGES_v0.4.80.md
 include src_v0480_update_report.md
 include xstar_atomic_v0.4.80.md
 
 include V0481_OPTIONAL_TYPE15_PROBE.md
-include XSTAR_SOURCE_CHANGES_v0.4.81.md
 include src_v0481_update_report.md
 include xstar_atomic_v0.4.81.md
 
 include V0482_TYPE59_CORRECTION.md
-include XSTAR_SOURCE_CHANGES_v0.4.82.md
 include src_v0482_update_report.md
 include xstar_atomic_v0.4.82.md
 
 include V0483_TYPE59_SOURCE_ZERO_RETURN.md
-include XSTAR_SOURCE_CHANGES_v0.4.83.md
 include src_v0483_update_report.md
 include xstar_atomic_v0.4.83.md
 
 include V0484_PRELIMINARY_LFPI_TYPE59_GRID_CACHE_RECOVERY.md
-include XSTAR_SOURCE_CHANGES_v0.4.84.md
 include src_v0484_update_report.md
 include xstar_atomic_v0.4.84.md
 
 include V0485_LIVE_HYDROGEN_STRICT_MSOLVELUCY.md
-include XSTAR_SOURCE_CHANGES_v0.4.85.md
 include src_v0485_update_report.md
 include xstar_atomic_v0.4.85.md
 
 include V0486_SOURCE_ORDER_STATE_PATH_PROBE.md
 include V0486_EARLY_ISSUES_STATUS.md
-include XSTAR_SOURCE_CHANGES_v0.4.86.md
 include src_v0486_update_report.md
 include xstar_atomic_v0.4.86.md
 include xstar_atomic_conversation_summary_v0486.md
 
 include V0487_ALIAS_RESET_LINK_HOTFIX.md
-include XSTAR_SOURCE_CHANGES_v0.4.87.md
 include src_v0487_update_report.md
 include xstar_atomic_v0.4.87.md
 
 include V0488_ALL_EVAL_HYDROGEN_HISTORY.md
 include V0488_HYDROGEN_HISTORY_PROBE.md
-include XSTAR_SOURCE_CHANGES_v0.4.88.md
 include src_v0488_update_report.md
 include xstar_atomic_v0.4.88.md
 include examples/run_v0488_original_xstar_probe.sh
@@ -385,4 +331,3 @@ recursive-include src/xstar_tools/xstar *.so *.dylib *.dll
 # Optional C++ shared-library solver backend sources/build helpers
 recursive-include src/xstar_tools/xstar/cpp *
 
-include XSTAR_SOURCE_CHANGES_v0.5.53.md

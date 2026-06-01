@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1459,10 +1459,13 @@ def assemble_element_matrix(
                 payload = [item for item, _idx in batch]
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                 try:
-                    cpp_rows, cpp_message, cpp_stats = build_mg_type51_rates_and_matrix_cpp_detailed(
+                    cpp_rows, cpp_message, cpp_stats = eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
                         payload,
                         basis_n_rows=basis.n_rows,
                         term_start=len(terms) + 1,
+                        ion_index=int(block.ion_index),
+                        ion_stage=int(block.ion_stage),
+                        nlev=int(block.nlev),
                         temperature_k=float(context.temperature_k),
                         electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
                         hydrogen_density_cm3=float(context.hydrogen_density_cm3),
@@ -1546,11 +1549,30 @@ def assemble_element_matrix(
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                            source_routine="libxstar_matrix.so:xstar_matrix_build_mg_type51_rates_and_matrix",
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_type51_rates_and_matrix",
                             status="fallback",
                             records_seen=float(len(batch)),
                             records_batched=float(len(batch)),
                             cpp_calls=0.0,
+                            fallback_count=float(len(batch)),
+                            emitted_matrix_terms=0.0,
+                            error=str(exc),
+                        )
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_type51_rates_and_matrix",
+                            status="fallback_type51_subset",
+                            records_seen=float(len(batch)),
+                            records_batched=float(len(batch)),
+                            cpp_calls=0.0,
+                            ion_cpp_calls=0.0,
+                            ion_records_batched=float(len(batch)),
                             fallback_count=float(len(batch)),
                             emitted_matrix_terms=0.0,
                             error=str(exc),
@@ -1628,8 +1650,21 @@ def assemble_element_matrix(
                             ion_stage=int(block.ion_stage),
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                            source_routine="libxstar_matrix.so:xstar_matrix_build_mg_type51_rates_and_matrix",
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_type51_rates_and_matrix",
                             status="cpp",
+                            parity_gate_records=float(min(mg_rates_matrix_parity_records, len(batch))),
+                            **cpp_stats,
+                        )
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_cpp_kernel",
+                            elapsed_cpp,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_type51_rates_and_matrix",
+                            status="cpp_type51_subset",
                             parity_gate_records=float(min(mg_rates_matrix_parity_records, len(batch))),
                             **cpp_stats,
                         )
