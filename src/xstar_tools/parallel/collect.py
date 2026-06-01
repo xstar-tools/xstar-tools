@@ -1,0 +1,2 @@
+"""Collect parallel/grid outputs.
+"""

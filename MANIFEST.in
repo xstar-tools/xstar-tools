@@ -61,7 +61,7 @@ include xstar_atomic_v0.4.22.md
 include xstar_o_element_equilibrium_v0421_diagnosis_v0422.md
 recursive-include xstar_python_source_port_inventory_v0422 *.csv *.json
 recursive-include benchmarks/oxygen_milestone3_v0422 *.md *.json *.csv
-recursive-include src/xstar_atomic/benchmarks/oxygen_milestone3_v0422 *.md *.json *.csv
+recursive-include src/xstar_tools/benchmarks/oxygen_milestone3_v0422 *.md *.json *.csv
 
 include xstar_atomic_v0.4.23.md
 include xstar_o_element_equilibrium_v0422_diagnosis_v0423.md
@@ -104,19 +104,19 @@ include xstar_atomic_conversation_summary_v0433.md
 include xstar_atomic_v0.4.34.md
 include xstar_atomic_conversation_summary_v0434.md
 recursive-include benchmarks/oxygen_v0434_correction_targets *.md *.json *.sha256
-recursive-include src/xstar_atomic/benchmarks/oxygen_v0434_correction_targets *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/oxygen_v0434_correction_targets *.md *.json *.sha256
 
 include xstar_atomic_v0.4.35.md
 include xstar_atomic_conversation_summary_v0435.md
 recursive-include benchmarks/oxygen_call73_v0434_acceptance *.md *.json *.sha256
-recursive-include src/xstar_atomic/benchmarks/oxygen_call73_v0434_acceptance *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/oxygen_call73_v0434_acceptance *.md *.json *.sha256
 
 include XSTAR_SOURCE_CHANGES_v0.4.35.md
 
 include xstar_atomic_v0.4.36.md
 include xstar_atomic_conversation_summary_v0436.md
 include XSTAR_SOURCE_CHANGES_v0.4.36.md
-recursive-include src/xstar_atomic/benchmarks/hydrogen_v0436_targets *.md *.json
+recursive-include src/xstar_tools/benchmarks/hydrogen_v0436_targets *.md *.json
 
 include xstar_atomic_v0.4.37.md
 include xstar_atomic_conversation_summary_v0437.md
@@ -131,42 +131,42 @@ include xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 include xstar_atomic_v0.4.39.md
 include xstar_atomic_conversation_summary_v0439.md
 include XSTAR_SOURCE_CHANGES_v0.4.39.md
-recursive-include src/xstar_atomic/benchmarks/all_element_call73_v0438_acceptance *.md *.json
-recursive-include src/xstar_atomic/source_port/data coheat.dat
+recursive-include src/xstar_tools/benchmarks/all_element_call73_v0438_acceptance *.md *.json
+recursive-include src/xstar_tools/source_port/data coheat.dat
 
 include xstar_atomic_v0.4.40.md
 include xstar_atomic_conversation_summary_v0440.md
 include XSTAR_SOURCE_CHANGES_v0.4.40.md
-recursive-include src/xstar_atomic/benchmarks/comp2_call73_v0439_acceptance *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/comp2_call73_v0439_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.41.md
 include xstar_atomic_conversation_summary_v0441.md
 include XSTAR_SOURCE_CHANGES_v0.4.41.md
 include src_v0441_update_report.md
-recursive-include src/xstar_atomic/benchmarks/freef_call73_v0440_acceptance *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/freef_call73_v0440_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.42.md
 include xstar_atomic_conversation_summary_v0442.md
 include XSTAR_SOURCE_CHANGES_v0.4.42.md
 include src_v0442_update_report.md
-recursive-include src/xstar_atomic/benchmarks/bremem_call73_v0441_acceptance *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/bremem_call73_v0441_acceptance *.md *.json *.sha256
 
 include xstar_atomic_v0.4.43.md
 include xstar_atomic_conversation_summary_v0443.md
 include XSTAR_SOURCE_CHANGES_v0.4.43.md
 include src_v0443_update_report.md
-recursive-include src/xstar_atomic/benchmarks/heatf_call73_v0442_acceptance *.md *.json *.sha256
+recursive-include src/xstar_tools/benchmarks/heatf_call73_v0442_acceptance *.md *.json *.sha256
 include xstar_atomic_v0.4.44.md
 include xstar_atomic_conversation_summary_v0444.md
 include XSTAR_SOURCE_CHANGES_v0.4.44.md
 include src_v0444_update_report.md
-recursive-include src/xstar_atomic/benchmarks/complete_fixed_state_v0443_state_ownership *.md *.json
+recursive-include src/xstar_tools/benchmarks/complete_fixed_state_v0443_state_ownership *.md *.json
 
 include xstar_atomic_v0.4.45.md
 include xstar_atomic_conversation_summary_v0445.md
 include XSTAR_SOURCE_CHANGES_v0.4.45.md
 include src_v0445_update_report.md
-recursive-include src/xstar_atomic/benchmarks/complete_fixed_state_v0444_acceptance *.md *.json SHA256
+recursive-include src/xstar_tools/benchmarks/complete_fixed_state_v0444_acceptance *.md *.json SHA256
 
 include xstar_atomic_v0.4.46.md
 include xstar_atomic_conversation_summary_v0446.md
@@ -379,10 +379,10 @@ include examples/run_v0488_zone1_analysis.sh
 recursive-include scripts *.sh
 
 include setup.py
-recursive-include src/xstar_atomic/source_port *.so *.dylib *.dll
+recursive-include src/xstar_tools/source_port *.so *.dylib *.dll
 
 
 # Optional C++ shared-library solver backend sources/build helpers
-recursive-include src/xstar_atomic/source_port/cpp *
+recursive-include src/xstar_tools/source_port/cpp *
 
 include XSTAR_SOURCE_CHANGES_v0.5.53.md

@@ -1,0 +1,1660 @@
+"""
+xstar_tools_level_population_solver_v2.py
+
+Second steady-state level-population solver for XSTAR's packed atdb.fits. v2 adds connected-component diagnostics, ground-component solving, and explicit source/sink hooks.
+
+This script builds on the validated ATDB readers/decoders:
+
+  * xstar_tools_hierarchy.py
+  * xstar_tools_extract_lines_v2.py
+  * xstar_tools_extract_collisions_v2b.py
+
+It assembles a simple statistical-equilibrium matrix for one ion using:
+
+  * radiative decays from decoded bound-bound line records, primarily type 50;
+  * electron-impact excitation/de-excitation from evaluated collision records,
+    currently type 56 and the implemented type-63 branch from v2b.
+
+For each requested temperature and electron density it solves
+
+    dn_i/dt = sum_j n_j R_{j->i} - n_i sum_j R_{i->j} = 0
+    sum_i n_i = 1
+
+and exports line emissivities using solved upper-level populations:
+
+    photon_emissivity_per_ion_s^-1 = population_upper * A_ul
+    energy_emissivity_per_ion_erg_s^-1 = population_upper * A_ul * h nu
+
+The corresponding volume emissivity is
+
+    j_line = n_ion * energy_emissivity_per_ion_erg_s^-1
+
+If you want an emissivity coefficient per n_e n_ion comparable to the earlier
+coronal direct-excitation table, use
+
+    energy_emissivity_coeff_erg_cm3_s = energy_emissivity_per_ion / n_e
+
+Caveats
+-------
+This is still a prototype collisional-radiative solver. v2 can add explicit
+user-supplied source/sink terms and can restrict the matrix to the connected
+component containing the ground level. It does not yet decode XSTAR recombination
+records into level-resolved cascade sources automatically; instead it provides
+source/sink hooks and clear diagnostics. The collision decoder now provides the XSTAR type-63 same-n l-mixing/amcrs
+branch.  The older phenomenological same-n l-mixing option remains available
+for controlled experiments, but it is separate from the XSTAR-equivalent
+collision rates.
+
+Examples
+--------
+# O VIII Ly-alpha with all O VIII levels in the matrix
+python xstar_tools_level_population_solver_v2.py ./xstar/data/atdb.fits \
+  --element O --ion-stage 8 \
+  --wavelength-min 18.8 --wavelength-max 19.1 \
+  --temperatures 1e6 3e6 1e7 \
+  --electron-densities 1.0 \
+  --out-lines-csv o8_lya_pop_lines.csv \
+  --out-populations-csv o8_populations.csv \
+  --summary-json o8_solver_summary.json \
+  --print-summary
+
+# O VII triplet status with the current collision set
+python xstar_tools_level_population_solver_v2.py ./xstar/data/atdb.fits \
+  --element O --ion-stage 7 \
+  --wavelength-min 21.4 --wavelength-max 22.2 \
+  --temperatures 1e6 3e6 1e7 \
+  --electron-densities 1.0 1e4 1e8 \
+  --out-lines-csv o7_triplet_pop_lines.csv \
+  --summary-json o7_triplet_solver_summary.json \
+  --print-summary
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+import warnings
+import sys
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+
+import numpy as np
+
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+
+from .hierarchy import ATDB  # type: ignore
+from .lines import (  # type: ignore
+    choose_z,
+    extract_levels,
+    extract_lines,
+)
+from .collisions import extract_collisions  # type: ignore
+
+HC_EV_A = 12398.419843320026
+EV_TO_ERG = 1.602176634e-12
+
+
+def maybe_float(x) -> Optional[float]:
+    if x is None or x == "":
+        return None
+    try:
+        v = float(x)
+    except Exception:
+        return None
+    if not math.isfinite(v):
+        return None
+    return v
+
+
+def maybe_int(x) -> Optional[int]:
+    if x is None or x == "":
+        return None
+    try:
+        return int(x)
+    except Exception:
+        try:
+            return int(float(x))
+        except Exception:
+            return None
+
+
+
+
+def parse_scale_specs(values: Optional[Sequence[str]]) -> Dict[object, float]:
+    """Parse RATE-SCALE specs used by diagnostic collision sensitivity runs.
+
+    Accepts either ``KEY:SCALE`` or ``A:B:SCALE``.  ``KEY`` can be a data
+    type integer for data-type scaling; ``A:B`` is an unordered level pair.
+    This diagnostic scaling is intentionally applied symmetrically to the
+    excitation and de-excitation rates of the selected pair so detailed-balance
+    ratios are not changed by the scale factor itself.
+    """
+    out: Dict[object, float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) == 2:
+            try:
+                out[int(float(parts[0]))] = float(parts[1])
+            except Exception as exc:
+                raise ValueError(f"invalid scale spec {text!r}; expected DATA_TYPE:SCALE") from exc
+        elif len(parts) == 3:
+            try:
+                a = int(float(parts[0])); b = int(float(parts[1])); scale = float(parts[2])
+                out[tuple(sorted((a, b)))] = scale
+            except Exception as exc:
+                raise ValueError(f"invalid pair scale spec {text!r}; expected LEVEL1:LEVEL2:SCALE") from exc
+        else:
+            raise ValueError(f"invalid scale spec {text!r}")
+    return out
+
+
+def parse_record_scale_specs(values: Optional[Sequence[str]]) -> Dict[int, float]:
+    """Parse RECORD:SCALE diagnostic collision-rate scaling specs."""
+    out: Dict[int, float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) != 2:
+            raise ValueError(f"invalid record scale spec {text!r}; expected RECORD:SCALE")
+        try:
+            out[int(float(parts[0]))] = float(parts[1])
+        except Exception as exc:
+            raise ValueError(f"invalid record scale spec {text!r}; expected RECORD:SCALE") from exc
+    return out
+
+
+def parse_record_direction_scale_specs(values: Optional[Sequence[str]]) -> Dict[Tuple[int, str], float]:
+    """Parse RECORD:DIRECTION:SCALE diagnostic collision scaling specs.
+
+    ``DIRECTION`` may be ``exc``, ``excitation``, ``up`` for the lower->upper
+    excitation direction, or ``deexc``, ``deexcitation``, ``down`` for the
+    upper->lower de-excitation direction.  This deliberately breaks detailed
+    balance and is intended only for physical-interpretation diagnostics.
+    """
+    aliases = {
+        "exc": "excitation",
+        "ex": "excitation",
+        "excitation": "excitation",
+        "up": "excitation",
+        "lower_to_upper": "excitation",
+        "deexc": "deexcitation",
+        "deex": "deexcitation",
+        "deexcitation": "deexcitation",
+        "down": "deexcitation",
+        "upper_to_lower": "deexcitation",
+    }
+    out: Dict[Tuple[int, str], float] = {}
+    for text in values or []:
+        parts = [part.strip() for part in str(text).replace(',', ':').split(':') if part.strip()]
+        if len(parts) != 3:
+            raise ValueError(f"invalid record direction scale spec {text!r}; expected RECORD:DIRECTION:SCALE")
+        try:
+            rec = int(float(parts[0]))
+            direction = aliases.get(parts[1].strip().lower())
+            if direction is None:
+                raise ValueError(parts[1])
+            out[(rec, direction)] = float(parts[2])
+        except Exception as exc:
+            raise ValueError(f"invalid record direction scale spec {text!r}; expected RECORD:DIRECTION:SCALE") from exc
+    return out
+
+
+def _text_contains_resonance_1p1(value: object) -> bool:
+    text = str(value or "").replace(" ", "").lower()
+    return ("1p" in text and "1p_1" in text) or "1s1.2p1.1p_1" in text or "1p1" in text
+
+
+def is_type69_ground_resonance_excitation_row(row: dict) -> bool:
+    """Return True for diagnostic type-69 ground -> resonance-upper excitation rows.
+
+    For the O VII ATDB records studied in v0.2.74--v0.2.77 this is record
+    22490, level 1 -> 7.  The level-label checks keep the option somewhat more
+    general for He-like ions when labels are available, while the level-1/7
+    fallback preserves the validated O VII diagnostic behavior.
+    """
+    if maybe_int(row.get("data_type")) != 69:
+        return False
+    lower = maybe_int(row.get("lower_level"))
+    upper = maybe_int(row.get("upper_level"))
+    if lower != 1 or upper is None:
+        return False
+    upper_label = row.get("upper_label") or row.get("upper_level_label") or row.get("level_upper_label") or row.get("label_upper")
+    if _text_contains_resonance_1p1(upper_label):
+        return True
+    # Validated O VII fallback: level 7 is 1s.2p 1P_1 in the current ATDB decode.
+    return upper == 7
+
+
+def _type69_ground_excitation_mode(args) -> str:
+    return str(getattr(args, "collision_type69_ground_excitation_mode", "include") or "include").strip().lower()
+
+
+def collision_scale_for_row(row: dict, args) -> float:
+    """Return the diagnostic collision-rate scale for one evaluated row."""
+    scale = float(getattr(args, 'collision_rate_scale', 1.0) or 1.0)
+    dt_scales = getattr(args, '_collision_data_type_scales', {}) or {}
+    pair_scales = getattr(args, '_collision_pair_scales', {}) or {}
+    record_scales = getattr(args, '_collision_record_scales', {}) or {}
+    dt = maybe_int(row.get('data_type'))
+    if dt in dt_scales:
+        scale *= float(dt_scales[dt])
+    rec = maybe_int(row.get('record'))
+    if rec in record_scales:
+        scale *= float(record_scales[rec])
+    ll = maybe_int(row.get('lower_level'))
+    ul = maybe_int(row.get('upper_level'))
+    if ll is not None and ul is not None:
+        key = tuple(sorted((int(ll), int(ul))))
+        if key in pair_scales:
+            scale *= float(pair_scales[key])
+    if not math.isfinite(scale) or scale < 0.0:
+        raise ValueError(f"invalid diagnostic collision scale {scale!r} for row {row}")
+    return scale
+
+def collision_direction_scales_for_row(row: dict, args) -> Tuple[float, float]:
+    """Return extra excitation/de-excitation diagnostic scale factors."""
+    rec = maybe_int(row.get('record'))
+    direction_scales = getattr(args, '_collision_record_direction_scales', {}) or {}
+    exc_scale = 1.0
+    deexc_scale = 1.0
+    if rec is not None:
+        exc_scale *= float(direction_scales.get((rec, 'excitation'), 1.0))
+        deexc_scale *= float(direction_scales.get((rec, 'deexcitation'), 1.0))
+    mode = _type69_ground_excitation_mode(args)
+    valid_modes = {"include", "suppress-resonance", "suppress-all"}
+    if mode not in valid_modes:
+        raise ValueError(f"invalid --collision-type69-ground-excitation-mode {mode!r}")
+    if mode == "suppress-all" and maybe_int(row.get("data_type")) == 69 and maybe_int(row.get("lower_level")) == 1:
+        exc_scale *= 0.0
+    elif mode == "suppress-resonance" and is_type69_ground_resonance_excitation_row(row):
+        exc_scale *= 0.0
+    for val in (exc_scale, deexc_scale):
+        if not math.isfinite(val) or val < 0.0:
+            raise ValueError(f"invalid diagnostic direction collision scale {val!r} for row {row}")
+    return exc_scale, deexc_scale
+
+
+def write_csv(path: str | Path, rows: List[dict]) -> None:
+    path = Path(path)
+    if not rows:
+        path.write_text("", encoding="utf-8")
+        return
+    keys: List[str] = []
+    seen = set()
+    for row in rows:
+        for k in row.keys():
+            if k not in seen:
+                keys.append(k)
+                seen.add(k)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
+        w.writeheader()
+        for row in rows:
+            w.writerow(row)
+
+
+def counts_by(rows: Iterable[dict], key: str) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for row in rows:
+        val = str(row.get(key, ""))
+        out[val] = out.get(val, 0) + 1
+    return dict(sorted(out.items(), key=lambda kv: kv[0]))
+
+
+def is_bound_bound_radiative(row: dict, include_two_photon: bool = False, include_superlevel: bool = False) -> bool:
+    rt = maybe_int(row.get("rate_type"))
+    dt = maybe_int(row.get("data_type"))
+    if rt == 4:
+        return True
+    if include_two_photon and rt == 9:
+        return True
+    if include_superlevel and rt == 14:
+        return True
+    # Most normal line rows are type 50/rate 4. Keep this conservative.
+    if dt == 50 and rt == 4:
+        return True
+    return False
+
+
+def line_energy_erg(row: dict) -> Optional[float]:
+    eev = maybe_float(row.get("energy_eV"))
+    if eev is not None and eev > 0:
+        return eev * EV_TO_ERG
+    wav = maybe_float(row.get("wavelength_A"))
+    if wav is not None and wav > 0:
+        return (HC_EV_A / wav) * EV_TO_ERG
+    return None
+
+
+def select_output_lines(lines: List[dict], args) -> List[dict]:
+    out = []
+    for row in lines:
+        if not is_bound_bound_radiative(row, args.include_two_photon, args.include_superlevel):
+            continue
+        ll = maybe_int(row.get("lower_level"))
+        ul = maybe_int(row.get("upper_level"))
+        if ll is None or ul is None:
+            continue
+        wav = maybe_float(row.get("wavelength_A"))
+        ene = maybe_float(row.get("energy_keV"))
+        if args.wavelength_min is not None and (wav is None or wav < args.wavelength_min):
+            continue
+        if args.wavelength_max is not None and (wav is None or wav > args.wavelength_max):
+            continue
+        if args.energy_min_kev is not None and (ene is None or ene < args.energy_min_kev):
+            continue
+        if args.energy_max_kev is not None and (ene is None or ene > args.energy_max_kev):
+            continue
+        if args.lower_level is not None and ll != args.lower_level:
+            continue
+        if args.upper_level is not None and ul != args.upper_level:
+            continue
+        out.append(row)
+    return out
+
+
+def build_level_set(levels: List[dict], lines: List[dict], collisions: List[dict], args) -> List[int]:
+    all_indices = sorted({maybe_int(r.get("level_index")) for r in levels if maybe_int(r.get("level_index")) is not None})
+    all_indices = [i for i in all_indices if i is not None]
+
+    if args.max_level is not None:
+        all_indices = [i for i in all_indices if i <= args.max_level]
+
+    if args.levels:
+        explicit = sorted({int(x) for x in args.levels})
+        # Always include endpoints of lines/collisions that touch explicitly selected levels.
+        s = set(explicit)
+        for row in list(lines) + list(collisions):
+            ll = maybe_int(row.get("lower_level"))
+            ul = maybe_int(row.get("upper_level"))
+            if ll in s or ul in s:
+                if ll is not None:
+                    s.add(ll)
+                if ul is not None:
+                    s.add(ul)
+        return sorted(i for i in s if i in set(all_indices))
+
+    return all_indices
+
+
+def build_radiative_transitions(lines: List[dict], level_set: set[int], args) -> List[dict]:
+    trans = []
+    for row in lines:
+        if not is_bound_bound_radiative(row, args.include_two_photon, args.include_superlevel):
+            continue
+        ll = maybe_int(row.get("lower_level"))
+        ul = maybe_int(row.get("upper_level"))
+        a = maybe_float(row.get("A_s^-1"))
+        if ll is None or ul is None or a is None or a <= 0:
+            continue
+        if ll not in level_set or ul not in level_set:
+            continue
+        if ul == ll:
+            continue
+        trans.append(row)
+    return trans
+
+
+def build_collision_rates_for_T(collision_eval: List[dict], level_set: set[int], temperature: float, electron_density: float, args=None) -> List[dict]:
+    rows = []
+    for row in collision_eval:
+        T = maybe_float(row.get("temperature_K"))
+        if T is None or abs(T - temperature) > max(1e-6 * max(abs(temperature), 1.0), 1e-20):
+            continue
+        ll = maybe_int(row.get("lower_level"))
+        ul = maybe_int(row.get("upper_level"))
+        if ll is None or ul is None or ll == ul:
+            continue
+        if ll not in level_set or ul not in level_set:
+            continue
+        qij = maybe_float(row.get("q_excitation_cm3_s"))
+        qji = maybe_float(row.get("q_deexcitation_cm3_s"))
+        if (qij is None or qij <= 0) and (qji is None or qji <= 0):
+            continue
+        rr = dict(row)
+        rate_scale = collision_scale_for_row(row, args) if args is not None else 1.0
+        exc_dir_scale, deexc_dir_scale = collision_direction_scales_for_row(row, args) if args is not None else (1.0, 1.0)
+        exc_scale = rate_scale * exc_dir_scale
+        deexc_scale = rate_scale * deexc_dir_scale
+        rr["collision_rate_scale_applied"] = rate_scale
+        rr["collision_excitation_direction_scale_applied"] = exc_dir_scale
+        rr["collision_deexcitation_direction_scale_applied"] = deexc_dir_scale
+        rr["C_excitation_s^-1"] = (electron_density * qij * exc_scale) if qij is not None else None
+        rr["C_deexcitation_s^-1"] = (electron_density * qji * deexc_scale) if qji is not None else None
+        rows.append(rr)
+    return rows
+
+
+def build_graph_edges(rad_lines: List[dict], collision_eval: List[dict], level_set: set[int]) -> List[Tuple[int, int, str]]:
+    """Build undirected graph edges from any decoded transition/rate that can couple levels."""
+    edges: List[Tuple[int, int, str]] = []
+    for row in rad_lines:
+        lo = maybe_int(row.get("lower_level"))
+        up = maybe_int(row.get("upper_level"))
+        A = maybe_float(row.get("A_s^-1"))
+        if lo in level_set and up in level_set and lo != up and A is not None and A > 0:
+            edges.append((lo, up, "radiative"))
+    for row in collision_eval:
+        lo = maybe_int(row.get("lower_level"))
+        up = maybe_int(row.get("upper_level"))
+        qij = maybe_float(row.get("q_excitation_cm3_s"))
+        qji = maybe_float(row.get("q_deexcitation_cm3_s"))
+        if lo in level_set and up in level_set and lo != up and ((qij is not None and qij > 0) or (qji is not None and qji > 0)):
+            edges.append((lo, up, str(row.get("eval_method", "collision"))))
+    return edges
+
+
+def connected_components(level_indices: List[int], edges: List[Tuple[int, int, str]]) -> List[List[int]]:
+    adj: Dict[int, set[int]] = {i: set() for i in level_indices}
+    for a, b, _kind in edges:
+        if a in adj and b in adj:
+            adj[a].add(b)
+            adj[b].add(a)
+    seen: set[int] = set()
+    comps: List[List[int]] = []
+    for node in level_indices:
+        if node in seen:
+            continue
+        stack = [node]
+        seen.add(node)
+        comp: List[int] = []
+        while stack:
+            x = stack.pop()
+            comp.append(x)
+            for y in adj.get(x, ()):
+                if y not in seen:
+                    seen.add(y)
+                    stack.append(y)
+        comps.append(sorted(comp))
+    comps.sort(key=lambda c: (-len(c), min(c) if c else 10**9))
+    return comps
+
+
+def make_component_diagnostics(level_indices: List[int], edges: List[Tuple[int, int, str]], output_lines: List[dict], ground_level: int) -> dict:
+    comps = connected_components(level_indices, edges)
+    comp_id: Dict[int, int] = {}
+    for k, comp in enumerate(comps):
+        for lev in comp:
+            comp_id[lev] = k
+    out_levels = set()
+    for line in output_lines:
+        lo = maybe_int(line.get("lower_level"))
+        up = maybe_int(line.get("upper_level"))
+        if lo is not None:
+            out_levels.add(lo)
+        if up is not None:
+            out_levels.add(up)
+    edge_counts: Dict[int, int] = {k: 0 for k in range(len(comps))}
+    edge_kind_counts: Dict[str, int] = {}
+    for a, b, kind in edges:
+        if comp_id.get(a) == comp_id.get(b) and comp_id.get(a) is not None:
+            edge_counts[comp_id[a]] += 1
+        edge_kind_counts[kind] = edge_kind_counts.get(kind, 0) + 1
+    rows = []
+    for k, comp in enumerate(comps):
+        rows.append({
+            "component_id": k,
+            "n_levels": len(comp),
+            "min_level": min(comp) if comp else None,
+            "max_level": max(comp) if comp else None,
+            "contains_ground_level": ground_level in comp,
+            "contains_output_line_level": bool(out_levels & set(comp)),
+            "n_output_line_levels": len(out_levels & set(comp)),
+            "n_internal_edges": edge_counts.get(k, 0),
+            "levels_preview": comp[:30],
+            "levels_truncated": len(comp) > 30,
+        })
+    return {
+        "n_components": len(comps),
+        "n_edges": len(edges),
+        "edge_kind_counts": dict(sorted(edge_kind_counts.items(), key=lambda kv: kv[0])),
+        "components": rows,
+        "level_to_component": comp_id,
+    }
+
+
+def choose_component_levels(level_indices: List[int], component_diag: dict, output_lines: List[dict], mode: str, ground_level: int) -> List[int]:
+    comps = component_diag.get("components", [])
+    level_to_component = component_diag.get("level_to_component", {})
+    if mode == "all" or not comps:
+        return level_indices
+    selected_ids: set[int] = set()
+    if mode == "ground":
+        cid = level_to_component.get(ground_level)
+        if cid is not None:
+            selected_ids.add(int(cid))
+    elif mode == "largest":
+        selected_ids.add(int(comps[0]["component_id"]))
+    elif mode == "output":
+        for line in output_lines:
+            for key in ("lower_level", "upper_level"):
+                lev = maybe_int(line.get(key))
+                cid = level_to_component.get(lev)
+                if cid is not None:
+                    selected_ids.add(int(cid))
+    if not selected_ids:
+        return level_indices
+    return [lev for lev in level_indices if level_to_component.get(lev) in selected_ids]
+
+
+
+
+def prune_unconnected_levels(
+    level_indices: List[int],
+    edges: List[Tuple[int, int, str]],
+    output_lines: List[dict],
+    ground_level: int,
+    source_levels: Optional[Iterable[int]] = None,
+) -> Tuple[List[int], dict]:
+    """Remove isolated levels while preserving ground, output, and source levels.
+
+    This is a lightweight connectivity pruning step. It is not a physical model
+    reduction; it only removes levels with no radiative/collisional graph edge
+    unless those levels are explicitly needed for output or source/sink tests.
+    """
+    connected: set[int] = set()
+    for a, b, _kind in edges:
+        connected.add(a)
+        connected.add(b)
+    keep: set[int] = set(connected)
+    keep.add(int(ground_level))
+    for line in output_lines:
+        lo = maybe_int(line.get("lower_level"))
+        up = maybe_int(line.get("upper_level"))
+        if lo is not None:
+            keep.add(lo)
+        if up is not None:
+            keep.add(up)
+    for lev in source_levels or []:
+        if lev is not None:
+            keep.add(int(lev))
+    pruned = [lev for lev in level_indices if lev in keep]
+    removed = [lev for lev in level_indices if lev not in keep]
+    return pruned, {
+        "enabled": True,
+        "n_levels_before": len(level_indices),
+        "n_levels_after": len(pruned),
+        "n_levels_removed": len(removed),
+        "removed_levels_preview": removed[:50],
+        "removed_levels_truncated": len(removed) > 50,
+    }
+
+
+def collect_explicit_source_levels(args) -> List[int]:
+    """Return levels explicitly mentioned by command-line source/sink options.
+
+    CSV source files are temperature dependent and are applied later, so this
+    helper only captures levels visible from the command line at setup time.
+    """
+    out: set[int] = set()
+    for pairs in (args.source_level or [], args.sink_level or []):
+        try:
+            out.add(int(pairs[0]))
+        except Exception:
+            pass
+    return sorted(out)
+
+def load_level_rate_csv(path: Optional[str], temperature: float, electron_density: float) -> Tuple[Dict[int, float], Dict[int, float], List[str]]:
+    """Load level source/sink rates from CSV. Optional columns: temperature_K, electron_density_cm^-3."""
+    src: Dict[int, float] = {}
+    sink: Dict[int, float] = {}
+    notes: List[str] = []
+    if not path:
+        return src, sink, notes
+    with Path(path).open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lev = maybe_int(row.get("level_index") or row.get("level") or row.get("upper_level"))
+            if lev is None:
+                continue
+            rowT = maybe_float(row.get("temperature_K"))
+            rowne = maybe_float(row.get("electron_density_cm^-3") or row.get("ne_cm^-3"))
+            if rowT is not None and abs(rowT - temperature) > max(1e-6 * max(abs(temperature), 1.0), 1e-20):
+                continue
+            if rowne is not None and abs(rowne - electron_density) > max(1e-6 * max(abs(electron_density), 1.0), 1e-20):
+                continue
+            srate = maybe_float(row.get("source_s^-1") or row.get("source_rate_s^-1") or row.get("recombination_source_s^-1"))
+            krate = maybe_float(row.get("sink_s^-1") or row.get("sink_rate_s^-1") or row.get("ionization_sink_s^-1"))
+            if srate is not None and srate > 0:
+                src[lev] = src.get(lev, 0.0) + srate
+            if krate is not None and krate > 0:
+                sink[lev] = sink.get(lev, 0.0) + krate
+    notes.append(f"loaded level source/sink CSV: {path}")
+    return src, sink, notes
+
+
+def build_source_sink_vectors(level_indices: List[int], args, temperature: float, electron_density: float) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    idx = {lev: k for k, lev in enumerate(level_indices)}
+    source = np.zeros(len(level_indices), dtype=float)
+    sink = np.zeros(len(level_indices), dtype=float)
+    notes: List[str] = []
+    for pair in (args.source_level or []):
+        lev = int(pair[0]); rate = float(pair[1])
+        if lev in idx and rate > 0:
+            source[idx[lev]] += rate
+            notes.append(f"manual source level {lev}: {rate:g} s^-1")
+    for pair in (args.sink_level or []):
+        lev = int(pair[0]); rate = float(pair[1])
+        if lev in idx and rate > 0:
+            sink[idx[lev]] += rate
+            notes.append(f"manual sink level {lev}: {rate:g} s^-1")
+    for csv_path in [args.source_csv, args.recombination_source_csv, args.adjacent_ion_source_csv]:
+        src_map, sink_map, csv_notes = load_level_rate_csv(csv_path, temperature, electron_density)
+        notes.extend(csv_notes)
+        for lev, rate in src_map.items():
+            if lev in idx:
+                source[idx[lev]] += rate
+        for lev, rate in sink_map.items():
+            if lev in idx:
+                sink[idx[lev]] += rate
+    if args.auto_recombination_cascade:
+        notes.append("auto recombination/cascade requested but not yet decoded from ATDB records; use --recombination-source-csv for level-resolved sources")
+    return source, sink, notes
+
+
+
+
+def summarize_source_sink_vectors(level_indices: List[int], source: np.ndarray, sink: np.ndarray, notes: List[str]) -> dict:
+    """Compact diagnostic summary for level source/sink vectors."""
+    rows = []
+    for k, lev in enumerate(level_indices):
+        s = float(source[k]) if k < len(source) else 0.0
+        t = float(sink[k]) if k < len(sink) else 0.0
+        if s != 0.0 or t != 0.0:
+            rows.append({"level_index": lev, "source_s^-1": s, "sink_s^-1": t})
+    return {
+        "n_source_terms_nonzero": int(np.count_nonzero(source)),
+        "n_sink_terms_nonzero": int(np.count_nonzero(sink)),
+        "source_sum_s^-1": float(np.sum(source)),
+        "sink_sum_s^-1": float(np.sum(sink)),
+        "nonzero_level_terms": rows,
+        "notes": list(notes),
+    }
+
+def build_same_n_lmixing_rows(level_indices: List[int], level_by_index: Dict[int, dict], electron_density: float, coeff_cm3_s: Optional[float]) -> List[dict]:
+    """Optional phenomenological same-n adjacent-l mixing; not an XSTAR amcrs port."""
+    if coeff_cm3_s is None or coeff_cm3_s <= 0:
+        return []
+    rows: List[dict] = []
+    levs = sorted(level_indices)
+    for i, a in enumerate(levs):
+        la = level_by_index.get(a, {})
+        na = maybe_int(la.get("n")); ella = maybe_int(la.get("l"))
+        if na is None or ella is None:
+            continue
+        for b in levs[i+1:]:
+            lb = level_by_index.get(b, {})
+            nb = maybe_int(lb.get("n")); ellb = maybe_int(lb.get("l"))
+            if nb == na and ellb is not None and abs(ellb - ella) == 1:
+                rate = electron_density * coeff_cm3_s
+                rows.append({
+                    "kind": "phenomenological_same_n_lmixing",
+                    "lower_level": a,
+                    "upper_level": b,
+                    "C_ab_s^-1": rate,
+                    "C_ba_s^-1": rate,
+                    "eval_method": "phenomenological_same_n_lmixing_not_xstar_amcrs",
+                })
+    return rows
+
+
+def assemble_rate_matrix(level_indices: List[int], rad_lines: List[dict], coll_rows_T: List[dict], same_n_lmix_rows: Optional[List[dict]] = None) -> Tuple[np.ndarray, List[dict]]:
+    """Return rate matrix R where R[i,j] is rate j -> i, plus transition log."""
+    n = len(level_indices)
+    idx = {lev: k for k, lev in enumerate(level_indices)}
+    R = np.zeros((n, n), dtype=float)
+    transition_log: List[dict] = []
+
+    # Radiative: upper -> lower at A_ul.
+    for row in rad_lines:
+        lower = maybe_int(row.get("lower_level"))
+        upper = maybe_int(row.get("upper_level"))
+        A = maybe_float(row.get("A_s^-1"))
+        if lower not in idx or upper not in idx or A is None or A <= 0:
+            continue
+        i = idx[lower]
+        j = idx[upper]
+        R[i, j] += A
+        transition_log.append({
+            "kind": "radiative_decay",
+            "from_level": upper,
+            "to_level": lower,
+            "rate_s^-1": A,
+            "record": row.get("record"),
+            "source_method": f"data_type_{row.get('data_type')}_rate_type_{row.get('rate_type')}",
+        })
+
+    # Collisions: lower -> upper and upper -> lower.
+    #
+    # Keep a source-code audit trail from the collision evaluator in the
+    # transition log.  Earlier versions only propagated record/source_method,
+    # which meant source-alignment columns such as the XSTAR type-63 ans1/ans2
+    # swap and type-56 interpolation diagnostics were available in the raw
+    # collision table but disappeared from the matrix-term products.
+    collision_audit_keys = (
+        "data_type",
+        "rate_type",
+        "source_format",
+        "delta_e_eV",
+        "wavelength_A",
+        "upsilon",
+        "q_excitation_cm3_s",
+        "q_deexcitation_cm3_s",
+        "eval_method",
+        "eval_diagnostic",
+        "collision_rate_scale_applied",
+        "collision_excitation_direction_scale_applied",
+        "collision_deexcitation_direction_scale_applied",
+        "xstar_calt67_68_effective_temperature_K",
+        "xstar_calt67_68_temperature_floor_applied",
+        "type63_case",
+        "type63_reason",
+        "type63_angular_sum",
+        "type63_aa1",
+        "type63_aa1_fortran_selector",
+        "type63_lower_shell_l",
+        "type63_upper_shell_l",
+        "type63_n_lower_shell",
+        "type63_n_upper_shell",
+        "type63_se_shell_cm3_s",
+        "type63_sd_shell_cm3_s",
+        "type63_ordering_mode",
+        "type63_record_initial_n",
+        "type63_record_initial_l",
+        "type63_record_final_n",
+        "type63_record_final_l",
+        "type63_ucalc_ans_swap_applied",
+        "type63_ucalc_ans1_forward_cm3_s",
+        "type63_ucalc_ans2_reverse_cm3_s",
+        "type63_forward_direction",
+        "type63_energy_order_q_excitation_cm3_s",
+        "type63_energy_order_q_deexcitation_cm3_s",
+        "type63_energy_order_reason",
+        "type63_energy_order_aa1",
+        "type63_energy_order_aa1_fortran_selector",
+        "type63_same_n_sum_A",
+        "type63_same_n_cn_l_high_to_low_cm3_s",
+        "type63_same_n_lii",
+        "type63_same_n_lff",
+        "type63_same_n_ne_cm^-3",
+        "type63_same_n_psi",
+    )
+    for row in coll_rows_T:
+        lower = maybe_int(row.get("lower_level"))
+        upper = maybe_int(row.get("upper_level"))
+        if lower not in idx or upper not in idx:
+            continue
+        qij_rate = maybe_float(row.get("C_excitation_s^-1"))
+        qji_rate = maybe_float(row.get("C_deexcitation_s^-1"))
+        common_collision_audit = {k: row.get(k) for k in collision_audit_keys if k in row}
+        if qij_rate is not None and qij_rate > 0:
+            R[idx[upper], idx[lower]] += qij_rate
+            transition_log.append({
+                "kind": "collisional_excitation",
+                "from_level": lower,
+                "to_level": upper,
+                "rate_s^-1": qij_rate,
+                "record": row.get("record"),
+                "source_method": row.get("eval_method"),
+                "directional_q_cm3_s": row.get("q_excitation_cm3_s"),
+                **common_collision_audit,
+            })
+        if qji_rate is not None and qji_rate > 0:
+            R[idx[lower], idx[upper]] += qji_rate
+            transition_log.append({
+                "kind": "collisional_deexcitation",
+                "from_level": upper,
+                "to_level": lower,
+                "rate_s^-1": qji_rate,
+                "record": row.get("record"),
+                "source_method": row.get("eval_method"),
+                "directional_q_cm3_s": row.get("q_deexcitation_cm3_s"),
+                **common_collision_audit,
+            })
+
+    # Optional phenomenological same-n l-mixing.
+    for row in same_n_lmix_rows or []:
+        a = maybe_int(row.get("lower_level"))
+        b = maybe_int(row.get("upper_level"))
+        rab = maybe_float(row.get("C_ab_s^-1"))
+        rba = maybe_float(row.get("C_ba_s^-1"))
+        if a in idx and b in idx and a != b:
+            if rab is not None and rab > 0:
+                R[idx[b], idx[a]] += rab
+                transition_log.append({"kind": "phenomenological_same_n_lmixing", "from_level": a, "to_level": b, "rate_s^-1": rab, "source_method": row.get("eval_method")})
+            if rba is not None and rba > 0:
+                R[idx[a], idx[b]] += rba
+                transition_log.append({"kind": "phenomenological_same_n_lmixing", "from_level": b, "to_level": a, "rate_s^-1": rba, "source_method": row.get("eval_method")})
+
+    return R, transition_log
+
+
+
+def prune_null_rate_levels_for_solve(
+    level_indices: List[int],
+    R: np.ndarray,
+    source: np.ndarray,
+    sink: np.ndarray,
+    output_lines: List[dict],
+    ground_level: int,
+    *,
+    rate_floor: float = 0.0,
+) -> Tuple[List[int], dict]:
+    """Remove levels with no effective rates for a particular T/ne solve.
+
+    Unlike graph pruning, this is evaluated after collision rates and optional
+    source/sink vectors have been built.  A level is kept if it is the ground
+    level, appears in a requested output line, has a nonzero source/sink term,
+    or has an incoming/outgoing rate above ``rate_floor``.
+    """
+    n = len(level_indices)
+    if n == 0:
+        return level_indices, {"enabled": True, "n_levels_before": 0, "n_levels_after": 0, "n_levels_removed": 0}
+    floor = max(float(rate_floor or 0.0), 0.0)
+    rate_activity = np.sum(np.abs(R), axis=0) + np.sum(np.abs(R), axis=1)
+    protected: set[int] = {int(ground_level)}
+    for line in output_lines:
+        lo = maybe_int(line.get("lower_level"))
+        up = maybe_int(line.get("upper_level"))
+        if lo is not None:
+            protected.add(lo)
+        if up is not None:
+            protected.add(up)
+    keep_mask = np.zeros(n, dtype=bool)
+    for k, lev in enumerate(level_indices):
+        if lev in protected:
+            keep_mask[k] = True
+        elif rate_activity[k] > floor:
+            keep_mask[k] = True
+        elif k < len(source) and abs(float(source[k])) > floor:
+            keep_mask[k] = True
+        elif k < len(sink) and abs(float(sink[k])) > floor:
+            keep_mask[k] = True
+    pruned = [lev for k, lev in enumerate(level_indices) if keep_mask[k]]
+    removed = [lev for k, lev in enumerate(level_indices) if not keep_mask[k]]
+    return pruned, {
+        "enabled": True,
+        "rate_floor_s^-1": floor,
+        "n_levels_before": len(level_indices),
+        "n_levels_after": len(pruned),
+        "n_levels_removed": len(removed),
+        "removed_levels_preview": removed[:50],
+        "removed_levels_truncated": len(removed) > 50,
+        "protected_levels": sorted(protected),
+    }
+
+
+def _svd_lstsq(M: np.ndarray, b: np.ndarray, rcond: Optional[float] = None) -> np.ndarray:
+    """Small explicit SVD least-squares helper for rank-deficient diagnostics."""
+    U, svals, Vt = np.linalg.svd(M, full_matrices=False)
+    if svals.size == 0:
+        return np.zeros(M.shape[1], dtype=float)
+    if rcond is None:
+        tol = max(M.shape) * np.finfo(float).eps * float(np.max(svals))
+    else:
+        tol = float(rcond) * float(np.max(svals))
+    inv = np.array([1.0 / x if x > tol else 0.0 for x in svals], dtype=float)
+    return Vt.T @ (inv * (U.T @ b))
+
+def solve_steady_state(
+    R: np.ndarray,
+    source_vector: Optional[np.ndarray] = None,
+    sink_rates: Optional[np.ndarray] = None,
+    *,
+    linear_solver: str = "dense",
+    rank_deficient_action: str = "lstsq",
+    negative_population_action: str = "clip",
+    negative_population_tol: float = 1.0e-8,
+    residual_l2_max: Optional[float] = None,
+    residual_linf_max: Optional[float] = None,
+    reject_large_residual: bool = False,
+) -> Tuple[np.ndarray, dict]:
+    """Solve statistical equilibrium for ``R[i, j] = rate j -> i``.
+
+    Optional ``source_vector`` adds ``+S_i`` to ``dn_i/dt``. Optional
+    ``sink_rates`` adds ``-K_i n_i``. The normalization equation is still
+    imposed, so source/sink terms should be interpreted as controlled prototype
+    drivers unless a full adjacent-ion balance is supplied.
+
+    Parameters
+    ----------
+    R:
+        Dense transition-rate matrix.
+    source_vector, sink_rates:
+        Optional source and sink terms in s^-1.
+    linear_solver:
+        ``"dense"`` uses NumPy ``solve``/``lstsq``. ``"sparse"`` attempts
+        SciPy sparse ``spsolve`` and falls back to dense least-squares if
+        SciPy is unavailable or the sparse solve fails. ``"auto"`` uses sparse
+        for matrices with at least 64 levels when SciPy is available.
+    """
+    n = R.shape[0]
+    A = np.zeros((n, n), dtype=float)
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                A[i, j] += R[i, j]
+        A[i, i] -= np.sum(R[:, i]) - R[i, i]
+    if sink_rates is not None:
+        for i in range(n):
+            if sink_rates[i] > 0:
+                A[i, i] -= sink_rates[i]
+
+    # Replace last equation by normalization. For source terms, solve A n = -S
+    # plus normalization in the final row.
+    M = A.copy()
+    b = np.zeros(n, dtype=float)
+    if source_vector is not None:
+        b[:] = -source_vector
+    M[-1, :] = 1.0
+    b[-1] = 1.0
+
+    requested_solver = str(linear_solver or "dense").lower()
+    nnz = int(np.count_nonzero(M))
+    abs_M = np.abs(M)
+    diag_abs = np.abs(np.diag(M)) if n else np.array([], dtype=float)
+    row_abs_sum = np.sum(abs_M, axis=1) if n else np.array([], dtype=float)
+    info = {
+        "matrix_size": n,
+        "matrix_nnz": nnz,
+        "matrix_density": float(nnz / (n * n)) if n else None,
+        "matrix_rank": None,
+        "matrix_effective_rank_tol": None,
+        "matrix_singular_value_min": None,
+        "matrix_singular_value_max": None,
+        "condition_number": None,
+        "diagonal_abs_min": float(np.min(diag_abs)) if diag_abs.size else None,
+        "diagonal_abs_max": float(np.max(diag_abs)) if diag_abs.size else None,
+        "row_abs_sum_min": float(np.min(row_abs_sum)) if row_abs_sum.size else None,
+        "row_abs_sum_max": float(np.max(row_abs_sum)) if row_abs_sum.size else None,
+        "solver": None,
+        "solver_requested": requested_solver,
+        "rank_deficient_action": str(rank_deficient_action or "lstsq").lower(),
+        "negative_population_action": str(negative_population_action or "clip").lower(),
+        "negative_population_tol": float(negative_population_tol),
+        "residual_l2_max": residual_l2_max,
+        "residual_linf_max": residual_linf_max,
+        "reject_large_residual": bool(reject_large_residual),
+        "solver_warning": "",
+        "sparse_available": False,
+        "sparse_used": False,
+        "n_source_terms_nonzero": int(np.count_nonzero(source_vector)) if source_vector is not None else 0,
+        "n_sink_terms_nonzero": int(np.count_nonzero(sink_rates)) if sink_rates is not None else 0,
+        "source_sum_s^-1": float(np.sum(source_vector)) if source_vector is not None else 0.0,
+        "sink_sum_s^-1": float(np.sum(sink_rates)) if sink_rates is not None else 0.0,
+    }
+
+    scipy_sparse = None
+    scipy_splinalg = None
+    try:
+        import scipy.sparse as scipy_sparse  # type: ignore
+        import scipy.sparse.linalg as scipy_splinalg  # type: ignore
+        info["sparse_available"] = True
+    except Exception:
+        pass
+
+    use_sparse = requested_solver == "sparse" or (requested_solver == "auto" and info["sparse_available"] and n >= 64)
+    if requested_solver in {"lstsq", "svd"}:
+        use_sparse = False
+        rank_deficient_action = requested_solver
+
+    # Dense diagnostics are useful but can be expensive for very large matrices.
+    if n <= 800:
+        try:
+            sv = np.linalg.svd(M, compute_uv=False)
+            if sv.size:
+                info["matrix_singular_value_min"] = float(np.min(sv))
+                info["matrix_singular_value_max"] = float(np.max(sv))
+                tol = float(max(M.shape) * np.finfo(float).eps * np.max(sv))
+                info["matrix_effective_rank_tol"] = tol
+                info["matrix_rank"] = int(np.sum(sv > tol))
+                if np.min(sv) > 0:
+                    cond = float(np.max(sv) / np.min(sv))
+                    if math.isfinite(cond):
+                        info["condition_number"] = cond
+        except Exception:
+            try:
+                info["matrix_rank"] = int(np.linalg.matrix_rank(M))
+            except Exception:
+                pass
+            try:
+                cond = float(np.linalg.cond(M))
+                if math.isfinite(cond):
+                    info["condition_number"] = cond
+            except Exception:
+                pass
+
+    rank = info.get("matrix_rank")
+    rank_deficient = bool(rank is not None and int(rank) < int(n))
+    info["matrix_rank_deficient"] = rank_deficient
+    rank_action = str(rank_deficient_action or "lstsq").lower()
+    if rank_deficient:
+        info["solver_warning"] = (info.get("solver_warning", "") + f"; matrix rank deficient ({rank}/{n})").strip("; ")
+        if rank_action == "reject":
+            raise RuntimeError(f"statistical-equilibrium matrix rank deficient ({rank}/{n})")
+        if rank_action in {"lstsq", "svd"}:
+            use_sparse = False
+            requested_solver = rank_action
+
+    try:
+        if requested_solver == "svd" or (rank_deficient and rank_action == "svd"):
+            info["solver"] = "numpy.linalg.svd_lstsq"
+            pop = _svd_lstsq(M, b)
+        elif requested_solver == "lstsq" or (rank_deficient and rank_action == "lstsq"):
+            info["solver"] = "numpy.linalg.lstsq_rank_deficient" if rank_deficient else "numpy.linalg.lstsq"
+            pop, *_ = np.linalg.lstsq(M, b, rcond=None)
+        elif use_sparse:
+            if scipy_sparse is None or scipy_splinalg is None:
+                raise RuntimeError("SciPy sparse solver requested but scipy is not available")
+            info["solver"] = "scipy.sparse.linalg.spsolve"
+            info["sparse_used"] = True
+            matrix_rank_warning = getattr(scipy_splinalg, "MatrixRankWarning", None)
+            with warnings.catch_warnings():
+                if matrix_rank_warning is not None:
+                    warnings.filterwarnings("error", category=matrix_rank_warning)
+                pop = scipy_splinalg.spsolve(scipy_sparse.csr_matrix(M), b)
+            pop = np.asarray(pop, dtype=float)
+            if not np.all(np.isfinite(pop)):
+                raise RuntimeError("sparse solve returned non-finite populations")
+        else:
+            info["solver"] = "numpy.linalg.solve"
+            pop = np.linalg.solve(M, b)
+    except Exception as exc:
+        info["solver"] = "numpy.linalg.lstsq"
+        info["solver_warning"] = (info.get("solver_warning", "") + f"; solve failed: {exc}; used least-squares").strip("; ")
+        pop, *_ = np.linalg.lstsq(M, b, rcond=None)
+
+    pop = np.asarray(pop, dtype=float)
+    info["raw_population_sum"] = float(np.sum(pop)) if len(pop) else 0.0
+    info["raw_min_population"] = float(np.min(pop)) if len(pop) else None
+    info["raw_max_population"] = float(np.max(pop)) if len(pop) else None
+    neg_tol = abs(float(negative_population_tol))
+    neg_mask = pop < -neg_tol
+    tiny_neg_mask = (pop < 0.0) & ~neg_mask
+    info["n_negative_populations_raw"] = int(np.count_nonzero(neg_mask))
+    info["n_tiny_negative_populations_raw"] = int(np.count_nonzero(tiny_neg_mask))
+    info["negative_population_abs_sum_raw"] = float(np.sum(np.abs(pop[pop < 0.0]))) if np.any(pop < 0.0) else 0.0
+
+    neg_action = str(negative_population_action or "clip").lower()
+    if np.any(neg_mask):
+        info["solver_warning"] = (info.get("solver_warning", "") + "; negative populations present").strip("; ")
+        if neg_action == "reject":
+            raise RuntimeError(f"negative populations exceed tolerance ({int(np.count_nonzero(neg_mask))} entries < -{neg_tol:g})")
+    # Clean tiny numerical negatives and optionally handle larger negatives.
+    pop[np.abs(pop) < 1e-300] = 0.0
+    if neg_action in {"clip", "zero-small"}:
+        if neg_action == "clip":
+            pop = np.where(pop < 0.0, 0.0, pop)
+            info["negative_population_handling"] = "clipped_all_negative_entries_to_zero"
+        else:
+            pop = np.where(tiny_neg_mask, 0.0, pop)
+            info["negative_population_handling"] = "zeroed_only_tiny_negative_entries"
+    elif neg_action == "keep":
+        info["negative_population_handling"] = "kept_raw_negative_entries"
+    elif neg_action == "reject":
+        info["negative_population_handling"] = "reject_if_below_tolerance"
+    else:
+        raise ValueError(f"unknown negative_population_action: {negative_population_action!r}")
+
+    s = float(np.sum(pop))
+    if s > 0:
+        pop /= s
+    else:
+        # Fallback: put all population in ground if something pathological happens.
+        pop[:] = 0.0
+        pop[0] = 1.0
+        info["solver_warning"] = (info.get("solver_warning", "") + "; zero population sum fallback").strip("; ")
+    info["population_sum"] = float(np.sum(pop))
+    info["min_population"] = float(np.min(pop)) if len(pop) else None
+    info["max_population"] = float(np.max(pop)) if len(pop) else None
+    try:
+        residual = M @ pop - b
+        info["linear_residual_l2"] = float(np.linalg.norm(residual))
+        info["linear_residual_linf"] = float(np.max(np.abs(residual))) if residual.size else 0.0
+        info["normalization_residual"] = float(abs(np.sum(pop) - 1.0))
+        large = False
+        if residual_l2_max is not None and info["linear_residual_l2"] is not None and info["linear_residual_l2"] > float(residual_l2_max):
+            large = True
+            info["solver_warning"] = (info.get("solver_warning", "") + f"; linear_residual_l2 exceeds threshold ({info['linear_residual_l2']:.6g} > {float(residual_l2_max):.6g})").strip("; ")
+        if residual_linf_max is not None and info["linear_residual_linf"] is not None and info["linear_residual_linf"] > float(residual_linf_max):
+            large = True
+            info["solver_warning"] = (info.get("solver_warning", "") + f"; linear_residual_linf exceeds threshold ({info['linear_residual_linf']:.6g} > {float(residual_linf_max):.6g})").strip("; ")
+        info["large_residual"] = bool(large)
+        if large and reject_large_residual:
+            raise RuntimeError("linear residual exceeds requested threshold")
+    except Exception:
+        if reject_large_residual:
+            raise
+        info["linear_residual_l2"] = info.get("linear_residual_l2")
+        info["linear_residual_linf"] = info.get("linear_residual_linf")
+        info["normalization_residual"] = info.get("normalization_residual")
+    return pop, info
+
+
+def make_population_rows(level_indices: List[int], level_by_index: Dict[int, dict], pop: np.ndarray, T: float, ne: float, solve_info: dict) -> List[dict]:
+    rows = []
+    for k, lev in enumerate(level_indices):
+        base = level_by_index.get(lev, {})
+        rows.append({
+            "temperature_K": T,
+            "electron_density_cm^-3": ne,
+            "level_index": lev,
+            "population_fraction": float(pop[k]),
+            "level_label": base.get("label"),
+            "energy_eV": base.get("energy_eV"),
+            "g": base.get("g"),
+            "n": base.get("n"),
+            "l": base.get("l"),
+            "solver": solve_info.get("solver"),
+            "solver_warning": solve_info.get("solver_warning"),
+        })
+    return rows
+
+
+def make_line_output_rows(output_lines: List[dict], level_indices: List[int], pop: np.ndarray, T: float, ne: float, solve_info: dict, level_by_index: Dict[int, dict], rad_rates_from_upper: Dict[int, float]) -> List[dict]:
+    idx = {lev: k for k, lev in enumerate(level_indices)}
+    rows = []
+    for line in output_lines:
+        lower = maybe_int(line.get("lower_level"))
+        upper = maybe_int(line.get("upper_level"))
+        Aul = maybe_float(line.get("A_s^-1"))
+        Eerg = line_energy_erg(line)
+        if lower not in idx or upper not in idx or Aul is None or Aul <= 0 or Eerg is None:
+            population_upper = 0.0
+            photon_per_ion = None
+            energy_per_ion = None
+            coeff = None
+        else:
+            population_upper = float(pop[idx[upper]])
+            photon_per_ion = population_upper * Aul
+            energy_per_ion = photon_per_ion * Eerg
+            coeff = energy_per_ion / ne if ne > 0 else None
+        total_A_upper = rad_rates_from_upper.get(upper or -999, 0.0)
+        branching = Aul / total_A_upper if Aul is not None and total_A_upper > 0 else None
+        rows.append({
+            "temperature_K": T,
+            "electron_density_cm^-3": ne,
+            "record": line.get("record"),
+            "element": line.get("element"),
+            "ion_stage": line.get("ion_stage"),
+            "ion_roman": line.get("ion_roman"),
+            "lower_level": lower,
+            "upper_level": upper,
+            "lower_label": line.get("lower_label"),
+            "upper_label": line.get("upper_label"),
+            "wavelength_A": line.get("wavelength_A"),
+            "energy_eV": line.get("energy_eV"),
+            "energy_keV": line.get("energy_keV"),
+            "A_s^-1": Aul,
+            "branching_ratio_within_decoded_lines": branching,
+            "upper_population_fraction": population_upper,
+            "line_photon_emissivity_per_ion_s^-1": photon_per_ion,
+            "line_energy_emissivity_per_ion_erg_s^-1": energy_per_ion,
+            "line_energy_emissivity_coeff_per_ne_nion_erg_cm3_s": coeff,
+            "matrix_size": solve_info.get("matrix_size"),
+            "matrix_rank": solve_info.get("matrix_rank"),
+            "condition_number": solve_info.get("condition_number"),
+            "solver": solve_info.get("solver"),
+            "solver_warning": solve_info.get("solver_warning"),
+        })
+    return rows
+
+
+
+
+def classify_helike_triplet_line(row: dict) -> Optional[str]:
+    """Classify He-like triplet components by level labels, with O VII fallback.
+
+    Returns ``f`` for 1s2 1S0 -> 1s2s 3S1, ``i`` for the 1s2p 3P_J
+    intercombination components, and ``r`` for 1s2p 1P1.  XSTAR's converted
+    line CSVs use labels such as ``1s1.2s1.3S_1`` and ``1s1.2p1.1P_1``; the
+    ATDB solver output also includes upper labels when available.  The O VII
+    wavelength/level-number fallback preserves the historical diagnostic.
+    """
+    upper_label = str(row.get("upper_label") or row.get("upper_level_label") or row.get("upper_config") or row.get("upper_level") or "")
+    lower_label = str(row.get("lower_label") or row.get("lower_level_label") or row.get("lower_config") or "")
+    norm_upper = upper_label.replace(" ", "").lower()
+    norm_lower = lower_label.replace(" ", "").lower()
+
+    # Prefer spectroscopic labels; these are ion-generic for He-like triplets.
+    if ("1s2" in norm_lower or not norm_lower):
+        if "2s1.3s_1" in norm_upper or "1s1.2s1.3s_1" in norm_upper:
+            return "f"
+        if "2p1.1p_1" in norm_upper or "1s1.2p1.1p_1" in norm_upper:
+            return "r"
+        if "2p1.3p_" in norm_upper or "1s1.2p1.3p_" in norm_upper:
+            return "i"
+
+    # Historical O VII fallback by wavelength or current level indices.
+    wav = maybe_float(row.get("wavelength_A") or row.get("wavelength"))
+    upper = maybe_int(row.get("upper_level"))
+    elem = str(row.get("element", "")).strip().upper()
+    ion = maybe_int(row.get("ion_stage"))
+    if elem == "O" and ion == 7:
+        if wav is not None:
+            if abs(wav - 22.1012) < 0.02:
+                return "f"
+            if abs(wav - 21.8070) < 0.03 or abs(wav - 21.8044) < 0.03:
+                return "i"
+            if abs(wav - 21.6020) < 0.02:
+                return "r"
+        if upper == 2:
+            return "f"
+        if upper in (3, 5):
+            return "i"
+        if upper == 7:
+            return "r"
+    return None
+
+
+def make_helike_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
+    """Compute He-like triplet diagnostics R=f/i and G=(f+i)/r.
+
+    The diagnostics use the solver line-energy emissivity per ion. They are
+    intended for source-fit and collision-network validation, not as a final
+    physical triplet prediction unless the source/cascade model is complete.
+    """
+    grouped: Dict[Tuple[str, int, float, float], Dict[str, float]] = {}
+    counts: Dict[Tuple[str, int, float, float], Dict[str, int]] = {}
+    for row in line_rows:
+        kind = classify_helike_triplet_line(row)
+        if not kind:
+            continue
+        elem = str(row.get("element", "")).strip()
+        ion = maybe_int(row.get("ion_stage"))
+        T = maybe_float(row.get("temperature_K"))
+        ne = maybe_float(row.get("electron_density_cm^-3"))
+        val = maybe_float(row.get("line_energy_emissivity_per_ion_erg_s^-1"))
+        if not elem or ion is None or T is None or ne is None:
+            continue
+        key = (elem, int(ion), T, ne)
+        grouped.setdefault(key, {"f": 0.0, "i": 0.0, "r": 0.0})
+        counts.setdefault(key, {"f": 0, "i": 0, "r": 0})
+        if val is not None:
+            grouped[key][kind] += val
+        counts[key][kind] += 1
+    rows: List[dict] = []
+    for (elem, ion, T, ne), vals in sorted(grouped.items(), key=lambda x: (x[0][0], x[0][1], x[0][2], x[0][3])):
+        f = vals.get("f", 0.0)
+        i = vals.get("i", 0.0)
+        r = vals.get("r", 0.0)
+        rows.append({
+            "element": elem,
+            "ion_stage": ion,
+            "temperature_K": T,
+            "electron_density_cm^-3": ne,
+            "forbidden_energy_per_ion_erg_s^-1": f,
+            "intercombination_energy_per_ion_erg_s^-1": i,
+            "resonance_energy_per_ion_erg_s^-1": r,
+            "R_f_over_i": (f / i) if i > 0 else None,
+            "G_f_plus_i_over_r": ((f + i) / r) if r > 0 else None,
+            "n_forbidden_components": counts[(elem, ion, T, ne)].get("f", 0),
+            "n_intercombination_components": counts[(elem, ion, T, ne)].get("i", 0),
+            "n_resonance_components": counts[(elem, ion, T, ne)].get("r", 0),
+            "diagnostic_note": "prototype He-like triplet solver diagnostic; requires physical source/cascade model for final interpretation",
+        })
+    return rows
+
+
+# Backward-compatible aliases used by older tests/scripts.
+def classify_o7_triplet_line(row: dict) -> Optional[str]:
+    return classify_helike_triplet_line(row)
+
+
+def make_o7_triplet_diagnostics(line_rows: List[dict]) -> List[dict]:
+    return [r for r in make_helike_triplet_diagnostics(line_rows) if str(r.get("element", "")).strip().upper() == "O" and maybe_int(r.get("ion_stage")) == 7]
+
+def summarize(levels: List[dict], rad_lines_matrix: List[dict], output_lines: List[dict], collisions: List[dict], collision_eval: List[dict], used_collision_eval: List[dict], line_rows: List[dict], population_rows: List[dict], solve_infos: List[dict]) -> dict:
+    matched_pairs = {(maybe_int(r.get("lower_level")), maybe_int(r.get("upper_level"))) for r in used_collision_eval}
+    output_pairs = {(maybe_int(r.get("lower_level")), maybe_int(r.get("upper_level"))) for r in output_lines}
+    return {
+        "n_levels_total_decoded": len(levels),
+        "n_levels_in_population_output": len({r.get("level_index") for r in population_rows}),
+        "n_radiative_lines_in_matrix": len(rad_lines_matrix),
+        "n_output_lines_selected": len(output_lines),
+        "n_collision_records_total": len(collisions),
+        "n_collision_eval_rows_total": len(collision_eval),
+        "n_collision_eval_rows_used_in_matrix": len(used_collision_eval),
+        "n_population_rows": len(population_rows),
+        "n_line_output_rows": len(line_rows),
+        "n_output_level_pairs": len(output_pairs),
+        "n_collision_level_pairs_used": len(matched_pairs),
+        "n_output_pairs_with_used_collision": len(output_pairs & matched_pairs),
+        "radiative_line_counts_by_data_type": counts_by(rad_lines_matrix, "data_type"),
+        "collision_counts_by_data_type": counts_by(collisions, "data_type"),
+        "collision_eval_counts_by_method_total": counts_by(collision_eval, "eval_method"),
+        "collision_eval_counts_by_method_used": counts_by(used_collision_eval, "eval_method"),
+        "collision_rate_scale_applied_values": sorted({str(r.get("collision_rate_scale_applied", 1.0)) for r in used_collision_eval}),
+        "solves": solve_infos,
+    }
+
+
+def main(argv=None) -> None:
+    p = argparse.ArgumentParser(description="Solve first-pass XSTAR Atomic level populations and line emissivities.")
+    p.add_argument("fitsfile")
+    p.add_argument("--element", required=True, help="Element symbol, e.g. O, Ne, Fe")
+    p.add_argument("--ion-stage", type=int, required=True, help="Ion stage, e.g. 8 for O VIII")
+    p.add_argument("--temperatures", type=float, nargs="+", required=True, help="Temperatures in K")
+    p.add_argument("--electron-densities", type=float, nargs="+", default=[1.0], help="Electron densities in cm^-3")
+    p.add_argument("--wavelength-min", type=float)
+    p.add_argument("--wavelength-max", type=float)
+    p.add_argument("--energy-min-kev", type=float)
+    p.add_argument("--energy-max-kev", type=float)
+    p.add_argument("--lower-level", type=int)
+    p.add_argument("--upper-level", type=int)
+    p.add_argument("--levels", type=int, nargs="*", help="Optional explicit levels to include; endpoints connected to them are also included")
+    p.add_argument("--max-level", type=int, help="Only include decoded levels with level_index <= this value")
+    p.add_argument("--prune-unconnected-levels", action="store_true",
+                   help="Remove isolated levels before solving while preserving ground, output, and explicit source/sink levels")
+    p.add_argument("--component-mode", choices=["all", "ground", "largest", "output"], default="all",
+                   help="Restrict matrix to connected component(s): all, ground, largest, or components containing output lines")
+    p.add_argument("--ground-level", type=int, default=1, help="Ground/reference level for component-mode=ground")
+    p.add_argument("--component-json", help="Write connected-component diagnostics JSON")
+    p.add_argument("--source-level", nargs=2, action="append", metavar=("LEVEL", "RATE_S_INV"),
+                   help="Add explicit source into a level, in s^-1 per ion normalization unit; may be repeated")
+    p.add_argument("--sink-level", nargs=2, action="append", metavar=("LEVEL", "RATE_S_INV"),
+                   help="Add explicit sink out of a level, in s^-1; may be repeated")
+    p.add_argument("--source-csv", help="CSV with level_index, source_s^-1 and/or sink_s^-1; optional temperature_K and electron_density_cm^-3")
+    p.add_argument("--recombination-source-csv", help="Alias/source CSV for level-resolved recombination/cascade sources")
+    p.add_argument("--adjacent-ion-source-csv", help="CSV hook for explicit adjacent-ion source/sink terms")
+    p.add_argument("--auto-recombination-cascade", action="store_true",
+                   help="Record a diagnostic that automatic ATDB recombination/cascade decoding is requested but not yet implemented")
+    p.add_argument("--phenomenological-same-n-lmixing-rate-coeff", type=float,
+                   help="Optional experimental same-n adjacent-l mixing coefficient in cm^3 s^-1; not an XSTAR amcrs port")
+    p.add_argument("--collision-rate-scale", type=float, default=1.0,
+                   help="Diagnostic scale factor applied to all evaluated electron-impact collision rates. Default 1.0.")
+    p.add_argument("--collision-data-type-scale", action="append", default=[], metavar="DATA_TYPE:SCALE",
+                   help="Diagnostic scale for evaluated collision rows of one XSTAR data type, e.g. 68:0.5. May be repeated.")
+    p.add_argument("--collision-pair-scale", action="append", default=[], metavar="LEVEL1:LEVEL2:SCALE",
+                   help="Diagnostic symmetric scale for evaluated collision rates connecting one level pair, e.g. 2:4:0.5. May be repeated.")
+    p.add_argument("--collision-record-scale", action="append", default=[], metavar="RECORD:SCALE",
+                   help="Diagnostic scale for one collision record number, e.g. 12345:0.5. May be repeated.")
+    p.add_argument("--collision-record-direction-scale", action="append", default=[], metavar="RECORD:DIRECTION:SCALE",
+                   help="Diagnostic direction-specific scale for one collision record, e.g. 22490:deexcitation:0.0. This intentionally breaks detailed balance and is for diagnostics only.")
+    p.add_argument("--collision-type69-ground-excitation-mode", choices=["include", "suppress-resonance", "suppress-all"], default="include",
+                   help="Diagnostic/experimental handling of type-69 excitation from the ground level. suppress-resonance suppresses only ground -> 1s.2p 1P1 resonance-upper excitation, validated for O VII record 22490; suppress-all suppresses all type-69 ground-level excitation while preserving de-excitation.")
+    p.add_argument("--electron-density-for-lmixing", type=float, default=None,
+                   help="Electron density in cm^-3 used by the XSTAR type-63 same-n l-mixing impact-parameter cutoff; defaults to the first --electron-densities value")
+    p.add_argument("--linear-solver", choices=["dense", "sparse", "auto", "lstsq", "svd"], default="dense",
+                   help="Linear algebra backend for the statistical-equilibrium solve. sparse uses scipy.sparse.linalg.spsolve when available; lstsq/svd use rank-aware least-squares.")
+    p.add_argument("--rank-deficient-action", choices=["warn", "lstsq", "svd", "reject"], default="lstsq",
+                   help="How to handle rank-deficient statistical-equilibrium matrices. Default uses least-squares instead of a direct inverse.")
+    p.add_argument("--negative-population-action", choices=["clip", "zero-small", "keep", "reject"], default="clip",
+                   help="How to handle negative populations after solving. The action and raw negative diagnostics are always reported.")
+    p.add_argument("--negative-population-tol", type=float, default=1.0e-8,
+                   help="Tolerance used to classify significant negative populations for reporting/rejection.")
+    p.add_argument("--residual-l2-max", type=float,
+                   help="Optional maximum allowed L2 residual for M n - b. Reported in summary; combine with --reject-large-residual to fail.")
+    p.add_argument("--residual-linf-max", type=float,
+                   help="Optional maximum allowed L-infinity residual for M n - b. Reported in summary; combine with --reject-large-residual to fail.")
+    p.add_argument("--reject-large-residual", action="store_true",
+                   help="Exit with an error when requested residual thresholds are exceeded.")
+    p.add_argument("--prune-null-rate-levels", action="store_true",
+                   help="For each T/ne solve, remove levels with no effective radiative/collisional/source/sink rate while preserving ground and output levels.")
+    p.add_argument("--null-rate-floor", type=float, default=0.0,
+                   help="Rate floor in s^-1 for --prune-null-rate-levels.")
+    p.add_argument("--include-two-photon", action="store_true")
+    p.add_argument("--include-superlevel", action="store_true")
+    p.add_argument("--out-lines-csv", default="level_population_lines.csv")
+    p.add_argument("--out-populations-csv")
+    p.add_argument("--out-transitions-csv")
+    p.add_argument("--out-triplet-csv", help="Write He-like triplet diagnostic CSV with R=f/i and G=(f+i)/r when applicable")
+    p.add_argument("--triplet-diagnostics", choices=["auto", "helike", "o7", "none"], default="auto",
+                   help="Compute He-like triplet R/G diagnostics for He-like output lines; o7 preserves the historical O VII-only mode")
+    p.add_argument("--summary-json")
+    p.add_argument("--print-summary", action="store_true")
+    p.add_argument("--index-cache", nargs="?", const=True, default=False,
+                   help="Use an on-disk ATDB hierarchy index cache. Optionally provide a cache filename; default is atdb.fits.xstar_tools_index.npz")
+    p.add_argument("--rebuild-index-cache", action="store_true",
+                   help="Rebuild the ATDB hierarchy index cache before solving")
+    p.add_argument("--index-cache-format", choices=["npz", "pickle"], default="npz",
+                   help="On-disk index cache format; npz is compact and preferred, pickle is legacy")
+    args = p.parse_args(argv)
+    try:
+        args._collision_data_type_scales = parse_scale_specs(args.collision_data_type_scale)
+        args._collision_pair_scales = parse_scale_specs(args.collision_pair_scale)
+        args._collision_record_scales = parse_record_scale_specs(args.collision_record_scale)
+        args._collision_record_direction_scales = parse_record_direction_scale_specs(args.collision_record_direction_scale)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    z = choose_z(args.element)
+    if z is None:
+        raise SystemExit(f"Could not map element {args.element!r} to Z")
+
+    db = ATDB(args.fitsfile)
+    # ATDB from xstar_tools_hierarchy.py exposes build_index(), not index_records().
+    cache_setting = args.index_cache
+    use_cache = bool(cache_setting) or bool(args.rebuild_index_cache)
+    cache_path = None if cache_setting is True or cache_setting is False else cache_setting
+    cache_format = getattr(args, "index_cache_format", "npz")
+    if use_cache and cache_format == "npz":
+        # Fast array-backed path: select only records for this ion, then convert
+        # only those rows to IndexedRecord objects.
+        records = db.select_records(
+            z=z,
+            ion_stage=args.ion_stage,
+            use_cache=True,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format="npz",
+        )
+        elements = db._index_elements or []
+        ions = db._index_ions or []
+    else:
+        records, elements, ions = db.build_index(
+            use_cache=use_cache,
+            cache_path=cache_path,
+            rebuild_cache=args.rebuild_index_cache,
+            cache_format=cache_format,
+        )
+
+    levels = extract_levels(db, records, z, args.ion_stage)
+    level_by_index: Dict[int, dict] = {maybe_int(r.get("level_index")): r for r in levels if maybe_int(r.get("level_index")) is not None}
+
+    all_lines = extract_lines(db, records, z, args.ion_stage)
+    output_lines = select_output_lines(all_lines, args)
+
+    # Collision decoder evaluates at all requested temperatures once.  Most q_ij are density-independent;
+    # type-63 same-n l-mixing uses this density only for the impact-parameter cutoff.
+    lmix_ne = args.electron_density_for_lmixing if args.electron_density_for_lmixing is not None else float(args.electron_densities[0])
+    collisions, _collision_grid, collision_eval = extract_collisions(
+        db, records, z, args.ion_stage, args.temperatures, electron_density_cm3=lmix_ne
+    )
+
+    level_indices_initial = build_level_set(levels, all_lines, collisions, args)
+    level_set_initial = set(level_indices_initial)
+
+    rad_lines_initial = build_radiative_transitions(all_lines, level_set_initial, args)
+    graph_edges = build_graph_edges(rad_lines_initial, collision_eval, level_set_initial)
+    component_diagnostics_initial = make_component_diagnostics(
+        level_indices_initial, graph_edges, output_lines, args.ground_level
+    )
+
+    level_indices = choose_component_levels(
+        level_indices_initial, component_diagnostics_initial, output_lines, args.component_mode, args.ground_level
+    )
+    pruning_diagnostics = {"enabled": False}
+    if args.prune_unconnected_levels:
+        selected_edges_for_pruning = build_graph_edges(
+            build_radiative_transitions(all_lines, set(level_indices), args),
+            collision_eval,
+            set(level_indices),
+        )
+        level_indices, pruning_diagnostics = prune_unconnected_levels(
+            level_indices,
+            selected_edges_for_pruning,
+            output_lines,
+            args.ground_level,
+            collect_explicit_source_levels(args),
+        )
+    level_set = set(level_indices)
+
+    rad_lines_matrix = build_radiative_transitions(all_lines, level_set, args)
+    # Only output lines in the included matrix level set.
+    output_lines = [r for r in output_lines if maybe_int(r.get("lower_level")) in level_set and maybe_int(r.get("upper_level")) in level_set]
+
+    component_diagnostics_selected = make_component_diagnostics(
+        level_indices, build_graph_edges(rad_lines_matrix, collision_eval, level_set), output_lines, args.ground_level
+    )
+    if args.component_json:
+        Path(args.component_json).write_text(json.dumps({
+            "initial": component_diagnostics_initial,
+            "selected": component_diagnostics_selected,
+            "component_mode": args.component_mode,
+            "ground_level": args.ground_level,
+        }, indent=2), encoding="utf-8")
+
+    rad_rates_from_upper: Dict[int, float] = {}
+    for row in rad_lines_matrix:
+        u = maybe_int(row.get("upper_level"))
+        A = maybe_float(row.get("A_s^-1"))
+        if u is not None and A is not None and A > 0:
+            rad_rates_from_upper[u] = rad_rates_from_upper.get(u, 0.0) + A
+
+    all_line_rows: List[dict] = []
+    all_population_rows: List[dict] = []
+    all_transition_rows: List[dict] = []
+    used_collision_eval_rows: List[dict] = []
+    solve_infos: List[dict] = []
+    source_sink_summaries: List[dict] = []
+
+    for T in args.temperatures:
+        for ne in args.electron_densities:
+            local_level_indices = list(level_indices)
+            local_level_set = set(local_level_indices)
+            local_rad_lines_matrix = rad_lines_matrix
+            local_output_lines = output_lines
+            coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne, args)
+            same_n_rows = build_same_n_lmixing_rows(
+                local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
+            )
+            R, trans_log = assemble_rate_matrix(local_level_indices, local_rad_lines_matrix, coll_T, same_n_rows)
+            source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(local_level_indices, args, T, ne)
+            null_pruning_diagnostics = {"enabled": False}
+            if args.prune_null_rate_levels:
+                pruned_levels, null_pruning_diagnostics = prune_null_rate_levels_for_solve(
+                    local_level_indices, R, source_vec, sink_vec, local_output_lines, args.ground_level,
+                    rate_floor=args.null_rate_floor,
+                )
+                if len(pruned_levels) != len(local_level_indices):
+                    local_level_indices = pruned_levels
+                    local_level_set = set(local_level_indices)
+                    local_rad_lines_matrix = build_radiative_transitions(all_lines, local_level_set, args)
+                    local_output_lines = [r for r in output_lines if maybe_int(r.get("lower_level")) in local_level_set and maybe_int(r.get("upper_level")) in local_level_set]
+                    coll_T = build_collision_rates_for_T(collision_eval, local_level_set, T, ne, args)
+                    same_n_rows = build_same_n_lmixing_rows(
+                        local_level_indices, level_by_index, ne, args.phenomenological_same_n_lmixing_rate_coeff
+                    )
+                    R, trans_log = assemble_rate_matrix(local_level_indices, local_rad_lines_matrix, coll_T, same_n_rows)
+                    source_vec, sink_vec, source_sink_notes = build_source_sink_vectors(local_level_indices, args, T, ne)
+            used_collision_eval_rows.extend(coll_T)
+            ss_summary = summarize_source_sink_vectors(local_level_indices, source_vec, sink_vec, source_sink_notes)
+            ss_summary.update({"temperature_K": T, "electron_density_cm^-3": ne, "null_rate_pruning_diagnostics": null_pruning_diagnostics})
+            source_sink_summaries.append(ss_summary)
+            pop, info = solve_steady_state(
+                R, source_vec, sink_vec,
+                linear_solver=args.linear_solver,
+                rank_deficient_action=args.rank_deficient_action,
+                negative_population_action=args.negative_population_action,
+                negative_population_tol=args.negative_population_tol,
+                residual_l2_max=args.residual_l2_max,
+                residual_linf_max=args.residual_linf_max,
+                reject_large_residual=args.reject_large_residual,
+            )
+            info.update({
+                "temperature_K": T,
+                "electron_density_cm^-3": ne,
+                "n_levels_in_this_solve": len(local_level_indices),
+                "null_rate_pruning_diagnostics": null_pruning_diagnostics,
+                "n_radiative_transitions_in_matrix": len([x for x in trans_log if x.get("kind") == "radiative_decay"]),
+                "n_collisional_transitions_in_matrix": len([x for x in trans_log if str(x.get("kind", "")).startswith("collisional")]),
+                "n_phenomenological_same_n_lmixing_transitions": len([x for x in trans_log if x.get("kind") == "phenomenological_same_n_lmixing"]),
+                "source_sink_notes": source_sink_notes,
+                "auto_recombination_cascade_status": "not_implemented_use_recombination_source_csv" if args.auto_recombination_cascade else "not_requested",
+            })
+            solve_infos.append(info)
+            all_population_rows.extend(make_population_rows(local_level_indices, level_by_index, pop, T, ne, info))
+            all_line_rows.extend(make_line_output_rows(local_output_lines, local_level_indices, pop, T, ne, info, level_by_index, rad_rates_from_upper))
+            for tr in trans_log:
+                tr = dict(tr)
+                tr["temperature_K"] = T
+                tr["electron_density_cm^-3"] = ne
+                all_transition_rows.append(tr)
+
+    write_csv(args.out_lines_csv, all_line_rows)
+    if args.out_populations_csv:
+        write_csv(args.out_populations_csv, all_population_rows)
+    if args.out_transitions_csv:
+        write_csv(args.out_transitions_csv, all_transition_rows)
+
+    # He-like ions have ion_stage = Z - 1.  In auto mode compute generic
+    # He-like triplet diagnostics when the selected ion is He-like.
+    do_triplet = False
+    triplet_rows = []
+    if args.triplet_diagnostics == "o7":
+        do_triplet = str(args.element).strip().upper() == "O" and int(args.ion_stage) == 7
+        triplet_rows = make_o7_triplet_diagnostics(all_line_rows) if do_triplet else []
+    elif args.triplet_diagnostics in ("auto", "helike"):
+        do_triplet = int(args.ion_stage) == int(z) - 1
+        triplet_rows = make_helike_triplet_diagnostics(all_line_rows) if do_triplet else []
+    if args.out_triplet_csv:
+        write_csv(args.out_triplet_csv, triplet_rows)
+
+    summary = summarize(levels, rad_lines_matrix, output_lines, collisions, collision_eval, used_collision_eval_rows, all_line_rows, all_population_rows, solve_infos)
+    summary.update({
+        "fitsfile": args.fitsfile,
+        "element": args.element,
+        "z": z,
+        "ion_stage": args.ion_stage,
+        "temperatures_K": args.temperatures,
+        "electron_densities_cm^-3": args.electron_densities,
+        "out_lines_csv": args.out_lines_csv,
+        "out_populations_csv": args.out_populations_csv,
+        "out_transitions_csv": args.out_transitions_csv,
+        "out_triplet_csv": args.out_triplet_csv,
+        "component_mode": args.component_mode,
+        "prune_unconnected_levels": bool(args.prune_unconnected_levels),
+        "prune_null_rate_levels": bool(args.prune_null_rate_levels),
+        "null_rate_floor_s^-1": float(args.null_rate_floor),
+        "pruning_diagnostics": pruning_diagnostics,
+        "ground_level": args.ground_level,
+        "n_components_initial": component_diagnostics_initial.get("n_components"),
+        "n_components_selected": component_diagnostics_selected.get("n_components"),
+        "n_levels_initial": len(level_indices_initial),
+        "n_levels_selected": len(level_indices),
+        "component_diagnostics_initial_summary": component_diagnostics_initial.get("components", [])[:10],
+        "component_diagnostics_selected_summary": component_diagnostics_selected.get("components", [])[:10],
+        "recombination_cascade_auto_status": "not_implemented_use_recombination_source_csv" if args.auto_recombination_cascade else "not_requested",
+        "same_n_lmixing_status": ("phenomenological_extra_enabled_on_top_of_xstar_amcrs" if args.phenomenological_same_n_lmixing_rate_coeff else "xstar_amcrs_collision_decoder_enabled"),
+        "diagnostic_collision_rate_scaling": {
+            "collision_rate_scale": float(args.collision_rate_scale),
+            "collision_data_type_scale": list(args.collision_data_type_scale or []),
+            "collision_pair_scale": list(args.collision_pair_scale or []),
+            "collision_record_scale": list(args.collision_record_scale or []),
+            "collision_record_direction_scale": list(args.collision_record_direction_scale or []),
+            "collision_type69_ground_excitation_mode": args.collision_type69_ground_excitation_mode,
+            "note": "Diagnostic sensitivity only; these scale evaluated collision rates and are not physical atomic-data edits.",
+        },
+        "source_sink_interface": {
+            "manual_source_terms": args.source_level or [],
+            "manual_sink_terms": args.sink_level or [],
+            "source_csv": args.source_csv,
+            "recombination_source_csv": args.recombination_source_csv,
+            "adjacent_ion_source_csv": args.adjacent_ion_source_csv,
+        },
+        "source_sink_summaries": source_sink_summaries,
+        "triplet_diagnostics_enabled": bool(do_triplet),
+        "triplet_diagnostics": triplet_rows,
+    })
+    if args.summary_json:
+        Path(args.summary_json).write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if args.print_summary:
+        print(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    main()
