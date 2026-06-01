@@ -1265,6 +1265,18 @@ def assemble_element_matrix(
                             })
                     rec = int(derived.npnxt[rec])
                 if not payload:
+                    if is_mg_summary_profile and not type51_cpp_stats_recorded:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.matrix_type51_ucalc_cpp",
+                            0.0,
+                            element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_type51_ucalc_batch",
+                            status="no_payload",
+                            records_batched=0.0, cpp_calls=0.0, packing_seconds=0.0, cpp_kernel_seconds=0.0,
+                            ucalc_cpp_applied=0.0, ucalc_cpp_unsupported=0.0, fallback_count=0.0,
+                        )
+                        type51_cpp_stats_recorded = True
                     return
                 try:
                     cpp_rows, cpp_msg, cpp_stats = eval_type51_ucalc_matrix_cpp(

@@ -607,6 +607,7 @@ def build_binemis_spectrum(
     elum: np.ndarray,
     zrems: np.ndarray,
     zremsz: Sequence[float],
+    timing: dict[str, float] | None = None,
 ) -> np.ndarray:
     """Literal array translation of ``binemis.f90``.
 
@@ -645,6 +646,7 @@ def build_binemis_spectrum(
     temporary_binned = np.zeros((2, nbtpp), dtype=float)
     temporary_profile = np.zeros((2, nbtpp), dtype=float)
     temporary_energy = np.zeros(nbtpp, dtype=float)
+    _rank_t0 = time.perf_counter()
     ranked = _rank_binemis_lines(
         metadata=metadata,
         luminosity=lum,
@@ -653,15 +655,21 @@ def build_binemis_spectrum(
         xlum=xlum,
         nrank=10,
     )
+    if timing is not None:
+        timing["final_product_build.spectrum.binemis_rank_lines_seconds"] = float(time.perf_counter() - _rank_t0)
     by_index = {row.line_index: row for row in metadata.lines}
     gate = _source_real(1.0e-15) * float(xlum)
     dpcrit = _source_real(1.0e-6)
 
+    _profile_t0 = time.perf_counter()
+    _profile_lines_attempted = 0
+    _profile_lines_applied = 0
     for kl_one_based in range(1, n + 1):
         for mm_one_based in range(1, 11):
             line_index = int(ranked[mm_one_based - 1, kl_one_based - 1])
             if line_index <= 0 or line_index > lum.shape[1]:
                 continue
+            _profile_lines_attempted += 1
             row = by_index.get(line_index)
             if row is None:
                 continue
@@ -780,6 +788,7 @@ def build_binemis_spectrum(
 
             if mlmin > mlmax:
                 continue
+            _profile_lines_applied += 1
             ml1min = int(nbinc(float(temporary_energy[mlmin - 1]), epi, n))
             ml1max = int(nbinc(float(temporary_energy[mlmax - 1]), epi, n))
             ml1m = ml1min
@@ -819,6 +828,11 @@ def build_binemis_spectrum(
                 out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
                 temporary_binned[:, lo - 1 : hi] = 0.0
 
+    if timing is not None:
+        timing["final_product_build.spectrum.binemis_profile_seconds"] = float(time.perf_counter() - _profile_t0)
+        timing["final_product_build.spectrum.binemis_profile_lines_attempted"] = float(_profile_lines_attempted)
+        timing["final_product_build.spectrum.binemis_profile_lines_applied"] = float(_profile_lines_applied)
+    _pack_t0 = time.perf_counter()
     for kl in range(n):
         out[2, kl] += saved[1, kl]
         out[3, kl] += saved[2, kl]
@@ -827,6 +841,8 @@ def build_binemis_spectrum(
         out[4, kl] = saved[3, kl]
     if original.shape[1] > n:
         out[:, n:] = original[:, n:]
+    if timing is not None:
+        timing["final_product_build.spectrum.binemis_pack_seconds"] = float(time.perf_counter() - _pack_t0)
     return out
 
 def build_final_spectrum_table(
@@ -842,6 +858,7 @@ def build_final_spectrum_table(
     zrems: np.ndarray,
     zremsz: Sequence[float],
     lwri: int,
+    timing: dict[str, float] | None = None,
 ) -> OutputTable:
     if int(lwri) >= 0:
         mapped = build_binemis_spectrum(
@@ -849,11 +866,12 @@ def build_final_spectrum_table(
             temperature_1e4K=temperature_1e4K,
             turbulent_velocity_km_s=turbulent_velocity_km_s,
             epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum,
-            zrems=zrems, zremsz=zremsz,
+            zrems=zrems, zremsz=zremsz, timing=timing,
         )
     else:
         mapped = np.asarray(zrems, dtype=float).copy()
     n = int(ncn2)
+    _spectrum_table_t0 = time.perf_counter()
     values = {
         "energy": _r4_array(np.asarray(epi_eV)[:n]),
         "incident": _r4_array(mapped[0, :n]),
@@ -861,6 +879,8 @@ def build_final_spectrum_table(
         "emit_inward": _r4_array(mapped[2, :n]),
         "emit_outward": _r4_array(mapped[3, :n]),
     }
+    if timing is not None:
+        timing["final_product_build.spectrum.table_pack_seconds"] = float(time.perf_counter() - _spectrum_table_t0)
     # Source defines a sixth 'scattered' descriptor but writes tfields=5.
     return OutputTable(
         extension_name="XSTAR_SPECTRA",
@@ -890,7 +910,8 @@ def _rank_final_lines(metadata: SourceOutputMetadata, elum: np.ndarray) -> list[
     return [item[2] for item in eligible[:FINAL_LINE_LIMIT]]
 
 
-def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, tau0: np.ndarray) -> OutputTable:
+def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, tau0: np.ndarray, timing: dict[str, float] | None = None) -> OutputTable:
+    _t0 = time.perf_counter()
     lum = np.asarray(elum, dtype=float); depth = np.asarray(tau0, dtype=float)
     rows = _rank_final_lines(metadata, lum)
     values = {
@@ -904,6 +925,9 @@ def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, 
         "depth_inward": _r4_array([depth[0, r.line_index - 1] for r in rows]),
         "depth_outward": _r4_array([depth[1, r.line_index - 1] for r in rows]),
     }
+    if timing is not None:
+        timing["final_product_build.lines_seconds"] = float(time.perf_counter() - _t0)
+        timing["final_product_build.lines_rows"] = float(len(rows))
     return OutputTable(
         extension_name="XSTAR_LINES",
         columns=tuple(values),
@@ -915,7 +939,8 @@ def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, 
     )
 
 
-def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont: np.ndarray, zrems: np.ndarray, zremsz: Sequence[float]) -> OutputTable:
+def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont: np.ndarray, zrems: np.ndarray, zremsz: Sequence[float], timing: dict[str, float] | None = None) -> OutputTable:
+    _t0 = time.perf_counter()
     n = int(ncn2); epi = np.asarray(epi_eV, dtype=float); dp = np.asarray(dpthcont, dtype=float); z = np.asarray(zrems, dtype=float); inc = np.asarray(zremsz, dtype=float)
     values = {
         "energy": _r4_array(epi[:n]),
@@ -924,6 +949,9 @@ def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont:
         "emit_inward": _r4_array(z[3, :n]),
         "emit_outward": _r4_array(z[4, :n]),
     }
+    if timing is not None:
+        timing["final_product_build.continuum_seconds"] = float(time.perf_counter() - _t0)
+        timing["final_product_build.continuum_rows"] = float(n)
     return OutputTable(
         extension_name="XSTAR_SPECTRA",
         columns=tuple(values),
@@ -935,7 +963,8 @@ def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont:
     )
 
 
-def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray, tauc: np.ndarray) -> OutputTable:
+def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray, tauc: np.ndarray, timing: dict[str, float] | None = None) -> OutputTable:
+    _t0 = time.perf_counter()
     lum = np.asarray(elumab, dtype=float); depth = np.asarray(tauc, dtype=float)
     rows = []
     for r in metadata.rrcs:
@@ -960,6 +989,9 @@ def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray,
         "depth_outward": _r4_array([depth[0, r.continuum_index - 1] for r in rows]),
         "depth_inward": _r4_array([depth[1, r.continuum_index - 1] for r in rows]),
     }
+    if timing is not None:
+        timing["final_product_build.rrc_seconds"] = float(time.perf_counter() - _t0)
+        timing["final_product_build.rrc_rows"] = float(len(rows))
     return OutputTable(
         extension_name="XSTAR_SPECTRA",
         columns=tuple(values),
@@ -977,12 +1009,17 @@ def build_final_output_products(
     dpthc: np.ndarray, dpthcont: np.ndarray, elum: np.ndarray,
     elumab: np.ndarray, tau0: np.ndarray, tauc: np.ndarray,
     zrems: np.ndarray, zremsz: Sequence[float], lwri: int,
+    timing: dict[str, float] | None = None,
 ) -> FinalOutputProducts:
+    _spectrum_t0 = time.perf_counter()
+    spectrum = build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri, timing=timing)
+    if timing is not None:
+        timing["final_product_build.spectrum_seconds"] = float(time.perf_counter() - _spectrum_t0)
     return FinalOutputProducts(
-        spectrum=build_final_spectrum_table(metadata=metadata, xlum=xlum, temperature_1e4K=temperature_1e4K, turbulent_velocity_km_s=turbulent_velocity_km_s, epi_eV=epi_eV, ncn2=ncn2, dpthc=dpthc, elum=elum, zrems=zrems, zremsz=zremsz, lwri=lwri),
-        lines=build_final_line_table(metadata=metadata, elum=elum, tau0=tau0),
-        continuum=build_final_continuum_table(epi_eV=epi_eV, ncn2=ncn2, dpthcont=dpthcont, zrems=zrems, zremsz=zremsz),
-        rrcs=build_final_rrc_table(metadata=metadata, elumab=elumab, tauc=tauc),
+        spectrum=spectrum,
+        lines=build_final_line_table(metadata=metadata, elum=elum, tau0=tau0, timing=timing),
+        continuum=build_final_continuum_table(epi_eV=epi_eV, ncn2=ncn2, dpthcont=dpthcont, zrems=zrems, zremsz=zremsz, timing=timing),
+        rrcs=build_final_rrc_table(metadata=metadata, elumab=elumab, tauc=tauc, timing=timing),
     )
 
 
@@ -1454,7 +1491,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     return record
 
 
-def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> FinalOutputProducts:
+def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0, timing: dict[str, float] | None = None) -> FinalOutputProducts:
     from .radial_transfer import _workspace_from_state
 
     metadata = _metadata_from_control(state)
@@ -1477,6 +1514,7 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0) -> 
         zrems=workspace.zrems,
         zremsz=workspace.zremsz,
         lwri=int(lwri),
+        timing=timing,
     )
     state.outputs["final_output_products"] = products
     return products
@@ -1604,7 +1642,7 @@ def run_output_writer_sequence(
 
         append_phase_snapshot(state, "before writespectra", note=f"lwri={level}")
         _final_build_t0 = time.perf_counter()
-        final = build_final_output_from_state(state, lwri=level)
+        final = build_final_output_from_state(state, lwri=level, timing=timing_breakdown)
         timing_breakdown["final_product_build"] = float(time.perf_counter() - _final_build_t0)
         writer_names.append("writespectra")
         if level >= 0:
