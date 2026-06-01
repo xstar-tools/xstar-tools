@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1857,6 +1857,9 @@ def assemble_element_matrix(
             source_record_iter: List[Tuple[int, int, int]] = []
             source_scan_cpp_stats: Dict[str, float] = {}
             source_scan_cpp_message = ""
+            cpp_simple_payload_by_record: Dict[int, Dict[str, Any]] = {}
+            cpp_simple_payload_message = ""
+            cpp_simple_payload_stats: Dict[str, float] = {}
             if mg_ion_source_scan_cpp_enabled:
                 try:
                     source_rows, source_scan_cpp_message, source_scan_cpp_stats = scan_mg_ion_source_records_cpp_detailed(
@@ -1901,6 +1904,53 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
+                try:
+                    cpp_simple_rows, cpp_simple_payload_message, cpp_simple_payload_stats = eval_mg_ion_source_simple_payloads_cpp_detailed(
+                        master=master,
+                        derived=derived,
+                        ion_index=int(block.ion_index),
+                        ion_record=int(block.ion_record),
+                        temperature_1e4k=float(context.temperature_k) / 1.0e4,
+                        electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                        neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+                        ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+                        nlevp=int(block.nlev),
+                    )
+                    cpp_simple_payload_by_record = {int(row["record"]): row for row in cpp_simple_rows if int(row.get("status_code", 0)) == 1}
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
+                            float(cpp_simple_payload_stats.get("packing_seconds", 0.0)) + float(cpp_simple_payload_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
+                            status="cpp",
+                            **cpp_simple_payload_stats,
+                        )
+                except Exception as exc:
+                    cpp_simple_payload_by_record = {}
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="fallback",
+                            error=str(exc),
+                        )
+
             if not source_record_iter:
                 for data_type in range(1, derived.npfi.shape[0]):
                     rec = int(derived.npfi[data_type, block.ion_index])
@@ -1981,6 +2031,83 @@ def assemble_element_matrix(
                     n_blocked += 1
                     summary.n_records_blocked += 1
                     summary.blocked_reasons[escape_reason] = summary.blocked_reasons.get(escape_reason, 0) + 1
+                    record = int(derived.npnxt[record])
+                    continue
+
+                if int(record) in cpp_simple_payload_by_record:
+                    cpp_row = cpp_simple_payload_by_record[int(record)]
+                    _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
+                    result = UCalcResult(
+                        record=int(record),
+                        data_type=int(cpp_row["data_type"]),
+                        rate_type=int(cpp_row["rate_type"]),
+                        status=UCalcStatus.EVALUATED,
+                        ans1=float(cpp_row.get("ans1", 0.0)),
+                        ans2=float(cpp_row.get("ans2", 0.0)),
+                        ans3=float(cpp_row.get("ans3", 0.0)),
+                        ans4=float(cpp_row.get("ans4", 0.0)),
+                        ans5=float(cpp_row.get("ans5", 0.0)),
+                        ans6=float(cpp_row.get("ans6", 0.0)),
+                        idest1=int(cpp_row.get("idest1", 0)),
+                        idest2=int(cpp_row.get("idest2", 0)),
+                        idest3=int(block.ion_index),
+                        idest4=int(block.ion_index) + 1,
+                        provenance=UCalcProvenance(
+                            source_label=int(cpp_row["data_type"]),
+                            source_routines=("ucalc", "libxstar_matrix"),
+                            branch_name=f"cpp_simple_payload_type{int(cpp_row['data_type'])}",
+                            implementation="cpp_ion_source_simple_payload_v6",
+                            validation_status="parity_gated_selected_branch",
+                            context_fields_used=("temperature_k", "xpx", "xee"),
+                            notes=("evaluated inside xstar_matrix_eval_mg_ion_source_simple_payloads",),
+                        ),
+                    )
+                    if is_mg_profile:
+                        _dt = time.perf_counter() - _rate_t0
+                        _ion_rate_elapsed += _dt
+                        _rtype = int(result.rate_type)
+                        _dtype = int(result.data_type)
+                        _key = (_rtype, _dtype)
+                        _ion_records_by_type[_rtype] = _ion_records_by_type.get(_rtype, 0.0) + _dt
+                        _ion_records_by_data_type[_dtype] = _ion_records_by_data_type.get(_dtype, 0.0) + _dt
+                        _ion_records_by_rate_data_type[_key] = _ion_records_by_rate_data_type.get(_key, 0.0) + _dt
+                        _ion_record_counts_by_rate_data_type[_key] = _ion_record_counts_by_rate_data_type.get(_key, 0) + 1
+                    row = result.to_dict()
+                    row.update({
+                        "ion_index": block.ion_index,
+                        "ion_stage": block.ion_stage,
+                        "nlev": block.nlev,
+                        "escape_factor_in": float(ptmp1),
+                        "escape_factor_out": float(ptmp2),
+                        "density_scale": float(context.hydrogen_density_cm3),
+                        "leveltemp_workspace_phase": "calc_hmc_ion_second_pass",
+                        "rates_backend": "cpp_matrix_mg_ion_source_simple_payload",
+                        "rates_backend_message": cpp_simple_payload_message,
+                    })
+                    record_results.append(row)
+                    if result.rate_type == 7:
+                        pending_cpp_type7.append((result, len(record_results) - 1))
+                    else:
+                        _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                        try:
+                            new_terms = _matrix_terms_for_result(
+                                result=result,
+                                basis=basis,
+                                block=block,
+                                levels=levels,
+                                term_start=len(terms) + 1,
+                                xpx=context.hydrogen_density_cm3,
+                            )
+                            terms.extend(new_terms)
+                            n_eval += 1
+                            summary.n_records_evaluated += 1
+                            summary.n_matrix_terms += len(new_terms)
+                        except (ElementEquilibriumError, IndexError) as inner_exc:
+                            n_unmapped += 1
+                            summary.n_records_invalid_endpoint += 1
+                            blocked_records.append({**row, "reason": str(inner_exc), "status": "invalid_endpoint"})
+                        if is_mg_profile:
+                            _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
                     record = int(derived.npnxt[record])
                     continue
 

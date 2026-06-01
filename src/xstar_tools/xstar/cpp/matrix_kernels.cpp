@@ -34,12 +34,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_source_scan_rates_matrix_v5";
+    return "xstar_matrix_mg_ion_source_payload_rates_matrix_v6";
 }
 
 int xstar_matrix_feature_flags() {
     // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches; 16: data_type=51 ucalc; 32: Mg rates+matrix ABI.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128;
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256;
 }
 
 int xstar_matrix_probe(
@@ -1053,6 +1053,231 @@ int xstar_matrix_scan_mg_ion_source_records(
     out_stats[10] = ion_index;
     out_stats[11] = ion_record;
     write_message(errbuf, errbuf_size, "xstar_matrix_scan_mg_ion_source_records traversed ion source chains");
+    return 0;
+}
+
+
+// Scan one Mg ion's source-pointer chains, decode selected simple packed
+// payloads directly from nptrs/rdat1/idat1, and evaluate no-grid/no-level
+// ucalc branches inside the ion-level matrix ABI.  This is the next step after
+// xstar_matrix_scan_mg_ion_source_records: Python no longer has to construct
+// UCalcRecord objects for rate/data groups that this ABI supports.
+//
+// Supported payload/evaluation groups:
+//   data_type 1,2,3,7,8,20, across active Mg ion source chains
+// Unsupported rows are not emitted; the caller falls back to Python.
+//
+// out_i64 columns per emitted row (10):
+//   record, rate_type, data_type, data_chain, next_record, idest1, idest2,
+//   status_code, support_mask, skip_mask
+// out_f64 columns per emitted row (6): ans1..ans6
+// out_stats columns:
+//   0 records_seen
+//   1 records_supported
+//   2 rows_emitted
+//   3 cpp_calls
+//   4 simple_payload_rows
+//   5 type1
+//   6 type2
+//   7 type3
+//   8 type7
+//   9 type8
+//   10 type20
+//   11 skipped_source_exclusions
+//   12 unsupported_records
+//   13 loop_guard_hits
+int xstar_matrix_eval_mg_ion_source_simple_payloads(
+    int n_data_types,
+    int n_records,
+    int n_rdat,
+    int n_idat,
+    long long ion_index,
+    long long ion_record,
+    const long long* npfi_col,
+    const long long* npar,
+    const long long* npnxt,
+    const long long* nptrs_flat,
+    const double* rdat1,
+    const long long* idat1,
+    double t_1e4,
+    double electron_density_cm3,
+    double neutral_h_density_cm3,
+    double ionized_h_density_cm3,
+    long long nlevp,
+    long long* out_i64,
+    double* out_f64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_data_types <= 0 || n_records <= 0 || n_rdat < 0 || n_idat < 0 || ion_index <= 0 || ion_record <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_eval_mg_ion_source_simple_payloads");
+        return 2;
+    }
+    if (!npfi_col || !npar || !npnxt || !nptrs_flat || !rdat1 || !idat1 || !out_i64 || !out_f64 || !out_stats) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_eval_mg_ion_source_simple_payloads");
+        return 3;
+    }
+    if (!std::isfinite(t_1e4) || t_1e4 <= 0.0 || !std::isfinite(electron_density_cm3) ||
+        !std::isfinite(neutral_h_density_cm3) || !std::isfinite(ionized_h_density_cm3)) {
+        write_message(errbuf, errbuf_size, "non-finite thermodynamic input to xstar_matrix_eval_mg_ion_source_simple_payloads");
+        return 4;
+    }
+
+    const double kt_ev_per_1e4k = 0.861707;
+    const auto expo = [](double x) -> double {
+        if (x < -60.0) x = -60.0;
+        if (x > 60.0) x = 60.0;
+        return std::exp(x);
+    };
+    const auto get_ptr = [&](long long rec, int col) -> long long {
+        // nptrs is passed as zero-based C rows with 10 columns; rec is one-based.
+        return nptrs_flat[(rec - 1) * 10 + col];
+    };
+    const auto get_real = [&](long long one_based) -> double {
+        if (one_based <= 0 || one_based > n_rdat) return 0.0;
+        return rdat1[one_based - 1];
+    };
+    const auto get_int = [&](long long one_based) -> long long {
+        if (one_based <= 0 || one_based > n_idat) return 0;
+        return idat1[one_based - 1];
+    };
+
+    long long seen = 0;
+    long long supported = 0;
+    long long emitted = 0;
+    long long n_type1 = 0, n_type2 = 0, n_type3 = 0, n_type7 = 0, n_type8 = 0, n_type20 = 0;
+    long long skipped = 0;
+    long long unsupported = 0;
+    long long guard_hits = 0;
+
+    for (int data_chain = 1; data_chain < n_data_types; ++data_chain) {
+        long long rec = npfi_col[data_chain];
+        long long guard = 0;
+        while (rec > 0 && rec <= n_records && npar[rec] == ion_record) {
+            if (++guard > n_records) {
+                ++guard_hits;
+                break;
+            }
+            ++seen;
+            const long long dt = get_ptr(rec, 1);
+            const long long rt = get_ptr(rec, 2);
+            const long long nreal = get_ptr(rec, 4);
+            const long long nint = get_ptr(rec, 5);
+            const long long real_ptr = get_ptr(rec, 7);
+            const long long int_ptr = get_ptr(rec, 8);
+            long long skip_mask = 0;
+            if ((rt == 1 && dt == 53) || rt == 8 || rt == 15) {
+                skip_mask = 1;
+                ++skipped;
+                rec = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+                continue;
+            }
+            bool ok = false;
+            double ans[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            long long id1 = 0;
+            long long id2 = 0;
+            long long support_mask = 0;
+            const double r0 = nreal >= 1 ? get_real(real_ptr + 0) : 0.0;
+            const double r1 = nreal >= 2 ? get_real(real_ptr + 1) : 0.0;
+            const double r2 = nreal >= 3 ? get_real(real_ptr + 2) : 0.0;
+            const double r3 = nreal >= 4 ? get_real(real_ptr + 3) : 0.0;
+            const double r4 = nreal >= 5 ? get_real(real_ptr + 4) : 0.0;
+            const double r5 = nreal >= 6 ? get_real(real_ptr + 5) : 0.0;
+            const double r6 = nreal >= 7 ? get_real(real_ptr + 6) : 0.0;
+            const double r7 = nreal >= 8 ? get_real(real_ptr + 7) : 0.0;
+            const long long i0 = nint >= 1 ? get_int(int_ptr + 0) : 0;
+            const long long i1 = nint >= 2 ? get_int(int_ptr + 1) : 0;
+
+            if (dt == 1 && nreal >= 2) {
+                ans[0] = r0 / std::pow(t_1e4, r1) * electron_density_cm3;
+                id1 = 1;
+                ok = true;
+                ++n_type1;
+            } else if (dt == 2 && nreal >= 4) {
+                id1 = 1;
+                id2 = nlevp;
+                if (t_1e4 <= 5.0) {
+                    const double rate = r0 * std::pow(t_1e4, r1) * std::max(0.0, 1.0 + r2 * expo(r3 * t_1e4)) * 1.0e-9;
+                    double a1 = rate * neutral_h_density_cm3;
+                    double a2 = 0.0;
+                    if (rt == 5) { a2 = a1; a1 = 0.0; }
+                    ans[0] = a1; ans[1] = a2;
+                }
+                ok = true;
+                ++n_type2;
+            } else if (dt == 3 && nreal >= 2) {
+                ans[0] = r0 * expo(-r1 / (kt_ev_per_1e4k * t_1e4)) / std::sqrt(t_1e4) * electron_density_cm3;
+                id1 = 1;
+                id2 = 1;
+                ok = true;
+                ++n_type3;
+            } else if (dt == 7 && nreal >= 4) {
+                const double rate = r0 * 1.0e-6 * expo(-r2 / t_1e4) * (1.0 + r1 * expo(-r3 / t_1e4)) / (t_1e4 * std::sqrt(t_1e4));
+                ans[0] = rate * electron_density_cm3;
+                id1 = 1;
+                ok = true;
+                ++n_type7;
+            } else if (dt == 8 && nreal >= 8) {
+                double rate = 0.0;
+                rate += r0 * expo(-r4 / (kt_ev_per_1e4k * t_1e4));
+                rate += r1 * expo(-r5 / (kt_ev_per_1e4k * t_1e4));
+                rate += r2 * expo(-r6 / (kt_ev_per_1e4k * t_1e4));
+                rate += r3 * expo(-r7 / (kt_ev_per_1e4k * t_1e4));
+                rate *= 1.0e-6 * std::pow(t_1e4, -1.5);
+                ans[0] = rate * electron_density_cm3;
+                id1 = 1;
+                ok = true;
+                ++n_type8;
+            } else if (dt == 20 && nreal >= 5) {
+                const double rate = r0 * std::pow(t_1e4, r1) * (1.0 + r2 * expo(r3 * t_1e4)) * expo(-r4 / t_1e4) * 1.0e-9;
+                ans[0] = rate * ionized_h_density_cm3;
+                id1 = 1;
+                id2 = nlevp;
+                ok = true;
+                ++n_type20;
+            }
+
+            if (!ok || !finite6(ans[0], ans[1], ans[2], ans[3], ans[4], ans[5]) || id1 <= 0) {
+                ++unsupported;
+                rec = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+                continue;
+            }
+            support_mask = 4;
+            long long* oi = out_i64 + emitted * 10;
+            double* of = out_f64 + emitted * 6;
+            oi[0] = rec;
+            oi[1] = rt;
+            oi[2] = dt;
+            oi[3] = data_chain;
+            oi[4] = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+            oi[5] = id1;
+            oi[6] = id2;
+            oi[7] = 1;
+            oi[8] = support_mask;
+            oi[9] = skip_mask;
+            for (int j = 0; j < 6; ++j) of[j] = ans[j];
+            ++emitted;
+            ++supported;
+            rec = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
+        }
+    }
+
+    out_stats[0] = seen;
+    out_stats[1] = supported;
+    out_stats[2] = emitted;
+    out_stats[3] = emitted > 0 ? 1 : 0;
+    out_stats[4] = emitted;
+    out_stats[5] = n_type1;
+    out_stats[6] = n_type2;
+    out_stats[7] = n_type3;
+    out_stats[8] = n_type7;
+    out_stats[9] = n_type8;
+    out_stats[10] = n_type20;
+    out_stats[11] = skipped;
+    out_stats[12] = unsupported;
+    out_stats[13] = guard_hits;
+    write_message(errbuf, errbuf_size, supported > 0 ? "xstar_matrix_eval_mg_ion_source_simple_payloads evaluated" : "xstar_matrix_eval_mg_ion_source_simple_payloads no supported payloads");
     return 0;
 }
 

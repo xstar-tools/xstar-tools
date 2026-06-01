@@ -166,6 +166,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 pass
             try:
+                lib.xstar_matrix_eval_mg_ion_source_simple_payloads.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_longlong, ctypes.c_longlong,
+                    i64p, i64p, i64p, i64p, f64p, i64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_longlong,
+                    i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_eval_mg_ion_source_simple_payloads.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
                 lib.xstar_matrix_eval_type51_ucalc_batch.argtypes = [
                     ctypes.c_int,
                     i64p, i64p, i64p, i64p, i64p, i64p, i64p,
@@ -772,6 +783,101 @@ def scan_mg_ion_source_records_cpp_detailed(
         "packing_seconds": float(packing_seconds),
         "cpp_kernel_seconds": float(cpp_kernel_seconds),
         "fallback_count": 0.0,
+    }
+    return rows, message, stats
+
+
+def eval_mg_ion_source_simple_payloads_cpp_detailed(
+    *,
+    master: Any,
+    derived: Any,
+    ion_index: int,
+    ion_record: int,
+    temperature_1e4k: float,
+    electron_density_cm3: float,
+    neutral_h_density_cm3: float,
+    ionized_h_density_cm3: float,
+    nlevp: int,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Scan and evaluate selected simple Mg ion payloads in libxstar_matrix.so.
+
+    This v0.6.0a9 helper widens the a8 source traversal ABI: C++ walks the
+    ion source-pointer chains, decodes packed REALS/INTEGERS for selected
+    no-grid/no-level ucalc branches, evaluates them, and returns UCalc-like
+    ans/idest rows. Unsupported records remain Python fallback.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_eval_mg_ion_source_simple_payloads"):
+        raise RuntimeError("C++ Mg ion source simple-payload evaluator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    t0 = time.perf_counter()
+    npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
+    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
+    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
+    ptrs = np.ascontiguousarray(np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64))
+    rdat = np.ascontiguousarray(np.asarray(master.rdat1.numpy(copy=False), dtype=np.float64))
+    idat = np.ascontiguousarray(np.asarray(master.idat1.numpy(copy=False), dtype=np.int64))
+    n_records = int(ptrs.shape[0])
+    max_out = max(1, n_records)
+    out_i64 = np.zeros(max_out * 10, dtype=np.int64)
+    out_f64 = np.zeros(max_out * 6, dtype=np.float64)
+    out_stats = np.zeros(14, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_eval_mg_ion_source_simple_payloads(
+        int(npfi.size), int(n_records), int(rdat.size), int(idat.size),
+        int(ion_index), int(ion_record),
+        npfi, npar, npnxt, ptrs.ravel(), rdat, idat,
+        float(temperature_1e4k), float(electron_density_cm3),
+        float(neutral_h_density_cm3), float(ionized_h_density_cm3), int(nlevp),
+        out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_eval_mg_ion_source_simple_payloads failed with code {rc}")
+    emitted = int(out_stats[4])
+    oi = out_i64[: emitted * 10].reshape((emitted, 10)) if emitted else np.zeros((0, 10), dtype=np.int64)
+    of = out_f64[: emitted * 6].reshape((emitted, 6)) if emitted else np.zeros((0, 6), dtype=np.float64)
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted):
+        rows.append({
+            "record": int(oi[j, 0]),
+            "rate_type": int(oi[j, 1]),
+            "data_type": int(oi[j, 2]),
+            "data_type_chain": int(oi[j, 3]),
+            "next_record": int(oi[j, 4]),
+            "idest1": int(oi[j, 5]),
+            "idest2": int(oi[j, 6]),
+            "status_code": int(oi[j, 7]),
+            "supported_mask": int(oi[j, 8]),
+            "skip_mask": int(oi[j, 9]),
+            "ans1": float(of[j, 0]),
+            "ans2": float(of[j, 1]),
+            "ans3": float(of[j, 2]),
+            "ans4": float(of[j, 3]),
+            "ans5": float(of[j, 4]),
+            "ans6": float(of[j, 5]),
+        })
+    stats = {
+        "records_seen": float(out_stats[0]),
+        "records_supported": float(out_stats[1]),
+        "records_batched": float(out_stats[2]),
+        "cpp_calls": float(out_stats[3]),
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": float(out_stats[12]),
+        "ucalc_cpp_applied": float(out_stats[1]),
+        "ucalc_cpp_unsupported": float(out_stats[12]),
+        "emitted_records": float(emitted),
+        "mg_ion_payload_type1_records": float(out_stats[5]),
+        "mg_ion_payload_type2_records": float(out_stats[6]),
+        "mg_ion_payload_type3_records": float(out_stats[7]),
+        "mg_ion_payload_type7_records": float(out_stats[8]),
+        "mg_ion_payload_type8_records": float(out_stats[9]),
+        "mg_ion_payload_type20_records": float(out_stats[10]),
+        "mg_ion_payload_skipped_records": float(out_stats[11]),
+        "mg_ion_payload_loop_guard_hits": float(out_stats[13]),
     }
     return rows, message, stats
 
