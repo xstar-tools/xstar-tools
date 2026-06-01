@@ -146,6 +146,7 @@ def _append_xout_step_timing_footer(
     out: Path,
     *,
     timing: Mapping[str, float],
+    output_breakdown: Mapping[str, float] | None = None,
 ) -> None:
     """Append source-like runtime accounting to ``xout_step.log``.
 
@@ -165,9 +166,19 @@ def _append_xout_step_timing_footer(
         f"after writespectra2 {float(timing.get('writespectra2', 0.0)):.9g}",
         f"after writespectra3 {float(timing.get('writespectra3', 0.0)):.9g}",
         f"after writespectra4 {float(timing.get('writespectra4', 0.0)):.9g}",
+    ]
+    if output_breakdown:
+        lines.append("output_writer_timing_breakdown:")
+        for key in sorted(output_breakdown):
+            try:
+                value = float(output_breakdown[key])
+            except Exception:
+                continue
+            lines.append(f"  {key} {value:.9g}")
+    lines.extend([
         f"total time {total:.9g}",
         f"total time human {minutes:d} min {seconds:.3f} sec",
-    ]
+    ])
     with path.open("a", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
 
@@ -2283,6 +2294,7 @@ def run_xstar_from_parameters(
             progress_callback=progress_callback,
         )
         writer_elapsed = time.perf_counter() - writer_start_time
+        writer_breakdown = dict(getattr(writer, "timing_breakdown", {}) or {})
         _prepend_xout_step_startup_provenance(out, state=state, built=built)
         # The current writer API builds/writes the four final products as one
         # source-sequence call.  Record the exact aggregate elapsed time on
@@ -2295,16 +2307,16 @@ def run_xstar_from_parameters(
             "writespectra4": 0.0,
             "total": float(time.perf_counter() - total_start_time),
         }
-        _append_xout_step_timing_footer(out, timing=timing_footer)
+        _append_xout_step_timing_footer(out, timing=timing_footer, output_breakdown=writer_breakdown)
         state.outputs["xout_step_timing_footer"] = dict(timing_footer)
-        state.outputs["output_writer_timing_breakdown"] = dict(getattr(writer, "timing_breakdown", {}) or {})
+        state.outputs["output_writer_timing_breakdown"] = dict(writer_breakdown)
         _emit_progress(
             progress_callback,
             "output_writer_done",
             source_order=list(writer.source_order),
             writer_elapsed_seconds=float(writer_elapsed),
             timing_footer=dict(timing_footer),
-            timing_breakdown=dict(getattr(writer, "timing_breakdown", {}) or {}),
+            timing_breakdown=dict(writer_breakdown),
         )
         if high_volume_diagnostics:
             continuum_diag_products = write_continuum_diagnostics(state, out)
@@ -2375,6 +2387,7 @@ def run_xstar_from_parameters(
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
+                "output_writer_timing_breakdown": dict(state.outputs.get("output_writer_timing_breakdown", {})),
                 "solver_backend": solver_backend_status(),
                 "atdb_path": str(resolved_atdb),
                 "pointer_cache_path": str(pointer_cache_path),

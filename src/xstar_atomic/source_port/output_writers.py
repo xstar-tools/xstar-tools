@@ -1189,6 +1189,20 @@ def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, 
     _rewrite_fits_ascii_null_padding(path)
 
 
+def _record_fits_timing(
+    timing: dict[str, float] | None,
+    *,
+    filename: str,
+    phase: str,
+    seconds: float,
+) -> None:
+    """Store per-file FITS timing in a flat, JSON-friendly mapping."""
+    if timing is None:
+        return
+    safe = filename.replace(".", "_")
+    timing[f"{phase}.{safe}"] = float(seconds)
+
+
 def write_final_output_files(
     products: FinalOutputProducts,
     *, out_dir: str | Path,
@@ -1197,6 +1211,7 @@ def write_final_output_files(
     atomic_data_date: str,
     lwri: int = 0,
     overwrite: bool = True,
+    timing: dict[str, float] | None = None,
 ) -> dict[str, str]:
     output = Path(out_dir); output.mkdir(parents=True, exist_ok=True)
     parameter_table = build_parameter_table(parameters, model_name=model_name)
@@ -1213,12 +1228,26 @@ def write_final_output_files(
     paths: dict[str, str] = {}
     for filename, table in mapping.items():
         path = output / filename
+        _build_t0 = time.perf_counter()
         hdul = fits.HDUList([
             _primary_hdu(model_name=model_name, atomic_data_date=atomic_data_date),
             _table_hdu(parameter_table),
             _table_hdu(table),
         ])
+        _record_fits_timing(
+            timing,
+            filename=filename,
+            phase="final_fits_build_hdu_seconds",
+            seconds=time.perf_counter() - _build_t0,
+        )
+        _write_t0 = time.perf_counter()
         _write_hdul_with_xstar_string_padding(hdul, path, overwrite=overwrite)
+        _record_fits_timing(
+            timing,
+            filename=filename,
+            phase="final_fits_write_seconds",
+            seconds=time.perf_counter() - _write_t0,
+        )
         paths[filename] = str(path)
     return paths
 
@@ -1242,6 +1271,7 @@ def write_detail_output_files(
     atomic_data_date: str,
     pass_index: int | None = None,
     overwrite: bool = True,
+    timing: dict[str, float] | None = None,
 ) -> dict[str, str]:
     output = Path(out_dir); output.mkdir(parents=True, exist_ok=True)
     parameter_table = build_parameter_table(parameters, model_name=model_name)
@@ -1254,13 +1284,27 @@ def write_detail_output_files(
     )
     paths: dict[str, str] = {}
     for filename, attr in specs:
+        _build_t0 = time.perf_counter()
         hdus: list[fits.hdu.base._BaseHDU] = [
             _primary_hdu(model_name=model_name, atomic_data_date=atomic_data_date),
             _table_hdu(parameter_table),
         ]
         hdus.extend(_table_hdu(getattr(record, attr)) for record in store.records)
+        _record_fits_timing(
+            timing,
+            filename=filename,
+            phase="detail_fits_build_hdu_seconds",
+            seconds=time.perf_counter() - _build_t0,
+        )
         path = output / filename
+        _write_t0 = time.perf_counter()
         _write_hdul_with_xstar_string_padding(fits.HDUList(hdus), path, overwrite=overwrite)
+        _record_fits_timing(
+            timing,
+            filename=filename,
+            phase="detail_fits_write_seconds",
+            seconds=time.perf_counter() - _write_t0,
+        )
         paths[filename] = str(path)
     return paths
 
@@ -1558,7 +1602,6 @@ def run_output_writer_sequence(
     if level >= -1:
         from .continuum_diagnostics import append_phase_snapshot
 
-        _emit("spectral_writer_start", lwri=int(level))
         append_phase_snapshot(state, "before writespectra", note=f"lwri={level}")
         _final_build_t0 = time.perf_counter()
         final = build_final_output_from_state(state, lwri=level)
@@ -1580,10 +1623,12 @@ def run_output_writer_sequence(
                     model_name=model_name,
                     atomic_data_date=atomic_data_date,
                     pass_index=pass_index,
+                    timing=timing_breakdown,
                 )
             )
         timing_breakdown["detail_fits_write"] = float(time.perf_counter() - _detail_write_t0)
         if final is not None:
+            _emit("spectral_writer_start", lwri=int(level))
             _final_write_t0 = time.perf_counter()
             paths.update(
                 write_final_output_files(
@@ -1593,6 +1638,7 @@ def run_output_writer_sequence(
                     model_name=model_name,
                     atomic_data_date=atomic_data_date,
                     lwri=level,
+                    timing=timing_breakdown,
                 )
             )
             timing_breakdown["final_fits_write"] = float(time.perf_counter() - _final_write_t0)
