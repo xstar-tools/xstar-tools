@@ -109,6 +109,18 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 pass
             try:
+                lib.xstar_matrix_build_mg_rates_and_matrix.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    i64p, i64p, i64p, i64p, i64p, i64p, i64p, i64p,
+                    f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double,
+                    i64p, f64p, i64p,
+                    ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_build_mg_rates_and_matrix.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
                 lib.xstar_matrix_eval_simple_ucalc.argtypes = [
                     ctypes.c_int,
                     i64p, i64p, i64p, i64p, i64p,
@@ -300,6 +312,102 @@ def build_mg_type7_terms_matrix_cpp_detailed(
     }
     return rows, message, stats
 
+
+
+
+def build_mg_rates_and_matrix_cpp_detailed(
+    records: list[dict[str, Any]],
+    *,
+    basis_n_rows: int,
+    term_start: int,
+    hydrogen_density_cm3: float,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Build Mg rate+matrix terms with the coarse libxstar_matrix.so ABI.
+
+    The first supported group is rate_type=3/data_type=51.  The ABI accepts
+    already evaluated ans1..ans6 values in this release so it can be attached
+    safely to the real calc_hmc_all hot path before moving source traversal and
+    ucalc into C++ in later releases.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_build_mg_rates_and_matrix"):
+        raise RuntimeError("C++ Mg rates+matrix kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    n = int(len(records))
+    t0 = time.perf_counter()
+    def i64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    def f64(name: str) -> np.ndarray:
+        return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
+    record = i64("record")
+    rate_type = i64("rate_type")
+    data_type = i64("data_type")
+    ion_index = i64("ion_index")
+    ion_stage = i64("ion_stage")
+    compact_start = i64("compact_start")
+    idest1 = i64("idest1")
+    idest2 = i64("idest2")
+    ans1 = f64("ans1"); ans2 = f64("ans2"); ans3 = f64("ans3")
+    ans4 = f64("ans4"); ans5 = f64("ans5"); ans6 = f64("ans6")
+    out_i64 = np.zeros(max(0, n) * 4 * 16, dtype=np.int64)
+    out_f64 = np.zeros(max(0, n) * 4 * 4, dtype=np.float64)
+    out_stats = np.zeros(8, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_build_mg_rates_and_matrix(
+        n, int(basis_n_rows), int(term_start),
+        record, rate_type, data_type, ion_index, ion_stage, compact_start, idest1, idest2,
+        ans1, ans2, ans3, ans4, ans5, ans6,
+        float(hydrogen_density_cm3), out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_build_mg_rates_and_matrix failed with code {rc}")
+    emitted = int(out_stats[4])
+    oi = out_i64.reshape((max(0, n) * 4, 16)) if n else np.zeros((0, 16), dtype=np.int64)
+    of = out_f64.reshape((max(0, n) * 4, 4)) if n else np.zeros((0, 4), dtype=np.float64)
+    rows: list[dict[str, Any]] = []
+    for j in range(max(0, emitted)):
+        role_code = int(oi[j, 6])
+        rows.append({
+            "term_index": int(oi[j, 0]),
+            "record": int(oi[j, 1]),
+            "data_type": int(oi[j, 2]),
+            "rate_type": int(oi[j, 3]),
+            "ion_index": int(oi[j, 4]),
+            "ion_stage": int(oi[j, 5]),
+            "role": _ROLE.get(role_code, f"role_{role_code}"),
+            "row": int(oi[j, 7]),
+            "column": int(oi[j, 8]),
+            "idest1": int(oi[j, 9]),
+            "idest2": int(oi[j, 10]),
+            "lower_endpoint": int(oi[j, 11]),
+            "upper_endpoint": int(oi[j, 12]),
+            "source_row_unclamped": int(oi[j, 13]),
+            "source_column_unclamped": int(oi[j, 14]),
+            "source_ipmat_clamped": bool(int(oi[j, 15])),
+            "ucalc_status": "evaluated",
+            "aj1": float(of[j, 0]),
+            "aj2": float(of[j, 1]),
+            "cj": float(of[j, 2]),
+            "cj2": float(of[j, 3]),
+        })
+    records_supported = int(out_stats[1])
+    stats = {
+        "records_seen": float(out_stats[0]),
+        "records_supported": float(records_supported),
+        "records_batched": float(out_stats[2]),
+        "cpp_calls": float(out_stats[3]),
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": float(max(0, int(out_stats[0]) - records_supported)),
+        "fallback_unsupported_rate_data": float(out_stats[5]),
+        "fallback_nonpositive_endpoint": float(out_stats[6]),
+        "fallback_nonfinite_answer": float(out_stats[7]),
+        "emitted_matrix_terms": float(len(rows)),
+    }
+    return rows, message, stats
 
 def dense_fill_terms_matrix_cpp(
     terms: list[dict[str, Any]],

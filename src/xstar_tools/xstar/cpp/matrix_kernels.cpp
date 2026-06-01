@@ -33,12 +33,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_type7_terms_dense_ucalc_type51_payload_v1";
+    return "xstar_matrix_mg_rates_matrix_type51_payload_v1";
 }
 
 int xstar_matrix_feature_flags() {
-    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches.
-    return 1 | 2 | 4 | 8 | 16;
+    // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches; 16: data_type=51 ucalc; 32: Mg rates+matrix ABI.
+    return 1 | 2 | 4 | 8 | 16 | 32;
 }
 
 int xstar_matrix_probe(
@@ -172,6 +172,161 @@ int xstar_matrix_build_mg_type7_terms(
         }
     }
     write_message(errbuf, errbuf_size, "xstar_matrix_build_mg_type7_terms evaluated");
+    return 0;
+}
+
+
+// Coarse Mg rates+matrix ABI skeleton.
+//
+// This is intentionally still conservative: Python may continue to own ucalc
+// evaluation for a record, but C++ owns the dominant Mg rate/data group handoff
+// and the four source calc_hmc_ion matrix-term insertions for supported rows.
+// The ABI is designed to grow until it owns record traversal and ucalc as well.
+//
+// Supported in this first release:
+//   rate_type=3, data_type=51 (Mg Burgess-Tully collisional excitation rows)
+//
+// out_stats columns:
+//   0 records_seen
+//   1 records_supported
+//   2 records_batched
+//   3 cpp_calls
+//   4 emitted_matrix_terms
+//   5 fallback_unsupported_rate_data
+//   6 fallback_nonpositive_endpoint
+//   7 fallback_nonfinite_answer
+int xstar_matrix_build_mg_rates_and_matrix(
+    int n_records,
+    int basis_n_rows,
+    int term_start,
+    const long long* record,
+    const long long* rate_type,
+    const long long* data_type,
+    const long long* ion_index,
+    const long long* ion_stage,
+    const long long* compact_start,
+    const long long* idest1,
+    const long long* idest2,
+    const double* ans1,
+    const double* ans2,
+    const double* ans3,
+    const double* ans4,
+    const double* ans5,
+    const double* ans6,
+    double xpx,
+    long long* out_i64,
+    double* out_f64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_records < 0 || basis_n_rows <= 0 || term_start <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_build_mg_rates_and_matrix");
+        return 2;
+    }
+    if (!record || !rate_type || !data_type || !ion_index || !ion_stage || !compact_start ||
+        !idest1 || !idest2 || !ans1 || !ans2 || !ans3 || !ans4 || !ans5 || !ans6 ||
+        !out_i64 || !out_f64 || !out_stats) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_build_mg_rates_and_matrix");
+        return 3;
+    }
+    if (!std::isfinite(xpx)) {
+        write_message(errbuf, errbuf_size, "non-finite density scale passed to xstar_matrix_build_mg_rates_and_matrix");
+        return 4;
+    }
+
+    long long records_seen = 0;
+    long long records_supported = 0;
+    long long emitted_terms = 0;
+    long long fallback_unsupported_rate_data = 0;
+    long long fallback_nonpositive_endpoint = 0;
+    long long fallback_nonfinite_answer = 0;
+
+    for (int k = 0; k < n_records; ++k) {
+        ++records_seen;
+        if (!(rate_type[k] == 3 && data_type[k] == 51)) {
+            ++fallback_unsupported_rate_data;
+            continue;
+        }
+        const long long id1 = idest1[k];
+        const long long id2 = idest2[k];
+        if (id1 <= 0 || id2 <= 0) {
+            ++fallback_nonpositive_endpoint;
+            continue;
+        }
+        if (!finite6(ans1[k], ans2[k], ans3[k], ans4[k], ans5[k], ans6[k])) {
+            ++fallback_nonfinite_answer;
+            continue;
+        }
+
+        const long long raw_lower = compact_start[k] + id1 - 1;
+        const long long raw_upper = compact_start[k] + id2 - 1;
+        long long lower = raw_lower;
+        long long upper = raw_upper;
+        if (lower > basis_n_rows) lower = basis_n_rows;
+        if (upper > basis_n_rows) upper = basis_n_rows;
+        if (lower <= 0 || upper <= 0) {
+            ++fallback_nonpositive_endpoint;
+            continue;
+        }
+        const long long clamped_forward = (raw_upper != upper || raw_lower != lower) ? 1LL : 0LL;
+
+        const double a1 = ans1[k];
+        const double a2 = ans2[k];
+        const double c3 = ans3[k];
+        const double c4 = ans4[k];
+        const double c5 = ans5[k];
+        const double c6 = ans6[k];
+
+        const long long rows[4] = {upper, lower, lower, upper};
+        const long long cols[4] = {lower, upper, lower, upper};
+        const long long raw_rows[4] = {raw_upper, raw_lower, raw_lower, raw_upper};
+        const long long raw_cols[4] = {raw_lower, raw_upper, raw_lower, raw_upper};
+        const long long role[4] = {1, 2, 3, 4};
+        const double aj1_vals[4] = {a1, a2, -a1, -a2};
+        const double aj2_vals[4] = {a2, a1, -a1, -a2};
+        const double cj_vals[4] = {0.0, 0.0, c4 * xpx, -c3 * xpx};
+        const double cj2_vals[4] = {0.0, 0.0, c6 * xpx, -c5 * xpx};
+
+        const long long base = emitted_terms;
+        for (int j = 0; j < 4; ++j) {
+            const long long out_row = base + j;
+            long long* oi = out_i64 + 16 * out_row;
+            double* of = out_f64 + 4 * out_row;
+            oi[0] = static_cast<long long>(term_start) + out_row;
+            oi[1] = record[k];
+            oi[2] = data_type[k];
+            oi[3] = rate_type[k];
+            oi[4] = ion_index[k];
+            oi[5] = ion_stage[k];
+            oi[6] = role[j];
+            oi[7] = rows[j];
+            oi[8] = cols[j];
+            oi[9] = id1;
+            oi[10] = id2;
+            oi[11] = id1;
+            oi[12] = id2;
+            oi[13] = raw_rows[j];
+            oi[14] = raw_cols[j];
+            oi[15] = clamped_forward;
+            of[0] = aj1_vals[j];
+            of[1] = aj2_vals[j];
+            of[2] = cj_vals[j];
+            of[3] = cj2_vals[j];
+        }
+        emitted_terms += 4;
+        ++records_supported;
+    }
+
+    out_stats[0] = records_seen;
+    out_stats[1] = records_supported;
+    out_stats[2] = n_records;
+    out_stats[3] = n_records > 0 ? 1 : 0;
+    out_stats[4] = emitted_terms;
+    out_stats[5] = fallback_unsupported_rate_data;
+    out_stats[6] = fallback_nonpositive_endpoint;
+    out_stats[7] = fallback_nonfinite_answer;
+    write_message(errbuf, errbuf_size, records_supported > 0 ? "xstar_matrix_build_mg_rates_and_matrix evaluated" : "xstar_matrix_build_mg_rates_and_matrix no supported records");
     return 0;
 }
 

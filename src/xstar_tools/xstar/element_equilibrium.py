@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -960,6 +960,18 @@ def _matrix_cpp_active_for_mg() -> bool:
     return bool(flags & 2)
 
 
+def _matrix_mg_rates_matrix_active_for_mg() -> bool:
+    """Return true when the coarse Mg rates+matrix ABI is available."""
+    try:
+        status = matrix_backend_status(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND"))
+    except Exception:
+        return False
+    if status.active != "cpp":
+        return False
+    flags = int(status.cpp_feature_flags or 0)
+    return bool(flags & 32)
+
+
 def _rates_cpp_active_for_mg() -> bool:
     """Return true when the legacy optional C++ rates backend should own Mg batches."""
     try:
@@ -1232,6 +1244,13 @@ def assemble_element_matrix(
             type51_cpp_cache: Dict[int, UCalcResult] = {}
             type51_cpp_stats_recorded = False
             type51_cpp_enabled = bool(int(element_z) == 12 and _matrix_cpp_active_for_mg() and str(os.environ.get("XSTAR_ATOMIC_MATRIX_TYPE51_UCALC_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"})
+            pending_cpp_mg_rates_matrix: List[Tuple[UCalcResult, int]] = []
+            mg_rates_matrix_cpp_enabled = bool(
+                int(element_z) == 12
+                and _matrix_mg_rates_matrix_active_for_mg()
+                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            mg_rates_matrix_parity_records = max(0, int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_PARITY_RECORDS", "16") or "0"))
 
             def _build_type51_cpp_cache(ucontext_for_payload: UCalcContext) -> None:
                 nonlocal type51_cpp_stats_recorded
@@ -1359,6 +1378,150 @@ def assemble_element_matrix(
                         **cpp_stats,
                     )
                     type51_cpp_stats_recorded = True
+
+
+            def _mg_terms_close(left: List[MatrixTerm], right: List[MatrixTerm]) -> bool:
+                if len(left) != len(right):
+                    return False
+                for a, b in zip(left, right):
+                    if (a.record, a.data_type, a.rate_type, a.row, a.column, a.role) != (b.record, b.data_type, b.rate_type, b.row, b.column, b.role):
+                        return False
+                    for name in ("aj1", "aj2", "cj", "cj2"):
+                        av = float(getattr(a, name)); bv = float(getattr(b, name))
+                        if not math.isclose(av, bv, rel_tol=1.0e-10, abs_tol=1.0e-80):
+                            return False
+                return True
+
+            def _flush_pending_mg_rates_matrix() -> None:
+                nonlocal n_eval, n_unmapped, n_blocked, n_source_clamps, _ion_matrix_elapsed
+                if not pending_cpp_mg_rates_matrix:
+                    return
+                batch = list(pending_cpp_mg_rates_matrix)
+                pending_cpp_mg_rates_matrix.clear()
+                _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                cpp_input: List[Dict[str, Any]] = []
+                for pending_result, _record_row_index in batch:
+                    cpp_input.append({
+                        "record": int(pending_result.record),
+                        "rate_type": int(pending_result.rate_type),
+                        "data_type": int(pending_result.data_type),
+                        "ion_index": int(block.ion_index),
+                        "ion_stage": int(block.ion_stage),
+                        "compact_start": int(block.compact_start),
+                        "idest1": int(pending_result.idest1),
+                        "idest2": int(pending_result.idest2),
+                        "ans1": float(pending_result.ans1),
+                        "ans2": float(pending_result.ans2),
+                        "ans3": float(pending_result.ans3),
+                        "ans4": float(pending_result.ans4),
+                        "ans5": float(pending_result.ans5),
+                        "ans6": float(pending_result.ans6),
+                    })
+                try:
+                    cpp_rows, cpp_message, cpp_stats = build_mg_rates_and_matrix_cpp_detailed(
+                        cpp_input,
+                        basis_n_rows=basis.n_rows,
+                        term_start=len(terms) + 1,
+                        hydrogen_density_cm3=context.hydrogen_density_cm3,
+                    )
+                    new_terms = _matrix_terms_from_cpp_rows(cpp_rows)
+                    if mg_rates_matrix_parity_records:
+                        parity_terms: List[MatrixTerm] = []
+                        parity_start = len(terms) + 1
+                        for pending_result, _record_row_index in batch[:mg_rates_matrix_parity_records]:
+                            parity_terms.extend(_matrix_terms_for_result(
+                                result=pending_result,
+                                basis=basis,
+                                block=block,
+                                levels=levels,
+                                term_start=parity_start + len(parity_terms),
+                                xpx=context.hydrogen_density_cm3,
+                            ))
+                        cpp_parity_terms = new_terms[:len(parity_terms)]
+                        if not _mg_terms_close(cpp_parity_terms, parity_terms):
+                            raise RuntimeError("Mg rates+matrix C++ parity gate failed for rate_type=3/data_type=51")
+                    if len(new_terms) != 4 * len(batch):
+                        raise RuntimeError(f"Mg rates+matrix C++ emitted {len(new_terms)} terms for {len(batch)} records")
+                except Exception as exc:
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_rates_matrix_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_build_mg_rates_and_matrix",
+                            records_seen=float(len(batch)),
+                            records_batched=float(len(batch)),
+                            cpp_calls=0.0,
+                            packing_seconds=0.0,
+                            cpp_kernel_seconds=0.0,
+                            fallback_count=float(len(batch)),
+                            fallback_reason="exception_or_parity_gate",
+                            emitted_matrix_terms=0.0,
+                            status="fallback",
+                            error=str(exc),
+                        )
+                    for pending_result, record_row_index in batch:
+                        try:
+                            new_terms = _matrix_terms_for_result(
+                                result=pending_result,
+                                basis=basis,
+                                block=block,
+                                levels=levels,
+                                term_start=len(terms) + 1,
+                                xpx=context.hydrogen_density_cm3,
+                            )
+                        except (ElementEquilibriumError, IndexError) as inner_exc:
+                            n_unmapped += 1
+                            summary.n_records_invalid_endpoint += 1
+                            blocked = {**record_results[record_row_index], "reason": str(inner_exc), "status": "invalid_endpoint"}
+                            blocked_records.append(blocked)
+                            if context.strict_context:
+                                n_blocked += 1
+                                summary.n_records_blocked += 1
+                        else:
+                            record_results[record_row_index]["rates_backend"] = "python_fallback_after_mg_rates_matrix_cpp_error"
+                            record_results[record_row_index]["rates_backend_error"] = str(exc)
+                            if any(term.source_ipmat_clamped for term in new_terms):
+                                n_source_clamps += 1
+                                record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
+                                record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
+                            terms.extend(new_terms)
+                            n_eval += 1
+                            summary.n_records_evaluated += 1
+                            summary.n_matrix_terms += len(new_terms)
+                else:
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_rates_matrix_cpp_kernel",
+                            float(cpp_stats.get("packing_seconds", 0.0)) + float(cpp_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_build_mg_rates_and_matrix",
+                            status="cpp",
+                            parity_gate_records=float(min(mg_rates_matrix_parity_records, len(batch))),
+                            **cpp_stats,
+                        )
+                    for offset, (_pending_result, record_row_index) in enumerate(batch):
+                        group = new_terms[4 * offset : 4 * offset + 4]
+                        record_results[record_row_index]["rates_backend"] = "cpp_matrix_mg_rates_matrix_type51"
+                        record_results[record_row_index]["rates_backend_message"] = cpp_message
+                        if any(term.source_ipmat_clamped for term in group):
+                            n_source_clamps += 1
+                            record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
+                            record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
+                    terms.extend(new_terms)
+                    n_eval += len(batch)
+                    summary.n_records_evaluated += len(batch)
+                    summary.n_matrix_terms += len(new_terms)
+                if is_mg_profile:
+                    _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
             for data_type in range(1, derived.npfi.shape[0]):
                 record = int(derived.npfi[data_type, block.ion_index])
@@ -1547,15 +1710,24 @@ def assemble_element_matrix(
                         # calc_hmc_ion's four-row matrix block.  They may still
                         # contribute the scalar totals accumulated above.
                         if result.idest1 <= 0 or result.idest2 <= 0:
+                            _flush_pending_mg_rates_matrix()
                             record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
                             record = int(derived.npnxt[record])
                             continue
-                        if use_cpp_mg_type7_rates and result.rate_type == 7:
+                        if (
+                            mg_rates_matrix_cpp_enabled
+                            and int(result.rate_type) == 3
+                            and int(result.data_type) == 51
+                        ):
+                            pending_cpp_mg_rates_matrix.append((result, len(record_results) - 1))
+                        elif use_cpp_mg_type7_rates and result.rate_type == 7:
+                            _flush_pending_mg_rates_matrix()
                             # Defer record_type=7 term construction to one compact C++
                             # batch per Mg ion.  Python still owns source-faithful ucalc
                             # physics for ans1..ans6 in this release.
                             pending_cpp_type7.append((result, len(record_results) - 1))
                         else:
+                            _flush_pending_mg_rates_matrix()
                             try:
                                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                                 new_terms = _matrix_terms_for_result(
@@ -1586,6 +1758,7 @@ def assemble_element_matrix(
                                 summary.n_records_evaluated += 1
                                 summary.n_matrix_terms += len(new_terms)
                     record = int(derived.npnxt[record])
+            _flush_pending_mg_rates_matrix()
             if pending_cpp_type7:
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                 cpp_input: List[Dict[str, Any]] = []

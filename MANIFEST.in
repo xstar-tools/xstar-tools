@@ -132,7 +132,7 @@ include xstar_atomic_v0.4.39.md
 include xstar_atomic_conversation_summary_v0439.md
 include XSTAR_SOURCE_CHANGES_v0.4.39.md
 recursive-include src/xstar_tools/benchmarks/all_element_call73_v0438_acceptance *.md *.json
-recursive-include src/xstar_tools/source_port/data coheat.dat
+recursive-include src/xstar_tools/xstar/data coheat.dat
 
 include xstar_atomic_v0.4.40.md
 include xstar_atomic_conversation_summary_v0440.md
@@ -379,10 +379,10 @@ include examples/run_v0488_zone1_analysis.sh
 recursive-include scripts *.sh
 
 include setup.py
-recursive-include src/xstar_tools/source_port *.so *.dylib *.dll
+recursive-include src/xstar_tools/xstar *.so *.dylib *.dll
 
 
 # Optional C++ shared-library solver backend sources/build helpers
-recursive-include src/xstar_tools/source_port/cpp *
+recursive-include src/xstar_tools/xstar/cpp *
 
 include XSTAR_SOURCE_CHANGES_v0.5.53.md
