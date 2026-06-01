@@ -450,9 +450,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"python_output_dir={result.python_run.output_dir}")
                 print(f"original_run_dir={result.original_run_dir}")
                 print(f"diagnostics={args.diagnostics}")
-                print(f"solver_backend={args.solver_backend}")
-                print(f"backend={args.backend}")
-                print(f"rates_backend={args.rates_backend or args.backend}")
+                provenance = dict(result.python_run.provenance or {})
+                selection = dict(provenance.get("backend_selection", {}))
+                print(f"global_backend_requested={selection.get('global_backend', args.backend)}")
+                for backend_name, requested_value in (
+                    ("solver_backend", args.solver_backend),
+                    ("rates_backend", args.rates_backend or args.backend),
+                    ("matrix_backend", args.matrix_backend or args.backend),
+                    ("emissivity_backend", args.emissivity_backend or args.backend),
+                ):
+                    status = dict(provenance.get(backend_name, {}))
+                    active = status.get("active", "unknown")
+                    requested = status.get("requested", requested_value)
+                    backend_label = status.get("cpp_backend_name") or status.get("status") or "python"
+                    print(f"{backend_name}_requested={requested}")
+                    print(f"{backend_name}_active={active}")
+                    print(f"{backend_name}_implementation={backend_label}")
                 if args.diagnostics_dir is not None:
                     print(f"diagnostics_dir={Path(args.diagnostics_dir).resolve()}")
         elif args.run_script is not None:
