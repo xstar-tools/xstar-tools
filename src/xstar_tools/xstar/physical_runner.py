@@ -2378,7 +2378,7 @@ def run_xstar_from_parameters(
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
-                "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_dense_fill_selected_ucalc_type51_and_mg_rates_matrix_available_via_libxstar_matrix"},
+                "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_dense_fill_selected_ucalc_type51_mg_rates_matrix_and_type51_ucalc_rates_matrix_available_via_libxstar_matrix"},
                 "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_type50_ucalc_linopac_voigt_cpp_via_libxstar_rates"},
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),

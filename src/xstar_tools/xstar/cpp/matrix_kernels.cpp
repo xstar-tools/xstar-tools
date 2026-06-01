@@ -24,6 +24,7 @@ bool finite6(double a, double b, double c, double d, double e, double f) {
            std::isfinite(d) && std::isfinite(e) && std::isfinite(f);
 }
 
+
 }  // namespace
 
 extern "C" {
@@ -33,12 +34,12 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_rates_matrix_type51_payload_v1";
+    return "xstar_matrix_mg_type51_rates_matrix_ucalc_v2";
 }
 
 int xstar_matrix_feature_flags() {
     // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches; 16: data_type=51 ucalc; 32: Mg rates+matrix ABI.
-    return 1 | 2 | 4 | 8 | 16 | 32;
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64;
 }
 
 int xstar_matrix_probe(
@@ -329,6 +330,8 @@ int xstar_matrix_build_mg_rates_and_matrix(
     write_message(errbuf, errbuf_size, records_supported > 0 ? "xstar_matrix_build_mg_rates_and_matrix evaluated" : "xstar_matrix_build_mg_rates_and_matrix no supported records");
     return 0;
 }
+
+
 
 // Fill dense, heating, and secondary-heating matrices from emitted term arrays.
 // This is the first broader matrix-assembly loop moved into libxstar_matrix.so.
@@ -667,6 +670,207 @@ extern "C" int xstar_matrix_eval_type51_ucalc_batch(
     write_message(errbuf, errbuf_size, applied > 0 ? "xstar_matrix_eval_type51_ucalc_batch evaluated" : "xstar_matrix_eval_type51_ucalc_batch no supported records");
     return 0;
 }
+
+// Coarse Mg type-51 rates+matrix ABI.
+//
+// This owns the dominant Mg rate_type=3/data_type=51 ucalc evaluation and
+// matrix-term construction in one source-ordered C++ batch.  Python is still
+// responsible for decoding the XSTAR packed record into compact payload arrays;
+// this ABI then traverses those payload rows in source order, evaluates the
+// Burgess-Tully collision rate, and emits the four calc_hmc_ion matrix terms.
+//
+// out_stats columns:
+//   0 records_seen
+//   1 records_supported
+//   2 records_batched
+//   3 cpp_calls
+//   4 emitted_matrix_terms
+//   5 fallback_unsupported_rate_data
+//   6 fallback_nonpositive_endpoint
+//   7 fallback_nonfinite_answer
+//   8 ucalc_cpp_applied
+//   9 ucalc_cpp_unsupported
+int xstar_matrix_build_mg_type51_rates_and_matrix(
+    int n_records,
+    int basis_n_rows,
+    int term_start,
+    const long long* record,
+    const long long* ion_index,
+    const long long* ion_stage,
+    const long long* compact_start,
+    const long long* lower_level,
+    const long long* upper_level,
+    const long long* bt_type,
+    const long long* n_points,
+    const double* eij_ryd,
+    const double* c_bt,
+    const double* g_lower,
+    const double* g_upper,
+    const double* delta_e_ev,
+    const double* y_values,
+    double temperature_k,
+    double electron_density_cm3,
+    double hydrogen_density_cm3,
+    long long* out_i64,
+    double* out_f64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_records < 0 || basis_n_rows <= 0 || term_start <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_build_mg_type51_rates_and_matrix");
+        return 2;
+    }
+    if (!record || !ion_index || !ion_stage || !compact_start || !lower_level || !upper_level || !bt_type || !n_points ||
+        !eij_ryd || !c_bt || !g_lower || !g_upper || !delta_e_ev || !y_values || !out_i64 || !out_f64 || !out_stats) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_build_mg_type51_rates_and_matrix");
+        return 3;
+    }
+    if (!std::isfinite(temperature_k) || temperature_k <= 0.0 || !std::isfinite(electron_density_cm3) || electron_density_cm3 < 0.0 ||
+        !std::isfinite(hydrogen_density_cm3)) {
+        write_message(errbuf, errbuf_size, "invalid thermodynamic input to xstar_matrix_build_mg_type51_rates_and_matrix");
+        return 4;
+    }
+
+    long long records_seen = 0;
+    long long records_supported = 0;
+    long long emitted_terms = 0;
+    long long fallback_unsupported_rate_data = 0;
+    long long fallback_nonpositive_endpoint = 0;
+    long long fallback_nonfinite_answer = 0;
+    long long ucalc_cpp_applied = 0;
+    long long ucalc_cpp_unsupported = 0;
+
+    for (int k = 0; k < n_records; ++k) {
+        ++records_seen;
+        const long long id1 = lower_level[k];
+        const long long id2 = upper_level[k];
+        if (id1 <= 0 || id2 <= 0) {
+            ++fallback_nonpositive_endpoint;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+        if ((n_points[k] != 5 && n_points[k] != 9) || eij_ryd[k] <= 0.0 || c_bt[k] <= 0.0 ||
+            g_lower[k] <= 0.0 || g_upper[k] <= 0.0 || delta_e_ev[k] <= 0.0) {
+            ++fallback_unsupported_rate_data;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+        double ups = 0.0;
+        const double* y = y_values + 9 * k;
+        const double eij_ev = eij_ryd[k] * 13.605692;
+        const double wavelength_a = 12398.4016 / eij_ev;
+        const double floor_k = 2.8777e6 / wavelength_a;
+        const double bt_temperature_k = std::max(temperature_k, floor_k);
+        bool ok = false;
+        if (n_points[k] == 5) ok = xstar_matrix_type51_upsilon5(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups);
+        else ok = xstar_matrix_type51_upsilon9(bt_type[k], eij_ryd[k], c_bt[k], y, bt_temperature_k, &ups);
+        if (!ok || !std::isfinite(ups)) {
+            ++fallback_nonfinite_answer;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+        const double t_xstar = temperature_k / 1.0e4;
+        const double tsq = std::sqrt(t_xstar);
+        const double ekt_ev = 0.861707 * t_xstar;
+        if (tsq <= 0.0 || ekt_ev <= 0.0) {
+            ++fallback_nonfinite_answer;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+        const double delta = eij_ev / ekt_ev;
+        const double q_deexc = 8.626e-8 * ups / tsq / g_upper[k];
+        const double q_exc = q_deexc * g_upper[k] * xstar_matrix_expo_limited(-delta) / g_lower[k];
+        const double ans1 = q_exc * electron_density_cm3;
+        const double ans2 = q_deexc * electron_density_cm3;
+        const double ans3 = 0.0;
+        const double ans4 = 0.0;
+        const double ans5 = ans2 * delta_e_ev[k] * 1.602176634e-12;
+        const double ans6 = ans1 * delta_e_ev[k] * 1.602176634e-12;
+        if (!finite6(ans1, ans2, ans3, ans4, ans5, ans6)) {
+            ++fallback_nonfinite_answer;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+
+        const long long raw_lower = compact_start[k] + id1 - 1;
+        const long long raw_upper = compact_start[k] + id2 - 1;
+        long long lower = raw_lower;
+        long long upper = raw_upper;
+        if (lower > basis_n_rows) lower = basis_n_rows;
+        if (upper > basis_n_rows) upper = basis_n_rows;
+        if (lower <= 0 || upper <= 0) {
+            ++fallback_nonpositive_endpoint;
+            ++ucalc_cpp_unsupported;
+            continue;
+        }
+        const long long clamped_forward = (raw_upper != upper || raw_lower != lower) ? 1LL : 0LL;
+
+        const long long rows[4] = {upper, lower, lower, upper};
+        const long long cols[4] = {lower, upper, lower, upper};
+        const long long raw_rows[4] = {raw_upper, raw_lower, raw_lower, raw_upper};
+        const long long raw_cols[4] = {raw_lower, raw_upper, raw_lower, raw_upper};
+        const long long role[4] = {1, 2, 3, 4};
+        const double aj1_vals[4] = {ans1, ans2, -ans1, -ans2};
+        const double aj2_vals[4] = {ans2, ans1, -ans1, -ans2};
+        const double cj_vals[4] = {0.0, 0.0, ans4 * hydrogen_density_cm3, -ans3 * hydrogen_density_cm3};
+        const double cj2_vals[4] = {0.0, 0.0, ans6 * hydrogen_density_cm3, -ans5 * hydrogen_density_cm3};
+
+        const long long base = emitted_terms;
+        for (int j = 0; j < 4; ++j) {
+            const long long out_row = base + j;
+            long long* oi = out_i64 + 20 * out_row;
+            double* of = out_f64 + 10 * out_row;
+            oi[0] = static_cast<long long>(term_start) + out_row;
+            oi[1] = record[k];
+            oi[2] = 51;
+            oi[3] = 3;
+            oi[4] = ion_index[k];
+            oi[5] = ion_stage[k];
+            oi[6] = role[j];
+            oi[7] = rows[j];
+            oi[8] = cols[j];
+            oi[9] = id1;
+            oi[10] = id2;
+            oi[11] = id1;
+            oi[12] = id2;
+            oi[13] = raw_rows[j];
+            oi[14] = raw_cols[j];
+            oi[15] = clamped_forward;
+            oi[16] = 1; // ucalc status evaluated
+            oi[17] = bt_type[k];
+            oi[18] = n_points[k];
+            oi[19] = 0;
+            of[0] = aj1_vals[j];
+            of[1] = aj2_vals[j];
+            of[2] = cj_vals[j];
+            of[3] = cj2_vals[j];
+            of[4] = ans1;
+            of[5] = ans2;
+            of[6] = ans3;
+            of[7] = ans4;
+            of[8] = ans5;
+            of[9] = ans6;
+        }
+        emitted_terms += 4;
+        ++records_supported;
+        ++ucalc_cpp_applied;
+    }
+
+    out_stats[0] = records_seen;
+    out_stats[1] = records_supported;
+    out_stats[2] = n_records;
+    out_stats[3] = n_records > 0 ? 1 : 0;
+    out_stats[4] = emitted_terms;
+    out_stats[5] = fallback_unsupported_rate_data;
+    out_stats[6] = fallback_nonpositive_endpoint;
+    out_stats[7] = fallback_nonfinite_answer;
+    out_stats[8] = ucalc_cpp_applied;
+    out_stats[9] = ucalc_cpp_unsupported;
+    write_message(errbuf, errbuf_size, records_supported > 0 ? "xstar_matrix_build_mg_type51_rates_and_matrix evaluated" : "xstar_matrix_build_mg_type51_rates_and_matrix no supported records");
+    return 0;
+}
+
 
 
 }  // extern "C"
