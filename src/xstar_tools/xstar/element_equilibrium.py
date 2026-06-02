@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -2074,6 +2074,89 @@ def assemble_element_matrix(
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type49_terms",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="fallback",
+                            error=str(exc),
+                        )
+
+
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
+                try:
+                    _type53_candidates = []
+                    for _rec, _rt, _dt in source_record_iter:
+                        if int(_rt) == 7 and int(_dt) == 53 and int(_rec) not in cpp_direct_accumulated_records:
+                            _pt1, _pt2, _esc_reason = _escape_factors(int(_rec), 7, derived, context)
+                            if _esc_reason is None:
+                                _type53_candidates.append((int(_rec), float(_pt1), float(_pt2)))
+                    if _type53_candidates:
+                        cpp_type53_rows, cpp_type53_message, cpp_type53_stats = accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
+                            master=master,
+                            derived=derived,
+                            levels=levels,
+                            radiation=context.radiation,
+                            ion_index=int(block.ion_index),
+                            ion_stage=int(block.ion_stage),
+                            compact_start=int(block.compact_start),
+                            basis_n_rows=int(basis.n_rows),
+                            term_start=len(terms) + len(cpp_direct_terms) + 1,
+                            temperature_k=float(context.temperature_k),
+                            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+                            electron_fraction_xee=float(context.electron_fraction_xee),
+                            nlevp=int(block.nlev),
+                            candidates=_type53_candidates,
+                        )
+                    else:
+                        cpp_type53_rows, cpp_type53_message, cpp_type53_stats = [], "no type53 candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
+                    cpp_type53_scalar_rows = [row for row in cpp_type53_rows if str(row.get("role")) in {"scalar_pirt", "scalar_rrrt"}]
+                    cpp_type53_matrix_rows = [row for row in cpp_type53_rows if str(row.get("role")) not in {"scalar_pirt", "scalar_rrrt"}]
+                    cpp_type53_terms = _matrix_terms_from_cpp_rows(cpp_type53_matrix_rows)
+                    cpp_type53_records = {int(row["record"]) for row in cpp_type53_rows}
+                    _type53_supported = float(cpp_type53_stats.get("records_supported", 0.0))
+                    _type53_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_MIN_RECORDS", "1"))
+                    _type53_gate_passed = _type53_supported >= float(_type53_min_records)
+                    if _type53_gate_passed:
+                        terms.extend(cpp_type53_terms)
+                        for _row in cpp_type53_scalar_rows:
+                            if int(_row.get("idest1", 0)) == 1:
+                                summary.second_pass_pirt += float(_row.get("aj1", 0.0))
+                            if int(_row.get("idest2", 0)) >= int(block.nlev):
+                                summary.second_pass_rrrt += float(_row.get("aj2", 0.0))
+                        cpp_direct_accumulated_records.update(cpp_type53_records)
+                        n_eval += len(cpp_type53_records)
+                        summary.n_records_evaluated += len(cpp_type53_records)
+                        summary.n_matrix_terms += len(cpp_type53_terms)
+                        _type53_status = "cpp"
+                    else:
+                        _type53_status = "coverage_gate_fallback"
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type53_cpp_kernel",
+                            float(cpp_type53_stats.get("packing_seconds", 0.0)) + float(cpp_type53_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type53_terms",
+                            status=_type53_status,
+                            type53_gate_passed=float(1.0 if _type53_gate_passed else 0.0),
+                            type53_min_records=float(_type53_min_records),
+                            **cpp_type53_stats,
+                        )
+                except Exception as exc:
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type53_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type53_terms",
                             records_seen=0.0,
                             records_batched=0.0,
                             cpp_calls=0.0,

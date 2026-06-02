@@ -219,6 +219,19 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 pass
             try:
+                lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong,
+                    i64p, i64p, i64p, i64p, i64p, f64p, f64p,
+                    f64p, i64p, f64p, f64p, f64p, f64p, f64p, f64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
                 lib.xstar_matrix_eval_type51_ucalc_batch.argtypes = [
                     ctypes.c_int,
                     i64p, i64p, i64p, i64p, i64p, i64p, i64p,
@@ -1169,6 +1182,100 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
         "packing_seconds": float(packing_seconds), "cpp_kernel_seconds": float(cpp_kernel_seconds),
         "ucalc_cpp_applied": float(out_stats[1]), "mg_ion_direct_rate7_type49_seen": float(out_stats[0]),
         "mg_ion_direct_rate7_type49_supported": float(out_stats[1]),
+    }
+    return rows, message, stats
+
+def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
+    *,
+    master: Any,
+    derived: Any,
+    levels: Any,
+    radiation: Any,
+    ion_index: int,
+    ion_stage: int,
+    compact_start: int,
+    basis_n_rows: int,
+    term_start: int,
+    temperature_k: float,
+    hydrogen_density_cm3: float,
+    electron_fraction_xee: float,
+    nlevp: int,
+    candidates: list[tuple[int, float, float]],
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Evaluate rate_type=7/data_type=53 Mg OP photoionization records in C++.
+
+    The caller supplies one ion's candidate source records and continuum escape
+    factors.  C++ decodes the packed type-53 payload, evaluates a phint53-like
+    photoionization/Milne branch, and emits scalar plus matrix rows directly.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_accumulate_mg_ion_rate7_type53_terms"):
+        raise RuntimeError("C++ Mg type-53 direct accumulator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    if not candidates:
+        return [], "no candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0}
+    t0 = time.perf_counter()
+    _npfi_all, _npar, _npnxt, ptrs, rdat, idat = _compact_matrix_arrays(master, derived)
+    recs = np.ascontiguousarray([int(x[0]) for x in candidates], dtype=np.int64)
+    ptmp1 = np.ascontiguousarray([float(x[1]) for x in candidates], dtype=np.float64)
+    ptmp2 = np.ascontiguousarray([float(x[2]) for x in candidates], dtype=np.float64)
+    nreal = np.ascontiguousarray([int(ptrs[int(r), 4]) for r in recs], dtype=np.int64)
+    real_ptr = np.ascontiguousarray([int(ptrs[int(r), 7]) for r in recs], dtype=np.int64)
+    nint = np.ascontiguousarray([int(ptrs[int(r), 5]) for r in recs], dtype=np.int64)
+    int_ptr = np.ascontiguousarray([int(ptrs[int(r), 8]) for r in recs], dtype=np.int64)
+    nlev = int(nlevp)
+    lev_energy = np.zeros(nlev + 1, dtype=np.float64)
+    lev_weight = np.zeros(nlev + 1, dtype=np.float64)
+    lev_ionpot = np.zeros(nlev + 1, dtype=np.float64)
+    lev_cont = np.zeros(nlev + 1, dtype=np.float64)
+    for idx in range(1, nlev + 1):
+        lev = levels.get(idx) if hasattr(levels, "get") else None
+        if lev is not None:
+            lev_energy[idx] = float(getattr(lev, "energy_ev", 0.0) or 0.0)
+            lev_weight[idx] = float(getattr(lev, "statistical_weight", 0.0) or 0.0)
+            lev_ionpot[idx] = float(getattr(lev, "ionization_potential_ev", 0.0) or 0.0)
+            lev_cont[idx] = float(getattr(lev, "continuum_energy_ev", 0.0) or 0.0)
+    epi, brem = _radiation_grid_arrays_for_type53(radiation)
+    max_terms = max(8, int(len(candidates)) * 5)
+    out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
+    out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
+    out_stats = np.zeros(16, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
+        int(len(candidates)), int(rdat.size), int(idat.size), int(nlev + 1), int(epi.size),
+        int(basis_n_rows), int(term_start), int(max_terms),
+        int(ion_index), int(ion_stage), int(compact_start), int(nlevp),
+        recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,
+        rdat, idat, lev_energy, lev_weight, lev_ionpot, lev_cont, epi, brem,
+        float(temperature_k), float(hydrogen_density_cm3), float(electron_fraction_xee),
+        out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_accumulate_mg_ion_rate7_type53_terms failed with code {rc}")
+    emitted = int(out_stats[2])
+    oi = out_i64[: emitted * 16].reshape((emitted, 16)) if emitted else np.zeros((0, 16), dtype=np.int64)
+    of = out_f64[: emitted * 4].reshape((emitted, 4)) if emitted else np.zeros((0, 4), dtype=np.float64)
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted):
+        rows.append({
+            "term_index": int(oi[j, 0]), "record": int(oi[j, 1]), "data_type": int(oi[j, 2]), "rate_type": int(oi[j, 3]),
+            "ion_index": int(oi[j, 4]), "ion_stage": int(oi[j, 5]), "role": _ROLE.get(int(oi[j, 6]), f"role_{int(oi[j, 6])}"),
+            "row": int(oi[j, 7]), "column": int(oi[j, 8]), "idest1": int(oi[j, 9]), "idest2": int(oi[j, 10]),
+            "lower_endpoint": int(oi[j, 11]), "upper_endpoint": int(oi[j, 12]),
+            "source_row_unclamped": int(oi[j, 13]), "source_column_unclamped": int(oi[j, 14]), "source_ipmat_clamped": bool(int(oi[j, 15])),
+            "ucalc_status": "evaluated", "aj1": float(of[j, 0]), "aj2": float(of[j, 1]), "cj": float(of[j, 2]), "cj2": float(of[j, 3]),
+        })
+    stats = {
+        "records_seen": float(out_stats[0]), "records_supported": float(out_stats[1]), "records_batched": float(out_stats[1]),
+        "cpp_calls": float(out_stats[3]), "emitted_matrix_terms": float(out_stats[4]), "emitted_scalar_rows": float(out_stats[5]),
+        "type53_invalid": float(out_stats[6]), "type53_no_pairs": float(out_stats[7]), "type53_bad_context": float(out_stats[8]),
+        "type53_outside_grid": float(out_stats[9]), "type53_output_overflow": float(out_stats[10]), "fallback_count": float(out_stats[11]),
+        "packing_seconds": float(packing_seconds), "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "ucalc_cpp_applied": float(out_stats[1]), "mg_ion_direct_rate7_type53_seen": float(out_stats[0]),
+        "mg_ion_direct_rate7_type53_supported": float(out_stats[1]),
     }
     return rows, message, stats
 
