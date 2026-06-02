@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <vector>
+#include <algorithm>
 
 namespace {
 
@@ -34,7 +36,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_direct_accumulator_v9";
+    return "xstar_matrix_mg_ion_direct_accumulator_type49_v10";
 }
 
 int xstar_matrix_feature_flags() {
@@ -1549,6 +1551,303 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
     out_stats[14] = rate7_seen;
     out_stats[15] = rate7_supported;
     write_message(errbuf, errbuf_size, supported > 0 ? "xstar_matrix_accumulate_mg_ion_source_simple_terms evaluated" : "xstar_matrix_accumulate_mg_ion_source_simple_terms no supported records");
+    return 0;
+}
+
+
+// Experimental Mg ion accumulator for dominant rate_type=7/data_type=49
+// photoionization-style records.  This ABI is one call per ion.  Python passes
+// only the candidate records and source escape factors; C++ owns the packed
+// payload decode, phextrap-like extension, phint53-like rate integration, scalar
+// pirt/rrrt row emission, and direct four-row matrix-term emission.
+int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
+    int n_candidates,
+    int n_rdat,
+    int n_idat,
+    int n_levels,
+    int n_grid,
+    int basis_n_rows,
+    int term_start,
+    int max_terms,
+    long long ion_index,
+    long long ion_stage,
+    long long compact_start,
+    long long nlevp,
+    const long long* records,
+    const long long* nreal_arr,
+    const long long* real_ptr_arr,
+    const long long* nint_arr,
+    const long long* int_ptr_arr,
+    const double* ptmp1_arr,
+    const double* ptmp2_arr,
+    const double* rdat1,
+    const long long* idat1,
+    const double* level_energy_ev,
+    const double* level_weight,
+    const double* level_ionpot_ev,
+    const double* level_continuum_ev,
+    const double* epi_ev,
+    const double* bremsa,
+    double temperature_k,
+    double hydrogen_density_cm3,
+    double electron_fraction_xee,
+    long long* out_i64,
+    double* out_f64,
+    long long* out_stats,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || basis_n_rows <= 0 ||
+        term_start <= 0 || max_terms <= 0 || ion_index <= 0 || ion_stage <= 0 || compact_start <= 0 || nlevp <= 0) {
+        write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_accumulate_mg_ion_rate7_type49_terms");
+        return 2;
+    }
+    if (!records || !nreal_arr || !real_ptr_arr || !nint_arr || !int_ptr_arr || !ptmp1_arr || !ptmp2_arr ||
+        !rdat1 || !idat1 || !level_energy_ev || !level_weight || !level_ionpot_ev || !level_continuum_ev ||
+        !epi_ev || !bremsa || !out_i64 || !out_f64 || !out_stats) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_accumulate_mg_ion_rate7_type49_terms");
+        return 3;
+    }
+    if (!std::isfinite(temperature_k) || temperature_k <= 0.0 || !std::isfinite(hydrogen_density_cm3) || hydrogen_density_cm3 < 0.0 ||
+        !std::isfinite(electron_fraction_xee) || electron_fraction_xee < 0.0) {
+        write_message(errbuf, errbuf_size, "invalid plasma context for xstar_matrix_accumulate_mg_ion_rate7_type49_terms");
+        return 4;
+    }
+    const double ryd_ev = 13.605692;
+    const double erg_per_ev = 1.602176634e-12;
+    const double kboltz_erg_k = 1.380649e-16;
+    const double kt_ev_per_1e4k = 0.861707;
+    const auto expo = [](double x) -> double {
+        if (x < -60.0) x = -60.0;
+        if (x > 60.0) x = 60.0;
+        return std::exp(x);
+    };
+    const auto lower_bracket = [&](double energy, int usable_n) -> int {
+        int n = std::min(n_grid, std::max(1, usable_n));
+        if (n <= 1 || energy <= epi_ev[0]) return 0;
+        int lo = 0, hi = n - 1;
+        while (lo + 1 < hi) {
+            int mid = (lo + hi) / 2;
+            if (epi_ev[mid] <= energy) lo = mid; else hi = mid;
+        }
+        return (epi_ev[hi] <= energy) ? hi : lo;
+    };
+    const auto get_real = [&](long long one_based) -> double {
+        if (one_based <= 0 || one_based > n_rdat) return 0.0;
+        return rdat1[one_based - 1];
+    };
+    const auto get_int = [&](long long one_based) -> long long {
+        if (one_based <= 0 || one_based > n_idat) return 0;
+        return idat1[one_based - 1];
+    };
+    const auto level_val = [&](const double* arr, long long idx) -> double {
+        if (idx <= 0 || idx > n_levels) return 0.0;
+        double v = arr[idx];
+        return std::isfinite(v) ? v : 0.0;
+    };
+    const auto emit_one = [&](long long term_index, long long rec, long long role, long long row, long long col,
+                              long long id1, long long id2, long long raw_row, long long raw_col, long long clamped,
+                              const double ans[6], long long emitted_terms) {
+        long long* oi = out_i64 + 16 * emitted_terms;
+        double* of = out_f64 + 4 * emitted_terms;
+        oi[0] = term_index; oi[1] = rec; oi[2] = 49; oi[3] = 7; oi[4] = ion_index; oi[5] = ion_stage; oi[6] = role;
+        oi[7] = row; oi[8] = col; oi[9] = id1; oi[10] = id2; oi[11] = id1; oi[12] = id2;
+        oi[13] = raw_row; oi[14] = raw_col; oi[15] = clamped;
+        of[0] = ans[0]; of[1] = ans[1]; of[2] = ans[2]; of[3] = ans[3];
+    };
+
+    long long seen = 0, supported = 0, emitted_terms = 0, scalar_rows = 0, matrix_terms = 0;
+    long long invalid = 0, no_pairs = 0, bad_context = 0, outside_grid = 0, overflow = 0;
+    for (int c = 0; c < n_candidates; ++c) {
+        ++seen;
+        const long long rec = records[c];
+        const long long nreal = nreal_arr[c];
+        const long long real_ptr = real_ptr_arr[c];
+        const long long nint = nint_arr[c];
+        const long long int_ptr = int_ptr_arr[c];
+        if (nreal < 4 || nint < 4) { ++invalid; continue; }
+        const long long id1 = get_int(int_ptr + nint - 2);
+        const long long parent_offset = std::max(0LL, get_int(int_ptr + nint - 4));
+        const long long id2 = nlevp + parent_offset - 1;
+        if (id1 <= 0 || id1 > nlevp || id2 <= 0) { ++invalid; continue; }
+        const double bound_energy = level_val(level_energy_ev, id1);
+        const double continuum_energy = level_val(level_energy_ev, nlevp);
+        double threshold = 0.0;
+        const double ionpot = level_val(level_ionpot_ev, id1);
+        const double cont = level_val(level_continuum_ev, id1);
+        if (ionpot > 0.0) threshold = std::max(ionpot - bound_energy, 0.0);
+        else if (cont > 0.0) threshold = std::max(cont - bound_energy, 0.0);
+        else threshold = std::max(continuum_energy - bound_energy, 0.0);
+        const double bound_g = level_val(level_weight, id1);
+        const double continuum_g = level_val(level_weight, nlevp);
+        const double dest_g = (id2 <= nlevp) ? level_val(level_weight, id2) : continuum_g;
+        const double dest_energy = (id2 <= nlevp) ? level_val(level_energy_ev, id2) : continuum_energy;
+        if (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0) { ++bad_context; continue; }
+        const int n_pairs0 = static_cast<int>(nreal / 2);
+        if (n_pairs0 < 2) { ++no_pairs; continue; }
+        std::vector<double> e_ryd; e_ryd.reserve(std::min(n_grid, n_pairs0 + 32));
+        std::vector<double> sigma; sigma.reserve(std::min(n_grid, n_pairs0 + 32));
+        for (int j = 0; j < n_pairs0; ++j) {
+            e_ryd.push_back(get_real(real_ptr + 2 * j));
+            sigma.push_back(std::max(0.0, get_real(real_ptr + 2 * j + 1) * 1.0e-18));
+        }
+        // phextrap.f90-like extension from the source's ntmp-1 physical point.
+        int base = std::max(static_cast<int>(e_ryd.size()) - 2, 0);
+        double e1 = e_ryd[base] * 13.6 + threshold;
+        double s1 = sigma[base];
+        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
+            double e2 = e1 * 1.3;
+            double s2 = s1 / (1.3 * 1.3 * 1.3);
+            e_ryd.push_back((e2 - threshold) / 13.6);
+            sigma.push_back(s2);
+            e1 = e2; s1 = s2;
+        }
+        const int ntmp = std::min(static_cast<int>(e_ryd.size()), static_cast<int>(sigma.size()));
+        if (ntmp <= 0) { ++no_pairs; continue; }
+        std::vector<double> sgbar(n_grid, 0.0);
+        const int numcon2 = std::max(2, n_grid / 50);
+        const int nphint_1 = n_grid - numcon2;
+        std::vector<double> xs(ntmp), ys(ntmp);
+        for (int j = 0; j < ntmp; ++j) { xs[j] = threshold + e_ryd[j] * ryd_ev; ys[j] = std::max(0.0, sigma[j]); }
+        int nb1 = lower_bracket(xs[0], nphint_1);
+        if (nb1 + 1 >= nphint_1) { ++outside_grid; continue; }
+        sgbar[std::max(0, nb1 - 1)] = 0.0; sgbar[nb1] = 0.0;
+        int k = nb1, j = 0;
+        double egrid = epi_ev[k], e2 = xs[j], s2 = ys[j];
+        if (egrid < e2 && k + 1 < n_grid) { ++k; egrid = epi_ev[k]; }
+        double e1o = e2, e2o = e2, s2o = s2, s2t = s2, e2t = egrid, integral = 0.0;
+        bool done = false; int iterations = 0, max_iter = std::max(8, 4 * (n_grid + ntmp));
+        while (!done && iterations < max_iter && k < n_grid) {
+            ++iterations; bool advanced = false;
+            while (e2 < egrid && j < ntmp - 2) {
+                ++j; e2o = e2; s2o = s2; e2 = xs[j]; s2 = ys[j];
+                integral += (s2 + s2o) * (e2 - e2o) / 2.0; advanced = true;
+            }
+            if (!advanced && iterations == 1) { e2o = e2; s2o = s2; }
+            integral -= (s2 + s2o) * (e2 - e2o) / 2.0;
+            e2t = egrid;
+            s2t = (e2 - e2o > 1.0e-8) ? (s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o + 1.0e-24)) : s2o;
+            integral += (s2t + s2o) * (e2t - e2o) / 2.0;
+            double denom = egrid - e1o;
+            sgbar[k] = (std::abs(denom) > 1.0e-36) ? integral / denom : 0.0;
+            e1o = egrid; ++k; if (k >= n_grid) break; egrid = epi_ev[k];
+            while (egrid < e2 && k < n_grid - 1) {
+                e2t = egrid;
+                s2t = (e2 - e2o > 1.0e-8) ? (s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o)) : s2o;
+                integral = s2t * (egrid - e1o);
+                denom = egrid - e1o;
+                sgbar[k] = (std::abs(denom) > 1.0e-36) ? integral / denom : 0.0;
+                e1o = egrid; ++k; if (k >= n_grid) break; egrid = epi_ev[k];
+            }
+            integral = (s2 + s2t) * (e2 - e2t) / 2.0;
+            if (k >= nphint_1 - 1 || j >= ntmp - 2) done = true;
+        }
+        int klmax = std::max(nb1, k - 1);
+        if (iterations >= max_iter || nb1 >= klmax || nb1 >= n_grid) { ++outside_grid; continue; }
+        const double t_1e4 = temperature_k / 1.0e4;
+        const double ne = hydrogen_density_cm3 * electron_fraction_xee;
+        const double q2 = 2.07e-16 * ne * std::pow(temperature_k, -1.5);
+        const double rs = q2 / std::max(continuum_g, 1.0e-300);
+        const double rnissel = bound_g * rs;
+        const double ethtmp = std::max(0.0, threshold - continuum_energy);
+        const double exponent_energy = std::max(0.0, ethtmp + ryd_ev * e_ryd[0]);
+        const double rnist = rnissel * expo(-exponent_energy / kt_ev_per_1e4k / std::max(t_1e4, 1.0e-300));
+        const double ptmp_sum = ptmp1_arr[c] + ptmp2_arr[c];
+        const double bktm = kboltz_erg_k * temperature_k / erg_per_ev;
+        if (bktm <= 0.0) { ++bad_context; continue; }
+        double sumr = 0.0, sumh = 0.0, sumh2 = 0.0, sumi = 0.0, sumc = 0.0, sumc2 = 0.0;
+        double sgtpp = sgbar[nb1];
+        double bremtmpp = bremsa[nb1] / 12.56;
+        double epiip = epi_ev[nb1];
+        double temprp = (epiip != 0.0) ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
+        double temphp = temprp * epiip;
+        double temphp2 = temprp * (epiip - threshold);
+        double exptst = (epiip - threshold) / bktm;
+        double exptmpp = expo(-exptst);
+        double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+        double tempip = (epiip != 0.0) ? rnist * bbnurjp * sgtpp * exptmpp / epiip * ptmp_sum : 0.0;
+        double tempcp = tempip * epiip;
+        double tempcp2 = tempip * (epiip - threshold);
+        int kl = nb1;
+        while (kl < klmax && kl + 1 < n_grid) {
+            sgtpp = sgbar[kl + 1];
+            bremtmpp = bremsa[kl + 1] / 12.56;
+            double epii = epi_ev[kl]; epiip = epi_ev[kl + 1];
+            double tempr = temprp;
+            temprp = (epiip != 0.0) ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
+            double wwir = (epiip - epii) / 2.0;
+            sumr += tempr * wwir + temprp * wwir;
+            double temph = temphp, temph2 = temphp2;
+            temphp = temprp * epiip;
+            temphp2 = temprp * (epiip - threshold);
+            sumh += temph * wwir + temphp * wwir;
+            sumh2 += temph2 * wwir + temphp2 * wwir;
+            double exptsto = exptst;
+            exptst = (epiip - threshold) / bktm;
+            if (exptsto < 200.0) {
+                exptmpp = expo(-exptst);
+                bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+                double tempi = tempip;
+                double tempip_unescaped = (epiip != 0.0) ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip : 0.0;
+                tempip = tempip_unescaped * ptmp_sum;
+                sumi += tempi * wwir + tempip * wwir;
+                double tempc = tempcp, tempc2 = tempcp2;
+                tempcp = tempip * epiip;
+                tempcp2 = tempip * (epiip - threshold);
+                sumc += tempc * wwir + tempcp * wwir;
+                sumc2 += tempc2 * wwir + tempcp2 * wwir;
+            }
+            ++kl;
+        }
+        double ans[6] = {sumr, sumi, -sumc * erg_per_ev, -sumh * erg_per_ev, -sumc2 * erg_per_ev, -sumh2 * erg_per_ev};
+        const double energy_difference = std::abs(dest_energy - bound_energy);
+        const double den6 = std::max(1.0e-43, std::abs(ans[3]) - threshold * erg_per_ev * ans[0]);
+        const double den5 = std::max(1.0e-43, std::abs(ans[2]) - threshold * erg_per_ev * ans[1]);
+        ans[5] *= (std::abs(ans[3]) - energy_difference * erg_per_ev * ans[0]) / den6;
+        ans[4] *= (std::abs(ans[2]) - energy_difference * erg_per_ev * ans[1]) / den5;
+        if (!finite6(ans[0], ans[1], ans[2], ans[3], ans[4], ans[5])) { ++bad_context; continue; }
+        if (emitted_terms + 5 > max_terms) { ++overflow; break; }
+        // Scalar pirt/rrrt contribution.
+        emit_one(term_start + emitted_terms, rec, 5, 0, 0, id1, id2, 0, 0, 0, ans, emitted_terms);
+        ++emitted_terms; ++scalar_rows;
+        const long long raw_lower = compact_start + id1 - 1;
+        const long long raw_upper = compact_start + id2 - 1;
+        long long lower = raw_lower, upper = raw_upper;
+        if (lower > basis_n_rows) lower = basis_n_rows;
+        if (upper > basis_n_rows) upper = basis_n_rows;
+        if (lower <= 0 || upper <= 0) { ++invalid; continue; }
+        const long long clamped = (raw_lower != lower || raw_upper != upper) ? 1LL : 0LL;
+        const long long rows[4] = {upper, lower, lower, upper};
+        const long long cols[4] = {lower, upper, lower, upper};
+        const long long raw_rows[4] = {raw_upper, raw_lower, raw_lower, raw_upper};
+        const long long raw_cols[4] = {raw_lower, raw_upper, raw_lower, raw_upper};
+        const long long roles[4] = {1, 2, 3, 4};
+        const double term_ans[4][4] = {
+            {ans[0], ans[1], 0.0, 0.0},
+            {ans[1], ans[0], 0.0, 0.0},
+            {-ans[0], -ans[0], ans[3] * hydrogen_density_cm3, ans[5] * hydrogen_density_cm3},
+            {-ans[1], -ans[1], -ans[2] * hydrogen_density_cm3, -ans[4] * hydrogen_density_cm3},
+        };
+        for (int m = 0; m < 4; ++m) {
+            double a[6] = {term_ans[m][0], term_ans[m][1], term_ans[m][2], term_ans[m][3], 0.0, 0.0};
+            emit_one(term_start + emitted_terms, rec, roles[m], rows[m], cols[m], id1, id2, raw_rows[m], raw_cols[m], clamped, a, emitted_terms);
+            ++emitted_terms; ++matrix_terms;
+        }
+        ++supported;
+    }
+    out_stats[0] = seen;
+    out_stats[1] = supported;
+    out_stats[2] = emitted_terms;
+    out_stats[3] = supported > 0 ? 1 : 0;
+    out_stats[4] = matrix_terms;
+    out_stats[5] = scalar_rows;
+    out_stats[6] = invalid;
+    out_stats[7] = no_pairs;
+    out_stats[8] = bad_context;
+    out_stats[9] = outside_grid;
+    out_stats[10] = overflow;
+    out_stats[11] = n_candidates - supported;
+    write_message(errbuf, errbuf_size, supported > 0 ? "xstar_matrix_accumulate_mg_ion_rate7_type49_terms evaluated" : "xstar_matrix_accumulate_mg_ion_rate7_type49_terms no supported records");
     return 0;
 }
 

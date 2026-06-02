@@ -55,10 +55,10 @@ It contains selected Mg line/emissivity/opacity helpers, including type-4 line e
 
 ### `libxstar_matrix.so`
 
-Thermal/statistical-equilibrium matrix backend.  Current implementation name after v0.6.0a11:
+Thermal/statistical-equilibrium matrix backend.  Current implementation name after v0.6.0a13:
 
 ```text
-xstar_matrix_mg_ion_direct_accumulator_v8
+xstar_matrix_mg_ion_direct_accumulator_type49_v10
 ```
 
 It contains:
@@ -68,8 +68,9 @@ It contains:
 - Mg type-51 C++ `ucalc` + matrix-term construction.
 - Mg ion source-pointer traversal.
 - Experimental Mg ion direct accumulator for selected simple payloads.
+- Experimental Mg rate_type=7/data_type=49 photoionization-style direct accumulator.
 
-The direct accumulator is opt-in and coverage-gated until full product parity and runtime improvement are confirmed.  The v0.6.0a11 path avoids the a9/a10 whole-ATDB per-ion allocation by caching compact arrays and sizing output buffers from the active ion source-record count.  It still falls back unless the supported-record coverage gate passes.
+The direct accumulator is opt-in and coverage-gated until full product parity and runtime improvement are confirmed.  The v0.6.0a11 path avoids the a9/a10 whole-ATDB per-ion allocation by caching compact arrays and sizing output buffers from the active ion source-record count.  v0.6.0a13 adds an experimental rate_type=7/data_type=49 photoionization branch that decodes packed type-49 cross-section payloads and evaluates a phint53-like rate integral in C++.
 
 
 Useful experimental controls:
@@ -82,6 +83,10 @@ export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1
 export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION=0.05
 export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_RECORDS=8
 export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY=1
+
+# Enable the experimental type-49 photoionization branch inside the direct accumulator.
+export XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=1
+export XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_MIN_RECORDS=1
 ```
 
 ## Backend selection and library overrides
