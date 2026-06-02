@@ -304,8 +304,8 @@ def calc_ion_rates(
     cpp_prematrix_stats: Dict[str, float] = {}
     if (
         int(element_z) == 12
-        and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
-        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
     ):
         try:
             from .cpp_backend_matrix import (

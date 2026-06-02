@@ -79,7 +79,7 @@ Useful experimental controls:
 
 ```bash
 # Keep disabled for normal runs unless testing the direct accumulator.
-export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1  # default in v0.6.0a18+
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1  # opt-in in v0.6.0a21+
 
 # Default coverage gate; prevents low-coverage experiments from slowing runs.
 export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION=0.05
@@ -109,7 +109,7 @@ final_product_build.spectrum.binemis_profile_seconds ~43-44 s
 Useful controls:
 
 ```bash
-export XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1   # default in v0.6.0a19+
+export XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1   # opt-in in v0.6.0a21+
 export XSTAR_ATOMIC_EMISSIVITY_LIB=/path/to/libxstar_emissivity.so
 ```
 
@@ -137,6 +137,10 @@ For source-tree runs, no override should be needed when the libraries are built 
 
 ## v0.6.0a20 parity note
 
-`XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1` remains the default for the validated Mg direct accumulator, but `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP` defaults to `0` because the fast type-53 path changed thermal convergence diagnostics (`h-c(%)` and final iteration column) relative to the a15/type49-only path. Enable it explicitly only for performance experiments until type-53 parity is corrected.
+`XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP`, type-49/type-53 direct accumulators, pre-matrix photo shortcuts, and C++ binemis are opt-in in v0.6.0a21 because original-XSTAR parity, not Python-version-to-Python-version parity, is now the default gate.
 
 The binemis C++ backend stores only numeric timing fields so output-writer timing totals can be computed safely.
+
+## v0.6.0a21 parity-first defaults
+
+C++ shared libraries remain buildable in the flat cpp directory, but the benchmark wrapper now defaults new C++ physics and output accelerators to opt-in only until original-XSTAR xout_step.log and FITS parity gates pass.  Enable individual paths explicitly for experiments, for example `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1`, `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=1`, `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP=1`, or `XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1`.

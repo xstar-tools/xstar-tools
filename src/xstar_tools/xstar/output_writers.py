@@ -679,7 +679,7 @@ def build_binemis_spectrum(
     # and packs compact line metadata, but C++ owns the expensive voigte/profile
     # expansion plus final active-row packing.  Fallback preserves the validated
     # Python implementation when the optional library is absent or disabled.
-    if os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "1") != "0" and _ranked_nonzero.shape[0] > 0:
+    if os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0") not in {"0", "false", "no", "off"} and _ranked_nonzero.shape[0] > 0:
         _cpp_t0 = time.perf_counter()
         try:
             from .cpp_backend_emissivity import build_binemis_profile_cpp
@@ -1276,6 +1276,148 @@ def _rewrite_fits_ascii_null_padding(path: str | Path) -> None:
         file_path.write_bytes(data)
 
 
+def _fits_ascii_table_width(tform: str) -> int:
+    """Byte width for simple FITS ASCII TABLE TFORM values."""
+    text = str(tform).strip().upper().replace(" ", "")
+    if not text:
+        return 0
+    if text.startswith("A"):
+        digits = text[1:]
+        return int(digits) if digits.isdigit() else 0
+    if text.startswith(("E", "F", "D", "I")):
+        digits = ""
+        for char in text[1:]:
+            if char.isdigit():
+                digits += char
+            elif digits:
+                break
+        return int(digits) if digits else 0
+    return 0
+
+
+def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
+    """Rewrite ASCII TABLE rows with source-like one-column gaps.
+
+    Astropy writes ASCII TABLE columns back-to-back.  XSTAR's Fortran FITS
+    writers leave one blank byte between successive TABLE fields, so the
+    source headers have TBCOLn = previous start + previous width + 1.  This
+    post-write rewrite restores that row layout for source-parity size/shape
+    checks without changing column values or table schemas.
+    """
+    import os
+
+    if str(os.environ.get("XSTAR_ATOMIC_FITS_ASCII_SOURCE_GAPS", "1")).strip().lower() in {"0", "false", "no", "off"}:
+        return
+    file_path = Path(path)
+    raw = file_path.read_bytes()
+    out = bytearray()
+    pos = 0
+    changed = False
+    total = len(raw)
+
+    def _card_value(cards: list[str], key: str) -> str | None:
+        prefix = key.ljust(8) + "="
+        for card in cards:
+            if card.startswith(prefix):
+                return card[10:80].split("/", 1)[0].strip().strip("'").strip()
+        return None
+
+    def _replace_or_append(cards: list[str], key: str, value: int) -> list[str]:
+        prefix = key.ljust(8) + "="
+        new = f"{key:<8}= {int(value):>20d}".ljust(80)
+        result = []
+        replaced = False
+        for card in cards:
+            if card.startswith(prefix):
+                result.append(new)
+                replaced = True
+            else:
+                result.append(card[:80].ljust(80))
+        if not replaced:
+            for idx, card in enumerate(result):
+                if card.startswith("END"):
+                    result.insert(idx, new)
+                    break
+            else:
+                result.append(new)
+        return result
+
+    while pos < total:
+        header_start = pos
+        cards: list[str] = []
+        while pos + 80 <= total:
+            card = raw[pos:pos + 80].decode("ascii", "replace")
+            cards.append(card)
+            pos += 80
+            if card.startswith("END"):
+                break
+        if not cards:
+            break
+        header_unpadded_len = pos - header_start
+        header_padded_len = ((header_unpadded_len + 2879) // 2880) * 2880
+        header_block = raw[header_start:header_start + header_padded_len]
+        pos = header_start + header_padded_len
+
+        xtension = (_card_value(cards, "XTENSION") or "").upper()
+        bitpix = int(_card_value(cards, "BITPIX") or "8")
+        naxis = int(_card_value(cards, "NAXIS") or "0")
+        naxis1 = int(_card_value(cards, "NAXIS1") or "0")
+        naxis2 = int(_card_value(cards, "NAXIS2") or "0")
+        pcount = int(_card_value(cards, "PCOUNT") or "0")
+        gcount = int(_card_value(cards, "GCOUNT") or "1")
+        tfields = int(_card_value(cards, "TFIELDS") or "0")
+        data_size = 0
+        if naxis > 0:
+            if "TABLE" in xtension and naxis1 > 0 and naxis2 > 0:
+                data_size = (naxis1 * naxis2 + pcount) * gcount
+            else:
+                data_size = abs(bitpix) // 8
+                for axis in range(1, naxis + 1):
+                    data_size *= int(_card_value(cards, f"NAXIS{axis}") or "0")
+                data_size = (data_size + pcount) * gcount
+        data_block_len = ((data_size + 2879) // 2880) * 2880
+        data_payload = raw[pos:pos + data_size]
+        data_padding = raw[pos + data_size:pos + data_block_len]
+        pos += data_block_len
+
+        if "TABLE" in xtension and "BINTABLE" not in xtension and naxis1 > 0 and naxis2 > 0 and tfields > 1:
+            widths = [_fits_ascii_table_width(_card_value(cards, f"TFORM{i}") or "") for i in range(1, tfields + 1)]
+            starts = [int(_card_value(cards, f"TBCOL{i}") or "0") - 1 for i in range(1, tfields + 1)]
+            if all(width > 0 for width in widths) and all(start >= 0 for start in starts):
+                target_starts = []
+                cur = 0
+                for idx, width in enumerate(widths):
+                    target_starts.append(cur)
+                    cur += width + (1 if idx < len(widths) - 1 else 0)
+                target_naxis1 = cur
+                if target_naxis1 > naxis1 or starts != target_starts:
+                    new_payload = bytearray()
+                    for row in range(naxis2):
+                        old_row = data_payload[row * naxis1:(row + 1) * naxis1]
+                        new_row = bytearray(b" " * target_naxis1)
+                        for start, width, target_start in zip(starts, widths, target_starts):
+                            field = old_row[start:start + width]
+                            new_row[target_start:target_start + width] = field.ljust(width, b" ")[:width]
+                        new_payload.extend(new_row)
+                    cards = _replace_or_append(cards, "NAXIS1", target_naxis1)
+                    for idx, start in enumerate(target_starts, start=1):
+                        cards = _replace_or_append(cards, f"TBCOL{idx}", start + 1)
+                    header_text = "".join(card[:80].ljust(80) for card in cards)
+                    header_bytes = header_text.encode("ascii", "replace")
+                    header_bytes += b" " * (((len(header_bytes) + 2879) // 2880) * 2880 - len(header_bytes))
+                    data_bytes = bytes(new_payload)
+                    data_bytes += b" " * (((len(data_bytes) + 2879) // 2880) * 2880 - len(data_bytes))
+                    out.extend(header_bytes)
+                    out.extend(data_bytes)
+                    changed = True
+                    continue
+        out.extend(header_block)
+        out.extend(data_payload)
+        out.extend(data_padding)
+    if changed:
+        file_path.write_bytes(bytes(out))
+
+
 def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, *, overwrite: bool) -> None:
     """Write a FITS file, then blank-pad binary A columns without Astropy re-encoding.
 
@@ -1286,6 +1428,7 @@ def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, 
     """
     hdul.writeto(path, overwrite=overwrite, checksum=False)
     _rewrite_fits_ascii_null_padding(path)
+    _rewrite_fits_ascii_table_intercolumn_gaps(path)
 
 
 def _record_fits_timing(

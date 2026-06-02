@@ -1032,6 +1032,11 @@ def write_xout_abund1(
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     hdul.writeto(output, overwrite=overwrite, checksum=True)
+    try:
+        from .output_writers import _rewrite_fits_ascii_table_intercolumn_gaps
+        _rewrite_fits_ascii_table_intercolumn_gaps(output)
+    except Exception:
+        pass
     if "pprint(11)" not in buf.source_calls:
         buf.source_calls.append("pprint(11)")
     return str(output)
