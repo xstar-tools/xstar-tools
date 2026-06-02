@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import math
+import os
 
 import numpy as np
 
@@ -293,7 +294,80 @@ def calc_ion_rates(
     n_selected = len(selected_records)
     retain_contributions = bool(getattr(context, "retain_contributions", True))
 
+    # v0.6.0a18: optional Mg pre-matrix shortcut for the same rate_type=7
+    # photoionization families that now dominate/benefit from the direct C++
+    # accumulator in the level-matrix pass.  The preliminary calc_ion_rates
+    # source path uses ptmp1=ptmp2=0.5; pass the same escape factors and skip
+    # only records that C++ reports as successfully evaluated.
+    cpp_prematrix_records: set[int] = set()
+    cpp_prematrix_pirt = 0.0
+    cpp_prematrix_stats: Dict[str, float] = {}
+    if (
+        int(element_z) == 12
+        and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+    ):
+        try:
+            from .cpp_backend_matrix import (
+                accumulate_mg_ion_rate7_type49_terms_cpp_detailed,
+                accumulate_mg_ion_rate7_type53_terms_cpp_detailed,
+            )
+
+            cand49: List[Tuple[int, float, float]] = []
+            cand53: List[Tuple[int, float, float]] = []
+            for _rate_slot, _record in selected_records:
+                _header = master.header(_record)
+                if int(_header.rate_type) != 7:
+                    continue
+                if int(_header.data_type) == 49:
+                    cand49.append((int(_record), 0.5, 0.5))
+                elif int(_header.data_type) == 53:
+                    cand53.append((int(_record), 0.5, 0.5))
+
+            for _label, _func, _cands in (
+                ("type49", accumulate_mg_ion_rate7_type49_terms_cpp_detailed, cand49),
+                ("type53", accumulate_mg_ion_rate7_type53_terms_cpp_detailed, cand53),
+            ):
+                if not _cands:
+                    continue
+                _rows, _message, _stats = _func(
+                    master=master,
+                    derived=derived,
+                    levels=levels,
+                    radiation=context.radiation,
+                    ion_index=int(ion_index),
+                    ion_stage=int(ion_stage),
+                    compact_start=1,
+                    basis_n_rows=max(1, int(nlev)),
+                    term_start=1,
+                    temperature_k=float(context.temperature_k),
+                    hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+                    electron_fraction_xee=float(context.electron_fraction_xee),
+                    nlevp=int(nlev),
+                    candidates=_cands,
+                )
+                _supported_records = {int(row.get("record", 0)) for row in _rows if int(row.get("record", 0)) > 0}
+                for _row in _rows:
+                    if str(_row.get("role")) == "scalar_pirt" and int(_row.get("idest1", 0)) == 1:
+                        cpp_prematrix_pirt += float(_row.get("aj1", 0.0))
+                cpp_prematrix_records.update(_supported_records)
+                for _k, _v in (_stats or {}).items():
+                    try:
+                        cpp_prematrix_stats[f"{_label}_{_k}"] = cpp_prematrix_stats.get(f"{_label}_{_k}", 0.0) + float(_v)
+                    except (TypeError, ValueError):
+                        pass
+        except Exception as _exc:
+            cpp_prematrix_records = set()
+            cpp_prematrix_pirt = 0.0
+            cpp_prematrix_stats = {"fallback": 1.0, "error_hash": float(abs(hash(str(_exc))) % 1000000)}
+
+    if cpp_prematrix_records:
+        pirti += float(cpp_prematrix_pirt)
+        n_evaluated += len(cpp_prematrix_records)
+
     for rate_slot, record in selected_records:
+        if int(record) in cpp_prematrix_records:
+            continue
         header = master.header(record)
         ints = master.record_integers(record)
         idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
@@ -425,6 +499,9 @@ def calc_ion_rates(
             "local_lfpi": 1,
             "cached_selected_records": isinstance(context.reusable_work_arrays, dict),
             "retain_contributions": retain_contributions,
+            "prematrix_cpp_records": len(cpp_prematrix_records),
+            "prematrix_cpp_pirt": float(cpp_prematrix_pirt),
+            "prematrix_cpp_stats": dict(cpp_prematrix_stats),
         },
     )
 

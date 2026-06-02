@@ -36,7 +36,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_direct_accumulator_type49_type53_v12";
+    return "xstar_matrix_mg_ion_direct_accumulator_type49_type53_v13";
 }
 
 int xstar_matrix_feature_flags() {

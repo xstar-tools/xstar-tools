@@ -37,6 +37,30 @@ _CPP_LIB: ctypes.CDLL | None = None
 _CPP_LOAD_ERROR: BaseException | None = None
 _CPP_LIBRARY_PATH: str | None = None
 _COMPACT_ARRAY_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+_SOURCE_HEADER_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _record_header_arrays_from_ptrs(ptrs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return cached 1-based record rate/data-type arrays for source scans.
+
+    The Mg source scanner is called once per ion.  Rebuilding these two
+    n_records+1 arrays for every ion was responsible for most of the
+    source-scan packing time after v0.6.0a16 moved type-49/type-53 to C++.
+    Cache by the contiguous ptrs array identity/shape and keep the flat C++ ABI.
+    """
+    n_records = int(ptrs.shape[0])
+    key = (id(ptrs), n_records)
+    cached = _SOURCE_HEADER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    record_data_type = np.zeros(n_records + 1, dtype=np.int64)
+    record_rate_type = np.zeros(n_records + 1, dtype=np.int64)
+    if n_records:
+        record_data_type[1:] = ptrs[:, 1]
+        record_rate_type[1:] = ptrs[:, 2]
+    cached = (record_rate_type, record_data_type)
+    _SOURCE_HEADER_CACHE[key] = cached
+    return cached
 
 
 def _compact_matrix_arrays(master: Any, derived: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -784,16 +808,10 @@ def scan_mg_ion_source_records_cpp_detailed(
     if lib is None or not hasattr(lib, "xstar_matrix_scan_mg_ion_source_records"):
         raise RuntimeError("C++ Mg ion source scanner is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     t0 = time.perf_counter()
-    npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
-    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
-    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
-    ptrs = np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64)
+    npfi_all, npar, npnxt, ptrs, _rdat, _idat = _compact_matrix_arrays(master, derived)
+    npfi = np.ascontiguousarray(npfi_all[:, int(ion_index)])
     n_records = int(ptrs.shape[0])
-    record_data_type = np.zeros(n_records + 1, dtype=np.int64)
-    record_rate_type = np.zeros(n_records + 1, dtype=np.int64)
-    if n_records:
-        record_data_type[1:] = ptrs[:, 1]
-        record_rate_type[1:] = ptrs[:, 2]
+    record_rate_type, record_data_type = _record_header_arrays_from_ptrs(ptrs)
     max_out = max(1, n_records)
     out_i64 = np.zeros(max_out * 8, dtype=np.int64)
     out_stats = np.zeros(12, dtype=np.int64)

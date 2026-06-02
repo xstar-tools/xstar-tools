@@ -664,8 +664,17 @@ def build_binemis_spectrum(
     _profile_t0 = time.perf_counter()
     _profile_lines_attempted = 0
     _profile_lines_applied = 0
-    for kl_one_based in range(1, n + 1):
-        for mm_one_based in range(1, 11):
+    # v0.6.0a18: binemis ranking is sparse.  The source loop is kl outer,
+    # rank inner, but most ranked slots are zero.  Iterate only nonzero
+    # ranked entries in the same kl/mm order instead of scanning
+    # ncn2 * nrank Python slots.
+    _ranked_nonzero = np.argwhere(np.asarray(ranked[:10, :n]).T > 0)
+    if timing is not None:
+        timing["final_product_build.spectrum.binemis_profile_nonzero_ranked_slots"] = float(_ranked_nonzero.shape[0])
+        timing["final_product_build.spectrum.binemis_profile_scanned_slots_saved"] = float(max(0, n * 10 - int(_ranked_nonzero.shape[0])))
+    for _kl0, _mm0 in _ranked_nonzero:
+            kl_one_based = int(_kl0) + 1
+            mm_one_based = int(_mm0) + 1
             line_index = int(ranked[mm_one_based - 1, kl_one_based - 1])
             if line_index <= 0 or line_index > lum.shape[1]:
                 continue

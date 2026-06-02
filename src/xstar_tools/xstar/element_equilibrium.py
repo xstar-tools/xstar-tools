@@ -1960,7 +1960,7 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
                     cpp_direct_rows, cpp_direct_accumulator_message, cpp_direct_accumulator_stats = accumulate_mg_ion_source_simple_terms_cpp_detailed(
                         master=master,
@@ -2051,7 +2051,7 @@ def assemble_element_matrix(
                             error=str(exc),
                         )
 
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
                     _type49_candidates = []
                     for _rec, _rt, _dt in source_record_iter:
@@ -2135,7 +2135,7 @@ def assemble_element_matrix(
                         )
 
 
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
                     _type53_candidates = []
                     for _rec, _rt, _dt in source_record_iter:

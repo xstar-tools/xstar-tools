@@ -77,7 +77,7 @@ Useful experimental controls:
 
 ```bash
 # Keep disabled for normal runs unless testing the direct accumulator.
-export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1  # default in v0.6.0a18+
 
 # Default coverage gate; prevents low-coverage experiments from slowing runs.
 export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION=0.05
