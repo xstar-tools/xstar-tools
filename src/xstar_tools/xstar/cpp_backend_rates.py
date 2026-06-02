@@ -52,12 +52,9 @@ def _candidate_library_paths() -> list[Path]:
         "libxstar_rates.dylib",
         "xstar_rates.dll",
     )
-    # Prefer the single shared-library location under source_port/cpp.
+    # Single shared-library location: src/xstar_tools/xstar/cpp/.
     for name in names:
         paths.append(here / "cpp" / name)
-    # Backward-compatible fallback for v0.5.53-v0.5.59 runtime copies.
-    for name in names:
-        paths.append(here / name)
     seen: set[str] = set()
     unique: list[Path] = []
     for path in paths:

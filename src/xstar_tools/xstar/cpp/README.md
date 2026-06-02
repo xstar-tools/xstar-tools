@@ -1,91 +1,92 @@
-# Optional C++ shared-library backend
+# xstar_tools.xstar C++ backend libraries
 
-This directory is intentionally aligned with the accepted future layout:
+This directory is the single location for optional XSTAR C++ backend sources and shared libraries.
 
 ```text
-xstar_tools.xstar.solver.backend
-src/xstar_atomic/source_port/cpp/
+src/xstar_tools/xstar/cpp/
+  level_population.cpp   -> libxstar_solver.so
+  rate_kernels.cpp       -> libxstar_rates.so
+  matrix_kernels.cpp     -> libxstar_matrix.so
+  build_lib.sh
+  Makefile
 ```
 
-v0.5.45 keeps one optional C++ kernel for the source-faithful dense
-`leqt2f` level-population solve. The Python implementation remains the
-reference backend. Build/install environments without a C++ compiler keep the
-pure-Python path.
+Do not copy the built `.so` files into `src/xstar_tools/xstar/`.  The Python loaders search this `cpp/` directory first and the build scripts now leave the artifacts here.
 
-The backend is a plain shared-object library, not a Python extension module.
-Python loads it with `ctypes` through `xstar_atomic.source_port.solver_backend`.
-
-## Build manually
+## Build
 
 From this directory:
 
 ```bash
 ./build_lib.sh
-```
-
-or:
-
-```bash
+# or
 make
 ```
 
-Both commands build:
+Both commands build only:
 
 ```text
-src/xstar_atomic/source_port/cpp/libxstar_solver.so
+src/xstar_tools/xstar/cpp/libxstar_solver.so
+src/xstar_tools/xstar/cpp/libxstar_rates.so
+src/xstar_tools/xstar/cpp/libxstar_matrix.so
 ```
 
-and copy it into the package runtime location:
+## Libraries
+
+### `libxstar_solver.so`
+
+Level-population / matrix-solve backend.  Current implementation name reported by provenance:
 
 ```text
+xstar_solver_so_leqt2f_v1
 ```
 
-The package loader searches the runtime location by default. You can override
-the path with:
+It accelerates the source-faithful `leqt2f`-style level-population solve while keeping the Python solver as fallback.
+
+### `libxstar_rates.so`
+
+Rates/emissivity/opacity helper backend.  Current implementation name reported by provenance:
+
+```text
+xstar_rates_mg_type7_type4_linopac_type50_voigt_v1
+```
+
+It contains selected Mg line/emissivity/opacity helpers, including type-4 line emissivity, line-profile/linopac work, and type-50 related kernels.
+
+### `libxstar_matrix.so`
+
+Thermal/statistical-equilibrium matrix backend.  Current implementation name after v0.6.0a10:
+
+```text
+xstar_matrix_mg_ion_direct_accumulator_v7
+```
+
+It contains:
+
+- Mg type-7 matrix-term construction from Python-evaluated `ucalc` rows.
+- Dense matrix fill helpers.
+- Mg type-51 C++ `ucalc` + matrix-term construction.
+- Mg ion source-pointer traversal.
+- Experimental Mg ion direct accumulator for selected simple payloads.
+
+The direct accumulator is opt-in until full product parity and runtime improvement are confirmed.
+
+## Backend selection and library overrides
+
+Normal runs use `auto` backend selection through the Python wrapper.  Explicit shared-library overrides are available when needed:
 
 ```bash
 export XSTAR_ATOMIC_SOLVER_LIB=/path/to/libxstar_solver.so
+export XSTAR_ATOMIC_RATES_LIB=/path/to/libxstar_rates.so
+export XSTAR_ATOMIC_MATRIX_LIB=/path/to/libxstar_matrix.so
 ```
 
-## Backend selection
+For source-tree runs, no override should be needed when the libraries are built in this directory.
 
-```bash
---solver-backend python
---solver-backend cpp
---solver-backend auto
-```
+## Development rules
 
-`python` is the source-faithful reference backend. `cpp` requires the shared
-library. `auto` uses the shared library if available and otherwise falls back to
-Python.
-
-## Development note
-
-Keep the C ABI small and stable. Python owns ATDB loading, runtime state,
-radial stepping, diagnostics, and FITS writing. C++ should receive compact
-numeric arrays and return compact numeric arrays. This makes the code easy to
-move later into the accepted `xstar_tools.xstar.solver` package layout.
-
-
-## v0.5.45 path change
-
-The C++ sources and build files now live directly under `src/xstar_atomic/source_port/cpp/`. The extra `xstar_solver/` subdirectory was removed because the shared-library name `libxstar_solver.so` already identifies the backend purpose. The loader now searches `src/xstar_atomic/source_port/cpp/libxstar_solver.so` first. Historical runtime copies beside `source_port/*.so` are only fallback paths.
-
-## v0.5.53 modular rates backend skeleton
-
-The source tree now builds a second plain shared library:
-
-```bash
-cd src/xstar_atomic/source_port/cpp
-./build_lib.sh
-# or: make
-```
-
-Artifacts copied beside the Python runtime modules:
-
-- `libxstar_solver.so` — existing level-population solver backend
-- `libxstar_rates.so` — new skeleton rates backend ABI
-
-The rates ABI currently verifies loading and dimensions only.  It is the stable
-entry point for future compact-array Mg rate-construction kernels and can later
-be linked into a standalone `xstar_tools_engine` executable.
+- Keep all C++ backend files in this directory.
+- Keep the ABI C-compatible and small.
+- Prefer coarse ion/element-level kernels over per-record `ctypes` calls.
+- Keep Python fallbacks available.
+- Do not enable experimental kernels by default until they show both parity and timing improvement.

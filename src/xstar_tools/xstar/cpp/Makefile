@@ -2,15 +2,14 @@ CXX ?= g++
 CXXFLAGS ?= -O3 -std=c++17 -fPIC -Wall -Wextra
 LDFLAGS ?= -shared
 
-DESTDIR ?= ..
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
 MATRIX_TARGET := libxstar_matrix.so
 TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET)
 
-.PHONY: all clean install runtime-copy
+.PHONY: all clean install
 
-all: $(TARGETS) runtime-copy
+all: $(TARGETS)
 
 $(SOLVER_TARGET): level_population.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
@@ -21,13 +20,8 @@ $(RATES_TARGET): rate_kernels.cpp
 $(MATRIX_TARGET): matrix_kernels.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
-runtime-copy: $(TARGETS)
-	mkdir -p $(DESTDIR)
-	cp $(SOLVER_TARGET) $(DESTDIR)/$(SOLVER_TARGET)
-	cp $(RATES_TARGET) $(DESTDIR)/$(RATES_TARGET)
-	cp $(MATRIX_TARGET) $(DESTDIR)/$(MATRIX_TARGET)
-
-install: runtime-copy
+install: all
+	@echo "Shared libraries are intentionally kept in this cpp/ directory."
 
 clean:
-	rm -f $(TARGETS) $(DESTDIR)/$(SOLVER_TARGET) $(DESTDIR)/$(RATES_TARGET) $(DESTDIR)/$(MATRIX_TARGET)
+	rm -f $(TARGETS)

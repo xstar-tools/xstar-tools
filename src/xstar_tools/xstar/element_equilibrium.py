@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1860,6 +1860,9 @@ def assemble_element_matrix(
             cpp_simple_payload_by_record: Dict[int, Dict[str, Any]] = {}
             cpp_simple_payload_message = ""
             cpp_simple_payload_stats: Dict[str, float] = {}
+            cpp_direct_accumulated_records: set[int] = set()
+            cpp_direct_accumulator_message = ""
+            cpp_direct_accumulator_stats: Dict[str, float] = {}
             if mg_ion_source_scan_cpp_enabled:
                 try:
                     source_rows, source_scan_cpp_message, source_scan_cpp_stats = scan_mg_ion_source_records_cpp_detailed(
@@ -1904,7 +1907,64 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+                try:
+                    cpp_direct_rows, cpp_direct_accumulator_message, cpp_direct_accumulator_stats = accumulate_mg_ion_source_simple_terms_cpp_detailed(
+                        master=master,
+                        derived=derived,
+                        ion_index=int(block.ion_index),
+                        ion_stage=int(block.ion_stage),
+                        ion_record=int(block.ion_record),
+                        compact_start=int(block.compact_start),
+                        basis_n_rows=int(basis.n_rows),
+                        term_start=len(terms) + 1,
+                        temperature_1e4k=float(context.temperature_k) / 1.0e4,
+                        electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                        neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+                        ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+                        hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+                        nlevp=int(block.nlev),
+                    )
+                    cpp_direct_terms = _matrix_terms_from_cpp_rows(cpp_direct_rows)
+                    cpp_direct_accumulated_records = {int(row["record"]) for row in cpp_direct_rows}
+                    terms.extend(cpp_direct_terms)
+                    n_eval += len(cpp_direct_accumulated_records)
+                    summary.n_records_evaluated += len(cpp_direct_accumulated_records)
+                    summary.n_matrix_terms += len(cpp_direct_terms)
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_direct_accumulator_cpp_kernel",
+                            float(cpp_direct_accumulator_stats.get("packing_seconds", 0.0)) + float(cpp_direct_accumulator_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_source_simple_terms",
+                            status="cpp",
+                            **cpp_direct_accumulator_stats,
+                        )
+                except Exception as exc:
+                    cpp_direct_accumulated_records = set()
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_direct_accumulator_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_source_simple_terms",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="fallback",
+                            error=str(exc),
+                        )
+
+            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
                     cpp_simple_rows, cpp_simple_payload_message, cpp_simple_payload_stats = eval_mg_ion_source_simple_payloads_cpp_detailed(
                         master=master,
@@ -1960,6 +2020,22 @@ def assemble_element_matrix(
                         rec = int(derived.npnxt[rec])
 
             for record, _source_rate_type, _source_data_type in source_record_iter:
+                if int(record) in cpp_direct_accumulated_records:
+                    record_results.append({
+                        "record": int(record),
+                        "data_type": int(_source_data_type),
+                        "rate_type": int(_source_rate_type),
+                        "status": UCalcStatus.EVALUATED.value,
+                        "ready": True,
+                        "ion_index": block.ion_index,
+                        "ion_stage": block.ion_stage,
+                        "nlev": block.nlev,
+                        "rates_backend": "cpp_matrix_mg_ion_direct_accumulator",
+                        "rates_backend_message": cpp_direct_accumulator_message,
+                    })
+                    n_seen += 1
+                    summary.n_records_seen += 1
+                    continue
                 header = master.header(record)
                 n_seen += 1
                 summary.n_records_seen += 1

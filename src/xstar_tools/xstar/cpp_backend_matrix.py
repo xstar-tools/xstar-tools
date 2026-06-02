@@ -50,10 +50,9 @@ def _candidate_library_paths() -> list[Path]:
         "libxstar_matrix.dylib",
         "xstar_matrix.dll",
     )
+    # Single shared-library location: src/xstar_tools/xstar/cpp/.
     for name in names:
         paths.append(here / "cpp" / name)
-    for name in names:
-        paths.append(here / name)
     seen: set[str] = set()
     unique: list[Path] = []
     for path in paths:
@@ -174,6 +173,18 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                     i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
                 ]
                 lib.xstar_matrix_eval_mg_ion_source_simple_payloads.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
+                lib.xstar_matrix_accumulate_mg_ion_source_simple_terms.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int,
+                    ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong,
+                    i64p, i64p, i64p, i64p, f64p, i64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_accumulate_mg_ion_source_simple_terms.restype = ctypes.c_int
             except AttributeError:
                 pass
             try:
@@ -878,6 +889,113 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
         "mg_ion_payload_type20_records": float(out_stats[10]),
         "mg_ion_payload_skipped_records": float(out_stats[11]),
         "mg_ion_payload_loop_guard_hits": float(out_stats[13]),
+    }
+    return rows, message, stats
+
+
+def accumulate_mg_ion_source_simple_terms_cpp_detailed(
+    *,
+    master: Any,
+    derived: Any,
+    ion_index: int,
+    ion_stage: int,
+    ion_record: int,
+    compact_start: int,
+    basis_n_rows: int,
+    term_start: int,
+    temperature_1e4k: float,
+    electron_density_cm3: float,
+    neutral_h_density_cm3: float,
+    ionized_h_density_cm3: float,
+    hydrogen_density_cm3: float,
+    nlevp: int,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Experimental direct Mg-ion accumulator for selected simple payloads.
+
+    C++ walks the Mg ion source-pointer chains, decodes selected simple
+    payloads, evaluates their rates, and emits matrix terms directly.  This is
+    opt-in until full benchmark parity and timing improvement are proven.
+    """
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_accumulate_mg_ion_source_simple_terms"):
+        raise RuntimeError("C++ Mg ion direct simple-term accumulator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    t0 = time.perf_counter()
+    npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
+    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
+    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
+    ptrs = np.ascontiguousarray(np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64))
+    rdat = np.ascontiguousarray(np.asarray(master.rdat1.numpy(copy=False), dtype=np.float64))
+    idat = np.ascontiguousarray(np.asarray(master.idat1.numpy(copy=False), dtype=np.int64))
+    n_records = int(ptrs.shape[0])
+    # Worst case is four terms per source record.  This is large but this
+    # experimental helper is opt-in and exists to validate direct emission.
+    max_terms = max(1, n_records * 4)
+    out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
+    out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
+    out_stats = np.zeros(14, dtype=np.int64)
+    packing_seconds = time.perf_counter() - t0
+    buf = ctypes.create_string_buffer(512)
+    k0 = time.perf_counter()
+    rc = lib.xstar_matrix_accumulate_mg_ion_source_simple_terms(
+        int(npfi.size), int(n_records), int(rdat.size), int(idat.size),
+        int(basis_n_rows), int(term_start),
+        int(ion_index), int(ion_stage), int(ion_record), int(compact_start), int(nlevp),
+        npfi, npar, npnxt, ptrs.ravel(), rdat, idat,
+        float(temperature_1e4k), float(electron_density_cm3),
+        float(neutral_h_density_cm3), float(ionized_h_density_cm3), float(hydrogen_density_cm3),
+        out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    cpp_kernel_seconds = time.perf_counter() - k0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_accumulate_mg_ion_source_simple_terms failed with code {rc}")
+    emitted_terms = int(out_stats[2])
+    oi = out_i64[: emitted_terms * 16].reshape((emitted_terms, 16)) if emitted_terms else np.zeros((0, 16), dtype=np.int64)
+    of = out_f64[: emitted_terms * 4].reshape((emitted_terms, 4)) if emitted_terms else np.zeros((0, 4), dtype=np.float64)
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted_terms):
+        role_code = int(oi[j, 6])
+        rows.append({
+            "term_index": int(oi[j, 0]),
+            "record": int(oi[j, 1]),
+            "data_type": int(oi[j, 2]),
+            "rate_type": int(oi[j, 3]),
+            "ion_index": int(oi[j, 4]),
+            "ion_stage": int(oi[j, 5]),
+            "role": _ROLE.get(role_code, f"role_{role_code}"),
+            "row": int(oi[j, 7]),
+            "column": int(oi[j, 8]),
+            "idest1": int(oi[j, 9]),
+            "idest2": int(oi[j, 10]),
+            "lower_endpoint": int(oi[j, 11]),
+            "upper_endpoint": int(oi[j, 12]),
+            "source_row_unclamped": int(oi[j, 13]),
+            "source_column_unclamped": int(oi[j, 14]),
+            "source_ipmat_clamped": bool(int(oi[j, 15])),
+            "ucalc_status": "evaluated",
+            "aj1": float(of[j, 0]),
+            "aj2": float(of[j, 1]),
+            "cj": float(of[j, 2]),
+            "cj2": float(of[j, 3]),
+        })
+    stats = {
+        "records_seen": float(out_stats[0]),
+        "records_supported": float(out_stats[1]),
+        "records_batched": float(out_stats[4]),
+        "cpp_calls": float(out_stats[3]),
+        "packing_seconds": float(packing_seconds),
+        "cpp_kernel_seconds": float(cpp_kernel_seconds),
+        "fallback_count": float(out_stats[12]),
+        "ucalc_cpp_applied": float(out_stats[1]),
+        "emitted_matrix_terms": float(emitted_terms),
+        "mg_ion_direct_type1_records": float(out_stats[5]),
+        "mg_ion_direct_type2_records": float(out_stats[6]),
+        "mg_ion_direct_type3_records": float(out_stats[7]),
+        "mg_ion_direct_type7_records": float(out_stats[8]),
+        "mg_ion_direct_type8_records": float(out_stats[9]),
+        "mg_ion_direct_type20_records": float(out_stats[10]),
+        "mg_ion_direct_skipped_records": float(out_stats[11]),
+        "mg_ion_direct_loop_guard_hits": float(out_stats[13]),
     }
     return rows, message, stats
 

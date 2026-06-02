@@ -83,22 +83,7 @@ def _candidate_library_paths() -> list[Path]:
     for name in names:
         paths.append(source_tree_cpp_dir / name)
 
-    # Backward-compatible fallback for v0.5.43-v0.5.59 runtime copies beside
-    # this module.
-    for name in names:
-        paths.append(here / name)
-
-    # Backward-compatible fallback for v0.5.43-v0.5.44 package-internal builds.
-    old_source_tree_cpp_dir = here / "cpp" / "xstar_solver"
-    for name in names:
-        paths.append(old_source_tree_cpp_dir / name)
-
-    # Backward-compatible fallback for older v0.5.39-v0.5.42 trees that kept
-    # cpp/xstar_solver at repository root.  This can be removed after the
-    # xstar_tools layout transition.
-    repo_root_cpp_dir = here.parents[2] / "cpp" / "xstar_solver" if len(here.parents) >= 3 else here / "cpp" / "xstar_solver"
-    for name in names:
-        paths.append(repo_root_cpp_dir / name)
+    # No runtime-copy fallback: shared libraries live in the cpp/ directory.
 
     # Deduplicate while preserving order.
     seen: set[str] = set()
