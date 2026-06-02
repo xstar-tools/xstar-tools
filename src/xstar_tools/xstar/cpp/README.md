@@ -11,7 +11,7 @@ src/xstar_tools/xstar/cpp/
   Makefile
 ```
 
-Do not copy the built `.so` files into `src/xstar_tools/xstar/`.  The Python loaders search this `cpp/` directory first and the build scripts now leave the artifacts here.
+Do not copy the built `.so` files into `src/xstar_tools/xstar/`.  The Python loaders search this `cpp/` directory first; keep shared objects in the cpp/ directory and the build scripts now leave the artifacts here.
 
 ## Build
 
@@ -55,10 +55,10 @@ It contains selected Mg line/emissivity/opacity helpers, including type-4 line e
 
 ### `libxstar_matrix.so`
 
-Thermal/statistical-equilibrium matrix backend.  Current implementation name after v0.6.0a10:
+Thermal/statistical-equilibrium matrix backend.  Current implementation name after v0.6.0a11:
 
 ```text
-xstar_matrix_mg_ion_direct_accumulator_v7
+xstar_matrix_mg_ion_direct_accumulator_v8
 ```
 
 It contains:
@@ -69,7 +69,20 @@ It contains:
 - Mg ion source-pointer traversal.
 - Experimental Mg ion direct accumulator for selected simple payloads.
 
-The direct accumulator is opt-in until full product parity and runtime improvement are confirmed.
+The direct accumulator is opt-in and coverage-gated until full product parity and runtime improvement are confirmed.  The v0.6.0a11 path avoids the a9/a10 whole-ATDB per-ion allocation by caching compact arrays and sizing output buffers from the active ion source-record count.  It still falls back unless the supported-record coverage gate passes.
+
+
+Useful experimental controls:
+
+```bash
+# Keep disabled for normal runs unless testing the direct accumulator.
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1
+
+# Default coverage gate; prevents low-coverage experiments from slowing runs.
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION=0.05
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_RECORDS=8
+export XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY=1
+```
 
 ## Backend selection and library overrides
 

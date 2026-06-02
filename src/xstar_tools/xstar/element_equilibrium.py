@@ -1927,10 +1927,28 @@ def assemble_element_matrix(
                     )
                     cpp_direct_terms = _matrix_terms_from_cpp_rows(cpp_direct_rows)
                     cpp_direct_accumulated_records = {int(row["record"]) for row in cpp_direct_rows}
-                    terms.extend(cpp_direct_terms)
-                    n_eval += len(cpp_direct_accumulated_records)
-                    summary.n_records_evaluated += len(cpp_direct_accumulated_records)
-                    summary.n_matrix_terms += len(cpp_direct_terms)
+                    _direct_seen = float(cpp_direct_accumulator_stats.get("records_seen", 0.0))
+                    _direct_supported = float(cpp_direct_accumulator_stats.get("records_supported", 0.0))
+                    _direct_fraction = (_direct_supported / _direct_seen) if _direct_seen > 0.0 else 0.0
+                    _direct_min_fraction = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION", "0.05"))
+                    _direct_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_RECORDS", "8"))
+                    _direct_type7_only = str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1")).strip().lower() in {"1", "true", "yes", "on"}
+                    _direct_type7_records = float(cpp_direct_accumulator_stats.get("mg_ion_direct_type7_records", 0.0))
+                    _direct_gate_passed = (
+                        _direct_supported >= float(_direct_min_records)
+                        and _direct_fraction >= _direct_min_fraction
+                        and ((not _direct_type7_only) or _direct_type7_records > 0.0)
+                    )
+                    if _direct_gate_passed:
+                        terms.extend(cpp_direct_terms)
+                        n_eval += len(cpp_direct_accumulated_records)
+                        summary.n_records_evaluated += len(cpp_direct_accumulated_records)
+                        summary.n_matrix_terms += len(cpp_direct_terms)
+                        _direct_status = "cpp"
+                    else:
+                        cpp_direct_terms = []
+                        cpp_direct_accumulated_records = set()
+                        _direct_status = "coverage_gate_fallback"
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -1941,7 +1959,12 @@ def assemble_element_matrix(
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_source_simple_terms",
-                            status="cpp",
+                            status=_direct_status,
+                            direct_accum_supported_fraction=float(_direct_fraction),
+                            direct_accum_min_supported_fraction=float(_direct_min_fraction),
+                            direct_accum_min_records=float(_direct_min_records),
+                            direct_accum_rate7_only=float(1.0 if _direct_type7_only else 0.0),
+                            direct_accum_gate_passed=float(1.0 if _direct_gate_passed else 0.0),
                             **cpp_direct_accumulator_stats,
                         )
                 except Exception as exc:

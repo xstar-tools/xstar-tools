@@ -34,7 +34,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_direct_accumulator_v7";
+    return "xstar_matrix_mg_ion_direct_accumulator_v8";
 }
 
 int xstar_matrix_feature_flags() {
@@ -1304,6 +1304,7 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
     int n_idat,
     int basis_n_rows,
     int term_start,
+    int max_terms,
     long long ion_index,
     long long ion_stage,
     long long ion_record,
@@ -1326,7 +1327,7 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
     char* errbuf,
     std::size_t errbuf_size
 ) {
-    if (n_data_types <= 0 || n_records <= 0 || n_rdat < 0 || n_idat < 0 || basis_n_rows <= 0 ||
+    if (n_data_types <= 0 || n_records <= 0 || n_rdat < 0 || n_idat < 0 || basis_n_rows <= 0 || max_terms <= 0 ||
         term_start <= 0 || ion_index <= 0 || ion_stage <= 0 || ion_record <= 0 || compact_start <= 0 || nlevp <= 0) {
         write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_accumulate_mg_ion_source_simple_terms");
         return 2;
@@ -1375,6 +1376,7 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
         const double aj2[4] = {ans[1], ans[0], -ans[0], -ans[1]};
         const double cj[4] = {0.0, 0.0, ans[3] * xpx, -ans[2] * xpx};
         const double cj2[4] = {0.0, 0.0, ans[5] * xpx, -ans[4] * xpx};
+        if (emitted_terms + 4 > max_terms) return false;
         for (int j = 0; j < 4; ++j) {
             long long* oi = out_i64 + 16 * (emitted_terms + j);
             double* of = out_f64 + 4 * (emitted_terms + j);

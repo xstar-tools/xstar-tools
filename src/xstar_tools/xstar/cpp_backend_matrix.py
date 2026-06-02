@@ -36,6 +36,24 @@ class MatrixBackendStatus:
 _CPP_LIB: ctypes.CDLL | None = None
 _CPP_LOAD_ERROR: BaseException | None = None
 _CPP_LIBRARY_PATH: str | None = None
+_COMPACT_ARRAY_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+
+
+def _compact_matrix_arrays(master: Any, derived: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return cached C-contiguous compact ATDB arrays for matrix backends."""
+    key = (id(master), id(derived))
+    cached = _COMPACT_ARRAY_CACHE.get(key)
+    if cached is not None:
+        return cached
+    npfi = np.ascontiguousarray(np.asarray(derived.npfi, dtype=np.int64))
+    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
+    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
+    ptrs = np.ascontiguousarray(np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64))
+    rdat = np.ascontiguousarray(np.asarray(master.rdat1.numpy(copy=False), dtype=np.float64))
+    idat = np.ascontiguousarray(np.asarray(master.idat1.numpy(copy=False), dtype=np.int64))
+    cached = (npfi, npar, npnxt, ptrs, rdat, idat)
+    _COMPACT_ARRAY_CACHE[key] = cached
+    return cached
 
 
 def _candidate_library_paths() -> list[Path]:
@@ -178,7 +196,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             try:
                 lib.xstar_matrix_accumulate_mg_ion_source_simple_terms.argtypes = [
                     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                    ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong,
                     i64p, i64p, i64p, i64p, f64p, i64p,
                     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
@@ -920,16 +938,23 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     if lib is None or not hasattr(lib, "xstar_matrix_accumulate_mg_ion_source_simple_terms"):
         raise RuntimeError("C++ Mg ion direct simple-term accumulator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     t0 = time.perf_counter()
-    npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
-    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
-    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
-    ptrs = np.ascontiguousarray(np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64))
-    rdat = np.ascontiguousarray(np.asarray(master.rdat1.numpy(copy=False), dtype=np.float64))
-    idat = np.ascontiguousarray(np.asarray(master.idat1.numpy(copy=False), dtype=np.int64))
+    npfi_all, npar, npnxt, ptrs, rdat, idat = _compact_matrix_arrays(master, derived)
+    npfi = np.ascontiguousarray(npfi_all[:, int(ion_index)])
     n_records = int(ptrs.shape[0])
-    # Worst case is four terms per source record.  This is large but this
-    # experimental helper is opt-in and exists to validate direct emission.
-    max_terms = max(1, n_records * 4)
+    # Bound output by this ion's source records, not by the whole ATDB.
+    # This avoids the a9/a10 regression where every ion allocated buffers
+    # sized as n_records * 4.
+    source_count = 0
+    for data_chain in range(1, int(npfi.size)):
+        rec = int(npfi[data_chain])
+        guard = 0
+        while rec > 0 and rec <= n_records and int(npar[rec]) == int(ion_record):
+            source_count += 1
+            guard += 1
+            if guard > n_records:
+                break
+            rec = int(npnxt[rec])
+    max_terms = max(4, source_count * 4)
     out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
     out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
     out_stats = np.zeros(14, dtype=np.int64)
@@ -938,7 +963,7 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     k0 = time.perf_counter()
     rc = lib.xstar_matrix_accumulate_mg_ion_source_simple_terms(
         int(npfi.size), int(n_records), int(rdat.size), int(idat.size),
-        int(basis_n_rows), int(term_start),
+        int(basis_n_rows), int(term_start), int(max_terms),
         int(ion_index), int(ion_stage), int(ion_record), int(compact_start), int(nlevp),
         npfi, npar, npnxt, ptrs.ravel(), rdat, idat,
         float(temperature_1e4k), float(electron_density_cm3),
@@ -981,6 +1006,8 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     stats = {
         "records_seen": float(out_stats[0]),
         "records_supported": float(out_stats[1]),
+        "source_records_scanned_python": float(source_count),
+        "direct_accum_max_terms": float(max_terms),
         "records_batched": float(out_stats[4]),
         "cpp_calls": float(out_stats[3]),
         "packing_seconds": float(packing_seconds),
