@@ -34,7 +34,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_direct_accumulator_v8";
+    return "xstar_matrix_mg_ion_direct_accumulator_v9";
 }
 
 int xstar_matrix_feature_flags() {
@@ -1145,6 +1145,7 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads(
     long long skipped = 0;
     long long unsupported = 0;
     long long guard_hits = 0;
+    long long rate7_seen = 0, rate7_supported = 0;
 
     for (int data_chain = 1; data_chain < n_data_types; ++data_chain) {
         long long rec = npfi_col[data_chain];
@@ -1157,6 +1158,7 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads(
             ++seen;
             const long long dt = get_ptr(rec, 1);
             const long long rt = get_ptr(rec, 2);
+            if (rt == 7) ++rate7_seen;
             const long long nreal = get_ptr(rec, 4);
             const long long real_ptr = get_ptr(rec, 7);
             long long skip_mask = 0;
@@ -1267,6 +1269,8 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads(
     out_stats[11] = skipped;
     out_stats[12] = unsupported;
     out_stats[13] = guard_hits;
+    out_stats[14] = rate7_seen;
+    out_stats[15] = rate7_supported;
     write_message(errbuf, errbuf_size, supported > 0 ? "xstar_matrix_eval_mg_ion_source_simple_payloads evaluated" : "xstar_matrix_eval_mg_ion_source_simple_payloads no supported payloads");
     return 0;
 }
@@ -1405,9 +1409,41 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
         return true;
     };
 
+    const auto emit_scalar = [&](long long rec, long long dt, long long rt, long long id1, long long id2,
+                                 const double ans[6], long long& emitted_terms) -> bool {
+        if (id1 <= 0 || !finite6(ans[0], ans[1], ans[2], ans[3], ans[4], ans[5])) return false;
+        if (emitted_terms + 1 > max_terms) return false;
+        long long* oi = out_i64 + 16 * emitted_terms;
+        double* of = out_f64 + 4 * emitted_terms;
+        oi[0] = static_cast<long long>(term_start + emitted_terms);
+        oi[1] = rec;
+        oi[2] = dt;
+        oi[3] = rt;
+        oi[4] = ion_index;
+        oi[5] = ion_stage;
+        oi[6] = 5; // scalar_pirt row, not a matrix term
+        oi[7] = 0;
+        oi[8] = 0;
+        oi[9] = id1;
+        oi[10] = id2;
+        oi[11] = id1;
+        oi[12] = id2;
+        oi[13] = 0;
+        oi[14] = 0;
+        oi[15] = 0;
+        of[0] = ans[0];
+        of[1] = ans[1];
+        of[2] = ans[2];
+        of[3] = ans[3];
+        emitted_terms += 1;
+        return true;
+    };
+
+
     long long seen = 0, supported = 0, emitted_terms = 0;
     long long n_type1 = 0, n_type2 = 0, n_type3 = 0, n_type7 = 0, n_type8 = 0, n_type20 = 0;
     long long skipped = 0, unsupported = 0, guard_hits = 0;
+    long long rate7_seen = 0, rate7_supported = 0;
 
     for (int data_chain = 1; data_chain < n_data_types; ++data_chain) {
         long long rec = npfi_col[data_chain];
@@ -1417,6 +1453,7 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
             ++seen;
             const long long dt = get_ptr(rec, 1);
             const long long rt = get_ptr(rec, 2);
+            if (rt == 7) ++rate7_seen;
             const long long nreal = get_ptr(rec, 4);
             const long long real_ptr = get_ptr(rec, 7);
             if ((rt == 1 && dt == 53) || rt == 8 || rt == 15) {
@@ -1477,10 +1514,19 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
                 evaluated = true; ++n_type20;
             }
 
-            if (!evaluated || !emit_terms(rec, dt, rt, id1, id2, ans, emitted_terms)) {
+            bool emitted = false;
+            if (evaluated) {
+                if (rt == 7) {
+                    emitted = emit_scalar(rec, dt, rt, id1, id2, ans, emitted_terms);
+                } else {
+                    emitted = emit_terms(rec, dt, rt, id1, id2, ans, emitted_terms);
+                }
+            }
+            if (!evaluated || !emitted) {
                 ++unsupported;
             } else {
                 ++supported;
+                if (rt == 7) ++rate7_supported;
             }
             rec = (rec > 0 && rec <= n_records) ? npnxt[rec] : 0;
         }
@@ -1500,6 +1546,8 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
     out_stats[11] = skipped;
     out_stats[12] = unsupported;
     out_stats[13] = guard_hits;
+    out_stats[14] = rate7_seen;
+    out_stats[15] = rate7_supported;
     write_message(errbuf, errbuf_size, supported > 0 ? "xstar_matrix_accumulate_mg_ion_source_simple_terms evaluated" : "xstar_matrix_accumulate_mg_ion_source_simple_terms no supported records");
     return 0;
 }

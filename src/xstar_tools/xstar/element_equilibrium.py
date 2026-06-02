@@ -1925,22 +1925,33 @@ def assemble_element_matrix(
                         hydrogen_density_cm3=float(context.hydrogen_density_cm3),
                         nlevp=int(block.nlev),
                     )
-                    cpp_direct_terms = _matrix_terms_from_cpp_rows(cpp_direct_rows)
+                    cpp_direct_scalar_rows = [row for row in cpp_direct_rows if str(row.get("role")) in {"scalar_pirt", "scalar_rrrt"}]
+                    cpp_direct_matrix_rows = [row for row in cpp_direct_rows if str(row.get("role")) not in {"scalar_pirt", "scalar_rrrt"}]
+                    cpp_direct_terms = _matrix_terms_from_cpp_rows(cpp_direct_matrix_rows)
                     cpp_direct_accumulated_records = {int(row["record"]) for row in cpp_direct_rows}
                     _direct_seen = float(cpp_direct_accumulator_stats.get("records_seen", 0.0))
                     _direct_supported = float(cpp_direct_accumulator_stats.get("records_supported", 0.0))
-                    _direct_fraction = (_direct_supported / _direct_seen) if _direct_seen > 0.0 else 0.0
+                    _direct_rate7_seen = float(cpp_direct_accumulator_stats.get("mg_ion_direct_rate7_seen", 0.0))
+                    _direct_rate7_supported = float(cpp_direct_accumulator_stats.get("mg_ion_direct_rate7_supported", 0.0))
+                    _direct_type7_only = str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1")).strip().lower() in {"1", "true", "yes", "on"}
+                    _direct_denominator = _direct_rate7_seen if _direct_type7_only and _direct_rate7_seen > 0.0 else _direct_seen
+                    _direct_fraction = (_direct_supported / _direct_denominator) if _direct_denominator > 0.0 else 0.0
                     _direct_min_fraction = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_SUPPORTED_FRACTION", "0.05"))
                     _direct_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_MIN_RECORDS", "8"))
-                    _direct_type7_only = str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1")).strip().lower() in {"1", "true", "yes", "on"}
                     _direct_type7_records = float(cpp_direct_accumulator_stats.get("mg_ion_direct_type7_records", 0.0))
                     _direct_gate_passed = (
                         _direct_supported >= float(_direct_min_records)
                         and _direct_fraction >= _direct_min_fraction
-                        and ((not _direct_type7_only) or _direct_type7_records > 0.0)
+                        and ((not _direct_type7_only) or _direct_rate7_supported > 0.0)
                     )
                     if _direct_gate_passed:
                         terms.extend(cpp_direct_terms)
+                        for _row in cpp_direct_scalar_rows:
+                            if int(_row.get("rate_type", 0)) in {1, 7, 40, 42}:
+                                if int(_row.get("idest1", 0)) == 1:
+                                    summary.second_pass_pirt += float(_row.get("aj1", 0.0))
+                                if int(_row.get("idest2", 0)) >= int(block.nlev):
+                                    summary.second_pass_rrrt += float(_row.get("aj2", 0.0))
                         n_eval += len(cpp_direct_accumulated_records)
                         summary.n_records_evaluated += len(cpp_direct_accumulated_records)
                         summary.n_matrix_terms += len(cpp_direct_terms)

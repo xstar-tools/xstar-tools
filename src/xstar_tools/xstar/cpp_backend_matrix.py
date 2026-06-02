@@ -299,6 +299,8 @@ _ROLE = {
     2: "reverse_offdiag",
     3: "forward_diag_loss",
     4: "reverse_diag_loss",
+    5: "scalar_pirt",
+    6: "scalar_rrrt",
 }
 
 
@@ -849,7 +851,7 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
     max_out = max(1, n_records)
     out_i64 = np.zeros(max_out * 10, dtype=np.int64)
     out_f64 = np.zeros(max_out * 6, dtype=np.float64)
-    out_stats = np.zeros(14, dtype=np.int64)
+    out_stats = np.zeros(18, dtype=np.int64)
     packing_seconds = time.perf_counter() - t0
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
@@ -957,7 +959,7 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     max_terms = max(4, source_count * 4)
     out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
     out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
-    out_stats = np.zeros(14, dtype=np.int64)
+    out_stats = np.zeros(18, dtype=np.int64)
     packing_seconds = time.perf_counter() - t0
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
@@ -1014,7 +1016,10 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
         "cpp_kernel_seconds": float(cpp_kernel_seconds),
         "fallback_count": float(out_stats[12]),
         "ucalc_cpp_applied": float(out_stats[1]),
-        "emitted_matrix_terms": float(emitted_terms),
+        "emitted_matrix_terms": float(sum(1 for r in rows if str(r.get("role")) not in {"scalar_pirt", "scalar_rrrt"})),
+        "emitted_scalar_rows": float(sum(1 for r in rows if str(r.get("role")) in {"scalar_pirt", "scalar_rrrt"})),
+        "mg_ion_direct_rate7_seen": float(out_stats[14]) if out_stats.size > 14 else 0.0,
+        "mg_ion_direct_rate7_supported": float(out_stats[15]) if out_stats.size > 15 else 0.0,
         "mg_ion_direct_type1_records": float(out_stats[5]),
         "mg_ion_direct_type2_records": float(out_stats[6]),
         "mg_ion_direct_type3_records": float(out_stats[7]),
