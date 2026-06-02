@@ -2,6 +2,7 @@
 xstar-tools-analyze-zone1-dsec-probe = xstar_tools.zone1_dsec_analysis_cli:main
 xstar-tools-benchmark-original-xstar = xstar_tools.source_port_physical_benchmark_cli:main
 xstar-tools-collisions = xstar_tools.collisions:main
+xstar-tools-cpp-parity-gate = xstar_tools.xstar.cpp_parity_gate:main
 xstar-tools-diagnose-zone1-dsec = xstar_tools.source_port_zone1_dsec_cli:main
 xstar-tools-download-data = xstar_tools.data:main
 xstar-tools-emissivity = xstar_tools.emissivity:main

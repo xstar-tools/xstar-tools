@@ -94,16 +94,27 @@ def cpp_import_error() -> str | None:
 
 
 def emissivity_backend_status(requested: str = "auto") -> EmissivityBackendStatus:
+    req = (requested or os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND") or "python").strip().lower()
+    if req not in {"python", "cpp", "auto"}:
+        req = "python"
     lib = _load_cpp_library()
     if lib is None:
-        return EmissivityBackendStatus(requested=requested, active="python", cpp_available=False, cpp_import_error=cpp_import_error())
+        active = "unavailable" if req == "cpp" else "python"
+        return EmissivityBackendStatus(requested=req, active=active, cpp_available=False, cpp_import_error=cpp_import_error())
     try:
         name = lib.xstar_emissivity_backend_name().decode("utf-8", "replace")
         abi = int(lib.xstar_emissivity_abi_version())
         flags = int(lib.xstar_emissivity_feature_flags())
     except Exception as exc:
-        return EmissivityBackendStatus(requested=requested, active="python", cpp_available=False, cpp_import_error=repr(exc), cpp_library_path=_CPP_LIBRARY_PATH)
-    return EmissivityBackendStatus(requested=requested, active="cpp", cpp_available=True, cpp_library_path=_CPP_LIBRARY_PATH, cpp_backend_name=name, cpp_abi_version=abi, cpp_feature_flags=flags)
+        active = "unavailable" if req == "cpp" else "python"
+        return EmissivityBackendStatus(requested=req, active=active, cpp_available=False, cpp_import_error=repr(exc), cpp_library_path=_CPP_LIBRARY_PATH)
+    if req == "python":
+        active = "python"
+    elif req == "cpp":
+        active = "cpp"
+    else:
+        active = "cpp"
+    return EmissivityBackendStatus(requested=req, active=active, cpp_available=True, cpp_library_path=_CPP_LIBRARY_PATH, cpp_backend_name=name, cpp_abi_version=abi, cpp_feature_flags=flags)
 
 
 def build_binemis_profile_cpp(

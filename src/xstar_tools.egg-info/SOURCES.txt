@@ -683,6 +683,7 @@ src/xstar_tools/xstar/continuum_diagnostics.py
 src/xstar_tools/xstar/cpp_backend_emissivity.py
 src/xstar_tools/xstar/cpp_backend_matrix.py
 src/xstar_tools/xstar/cpp_backend_rates.py
+src/xstar_tools/xstar/cpp_parity_gate.py
 src/xstar_tools/xstar/driver.py
 src/xstar_tools/xstar/dsec.py
 src/xstar_tools/xstar/dsec_correlation.py

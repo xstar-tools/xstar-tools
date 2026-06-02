@@ -462,7 +462,12 @@ def main(argv: list[str] | None = None) -> int:
                     status = dict(provenance.get(backend_name, {}))
                     active = status.get("active", "unknown")
                     requested = status.get("requested", requested_value)
-                    backend_label = status.get("cpp_backend_name") or status.get("status") or "python"
+                    if active == "python":
+                        backend_label = "python_reference"
+                    elif active == "unavailable":
+                        backend_label = status.get("cpp_import_error") or "unavailable"
+                    else:
+                        backend_label = status.get("cpp_backend_name") or status.get("status") or "python_reference"
                     print(f"{backend_name}_requested={requested}")
                     print(f"{backend_name}_active={active}")
                     print(f"{backend_name}_implementation={backend_label}")

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.0a21
+Version: 0.6.0a22
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -1836,3 +1836,16 @@ PYTHONPATH=src python examples/131_validate_xstar_calc_emisab_all.py \
 
 The next source-order target is `calc_emis_all`; full `xstarcalc`, radial
 transfer, and output writers remain unported.
+
+## v0.6.0a22 C++ parity policy
+
+The current source-faithful Python path is the reference for enabling C++ accelerators.  Original Fortran XSTAR products are close but not bit-for-bit identical to the Python port, so C++ work is now gated against Python-reference products first.  Type-49/type-53 Mg direct accumulators, pre-matrix shortcuts, and C++ binemis remain opt-in until a Python-reference vs C++-candidate parity gate passes for `xout_step.log` and FITS products.
+
+Use the C++ parity gate after running one default Python reference directory and one C++ candidate directory:
+
+```bash
+xstar-tools-cpp-parity-gate \
+  --reference-dir python_xstar_tools_benchmark_v0600a22/helike_type69_mg11_ne1e8 \
+  --candidate-dir python_xstar_tools_benchmark_v0600a22_cpp_type49/helike_type69_mg11_ne1e8 \
+  --out-json cpp_parity_type49.json
+```

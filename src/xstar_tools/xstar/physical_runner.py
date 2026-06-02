@@ -48,6 +48,7 @@ from .backend_config import BackendSelection, resolve_backend_selection, install
 from .compact_active_atdb import export_compact_active_atdb
 from .cpp_backend_rates import rates_backend_status
 from .cpp_backend_matrix import matrix_backend_status
+from .cpp_backend_emissivity import emissivity_backend_status
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
 from .performance import normalize_profile_level, profile_component, summarize_profile
@@ -2379,7 +2380,7 @@ def run_xstar_from_parameters(
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_dense_fill_selected_ucalc_type51_mg_rates_matrix_and_type51_ucalc_rates_matrix_available_via_libxstar_matrix"},
-                "emissivity_backend": {**rates_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "mg_type4_type50_ucalc_linopac_voigt_cpp_via_libxstar_rates"},
+                "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),
