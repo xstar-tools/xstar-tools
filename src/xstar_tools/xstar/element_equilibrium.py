@@ -997,6 +997,165 @@ def _rates_cpp_active_for_mg() -> bool:
     return bool(flags & 2)
 
 
+
+def _mg_type49_shadow_term_signature(term: MatrixTerm) -> tuple[str, int, int]:
+    return (str(term.role), int(term.row), int(term.column))
+
+
+def _mg_type49_shadow_float_diff(a: float, b: float) -> tuple[float, float]:
+    aa = float(a)
+    bb = float(b)
+    abs_diff = abs(aa - bb)
+    scale = max(abs(aa), abs(bb), 1.0e-300)
+    return abs_diff, abs_diff / scale
+
+
+def _mg_type49_shadow_record_compare(
+    *,
+    record: int,
+    ion_index: int,
+    ion_stage: int,
+    nlev: int,
+    source_header_rate_type: int,
+    source_header_data_type: int,
+    escape_factor_in: float,
+    escape_factor_out: float,
+    result: UCalcResult,
+    python_terms: Sequence[MatrixTerm],
+    cpp_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Compare Python-applied type49 scalar/matrix effects against shadow C++ rows.
+
+    This is diagnostic-only: it never changes matrix assembly.  C++ emits scalar
+    rows and matrix rows in a row/column-oriented representation, while Python
+    owns the reference ``UCalcResult`` plus ``MatrixTerm`` expansion.
+    """
+    scalar_pirt_py = float(result.ans1) if int(result.rate_type) in {1, 7, 40, 42} and int(result.idest1) == 1 else 0.0
+    scalar_rrrt_py = float(result.ans2) if int(result.rate_type) in {1, 7, 40, 42} and int(result.idest2) >= int(nlev) else 0.0
+    scalar_pirt_cpp = 0.0
+    scalar_rrrt_cpp = 0.0
+    cpp_terms: list[MatrixTerm] = []
+    cpp_scalar_rows = 0
+    for row in cpp_rows:
+        role = str(row.get("role", ""))
+        if role == "scalar_pirt":
+            cpp_scalar_rows += 1
+            scalar_pirt_cpp += float(row.get("aj1", 0.0))
+            # The type-49 C++ ABI emits one scalar row carrying both pirt (aj1)
+            # and rrrt (aj2), matching the direct-application path.  Treat it
+            # the same way here so the shadow comparator reports physics
+            # differences rather than an artifact of the compact scalar ABI.
+            scalar_rrrt_cpp += float(row.get("aj2", 0.0))
+        elif role == "scalar_rrrt":
+            cpp_scalar_rows += 1
+            scalar_rrrt_cpp += float(row.get("aj2", 0.0))
+        else:
+            try:
+                cpp_terms.extend(_matrix_terms_from_cpp_rows([row]))
+            except Exception:
+                pass
+    pirt_abs, pirt_rel = _mg_type49_shadow_float_diff(scalar_pirt_py, scalar_pirt_cpp)
+    rrrt_abs, rrrt_rel = _mg_type49_shadow_float_diff(scalar_rrrt_py, scalar_rrrt_cpp)
+
+    py_by_sig = {_mg_type49_shadow_term_signature(t): t for t in python_terms}
+    cpp_by_sig = {_mg_type49_shadow_term_signature(t): t for t in cpp_terms}
+    all_sigs = sorted(set(py_by_sig) | set(cpp_by_sig))
+    max_matrix_abs_diff = 0.0
+    max_matrix_rel_diff = 0.0
+    mismatched_terms: list[dict[str, Any]] = []
+    for sig in all_sigs:
+        pt = py_by_sig.get(sig)
+        ct = cpp_by_sig.get(sig)
+        term_record: dict[str, Any] = {"role": sig[0], "row": int(sig[1]), "column": int(sig[2])}
+        if pt is None or ct is None:
+            term_record["status"] = "missing_python" if pt is None else "missing_cpp"
+            mismatched_terms.append(term_record)
+            max_matrix_abs_diff = max(max_matrix_abs_diff, float("inf"))
+            max_matrix_rel_diff = max(max_matrix_rel_diff, float("inf"))
+            continue
+        term_record["status"] = "compared"
+        for name in ("aj1", "aj2", "cj", "cj2"):
+            ad, rd = _mg_type49_shadow_float_diff(getattr(pt, name), getattr(ct, name))
+            term_record[f"{name}_python"] = float(getattr(pt, name))
+            term_record[f"{name}_cpp"] = float(getattr(ct, name))
+            term_record[f"{name}_abs_diff"] = float(ad)
+            term_record[f"{name}_rel_diff"] = float(rd)
+            max_matrix_abs_diff = max(max_matrix_abs_diff, ad)
+            max_matrix_rel_diff = max(max_matrix_rel_diff, rd)
+        if any(float(term_record.get(f"{name}_abs_diff", 0.0)) > 0.0 for name in ("aj1", "aj2", "cj", "cj2")):
+            mismatched_terms.append(term_record)
+    status = "match"
+    if pirt_rel > 1.0e-10 or rrrt_rel > 1.0e-10 or max_matrix_rel_diff > 1.0e-10 or len(py_by_sig) != len(cpp_by_sig):
+        status = "mismatch"
+    return {
+        "record": int(record),
+        "ion_index": int(ion_index),
+        "ion_stage": int(ion_stage),
+        "nlev": int(nlev),
+        "source_header_rate_type": int(source_header_rate_type),
+        "source_header_data_type": int(source_header_data_type),
+        "result_rate_type": int(result.rate_type),
+        "result_data_type": int(result.data_type),
+        "idest1": int(result.idest1),
+        "idest2": int(result.idest2),
+        "ans1": float(result.ans1),
+        "ans2": float(result.ans2),
+        "ans3": float(result.ans3),
+        "ans4": float(result.ans4),
+        "ans5": float(result.ans5),
+        "ans6": float(result.ans6),
+        "escape_factor_in": float(escape_factor_in),
+        "escape_factor_out": float(escape_factor_out),
+        "python_scalar_pirt": float(scalar_pirt_py),
+        "cpp_scalar_pirt": float(scalar_pirt_cpp),
+        "scalar_pirt_abs_diff": float(pirt_abs),
+        "scalar_pirt_rel_diff": float(pirt_rel),
+        "python_scalar_rrrt": float(scalar_rrrt_py),
+        "cpp_scalar_rrrt": float(scalar_rrrt_cpp),
+        "scalar_rrrt_abs_diff": float(rrrt_abs),
+        "scalar_rrrt_rel_diff": float(rrrt_rel),
+        "python_matrix_terms": int(len(python_terms)),
+        "cpp_matrix_terms": int(len(cpp_terms)),
+        "cpp_scalar_rows": int(cpp_scalar_rows),
+        "max_matrix_abs_diff": float(max_matrix_abs_diff),
+        "max_matrix_rel_diff": float(max_matrix_rel_diff),
+        "mismatched_terms": mismatched_terms[:16],
+        "status": status,
+    }
+
+
+def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:
+    samples = profile_control.setdefault("mg_type49_shadow_parity_samples", [])
+    if isinstance(samples, list) and len(samples) < int(sample_limit):
+        samples.append(dict(sample))
+    summary = profile_control.setdefault("mg_type49_shadow_parity_summary", {
+        "records_compared": 0.0,
+        "records_matched": 0.0,
+        "records_mismatched": 0.0,
+        "max_scalar_pirt_rel_diff": 0.0,
+        "max_scalar_rrrt_rel_diff": 0.0,
+        "max_matrix_rel_diff": 0.0,
+        "max_scalar_pirt_abs_diff": 0.0,
+        "max_scalar_rrrt_abs_diff": 0.0,
+        "max_matrix_abs_diff": 0.0,
+    })
+    if isinstance(summary, dict):
+        summary["records_compared"] = float(summary.get("records_compared", 0.0)) + 1.0
+        if str(sample.get("status")) == "match":
+            summary["records_matched"] = float(summary.get("records_matched", 0.0)) + 1.0
+        else:
+            summary["records_mismatched"] = float(summary.get("records_mismatched", 0.0)) + 1.0
+        for key in (
+            "scalar_pirt_rel_diff", "scalar_rrrt_rel_diff", "max_matrix_rel_diff",
+            "scalar_pirt_abs_diff", "scalar_rrrt_abs_diff", "max_matrix_abs_diff",
+        ):
+            out_key = "max_" + key if not key.startswith("max_") else key
+            try:
+                val = float(sample.get(key, 0.0))
+            except Exception:
+                val = float("inf")
+            summary[out_key] = max(float(summary.get(out_key, 0.0)), val)
+
 def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[MatrixTerm]:
     out: List[MatrixTerm] = []
     for row in rows:
@@ -1916,6 +2075,17 @@ def assemble_element_matrix(
             cpp_direct_terms = []
             cpp_direct_accumulator_message = ""
             cpp_direct_accumulator_stats: Dict[str, float] = {}
+            type49_shadow_enabled = (
+                int(element_z) == 12
+                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            type49_shadow_rows_by_record: Dict[int, List[Dict[str, Any]]] = {}
+            type49_shadow_stats: Dict[str, float] = {}
+            type49_shadow_message = ""
+            type49_shadow_sample_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_MAX_SAMPLES", "128"))
+            type49_shadow_max_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_MAX_RECORDS", "0"))
+            if type49_shadow_enabled:
+                profile_control.setdefault("mg_type49_shadow_parity_enabled", True)
             if mg_ion_source_scan_cpp_enabled:
                 try:
                     source_rows, source_scan_cpp_message, source_scan_cpp_stats = scan_mg_ion_source_records_cpp_detailed(
@@ -1960,6 +2130,77 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
+            if type49_shadow_enabled and not source_record_iter:
+                for data_type in range(1, derived.npfi.shape[0]):
+                    rec = int(derived.npfi[data_type, block.ion_index])
+                    while rec and int(derived.npar[rec]) == block.ion_record:
+                        h = master.header(rec)
+                        source_record_iter.append((int(rec), int(h.rate_type), int(h.data_type)))
+                        rec = int(derived.npnxt[rec])
+            if type49_shadow_enabled:
+                try:
+                    _shadow_candidates: List[Tuple[int, float, float]] = []
+                    for _rec, _rt, _dt in source_record_iter:
+                        if int(_rt) == 7 and int(_dt) == 49:
+                            _pt1, _pt2, _esc_reason = _escape_factors(int(_rec), 7, derived, context)
+                            if _esc_reason is None:
+                                _shadow_candidates.append((int(_rec), float(_pt1), float(_pt2)))
+                                if type49_shadow_max_records > 0 and len(_shadow_candidates) >= type49_shadow_max_records:
+                                    break
+                    if _shadow_candidates:
+                        _shadow_rows, type49_shadow_message, type49_shadow_stats = accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
+                            master=master,
+                            derived=derived,
+                            levels=levels,
+                            radiation=context.radiation,
+                            ion_index=int(block.ion_index),
+                            ion_stage=int(block.ion_stage),
+                            compact_start=int(block.compact_start),
+                            basis_n_rows=int(basis.n_rows),
+                            term_start=1,
+                            temperature_k=float(context.temperature_k),
+                            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+                            electron_fraction_xee=float(context.electron_fraction_xee),
+                            nlevp=int(block.nlev),
+                            candidates=_shadow_candidates,
+                        )
+                    else:
+                        _shadow_rows, type49_shadow_message, type49_shadow_stats = [], "no type49 shadow candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
+                    for _row in _shadow_rows:
+                        type49_shadow_rows_by_record.setdefault(int(_row["record"]), []).append(dict(_row))
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type49_shadow_parity_cpp_kernel",
+                            float(type49_shadow_stats.get("packing_seconds", 0.0)) + float(type49_shadow_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type49_terms",
+                            status="shadow",
+                            **type49_shadow_stats,
+                        )
+                except Exception as exc:
+                    type49_shadow_rows_by_record = {}
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type49_shadow_parity_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type49_terms",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="shadow_fallback",
+                            error=str(exc),
+                        )
+
             if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
                     cpp_direct_rows, cpp_direct_accumulator_message, cpp_direct_accumulator_stats = accumulate_mg_ion_source_simple_terms_cpp_detailed(
@@ -2629,6 +2870,47 @@ def assemble_element_matrix(
                             summary.second_pass_pirt += float(result.ans1)
                         if result.idest2 >= block.nlev:
                             summary.second_pass_rrrt += float(result.ans2)
+
+                    if type49_shadow_enabled and int(record) in type49_shadow_rows_by_record and int(result.rate_type) == 7 and int(result.data_type) == 49:
+                        try:
+                            _shadow_python_terms: List[MatrixTerm] = []
+                            if result.idest1 > 0 and result.idest2 > 0:
+                                _shadow_python_terms = _matrix_terms_for_result(
+                                    result=result,
+                                    basis=basis,
+                                    block=block,
+                                    levels=levels,
+                                    term_start=1,
+                                    xpx=context.hydrogen_density_cm3,
+                                )
+                            _shadow_sample = _mg_type49_shadow_record_compare(
+                                record=int(record),
+                                ion_index=int(block.ion_index),
+                                ion_stage=int(block.ion_stage),
+                                nlev=int(block.nlev),
+                                source_header_rate_type=int(header.rate_type),
+                                source_header_data_type=int(header.data_type),
+                                escape_factor_in=float(ptmp1),
+                                escape_factor_out=float(ptmp2),
+                                result=result,
+                                python_terms=_shadow_python_terms,
+                                cpp_rows=type49_shadow_rows_by_record.get(int(record), []),
+                            )
+                            _mg_type49_shadow_add_sample(profile_control, _shadow_sample, sample_limit=type49_shadow_sample_limit)
+                            record_results[-1]["type49_shadow_parity_status"] = str(_shadow_sample.get("status"))
+                            record_results[-1]["type49_shadow_parity_max_matrix_rel_diff"] = float(_shadow_sample.get("max_matrix_rel_diff", 0.0))
+                            record_results[-1]["type49_shadow_parity_scalar_pirt_rel_diff"] = float(_shadow_sample.get("scalar_pirt_rel_diff", 0.0))
+                            record_results[-1]["type49_shadow_parity_scalar_rrrt_rel_diff"] = float(_shadow_sample.get("scalar_rrrt_rel_diff", 0.0))
+                        except Exception as _shadow_exc:
+                            _shadow_error = {
+                                "record": int(record),
+                                "ion_index": int(block.ion_index),
+                                "ion_stage": int(block.ion_stage),
+                                "status": "shadow_compare_error",
+                                "error": str(_shadow_exc),
+                            }
+                            _mg_type49_shadow_add_sample(profile_control, _shadow_error, sample_limit=type49_shadow_sample_limit)
+                            record_results[-1]["type49_shadow_parity_status"] = "shadow_compare_error"
 
                     # Source branches with a missing endpoint do not enter
                     # calc_hmc_ion's four-row matrix block.  They may still
