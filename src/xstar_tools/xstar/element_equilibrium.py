@@ -1215,6 +1215,58 @@ def assemble_element_matrix(
     n_seen = n_eval = n_noop = n_skipped = n_blocked = n_unmapped = 0
     n_source_clamps = 0
 
+    # v0.6.0a15 diagnostic classifier for the remaining Python-evaluated
+    # Mg rate_type=7 records after the direct C++ accumulator has already
+    # consumed supported source records.  This is intentionally observational:
+    # it does not alter rate values, matrix insertion, or fallback behavior.
+    _rate7_classifier_enabled = int(element_z) == 12 and (
+        is_mg_forensic_profile
+        or str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATE7_RESULT_CLASSIFIER", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    )
+    _rate7_classifier_sample_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATE7_CLASSIFIER_SAMPLES", "256"))
+    _remaining_rate7_by_source_header_data_type: Dict[int, Dict[str, float]] = {}
+    _remaining_rate7_by_result_data_type: Dict[int, Dict[str, float]] = {}
+    _remaining_rate7_by_result_pair: Dict[Tuple[int, int], Dict[str, float]] = {}
+    _remaining_rate7_samples: List[Dict[str, Any]] = []
+
+    def _rate7_classifier_add(
+        *,
+        source_record: int,
+        source_header_rate_type: int,
+        source_header_data_type: int,
+        result_rate_type: int,
+        result_data_type: int,
+        ion_stage: int,
+        ion_index: int,
+        elapsed_seconds: float,
+        matrix_inserted: bool,
+        status: Any,
+    ) -> None:
+        if not _rate7_classifier_enabled or int(result_rate_type) != 7:
+            return
+        def _add(target: Dict[Any, Dict[str, float]], key: Any) -> None:
+            item = target.setdefault(key, {"records_seen": 0.0, "elapsed_seconds": 0.0, "matrix_inserted": 0.0})
+            item["records_seen"] += 1.0
+            item["elapsed_seconds"] += float(elapsed_seconds)
+            if matrix_inserted:
+                item["matrix_inserted"] += 1.0
+        _add(_remaining_rate7_by_source_header_data_type, int(source_header_data_type))
+        _add(_remaining_rate7_by_result_data_type, int(result_data_type))
+        _add(_remaining_rate7_by_result_pair, (int(source_header_data_type), int(result_data_type)))
+        if len(_remaining_rate7_samples) < _rate7_classifier_sample_limit:
+            _remaining_rate7_samples.append({
+                "source_record": int(source_record),
+                "source_header_rate_type": int(source_header_rate_type),
+                "source_header_data_type": int(source_header_data_type),
+                "result_rate_type": int(result_rate_type),
+                "result_data_type": int(result_data_type),
+                "ion_stage": int(ion_stage),
+                "ion_index": int(ion_index),
+                "elapsed_seconds": float(elapsed_seconds),
+                "matrix_inserted": bool(matrix_inserted),
+                "status": str(status.value if hasattr(status, "value") else status),
+            })
+
     for block in basis.blocks:
             _ion_loop_t0 = time.perf_counter() if is_mg_profile else 0.0
             _ion_rate_elapsed = 0.0
@@ -2481,8 +2533,10 @@ def assemble_element_matrix(
                         next_record=int(derived.npnxt[record]),
                         strict=False,
                     )
-                if is_mg_profile:
+                _dt = 0.0
+                if is_mg_profile or _rate7_classifier_enabled:
                     _dt = time.perf_counter() - _rate_t0
+                if is_mg_profile:
                     _ion_rate_elapsed += _dt
                     _rtype = int(header.rate_type)
                     _dtype = int(header.data_type)
@@ -2503,6 +2557,19 @@ def assemble_element_matrix(
                                 "elapsed_seconds": float(_dt),
                                 "status": str(result.status.value if hasattr(result.status, "value") else result.status),
                             })
+                if _rate7_classifier_enabled and int(result.rate_type) == 7:
+                    _rate7_classifier_add(
+                        source_record=int(record),
+                        source_header_rate_type=int(header.rate_type),
+                        source_header_data_type=int(header.data_type),
+                        result_rate_type=int(result.rate_type),
+                        result_data_type=int(result.data_type),
+                        ion_stage=int(block.ion_stage),
+                        ion_index=int(block.ion_index),
+                        elapsed_seconds=float(_dt),
+                        matrix_inserted=bool(result.status is UCalcStatus.EVALUATED and int(result.idest1) > 0 and int(result.idest2) > 0),
+                        status=result.status,
+                    )
                 row = result.to_dict()
                 destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
                 source_leveltemp_destination = levels.get(int(result.idest2))
@@ -2807,6 +2874,46 @@ def assemble_element_matrix(
                             records_seen=float(_count),
                             source_routine="ucalc",
                         )
+
+    if _rate7_classifier_enabled:
+        profile_control["remaining_rate7_classifier_samples"] = _remaining_rate7_samples
+        for _source_dtype, _values in sorted(_remaining_rate7_by_source_header_data_type.items()):
+            record_profile_event(
+                profile_control,
+                "remaining_rate7_by_source_header_data_type",
+                float(_values.get("elapsed_seconds", 0.0)),
+                element_z=int(element_z),
+                data_type=int(_source_dtype),
+                source_header_data_type=int(_source_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
+        for _result_dtype, _values in sorted(_remaining_rate7_by_result_data_type.items()):
+            record_profile_event(
+                profile_control,
+                "remaining_rate7_by_result_data_type",
+                float(_values.get("elapsed_seconds", 0.0)),
+                element_z=int(element_z),
+                data_type=int(_result_dtype),
+                result_data_type=int(_result_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
+        for (_source_dtype, _result_dtype), _values in sorted(_remaining_rate7_by_result_pair.items()):
+            record_profile_event(
+                profile_control,
+                "remaining_rate7_by_source_and_result_data_type",
+                float(_values.get("elapsed_seconds", 0.0)),
+                element_z=int(element_z),
+                data_type=int(_result_dtype),
+                source_header_data_type=int(_source_dtype),
+                result_data_type=int(_result_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
     dense = heat = heat2 = None

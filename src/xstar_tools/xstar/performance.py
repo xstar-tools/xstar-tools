@@ -225,6 +225,7 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "type50_reason_linopac_cpp_failure",
         "type50_reason_invalid_or_nonfinite_input",
         "records_seen",
+        "matrix_inserted",
         "ucalc_cpp_applied",
         "ucalc_cpp_unsupported",
         "matrix_dense_terms",
