@@ -2878,10 +2878,22 @@ def assemble_element_matrix(
     if _rate7_classifier_enabled:
         profile_control["remaining_rate7_classifier_samples"] = _remaining_rate7_samples
         for _source_dtype, _values in sorted(_remaining_rate7_by_source_header_data_type.items()):
+            _elapsed = float(_values.get("elapsed_seconds", 0.0))
             record_profile_event(
                 profile_control,
                 "remaining_rate7_by_source_header_data_type",
-                float(_values.get("elapsed_seconds", 0.0)),
+                _elapsed,
+                element_z=int(element_z),
+                data_type=int(_source_dtype),
+                source_header_data_type=int(_source_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
+            record_profile_event(
+                profile_control,
+                f"remaining_rate7_by_source_header_data_type.{int(_source_dtype)}",
+                _elapsed,
                 element_z=int(element_z),
                 data_type=int(_source_dtype),
                 source_header_data_type=int(_source_dtype),
@@ -2890,10 +2902,22 @@ def assemble_element_matrix(
                 source_routine="ucalc_remaining_rate7_classifier",
             )
         for _result_dtype, _values in sorted(_remaining_rate7_by_result_data_type.items()):
+            _elapsed = float(_values.get("elapsed_seconds", 0.0))
             record_profile_event(
                 profile_control,
                 "remaining_rate7_by_result_data_type",
-                float(_values.get("elapsed_seconds", 0.0)),
+                _elapsed,
+                element_z=int(element_z),
+                data_type=int(_result_dtype),
+                result_data_type=int(_result_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
+            record_profile_event(
+                profile_control,
+                f"remaining_rate7_by_result_data_type.{int(_result_dtype)}",
+                _elapsed,
                 element_z=int(element_z),
                 data_type=int(_result_dtype),
                 result_data_type=int(_result_dtype),
@@ -2902,10 +2926,23 @@ def assemble_element_matrix(
                 source_routine="ucalc_remaining_rate7_classifier",
             )
         for (_source_dtype, _result_dtype), _values in sorted(_remaining_rate7_by_result_pair.items()):
+            _elapsed = float(_values.get("elapsed_seconds", 0.0))
             record_profile_event(
                 profile_control,
                 "remaining_rate7_by_source_and_result_data_type",
-                float(_values.get("elapsed_seconds", 0.0)),
+                _elapsed,
+                element_z=int(element_z),
+                data_type=int(_result_dtype),
+                source_header_data_type=int(_source_dtype),
+                result_data_type=int(_result_dtype),
+                records_seen=float(_values.get("records_seen", 0.0)),
+                matrix_inserted=float(_values.get("matrix_inserted", 0.0)),
+                source_routine="ucalc_remaining_rate7_classifier",
+            )
+            record_profile_event(
+                profile_control,
+                f"remaining_rate7_by_source_and_result_data_type.{int(_source_dtype)}_to_{int(_result_dtype)}",
+                _elapsed,
                 element_z=int(element_z),
                 data_type=int(_result_dtype),
                 source_header_data_type=int(_source_dtype),

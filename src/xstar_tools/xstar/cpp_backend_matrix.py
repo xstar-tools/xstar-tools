@@ -1091,6 +1091,20 @@ def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.nd
     return np.ascontiguousarray(epi), np.zeros(int(epi.size), dtype=np.float64)
 
 
+
+
+def _radiation_grid_arrays_for_type53(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
+    """Return the same live high-resolution radiation grid used by type-49.
+
+    v0.6.0a14/a15 enabled the type-53 accumulator but accidentally called an
+    undefined helper here, so every type-53 candidate fell into Python fallback
+    before libxstar_matrix.so could see it.  Type-53 and type-49 both use the
+    source-faithful phint53-like continuum/photoionization grid, so share the
+    same live grid accessor.
+    """
+    return _radiation_grid_arrays_for_type49(radiation)
+
+
 def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     *,
     master: Any,
