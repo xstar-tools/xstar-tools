@@ -321,7 +321,7 @@ def calc_ion_rates(
                     continue
                 if int(_header.data_type) == 49:
                     cand49.append((int(_record), 0.5, 0.5))
-                elif int(_header.data_type) == 53:
+                elif int(_header.data_type) == 53 and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP", os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "0"))).strip().lower() in {"1", "true", "yes", "on"}:
                     cand53.append((int(_record), 0.5, 0.5))
 
             for _label, _func, _cands in (

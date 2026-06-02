@@ -713,7 +713,7 @@ def build_binemis_spectrum(
             )
             if timing is not None:
                 timing["final_product_build.spectrum.binemis_cpp_seconds"] = float(time.perf_counter() - _cpp_t0)
-                timing["final_product_build.spectrum.binemis_cpp_message"] = str(cpp_message)
+                timing["final_product_build.spectrum.binemis_cpp_message_present"] = 1.0 if cpp_message else 0.0
                 timing["final_product_build.spectrum.binemis_profile_seconds"] = float(timing["final_product_build.spectrum.binemis_cpp_seconds"])
                 timing["final_product_build.spectrum.binemis_profile_lines_attempted"] = float(cpp_stats.get("cpp_profile_lines_attempted", 0.0))
                 timing["final_product_build.spectrum.binemis_profile_lines_applied"] = float(cpp_stats.get("cpp_profile_lines_applied", 0.0))
@@ -723,7 +723,7 @@ def build_binemis_spectrum(
         except Exception as exc:
             if timing is not None:
                 timing["final_product_build.spectrum.binemis_cpp_fallback"] = 1.0
-                timing["final_product_build.spectrum.binemis_cpp_error"] = str(exc)[:240]
+                timing["final_product_build.spectrum.binemis_cpp_error_present"] = 1.0
 
     for _kl0, _mm0 in _ranked_nonzero:
             kl_one_based = int(_kl0) + 1
@@ -1743,7 +1743,7 @@ def run_output_writer_sequence(
             )
             timing_breakdown["final_fits_write"] = float(time.perf_counter() - _final_write_t0)
             _emit("spectral_writer_done", lwri=int(level))
-    timing_breakdown["total"] = float(sum(timing_breakdown.values()))
+    timing_breakdown["total"] = float(sum(float(v) for v in timing_breakdown.values() if isinstance(v, (int, float))))
     state.outputs["output_writer_source_order"] = tuple(source_order)
     state.outputs["output_writer_paths"] = dict(paths)
     state.outputs["output_writers_executed"] = bool(writer_names or stores)

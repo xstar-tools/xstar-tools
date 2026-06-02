@@ -133,3 +133,10 @@ For source-tree runs, no override should be needed when the libraries are built 
 - Prefer coarse ion/element-level kernels over per-record `ctypes` calls.
 - Keep Python fallbacks available.
 - Do not enable experimental kernels by default until they show both parity and timing improvement.
+
+
+## v0.6.0a20 parity note
+
+`XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1` remains the default for the validated Mg direct accumulator, but `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP` defaults to `0` because the fast type-53 path changed thermal convergence diagnostics (`h-c(%)` and final iteration column) relative to the a15/type49-only path. Enable it explicitly only for performance experiments until type-53 parity is corrected.
+
+The binemis C++ backend stores only numeric timing fields so output-writer timing totals can be computed safely.
