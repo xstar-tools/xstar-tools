@@ -7,6 +7,7 @@ src/xstar_tools/xstar/cpp/
   level_population.cpp   -> libxstar_solver.so
   rate_kernels.cpp       -> libxstar_rates.so
   matrix_kernels.cpp     -> libxstar_matrix.so
+  line_emissivity.cpp    -> libxstar_emissivity.so
   build_lib.sh
   Makefile
 ```
@@ -23,12 +24,13 @@ From this directory:
 make
 ```
 
-Both commands build only:
+Both commands build only in this directory:
 
 ```text
 src/xstar_tools/xstar/cpp/libxstar_solver.so
 src/xstar_tools/xstar/cpp/libxstar_rates.so
 src/xstar_tools/xstar/cpp/libxstar_matrix.so
+src/xstar_tools/xstar/cpp/libxstar_emissivity.so
 ```
 
 ## Libraries
@@ -89,6 +91,28 @@ export XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=1
 export XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_MIN_RECORDS=1
 ```
 
+
+### `libxstar_emissivity.so`
+
+Output/emissivity backend.  Current implementation name reported by the C ABI:
+
+```text
+xstar_emissivity_binemis_profile_v1
+```
+
+It moves the `binemis` strong-line profile loop from Python into C++ while Python still performs source-faithful line ranking and FITS/table packing.  This targets the post-a18 bottleneck:
+
+```text
+final_product_build.spectrum.binemis_profile_seconds ~43-44 s
+```
+
+Useful controls:
+
+```bash
+export XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1   # default in v0.6.0a19+
+export XSTAR_ATOMIC_EMISSIVITY_LIB=/path/to/libxstar_emissivity.so
+```
+
 ## Backend selection and library overrides
 
 Normal runs use `auto` backend selection through the Python wrapper.  Explicit shared-library overrides are available when needed:
@@ -97,6 +121,7 @@ Normal runs use `auto` backend selection through the Python wrapper.  Explicit s
 export XSTAR_ATOMIC_SOLVER_LIB=/path/to/libxstar_solver.so
 export XSTAR_ATOMIC_RATES_LIB=/path/to/libxstar_rates.so
 export XSTAR_ATOMIC_MATRIX_LIB=/path/to/libxstar_matrix.so
+export XSTAR_ATOMIC_EMISSIVITY_LIB=/path/to/libxstar_emissivity.so
 ```
 
 For source-tree runs, no override should be needed when the libraries are built in this directory.

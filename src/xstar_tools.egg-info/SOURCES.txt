@@ -680,6 +680,7 @@ src/xstar_tools/xstar/compact_active_atdb.py
 src/xstar_tools/xstar/complete_fixed_state.py
 src/xstar_tools/xstar/compton.py
 src/xstar_tools/xstar/continuum_diagnostics.py
+src/xstar_tools/xstar/cpp_backend_emissivity.py
 src/xstar_tools/xstar/cpp_backend_matrix.py
 src/xstar_tools/xstar/cpp_backend_rates.py
 src/xstar_tools/xstar/driver.py
@@ -744,9 +745,11 @@ src/xstar_tools/xstar/cpp/Makefile
 src/xstar_tools/xstar/cpp/README.md
 src/xstar_tools/xstar/cpp/build_lib.sh
 src/xstar_tools/xstar/cpp/level_population.cpp
+src/xstar_tools/xstar/cpp/libxstar_emissivity.so
 src/xstar_tools/xstar/cpp/libxstar_matrix.so
 src/xstar_tools/xstar/cpp/libxstar_rates.so
 src/xstar_tools/xstar/cpp/libxstar_solver.so
+src/xstar_tools/xstar/cpp/line_emissivity.cpp
 src/xstar_tools/xstar/cpp/matrix_kernels.cpp
 src/xstar_tools/xstar/cpp/rate_kernels.cpp
 src/xstar_tools/xstar/data/coheat.dat

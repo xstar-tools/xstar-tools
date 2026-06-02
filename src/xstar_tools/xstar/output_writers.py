@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
 from typing import Any, Iterable, Mapping, Sequence
 
 import time
@@ -672,6 +673,58 @@ def build_binemis_spectrum(
     if timing is not None:
         timing["final_product_build.spectrum.binemis_profile_nonzero_ranked_slots"] = float(_ranked_nonzero.shape[0])
         timing["final_product_build.spectrum.binemis_profile_scanned_slots_saved"] = float(max(0, n * 10 - int(_ranked_nonzero.shape[0])))
+
+    # v0.6.0a19: the strong-line profile loop is now available as a real
+    # C++ emissivity/output backend.  Python still ranks lines source-faithfully
+    # and packs compact line metadata, but C++ owns the expensive voigte/profile
+    # expansion plus final active-row packing.  Fallback preserves the validated
+    # Python implementation when the optional library is absent or disabled.
+    if os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "1") != "0" and _ranked_nonzero.shape[0] > 0:
+        _cpp_t0 = time.perf_counter()
+        try:
+            from .cpp_backend_emissivity import build_binemis_profile_cpp
+            n_lum_lines = int(lum.shape[1])
+            line_wavelength = np.zeros(n_lum_lines, dtype=float)
+            line_data_type = np.zeros(n_lum_lines, dtype=np.int64)
+            line_atomic_mass = np.ones(n_lum_lines, dtype=float)
+            line_natural_rate = np.zeros(n_lum_lines, dtype=float)
+            line_auger_width = np.zeros(n_lum_lines, dtype=float)
+            line_auger_rate = np.zeros(n_lum_lines, dtype=float)
+            for row in metadata.lines:
+                j0 = int(row.line_index) - 1
+                if 0 <= j0 < n_lum_lines:
+                    line_wavelength[j0] = abs(float(row.wavelength_angstrom))
+                    line_data_type[j0] = int(row.data_type)
+                    line_atomic_mass[j0] = max(float(row.atomic_mass), np.finfo(float).tiny)
+                    line_natural_rate[j0] = float(row.natural_rate_s)
+                    line_auger_width[j0] = float(row.auger_width_eV)
+                    line_auger_rate[j0] = float(row.auger_rate_s)
+            slot_line_indices = np.ascontiguousarray([
+                int(ranked[int(mm0), int(kl0)]) for kl0, mm0 in _ranked_nonzero
+            ], dtype=np.int64)
+            cpp_out, cpp_stats, cpp_message = build_binemis_profile_cpp(
+                epi_eV=epi, dpthc=dp, elum=lum, zrems=original, zremsz=incident,
+                slot_line_indices=slot_line_indices,
+                line_wavelength=line_wavelength, line_data_type=line_data_type,
+                line_atomic_mass=line_atomic_mass, line_natural_rate_s=line_natural_rate,
+                line_auger_width_eV=line_auger_width, line_auger_rate_s=line_auger_rate,
+                xlum=xlum, temperature_1e4K=temperature_1e4K,
+                turbulent_velocity_km_s=turbulent_velocity_km_s, ncn2=n,
+            )
+            if timing is not None:
+                timing["final_product_build.spectrum.binemis_cpp_seconds"] = float(time.perf_counter() - _cpp_t0)
+                timing["final_product_build.spectrum.binemis_cpp_message"] = str(cpp_message)
+                timing["final_product_build.spectrum.binemis_profile_seconds"] = float(timing["final_product_build.spectrum.binemis_cpp_seconds"])
+                timing["final_product_build.spectrum.binemis_profile_lines_attempted"] = float(cpp_stats.get("cpp_profile_lines_attempted", 0.0))
+                timing["final_product_build.spectrum.binemis_profile_lines_applied"] = float(cpp_stats.get("cpp_profile_lines_applied", 0.0))
+                timing["final_product_build.spectrum.binemis_cpp_slots"] = float(cpp_stats.get("cpp_profile_slots", 0.0))
+                timing["final_product_build.spectrum.binemis_pack_seconds"] = 0.0
+            return cpp_out
+        except Exception as exc:
+            if timing is not None:
+                timing["final_product_build.spectrum.binemis_cpp_fallback"] = 1.0
+                timing["final_product_build.spectrum.binemis_cpp_error"] = str(exc)[:240]
+
     for _kl0, _mm0 in _ranked_nonzero:
             kl_one_based = int(_kl0) + 1
             mm_one_based = int(_mm0) + 1

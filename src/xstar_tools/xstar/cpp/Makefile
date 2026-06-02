@@ -5,7 +5,8 @@ LDFLAGS ?= -shared
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
 MATRIX_TARGET := libxstar_matrix.so
-TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET)
+EMISSIVITY_TARGET := libxstar_emissivity.so
+TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) $(EMISSIVITY_TARGET)
 
 .PHONY: all clean install
 
@@ -18,6 +19,9 @@ $(RATES_TARGET): rate_kernels.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 $(MATRIX_TARGET): matrix_kernels.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
+
+$(EMISSIVITY_TARGET): line_emissivity.cpp
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 install: all
