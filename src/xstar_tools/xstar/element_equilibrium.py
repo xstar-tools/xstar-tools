@@ -984,6 +984,37 @@ def _matrix_mg_ion_source_scan_active_for_mg() -> bool:
     return bool(flags & 128)
 
 
+
+
+def _env_truthy(name: str, default: str = "0") -> bool:
+    return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_falsy(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"0", "false", "no", "off"}
+
+
+def _matrix_mg_ion_type49_auto_enabled_for_mg() -> bool:
+    """Return true when proven Mg rate-7/data-49 C++ direct terms may run.
+
+    v0.6.0a29 promotes the a28 shadow-parity-proven type49 path for
+    ``matrix-backend=auto`` and explicit ``matrix-backend=cpp``.  The older
+    opt-in variable is still honored, and the path can be disabled explicitly
+    with ``XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=0`` or with the
+    dedicated opt-out ``XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO=0``.
+    Type53 and the broader direct accumulator remain opt-in.
+    """
+    if _env_truthy("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP", "0"):
+        return _matrix_mg_ion_source_scan_active_for_mg()
+    requested = str(os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND", os.environ.get("XSTAR_ATOMIC_BACKEND", "python"))).strip().lower()
+    if requested not in {"auto", "cpp"}:
+        return False
+    if _env_falsy("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP"):
+        return False
+    if _env_falsy("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO"):
+        return False
+    return _matrix_mg_ion_source_scan_active_for_mg()
+
 def _rates_cpp_active_for_mg() -> bool:
     """Return true when the legacy optional C++ rates backend should own Mg batches."""
     try:
@@ -1558,13 +1589,13 @@ def assemble_element_matrix(
             pending_cpp_type7: List[Tuple[UCalcResult, int]] = []
             type51_cpp_cache: Dict[int, UCalcResult] = {}
             type51_cpp_stats_recorded = False
-            type51_cpp_enabled = bool(int(element_z) == 12 and _matrix_cpp_active_for_mg() and str(os.environ.get("XSTAR_ATOMIC_MATRIX_TYPE51_UCALC_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"})
+            type51_cpp_enabled = bool(int(element_z) == 12 and _matrix_cpp_active_for_mg() and str(os.environ.get("XSTAR_ATOMIC_MATRIX_TYPE51_UCALC_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"})
             pending_cpp_mg_rates_matrix: List[Tuple[UCalcResult, int]] = []
             pending_cpp_mg_type51_payload: List[Tuple[Dict[str, Any], int]] = []
             mg_rates_matrix_cpp_enabled = bool(
                 int(element_z) == 12
                 and _matrix_mg_rates_matrix_active_for_mg()
-                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
             )
             mg_rates_matrix_parity_records = max(0, int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_PARITY_RECORDS", "16") or "0"))
             mg_ion_source_scan_cpp_enabled = bool(
@@ -2384,7 +2415,7 @@ def assemble_element_matrix(
                             error=str(exc),
                         )
 
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and _matrix_mg_ion_type49_auto_enabled_for_mg():
                 try:
                     _type49_candidates = []
                     for _rec, _rt, _dt in source_record_iter:
@@ -2778,7 +2809,7 @@ def assemble_element_matrix(
                     mg_rates_matrix_cpp_enabled
                     and int(header.rate_type) == 3
                     and int(header.data_type) == 51
-                    and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_TYPE51_UCALC_IN_RATES_MATRIX_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
+                    and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_TYPE51_UCALC_IN_RATES_MATRIX_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
                 ):
                     payload_item = _build_mg_type51_payload(int(record), ucontext)
                     if payload_item is not None:
