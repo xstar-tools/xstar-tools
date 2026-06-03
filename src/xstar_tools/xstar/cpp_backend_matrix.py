@@ -231,7 +231,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 pass
             try:
                 lib.xstar_matrix_accumulate_mg_ion_rate7_type49_terms.argtypes = [
-                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong,
                     i64p, i64p, i64p, i64p, i64p, f64p, f64p,
@@ -244,7 +244,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 pass
             try:
                 lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms.argtypes = [
-                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong,
                     i64p, i64p, i64p, i64p, i64p, f64p, f64p,
@@ -1110,6 +1110,23 @@ def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.nd
 
 
 
+def _radiation_extrap_max_points_for_type49(radiation: Any, full_grid_size: int) -> int:
+    """Return Python ``phextrap`` capacity for type49/type53 shadow parity.
+
+    Python evaluates type49 as ``phextrap(..., len(self._mapped_grid(c)))``;
+    ``_mapped_grid`` uses the reduced ``epim`` grid even though phint53 later
+    integrates on the full live ``epi`` grid.  The C++ shadow path must use the
+    same extrapolation capacity; otherwise high-threshold records receive extra
+    extrapolated cross-section points and pirt is too large.
+    """
+    try:
+        epim = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=np.float64).reshape(-1)
+        if epim.size >= 3 and np.all(np.isfinite(epim)) and np.all(np.diff(epim) > 0.0):
+            return int(epim.size)
+    except Exception:
+        pass
+    return int(full_grid_size)
+
 
 def _radiation_grid_arrays_for_type53(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
     """Return the same live high-resolution radiation grid used by type-49.
@@ -1186,6 +1203,7 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
             lev_ionpot[idx] = float(getattr(lev, "ionization_potential_ev", 0.0) or 0.0)
             lev_cont[idx] = float(getattr(lev, "continuum_energy_ev", 0.0) or 0.0)
     epi, brem = _radiation_grid_arrays_for_type49(radiation)
+    extrap_max_points = _radiation_extrap_max_points_for_type49(radiation, int(epi.size))
     max_terms = max(8, int(len(candidates)) * 5)
     out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
     out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
@@ -1194,7 +1212,7 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
     rc = lib.xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
-        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size),
+        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size), int(extrap_max_points),
         int(basis_n_rows), int(term_start), int(max_terms),
         int(ion_index), int(ion_stage), int(compact_start), int(nlevp),
         recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,
@@ -1293,6 +1311,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
             lev_ionpot[idx] = float(getattr(lev, "ionization_potential_ev", 0.0) or 0.0)
             lev_cont[idx] = float(getattr(lev, "continuum_energy_ev", 0.0) or 0.0)
     epi, brem = _radiation_grid_arrays_for_type53(radiation)
+    extrap_max_points = _radiation_extrap_max_points_for_type49(radiation, int(epi.size))
     max_terms = max(8, int(len(candidates)) * 5)
     out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
     out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
@@ -1301,7 +1320,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
     rc = lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
-        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size),
+        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size), int(extrap_max_points),
         int(basis_n_rows), int(term_start), int(max_terms),
         int(ion_index), int(ion_stage), int(compact_start), int(nlevp),
         recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,

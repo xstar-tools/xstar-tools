@@ -36,7 +36,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_direct_accumulator_type49_type53_v13";
+    return "xstar_matrix_mg_ion_direct_accumulator_type49_type53_v14";
 }
 
 int xstar_matrix_feature_flags() {
@@ -1566,6 +1566,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
     int n_idat,
     int n_levels,
     int n_grid,
+    int extrap_max_points,
     int basis_n_rows,
     int term_start,
     int max_terms,
@@ -1597,7 +1598,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
     char* errbuf,
     std::size_t errbuf_size
 ) {
-    if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || basis_n_rows <= 0 ||
+    if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || extrap_max_points < 1 || basis_n_rows <= 0 ||
         term_start <= 0 || max_terms <= 0 || ion_index <= 0 || ion_stage <= 0 || compact_start <= 0 || nlevp <= 0) {
         write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_accumulate_mg_ion_rate7_type49_terms");
         return 2;
@@ -1697,7 +1698,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
         int base = std::max(static_cast<int>(e_ryd.size()) - 2, 0);
         double e1 = e_ryd[base] * 13.6 + threshold;
         double s1 = sigma[base];
-        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
+        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < extrap_max_points && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
             double e2 = e1 * 1.3;
             double s2 = s1 / (1.3 * 1.3 * 1.3);
             e_ryd.push_back((e2 - threshold) / 13.6);
@@ -1863,6 +1864,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
     int n_idat,
     int n_levels,
     int n_grid,
+    int extrap_max_points,
     int basis_n_rows,
     int term_start,
     int max_terms,
@@ -1894,7 +1896,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
     char* errbuf,
     std::size_t errbuf_size
 ) {
-    if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || basis_n_rows <= 0 ||
+    if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || extrap_max_points < 1 || basis_n_rows <= 0 ||
         term_start <= 0 || max_terms <= 0 || ion_index <= 0 || ion_stage <= 0 || compact_start <= 0 || nlevp <= 0) {
         write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_accumulate_mg_ion_rate7_type53_terms");
         return 2;
@@ -1994,7 +1996,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         int base = std::max(static_cast<int>(e_ryd.size()) - 2, 0);
         double e1 = e_ryd[base] * 13.6 + threshold;
         double s1 = sigma[base];
-        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
+        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < extrap_max_points && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
             double e2 = e1 * 1.3;
             double s2 = s1 / (1.3 * 1.3 * 1.3);
             e_ryd.push_back((e2 - threshold) / 13.6);
