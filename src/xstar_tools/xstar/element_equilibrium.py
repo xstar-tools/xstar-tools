@@ -1278,6 +1278,98 @@ def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], samp
             except Exception:
                 val = float("inf")
             summary[out_key] = max(float(summary.get(out_key, 0.0)), val)
+        summary["ready"] = bool(float(summary.get("records_failed_tolerance", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
+        summary["ready_exact"] = bool(float(summary.get("records_mismatched", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
+
+
+def _mg_type53_shadow_record_compare(**kwargs: Any) -> dict[str, Any]:
+    """Compare Python-applied type53 scalar/matrix effects against shadow C++ rows.
+
+    Python remains applied physics; C++ type53 rows are diagnostic-only.
+    """
+    return _mg_type49_shadow_record_compare(**kwargs)
+
+
+def _mg_type53_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:
+    samples = profile_control.setdefault("mg_type53_shadow_parity_samples", [])
+    if isinstance(samples, list) and len(samples) < int(sample_limit):
+        samples.append(dict(sample))
+    worst_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY_MAX_WORST", str(sample_limit)))
+    _mg_type49_shadow_store_worst(
+        profile_control, sample, sample_limit=worst_limit, key="mg_type53_shadow_parity_worst_abs_samples", mode="abs"
+    )
+    _mg_type49_shadow_store_worst(
+        profile_control, sample, sample_limit=worst_limit, key="mg_type53_shadow_parity_worst_rel_samples", mode="rel"
+    )
+    summary = profile_control.setdefault("mg_type53_shadow_parity_summary", {
+        "records_compared": 0.0,
+        "records_matched": 0.0,
+        "records_mismatched": 0.0,
+        "records_with_scalar_pirt_mismatch": 0.0,
+        "records_with_scalar_rrrt_mismatch": 0.0,
+        "records_with_matrix_mismatch": 0.0,
+        "records_with_missing_matrix_term": 0.0,
+        "records_within_tolerance": 0.0,
+        "records_failed_tolerance": 0.0,
+        "shadow_tolerance_rtol": 1.0e-10,
+        "shadow_tolerance_atol": 0.0,
+        "max_scalar_pirt_rel_diff": 0.0,
+        "max_scalar_rrrt_rel_diff": 0.0,
+        "max_matrix_rel_diff": 0.0,
+        "max_scalar_pirt_abs_diff": 0.0,
+        "max_scalar_rrrt_abs_diff": 0.0,
+        "max_matrix_abs_diff": 0.0,
+    })
+    if isinstance(summary, dict):
+        try:
+            rtol = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY_RTOL", "1e-10"))
+        except Exception:
+            rtol = 1.0e-10
+        try:
+            atol = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY_ATOL", "0"))
+        except Exception:
+            atol = 0.0
+        summary["shadow_tolerance_rtol"] = float(rtol)
+        summary["shadow_tolerance_atol"] = float(atol)
+        summary["records_compared"] = float(summary.get("records_compared", 0.0)) + 1.0
+        if str(sample.get("status")) == "match":
+            summary["records_matched"] = float(summary.get("records_matched", 0.0)) + 1.0
+        else:
+            summary["records_mismatched"] = float(summary.get("records_mismatched", 0.0)) + 1.0
+        channel_rel = {
+            "scalar_pirt": float(sample.get("scalar_pirt_rel_diff", 0.0) or 0.0),
+            "scalar_rrrt": float(sample.get("scalar_rrrt_rel_diff", 0.0) or 0.0),
+            "matrix": float(sample.get("max_matrix_rel_diff", 0.0) or 0.0),
+        }
+        channel_abs = {
+            "scalar_pirt": float(sample.get("scalar_pirt_abs_diff", 0.0) or 0.0),
+            "scalar_rrrt": float(sample.get("scalar_rrrt_abs_diff", 0.0) or 0.0),
+            "matrix": float(sample.get("max_matrix_abs_diff", 0.0) or 0.0),
+        }
+        for chan in ("scalar_pirt", "scalar_rrrt", "matrix"):
+            if channel_abs[chan] > 0.0:
+                summary[f"records_with_{chan}_mismatch"] = float(summary.get(f"records_with_{chan}_mismatch", 0.0)) + 1.0
+        missing = any(str(term.get("status", "")) in {"missing_python", "missing_cpp"} for term in sample.get("mismatched_terms", []) if isinstance(term, Mapping))
+        if missing:
+            summary["records_with_missing_matrix_term"] = float(summary.get("records_with_missing_matrix_term", 0.0)) + 1.0
+        failed_tol = any(channel_abs[chan] > atol and channel_rel[chan] > rtol for chan in ("scalar_pirt", "scalar_rrrt", "matrix"))
+        if failed_tol:
+            summary["records_failed_tolerance"] = float(summary.get("records_failed_tolerance", 0.0)) + 1.0
+        else:
+            summary["records_within_tolerance"] = float(summary.get("records_within_tolerance", 0.0)) + 1.0
+        for key in (
+            "scalar_pirt_rel_diff", "scalar_rrrt_rel_diff", "max_matrix_rel_diff",
+            "scalar_pirt_abs_diff", "scalar_rrrt_abs_diff", "max_matrix_abs_diff",
+        ):
+            out_key = "max_" + key if not key.startswith("max_") else key
+            try:
+                val = float(sample.get(key, 0.0))
+            except Exception:
+                val = float("inf")
+            summary[out_key] = max(float(summary.get(out_key, 0.0)), val)
+        summary["ready"] = bool(float(summary.get("records_failed_tolerance", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
+        summary["ready_exact"] = bool(float(summary.get("records_mismatched", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
+
 
 def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[MatrixTerm]:
     out: List[MatrixTerm] = []
@@ -2207,8 +2299,19 @@ def assemble_element_matrix(
             type49_shadow_message = ""
             type49_shadow_sample_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_MAX_SAMPLES", "128"))
             type49_shadow_max_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_MAX_RECORDS", "0"))
+            type53_shadow_enabled = (
+                int(element_z) == 12
+                and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY", "0")).strip().lower() in {"1", "true", "yes", "on"}
+            )
+            type53_shadow_rows_by_record: Dict[int, List[Dict[str, Any]]] = {}
+            type53_shadow_stats: Dict[str, float] = {}
+            type53_shadow_message = ""
+            type53_shadow_sample_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY_MAX_SAMPLES", "128"))
+            type53_shadow_max_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY_MAX_RECORDS", "0"))
             if type49_shadow_enabled:
                 profile_control.setdefault("mg_type49_shadow_parity_enabled", True)
+            if type53_shadow_enabled:
+                profile_control.setdefault("mg_type53_shadow_parity_enabled", True)
             if mg_ion_source_scan_cpp_enabled:
                 try:
                     source_rows, source_scan_cpp_message, source_scan_cpp_stats = scan_mg_ion_source_records_cpp_detailed(
@@ -2253,7 +2356,7 @@ def assemble_element_matrix(
                             status="fallback",
                             error=str(exc),
                         )
-            if type49_shadow_enabled and not source_record_iter:
+            if (type49_shadow_enabled or type53_shadow_enabled) and not source_record_iter:
                 for data_type in range(1, derived.npfi.shape[0]):
                     rec = int(derived.npfi[data_type, block.ion_index])
                     while rec and int(derived.npar[rec]) == block.ion_record:
@@ -2316,6 +2419,70 @@ def assemble_element_matrix(
                             ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type49_terms",
+                            records_seen=0.0,
+                            records_batched=0.0,
+                            cpp_calls=0.0,
+                            fallback_count=1.0,
+                            status="shadow_fallback",
+                            error=str(exc),
+                        )
+
+            if type53_shadow_enabled:
+                try:
+                    _type53_shadow_candidates: List[Tuple[int, float, float]] = []
+                    for _rec, _rt, _dt in source_record_iter:
+                        if int(_rt) == 7 and int(_dt) == 53:
+                            _pt1, _pt2, _esc_reason = _escape_factors(int(_rec), 7, derived, context)
+                            if _esc_reason is None:
+                                _type53_shadow_candidates.append((int(_rec), float(_pt1), float(_pt2)))
+                                if type53_shadow_max_records > 0 and len(_type53_shadow_candidates) >= type53_shadow_max_records:
+                                    break
+                    if _type53_shadow_candidates:
+                        _type53_shadow_rows, type53_shadow_message, type53_shadow_stats = accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
+                            master=master,
+                            derived=derived,
+                            levels=levels,
+                            radiation=context.radiation,
+                            ion_index=int(block.ion_index),
+                            ion_stage=int(block.ion_stage),
+                            compact_start=int(block.compact_start),
+                            basis_n_rows=int(basis.n_rows),
+                            term_start=1,
+                            temperature_k=float(context.temperature_k),
+                            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+                            electron_fraction_xee=float(context.electron_fraction_xee),
+                            nlevp=int(block.nlev),
+                            candidates=_type53_shadow_candidates,
+                        )
+                    else:
+                        _type53_shadow_rows, type53_shadow_message, type53_shadow_stats = [], "no type53 shadow candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
+                    for _row in _type53_shadow_rows:
+                        type53_shadow_rows_by_record.setdefault(int(_row["record"]), []).append(dict(_row))
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type53_shadow_parity_cpp_kernel",
+                            float(type53_shadow_stats.get("packing_seconds", 0.0)) + float(type53_shadow_stats.get("cpp_kernel_seconds", 0.0)),
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type53_terms",
+                            status="shadow",
+                            **type53_shadow_stats,
+                        )
+                except Exception as exc:
+                    type53_shadow_rows_by_record = {}
+                    if is_mg_summary_profile:
+                        record_profile_event(
+                            profile_control,
+                            "calc_hmc_all.element_solver.mg_ion_rate7_type53_shadow_parity_cpp_kernel",
+                            0.0,
+                            element_z=int(element_z),
+                            ion_stage=int(block.ion_stage),
+                            ion_index=int(block.ion_index),
+                            emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                            source_routine="libxstar_matrix.so:xstar_matrix_accumulate_mg_ion_rate7_type53_terms",
                             records_seen=0.0,
                             records_batched=0.0,
                             cpp_calls=0.0,
@@ -3034,6 +3201,47 @@ def assemble_element_matrix(
                             }
                             _mg_type49_shadow_add_sample(profile_control, _shadow_error, sample_limit=type49_shadow_sample_limit)
                             record_results[-1]["type49_shadow_parity_status"] = "shadow_compare_error"
+
+                    if type53_shadow_enabled and int(record) in type53_shadow_rows_by_record and int(result.rate_type) == 7 and int(result.data_type) == 53:
+                        try:
+                            _shadow_python_terms53: List[MatrixTerm] = []
+                            if result.idest1 > 0 and result.idest2 > 0:
+                                _shadow_python_terms53 = _matrix_terms_for_result(
+                                    result=result,
+                                    basis=basis,
+                                    block=block,
+                                    levels=levels,
+                                    term_start=1,
+                                    xpx=context.hydrogen_density_cm3,
+                                )
+                            _shadow_sample53 = _mg_type53_shadow_record_compare(
+                                record=int(record),
+                                ion_index=int(block.ion_index),
+                                ion_stage=int(block.ion_stage),
+                                nlev=int(block.nlev),
+                                source_header_rate_type=int(header.rate_type),
+                                source_header_data_type=int(header.data_type),
+                                escape_factor_in=float(ptmp1),
+                                escape_factor_out=float(ptmp2),
+                                result=result,
+                                python_terms=_shadow_python_terms53,
+                                cpp_rows=type53_shadow_rows_by_record.get(int(record), []),
+                            )
+                            _mg_type53_shadow_add_sample(profile_control, _shadow_sample53, sample_limit=type53_shadow_sample_limit)
+                            record_results[-1]["type53_shadow_parity_status"] = str(_shadow_sample53.get("status"))
+                            record_results[-1]["type53_shadow_parity_max_matrix_rel_diff"] = float(_shadow_sample53.get("max_matrix_rel_diff", 0.0))
+                            record_results[-1]["type53_shadow_parity_scalar_pirt_rel_diff"] = float(_shadow_sample53.get("scalar_pirt_rel_diff", 0.0))
+                            record_results[-1]["type53_shadow_parity_scalar_rrrt_rel_diff"] = float(_shadow_sample53.get("scalar_rrrt_rel_diff", 0.0))
+                        except Exception as _shadow_exc:
+                            _shadow_error53 = {
+                                "record": int(record),
+                                "ion_index": int(block.ion_index),
+                                "ion_stage": int(block.ion_stage),
+                                "status": "shadow_compare_error",
+                                "error": str(_shadow_exc),
+                            }
+                            _mg_type53_shadow_add_sample(profile_control, _shadow_error53, sample_limit=type53_shadow_sample_limit)
+                            record_results[-1]["type53_shadow_parity_status"] = "shadow_compare_error"
 
                     # Source branches with a missing endpoint do not enter
                     # calc_hmc_ion's four-row matrix block.  They may still
