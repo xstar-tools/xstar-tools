@@ -1973,19 +1973,54 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         if (id1 <= 0 || id1 > nlevp || id2 <= 0) { ++invalid; continue; }
         const double bound_energy = level_val(level_energy_ev, id1);
         const double continuum_energy = level_val(level_energy_ev, nlevp);
-        double threshold = 0.0;
         const double ionpot = level_val(level_ionpot_ev, id1);
-        const double cont = level_val(level_continuum_ev, id1);
-        if (ionpot > 0.0) threshold = std::max(ionpot - bound_energy, 0.0);
-        else if (cont > 0.0) threshold = std::max(cont - bound_energy, 0.0);
-        else threshold = std::max(continuum_energy - bound_energy, 0.0);
+        const double base_threshold = ionpot - bound_energy;
         const double bound_g = level_val(level_weight, id1);
         const double continuum_g = level_val(level_weight, nlevp);
         const double dest_g_candidate = (id2 <= n_levels) ? level_val(level_weight, id2) : 0.0;
         const double dest_energy_candidate = (id2 <= n_levels) ? level_val(level_energy_ev, id2) : 0.0;
         const double dest_g = (dest_g_candidate > 0.0) ? dest_g_candidate : continuum_g;
-        const double dest_energy = (dest_energy_candidate != 0.0 || id2 <= n_levels) ? dest_energy_candidate : continuum_energy;
-        if (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0) { ++bad_context; continue; }
+        const double parent_excitation = (id2 > nlevp && id2 <= n_levels) ? dest_energy_candidate : 0.0;
+        const double physical_dest_energy = (id2 > nlevp) ? (continuum_energy + parent_excitation) : dest_energy_candidate;
+        const double dest_energy = (dest_energy_candidate != 0.0 || id2 <= n_levels) ? dest_energy_candidate : physical_dest_energy;
+        const double threshold = base_threshold + parent_excitation;
+        const bool force_zero_base_threshold = (base_threshold <= 0.0);
+        if (!force_zero_base_threshold && (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0)) { ++bad_context; continue; }
+        if (force_zero_base_threshold) {
+            if (emitted_terms + 5 > max_terms) { ++overflow; break; }
+            double ans_zero[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            const double dbg_zero[16] = {
+                threshold, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0
+            };
+            const auto write_debug_zero = [&](long long idx_row) {
+                double* d = out_debug_f64 + static_cast<long long>(debug_stride) * idx_row;
+                for (int q = 0; q < 16; ++q) d[q] = dbg_zero[q];
+            };
+            emit_one(term_start + emitted_terms, rec, 5, 0, 0, id1, id2, 0, 0, 0, ans_zero, emitted_terms);
+            write_debug_zero(emitted_terms);
+            ++emitted_terms; ++scalar_rows;
+            const long long raw_lower = compact_start + id1 - 1;
+            const long long raw_upper = compact_start + id2 - 1;
+            long long lower = raw_lower, upper = raw_upper;
+            if (lower > basis_n_rows) lower = basis_n_rows;
+            if (upper > basis_n_rows) upper = basis_n_rows;
+            if (lower <= 0 || upper <= 0) { ++invalid; continue; }
+            const long long clamped = (raw_lower != lower || raw_upper != upper) ? 1LL : 0LL;
+            const long long rows[4] = {upper, lower, lower, upper};
+            const long long cols[4] = {lower, upper, lower, upper};
+            const long long raw_rows[4] = {raw_upper, raw_lower, raw_lower, raw_upper};
+            const long long raw_cols[4] = {raw_lower, raw_upper, raw_lower, raw_upper};
+            const long long roles[4] = {1, 2, 3, 4};
+            for (int m = 0; m < 4; ++m) {
+                emit_one(term_start + emitted_terms, rec, roles[m], rows[m], cols[m], id1, id2, raw_rows[m], raw_cols[m], clamped, ans_zero, emitted_terms);
+                write_debug_zero(emitted_terms);
+                ++emitted_terms; ++matrix_terms;
+            }
+            ++supported;
+            continue;
+        }
         const int n_pairs0 = static_cast<int>(nreal / 2);
         if (n_pairs0 < 2) { ++no_pairs; continue; }
         std::vector<double> e_ryd; e_ryd.reserve(std::min(n_grid, n_pairs0 + 32));
@@ -1994,17 +2029,13 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
             e_ryd.push_back(get_real(real_ptr + 2 * j));
             sigma.push_back(std::max(0.0, get_real(real_ptr + 2 * j + 1) * 1.0e-18));
         }
-        // phextrap.f90-like extension from the source's ntmp-1 physical point.
-        int base = std::max(static_cast<int>(e_ryd.size()) - 2, 0);
-        double e1 = e_ryd[base] * 13.6 + threshold;
-        double s1 = sigma[base];
-        while (s1 > 1.0e-27 && static_cast<int>(e_ryd.size()) < extrap_max_points && static_cast<int>(e_ryd.size()) < n_grid && e1 < 2.0e5) {
-            double e2 = e1 * 1.3;
-            double s2 = s1 / (1.3 * 1.3 * 1.3);
-            e_ryd.push_back((e2 - threshold) / 13.6);
-            sigma.push_back(s2);
-            e1 = e2; s1 = s2;
-        }
+        // v0.6.0a33: match the Python type53 reference exactly.
+        // Python evaluate_type53_ucalc_record currently passes the packed
+        // cross-section pairs directly into phint53 mapping.  Unlike the
+        // type49 branch, it does not call phextrap before evaluate_phint53_exact.
+        // Earlier C++ type53 extrapolated here, which pushed klmax thousands
+        // of grid bins too high and changed sumr/sumi/sumh/sumc before ans
+        // construction.  Keep the raw packed pair count for shadow parity.
         const int ntmp = std::min(static_cast<int>(e_ryd.size()), static_cast<int>(sigma.size()));
         if (ntmp <= 0) { ++no_pairs; continue; }
         std::vector<double> sgbar(n_grid, 0.0);
