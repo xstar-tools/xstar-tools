@@ -1826,3 +1826,8 @@ xstar-tools-cpp-parity-gate \
 ### v0.6.0a29 C++ auto-backend policy
 
 The Mg `rate_type=7` / `data_type=49` matrix path is enabled for `matrix-backend=auto` after the v0.6.0a28 shadow-parity gate matched all compared records against the Python reference.  Type51, type53, broader direct accumulation, pre-matrix shortcuts, and C++ binemis remain opt-in until they pass the same Python-vs-C++ gate. Source scanning remains available because the promoted type49 path uses it only to enumerate candidate records.  To opt out of type49 while using `auto`, set `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO=0` or `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=0`.
+
+
+### v0.6.0a30 C++ backend wrapper
+
+Use `run_v0600a30_xstar_tools_cpp_type49.sh` to request the C++ backend explicitly. This wrapper passes `--backend cpp` and requests C++ solver, rates, matrix, and emissivity backends, while keeping unproven high-risk subpaths disabled unless explicitly enabled. The promoted matrix path remains the parity-gated Mg rate_type=7/data_type=49 implementation.
