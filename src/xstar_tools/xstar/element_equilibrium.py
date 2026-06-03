@@ -2511,6 +2511,7 @@ def assemble_element_matrix(
                             electron_fraction_xee=float(context.electron_fraction_xee),
                             nlevp=int(block.nlev),
                             candidates=_type53_shadow_candidates,
+                            context_extras=getattr(context, "extras", {}),
                         )
                     else:
                         _type53_shadow_rows, type53_shadow_message, type53_shadow_stats = [], "no type53 shadow candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
@@ -2748,6 +2749,7 @@ def assemble_element_matrix(
                             electron_fraction_xee=float(context.electron_fraction_xee),
                             nlevp=int(block.nlev),
                             candidates=_type53_candidates,
+                            context_extras=getattr(context, "extras", {}),
                         )
                     else:
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = [], "no type53 candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}

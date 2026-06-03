@@ -13,7 +13,7 @@ from dataclasses import dataclass, asdict
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -1264,6 +1264,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     electron_fraction_xee: float,
     nlevp: int,
     candidates: list[tuple[int, float, float]],
+    context_extras: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
     """Evaluate rate_type=7/data_type=53 Mg OP photoionization records in C++.
 
@@ -1302,14 +1303,34 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     lev_energy = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_weight = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_ionpot = np.zeros(max_level_index + 1, dtype=np.float64)
+    # For type53, this array is used by C++ as the excited-parent energy map
+    # for destinations above nlevp.  Python type53 gets this from
+    # context.extras["parent_level_energy_ev_by_destination"], not from the
+    # mutable leveltemp workspace.
     lev_cont = np.zeros(max_level_index + 1, dtype=np.float64)
+    _extras = dict(context_extras or {})
+    _parent_energy = _extras.get("parent_level_energy_ev_by_destination", {})
+    _parent_weight = _extras.get("parent_level_stat_weight_by_destination", {})
     for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:
+            # leveltemp workspace energy; Python uses this for final destination
+            # energy correction when present.
             lev_energy[idx] = float(getattr(lev, "energy_ev", 0.0) or 0.0)
             lev_weight[idx] = float(getattr(lev, "statistical_weight", 0.0) or 0.0)
             lev_ionpot[idx] = float(getattr(lev, "ionization_potential_ev", 0.0) or 0.0)
             lev_cont[idx] = float(getattr(lev, "continuum_energy_ev", 0.0) or 0.0)
+        if idx > int(nlevp):
+            try:
+                if isinstance(_parent_energy, Mapping) and idx in _parent_energy:
+                    lev_cont[idx] = float(_parent_energy[idx] or 0.0)
+            except Exception:
+                pass
+            try:
+                if isinstance(_parent_weight, Mapping) and idx in _parent_weight:
+                    lev_weight[idx] = float(_parent_weight[idx] or 0.0)
+            except Exception:
+                pass
     epi, brem = _radiation_grid_arrays_for_type53(radiation)
     extrap_max_points = _radiation_extrap_max_points_for_type49(radiation, int(epi.size))
     max_terms = max(8, int(len(candidates)) * 5)

@@ -36,7 +36,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_type49_auto_default_type53_optin_v15";
+    return "xstar_matrix_mg_ion_type49_auto_default_type53_optin_v16";
 }
 
 int xstar_matrix_feature_flags() {
@@ -1980,9 +1980,18 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         const double dest_g_candidate = (id2 <= n_levels) ? level_val(level_weight, id2) : 0.0;
         const double dest_energy_candidate = (id2 <= n_levels) ? level_val(level_energy_ev, id2) : 0.0;
         const double dest_g = (dest_g_candidate > 0.0) ? dest_g_candidate : continuum_g;
-        const double parent_excitation = (id2 > nlevp && id2 <= n_levels) ? dest_energy_candidate : 0.0;
+        // v0.6.0a34: Python type53 gets the excited-parent correction from
+        // context.extras["parent_level_energy_ev_by_destination"], not from
+        // leveltemp.  The Python bridge packs that map in level_continuum_ev
+        // for id2 > nlevp.  Fall back to leveltemp energy only if the explicit
+        // parent map is absent.
+        double parent_excitation = 0.0;
+        if (id2 > nlevp && id2 <= n_levels) {
+            const double parent_map_energy = level_val(level_continuum_ev, id2);
+            parent_excitation = (parent_map_energy > 0.0) ? parent_map_energy : dest_energy_candidate;
+        }
         const double physical_dest_energy = (id2 > nlevp) ? (continuum_energy + parent_excitation) : dest_energy_candidate;
-        const double dest_energy = (dest_energy_candidate != 0.0 || id2 <= n_levels) ? dest_energy_candidate : physical_dest_energy;
+        const double dest_energy = (dest_energy_candidate != 0.0) ? dest_energy_candidate : physical_dest_energy;
         const double threshold = base_threshold + parent_excitation;
         const bool force_zero_base_threshold = (base_threshold <= 0.0);
         if (!force_zero_base_threshold && (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0)) { ++bad_context; continue; }
