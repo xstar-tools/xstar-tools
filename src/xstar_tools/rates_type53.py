@@ -459,6 +459,21 @@ def evaluate_phint53_exact(
             "rnist": float(rnist),
             "ptmp_sum": ptmp_sum,
             "lfast": int(lfast),
+            # v0.6.0a32 type53 shadow diagnostics: expose the raw
+            # phint53 integration accumulators so C++ shadow output can be
+            # compared before ucalc sign swaps and energy corrections.
+            "sumr": float(sumr),
+            "sumi": float(sumi),
+            "sumh": float(sumh),
+            "sumh2": float(sumh2),
+            "sumc": float(sumc),
+            "sumc2": float(sumc2),
+            "phint53_ans1_pre_ucalc": float(sumr),
+            "phint53_ans2_pre_ucalc": float(sumi),
+            "phint53_ans3_pre_ucalc": float(sumh * ERG_PER_EV),
+            "phint53_ans4_pre_ucalc": float(sumc * ERG_PER_EV),
+            "phint53_ans5_pre_ucalc": float(sumh2 * ERG_PER_EV),
+            "phint53_ans6_pre_ucalc": float(sumc2 * ERG_PER_EV),
             "bremsint_carried_as_live_state": True,
             "bremsint_consumed_by_phint53_source": False,
             "type53_grid_policy": str(live_radiation.metadata.get("type53_grid_policy", "unspecified")),
@@ -537,11 +552,15 @@ def evaluate_type53_ucalc_record(
     ans5 = -ph.rrcl2_erg_s_inv
     ans6 = -ph.piht2_erg_s_inv
 
+    ans5_pre_energy_correction = ans5
+    ans6_pre_energy_correction = ans6
     energy_difference = abs(destination_energy - bound_energy)
     den6 = max(1.0e-43, abs(ans4) - threshold * ERG_PER_EV * ans1)
     den5 = max(1.0e-43, abs(ans3) - threshold * ERG_PER_EV * ans2)
-    ans6 *= (abs(ans4) - energy_difference * ERG_PER_EV * ans1) / den6
-    ans5 *= (abs(ans3) - energy_difference * ERG_PER_EV * ans2) / den5
+    energy_correction_factor_ans6 = (abs(ans4) - energy_difference * ERG_PER_EV * ans1) / den6
+    energy_correction_factor_ans5 = (abs(ans3) - energy_difference * ERG_PER_EV * ans2) / den5
+    ans6 *= energy_correction_factor_ans6
+    ans5 *= energy_correction_factor_ans5
 
     return {
         "status": "evaluated",
@@ -560,6 +579,19 @@ def evaluate_type53_ucalc_record(
         "phint53_rrcl2_erg_s^-1": ph.rrcl2_erg_s_inv,
         "rnist": rnist,
         "swrat": swrat,
+        "sumr": float(ph.diagnostics.get("sumr", 0.0)),
+        "sumi": float(ph.diagnostics.get("sumi", 0.0)),
+        "sumh": float(ph.diagnostics.get("sumh", 0.0)),
+        "sumh2": float(ph.diagnostics.get("sumh2", 0.0)),
+        "sumc": float(ph.diagnostics.get("sumc", 0.0)),
+        "sumc2": float(ph.diagnostics.get("sumc2", 0.0)),
+        "ans5_pre_energy_correction": float(ans5_pre_energy_correction),
+        "ans6_pre_energy_correction": float(ans6_pre_energy_correction),
+        "ans5_energy_correction_factor": float(energy_correction_factor_ans5),
+        "ans6_energy_correction_factor": float(energy_correction_factor_ans6),
+        "energy_difference_eV": float(energy_difference),
+        "ans5_energy_correction_denominator": float(den5),
+        "ans6_energy_correction_denominator": float(den6),
         "electron_density_xpx_times_xee_cm^-3": electron_density,
         "threshold_eV": threshold,
         "bound_energy_eV": bound_energy,

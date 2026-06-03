@@ -250,7 +250,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                     i64p, i64p, i64p, i64p, i64p, f64p, f64p,
                     f64p, i64p, f64p, f64p, f64p, f64p, f64p, f64p,
                     ctypes.c_double, ctypes.c_double, ctypes.c_double,
-                    i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                    i64p, f64p, i64p, f64p, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t,
                 ]
                 lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms.restype = ctypes.c_int
             except AttributeError:
@@ -1315,6 +1315,11 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     max_terms = max(8, int(len(candidates)) * 5)
     out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
     out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
+    # v0.6.0a32: per-emitted-row type53 debug intermediates.
+    # Columns: threshold, rnist, sumr, sumi, sumh, sumh2, sumc, sumc2,
+    # ans1..ans6, nb1_1based, klmax_1based.
+    debug_stride = 16
+    out_debug_f64 = np.zeros(max_terms * debug_stride, dtype=np.float64)
     out_stats = np.zeros(16, dtype=np.int64)
     packing_seconds = time.perf_counter() - t0
     buf = ctypes.create_string_buffer(512)
@@ -1326,7 +1331,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
         recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,
         rdat, idat, lev_energy, lev_weight, lev_ionpot, lev_cont, epi, brem,
         float(temperature_k), float(hydrogen_density_cm3), float(electron_fraction_xee),
-        out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+        out_i64, out_f64, out_stats, out_debug_f64, int(debug_stride), buf, ctypes.sizeof(buf),
     )
     cpp_kernel_seconds = time.perf_counter() - k0
     message = buf.value.decode("utf-8", errors="replace")
@@ -1335,8 +1340,14 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     emitted = int(out_stats[2])
     oi = out_i64[: emitted * 16].reshape((emitted, 16)) if emitted else np.zeros((0, 16), dtype=np.int64)
     of = out_f64[: emitted * 4].reshape((emitted, 4)) if emitted else np.zeros((0, 4), dtype=np.float64)
+    od = out_debug_f64[: emitted * debug_stride].reshape((emitted, debug_stride)) if emitted else np.zeros((0, debug_stride), dtype=np.float64)
+    debug_names = (
+        "cpp_threshold_eV", "cpp_rnist", "cpp_sumr", "cpp_sumi", "cpp_sumh", "cpp_sumh2", "cpp_sumc", "cpp_sumc2",
+        "cpp_ans1", "cpp_ans2", "cpp_ans3", "cpp_ans4", "cpp_ans5", "cpp_ans6", "cpp_nb1_1based", "cpp_klmax_1based",
+    )
     rows: list[dict[str, Any]] = []
     for j in range(emitted):
+        _debug = {debug_names[k]: float(od[j, k]) for k in range(min(debug_stride, len(debug_names)))}
         rows.append({
             "term_index": int(oi[j, 0]), "record": int(oi[j, 1]), "data_type": int(oi[j, 2]), "rate_type": int(oi[j, 3]),
             "ion_index": int(oi[j, 4]), "ion_stage": int(oi[j, 5]), "role": _ROLE.get(int(oi[j, 6]), f"role_{int(oi[j, 6])}"),
@@ -1344,6 +1355,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
             "lower_endpoint": int(oi[j, 11]), "upper_endpoint": int(oi[j, 12]),
             "source_row_unclamped": int(oi[j, 13]), "source_column_unclamped": int(oi[j, 14]), "source_ipmat_clamped": bool(int(oi[j, 15])),
             "ucalc_status": "evaluated", "aj1": float(of[j, 0]), "aj2": float(of[j, 1]), "cj": float(of[j, 2]), "cj2": float(of[j, 3]),
+            **_debug,
         })
     stats = {
         "records_seen": float(out_stats[0]), "records_supported": float(out_stats[1]), "records_batched": float(out_stats[1]),

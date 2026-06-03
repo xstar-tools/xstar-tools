@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.0a31
+Version: 0.6.0a32
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT

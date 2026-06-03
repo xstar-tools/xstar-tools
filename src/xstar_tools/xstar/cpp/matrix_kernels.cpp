@@ -1893,17 +1893,19 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
     long long* out_i64,
     double* out_f64,
     long long* out_stats,
+    double* out_debug_f64,
+    int debug_stride,
     char* errbuf,
     std::size_t errbuf_size
 ) {
     if (n_candidates <= 0 || n_rdat < 0 || n_idat < 0 || n_levels <= 0 || n_grid < 3 || extrap_max_points < 1 || basis_n_rows <= 0 ||
-        term_start <= 0 || max_terms <= 0 || ion_index <= 0 || ion_stage <= 0 || compact_start <= 0 || nlevp <= 0) {
+        term_start <= 0 || max_terms <= 0 || ion_index <= 0 || ion_stage <= 0 || compact_start <= 0 || nlevp <= 0 || debug_stride < 16) {
         write_message(errbuf, errbuf_size, "invalid dimensions for xstar_matrix_accumulate_mg_ion_rate7_type53_terms");
         return 2;
     }
     if (!records || !nreal_arr || !real_ptr_arr || !nint_arr || !int_ptr_arr || !ptmp1_arr || !ptmp2_arr ||
         !rdat1 || !idat1 || !level_energy_ev || !level_weight || !level_ionpot_ev || !level_continuum_ev ||
-        !epi_ev || !bremsa || !out_i64 || !out_f64 || !out_stats) {
+        !epi_ev || !bremsa || !out_i64 || !out_f64 || !out_stats || !out_debug_f64) {
         write_message(errbuf, errbuf_size, "null pointer passed to xstar_matrix_accumulate_mg_ion_rate7_type53_terms");
         return 3;
     }
@@ -2108,8 +2110,24 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         ans[4] *= (std::abs(ans[2]) - energy_difference * erg_per_ev * ans[1]) / den5;
         if (!finite6(ans[0], ans[1], ans[2], ans[3], ans[4], ans[5])) { ++bad_context; continue; }
         if (emitted_terms + 5 > max_terms) { ++overflow; break; }
+
+        // v0.6.0a32 shadow diagnostics.  These values are copied onto every
+        // emitted row for this record so Python can compare the first divergent
+        // intermediate before matrix assembly: threshold/rnist, raw phint53
+        // accumulators, post-ucalc ans channels, and integration bounds.
+        const double dbg[16] = {
+            threshold, rnist, sumr, sumi, sumh, sumh2, sumc, sumc2,
+            ans[0], ans[1], ans[2], ans[3], ans[4], ans[5],
+            static_cast<double>(nb1 + 1), static_cast<double>(klmax + 1)
+        };
+        const auto write_debug = [&](long long idx_row) {
+            double* d = out_debug_f64 + static_cast<long long>(debug_stride) * idx_row;
+            for (int q = 0; q < 16; ++q) d[q] = dbg[q];
+        };
+
         // Scalar pirt/rrrt contribution.
         emit_one(term_start + emitted_terms, rec, 5, 0, 0, id1, id2, 0, 0, 0, ans, emitted_terms);
+        write_debug(emitted_terms);
         ++emitted_terms; ++scalar_rows;
         const long long raw_lower = compact_start + id1 - 1;
         const long long raw_upper = compact_start + id2 - 1;
@@ -2132,6 +2150,7 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         for (int m = 0; m < 4; ++m) {
             double a[6] = {term_ans[m][0], term_ans[m][1], term_ans[m][2], term_ans[m][3], 0.0, 0.0};
             emit_one(term_start + emitted_terms, rec, roles[m], rows[m], cols[m], id1, id2, raw_rows[m], raw_cols[m], clamped, a, emitted_terms);
+            write_debug(emitted_terms);
             ++emitted_terms; ++matrix_terms;
         }
         ++supported;

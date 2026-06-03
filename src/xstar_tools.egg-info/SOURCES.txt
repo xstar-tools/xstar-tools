@@ -747,10 +747,6 @@ src/xstar_tools/xstar/cpp/Makefile
 src/xstar_tools/xstar/cpp/README.md
 src/xstar_tools/xstar/cpp/build_lib.sh
 src/xstar_tools/xstar/cpp/level_population.cpp
-src/xstar_tools/xstar/cpp/libxstar_emissivity.so
-src/xstar_tools/xstar/cpp/libxstar_matrix.so
-src/xstar_tools/xstar/cpp/libxstar_rates.so
-src/xstar_tools/xstar/cpp/libxstar_solver.so
 src/xstar_tools/xstar/cpp/line_emissivity.cpp
 src/xstar_tools/xstar/cpp/matrix_kernels.cpp
 src/xstar_tools/xstar/cpp/rate_kernels.cpp

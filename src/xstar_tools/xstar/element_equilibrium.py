@@ -1067,6 +1067,9 @@ def _mg_type49_shadow_record_compare(
     scalar_rrrt_cpp = 0.0
     cpp_terms: list[MatrixTerm] = []
     cpp_scalar_rows = 0
+    cpp_debug_source = next((row for row in cpp_rows if str(row.get("role", "")) in {"scalar_pirt", "scalar_rrrt"}), None)
+    if cpp_debug_source is None and cpp_rows:
+        cpp_debug_source = cpp_rows[0]
     for row in cpp_rows:
         role = str(row.get("role", ""))
         if role == "scalar_pirt":
@@ -1127,6 +1130,58 @@ def _mg_type49_shadow_record_compare(
     status = "match"
     if pirt_rel > 1.0e-10 or rrrt_rel > 1.0e-10 or max_matrix_rel_diff > 1.0e-10 or len(py_by_sig) != len(cpp_by_sig):
         status = "mismatch"
+
+    py_diag = dict(getattr(result, "diagnostics", {}) or {})
+    nested_py_diag = dict(py_diag.get("phint53_diagnostics", {}) or {}) if isinstance(py_diag.get("phint53_diagnostics", {}), Mapping) else {}
+    def _diag_float(mapping: Mapping[str, Any], key: str) -> float:
+        try:
+            return float(mapping.get(key, 0.0))
+        except Exception:
+            return 0.0
+    python_intermediates = {
+        "threshold_eV": _diag_float(py_diag, "threshold_eV"),
+        "rnist": _diag_float(py_diag, "rnist"),
+        "sumr": _diag_float(py_diag, "sumr"),
+        "sumi": _diag_float(py_diag, "sumi"),
+        "sumh": _diag_float(py_diag, "sumh"),
+        "sumh2": _diag_float(py_diag, "sumh2"),
+        "sumc": _diag_float(py_diag, "sumc"),
+        "sumc2": _diag_float(py_diag, "sumc2"),
+        "ans1": float(result.ans1),
+        "ans2": float(result.ans2),
+        "ans3": float(result.ans3),
+        "ans4": float(result.ans4),
+        "ans5": float(result.ans5),
+        "ans6": float(result.ans6),
+        "nb1_1based": _diag_float(nested_py_diag, "nb1_1based"),
+        "klmax_1based": _diag_float(nested_py_diag, "klmax_1based"),
+    }
+    cpp_intermediates = {}
+    if isinstance(cpp_debug_source, Mapping):
+        cpp_intermediates = {
+            "threshold_eV": _diag_float(cpp_debug_source, "cpp_threshold_eV"),
+            "rnist": _diag_float(cpp_debug_source, "cpp_rnist"),
+            "sumr": _diag_float(cpp_debug_source, "cpp_sumr"),
+            "sumi": _diag_float(cpp_debug_source, "cpp_sumi"),
+            "sumh": _diag_float(cpp_debug_source, "cpp_sumh"),
+            "sumh2": _diag_float(cpp_debug_source, "cpp_sumh2"),
+            "sumc": _diag_float(cpp_debug_source, "cpp_sumc"),
+            "sumc2": _diag_float(cpp_debug_source, "cpp_sumc2"),
+            "ans1": _diag_float(cpp_debug_source, "cpp_ans1"),
+            "ans2": _diag_float(cpp_debug_source, "cpp_ans2"),
+            "ans3": _diag_float(cpp_debug_source, "cpp_ans3"),
+            "ans4": _diag_float(cpp_debug_source, "cpp_ans4"),
+            "ans5": _diag_float(cpp_debug_source, "cpp_ans5"),
+            "ans6": _diag_float(cpp_debug_source, "cpp_ans6"),
+            "nb1_1based": _diag_float(cpp_debug_source, "cpp_nb1_1based"),
+            "klmax_1based": _diag_float(cpp_debug_source, "cpp_klmax_1based"),
+        }
+    intermediate_diffs = {}
+    for _k, _py_v in python_intermediates.items():
+        _cpp_v = float(cpp_intermediates.get(_k, 0.0)) if cpp_intermediates else 0.0
+        _ad, _rd = _mg_type49_shadow_float_diff(float(_py_v), float(_cpp_v))
+        intermediate_diffs[_k] = {"python": float(_py_v), "cpp": float(_cpp_v), "abs_diff": float(_ad), "rel_diff": float(_rd)}
+
     return {
         "record": int(record),
         "ion_index": int(ion_index),
@@ -1160,6 +1215,9 @@ def _mg_type49_shadow_record_compare(
         "max_matrix_abs_diff": float(max_matrix_abs_diff),
         "max_matrix_rel_diff": float(max_matrix_rel_diff),
         "mismatched_terms": mismatched_terms[:16],
+        "python_intermediates": python_intermediates,
+        "cpp_intermediates": cpp_intermediates,
+        "intermediate_diffs": intermediate_diffs,
         "status": status,
     }
 
