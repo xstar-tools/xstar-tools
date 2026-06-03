@@ -1680,8 +1680,10 @@ int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
         else threshold = std::max(continuum_energy - bound_energy, 0.0);
         const double bound_g = level_val(level_weight, id1);
         const double continuum_g = level_val(level_weight, nlevp);
-        const double dest_g = (id2 <= nlevp) ? level_val(level_weight, id2) : continuum_g;
-        const double dest_energy = (id2 <= nlevp) ? level_val(level_energy_ev, id2) : continuum_energy;
+        const double dest_g_candidate = (id2 <= n_levels) ? level_val(level_weight, id2) : 0.0;
+        const double dest_energy_candidate = (id2 <= n_levels) ? level_val(level_energy_ev, id2) : 0.0;
+        const double dest_g = (dest_g_candidate > 0.0) ? dest_g_candidate : continuum_g;
+        const double dest_energy = (dest_energy_candidate != 0.0 || id2 <= n_levels) ? dest_energy_candidate : continuum_energy;
         if (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0) { ++bad_context; continue; }
         const int n_pairs0 = static_cast<int>(nreal / 2);
         if (n_pairs0 < 2) { ++no_pairs; continue; }
@@ -1975,8 +1977,10 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
         else threshold = std::max(continuum_energy - bound_energy, 0.0);
         const double bound_g = level_val(level_weight, id1);
         const double continuum_g = level_val(level_weight, nlevp);
-        const double dest_g = (id2 <= nlevp) ? level_val(level_weight, id2) : continuum_g;
-        const double dest_energy = (id2 <= nlevp) ? level_val(level_energy_ev, id2) : continuum_energy;
+        const double dest_g_candidate = (id2 <= n_levels) ? level_val(level_weight, id2) : 0.0;
+        const double dest_energy_candidate = (id2 <= n_levels) ? level_val(level_energy_ev, id2) : 0.0;
+        const double dest_g = (dest_g_candidate > 0.0) ? dest_g_candidate : continuum_g;
+        const double dest_energy = (dest_energy_candidate != 0.0 || id2 <= n_levels) ? dest_energy_candidate : continuum_energy;
         if (threshold <= 0.0 || bound_g <= 0.0 || continuum_g <= 0.0 || dest_g <= 0.0) { ++bad_context; continue; }
         const int n_pairs0 = static_cast<int>(nreal / 2);
         if (n_pairs0 < 2) { ++no_pairs; continue; }

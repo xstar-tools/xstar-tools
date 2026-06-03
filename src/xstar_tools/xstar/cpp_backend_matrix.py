@@ -1161,11 +1161,24 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     nint = np.ascontiguousarray([int(ptrs[int(r) - 1, 5]) for r in recs], dtype=np.int64)
     int_ptr = np.ascontiguousarray([int(ptrs[int(r) - 1, 8]) for r in recs], dtype=np.int64)
     nlev = int(nlevp)
-    lev_energy = np.zeros(nlev + 1, dtype=np.float64)
-    lev_weight = np.zeros(nlev + 1, dtype=np.float64)
-    lev_ionpot = np.zeros(nlev + 1, dtype=np.float64)
-    lev_cont = np.zeros(nlev + 1, dtype=np.float64)
-    for idx in range(1, nlev + 1):
+    # Preserve Python ucalc's leveltemp semantics for parent destinations.
+    # Type-49/53 records can have idest2 > nlevp; Python looks up these
+    # persistent higher leveltemp columns for the final electron-POV ans5/ans6
+    # energy correction.  Passing only 1..nlevp made C++ silently fall back to
+    # the continuum energy and produced correct ans1..ans4 but wrong cj2.
+    max_level_index = nlev
+    if len(recs):
+        try:
+            parent_offsets = [max(0, int(idat[int(int_ptr[j] + int(nint[j]) - 4) - 1])) for j in range(len(recs)) if int(nint[j]) >= 4]
+            if parent_offsets:
+                max_level_index = max(max_level_index, max(int(nlevp) + int(off) - 1 for off in parent_offsets))
+        except Exception:
+            max_level_index = nlev
+    lev_energy = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_weight = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_ionpot = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_cont = np.zeros(max_level_index + 1, dtype=np.float64)
+    for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:
             lev_energy[idx] = float(getattr(lev, "energy_ev", 0.0) or 0.0)
@@ -1181,7 +1194,7 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
     rc = lib.xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
-        int(len(candidates)), int(rdat.size), int(idat.size), int(nlev + 1), int(epi.size),
+        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size),
         int(basis_n_rows), int(term_start), int(max_terms),
         int(ion_index), int(ion_stage), int(compact_start), int(nlevp),
         recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,
@@ -1255,11 +1268,24 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     nint = np.ascontiguousarray([int(ptrs[int(r) - 1, 5]) for r in recs], dtype=np.int64)
     int_ptr = np.ascontiguousarray([int(ptrs[int(r) - 1, 8]) for r in recs], dtype=np.int64)
     nlev = int(nlevp)
-    lev_energy = np.zeros(nlev + 1, dtype=np.float64)
-    lev_weight = np.zeros(nlev + 1, dtype=np.float64)
-    lev_ionpot = np.zeros(nlev + 1, dtype=np.float64)
-    lev_cont = np.zeros(nlev + 1, dtype=np.float64)
-    for idx in range(1, nlev + 1):
+    # Preserve Python ucalc's leveltemp semantics for parent destinations.
+    # Type-49/53 records can have idest2 > nlevp; Python looks up these
+    # persistent higher leveltemp columns for the final electron-POV ans5/ans6
+    # energy correction.  Passing only 1..nlevp made C++ silently fall back to
+    # the continuum energy and produced correct ans1..ans4 but wrong cj2.
+    max_level_index = nlev
+    if len(recs):
+        try:
+            parent_offsets = [max(0, int(idat[int(int_ptr[j] + int(nint[j]) - 4) - 1])) for j in range(len(recs)) if int(nint[j]) >= 4]
+            if parent_offsets:
+                max_level_index = max(max_level_index, max(int(nlevp) + int(off) - 1 for off in parent_offsets))
+        except Exception:
+            max_level_index = nlev
+    lev_energy = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_weight = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_ionpot = np.zeros(max_level_index + 1, dtype=np.float64)
+    lev_cont = np.zeros(max_level_index + 1, dtype=np.float64)
+    for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:
             lev_energy[idx] = float(getattr(lev, "energy_ev", 0.0) or 0.0)
@@ -1275,7 +1301,7 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     buf = ctypes.create_string_buffer(512)
     k0 = time.perf_counter()
     rc = lib.xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
-        int(len(candidates)), int(rdat.size), int(idat.size), int(nlev + 1), int(epi.size),
+        int(len(candidates)), int(rdat.size), int(idat.size), int(max_level_index + 1), int(epi.size),
         int(basis_n_rows), int(term_start), int(max_terms),
         int(ion_index), int(ion_stage), int(compact_start), int(nlevp),
         recs, nreal, real_ptr, nint, int_ptr, ptmp1, ptmp2,
