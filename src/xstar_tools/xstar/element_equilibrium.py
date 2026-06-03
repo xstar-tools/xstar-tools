@@ -1040,15 +1040,24 @@ def _mg_type49_shadow_record_compare(
         role = str(row.get("role", ""))
         if role == "scalar_pirt":
             cpp_scalar_rows += 1
-            scalar_pirt_cpp += float(row.get("aj1", 0.0))
-            # The type-49 C++ ABI emits one scalar row carrying both pirt (aj1)
-            # and rrrt (aj2), matching the direct-application path.  Treat it
-            # the same way here so the shadow comparator reports physics
-            # differences rather than an artifact of the compact scalar ABI.
-            scalar_rrrt_cpp += float(row.get("aj2", 0.0))
+            # Match calc_hmc_ion/direct-application semantics, not the raw
+            # compact scalar ABI.  The C++ row carries ans1/ans2 for every
+            # supported type-49 record, but Python only adds ans1 to pirt when
+            # idest1==1 and ans2 to rrrt when idest2>=nlev.  Earlier shadow
+            # releases counted raw ans1 for excited-source records and therefore
+            # reported thousands of false scalar mismatches even though the
+            # direct C++ application code already applied these gates.
+            row_idest1 = int(row.get("idest1", 0) or 0)
+            row_idest2 = int(row.get("idest2", 0) or 0)
+            if row_idest1 == 1:
+                scalar_pirt_cpp += float(row.get("aj1", 0.0))
+            if row_idest2 >= int(nlev):
+                scalar_rrrt_cpp += float(row.get("aj2", 0.0))
         elif role == "scalar_rrrt":
             cpp_scalar_rows += 1
-            scalar_rrrt_cpp += float(row.get("aj2", 0.0))
+            row_idest2 = int(row.get("idest2", 0) or 0)
+            if row_idest2 >= int(nlev):
+                scalar_rrrt_cpp += float(row.get("aj2", 0.0))
         else:
             try:
                 cpp_terms.extend(_matrix_terms_from_cpp_rows([row]))
