@@ -2388,6 +2388,8 @@ def run_xstar_from_parameters(
                 "mg_type49_shadow_parity_enabled": bool(state.control.get("mg_type49_shadow_parity_enabled", False)),
                 "mg_type49_shadow_parity_summary": dict(state.control.get("mg_type49_shadow_parity_summary", {})),
                 "mg_type49_shadow_parity_samples": list(state.control.get("mg_type49_shadow_parity_samples", [])),
+                "mg_type49_shadow_parity_worst_abs_samples": list(state.control.get("mg_type49_shadow_parity_worst_abs_samples", [])),
+                "mg_type49_shadow_parity_worst_rel_samples": list(state.control.get("mg_type49_shadow_parity_worst_rel_samples", [])),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),

@@ -1124,14 +1124,66 @@ def _mg_type49_shadow_record_compare(
     }
 
 
+def _mg_type49_shadow_sample_score(sample: Mapping[str, Any], *, mode: str) -> float:
+    keys = (
+        ("scalar_pirt_abs_diff", "scalar_rrrt_abs_diff", "max_matrix_abs_diff")
+        if str(mode) == "abs"
+        else ("scalar_pirt_rel_diff", "scalar_rrrt_rel_diff", "max_matrix_rel_diff")
+    )
+    out = 0.0
+    for key in keys:
+        try:
+            val = float(sample.get(key, 0.0))
+        except Exception:
+            val = float("inf")
+        out = max(out, val)
+    return float(out)
+
+
+def _mg_type49_shadow_store_worst(
+    profile_control: MutableMapping[str, Any],
+    sample: Mapping[str, Any],
+    *,
+    sample_limit: int,
+    key: str,
+    mode: str,
+) -> None:
+    if int(sample_limit) <= 0:
+        return
+    worst = profile_control.setdefault(key, [])
+    if not isinstance(worst, list):
+        return
+    item = dict(sample)
+    item["shadow_worst_score"] = _mg_type49_shadow_sample_score(sample, mode=mode)
+    item["shadow_worst_score_mode"] = str(mode)
+    worst.append(item)
+    worst.sort(key=lambda row: float(row.get("shadow_worst_score", 0.0) or 0.0), reverse=True)
+    del worst[int(sample_limit):]
+
+
 def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:
     samples = profile_control.setdefault("mg_type49_shadow_parity_samples", [])
     if isinstance(samples, list) and len(samples) < int(sample_limit):
         samples.append(dict(sample))
+    worst_limit = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_MAX_WORST", str(sample_limit)))
+    _mg_type49_shadow_store_worst(
+        profile_control, sample, sample_limit=worst_limit, key="mg_type49_shadow_parity_worst_abs_samples", mode="abs"
+    )
+    _mg_type49_shadow_store_worst(
+        profile_control, sample, sample_limit=worst_limit, key="mg_type49_shadow_parity_worst_rel_samples", mode="rel"
+    )
     summary = profile_control.setdefault("mg_type49_shadow_parity_summary", {
         "records_compared": 0.0,
         "records_matched": 0.0,
         "records_mismatched": 0.0,
+        "records_with_scalar_pirt_mismatch": 0.0,
+        "records_with_scalar_rrrt_mismatch": 0.0,
+        "records_with_matrix_mismatch": 0.0,
+        "records_with_missing_matrix_term": 0.0,
+        "records_within_tolerance": 0.0,
+        "records_failed_tolerance": 0.0,
+        "shadow_tolerance_rtol": 1.0e-10,
+        "shadow_tolerance_atol": 0.0,
         "max_scalar_pirt_rel_diff": 0.0,
         "max_scalar_rrrt_rel_diff": 0.0,
         "max_matrix_rel_diff": 0.0,
@@ -1140,11 +1192,42 @@ def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], samp
         "max_matrix_abs_diff": 0.0,
     })
     if isinstance(summary, dict):
+        try:
+            rtol = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_RTOL", "1e-10"))
+        except Exception:
+            rtol = 1.0e-10
+        try:
+            atol = float(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_SHADOW_PARITY_ATOL", "0"))
+        except Exception:
+            atol = 0.0
+        summary["shadow_tolerance_rtol"] = float(rtol)
+        summary["shadow_tolerance_atol"] = float(atol)
         summary["records_compared"] = float(summary.get("records_compared", 0.0)) + 1.0
         if str(sample.get("status")) == "match":
             summary["records_matched"] = float(summary.get("records_matched", 0.0)) + 1.0
         else:
             summary["records_mismatched"] = float(summary.get("records_mismatched", 0.0)) + 1.0
+        channel_rel = {
+            "scalar_pirt": float(sample.get("scalar_pirt_rel_diff", 0.0) or 0.0),
+            "scalar_rrrt": float(sample.get("scalar_rrrt_rel_diff", 0.0) or 0.0),
+            "matrix": float(sample.get("max_matrix_rel_diff", 0.0) or 0.0),
+        }
+        channel_abs = {
+            "scalar_pirt": float(sample.get("scalar_pirt_abs_diff", 0.0) or 0.0),
+            "scalar_rrrt": float(sample.get("scalar_rrrt_abs_diff", 0.0) or 0.0),
+            "matrix": float(sample.get("max_matrix_abs_diff", 0.0) or 0.0),
+        }
+        for chan in ("scalar_pirt", "scalar_rrrt", "matrix"):
+            if channel_abs[chan] > 0.0:
+                summary[f"records_with_{chan}_mismatch"] = float(summary.get(f"records_with_{chan}_mismatch", 0.0)) + 1.0
+        missing = any(str(term.get("status", "")) in {"missing_python", "missing_cpp"} for term in sample.get("mismatched_terms", []) if isinstance(term, Mapping))
+        if missing:
+            summary["records_with_missing_matrix_term"] = float(summary.get("records_with_missing_matrix_term", 0.0)) + 1.0
+        failed_tol = any(channel_abs[chan] > atol and channel_rel[chan] > rtol for chan in ("scalar_pirt", "scalar_rrrt", "matrix"))
+        if failed_tol:
+            summary["records_failed_tolerance"] = float(summary.get("records_failed_tolerance", 0.0)) + 1.0
+        else:
+            summary["records_within_tolerance"] = float(summary.get("records_within_tolerance", 0.0)) + 1.0
         for key in (
             "scalar_pirt_rel_diff", "scalar_rrrt_rel_diff", "max_matrix_rel_diff",
             "scalar_pirt_abs_diff", "scalar_rrrt_abs_diff", "max_matrix_abs_diff",
