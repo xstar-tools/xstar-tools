@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a45",
+                "version": "0.6.0a46",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1732,6 +1732,7 @@ def assemble_element_matrix(
                     "simple_payload_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP"),
                     "direct_accum_rate7_only": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1"),
                     "transition_topology_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1"),
+                    "transition_family_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE", "1"),
                 },
                 "source_scan_records_by_data_type": {},
                 "source_scan_rate7_records_by_data_type": {},
@@ -1843,8 +1844,78 @@ def assemble_element_matrix(
             else:
                 bucket[k] = v
 
+    _TRANSITION_FAMILY_FAST_SKIP_TYPES = {50, 51, 57, 6, 63, 86, 99}
+
     def _transition_cache_enabled() -> bool:
         return int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1")
+
+    def _transition_family_cache_enabled() -> bool:
+        return int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE", "1")
+
+    def _transition_family_cache_store() -> Dict[Any, Dict[str, Any]]:
+        return profile_control.setdefault("mg_transition_family_cache_v46", {})
+
+    def _transition_family_bucket(data_type: Any) -> str:
+        try:
+            return str(int(data_type))
+        except Exception:
+            return str(data_type)
+
+    def _transition_family_counter(name: str, data_type: Any, amount: float = 1.0, *, ion_stage: int | None = None) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        families = diag.setdefault("transition_family_cache_candidates", {})
+        fam = families.setdefault(_transition_family_bucket(data_type), {})
+        fam[name] = float(fam.get(name, 0.0)) + float(amount)
+        if ion_stage in {7, 8}:
+            per = diag.setdefault("transition_family_cache_candidates_by_ion", {}).setdefault(str(int(ion_stage)), {}).setdefault(_transition_family_bucket(data_type), {})
+            per[name] = float(per.get(name, 0.0)) + float(amount)
+
+    def _transition_family_timing(name: str, data_type: Any, elapsed_seconds: float, *, ion_stage: int | None = None) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        timings = diag.setdefault("transition_family_timing_by_data_type", {}).setdefault(_transition_family_bucket(data_type), {})
+        item = timings.setdefault(str(name), {"elapsed_seconds": 0.0, "count": 0.0})
+        item["elapsed_seconds"] = float(item.get("elapsed_seconds", 0.0)) + float(elapsed_seconds)
+        item["count"] = float(item.get("count", 0.0)) + 1.0
+        # Also surface the primary requested per-family outer-loop buckets in timing_splits.
+        if str(name) == "per_record_outer_loop":
+            _speed_timing_add(f"matrix_transition_family_type{_transition_family_bucket(data_type)}", float(elapsed_seconds))
+            if ion_stage in {7, 8}:
+                per = diag.setdefault("transition_family_timing_by_ion", {}).setdefault(str(int(ion_stage)), {}).setdefault(_transition_family_bucket(data_type), {})
+                pit = per.setdefault(str(name), {"elapsed_seconds": 0.0, "count": 0.0})
+                pit["elapsed_seconds"] = float(pit.get("elapsed_seconds", 0.0)) + float(elapsed_seconds)
+                pit["count"] = float(pit.get("count", 0.0)) + 1.0
+
+    def _transition_family_record_signature(record: int, rate_type: int, data_type: int, block_obj: ElementIonBlock, levels_obj: UCalcLevelTable) -> Tuple[Any, ...]:
+        return (
+            int(element_z),
+            int(block_obj.ion_index),
+            int(block_obj.ion_stage),
+            int(block_obj.ion_record),
+            int(block_obj.nlev),
+            int(getattr(levels_obj, "nlev", block_obj.nlev)),
+            int(record),
+            int(rate_type),
+            int(data_type),
+            _transition_basis_signature(block_obj, levels_obj),
+        )
+
+    def _transition_family_classification(data_type: int, result: UCalcResult | None = None) -> str:
+        # Conservative classification for cache/fast-path promotion decisions.
+        # Only topology/counter metadata is cached in a46; rate values and rows
+        # still come from the existing Python/C++ evaluated paths.
+        if int(data_type) in {49, 53}:
+            return "can_skip_when_already_consumed"
+        if int(data_type) in {50, 51, 57, 6, 63, 86, 99}:
+            if result is not None and int(getattr(result, "rate_type", 0)) in {1, 7, 40, 42}:
+                return "heat_cool_only_rows"
+            return "coefficient_only_rows"
+        return "state_dependent_rows"
 
     def _transition_cache_store() -> Dict[Any, Dict[str, Any]]:
         # Persist across the repeated calc_hmc_all / per-zone ion-loop calls.
@@ -2035,7 +2106,7 @@ def assemble_element_matrix(
                 "status": str(status.value if hasattr(status, "value") else status),
             })
 
-    # v0.6.0a45 transition-topology cache activation.  This cache is
+    # v0.6.0a46 transition-topology cache activation.  This cache is
     # observational by default: it records topology-key hits/misses and stable
     # row-stream candidates so we can later bypass repeated Python bookkeeping
     # safely.  It does not alter physics or matrix rows unless a future release
@@ -3421,9 +3492,28 @@ def assemble_element_matrix(
                 _transition_cache_update("source_record_topology", disabled=1.0)
             for record, _source_rate_type, _source_data_type in source_record_iter_for_python:
                 _rec_iter_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
+                _family_outer_t0 = time.perf_counter() if int(element_z) == 12 and int(_source_data_type) in _TRANSITION_FAMILY_FAST_SKIP_TYPES else 0.0
+                _family_cache_hit = False
+                _family_cache_entry = None
                 if int(element_z) == 12:
                     _transition_diag_add("records_visited", None, 1.0, ion_stage=int(block.ion_stage))
                     _transition_diag_add("records_visited_by_source_data_type", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    if int(_source_data_type) in _TRANSITION_FAMILY_FAST_SKIP_TYPES:
+                        _transition_family_counter("records_visited", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                        if _transition_family_cache_enabled():
+                            _fam_key = _transition_family_record_signature(int(record), int(_source_rate_type), int(_source_data_type), block, levels)
+                            _fam_store = _transition_family_cache_store()
+                            _family_cache_entry = _fam_store.get(_fam_key)
+                            if _family_cache_entry is not None and _family_cache_entry.get("signature") == _fam_key:
+                                _family_cache_hit = True
+                                _transition_family_counter("cache_hits", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                                _transition_family_counter("stable_topology_hits", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                            elif _family_cache_entry is not None:
+                                _transition_family_counter("cache_invalidations", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                                _transition_family_counter("topology_signature_mismatch", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                                _fam_store.pop(_fam_key, None)
+                            else:
+                                _transition_family_counter("cache_misses", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
                 if int(record) in cpp_direct_accumulated_records:
                     if int(element_z) == 12:
                         _transition_source_iter_elapsed += time.perf_counter() - _rec_iter_t0
@@ -3721,6 +3811,32 @@ def assemble_element_matrix(
                 if int(element_z) == 12 and int(result.rate_type) == 7:
                     _speed_add_counter("python_remaining_records_by_result_data_type", int(result.data_type), 1.0)
                     _speed_add_elapsed("python_remaining_elapsed_by_result_data_type", int(result.data_type), float(_dt))
+                if int(element_z) == 12 and int(_source_data_type) in _TRANSITION_FAMILY_FAST_SKIP_TYPES:
+                    _family_class = _transition_family_classification(int(_source_data_type), result)
+                    _transition_family_counter(_family_class, int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    if _family_class == "coefficient_only_rows":
+                        _transition_family_counter("topology_stable_rows", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    if _family_class == "can_skip_when_already_consumed":
+                        _transition_family_counter("can_skip_when_already_consumed", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    else:
+                        _transition_family_counter("must_python_evaluate", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    if _transition_family_cache_enabled():
+                        _fam_key = _transition_family_record_signature(int(record), int(_source_rate_type), int(_source_data_type), block, levels)
+                        _fam_store = _transition_family_cache_store()
+                        if _fam_key not in _fam_store:
+                            _fam_store[_fam_key] = {
+                                "signature": _fam_key,
+                                "classification": _family_class,
+                                "rate_type": int(result.rate_type),
+                                "data_type": int(result.data_type),
+                                "idest1": int(result.idest1),
+                                "idest2": int(result.idest2),
+                            }
+                        elif _family_cache_hit:
+                            _transition_family_counter("cached_records_reused", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                            if str(_family_cache_entry.get("classification")) != str(_family_class):
+                                _transition_family_counter("cache_invalidations", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                                _transition_family_counter("topology_signature_mismatch", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
                 if _rate7_classifier_enabled and int(result.rate_type) == 7:
                     _rate7_classifier_add(
                         source_record=int(record),
@@ -3951,6 +4067,8 @@ def assemble_element_matrix(
                             n_eval += 1
                             summary.n_records_evaluated += 1
                             summary.n_matrix_terms += len(new_terms)
+                if int(element_z) == 12 and int(_source_data_type) in _TRANSITION_FAMILY_FAST_SKIP_TYPES and _family_outer_t0:
+                    _transition_family_timing("per_record_outer_loop", int(_source_data_type), time.perf_counter() - _family_outer_t0, ion_stage=int(block.ion_stage))
                 record = int(derived.npnxt[record])
             _flush_pending_mg_rates_matrix()
             if pending_cpp_type7:
