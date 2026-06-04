@@ -2395,6 +2395,7 @@ def run_xstar_from_parameters(
                 "mg_type53_shadow_parity_samples": list(state.control.get("mg_type53_shadow_parity_samples", [])),
                 "mg_type53_shadow_parity_worst_abs_samples": list(state.control.get("mg_type53_shadow_parity_worst_abs_samples", [])),
                 "mg_type53_shadow_parity_worst_rel_samples": list(state.control.get("mg_type53_shadow_parity_worst_rel_samples", [])),
+                "mg_rate7_applied_cpp_speed_summary": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {})),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),

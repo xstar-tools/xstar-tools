@@ -1702,6 +1702,86 @@ def assemble_element_matrix(
     _remaining_rate7_by_result_pair: Dict[Tuple[int, int], Dict[str, float]] = {}
     _remaining_rate7_samples: List[Dict[str, Any]] = []
 
+
+    # v0.6.0a39 applied-speed instrumentation.  This is observational only:
+    # it records whether requested C++ rate7 paths actually consume records
+    # before the Python ucalc remaining-rate7 loop sees them.
+    def _env_enabled(name: str, default: str = "0") -> bool:
+        return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _applied_speed_summary() -> Dict[str, Any] | None:
+        if int(element_z) != 12:
+            return None
+        summary_obj = profile_control.setdefault("mg_rate7_applied_cpp_speed_summary", {})
+        if not isinstance(summary_obj, dict):
+            summary_obj = {}
+            profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
+        if not summary_obj:
+            summary_obj.update({
+                "version": "0.6.0a39",
+                "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
+                "flags": {
+                    "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
+                    "direct_accum_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP"),
+                    "type49_photo_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP"),
+                    "type49_photo_auto": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO", "1"),
+                    "type53_photo_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP"),
+                    "type53_shadow_parity": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_SHADOW_PARITY"),
+                    "pre_matrix_type53_cpp": _env_enabled("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP", os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "0")),
+                    "pre_matrix_photo_cpp": _env_enabled("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP"),
+                    "simple_payload_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP"),
+                    "direct_accum_rate7_only": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1"),
+                },
+                "source_scan_records_by_data_type": {},
+                "source_scan_rate7_records_by_data_type": {},
+                "escape_eligible_candidates_by_data_type": {},
+                "applied_cpp_records_by_data_type": {},
+                "applied_cpp_matrix_terms_by_data_type": {},
+                "python_remaining_records_by_result_data_type": {},
+                "python_remaining_elapsed_by_result_data_type": {},
+                "skipped_records_by_source_data_type": {},
+                "kernel_status": {},
+                "skip_reasons": {},
+                "notes": [],
+            })
+        return summary_obj
+
+    def _as_key(value: Any) -> str:
+        try:
+            return str(int(value))
+        except Exception:
+            return str(value)
+
+    def _speed_add_counter(section: str, key: Any, amount: float = 1.0) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        bucket = summary_obj.setdefault(section, {})
+        k = _as_key(key)
+        bucket[k] = float(bucket.get(k, 0.0)) + float(amount)
+
+    def _speed_add_elapsed(section: str, key: Any, amount: float = 0.0) -> None:
+        _speed_add_counter(section, key, float(amount))
+
+    def _speed_kernel_update(name: str, **values: Any) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        bucket = summary_obj.setdefault("kernel_status", {}).setdefault(name, {})
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                bucket[k] = float(bucket.get(k, 0.0)) + float(v)
+            else:
+                bucket[k] = v
+
+    def _speed_note(text: str, limit: int = 32) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        notes = summary_obj.setdefault("notes", [])
+        if isinstance(notes, list) and len(notes) < limit:
+            notes.append(str(text))
+
     def _rate7_classifier_add(
         *,
         source_record: int,
@@ -2423,6 +2503,11 @@ def assemble_element_matrix(
                         (int(row["record"]), int(row["rate_type"]), int(row["data_type"]))
                         for row in source_rows
                     ]
+                    if int(element_z) == 12:
+                        for _speed_rec, _speed_rt, _speed_dt in source_record_iter:
+                            _speed_add_counter("source_scan_records_by_data_type", int(_speed_dt), 1.0)
+                            if int(_speed_rt) == 7:
+                                _speed_add_counter("source_scan_rate7_records_by_data_type", int(_speed_dt), 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2618,6 +2703,16 @@ def assemble_element_matrix(
                     cpp_direct_matrix_rows = [row for row in cpp_direct_rows if str(row.get("role")) not in {"scalar_pirt", "scalar_rrrt"}]
                     cpp_direct_terms = _matrix_terms_from_cpp_rows(cpp_direct_matrix_rows)
                     cpp_direct_accumulated_records = {int(row["record"]) for row in cpp_direct_rows}
+                    if int(element_z) == 12:
+                        _speed_kernel_update(
+                            "direct_accumulator",
+                            attempted=1.0,
+                            rows_returned=float(len(cpp_direct_rows)),
+                            scalar_rows=float(len(cpp_direct_scalar_rows)),
+                            matrix_rows=float(len(cpp_direct_matrix_rows)),
+                        )
+                        for _speed_row in cpp_direct_rows:
+                            _speed_add_counter("direct_accumulator_rows_by_data_type", int(_speed_row.get("data_type", -1)), 1.0)
                     _direct_seen = float(cpp_direct_accumulator_stats.get("records_seen", 0.0))
                     _direct_supported = float(cpp_direct_accumulator_stats.get("records_supported", 0.0))
                     _direct_rate7_seen = float(cpp_direct_accumulator_stats.get("mg_ion_direct_rate7_seen", 0.0))
@@ -2644,11 +2739,20 @@ def assemble_element_matrix(
                         n_eval += len(cpp_direct_accumulated_records)
                         summary.n_records_evaluated += len(cpp_direct_accumulated_records)
                         summary.n_matrix_terms += len(cpp_direct_terms)
+                        if int(element_z) == 12:
+                            _speed_kernel_update("direct_accumulator", gate_passed=1.0, applied_records=float(len(cpp_direct_accumulated_records)), applied_matrix_terms=float(len(cpp_direct_terms)))
+                            for _speed_row in cpp_direct_rows:
+                                _speed_add_counter("applied_cpp_records_by_data_type", int(_speed_row.get("data_type", -1)), 1.0)
+                            for _speed_row in cpp_direct_matrix_rows:
+                                _speed_add_counter("applied_cpp_matrix_terms_by_data_type", int(_speed_row.get("data_type", -1)), 1.0)
                         _direct_status = "cpp"
                     else:
                         cpp_direct_terms = []
                         cpp_direct_accumulated_records = set()
                         _direct_status = "coverage_gate_fallback"
+                        if int(element_z) == 12:
+                            _speed_kernel_update("direct_accumulator", coverage_gate_fallback=1.0)
+                            _speed_add_counter("skip_reasons", "direct_accumulator_coverage_gate_fallback", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2669,6 +2773,9 @@ def assemble_element_matrix(
                         )
                 except Exception as exc:
                     cpp_direct_accumulated_records = set()
+                    if int(element_z) == 12:
+                        _speed_kernel_update("direct_accumulator", fallback_count=1.0, error=str(exc))
+                        _speed_add_counter("skip_reasons", "direct_accumulator_exception", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2695,6 +2802,9 @@ def assemble_element_matrix(
                             _pt1, _pt2, _esc_reason = _escape_factors(int(_rec), 7, derived, context)
                             if _esc_reason is None:
                                 _type49_candidates.append((int(_rec), float(_pt1), float(_pt2)))
+                    if int(element_z) == 12:
+                        _speed_kernel_update("type49_applied", attempted=1.0, candidates=float(len(_type49_candidates)))
+                        _speed_add_counter("escape_eligible_candidates_by_data_type", 49, float(len(_type49_candidates)))
                     if _type49_candidates:
                         cpp_type49_rows, cpp_type49_message, cpp_type49_stats = accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
                             master=master,
@@ -2722,6 +2832,15 @@ def assemble_element_matrix(
                     _type49_seen = float(cpp_type49_stats.get("records_seen", 0.0))
                     _type49_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_MIN_RECORDS", "1"))
                     _type49_gate_passed = _type49_supported >= float(_type49_min_records)
+                    if int(element_z) == 12:
+                        _speed_kernel_update(
+                            "type49_applied",
+                            rows_returned=float(len(cpp_type49_rows)),
+                            records_seen=float(cpp_type49_stats.get("records_seen", 0.0)),
+                            records_supported=float(cpp_type49_stats.get("records_supported", 0.0)),
+                            cpp_calls=float(cpp_type49_stats.get("cpp_calls", 0.0)),
+                            fallback_count=float(cpp_type49_stats.get("fallback_count", 0.0)),
+                        )
                     if _type49_gate_passed:
                         terms.extend(cpp_type49_terms)
                         for _row in cpp_type49_scalar_rows:
@@ -2733,9 +2852,16 @@ def assemble_element_matrix(
                         n_eval += len(cpp_type49_records)
                         summary.n_records_evaluated += len(cpp_type49_records)
                         summary.n_matrix_terms += len(cpp_type49_terms)
+                        if int(element_z) == 12:
+                            _speed_kernel_update("type49_applied", gate_passed=1.0, applied_records=float(len(cpp_type49_records)), applied_matrix_terms=float(len(cpp_type49_terms)))
+                            _speed_add_counter("applied_cpp_records_by_data_type", 49, float(len(cpp_type49_records)))
+                            _speed_add_counter("applied_cpp_matrix_terms_by_data_type", 49, float(len(cpp_type49_terms)))
                         _type49_status = "cpp"
                     else:
                         _type49_status = "coverage_gate_fallback"
+                        if int(element_z) == 12:
+                            _speed_kernel_update("type49_applied", coverage_gate_fallback=1.0)
+                            _speed_add_counter("skip_reasons", "type49_coverage_gate_fallback", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2752,6 +2878,9 @@ def assemble_element_matrix(
                             **cpp_type49_stats,
                         )
                 except Exception as exc:
+                    if int(element_z) == 12:
+                        _speed_kernel_update("type49_applied", fallback_count=1.0, error=str(exc))
+                        _speed_add_counter("skip_reasons", "type49_exception", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2779,6 +2908,9 @@ def assemble_element_matrix(
                             _pt1, _pt2, _esc_reason = _escape_factors(int(_rec), 7, derived, context)
                             if _esc_reason is None:
                                 _type53_candidates.append((int(_rec), float(_pt1), float(_pt2)))
+                    if int(element_z) == 12:
+                        _speed_kernel_update("type53_applied", attempted=1.0, candidates=float(len(_type53_candidates)))
+                        _speed_add_counter("escape_eligible_candidates_by_data_type", 53, float(len(_type53_candidates)))
                     if _type53_candidates:
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
                             master=master,
@@ -2811,6 +2943,15 @@ def assemble_element_matrix(
                     _type53_supported = float(cpp_type53_stats.get("records_supported", 0.0))
                     _type53_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_MIN_RECORDS", "1"))
                     _type53_gate_passed = _type53_supported >= float(_type53_min_records)
+                    if int(element_z) == 12:
+                        _speed_kernel_update(
+                            "type53_applied",
+                            rows_returned=float(len(cpp_type53_rows)),
+                            records_seen=float(cpp_type53_stats.get("records_seen", 0.0)),
+                            records_supported=float(cpp_type53_stats.get("records_supported", 0.0)),
+                            cpp_calls=float(cpp_type53_stats.get("cpp_calls", 0.0)),
+                            fallback_count=float(cpp_type53_stats.get("fallback_count", 0.0)),
+                        )
                     if _type53_gate_passed:
                         terms.extend(cpp_type53_terms)
                         for _row in cpp_type53_scalar_rows:
@@ -2822,9 +2963,16 @@ def assemble_element_matrix(
                         n_eval += len(cpp_type53_records)
                         summary.n_records_evaluated += len(cpp_type53_records)
                         summary.n_matrix_terms += len(cpp_type53_terms)
+                        if int(element_z) == 12:
+                            _speed_kernel_update("type53_applied", gate_passed=1.0, applied_records=float(len(cpp_type53_records)), applied_matrix_terms=float(len(cpp_type53_terms)))
+                            _speed_add_counter("applied_cpp_records_by_data_type", 53, float(len(cpp_type53_records)))
+                            _speed_add_counter("applied_cpp_matrix_terms_by_data_type", 53, float(len(cpp_type53_terms)))
                         _type53_status = "cpp"
                     else:
                         _type53_status = "coverage_gate_fallback"
+                        if int(element_z) == 12:
+                            _speed_kernel_update("type53_applied", coverage_gate_fallback=1.0)
+                            _speed_add_counter("skip_reasons", "type53_coverage_gate_fallback", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2841,6 +2989,9 @@ def assemble_element_matrix(
                             **cpp_type53_stats,
                         )
                 except Exception as exc:
+                    if int(element_z) == 12:
+                        _speed_kernel_update("type53_applied", fallback_count=1.0, error=str(exc))
+                        _speed_add_counter("skip_reasons", "type53_exception", 1.0)
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
@@ -2916,6 +3067,8 @@ def assemble_element_matrix(
 
             for record, _source_rate_type, _source_data_type in source_record_iter:
                 if int(record) in cpp_direct_accumulated_records:
+                    if int(element_z) == 12:
+                        _speed_add_counter("skipped_records_by_source_data_type", int(_source_data_type), 1.0)
                     record_results.append({
                         "record": int(record),
                         "data_type": int(_source_data_type),
@@ -3199,6 +3352,9 @@ def assemble_element_matrix(
                                 "elapsed_seconds": float(_dt),
                                 "status": str(result.status.value if hasattr(result.status, "value") else result.status),
                             })
+                if int(element_z) == 12 and int(result.rate_type) == 7:
+                    _speed_add_counter("python_remaining_records_by_result_data_type", int(result.data_type), 1.0)
+                    _speed_add_elapsed("python_remaining_elapsed_by_result_data_type", int(result.data_type), float(_dt))
                 if _rate7_classifier_enabled and int(result.rate_type) == 7:
                     _rate7_classifier_add(
                         source_record=int(record),
