@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a41",
+                "version": "0.6.0a42",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1738,6 +1738,11 @@ def assemble_element_matrix(
                 "applied_cpp_records_by_data_type": {},
                 "applied_cpp_matrix_terms_by_data_type": {},
                 "row_accounting": {},
+                "matrix_assembly_diagnostics": {
+                    "row_volume_totals": {},
+                    "row_volume_by_ion": {},
+                    "notes": [],
+                },
                 "timing_splits": {},
                 "python_remaining_records_by_result_data_type": {},
                 "python_remaining_elapsed_by_result_data_type": {},
@@ -1778,6 +1783,21 @@ def assemble_element_matrix(
 
     def _speed_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
         _speed_nested_update("timing_splits", name, elapsed_seconds=float(elapsed_seconds), count=float(count))
+
+    def _matrix_diag_update(section: str, name: str | None = None, **values: Any) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        if name is None:
+            bucket = diag.setdefault(section, {})
+        else:
+            bucket = diag.setdefault(section, {}).setdefault(str(name), {})
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                bucket[k] = float(bucket.get(k, 0.0)) + float(v)
+            else:
+                bucket[k] = v
 
     def _duplicate_cpp_row_count(rows: Sequence[Mapping[str, Any]]) -> int:
         seen: set[tuple[Any, ...]] = set()
@@ -3906,6 +3926,51 @@ def assemble_element_matrix(
             )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
+    if int(element_z) == 12:
+        _term_counts_by_ion: Dict[int, Dict[str, float]] = {}
+        _pair_counts_by_ion: Dict[int, set[tuple[int, int]]] = {}
+        _duplicate_terms_by_ion: Dict[int, float] = {}
+        _near_zero_terms_by_ion: Dict[int, float] = {}
+        _global_pairs: set[tuple[int, int]] = set()
+        _global_duplicate_terms = 0.0
+        _global_near_zero_terms = 0.0
+        for _term in terms:
+            _ion = int(getattr(_term, "ion_stage", 0) or 0)
+            _bucket = _term_counts_by_ion.setdefault(_ion, {"rows_inserted": 0.0, "matrix_terms": 0.0})
+            _bucket["rows_inserted"] += 1.0
+            _bucket["matrix_terms"] += 1.0
+            _pair = (int(_term.row), int(_term.column))
+            _pairs = _pair_counts_by_ion.setdefault(_ion, set())
+            if _pair in _pairs:
+                _duplicate_terms_by_ion[_ion] = float(_duplicate_terms_by_ion.get(_ion, 0.0)) + 1.0
+            else:
+                _pairs.add(_pair)
+            if _pair in _global_pairs:
+                _global_duplicate_terms += 1.0
+            else:
+                _global_pairs.add(_pair)
+            if max(abs(float(_term.aj1)), abs(float(_term.cj)), abs(float(_term.cj2))) <= 1.0e-300:
+                _near_zero_terms_by_ion[_ion] = float(_near_zero_terms_by_ion.get(_ion, 0.0)) + 1.0
+                _global_near_zero_terms += 1.0
+        _matrix_diag_update(
+            "row_volume_totals",
+            None,
+            rows_inserted=float(len(terms)),
+            unique_row_column_pairs=float(len(_global_pairs)),
+            duplicate_rows_merged=float(_global_duplicate_terms),
+            zero_or_near_zero_rows_discarded=float(_global_near_zero_terms),
+            basis_rows=float(basis.n_rows),
+        )
+        for _ion, _bucket in sorted(_term_counts_by_ion.items()):
+            _matrix_diag_update(
+                "row_volume_by_ion",
+                _ion,
+                rows_inserted=float(_bucket.get("rows_inserted", 0.0)),
+                matrix_terms=float(_bucket.get("matrix_terms", 0.0)),
+                unique_row_column_pairs=float(len(_pair_counts_by_ion.get(_ion, set()))),
+                duplicate_rows_merged=float(_duplicate_terms_by_ion.get(_ion, 0.0)),
+                zero_or_near_zero_rows_discarded=float(_near_zero_terms_by_ion.get(_ion, 0.0)),
+            )
     dense = heat = heat2 = None
     dense_fill_cpp_used = False
     dense_fill_cpp_enabled = str(os.environ.get("XSTAR_ATOMIC_MATRIX_DENSE_FILL_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
@@ -3951,18 +4016,39 @@ def assemble_element_matrix(
                 )
             dense = heat = heat2 = None
     if dense is None:
+        _alloc_t0 = time.perf_counter()
         dense = np.zeros((basis.n_rows, basis.n_rows), dtype=float)
         heat = np.zeros_like(dense)
         heat2 = np.zeros_like(dense)
+        _alloc_seconds = time.perf_counter() - _alloc_t0
+        if int(element_z) == 12:
+            _speed_timing_add("matrix_reset_zeroing", _alloc_seconds)
+            _speed_timing_add("dense_matrix_allocation_zeroing", _alloc_seconds)
+        _insert_t0 = time.perf_counter()
         for term in terms:
             dense[term.row - 1, term.column - 1] += term.aj1
             heat[term.row - 1, term.column - 1] += term.cj
             heat2[term.row - 1, term.column - 1] += term.cj2
+        _insert_seconds = time.perf_counter() - _insert_t0
+        if int(element_z) == 12:
+            _speed_timing_add("python_row_insertion_to_dense", _insert_seconds)
+            _matrix_diag_update(
+                "row_volume_totals",
+                None,
+                dense_matrix_nonzeros=float(np.count_nonzero(dense)),
+                heat_matrix_nonzeros=float(np.count_nonzero(heat)),
+                heat2_matrix_nonzeros=float(np.count_nonzero(heat2)),
+            )
 
+    _norm_t0 = time.perf_counter()
     normalized = dense.copy()
     rhs = np.zeros(basis.n_rows, dtype=float)
     normalized[basis.normalization_row - 1, :] = 1.0
     rhs[basis.normalization_row - 1] = 1.0
+    _norm_seconds = time.perf_counter() - _norm_t0
+    if int(element_z) == 12:
+        _speed_timing_add("dense_matrix_normalization_setup", _norm_seconds)
+        _speed_timing_add("dense_sparse_matrix_construction", (time.perf_counter() - _dense_t0) if is_mg_profile else 0.0)
     if is_mg_profile:
         record_profile_event(
             profile_control,
@@ -4088,6 +4174,23 @@ def msolvelucy(
 ) -> LucySolveResult:
     """Translate ``msolvelucy.f90`` superlevel and fixed-point iteration."""
     basis = assembly.basis
+    _solver_total_t0 = time.perf_counter()
+    _solver_setup_t0 = time.perf_counter()
+    _mg_profile = int(getattr(basis, "element_z", 0) or 0) == 12
+    profile_control = context.profile_control or {}
+
+    def _solver_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
+        if not _mg_profile:
+            return
+        try:
+            speed = profile_control.setdefault("mg_rate7_applied_cpp_speed_summary", {})
+            splits = speed.setdefault("timing_splits", {})
+            bucket = splits.setdefault(str(name), {})
+            bucket["elapsed_seconds"] = float(bucket.get("elapsed_seconds", 0.0)) + float(elapsed_seconds)
+            bucket["count"] = float(bucket.get("count", 0.0)) + float(count)
+        except Exception:
+            pass
+
     n = basis.n_rows
     x = np.asarray(assembly.initial_populations[1 : n + 1], dtype=float).copy()
     # Source ``msolvelucy.f90`` enters the first outer iteration with the
@@ -4124,7 +4227,11 @@ def msolvelucy(
     # does not recompute it after the final fixed-point update.  Preserve that
     # execution-order-dependent vector separately from the returned final x.
     final_outer_start = x.copy()
+    _solver_timing_add("per_ion_matrix_solve_setup", time.perf_counter() - _solver_setup_t0)
 
+    _condensed_build_seconds = 0.0
+    _condensed_solve_seconds = 0.0
+    _fixed_point_seconds = 0.0
     while outer_diff > context.lucy_tolerance and outer < context.max_lucy_iterations:
         outer += 1
         xo = x.copy()
@@ -4141,6 +4248,7 @@ def msolvelucy(
             if sp >= 0 and p[sp] > 1.0e-36:
                 rr[i] = x[i] / (1.0e-48 + p[sp])
 
+        _condensed_build_t0 = time.perf_counter()
         condensed = np.zeros((nspmx, nspmx), dtype=float)
         for term in terms:
             mm = min(n, term.row) - 1
@@ -4150,13 +4258,16 @@ def msolvelucy(
             if spm != spn and spm >= 0 and spn >= 0 and (abs(term.aj1) > 1.0e-48 or abs(term.aj2) > 1.0e-48):
                 condensed[spm, spn] += term.aj1 * rr[nn]
                 condensed[spm, spm] -= term.aj2 * rr[mm]
+        _condensed_build_seconds += time.perf_counter() - _condensed_build_t0
 
         p_start = p.copy()
+        _condensed_solve_t0 = time.perf_counter()
         p_new, method, condensed_rank = _solve_normalized(
             condensed,
             nspmx,
             allow_lstsq=context.allow_lstsq_fallback,
         )
+        _condensed_solve_seconds += time.perf_counter() - _condensed_solve_t0
         solver_methods.append(method)
         for i in range(n):
             sp = int(nsup[i]) - 1
@@ -4165,6 +4276,7 @@ def msolvelucy(
 
         fixed_diff = 10.0
         fixed_iter = 0
+        _fixed_point_t0 = time.perf_counter()
         while fixed_iter < context.max_fixed_point_iterations and fixed_diff >= context.fixed_point_tolerance:
             fixed_iter += 1
             total_fixed += 1
@@ -4231,6 +4343,7 @@ def msolvelucy(
             if fixed_diff >= 1.0e3:
                 break
 
+        _fixed_point_seconds += time.perf_counter() - _fixed_point_t0
         if trace is not None:
             for i in range(n):
                 trace.outer_level_rows.append(
@@ -4370,6 +4483,11 @@ def msolvelucy(
         dense_condition = float(np.linalg.cond(dense_norm))
     except np.linalg.LinAlgError:
         dense_condition = float("inf")
+
+    _solver_timing_add("actual_solver_condensed_matrix_build", _condensed_build_seconds)
+    _solver_timing_add("actual_solver_condensed_linear_solve", _condensed_solve_seconds)
+    _solver_timing_add("actual_solver_fixed_point_update", _fixed_point_seconds)
+    _solver_timing_add("actual_solver_total", time.perf_counter() - _solver_total_t0)
 
     notes: List[str] = list(runtime_notes)
     nnegative = int(np.count_nonzero(x < 0.0))
