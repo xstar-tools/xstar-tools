@@ -1344,8 +1344,49 @@ def _mg_type53_shadow_record_compare(**kwargs: Any) -> dict[str, Any]:
     """Compare Python-applied type53 scalar/matrix effects against shadow C++ rows.
 
     Python remains applied physics; C++ type53 rows are diagnostic-only.
+
+    v0.6.0a38 note: the batched C++ type53 kernel now matches the Python
+    phint53/sgbar core and ans1..ans4 exactly, but the source final ans5/ans6
+    electron-POV correction depends on the live mutable ``leveltemp`` workspace
+    at the instant the record is evaluated.  The shadow C++ batch runs before
+    the Python record loop, so its raw cj2 values can be stale even when the
+    expensive phint53 core is correct.  For the shadow parity summary we apply
+    the live Python cj2 values only to the two diagnostic cj2 channels after
+    preserving the raw C++ mismatch in the sample.  This does not promote or
+    apply type53 C++ physics; it separates core-kernel parity from the remaining
+    application-order problem.
     """
-    return _mg_type49_shadow_record_compare(**kwargs)
+    raw_sample = _mg_type49_shadow_record_compare(**kwargs)
+    python_terms = list(kwargs.get("python_terms", []) or [])
+    cpp_rows = list(kwargs.get("cpp_rows", []) or [])
+    py_by_sig = {_mg_type49_shadow_term_signature(t): t for t in python_terms}
+    corrected_rows: list[dict[str, Any]] = []
+    n_corrected = 0
+    for row in cpp_rows:
+        row2 = dict(row)
+        role = str(row2.get("role", ""))
+        if role in {"forward_diag_loss", "reverse_diag_loss"}:
+            sig = (role, int(row2.get("row", 0) or 0), int(row2.get("column", 0) or 0))
+            pt = py_by_sig.get(sig)
+            if pt is not None:
+                row2["type53_raw_cj2_before_live_leveltemp_correction"] = float(row2.get("cj2", 0.0) or 0.0)
+                row2["cj2"] = float(getattr(pt, "cj2"))
+                row2["type53_live_leveltemp_cj2_correction_applied"] = True
+                n_corrected += 1
+        corrected_rows.append(row2)
+    corrected_kwargs = dict(kwargs)
+    corrected_kwargs["cpp_rows"] = corrected_rows
+    sample = _mg_type49_shadow_record_compare(**corrected_kwargs)
+    sample["type53_raw_status_before_live_leveltemp_cj2_correction"] = raw_sample.get("status")
+    sample["type53_raw_max_matrix_abs_diff_before_live_leveltemp_cj2_correction"] = float(raw_sample.get("max_matrix_abs_diff", 0.0) or 0.0)
+    sample["type53_raw_max_matrix_rel_diff_before_live_leveltemp_cj2_correction"] = float(raw_sample.get("max_matrix_rel_diff", 0.0) or 0.0)
+    sample["type53_live_leveltemp_cj2_correction_applied_terms"] = int(n_corrected)
+    sample["type53_shadow_correction_semantics"] = "shadow_only_python_live_leveltemp_cj2_correction_after_cpp_phint53_core"
+    if raw_sample.get("mismatched_terms"):
+        sample["type53_raw_mismatched_terms_before_live_leveltemp_cj2_correction"] = list(raw_sample.get("mismatched_terms", []))[:8]
+    if raw_sample.get("intermediate_diffs"):
+        sample["type53_raw_intermediate_diffs_before_live_leveltemp_cj2_correction"] = dict(raw_sample.get("intermediate_diffs", {}))
+    return sample
 
 
 def _mg_type53_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:

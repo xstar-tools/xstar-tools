@@ -36,7 +36,7 @@ int xstar_matrix_abi_version() {
 }
 
 const char* xstar_matrix_backend_name() {
-    return "xstar_matrix_mg_ion_type49_auto_default_type53_optin_v16";
+    return "xstar_matrix_mg_ion_type49_auto_default_type53_optin_v17";
 }
 
 int xstar_matrix_feature_flags() {
