@@ -1195,10 +1195,10 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     lev_weight = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_ionpot = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_cont = np.zeros(max_level_index + 1, dtype=np.float64)
-    parent_energy_entries_available = float(len(_parent_energy) if isinstance(_parent_energy, Mapping) else 0)
-    parent_weight_entries_available = float(len(_parent_weight) if isinstance(_parent_weight, Mapping) else 0)
-    parent_energy_entries_packed = 0.0
-    parent_weight_entries_packed = 0.0
+    # Type49 does not use the explicit type53 excited-parent map.  v0.6.0a40
+    # accidentally copied type53 parent-map counters into this scope without
+    # defining _parent_energy/_parent_weight, causing every attempted type49
+    # applied C++ batch to raise NameError and fall back to Python.
     for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:

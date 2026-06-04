@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a39",
+                "version": "0.6.0a41",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1737,6 +1737,8 @@ def assemble_element_matrix(
                 "escape_eligible_candidates_by_data_type": {},
                 "applied_cpp_records_by_data_type": {},
                 "applied_cpp_matrix_terms_by_data_type": {},
+                "row_accounting": {},
+                "timing_splits": {},
                 "python_remaining_records_by_result_data_type": {},
                 "python_remaining_elapsed_by_result_data_type": {},
                 "skipped_records_by_source_data_type": {},
@@ -1762,6 +1764,38 @@ def assemble_element_matrix(
 
     def _speed_add_elapsed(section: str, key: Any, amount: float = 0.0) -> None:
         _speed_add_counter(section, key, float(amount))
+
+    def _speed_nested_update(section: str, name: str, **values: Any) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        bucket = summary_obj.setdefault(section, {}).setdefault(str(name), {})
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                bucket[k] = float(bucket.get(k, 0.0)) + float(v)
+            else:
+                bucket[k] = v
+
+    def _speed_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
+        _speed_nested_update("timing_splits", name, elapsed_seconds=float(elapsed_seconds), count=float(count))
+
+    def _duplicate_cpp_row_count(rows: Sequence[Mapping[str, Any]]) -> int:
+        seen: set[tuple[Any, ...]] = set()
+        dup = 0
+        for row in rows:
+            key = (
+                int(row.get("record", 0)),
+                str(row.get("role", "")),
+                int(row.get("row", 0)),
+                int(row.get("column", 0)),
+                int(row.get("idest1", 0)),
+                int(row.get("idest2", 0)),
+            )
+            if key in seen:
+                dup += 1
+            else:
+                seen.add(key)
+        return dup
 
     def _speed_kernel_update(name: str, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
@@ -2936,10 +2970,33 @@ def assemble_element_matrix(
                         )
                     else:
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = [], "no type53 candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
+                    _type53_row_decode_t0 = time.perf_counter()
                     cpp_type53_scalar_rows = [row for row in cpp_type53_rows if str(row.get("role")) in {"scalar_pirt", "scalar_rrrt"}]
                     cpp_type53_matrix_rows = [row for row in cpp_type53_rows if str(row.get("role")) not in {"scalar_pirt", "scalar_rrrt"}]
                     cpp_type53_terms = _matrix_terms_from_cpp_rows(cpp_type53_matrix_rows)
                     cpp_type53_records = {int(row["record"]) for row in cpp_type53_rows}
+                    _type53_row_decode_seconds = time.perf_counter() - _type53_row_decode_t0
+                    _type53_expected_matrix_terms = float(len(cpp_type53_records) * 4)
+                    _type53_duplicate_matrix_rows = float(_duplicate_cpp_row_count(cpp_type53_matrix_rows))
+                    _type53_duplicate_scalar_rows = float(_duplicate_cpp_row_count(cpp_type53_scalar_rows))
+                    _type53_extra_scalar_over_records = float(max(0, len(cpp_type53_scalar_rows) - len(cpp_type53_records)))
+                    _type53_extra_rows = float(max(0, len(cpp_type53_rows) - len(cpp_type53_matrix_rows) - len(cpp_type53_scalar_rows)))
+                    if int(element_z) == 12:
+                        _speed_nested_update(
+                            "row_accounting",
+                            "type53",
+                            python_expected_matrix_terms=_type53_expected_matrix_terms,
+                            cpp_returned_rows=float(len(cpp_type53_rows)),
+                            cpp_returned_matrix_rows=float(len(cpp_type53_matrix_rows)),
+                            cpp_returned_scalar_rows=float(len(cpp_type53_scalar_rows)),
+                            cpp_inserted_matrix_terms=float(len(cpp_type53_terms)),
+                            duplicate_matrix_rows=_type53_duplicate_matrix_rows,
+                            duplicate_scalar_rows=_type53_duplicate_scalar_rows,
+                            extra_scalar_rows_over_records=_type53_extra_scalar_over_records,
+                            extra_non_matrix_non_scalar_rows=_type53_extra_rows,
+                            records=float(len(cpp_type53_records)),
+                        )
+                        _speed_timing_add("type53_row_decode_and_term_conversion", _type53_row_decode_seconds)
                     _type53_supported = float(cpp_type53_stats.get("records_supported", 0.0))
                     _type53_min_records = int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_MIN_RECORDS", "1"))
                     _type53_gate_passed = _type53_supported >= float(_type53_min_records)
@@ -2953,6 +3010,7 @@ def assemble_element_matrix(
                             fallback_count=float(cpp_type53_stats.get("fallback_count", 0.0)),
                         )
                     if _type53_gate_passed:
+                        _type53_apply_t0 = time.perf_counter()
                         terms.extend(cpp_type53_terms)
                         for _row in cpp_type53_scalar_rows:
                             if int(_row.get("idest1", 0)) == 1:
@@ -2963,6 +3021,21 @@ def assemble_element_matrix(
                         n_eval += len(cpp_type53_records)
                         summary.n_records_evaluated += len(cpp_type53_records)
                         summary.n_matrix_terms += len(cpp_type53_terms)
+                        _type53_apply_seconds = time.perf_counter() - _type53_apply_t0
+                        if int(element_z) == 12:
+                            _speed_timing_add("type53_apply_rows_to_matrix", _type53_apply_seconds)
+                            record_profile_event(
+                                profile_control,
+                                "calc_hmc_all.element_solver.mg_ion_rate7_type53_apply_rows_to_matrix",
+                                float(_type53_apply_seconds),
+                                element_z=int(element_z),
+                                ion_stage=int(block.ion_stage),
+                                ion_index=int(block.ion_index),
+                                emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                                inserted_matrix_terms=float(len(cpp_type53_terms)),
+                                scalar_rows=float(len(cpp_type53_scalar_rows)),
+                                records=float(len(cpp_type53_records)),
+                            )
                         if int(element_z) == 12:
                             _speed_kernel_update("type53_applied", gate_passed=1.0, applied_records=float(len(cpp_type53_records)), applied_matrix_terms=float(len(cpp_type53_terms)))
                             _speed_add_counter("applied_cpp_records_by_data_type", 53, float(len(cpp_type53_records)))
@@ -4364,6 +4437,7 @@ def solve_element_statistical_equilibrium(
     """Run the complete translated element source sequence."""
     profile_control = context.profile_control or {}
     if int(element_z) == 12:
+        _matrix_assembly_t0 = time.perf_counter()
         with profile_component(
             profile_control,
             "calc_hmc_all.element_solver.level_matrix_assembly_total",
@@ -4377,6 +4451,24 @@ def solve_element_statistical_equilibrium(
                 context=context,
                 dispatcher=dispatcher,
             )
+        _matrix_assembly_seconds = time.perf_counter() - _matrix_assembly_t0
+        record_profile_event(
+            profile_control,
+            "calc_hmc_all.element_solver.matrix_assembly_after_type53_cpp",
+            float(_matrix_assembly_seconds),
+            element_z=int(element_z),
+            source_routine="assemble_element_matrix",
+            terms=float(len(getattr(assembly, "terms", []) or [])),
+            note="Duplicate timing label for total Mg matrix assembly after applied type53 C++ row insertion decisions.",
+        )
+        try:
+            speed = profile_control.get("mg_rate7_applied_cpp_speed_summary")
+            if isinstance(speed, dict):
+                bucket = speed.setdefault("timing_splits", {}).setdefault("matrix_assembly_after_type53_cpp", {})
+                bucket["elapsed_seconds"] = float(bucket.get("elapsed_seconds", 0.0)) + float(_matrix_assembly_seconds)
+                bucket["count"] = float(bucket.get("count", 0.0)) + 1.0
+        except Exception:
+            pass
     else:
         assembly = assemble_element_matrix(
             master,
