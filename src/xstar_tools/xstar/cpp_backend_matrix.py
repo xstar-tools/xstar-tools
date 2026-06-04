@@ -1315,6 +1315,10 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     _extras = dict(context_extras or {})
     _parent_energy = _extras.get("parent_level_energy_ev_by_destination", {})
     _parent_weight = _extras.get("parent_level_stat_weight_by_destination", {})
+    parent_energy_entries_available = float(len(_parent_energy) if isinstance(_parent_energy, Mapping) else 0)
+    parent_weight_entries_available = float(len(_parent_weight) if isinstance(_parent_weight, Mapping) else 0)
+    parent_energy_entries_packed = 0.0
+    parent_weight_entries_packed = 0.0
 
     def _map_lookup_number(mapping: Any, key: int) -> float | None:
         """Return numeric map value for integer/string destination keys.
