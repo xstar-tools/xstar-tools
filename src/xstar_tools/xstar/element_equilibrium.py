@@ -2511,7 +2511,12 @@ def assemble_element_matrix(
                             electron_fraction_xee=float(context.electron_fraction_xee),
                             nlevp=int(block.nlev),
                             candidates=_type53_shadow_candidates,
-                            context_extras=getattr(context, "extras", {}),
+                            context_extras={
+                                **dict(getattr(context, "extras", {}) or {}),
+                                "parent_level_energy_ev_by_destination": parent_energy_map,
+                                "parent_level_stat_weight_by_destination": parent_weight_map,
+                                "type53_parent_maps_source": "element_equilibrium_parent_destination_context",
+                            },
                         )
                     else:
                         _type53_shadow_rows, type53_shadow_message, type53_shadow_stats = [], "no type53 shadow candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
@@ -2749,7 +2754,12 @@ def assemble_element_matrix(
                             electron_fraction_xee=float(context.electron_fraction_xee),
                             nlevp=int(block.nlev),
                             candidates=_type53_candidates,
-                            context_extras=getattr(context, "extras", {}),
+                            context_extras={
+                                **dict(getattr(context, "extras", {}) or {}),
+                                "parent_level_energy_ev_by_destination": parent_energy_map,
+                                "parent_level_stat_weight_by_destination": parent_weight_map,
+                                "type53_parent_maps_source": "element_equilibrium_parent_destination_context",
+                            },
                         )
                     else:
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = [], "no type53 candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}

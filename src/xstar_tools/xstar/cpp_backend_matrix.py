@@ -1195,6 +1195,10 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     lev_weight = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_ionpot = np.zeros(max_level_index + 1, dtype=np.float64)
     lev_cont = np.zeros(max_level_index + 1, dtype=np.float64)
+    parent_energy_entries_available = float(len(_parent_energy) if isinstance(_parent_energy, Mapping) else 0)
+    parent_weight_entries_available = float(len(_parent_weight) if isinstance(_parent_weight, Mapping) else 0)
+    parent_energy_entries_packed = 0.0
+    parent_weight_entries_packed = 0.0
     for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:
@@ -1344,9 +1348,11 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
             parent_e = _map_lookup_number(_parent_energy, idx)
             if parent_e is not None:
                 lev_cont[idx] = parent_e
+                parent_energy_entries_packed += 1.0
             parent_g = _map_lookup_number(_parent_weight, idx)
             if parent_g is not None:
                 lev_weight[idx] = parent_g
+                parent_weight_entries_packed += 1.0
     epi, brem = _radiation_grid_arrays_for_type53(radiation)
     extrap_max_points = _radiation_extrap_max_points_for_type49(radiation, int(epi.size))
     max_terms = max(8, int(len(candidates)) * 5)
@@ -1399,6 +1405,10 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
         "cpp_calls": float(out_stats[3]), "emitted_matrix_terms": float(out_stats[4]), "emitted_scalar_rows": float(out_stats[5]),
         "type53_invalid": float(out_stats[6]), "type53_no_pairs": float(out_stats[7]), "type53_bad_context": float(out_stats[8]),
         "type53_outside_grid": float(out_stats[9]), "type53_output_overflow": float(out_stats[10]), "fallback_count": float(out_stats[11]),
+        "parent_energy_entries_available": float(parent_energy_entries_available),
+        "parent_weight_entries_available": float(parent_weight_entries_available),
+        "parent_energy_entries_packed": float(parent_energy_entries_packed),
+        "parent_weight_entries_packed": float(parent_weight_entries_packed),
         "packing_seconds": float(packing_seconds), "cpp_kernel_seconds": float(cpp_kernel_seconds),
         "ucalc_cpp_applied": float(out_stats[1]), "mg_ion_direct_rate7_type53_seen": float(out_stats[0]),
         "mg_ion_direct_rate7_type53_supported": float(out_stats[1]),
