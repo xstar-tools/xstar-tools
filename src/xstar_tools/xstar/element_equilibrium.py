@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a43",
+                "version": "0.6.0a44",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1794,6 +1794,53 @@ def assemble_element_matrix(
                 diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
                 per_ion = diag.setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(int(ion_stage)), {})
                 per_ion[field] = float(per_ion.get(field, 0.0)) + float(elapsed_seconds)
+
+    def _transition_diag_add(section: str, key: Any | None = None, amount: float = 1.0, *, ion_stage: int | None = None) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        trans = diag.setdefault("transition_bookkeeping_breakdown", {})
+        if key is None:
+            trans[section] = float(trans.get(section, 0.0)) + float(amount)
+        else:
+            bucket = trans.setdefault(section, {})
+            k = _as_key(key)
+            bucket[k] = float(bucket.get(k, 0.0)) + float(amount)
+        if ion_stage in {7, 8}:
+            per = diag.setdefault("transition_counters_by_ion", {}).setdefault(str(int(ion_stage)), {})
+            if key is None:
+                per[section] = float(per.get(section, 0.0)) + float(amount)
+            else:
+                bucket = per.setdefault(section, {})
+                k = _as_key(key)
+                bucket[k] = float(bucket.get(k, 0.0)) + float(amount)
+
+    def _transition_timing_add(name: str, elapsed_seconds: float, *, ion_stage: int | None = None, field: str | None = None) -> None:
+        _matrix_hidden_timing_add(name, float(elapsed_seconds), ion_stage=ion_stage, field=field)
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        breakdown = diag.setdefault("transition_timing_breakdown", {})
+        item = breakdown.setdefault(str(name), {"elapsed_seconds": 0.0, "count": 0.0})
+        item["elapsed_seconds"] = float(item.get("elapsed_seconds", 0.0)) + float(elapsed_seconds)
+        item["count"] = float(item.get("count", 0.0)) + 1.0
+        if ion_stage in {7, 8} and field:
+            per = diag.setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(int(ion_stage)), {})
+            per[field] = float(per.get(field, 0.0)) + float(elapsed_seconds)
+
+    def _transition_cache_update(name: str, **values: Any) -> None:
+        summary_obj = _applied_speed_summary()
+        if summary_obj is None:
+            return
+        diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+        bucket = diag.setdefault("transition_topology_cache", {}).setdefault(str(name), {})
+        for k, v in values.items():
+            if isinstance(v, (int, float)):
+                bucket[k] = float(bucket.get(k, 0.0)) + float(v)
+            else:
+                bucket[k] = v
 
     def _matrix_diag_update(section: str, name: str | None = None, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
@@ -1884,6 +1931,13 @@ def assemble_element_matrix(
                 "matrix_inserted": bool(matrix_inserted),
                 "status": str(status.value if hasattr(status, "value") else status),
             })
+
+    # v0.6.0a44 transition-bookkeeping optimization prep.  This cache is
+    # observational by default: it records topology-key hits/misses and stable
+    # row-stream candidates so we can later bypass repeated Python bookkeeping
+    # safely.  It does not alter physics or matrix rows unless a future release
+    # explicitly promotes a validated fast path.
+    _transition_topology_cache: Dict[Tuple[int, int, int, int], Dict[str, Any]] = {}
 
     for block in basis.blocks:
             _ion_loop_t0 = time.perf_counter() if is_mg_profile else 0.0
@@ -3192,10 +3246,38 @@ def assemble_element_matrix(
                 )
 
             _transition_bookkeeping_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
+            _transition_source_iter_elapsed = 0.0
+            _transition_dest_lookup_elapsed = 0.0
+            _transition_basis_resolution_elapsed = 0.0
+            _transition_coeff_extract_elapsed = 0.0
+            _transition_heat_cool_elapsed = 0.0
+            _transition_row_append_elapsed = 0.0
+            if int(element_z) == 12:
+                _cache_key = (int(block.ion_index), int(block.ion_stage), int(block.ion_record), int(len(source_record_iter)))
+                _cache_signature = tuple((int(r), int(rt), int(dt)) for r, rt, dt in source_record_iter)
+                _cache_entry = _transition_topology_cache.get(_cache_key)
+                if _cache_entry is None:
+                    _transition_topology_cache[_cache_key] = {
+                        "source_records": _cache_signature,
+                        "records_seen": float(len(source_record_iter)),
+                    }
+                    _transition_cache_update("source_record_topology", misses=1.0, cached_records=float(len(source_record_iter)))
+                else:
+                    same_topology = _cache_signature == tuple(_cache_entry.get("source_records", ()))
+                    _transition_cache_update("source_record_topology", hits=1.0, stable_hits=float(1.0 if same_topology else 0.0), unstable_hits=float(0.0 if same_topology else 1.0), cached_records=float(len(source_record_iter)))
             for record, _source_rate_type, _source_data_type in source_record_iter:
+                _rec_iter_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
+                if int(element_z) == 12:
+                    _transition_diag_add("records_visited", None, 1.0, ion_stage=int(block.ion_stage))
+                    _transition_diag_add("records_visited_by_source_data_type", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
                 if int(record) in cpp_direct_accumulated_records:
                     if int(element_z) == 12:
+                        _transition_source_iter_elapsed += time.perf_counter() - _rec_iter_t0
                         _speed_add_counter("skipped_records_by_source_data_type", int(_source_data_type), 1.0)
+                        _transition_diag_add("records_skipped", None, 1.0, ion_stage=int(block.ion_stage))
+                        _transition_diag_add("records_skipped_by_source_data_type", int(_source_data_type), 1.0, ion_stage=int(block.ion_stage))
+                        _transition_diag_add("fast_path_cpp_row_triple_candidates", None, 4.0, ion_stage=int(block.ion_stage))
+                    _append_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                     record_results.append({
                         "record": int(record),
                         "data_type": int(_source_data_type),
@@ -3218,6 +3300,9 @@ def assemble_element_matrix(
                 if (header.rate_type == 1 and header.data_type == 53) or header.rate_type in {8, 15}:
                     n_skipped += 1
                     summary.n_records_skipped_by_calc_hmc_ion += 1
+                    if int(element_z) == 12:
+                        _transition_row_append_elapsed += time.perf_counter() - _append_t0
+                        _transition_diag_add("rows_appended", None, 1.0, ion_stage=int(block.ion_stage))
                     record = int(derived.npnxt[record])
                     continue
 
@@ -3495,10 +3580,17 @@ def assemble_element_matrix(
                         matrix_inserted=bool(result.status is UCalcStatus.EVALUATED and int(result.idest1) > 0 and int(result.idest2) > 0),
                         status=result.status,
                     )
+                _coeff_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                 row = result.to_dict()
+                if int(element_z) == 12:
+                    _transition_coeff_extract_elapsed += time.perf_counter() - _coeff_t0
+                _dest_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                 destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
                 source_leveltemp_destination = levels.get(int(result.idest2))
                 source_leveltemp_bound = levels.get(int(result.idest1))
+                if int(element_z) == 12:
+                    _transition_dest_lookup_elapsed += time.perf_counter() - _dest_t0
+                    _transition_diag_add("python_object_state_lookup_records", None, 1.0, ion_stage=int(block.ion_stage))
                 row.update({
                     "ion_index": block.ion_index,
                     "ion_stage": block.ion_stage,
@@ -3526,7 +3618,11 @@ def assemble_element_matrix(
                     "leveltemp_idest2_owner_write_sequence": destination_owner.get("write_sequence"),
                     "leveltemp_idest2_owner_phase": destination_owner.get("phase"),
                 })
+                _append_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                 record_results.append(row)
+                if int(element_z) == 12:
+                    _transition_row_append_elapsed += time.perf_counter() - _append_t0
+                    _transition_diag_add("rows_appended", None, 1.0, ion_stage=int(block.ion_stage))
 
                 if result.status is UCalcStatus.SOURCE_NOOP:
                     n_noop += 1
@@ -3549,11 +3645,18 @@ def assemble_element_matrix(
                     # what calc_hmc_element returns to calc_hmc_all after
                     # the active ion range is selected; they must not be
                     # confused with preliminary calc_ion_rates totals.
+                    _heat_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                     if result.rate_type in {1, 7, 40, 42}:
                         if result.idest1 == 1:
                             summary.second_pass_pirt += float(result.ans1)
+                            if int(element_z) == 12:
+                                _transition_diag_add("heat_rows_appended", None, 1.0, ion_stage=int(block.ion_stage))
                         if result.idest2 >= block.nlev:
                             summary.second_pass_rrrt += float(result.ans2)
+                            if int(element_z) == 12:
+                                _transition_diag_add("cool_rows_appended", None, 1.0, ion_stage=int(block.ion_stage))
+                    if int(element_z) == 12:
+                        _transition_heat_cool_elapsed += time.perf_counter() - _heat_t0
 
                     if type49_shadow_enabled and int(record) in type49_shadow_rows_by_record and int(result.rate_type) == 7 and int(result.data_type) == 49:
                         try:
@@ -3661,6 +3764,7 @@ def assemble_element_matrix(
                         _flush_pending_mg_rates_matrix()
                         try:
                             _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
+                            _basis_res_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                             new_terms = _matrix_terms_for_result(
                                 result=result,
                                 basis=basis,
@@ -3669,6 +3773,8 @@ def assemble_element_matrix(
                                 term_start=len(terms) + 1,
                                 xpx=context.hydrogen_density_cm3,
                             )
+                            if int(element_z) == 12:
+                                _transition_basis_resolution_elapsed += time.perf_counter() - _basis_res_t0
                             if is_mg_profile:
                                 _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
                         except (ElementEquilibriumError, IndexError) as exc:
@@ -3685,6 +3791,9 @@ def assemble_element_matrix(
                                 record_results[-1]["source_ipmat_endpoint_clamped"] = True
                                 record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
                             terms.extend(new_terms)
+                            if int(element_z) == 12:
+                                _transition_diag_add("transitions_emitted", None, 1.0, ion_stage=int(block.ion_stage))
+                                _transition_diag_add("matrix_rows_appended", None, float(len(new_terms)), ion_stage=int(block.ion_stage))
                             n_eval += 1
                             summary.n_records_evaluated += 1
                             summary.n_matrix_terms += len(new_terms)
@@ -3815,6 +3924,13 @@ def assemble_element_matrix(
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
             if int(element_z) == 12:
+                _transition_timing_add("matrix_transition_source_record_iteration", _transition_source_iter_elapsed, ion_stage=int(block.ion_stage), field="source_record_iteration_elapsed")
+                _transition_timing_add("matrix_transition_destination_state_lookup", _transition_dest_lookup_elapsed, ion_stage=int(block.ion_stage), field="destination_state_lookup_elapsed")
+                _transition_timing_add("matrix_transition_level_basis_index_resolution", _transition_basis_resolution_elapsed, ion_stage=int(block.ion_stage), field="level_basis_index_resolution_elapsed")
+                _transition_timing_add("matrix_transition_coefficient_extraction", _transition_coeff_extract_elapsed, ion_stage=int(block.ion_stage), field="coefficient_extraction_elapsed")
+                _transition_timing_add("matrix_transition_heat_cool_side_bookkeeping", _transition_heat_cool_elapsed, ion_stage=int(block.ion_stage), field="heat_cool_side_bookkeeping_elapsed")
+                _transition_timing_add("matrix_transition_row_append_list_construction", _transition_row_append_elapsed, ion_stage=int(block.ion_stage), field="row_append_list_construction_elapsed")
+                _transition_diag_add("fast_path_python_object_lookup_rows", None, float(max(0.0, float(len(source_record_iter)) - float(len(cpp_direct_accumulated_records)))), ion_stage=int(block.ion_stage))
                 _matrix_hidden_timing_add(
                     "matrix_transition_bookkeeping",
                     time.perf_counter() - _transition_bookkeeping_t0,
