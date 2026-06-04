@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a42",
+                "version": "0.6.0a43",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1783,6 +1783,17 @@ def assemble_element_matrix(
 
     def _speed_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
         _speed_nested_update("timing_splits", name, elapsed_seconds=float(elapsed_seconds), count=float(count))
+
+    def _matrix_hidden_timing_add(name: str, elapsed_seconds: float, *, ion_stage: int | None = None, field: str | None = None) -> None:
+        if int(element_z) != 12:
+            return
+        _speed_timing_add(name, float(elapsed_seconds))
+        if ion_stage in {7, 8} and field:
+            summary_obj = _applied_speed_summary()
+            if summary_obj is not None:
+                diag = summary_obj.setdefault("matrix_assembly_diagnostics", {})
+                per_ion = diag.setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(int(ion_stage)), {})
+                per_ion[field] = float(per_ion.get(field, 0.0)) + float(elapsed_seconds)
 
     def _matrix_diag_update(section: str, name: str | None = None, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
@@ -1882,6 +1893,7 @@ def assemble_element_matrix(
             _ion_records_by_data_type: Dict[int, float] = {}
             _ion_records_by_rate_data_type: Dict[Tuple[int, int], float] = {}
             _ion_record_counts_by_rate_data_type: Dict[Tuple[int, int], int] = {}
+            _basis_lookup_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
             current_levels = level_tables[block.ion_index]
             second_pass_write_sequence += 1
             previous_max_column = max(leveltemp_workspace.levels, default=0)
@@ -1894,6 +1906,13 @@ def assemble_element_matrix(
                 write_sequence=second_pass_write_sequence,
                 phase="calc_hmc_ion_second_pass",
             )
+            if int(element_z) == 12:
+                _matrix_hidden_timing_add(
+                    "matrix_basis_index_lookup",
+                    time.perf_counter() - _basis_lookup_t0,
+                    ion_stage=int(block.ion_stage),
+                    field="basis_lookup_elapsed",
+                )
             leveltemp_write_trace.append({
                 "phase": "calc_hmc_ion_second_pass",
                 "write_sequence": second_pass_write_sequence,
@@ -3150,6 +3169,7 @@ def assemble_element_matrix(
                             error=str(exc),
                         )
 
+            _row_collection_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
             if not source_record_iter:
                 for data_type in range(1, derived.npfi.shape[0]):
                     rec = int(derived.npfi[data_type, block.ion_index])
@@ -3157,7 +3177,21 @@ def assemble_element_matrix(
                         h = master.header(rec)
                         source_record_iter.append((int(rec), int(h.rate_type), int(h.data_type)))
                         rec = int(derived.npnxt[rec])
+            if int(element_z) == 12:
+                _matrix_hidden_timing_add(
+                    "matrix_row_collection_total",
+                    time.perf_counter() - _row_collection_t0,
+                    ion_stage=int(block.ion_stage),
+                    field="row_collection_elapsed",
+                )
+                _matrix_hidden_timing_add(
+                    "matrix_row_group_by_ion",
+                    0.0,
+                    ion_stage=int(block.ion_stage),
+                    field="row_collection_elapsed",
+                )
 
+            _transition_bookkeeping_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
             for record, _source_rate_type, _source_data_type in source_record_iter:
                 if int(record) in cpp_direct_accumulated_records:
                     if int(element_z) == 12:
@@ -3780,6 +3814,19 @@ def assemble_element_matrix(
                 if is_mg_profile:
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
+            if int(element_z) == 12:
+                _matrix_hidden_timing_add(
+                    "matrix_transition_bookkeeping",
+                    time.perf_counter() - _transition_bookkeeping_t0,
+                    ion_stage=int(block.ion_stage),
+                    field="transition_bookkeeping_elapsed",
+                )
+                _matrix_hidden_timing_add(
+                    "matrix_per_ion_outer_loop",
+                    time.perf_counter() - _ion_loop_t0,
+                    ion_stage=int(block.ion_stage),
+                    field="per_ion_outer_loop_elapsed",
+                )
             ion_summaries.append(summary)
             if is_mg_profile:
                 _ion_total = time.perf_counter() - _ion_loop_t0
@@ -3927,18 +3974,52 @@ def assemble_element_matrix(
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
     if int(element_z) == 12:
+        _row_prep_total_t0 = time.perf_counter()
         _term_counts_by_ion: Dict[int, Dict[str, float]] = {}
-        _pair_counts_by_ion: Dict[int, set[tuple[int, int]]] = {}
-        _duplicate_terms_by_ion: Dict[int, float] = {}
+        _term_total_by_ion: Dict[int, float] = {}
         _near_zero_terms_by_ion: Dict[int, float] = {}
-        _global_pairs: set[tuple[int, int]] = set()
-        _global_duplicate_terms = 0.0
         _global_near_zero_terms = 0.0
+
+        _group_t0 = time.perf_counter()
         for _term in terms:
             _ion = int(getattr(_term, "ion_stage", 0) or 0)
             _bucket = _term_counts_by_ion.setdefault(_ion, {"rows_inserted": 0.0, "matrix_terms": 0.0})
             _bucket["rows_inserted"] += 1.0
             _bucket["matrix_terms"] += 1.0
+            _term_total_by_ion[_ion] = float(_term_total_by_ion.get(_ion, 0.0)) + 1.0
+        _group_elapsed = time.perf_counter() - _group_t0
+        _matrix_hidden_timing_add("matrix_row_group_by_ion", _group_elapsed)
+        _total_terms_for_share = max(1.0, float(len(terms)))
+        for _ion in (7, 8):
+            _share = float(_term_total_by_ion.get(_ion, 0.0)) / _total_terms_for_share
+            _matrix_hidden_timing_add("matrix_row_group_by_ion", 0.0, ion_stage=_ion, field="row_group_by_ion_elapsed")
+            summary_obj = _applied_speed_summary()
+            if summary_obj is not None:
+                per_ion = summary_obj.setdefault("matrix_assembly_diagnostics", {}).setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(_ion), {})
+                per_ion["row_group_by_ion_elapsed"] = float(per_ion.get("row_group_by_ion_elapsed", 0.0)) + float(_group_elapsed * _share)
+
+        _zero_t0 = time.perf_counter()
+        for _term in terms:
+            if max(abs(float(_term.aj1)), abs(float(_term.cj)), abs(float(_term.cj2))) <= 1.0e-300:
+                _ion = int(getattr(_term, "ion_stage", 0) or 0)
+                _near_zero_terms_by_ion[_ion] = float(_near_zero_terms_by_ion.get(_ion, 0.0)) + 1.0
+                _global_near_zero_terms += 1.0
+        _zero_elapsed = time.perf_counter() - _zero_t0
+        _matrix_hidden_timing_add("matrix_row_zero_filtering", _zero_elapsed)
+        for _ion in (7, 8):
+            _share = float(_term_total_by_ion.get(_ion, 0.0)) / _total_terms_for_share
+            summary_obj = _applied_speed_summary()
+            if summary_obj is not None:
+                per_ion = summary_obj.setdefault("matrix_assembly_diagnostics", {}).setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(_ion), {})
+                per_ion["zero_filter_elapsed"] = float(per_ion.get("zero_filter_elapsed", 0.0)) + float(_zero_elapsed * _share)
+
+        _dup_t0 = time.perf_counter()
+        _pair_counts_by_ion: Dict[int, set[tuple[int, int]]] = {}
+        _duplicate_terms_by_ion: Dict[int, float] = {}
+        _global_pairs: set[tuple[int, int]] = set()
+        _global_duplicate_terms = 0.0
+        for _term in terms:
+            _ion = int(getattr(_term, "ion_stage", 0) or 0)
             _pair = (int(_term.row), int(_term.column))
             _pairs = _pair_counts_by_ion.setdefault(_ion, set())
             if _pair in _pairs:
@@ -3949,9 +4030,17 @@ def assemble_element_matrix(
                 _global_duplicate_terms += 1.0
             else:
                 _global_pairs.add(_pair)
-            if max(abs(float(_term.aj1)), abs(float(_term.cj)), abs(float(_term.cj2))) <= 1.0e-300:
-                _near_zero_terms_by_ion[_ion] = float(_near_zero_terms_by_ion.get(_ion, 0.0)) + 1.0
-                _global_near_zero_terms += 1.0
+        _dup_elapsed = time.perf_counter() - _dup_t0
+        _matrix_hidden_timing_add("matrix_row_duplicate_merge", _dup_elapsed)
+        for _ion in (7, 8):
+            _share = float(_term_total_by_ion.get(_ion, 0.0)) / _total_terms_for_share
+            summary_obj = _applied_speed_summary()
+            if summary_obj is not None:
+                per_ion = summary_obj.setdefault("matrix_assembly_diagnostics", {}).setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(_ion), {})
+                per_ion["duplicate_merge_elapsed"] = float(per_ion.get("duplicate_merge_elapsed", 0.0)) + float(_dup_elapsed * _share)
+
+        _row_prep_elapsed = time.perf_counter() - _row_prep_total_t0
+        _matrix_hidden_timing_add("matrix_row_pre_filtering", _row_prep_elapsed)
         _matrix_diag_update(
             "row_volume_totals",
             None,
