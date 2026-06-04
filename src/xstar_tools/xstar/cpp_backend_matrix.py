@@ -1311,6 +1311,26 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     _extras = dict(context_extras or {})
     _parent_energy = _extras.get("parent_level_energy_ev_by_destination", {})
     _parent_weight = _extras.get("parent_level_stat_weight_by_destination", {})
+
+    def _map_lookup_number(mapping: Any, key: int) -> float | None:
+        """Return numeric map value for integer/string destination keys.
+
+        The parent-level maps are serialized through summary/provenance paths in
+        some runs and can arrive with string keys.  v0.6.0a34 only checked the
+        integer key, so the C++ type53 bridge still packed zero parent
+        excitation and used the base threshold for idest2 > nlevp.
+        """
+        if not isinstance(mapping, Mapping):
+            return None
+        candidates = (key, str(key), float(key), f"{key}.0")
+        for cand in candidates:
+            try:
+                if cand in mapping:
+                    return float(mapping[cand] or 0.0)
+            except Exception:
+                continue
+        return None
+
     for idx in range(1, max_level_index + 1):
         lev = levels.get(idx) if hasattr(levels, "get") else None
         if lev is not None:
@@ -1321,16 +1341,12 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
             lev_ionpot[idx] = float(getattr(lev, "ionization_potential_ev", 0.0) or 0.0)
             lev_cont[idx] = float(getattr(lev, "continuum_energy_ev", 0.0) or 0.0)
         if idx > int(nlevp):
-            try:
-                if isinstance(_parent_energy, Mapping) and idx in _parent_energy:
-                    lev_cont[idx] = float(_parent_energy[idx] or 0.0)
-            except Exception:
-                pass
-            try:
-                if isinstance(_parent_weight, Mapping) and idx in _parent_weight:
-                    lev_weight[idx] = float(_parent_weight[idx] or 0.0)
-            except Exception:
-                pass
+            parent_e = _map_lookup_number(_parent_energy, idx)
+            if parent_e is not None:
+                lev_cont[idx] = parent_e
+            parent_g = _map_lookup_number(_parent_weight, idx)
+            if parent_g is not None:
+                lev_weight[idx] = parent_g
     epi, brem = _radiation_grid_arrays_for_type53(radiation)
     extrap_max_points = _radiation_extrap_max_points_for_type49(radiation, int(epi.size))
     max_terms = max(8, int(len(candidates)) * 5)
