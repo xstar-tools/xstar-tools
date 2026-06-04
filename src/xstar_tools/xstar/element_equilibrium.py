@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a44",
+                "version": "0.6.0a45",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1731,6 +1731,7 @@ def assemble_element_matrix(
                     "pre_matrix_photo_cpp": _env_enabled("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP"),
                     "simple_payload_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP"),
                     "direct_accum_rate7_only": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY", "1"),
+                    "transition_topology_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1"),
                 },
                 "source_scan_records_by_data_type": {},
                 "source_scan_rate7_records_by_data_type": {},
@@ -1842,6 +1843,108 @@ def assemble_element_matrix(
             else:
                 bucket[k] = v
 
+    def _transition_cache_enabled() -> bool:
+        return int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1")
+
+    def _transition_cache_store() -> Dict[Any, Dict[str, Any]]:
+        # Persist across the repeated calc_hmc_all / per-zone ion-loop calls.
+        # The old a44 cache was function-local and therefore only measured misses.
+        return profile_control.setdefault("mg_transition_topology_cache_v45", {})
+
+    def _hashable_signature(values: Any) -> Any:
+        if isinstance(values, dict):
+            return tuple(sorted((str(k), _hashable_signature(v)) for k, v in values.items()))
+        if isinstance(values, (list, tuple)):
+            return tuple(_hashable_signature(v) for v in values)
+        try:
+            if isinstance(values, float):
+                return round(values, 12)
+            if isinstance(values, (int, str, bool)) or values is None:
+                return values
+        except Exception:
+            pass
+        return str(values)
+
+    def _transition_basis_signature(block_obj: ElementIonBlock, levels_obj: UCalcLevelTable) -> Tuple[Any, ...]:
+        # Compact topology and leveltemp destination ownership must be stable for
+        # cached record classification to be reused.  This signature deliberately
+        # excludes plasma/rate coefficients; a45 only caches source-record topology
+        # and C++-consumed skip classification, not numeric matrix rows.
+        owner_items = tuple(
+            (int(k), int(v.get("ion_index", -1)), int(v.get("ion_stage", -1)), int(v.get("nlev", -1)))
+            for k, v in sorted(leveltemp_owner_by_column.items())
+            if int(k) <= max(int(block_obj.nlev) + 8, int(block_obj.nlev) * 2 + 4)
+        )
+        return (
+            int(element_z),
+            int(block_obj.ion_index),
+            int(block_obj.ion_stage),
+            int(block_obj.ion_record),
+            int(block_obj.nlev),
+            int(getattr(levels_obj, "nlev", block_obj.nlev)),
+            int(block_obj.compact_start),
+            int(block_obj.compact_stop),
+            int(basis.n_rows),
+            owner_items,
+        )
+
+    def _transition_topology_signature(
+        block_obj: ElementIonBlock,
+        levels_obj: UCalcLevelTable,
+        records_iter: Sequence[Tuple[int, int, int]],
+        cpp_consumed: set[int],
+    ) -> Tuple[Any, ...]:
+        data_type_sequence = tuple(int(dt) for _r, _rt, dt in records_iter)
+        rate_type_sequence = tuple(int(rt) for _r, rt, _dt in records_iter)
+        record_sequence = tuple(int(r) for r, _rt, _dt in records_iter)
+        cpp_consumed_sequence = tuple(int(r) for r, _rt, _dt in records_iter if int(r) in cpp_consumed)
+        return (
+            _transition_basis_signature(block_obj, levels_obj),
+            data_type_sequence,
+            rate_type_sequence,
+            record_sequence,
+            cpp_consumed_sequence,
+        )
+
+    def _transition_cache_key(
+        block_obj: ElementIonBlock,
+        levels_obj: UCalcLevelTable,
+        records_iter: Sequence[Tuple[int, int, int]],
+        cpp_consumed: set[int],
+    ) -> Tuple[Any, ...]:
+        # Key by requested topology dimensions.  The full signature is still
+        # checked as a parity guard before any cached skip/filter path is used.
+        return (
+            int(element_z),
+            int(block_obj.ion_index),
+            int(block_obj.ion_stage),
+            int(block_obj.ion_record),
+            int(block_obj.nlev),
+            int(getattr(levels_obj, "nlev", block_obj.nlev)),
+            tuple(int(dt) for _r, _rt, dt in records_iter),
+            tuple(int(r) for r, _rt, _dt in records_iter),
+            tuple(int(r) for r, _rt, _dt in records_iter if int(r) in cpp_consumed),
+            _transition_basis_signature(block_obj, levels_obj),
+        )
+
+    def _append_cpp_consumed_record_result(record: int, source_rate_type: int, source_data_type: int) -> None:
+        nonlocal n_seen
+        record_results.append({
+            "record": int(record),
+            "data_type": int(source_data_type),
+            "rate_type": int(source_rate_type),
+            "status": UCalcStatus.EVALUATED.value,
+            "ready": True,
+            "ion_index": block.ion_index,
+            "ion_stage": block.ion_stage,
+            "nlev": block.nlev,
+            "rates_backend": "cpp_matrix_mg_ion_direct_accumulator",
+            "rates_backend_message": cpp_direct_accumulator_message,
+            "transition_topology_cache": "cpp_consumed_skip",
+        })
+        n_seen += 1
+        summary.n_records_seen += 1
+
     def _matrix_diag_update(section: str, name: str | None = None, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -1932,7 +2035,7 @@ def assemble_element_matrix(
                 "status": str(status.value if hasattr(status, "value") else status),
             })
 
-    # v0.6.0a44 transition-bookkeeping optimization prep.  This cache is
+    # v0.6.0a45 transition-topology cache activation.  This cache is
     # observational by default: it records topology-key hits/misses and stable
     # row-stream candidates so we can later bypass repeated Python bookkeeping
     # safely.  It does not alter physics or matrix rows unless a future release
@@ -3252,20 +3355,71 @@ def assemble_element_matrix(
             _transition_coeff_extract_elapsed = 0.0
             _transition_heat_cool_elapsed = 0.0
             _transition_row_append_elapsed = 0.0
-            if int(element_z) == 12:
-                _cache_key = (int(block.ion_index), int(block.ion_stage), int(block.ion_record), int(len(source_record_iter)))
-                _cache_signature = tuple((int(r), int(rt), int(dt)) for r, rt, dt in source_record_iter)
-                _cache_entry = _transition_topology_cache.get(_cache_key)
+            source_record_iter_for_python = source_record_iter
+            _cpp_consumed_records = set(int(r) for r in cpp_direct_accumulated_records)
+            if _transition_cache_enabled():
+                _cache_store = _transition_cache_store()
+                _cache_key = _transition_cache_key(block, levels, source_record_iter, _cpp_consumed_records)
+                _cache_signature = _transition_topology_signature(block, levels, source_record_iter, _cpp_consumed_records)
+                _cache_entry = _cache_store.get(_cache_key)
                 if _cache_entry is None:
-                    _transition_topology_cache[_cache_key] = {
-                        "source_records": _cache_signature,
+                    _active_records = tuple((int(r), int(rt), int(dt)) for r, rt, dt in source_record_iter if int(r) not in _cpp_consumed_records)
+                    _cpp_skipped_records = tuple((int(r), int(rt), int(dt)) for r, rt, dt in source_record_iter if int(r) in _cpp_consumed_records)
+                    _cache_store[_cache_key] = {
+                        "signature": _cache_signature,
+                        "active_records": _active_records,
+                        "cpp_skipped_records": _cpp_skipped_records,
                         "records_seen": float(len(source_record_iter)),
                     }
-                    _transition_cache_update("source_record_topology", misses=1.0, cached_records=float(len(source_record_iter)))
+                    source_record_iter_for_python = list(_active_records)
+                    _transition_cache_update(
+                        "source_record_topology",
+                        cache_misses=1.0,
+                        misses=1.0,
+                        cached_records=float(len(source_record_iter)),
+                        cached_records_reused=0.0,
+                        skipped_cpp_consumed_records=float(len(_cpp_skipped_records)),
+                    )
                 else:
-                    same_topology = _cache_signature == tuple(_cache_entry.get("source_records", ()))
-                    _transition_cache_update("source_record_topology", hits=1.0, stable_hits=float(1.0 if same_topology else 0.0), unstable_hits=float(0.0 if same_topology else 1.0), cached_records=float(len(source_record_iter)))
-            for record, _source_rate_type, _source_data_type in source_record_iter:
+                    if _cache_signature == _cache_entry.get("signature"):
+                        _active_records = tuple(_cache_entry.get("active_records", ()))
+                        _cpp_skipped_records = tuple(_cache_entry.get("cpp_skipped_records", ()))
+                        source_record_iter_for_python = list(_active_records)
+                        _transition_cache_update(
+                            "source_record_topology",
+                            cache_hits=1.0,
+                            hits=1.0,
+                            stable_hits=1.0,
+                            cached_records=float(len(source_record_iter)),
+                            cached_records_reused=float(len(_active_records)),
+                            skipped_cpp_consumed_records=float(len(_cpp_skipped_records)),
+                        )
+                    else:
+                        source_record_iter_for_python = source_record_iter
+                        _transition_cache_update(
+                            "source_record_topology",
+                            cache_invalidations=1.0,
+                            topology_signature_mismatch=1.0,
+                            unstable_hits=1.0,
+                            cached_records=float(len(source_record_iter)),
+                        )
+                # Safe active optimization: records already consumed by applied
+                # C++ type49/type53 do not need Python ucalc bookkeeping.  We
+                # still append their diagnostic record_results and counters.
+                for _sk_record, _sk_rate_type, _sk_data_type in (
+                    _cache_store.get(_cache_key, {}).get("cpp_skipped_records", ())
+                    if _cache_signature == _cache_store.get(_cache_key, {}).get("signature")
+                    else ()
+                ):
+                    _speed_add_counter("skipped_records_by_source_data_type", int(_sk_data_type), 1.0)
+                    _transition_diag_add("records_skipped", None, 1.0, ion_stage=int(block.ion_stage))
+                    _transition_diag_add("records_skipped_by_source_data_type", int(_sk_data_type), 1.0, ion_stage=int(block.ion_stage))
+                    _transition_diag_add("fast_path_cpp_row_triple_candidates", None, 4.0, ion_stage=int(block.ion_stage))
+                    _transition_cache_update("source_record_topology", skipped_cpp_consumed_record_results_appended=1.0)
+                    _append_cpp_consumed_record_result(int(_sk_record), int(_sk_rate_type), int(_sk_data_type))
+            elif int(element_z) == 12:
+                _transition_cache_update("source_record_topology", disabled=1.0)
+            for record, _source_rate_type, _source_data_type in source_record_iter_for_python:
                 _rec_iter_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
                 if int(element_z) == 12:
                     _transition_diag_add("records_visited", None, 1.0, ion_stage=int(block.ion_stage))
