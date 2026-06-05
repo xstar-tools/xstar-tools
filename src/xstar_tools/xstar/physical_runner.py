@@ -49,7 +49,7 @@ from .compact_active_atdb import export_compact_active_atdb
 from .cpp_backend_rates import rates_backend_status
 from .cpp_backend_matrix import matrix_backend_status
 from .cpp_backend_emissivity import emissivity_backend_status
-from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, probe_mg_ion_accumulator_skeleton
+from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, eval_mg_ion_accumulator_cpp
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
 from .performance import normalize_profile_level, profile_component, summarize_profile
@@ -2384,8 +2384,8 @@ def run_xstar_from_parameters(
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
                 "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "skeleton_only_no_product_active_opacity_physics"},
                 "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
-                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "skeleton_only_mg_ion_accumulator_abi_present_off_by_default"},
-                "mg_ion_accumulator_skeleton": probe_mg_ion_accumulator_skeleton(enabled=False).as_dict(),
+                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "coarse_mg_ion_accumulator_abi_present_product_inactive_v062"},
+                "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),

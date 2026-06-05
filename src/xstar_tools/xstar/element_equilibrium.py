@@ -34,6 +34,7 @@ from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
 from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_extra import eval_mg_ion_accumulator_cpp
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -1718,8 +1719,8 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.1",
-                "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
+                "version": "0.6.2",
+                "description": "Observational counters for Mg applied C++ kernels and the coarse Mg-ion accumulator ABI.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
                     "direct_accum_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP"),
@@ -1734,6 +1735,8 @@ def assemble_element_matrix(
                     "transition_topology_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1"),
                     "transition_family_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE", "1"),
                     "transition_family_cache_product": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE_PRODUCT", "1"),
+                    "engine_mg_ion_accumulator_cpp": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"),
+                    "engine_mg_ion_accumulator_product": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_PRODUCT", "0"),
                 },
                 "source_scan_records_by_data_type": {},
                 "source_scan_rate7_records_by_data_type": {},
@@ -3365,6 +3368,87 @@ def assemble_element_matrix(
                     ion_stage=int(block.ion_stage),
                     field="row_collection_elapsed",
                 )
+
+            if int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"):
+                _acc_t0 = time.perf_counter()
+                try:
+                    _acc_records = np.ascontiguousarray(np.asarray([int(_r) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
+                    _acc_rate_types = np.ascontiguousarray(np.asarray([int(_rt) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
+                    _acc_data_types = np.ascontiguousarray(np.asarray([int(_dt) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
+                    _acc_source_index = np.ascontiguousarray(np.arange(1, int(_acc_records.shape[0]) + 1, dtype=np.int64))
+                    _acc = eval_mg_ion_accumulator_cpp(
+                        element_z=int(element_z),
+                        ion_index=int(block.ion_index),
+                        ion_stage=int(block.ion_stage),
+                        n_levels=int(block.nlev),
+                        n_parent_levels=int(current_levels.nlev),
+                        record_number=_acc_records,
+                        record_rate_type=_acc_rate_types,
+                        record_data_type=_acc_data_types,
+                        record_source_index=_acc_source_index,
+                        enabled=True,
+                    )
+                    _speed_kernel_update(
+                        "mg_ion_accumulator",
+                        cpp_calls=1.0,
+                        records_seen=float(_acc.records_seen),
+                        cpp_supported=float(_acc.cpp_supported),
+                        python_fallback=float(_acc.python_fallback),
+                        fallback_count=float(_acc.python_fallback),
+                        matrix_terms_emitted=float(_acc.matrix_terms_emitted),
+                        rate_terms_emitted=float(_acc.rate_terms_emitted),
+                        heat_terms_emitted=float(_acc.heat_terms_emitted),
+                        cool_terms_emitted=float(_acc.cool_terms_emitted),
+                        rate_type7_records=float(_acc.rate_type7_records),
+                        type49_records=float(_acc.type49_records),
+                        type53_records=float(_acc.type53_records),
+                        type50_records=float(_acc.type50_records),
+                        type51_records=float(_acc.type51_records),
+                        type49_supported=float(_acc.type49_supported),
+                        type53_supported=float(_acc.type53_supported),
+                        type50_topology_supported=float(_acc.type50_topology_supported),
+                        type51_topology_supported=float(_acc.type51_topology_supported),
+                        unsupported_rate_type_records=float(_acc.unsupported_rate_type_records),
+                        unsupported_data_type_records=float(_acc.unsupported_data_type_records),
+                        source_order_records=float(_acc.source_order_records),
+                        product_active=float(_acc.product_active),
+                        status="cpp" if _acc.error is None else "fallback",
+                        message=str(_acc.message)[:240],
+                    )
+                    record_profile_event(
+                        profile_control,
+                        "calc_hmc_all.element_solver.mg_ion_accumulator_cpp_kernel",
+                        time.perf_counter() - _acc_t0,
+                        element_z=int(element_z),
+                        ion_stage=int(block.ion_stage),
+                        ion_index=int(block.ion_index),
+                        emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                        source_routine="libxstar_engine.so:xstar_matrix_eval_mg_ion_accumulator_v1",
+                        status="cpp" if _acc.error is None else "fallback",
+                        records_seen=float(_acc.records_seen),
+                        records_batched=float(_acc.records_seen),
+                        cpp_calls=1.0,
+                        cpp_supported=float(_acc.cpp_supported),
+                        fallback_count=float(_acc.python_fallback),
+                        matrix_terms_emitted=float(_acc.matrix_terms_emitted),
+                        rate_terms_emitted=float(_acc.rate_terms_emitted),
+                        product_active=float(_acc.product_active),
+                    )
+                except Exception as exc:
+                    _speed_kernel_update("mg_ion_accumulator", cpp_calls=0.0, fallback_count=1.0, status="exception", error=str(exc))
+                    record_profile_event(
+                        profile_control,
+                        "calc_hmc_all.element_solver.mg_ion_accumulator_cpp_kernel",
+                        0.0,
+                        element_z=int(element_z),
+                        ion_stage=int(block.ion_stage),
+                        ion_index=int(block.ion_index),
+                        emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                        source_routine="libxstar_engine.so:xstar_matrix_eval_mg_ion_accumulator_v1",
+                        status="fallback",
+                        records_seen=0.0, records_batched=0.0, cpp_calls=0.0, fallback_count=1.0,
+                        error=str(exc),
+                    )
 
             _transition_bookkeeping_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
             for record, _source_rate_type, _source_data_type in source_record_iter:
