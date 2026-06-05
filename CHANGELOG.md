@@ -1,5 +1,728 @@
 # CHANGELOG
 
+## 0.6.0a37
+
+- Fixes v0.6.0a36 type53 shadow fallback regression: initialize parent map packing counters inside the type53 C++ bridge before use.
+- Adds checker reporting for enabled-but-empty shadow diagnostics and backend fallback counters so this failure mode is visible instead of only printing None fields.
+- Type53 remains shadow-only; C++ type53 is not applied to products.
+
+## 0.6.0a36
+
+- Fix type53 parent excitation packing for shadow parity when `context.extras` maps use string keys.
+- The a34 C++ path packed the parent-energy map but only looked up integer keys; many runs therefore still used the base threshold for `idest2 > nlevp`.
+- Adds robust int/string/float-key lookup for `parent_level_energy_ev_by_destination` and `parent_level_stat_weight_by_destination`.
+- Refreshes package metadata/egg-info version stamping so runtime reports 0.6.0a36.
+- Type53 remains shadow-only; C++ type53 is not applied to products.
+
+## 0.6.0a34
+
+- Fixes type53 C++ shadow parent-excitation packing.
+- Passes `context.extras["parent_level_energy_ev_by_destination"]` and parent statistical weights into the C++ type53 packing path.
+- Uses the explicit parent-excitation map for `idest2 > nlevp` threshold construction instead of relying on leveltemp destination energy.
+- Keeps type53 C++ shadow-only; no product physics are changed by the C++ candidate path.
+
+
+## v0.6.0a32
+
+- Baked the type53 shadow checker fix so diagnostics are found under `python_run.provenance` as well as the legacy top level.
+- Added per-record Mg type53 shadow intermediates for Python and C++: threshold, rnist, sumr, sumi, sumh, sumh2, sumc, sumc2, ans1..ans6, nb1, and klmax.
+- Extended the C++ type53 shadow ABI with a diagnostic buffer. This remains diagnostic-only; Python stays the applied physics and C++ type53 remains disabled for product application.
+
+## v0.6.0a30 - explicit C++ backend wrapper for proven type49 path
+
+- Adds a standalone full C++-requested benchmark wrapper (`run_v0600a30_xstar_tools_cpp_type49.sh`) outside the sdist artifacts.
+- The wrapper passes explicit CLI backend options instead of chaining through a Python-reference wrapper:
+  - `--backend cpp`
+  - `--solver-backend cpp`
+  - `--rates-backend cpp`
+  - `--matrix-backend cpp`
+  - `--emissivity-backend cpp`
+- Keeps unproven high-risk subpaths disabled by environment defaults: type53, pre-matrix photo shortcuts, broader direct accumulation, and C++ binemis.
+- Retains Mg rate_type=7/data_type=49 C++ matrix path as the only promoted matrix optimization, based on v0.6.0a28 shadow parity (`records_mismatched=0`, `records_failed_tolerance=0`).
+
+
+## v0.6.0a29 - Promote parity-proven Mg type49 C++ path for auto matrix backend
+
+- Promotes the Mg `rate_type=7` / `data_type=49` C++ matrix direct path for `matrix-backend=auto` and explicit `matrix-backend=cpp` after the v0.6.0a28 shadow gate matched all 48,343 compared records with only double-precision roundoff.
+- Keeps type51, the broader Mg direct accumulator, type53 photoionization path, pre-matrix shortcuts, and C++ binemis opt-in by default; source scanning remains allowed because the promoted type49 path uses it only to enumerate candidate records.
+- Preserves opt-out controls: set `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=0` or `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO=0` to force Python handling of type49 while using the C++ matrix backend for other proven paths.
+- Renames the matrix backend implementation string to `xstar_matrix_mg_ion_type49_auto_default_type53_optin_v15`.
+
+# v0.6.0a23 - type49 shadow parity probe
+
+## 0.6.0a27 - Type49 effective-scalar shadow comparator
+
+- Refines the Mg rate_type=7/data_type=49 shadow-parity comparator so scalar C++ rows are compared after the same calc_hmc_ion gates used by the Python reference and direct C++ application path: pirt contributes only when `idest1 == 1`, and rrrt contributes only when `idest2 >= nlev`.
+- Keeps C++ type49/type53 physics opt-in; this release changes diagnostics/comparison semantics, not the applied physics.
+- Leaves the remaining type49 kernel mismatch localized to true effective records such as record 40056 (`idest1=1`, `idest2=50`), rather than false scalar mismatches from excited-source records like record 40547 (`idest1=5`).
+
+
+## v0.6.0a25
+
+- Fixes the next Mg type49 shadow-parity mismatch after the v0.6.0a24 record-pointer correction.
+- The C++ type49/type53 packers now pass persistent higher `leveltemp` destination energies for parent destinations (`idest2 > nlevp`) into the C++ kernel.
+- The C++ matrix kernel now uses those higher destination energies for the final ans5/ans6 electron-POV energy correction, matching Python `ucalc._leveltemp_destination_energy` semantics instead of falling back to the continuum energy.
+- C++ physics remains opt-in; shadow mode remains the recommended validation path before direct type49/type53 application.
+
+## v0.6.0a24 - Type49 shadow pointer parity hotfix
+
+- Fixed the C++ type49/type53 candidate pointer packing to convert one-based atomic record numbers to zero-based `nptrs` rows before reading `nreal`, `nint`, `real_ptr`, and `int_ptr`.
+- This addresses the shadow-parity signature where record N in C++ used record N+1 payloads, shifting scalar rates and matrix destination rows by +1.
+- Updated type49 shadow comparison to treat the C++ scalar row as carrying both `pirt` (`aj1`) and `rrrt` (`aj2`), matching the direct-application path.
+- C++ direct accumulator paths remain opt-in; Python remains the default physics reference.
+
+
+- Added opt-in Mg rate_type=7/data_type=49 shadow parity mode.
+- In shadow mode, Python remains the only applied physics path; C++ type49 is evaluated beside it and compared record-by-record.
+- Captures scalar pirt/rrrt deltas and four-row matrix term deltas for each sampled record.
+- Exposes `mg_type49_shadow_parity_summary` and `mg_type49_shadow_parity_samples` in run provenance.
+- Keeps C++ type49/type53 direct accumulators opt-in and non-default until Python-vs-C++ parity passes.
+
+# v0.6.0a22
+
+## v0.6.0a22 - Python-reference C++ parity gates
+
+- Reframes parity policy: the current Python implementation is the physics reference for enabling C++ accelerators. Exact original Fortran-XSTAR product identity is not required before C++ development, but every C++ path must match the Python-reference run before becoming default.
+- Keeps type-49/type-53 Mg direct accumulators, pre-matrix shortcuts, and C++ binemis opt-in only.
+- Adds `xstar-tools-cpp-parity-gate` and `xstar_tools.xstar.cpp_parity_gate` to compare a Python-reference product directory against a C++ candidate directory. The gate checks `xout_step.log` summary rows, option 22 values, option 27 Mg ion columns, and FITS existence/size/structure/hash metadata.
+- Fixes provenance/summary reporting so a requested Python backend prints `python_reference` instead of showing an available C++ shared-library implementation name.
+- Fixes emissivity backend status resolution so `EMISSIVITY_BACKEND=python` reports active Python even when `libxstar_emissivity.so` is buildable.
+
+
+## v0.6.0a21 - original-XSTAR parity defaults
+
+- Restores a2-a12-like physics as the default by making Mg direct accumulator, type-49/type-53 photoionization fast paths, pre-matrix photo shortcuts, and C++ binemis opt-in.
+- Keeps solver/rates/matrix/emissivity C++ libraries buildable and selectable, but the parity wrapper defaults all backend selectors to Python.
+- Adds source-like ASCII TABLE one-byte intercolumn gaps for final FITS and xout_abund1.fits products, fixing table widths such as xout_cont1/xout_spect1 NAXIS1=69, xout_lines1 NAXIS1=128, and abundance-table row widths.
+- Restores source-row RRC final-table emission by default so inactive RRC rows remain represented instead of being filtered out by nonzero luminosity.
+- Adds original-XSTAR parity gate tooling for xout_step.log option 17/22/27 and FITS hash/size/structure checks.
+
+
+- Fixed v0.6.0a19 output-writer crash by keeping `output_writer_timing_breakdown` numeric-only and summing only numeric timing values.
+- Kept `MATRIX_MG_ION_DIRECT_ACCUM_CPP=1` as the default, but changed the experimental Mg `rate_type=7/data_type=53` photoionization accumulator default to off because it changes the thermal convergence printout (`h-c(%)` and final iteration column) relative to the validated a15/type49-only path.
+- Added explicit opt-in for type-53 experiments via `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP=1`; pre-matrix type-53 follows the same opt-in unless `XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP` is set.
+- Kept the C++ binemis backend enabled by default with numeric timing diagnostics only.
+
+
+## v0.6.0a19 - C++ binemis emissivity backend
+
+- Added `libxstar_emissivity.so` in the flat `src/xstar_tools/xstar/cpp/` backend directory.
+- Added `line_emissivity.cpp` with `xstar_emissivity_build_binemis_profile(...)`, a real C++ backend for the `binemis` strong-line profile loop.
+- Added `xstar_tools.xstar.cpp_backend_emissivity` and enabled `XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1` by default with Python fallback.
+- Kept the successful Mg rate_type=7/data_type=49 and data_type=53 direct accumulator enabled by default.
+- Updated build scripts so `make`, `build_lib.sh`, and `setup.py build_py` build `libxstar_emissivity.so` alongside solver/rates/matrix libraries while keeping all shared libraries only under `src/xstar_tools/xstar/cpp/`.
+
+
+## v0.6.0a18 - Mg direct accumulator default and binemis sparse profile scan
+
+- Made the successful Mg ion direct accumulator path default-on. Set `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=0` to force the old Python path.
+- Kept the flat C++ shared-library layout under `src/xstar_tools/xstar/cpp/`.
+- Retained the v0.6.0a16/v0.6.0a17 rate-type 7 type-49/type-53 direct accumulators.
+- Reduced `binemis` Python overhead by iterating only nonzero ranked line slots in source-equivalent `kl, rank` order instead of scanning all `ncn2 * 10` slots.
+- Added timing fields for nonzero ranked slots and skipped ranked slots in the binemis profile builder.
+
+
+## v0.6.0a17 - Mg source-scan packing cache and post-type53 profiling cleanup
+
+- Kept the v0.6.0a16 type-49/type-53 direct accumulator behavior.
+- Added cached 1-based record header arrays for Mg ion source scans so the scanner no longer rebuilds full record-rate/data-type arrays once per ion.
+- Preserved the flat C++ backend layout under `src/xstar_tools/xstar/cpp/` and kept shared libraries in that directory only.
+- No new physics branch is enabled in this release; the goal is to reduce Python packing overhead now that rate_type=7 construction is no longer dominant.
+
+## v0.6.0a16 - Fix Mg rate-type 7 type-53 accumulator activation
+
+- Fixed the v0.6.0a14/v0.6.0a15 type-53 C++ activation bug: `accumulate_mg_ion_rate7_type53_terms_cpp_detailed()` called an undefined `_radiation_grid_arrays_for_type53()` helper, so every type-53 candidate fell back before reaching `libxstar_matrix.so`.
+- Added `_radiation_grid_arrays_for_type53()` as an alias of the validated type-49 live radiation-grid accessor because both branches use the same phint53-like continuum/photoionization grid.
+- Updated the matrix backend name to `xstar_matrix_mg_ion_direct_accumulator_type49_type53_v12`.
+- Kept the flat C++ layout and `.so` location rule: shared libraries stay only in `src/xstar_tools/xstar/cpp/`.
+- Added granular classifier component names such as `remaining_rate7_by_source_header_data_type.53` and `remaining_rate7_by_source_and_result_data_type.53_to_53` for future family identification.
+
+## v0.6.0a15 - Mg rate-type 7 result-family classifier
+
+- Added an observational classifier for the remaining Python-evaluated Mg `rate_type=7` records after the direct C++ accumulator consumes supported records.
+- Records per remaining Python-evaluated `rate_type=7` row: source record, source header rate/data type, result rate/data type, ion stage/index, elapsed seconds, and matrix-insertion status.
+- Adds aggregate profile components: `remaining_rate7_by_source_header_data_type`, `remaining_rate7_by_result_data_type`, and `remaining_rate7_by_source_and_result_data_type`.
+- Stores bounded samples in `profile_control["remaining_rate7_classifier_samples"]` for forensic follow-up.
+- No new physics path is enabled in this release; the classifier identifies the next source family to move into the Mg ion direct accumulator.
+
+## v0.6.0a14 - Mg rate-type 7 type-53 photoionization C++ accumulator
+
+- Added experimental Mg ion direct-accumulator support for rate_type=7/data_type=53 OP photoionization-style records in libxstar_matrix.so.
+- Kept flat C++ layout and .so outputs in src/xstar_tools/xstar/cpp/.
+- Updated matrix backend name to xstar_matrix_mg_ion_direct_accumulator_type49_type53_v11 and feature flags to include the type-53 experimental branch.
+- Added separate profile counters under calc_hmc_all.element_solver.mg_ion_rate7_type53_cpp_kernel so type-53 coverage, fallbacks, packing, and C++ kernel time can be evaluated independently.
+
+## v0.6.0a13 - Mg rate-type 7 type-49 photoionization C++ accumulator
+
+- Adds an experimental Mg ion-level direct accumulator for rate_type=7/data_type=49 photoionization-style records.
+- Keeps the flat src/xstar_tools/xstar/cpp shared-library layout.
+- Adds counters for type-49 candidate, supported, matrix-term, and scalar-row coverage.
+- The path is gated behind MATRIX_MG_ION_DIRECT_ACCUM_CPP=1 and MATRIX_MG_ION_TYPE49_PHOTO_CPP=1 while benchmark parity and timing are validated.
+
+## v0.6.0a12 - Mg direct accumulator rate-type 7 scalar coverage
+
+- Added scalar-row support to the experimental Mg ion direct accumulator so supported rate_type=7 rows can update second-pass scalar pirt/rrrt totals without being converted back into Python UCalc rows.
+- Changed the direct-accumulator coverage gate to use rate_type=7 coverage when MATRIX_MG_ION_DIRECT_ACCUM_RATE7_ONLY=1, instead of dividing supported records by the full source-record scan count.
+- Added C++ counters for rate_type=7 records seen/supported by the direct accumulator.
+- Kept the flat C++ layout and a10 shared-library location rule: libxstar_*.so files live only under src/xstar_tools/xstar/cpp/.
+
+
+## v0.6.0a11 - Mg direct-accumulator gating and compact buffer sizing
+
+- Kept the v0.6.0a10 flat C++ shared-library layout under `src/xstar_tools/xstar/cpp/`.
+- Updated `libxstar_matrix.so` backend name to `xstar_matrix_mg_ion_direct_accumulator_v8`.
+- Added cached compact ATDB arrays for the experimental Mg ion direct accumulator to avoid copying full `nptrs/rdat/idat` arrays once per ion.
+- Bounded direct-accumulator output buffers by active ion source-record count instead of whole-ATDB record count.
+- Added coverage gates for `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1` so low-coverage experiments fall back instead of silently applying tiny subsets and adding large overhead.
+- Added direct-accumulator profile counters for supported fraction and gate status.
+
+## v0.6.0a10 - Mg ion direct accumulator guardrail and C++ build cleanup
+
+- Fixed the `matrix_kernels.cpp` `-Wall -Wextra` warning from unused simple-payload integer variables.
+- Changed `src/xstar_tools/xstar/cpp/Makefile` so `make` builds shared libraries only in `src/xstar_tools/xstar/cpp/`; it no longer copies `libxstar_solver.so`, `libxstar_rates.so`, or `libxstar_matrix.so` into `src/xstar_tools/xstar/`.
+- Updated C++ backend loaders to use the `cpp/` directory as the only package-local shared-library location, while retaining explicit environment-variable overrides.
+- Rewrote `src/xstar_tools/xstar/cpp/README.md` to document the current flat C++ backend layout and the three shared libraries.
+- Disabled the v0.6.0a9 Mg simple-payload path by default because the benchmark showed ~143.9 s of packing overhead for only 112 applied rows and a wall-time regression. It remains available behind `XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP=1`.
+- Added an experimental opt-in direct Mg-ion simple-payload accumulator, `xstar_matrix_accumulate_mg_ion_source_simple_terms`, behind `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1`. It emits matrix terms directly and is not enabled by default until full benchmark parity and timing improvement are proven.
+
+## v0.6.0a9 - Mg ion simple payload evaluation backend
+
+- Widened the Mg ion-level C++ matrix ABI from source-pointer scanning to source-pointer scanning plus packed payload decoding/evaluation for selected no-grid/no-level rate groups.
+- Added `xstar_matrix_eval_mg_ion_source_simple_payloads` in the existing flat `src/xstar_tools/xstar/cpp/matrix_kernels.cpp` library.
+- Added Python binding `eval_mg_ion_source_simple_payloads_cpp_detailed` and attached it to the Mg `calc_hmc_all.element_solver` loop.
+- Supported first dominant non-type-51 groups: data types 1, 2, 3, 7, 8, and 20, including the rate-type 7/data-type 7 group that dominated the a8 timing report.
+- Added profile counter `calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel` to show `records_seen`, `records_supported`, `records_batched`, `cpp_calls`, and `ucalc_cpp_applied`.
+- Kept Python fallback for unsupported records and all grid/level/radiation-dependent branches.
+
+# Changelog
+
+## v0.6.0a26
+
+- Added type49 shadow-parity worst-sample tracking so the run provenance retains the largest remaining scalar/matrix mismatches, not only the first sampled records.
+- Added per-channel mismatch counters and tolerance-aware pass counts for Mg type49 Python-vs-C++ shadow comparisons.
+- Updated the standalone shadow checker to report exact and tolerance-aware readiness plus first/worst sample counts.
+
+## v0.6.0a8 - Mg ion source-pointer traversal backend
+
+- Added the flat-folder C++ ABI `xstar_matrix_scan_mg_ion_source_records(...)` in `src/xstar_tools/xstar/cpp/matrix_kernels.cpp`.
+- Moved Mg ion `npfi -> npnxt -> npar` source-pointer traversal into `libxstar_matrix.so` when the matrix backend is active.
+- Added `calc_hmc_all.element_solver.mg_ion_source_traversal_cpp_kernel` counters with source records seen, supported masks, type-51/type-7/simple-group counts, and loop-guard diagnostics.
+- Kept unsupported payload physics on the Python fallback path while preserving the ion-level ABI boundary needed for moving more rate/data groups into C++ next.
+- Preserved the flat C++ layout under `src/xstar_tools/xstar/cpp/`; no per-library C++ subdirectories were added.
+
+## v0.6.0a7 - Mg ion-level C++ backend boundary
+
+- Kept all C++ sources and shared libraries in the single flat `src/xstar_tools/xstar/cpp/` directory.
+- Added a first Mg ion-level C++ backend entry point, `xstar_matrix_eval_mg_ion_type51_rates_and_matrix(...)`, as the v0.6.4-style widening target.
+- Routed the existing Mg `rate_type=3/data_type=51` source-ordered payload batch through the ion-level ABI and added `calc_hmc_all.element_solver.mg_ion_cpp_kernel` counters for ion calls, records seen/batched, applied C++ ucalc rows, emitted matrix terms, and fallback rows.
+- Preserved Python fallback and parity-gated behavior; this release is a boundary-widening step and should be benchmarked against `ion_loop`, `level_matrix_assembly_total`, and `rate_construction`.
+- Removed root-level `XSTAR_SOURCE_CHANGES*.md` files from the source tree and `MANIFEST.in`; `CHANGELOG.md` is now the canonical covered history.
+
+## v0.6.0a6 - Mg type-51 C++ full-run activation
+
+- Kept the flat C++ backend layout under `src/xstar_tools/xstar/cpp/`.
+- Tightened Mg type-51 payload eligibility before deferring records to the coarse C++ rates+matrix ABI.
+- Relaxed the Mg type-51 parity gate to diagnostic-by-default with `XSTAR_ATOMIC_MATRIX_MG_RATES_MATRIX_PARITY_STRICT=1` available for hard failure.
+- Aligned the C++ type-51 energy-conversion constant with the Python/source-faithful evaluator.
+- Intended to make `mg_type51_rates_matrix_cpp_kernel.cpp_calls` and `ucalc_cpp_applied` nonzero in full `mg11_ne1e8` runs so rate-construction timing can be rechecked.
+
+
+This changelog is now the canonical package history for the `xstar-tools` transition. Future releases should update this file first, then package artifacts and release notes should refer back to it.
+
+## v0.6.0a5
+
+- Adopt the uploaded full-history changelog as the package changelog for the `xstar_tools` line and add the missing `v0.6.0a0`--`v0.6.0a4` entries.
+- Clarify backend reporting in the physical runner summary: `backend=python` was the requested global/default backend, not evidence that the optional C++ sub-backends were inactive. The summary now reports requested and active status for solver, rates, matrix, and emissivity separately.
+- Keep the flat C++ backend layout under `src/xstar_tools/xstar/cpp/`; no per-library C++ subdirectories are introduced.
+- Keep the v0.6.0a4 Mg type-51 context fix and C++ backend availability unchanged.
+- Note from the user-provided v0.6.0a4 benchmark: the solver, rates, matrix, and emissivity backends were active as C++ in provenance, while the new type-51 rates+matrix counter saw and batched records but still fell back before calling the C++ kernel. The next performance patch should inspect the fallback/parity error and make `mg_type51_rates_matrix_cpp_kernel.cpp_calls` and `ucalc_cpp_applied` nonzero in the full benchmark.
+
+## v0.6.0a4
+
+- Fixed the Mg type-51 C++ parity/fallback path after `UCalcContext` rejected unsupported constructor fields.
+- Moved parent-level energy/statistical-weight maps into `UCalcContext.extras` using the existing runtime keys.
+- Preserved the flat `src/xstar_tools/xstar/cpp/` shared-library layout.
+- Validation checker confirmed the standalone coarse type-51 C++ ABI path could report nonzero `cpp_calls`, `ucalc_cpp_applied`, and emitted matrix terms.
+
+## v0.6.0a3
+
+- Added `xstar_matrix_build_mg_type51_rates_and_matrix(...)` to `matrix_kernels.cpp`.
+- Moved selected Mg `rate_type=3/data_type=51` Burgess-Tully/CHIANTI-style `ucalc` evaluation into the coarse Mg rates+matrix ABI for 5-point and 9-point payloads.
+- Added `mg_type51_rates_matrix_cpp_kernel` counters for records seen/batched, C++ calls, C++ `ucalc` applications, fallbacks, and emitted matrix terms.
+- Kept all C++ files and produced libraries in the single flat `src/xstar_tools/xstar/cpp/` directory.
+
+## v0.6.0a2
+
+- Added the first coarse Mg rates+matrix ABI skeleton, `xstar_matrix_build_mg_rates_and_matrix(...)`, in the existing flat `matrix_kernels.cpp`.
+- Attached the ABI to the real `calc_hmc_all.element_solver` Mg matrix path.
+- Added counters for records seen, records batched, C++ calls, emitted matrix terms, fallback count, unsupported rate/data groups, invalid endpoints, nonfinite answers, and parity-gate records.
+- First supported group was Mg `rate_type=3/data_type=51`, initially using Python source-faithful `ucalc` with C++ matrix-term construction/attachment.
+
+## v0.6.0a1
+
+- Converted the package to a clean `xstar_tools` source tree and removed the duplicated full `src/xstar_atomic/` implementation tree.
+- Kept the requested top-level package scaffolding: `atomic`, `xstar`, `tables`, `parallel`, `io`, `diagnostics`, `benchmarks`, and `cli`.
+- Removed legacy `xstar-atomic-*` entry points in favor of `xstar-tools-*` commands.
+- Kept optional C++ shared libraries under `src/xstar_tools/xstar/cpp/`.
+
+## v0.6.0a0
+
+- Introduced the `xstar-tools` distribution name and `xstar_tools` Python import namespace.
+- Added the first migration scaffold from `xstar_atomic` to `xstar_tools.xstar`.
+- Preserved source-faithful runtime behavior while beginning the namespace/layout transition.
+- No physics-speed changes were intended in this layout-only migration step.
+
+This changelog has been updated from the available v0.5.72 source tree, the subsequent v0.5.73--v0.5.75 benchmark/release notes, the uploaded archive containing source packages v0.5.37--v0.5.49 and v0.5.51, the uploaded pre-v0.5.00 changelog/source-change archive, and the current ChatGPT development conversation through the v0.5.75 `mg11_ne1e8` benchmark result plus the later output/timing follow-up discussion. It emphasizes what is implemented, what benchmarks showed, and what remains explicitly unfinished.
+
+### Unreleased / Next planned work
+
+- Replace isolated Mg type-51 micro-kernel attempts with a coarser `libxstar_matrix.so` ABI, tentatively `xstar_matrix_build_mg_rates_and_matrix(...)`, that owns a source-ordered Mg rates + matrix pass rather than only per-branch `ucalc` evaluation.
+- Target the true thermal-balance bottleneck rather than output writing:
+  - `dsec.calc_hmc_all` remains about 690--700 s in the Mg benchmark.
+  - `calc_hmc_all.element_solver` remains about 600 s.
+  - `calc_hmc_all.element_solver.level_matrix_assembly_total` remains about 510--525 s.
+  - `rate_construction` / `ucalc` remains the dominant inner cost.
+- Keep the `pprint(17)` thermal iteration count and first `h-c(%)` residual source-faithful. Do not use display-only offsets to hide the extra Python thermal iteration; diagnose the residual trajectory and convergence branch instead.
+- Continue toward larger C++ ownership in this order:
+  1. Mg rates + matrix assembly for one element/ion block.
+  2. Mg thermal residual contribution and iteration diagnostics.
+  3. Full Mg element thermal evaluation.
+  4. Full zone-level thermal backend.
+- Output writer work should continue only after the thermal path is addressed; v0.5.73/v0.5.74 showed that actual FITS writes are under one second and the residual output delay is product construction, not disk I/O.
+- Add a production-facing switch to suppress optional CSV/JSONL diagnostics once smoke tests are passing. The current intended policy is to keep science FITS and `xout_step.log` always on, but make heavy debug products such as continuum side-effect CSV/JSONL, phase-snapshot CSV/JSONL, forensic profile rows, and other optional diagnostics controllable by `--diagnostics {full,summary,none}` and/or equivalent environment variables.
+- Ensure stale optional diagnostic files are removed on overwrite reruns when diagnostics are disabled, so a `--diagnostics none` result directory cannot accidentally contain old CSV/JSONL artifacts from an earlier debug run.
+- Add a more source-like timing footer to `xout_step.log`, including both raw seconds and a human-readable minutes+seconds total. The original XSTAR footer uses cumulative/checkpoint labels such as `after writespectra`, `after writespectra2`, `after writespectra3`, `after writespectra4`, and `total time`; Python should keep those labels while also adding `total time mm:ss` or equivalent.
+- Clarify and preserve the meaning of the `writespectra*` timing labels: `writespectra` builds/writes the final binned spectrum `xout_spect1.fits`; `writespectra2` builds/writes final line luminosities `xout_lines1.fits`; `writespectra3` builds/writes continuum-only spectrum `xout_cont1.fits`; and `writespectra4` builds/writes final RRC table `xout_rrc1.fits`. The footer values should be treated as elapsed timing checkpoints around these output phases, not physics quantities.
+
+## v0.5.75
+
+- Attempted to connect the Mg `data_type=51` C++ `ucalc` batch path to the real `calc_hmc_all.element_solver.rate_construction` hot path.
+- Updated the type-51 payload collector to use decoded collision-row data instead of manually guessing packed ATDB record layout.
+- Broadened the C++ type-51 evaluator in `libxstar_matrix.so` to handle both 5-point and 9-point Burgess-Tully/CHIANTI-style collision rows.
+- Backend identity for the matrix library became `xstar_matrix_mg_type7_terms_dense_ucalc_type51_payload_v1`.
+- Validation included compile checks, shared-library build, and a 9-point type-51 ABI smoke test.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Total runtime was about 899 s, or 14 min 59 s.
+  - No meaningful improvement relative to v0.5.72--v0.5.74.
+  - The C++ matrix library loaded, but the type-51 path still did not move the dominant Python hot path enough to matter.
+- Known limitation: this release demonstrated that isolated type-51 micro-kernel work is not sufficient. The next implementation should move to a coarse Mg rates + matrix ABI.
+
+## v0.5.74
+
+- Added finer output-product timing to identify the remaining post-output delay.
+- Split `final_product_build` into sub-timings for spectrum construction, `binemis`/profile work, table packing, line table build, continuum table build, and RRC table build.
+- Added explicit matrix type-51 no-payload counters so that the summary can distinguish:
+  - C++ unavailable.
+  - C++ available but no eligible payload collected.
+  - Eligible payload collected but unsupported.
+  - Eligible records applied.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Total runtime was about 897 s.
+  - Output timing showed actual FITS writes were less than one second total.
+  - The residual output delay was dominated by final spectral-product construction, not FITS I/O.
+  - The dominant total runtime remained `calc_hmc_all` and Mg level-matrix/rate construction.
+
+## v0.5.73
+
+- Kept `OUTPUT_FINAL_RECOMPUTE=0` as the default benchmark mode.
+- Moved the terminal message `xstar: Prepping to write spectral data` closer to the actual final FITS writing stage instead of printing it before slow output-product construction.
+- Persisted `output_writer_timing_breakdown` into `summary.json` and appended the breakdown to `xout_step.log`.
+- Added per-file timing keys for important FITS products:
+  - `xo01_detail.fits`
+  - `xo01_detal2.fits`
+  - `xo01_detal3.fits`
+  - `xo01_detal4.fits`
+  - `xout_spect1.fits`
+  - `xout_lines1.fits`
+  - `xout_cont1.fits`
+  - `xout_rrc1.fits`
+- Confirmed via v0.5.73 benchmark that the remaining post-output delay is not Astropy file writing itself.
+
+## v0.5.72
+
+- Added `OUTPUT_FINAL_RECOMPUTE=0` benchmark mode and made it the default in the v0.5.72 wrapper.
+- Skipped the duplicated final local recompute before final FITS construction when `OUTPUT_FINAL_RECOMPUTE=0`.
+- Preserved source-like mode with `OUTPUT_FINAL_RECOMPUTE=1` for comparison.
+- Added output-phase timing breakdown in the Python runner.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Runtime improved from about 945.9 s to about 910.6 s relative to v0.5.71.
+  - All ten Python products were present.
+  - Science/detail/spectral FITS products matched v0.5.71 byte-for-byte; `xout_abund1.fits` differed only through FITS checksum/date bookkeeping.
+  - The historical top-level `all_files_match=False` status remained unchanged.
+
+## v0.5.71
+
+- Added the first batched Mg `data_type=51` `ucalc` ABI in `libxstar_matrix.so`:
+  - `xstar_matrix_eval_type51_ucalc_batch`
+- Extended the matrix backend identity to `xstar_matrix_mg_type7_terms_dense_ucalc_type51_v1`.
+- Added feature flag `16` for batched Mg data-type-51 `ucalc` support.
+- Wrapper added `MATRIX_TYPE51_UCALC_CPP=1` to enable the attempted C++ path.
+- Kept `MATRIX_DENSE_FILL_CPP=0` by default because dense-fill C++ added packing overhead in v0.5.68.
+- Benchmark outcome:
+  - Runtime stayed around 946 s.
+  - The type-51 C++ path did not produce meaningful speedup.
+  - Later analysis showed the type-51 path was not properly attached to the real Mg thermal-balance hot path.
+
+## v0.5.70
+
+- Removed the non-source-faithful display-only `ntotit` decrement that had been introduced in v0.5.69.
+- Restored raw translated thermal-iteration count in `pprint(17)` output.
+- Added Mg thermal-rate forensic profiling by:
+  - rate type,
+  - data type,
+  - combined rate/data type.
+- Added `records_seen`-style counters and Mg matrix/ucalc forensic samples into summary provenance.
+- Expanded residual trajectory diagnostics for thermal-balance evaluation.
+- Benchmark outcome:
+  - Runtime remained around 950 s.
+  - `pprint(17)` continued to show an extra thermal iteration versus original XSTAR, confirming this is a real convergence/path issue rather than a print-format issue.
+
+## v0.5.69
+
+- Added selected simple `ucalc` branch ABI in `libxstar_matrix.so`:
+  - `xstar_matrix_eval_simple_ucalc`
+- Supported selected simple analytic branches initially identified as data types 1, 2, 3, 7, 8, and 20.
+- Disabled dense matrix fill by default with `MATRIX_DENSE_FILL_CPP=0` because previous dense-fill C++ did not improve runtime.
+- Added first residual-trajectory summary scaffolding for thermal-balance debugging.
+- Introduced a display-only `ntotit` decrement in `pprint(17)`; this was later recognized as non-source-faithful and removed in v0.5.70.
+- Known limitation: the new simple-branch ABI was validated but not yet attached as a default hot-path batched Mg thermal backend.
+
+## v0.5.68
+
+- Added dense matrix/heating matrix fill support to `libxstar_matrix.so`:
+  - `xstar_matrix_dense_fill_terms`
+- Matrix backend identity became `xstar_matrix_mg_type7_terms_dense_v1`.
+- Added feature flag `4` for dense matrix/heating fill.
+- Benchmark outcome:
+  - Runtime regressed slightly to about 960.9 s.
+  - The dense C++ kernel itself was fast, but packing overhead outweighed the benefit.
+- Known limitation: moving only dense matrix insertion is too small a kernel; the dominant cost remains Python rate construction/`ucalc` and source-order traversal.
+
+## v0.5.67
+
+- Started the dedicated `libxstar_matrix.so` shared library.
+- Added C ABI:
+  - `xstar_matrix_abi_version`
+  - `xstar_matrix_backend_name`
+  - `xstar_matrix_feature_flags`
+  - `xstar_matrix_probe`
+  - `xstar_matrix_build_mg_type7_terms`
+- Moved the already-validated Mg record-type-7 matrix-term construction out of `libxstar_rates.so` and into `libxstar_matrix.so`.
+- Added matrix backend status/provenance reporting.
+- Benchmark outcome:
+  - Matrix library loaded correctly.
+  - Runtime remained about 949 s because the moved kernel represented only about 0.1--0.2 s of work.
+- Known limitation: full `calc_hmc_all.element_solver`, `level_matrix_assembly_total`, and `dsec.calc_hmc_all` remained Python-orchestrated.
+
+## v0.5.66
+
+- Cleaned terminal and `xout_step.log` version/progress output.
+- Changed startup/version string to use only the future package-facing form:
+  - `xstar_tools version <version>`
+- Terminal output now prints source-like radial progress table rows from the same stored `pprint(9)`/`pprint(17)` strings used in `xout_step.log` instead of recomputing approximate values.
+- Added source-like terminal footer:
+  - `final print:           1`
+  - `xstar: Prepping to write spectral data`
+  - `xstar: Done writing spectral data`
+  - `total time ...`
+- Kept raw progress/debug events behind `PROGRESS_DEBUG=1`.
+
+## v0.5.65
+
+- Implemented the missing C++ Voigt/natural-width `linopac` path in `libxstar_rates.so`.
+- Translated the relevant `voigte.f90` behavior into `rate_kernels.cpp`.
+- Updated `xstar_rates_apply_linopac_profile` to support both Gaussian and Voigt/natural-width line profiles.
+- Backend identity became `xstar_rates_mg_type7_type4_linopac_type50_voigt_v1`.
+- Fixed C++ counter aggregation so newly added numeric counters are not dropped from summary totals.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Runtime improved from about 21.5 min to about 15 min 53 s.
+  - `type50_coarse_cpp_full_applied = 9885`.
+  - `linopac_cpp_calls = 9885`.
+  - `linopac_cpp_fallback_count = 0`.
+  - `type50_reason_linopac_voigt_python_fallback = 0`.
+- This was the first major successful speed improvement from the C++ path.
+
+## v0.5.64
+
+- Made raw `dsec_evaluation` progress rows debug-only.
+- Added source-like compact radial progress table output in normal terminal mode.
+- Introduced `PROGRESS_DEBUG=1` / `--progress-debug` to restore high-volume raw progress events.
+- No intended physics or FITS product change.
+
+## v0.5.63
+
+- Added explicit fallback reason counters and rejection/hybrid samples for the Mg type-4 type-50 coarse backend.
+- Split status into:
+  - full C++ type-50 scalar + C++ linopac,
+  - hybrid C++ scalar + Python linopac fallback,
+  - full Python fallback.
+- Added summary fields for type-50 coarse backend reasons, including `linopac_voigt_python_fallback`.
+- Benchmark showed that hybrid rows existed but the Voigt/natural-width linopac path was still in Python, motivating v0.5.65.
+
+## v0.5.62
+
+- Added first selected Mg type-4/data-type-50 coarse backend attempt in `libxstar_rates.so`.
+- Intended to combine selected type-50 `ucalc`, scalar line products, `oplin`, `fline`, `flinel`, and `linopac` updates in one C++ path.
+- Backend identity became `xstar_rates_mg_type7_type4_linopac_type50_v1`.
+- Benchmark outcome:
+  - C++ library loaded.
+  - The coarse type-50 path did not apply in the real benchmark (`type50_coarse_cpp_applied = 0`) because the linopac Voigt/natural-width branch fell back.
+
+## v0.5.61
+
+- Added C++ Gaussian full-profile `linopac` opacity side-effect support in `libxstar_rates.so`.
+- Added Python-vs-C++ parity gate for Mg type-4 linopac profile updates.
+- Added counters for linopac C++ calls, kernel time, updated bins, fallbacks, and parity checks.
+- Preserved Python fallback for unsupported Voigt/natural-width branch.
+- Enforced shared-library layout under `src/xstar_atomic/source_port/cpp/` with no root-level `.so` copies.
+
+## v0.5.60
+
+- Cleaned shared-library layout so C++ shared libraries live under `source_port/cpp/`.
+- Updated build/load behavior to prefer the `cpp/` directory.
+- Disabled high-volume terminal profile rows by default with `PROFILE_TERMINAL=0`.
+- Kept profile details in JSON summaries instead of terminal logs.
+
+## v0.5.59
+
+- Batched Mg type-4 scalar C++ line-emissivity calls by contiguous line blocks.
+- Reduced type-4 C++ calls from one per record to one per block.
+- Benchmark outcome:
+  - Calls dropped substantially, but runtime did not improve because the moved kernel was tiny relative to Python `ucalc`, `linopac`, and traversal work.
+
+## v0.5.58
+
+- Added conservative Mg record-type-4 scalar line-emissivity backend in `libxstar_rates.so`.
+- C++ computed post-`ucalc` scalar products and line emissivity components while Python still owned source traversal, `ucalc`, `linopac`, and live array side effects.
+- Added quiet backend-call counters and removed several noisy startup/log artifacts.
+- Benchmark outcome:
+  - C++ type-4 scalar kernel processed 9885 records with no fallback.
+  - Runtime did not improve because the moved work was less than one second out of a ~21.5 minute run.
+
+## v0.5.57
+
+- Quieted backend-call profile logging and retained aggregate counters in summary JSON.
+- Confirmed Mg type-7 C++ matrix-term construction worked but represented only about 0.1--0.15 s of runtime.
+- The source package artifact for this version was not available in the later sandbox; subsequent work reimplemented relevant quiet behavior.
+
+## v0.5.56
+
+- Added detailed Mg record-type-7 C++ matrix-term counters.
+- Added optional RSS sampling and quiet performance counter aggregation.
+- Added wrapper defaults for no RSS profiling and no compact active-ATDB export.
+- Fixed thermal line spacing in `pprint_legacy`.
+- Benchmark outcome:
+  - Mg type-7 C++ work was active but too small to affect total runtime.
+
+## v0.5.55
+
+- Served primarily as cleanup/measurement work rather than the originally planned full C++ Mg line-emissivity backend.
+- Continued profiling and backend scaffolding toward later Mg C++ kernels.
+
+## v0.5.54
+
+- Added the first real Mg record-type-7 C++ rate-to-matrix construction/scatter path.
+- Did not port source-faithful `ucalc` leaf formula evaluation.
+- Established that post-`ucalc` matrix-term construction alone is too small for meaningful speedup.
+
+## v0.5.53
+
+- Introduced the backend architecture for optional C++ shared-library kernels.
+- Added compact active-ATDB export support.
+- Added `libxstar_rates.so` skeleton and backend selection plumbing.
+- Established the long-term architecture of Python orchestration plus modular C++ shared libraries.
+
+## v0.5.51
+
+- Added an optional Mg compact matrix-fill C++ backend into `libxstar_solver.so`:
+  - C ABI: `xstar_solver_fill_matrices(...)`.
+  - Backend identity: `xstar_solver_so_leqt2f_mg_matrix_v2`.
+- Added Python wrapper `call_cpp_fill_matrices(...)` and Mg-only matrix backend plumbing through `--mg-matrix-backend {python,cpp,auto}`.
+- Added reusable Mg matrix buffers to avoid repeated dense matrix/rate allocations when the optional backend is used.
+- Added `profile_rss` controls that are independent of live `--progress-memory` output, so stored profile rows can include RSS only when explicitly requested.
+- Kept Python as the source-faithful reference path; C++ only filled compact Mg dense/rate matrices from already-built terms and did not port `ucalc` or full `calc_hmc_all` traversal.
+- Known archive issue: `pyproject.toml` reports 0.5.51 but `src/xstar_atomic/__init__.py` still reports `__version__ = "0.5.48"` in the uploaded source archive.
+
+## v0.5.50
+
+- No v0.5.50 source archive was present in the reviewed upload. The reviewed sequence jumps from v0.5.49 to v0.5.51.
+
+## v0.5.49
+
+- Added production-oriented Mg benchmark wrapper `run_v0549_xstar_python.sh` with defaults for timing runs:
+  - `PROFILE_COMPONENTS=summary`.
+  - `PROGRESS_MEMORY=0`.
+  - `MG_LINE_KERNEL=numpy`.
+  - `SOLVER_BACKEND=auto`.
+- Added `check_v0549_profile_and_mg_line_kernel.py` static checker.
+- Reworked profiling control into levels: `none`, `summary`, `nested`, and `forensic`.
+- Added `--mg-line-kernel` CLI plumbing and `mg_line_kernel` runner state.
+- Added a conservative NumPy-oriented Mg line-emissivity lookup/table path for record types 4 and 9.
+- Limited expensive Mg forensic per-rate/per-record profiling to explicit forensic mode rather than normal timing runs.
+- Known archive issue: `pyproject.toml` reports 0.5.49 but `src/xstar_atomic/__init__.py` still reports `__version__ = "0.5.48"` in the uploaded source archive.
+
+## v0.5.48
+
+- Added more detailed Mg hot-path profiling around `calc_hmc_all` and `calc_emis_all`:
+  - `calc_hmc_all.element_solver.level_matrix_assembly_total`.
+  - `calc_hmc_all.element_solver.ion_loop`.
+  - `calc_hmc_all.element_solver.rate_construction`.
+  - `calc_hmc_all.element_solver.matrix_assembly`.
+  - `calc_hmc_all.element_solver.dense_matrix_fill`.
+  - `calc_hmc_all.element_solver.solver_call`.
+  - Mg emissivity breakdown by ion and record kind.
+- Added `source_routine` labels to profile events so later benchmark summaries could attribute time to `ucalc`, `calc_hmc_ion`, `assemble_element_matrix`, `msolvelucy/leqt2f`, and related source-equivalent blocks.
+- Added population-state commit profiling for Mg writeback.
+- Purpose: identify whether the next acceleration target should be solver, matrix fill, `ucalc`, emissivity, or output writing. Later benchmarks showed `ucalc`/rate construction and source-order matrix assembly dominate.
+
+## v0.5.47
+
+- Fixed the v0.5.46 `calc_emis_all` regression where `calc_emis_element(...)` referenced `epi` without receiving it from `calc_emis_all(...)`, causing:
+  - `NameError: name 'epi' is not defined`.
+- Passed the precomputed high-resolution radiation grid `epi` through the `calc_emis_all -> calc_emis_element -> calc_emis_ion` call chain.
+- Avoided repeated high-resolution radiation-grid extraction inside the Mg/Ca emissivity ion loop by reusing the precomputed `epi` grid.
+- This was a narrow correctness/performance cleanup; it did not change physics logic or introduce a new backend.
+- Benchmark outcome on `helike_type69/mg11_ne1e8` with `DIAGNOSTICS=none`, `BLAS_THREADS=1`, `SOLVER_BACKEND=cpp`, `PROFILE_COMPONENTS=1`, and `ACTIVE_SUBSET=1`:
+  - The run completed successfully after the v0.5.46 crash point.
+  - All ten Python products were present.
+  - `xout_step.log` timing footer was present.
+  - Total wall time was `1246.33809` s, or `20 min 46.338 sec`.
+  - Peak profiled RSS was about 3.96 GB, preserving the earlier memory reduction from the old ~6.3 GB peak.
+  - Active subset was H, He, Mg: 3 active elements, 15 ions, about 700 active levels, 3213 active lines, and 1957 active continua.
+  - Dominant profiled costs remained Mg thermal/emissivity work:
+    - `calc_hmc_all.element_solver:Z12` about 518 s.
+    - `calc_emis_all.element:Z12` about 352 s.
+    - `calc_hmc_all.pre_matrix_solver:Z12` about 73 s.
+    - `dsec.calc_hmc_all` about 683 s total.
+- Conclusion: v0.5.47 was a correctness/stability release, not a speed release. It confirmed that the next acceleration target must be deeper Mg rate/matrix/emissivity kernels rather than the `leqt2f` solver wrapper alone.
+
+## v0.5.46
+
+- Targeted the Mg Z=12 hot paths identified in v0.5.44/v0.5.47-era profiling:
+  - `calc_hmc_all.element_solver:Z12`.
+  - `calc_emis_all.element:Z12`.
+- Added process-local caching for immutable per-ion level tables used by hot Mg/Ca loops:
+  - `_LEVEL_TABLE_CACHE`.
+  - `clear_level_table_cache()`.
+- Added cached source-ordered `calc_emis_all` record sequences per ion through `_calc_emis_record_sequence_for_ion(...)`.
+- Avoided copying the full `leveltemp_workspace.levels` dictionary on every emissivity ion pass when the workspace is read-only for that ion.
+- Added selected preliminary-rate record caching for the pre-matrix solver to reduce repeated rate-slot traversal in Mg/Ca high-density runs.
+- Preserved source traversal order and kept downstream rate-type conditions authoritative.
+- Known regression discovered by the `mg11_ne1e8` run: the new `epi` reuse path referenced `epi` inside `calc_emis_element(...)` without passing it through that function, causing `NameError: name 'epi' is not defined` during the first `calc_emis_all` call. This was fixed in v0.5.47.
+
+## v0.5.45
+
+- Simplified the C++ solver source layout by moving files directly under `src/xstar_atomic/source_port/cpp/` instead of `src/xstar_atomic/source_port/cpp/xstar_solver/`.
+- Updated package data, build script, Makefile, and loader search paths for the flatter C++ layout.
+- Kept backward-compatible loader support for the older `cpp/xstar_solver/` location during the transition.
+- Continued using a plain shared library loaded by `ctypes`, not a Python extension module.
+
+## v0.5.44
+
+- Added aggregate timing summaries to the JSON summary:
+  - `provenance.performance_profile_summary`.
+  - `provenance.aggregate_timing_summary`.
+- Added active feature lists for the active ATDB subset:
+  - active line indices from `nplin` ownership.
+  - active continuum indices from `npcon` ownership.
+- Used the active feature lists in `calc_emis_all` ranking so production active-subset runs rank only H, He, and the active abundance element instead of scanning all ATDB line/RRC features every zone.
+- Added cached line/continuum rank tables in reusable work arrays.
+- Added active-feature summary metadata to the emissivity result/provenance.
+- Added more profile timing around `calc_emis_all.rank_features` and per-element emissivity work, including `calc_emis_all.element element_z=<Z>`.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Run completed successfully with `ready=True`.
+  - Memory stayed in the new ~4 GB regime; max profile RSS was about 4094 MB.
+  - The timing summary showed `calc_emis_all` was still dominated by Mg:
+    - `calc_emis_all total` about 405 s.
+    - `calc_emis_all.element:Z12` about 346 s.
+    - `calc_hmc_all.element_solver:Z12` about 504 s.
+  - Conclusion: active feature filtering improved accounting and avoided full-feature ranking, but it did not materially reduce total runtime because the true Mg inner loops still dominated.
+
+## v0.5.43
+
+- Moved optional C++ solver source/build helpers into the package source tree under `src/xstar_atomic/source_port/cpp/xstar_solver/`.
+- Updated `setup.py`, `MANIFEST.in`, package data, and `solver_backend.py` so source-tree and built-package runs can find `libxstar_solver.so` from the package C++ directory.
+- Kept compatibility with the earlier repository-root `cpp/xstar_solver/` layout.
+- This was a packaging/layout release; the actual solver ABI remained the `leqt2f` shared-library path.
+
+## v0.5.42
+
+- Added production memory controls for diagnostics-heavy physical runs.
+- In `DIAGNOSTICS=none` production mode, stopped retaining full element assemblies and large diagnostic arrays from repeated `dsec`/`calc_hmc_all` calls.
+- Added `retain_diagnostic_arrays` / trace-retention controls to keep full diagnostics in debug modes while reducing memory pressure in timing runs.
+- Disabled retained per-level/per-ion diagnostic spectra and full `element_results` during repeated production DSEC evaluations.
+- Added an `xout_step.log` timing footer for total time and writer elapsed time.
+- Preserved final product generation while reducing retained intermediate state.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Memory dropped from the earlier ~6.0--6.3 GB peak to about 4.1--4.2 GB.
+  - Runtime stayed around the same ~21 minute regime.
+  - Conclusion: v0.5.42 was a successful memory-retention release, not a speed release.
+
+## v0.5.41
+
+- Added active ATDB subset support for production runs, allowing the runner to precompute active element/ion/level mappings instead of repeatedly using the full ATDB universe for active-subset cases.
+- Added `active_subsets.py` and active-subset summaries.
+- Added first generic `performance.py` profiling helpers with component timers, optional RSS sampling, and summary aggregation.
+- Added broad profile instrumentation around `dsec`, `calc_hmc_all`, pre-matrix solver, element solver, continuum helper components, and related physical-run blocks.
+- Added CLI/runner plumbing for profile controls and active-subset state.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Instrumentation identified the dominant hot paths as Mg `calc_hmc_all.element_solver` and `calc_emis_all`.
+  - Memory did not materially improve yet because the active-subset work was still mostly summary/scaffolding rather than a full compact execution path.
+
+## v0.5.40
+
+- Added a Makefile and `build_lib.sh` for the optional `libxstar_solver.so` shared-library backend.
+- Documented backend selection and build behavior in the C++ README.
+- Packaged the root `cpp/xstar_solver` shared-library sources and build helpers.
+- Continued the plain shared-object design introduced after the initial Python-extension experiment.
+- Benchmark outcome on `helike_type69/mg11_ne1e8` with strict/active C++ solver loading:
+  - The C++ `leqt2f` shared library loaded, but total runtime remained about the same as pure Python, around 22 minutes in that run.
+  - Memory remained around the old ~6.3 GB peak.
+  - Conclusion: the isolated dense `leqt2f` solver was not the dominant performance bottleneck.
+
+## v0.5.39
+
+- Replaced the initial Python C-extension solver experiment with a plain shared-library ABI loaded through `ctypes`.
+- Added C ABI symbols:
+  - `xstar_solver_abi_version()`.
+  - `xstar_solver_backend_name()`.
+  - `xstar_solver_leqt2f(...)`.
+- Added optional `build_py` support to compile and package `libxstar_solver.so` without making installation fail when a compiler is unavailable.
+- Added loader diagnostics for library path, backend name, and ABI version.
+- Kept `python` as the source-faithful reference backend and `auto` as C++-when-available fallback mode.
+
+## v0.5.38
+
+- Added the first optional C++ solver backend experiment for the dense source-faithful `leqt2f` level-population solve.
+- Implemented the C++ solve as a Python extension module `_xstar_solver_cpp` with a small `leqt2f` entry point.
+- Added `solver_backend.py` with process-wide backend selection (`python`, `cpp`, `auto`) and CLI `--solver-backend` support.
+- Added solver backend provenance into physical-run summaries.
+- This version established Python as the reference implementation and C++ as an optional acceleration path; the packaging was later changed to a plain shared library.
+
+## v0.5.37
+
+- Targeted the `mg11_ne1e8` production-memory failure seen in v0.5.36, where the run was externally killed during the radial/DSEC inner solve despite `--diagnostics none`.
+- Added production memory mode for DSEC/thermal iterations:
+  - Added `retain_fixed_state_results` to `CalcHMCAllDsecEvaluator`.
+  - In `diagnostics=none`, stopped retaining each full `FixedStateCalcHMCAllResult` inside `DsecEvaluation`.
+  - Kept source-faithful state propagation while avoiding repeated retention of large intermediate result objects.
+- Added runtime memory controls and visibility:
+  - `--blas-threads`.
+  - `--progress-memory`.
+  - RSS sampling from `/proc/self/status`.
+  - Early environment caps for `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`, `BLIS_NUM_THREADS`, and `MALLOC_ARENA_MAX=2`.
+- Moved NumPy-heavy imports behind the CLI environment setup so BLAS/thread caps take effect before NumPy loads.
+- Added `run_v0537_xstar_python.sh` and `check_v0537_memory_mode.py`.
+- Benchmark outcome on `helike_type69/mg11_ne1e8`:
+  - Run completed successfully with `--diagnostics none --blas-threads 1 --progress-memory`.
+  - Runtime was about 21.4 minutes.
+  - Peak observed RSS was about 6.29 GB.
+  - All ten ordinary XSTAR products were generated.
+  - Main spectra/continuum/line products were close to original XSTAR; dominant Mg ion columns were within roughly the 1% regime.
+  - RRC output was about 1.3% low and remained a watch-list item.
+- Conclusion: v0.5.37 made the high-density Mg run complete reliably enough for benchmarking, but memory was still too high for Ca/full smoke runs.
+
+
 ## 0.5.36 - 2026-05-28
 
 - Add `--diagnostics {full,summary,none}` to the physical runner CLI.
