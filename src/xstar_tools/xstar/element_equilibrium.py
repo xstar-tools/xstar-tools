@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a48",
+                "version": "0.6.0a49",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1831,17 +1831,54 @@ def assemble_element_matrix(
     _transition_family_report_dtypes = {50, 51, 57, 6, 63, 86, 99}
     _transition_family_cache_store: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
 
-    def _transition_family_key(block_obj: Any, record_number: int, rate_type: int, data_type: int) -> Tuple[Any, ...]:
+    _transition_family_key_seen_counts: Dict[int, Dict[Tuple[Any, ...], int]] = {}
+    _transition_family_key_hit_counts: Dict[int, Dict[str, int]] = {}
+    _transition_family_key_miss_counts: Dict[int, Dict[str, int]] = {}
+
+    def _transition_family_key(
+        block_obj: Any,
+        rate_type: int,
+        data_type: int,
+        idest1: int,
+        idest2: int,
+    ) -> Tuple[Any, ...]:
+        # v0.6.0a49: normalized family-cache key.  Per-instance
+        # source-record identity is intentionally excluded so repeated
+        # type50/type51 topology can reuse cache entries across the 545
+        # Mg ion-loop calls.  Keep only topology-stable fields plus the
+        # resulting destination topology and basis-map signature.
         return (
             int(element_z),
             int(getattr(block_obj, "ion_index", 0)),
             int(getattr(block_obj, "ion_stage", 0)),
             int(getattr(block_obj, "nlev", 0)),
-            int(getattr(block_obj, "compact_start", 0)),
-            int(record_number),
+            int(getattr(block_obj, "nlev", 0)),  # nlevp equivalent in this compact Mg path
             int(rate_type),
             int(data_type),
+            int(idest1),
+            int(idest2),
+            int(getattr(block_obj, "compact_start", 0)),
+            int(getattr(block_obj, "compact_stop", 0)),
+            int(getattr(basis, "n_rows", 0)),
+            int(getattr(basis, "normalization_row", 0)),
         )
+
+    def _transition_family_record_key_event(data_type: int, key: Tuple[Any, ...], event: str) -> None:
+        dtype = int(data_type)
+        if event == "seen":
+            seen = _transition_family_key_seen_counts.setdefault(dtype, {})
+            seen[key] = int(seen.get(key, 0)) + 1
+            if seen[key] == 1:
+                _transition_family_local_add(_transition_family_local, dtype, unique_family_cache_keys=1.0)
+                _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), dtype, unique_family_cache_keys=1.0)
+            else:
+                _transition_family_local_add(_transition_family_local, dtype, repeated_family_cache_keys=1.0)
+                _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), dtype, repeated_family_cache_keys=1.0)
+            return
+        table = _transition_family_key_hit_counts if event == "hit" else _transition_family_key_miss_counts
+        bucket = table.setdefault(dtype, {})
+        skey = repr(key)
+        bucket[skey] = int(bucket.get(skey, 0)) + 1
 
     def _transition_family_local_add(local: Dict[int, Dict[str, float]], data_type: int, **values: float) -> None:
         bucket = local.setdefault(int(data_type), {})
@@ -3243,19 +3280,12 @@ def assemble_element_matrix(
                 _family_cached_row_count = None
                 _family_cache_can_reuse = False
                 if int(element_z) == 12 and _transition_family_cache_enabled and _family_dtype in _transition_family_report_dtypes:
-                    _family_key = _transition_family_key(block, int(record), int(_source_rate_type), _family_dtype)
+                    # Count the visited family now, but defer normalized cache
+                    # key lookup until after ucalc has produced idest1/idest2.
+                    # That lets the key include the destination topology while
+                    # still excluding per-instance source-record identity.
                     _transition_family_local_add(_transition_family_local, _family_dtype, records_visited=1.0)
                     _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, records_visited=1.0)
-                    if _family_dtype in _transition_family_cache_dtypes:
-                        _cached = _transition_family_cache_store.get(_family_key)
-                        if _cached is None:
-                            _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=1.0)
-                            _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=1.0)
-                        else:
-                            _family_cached_row_count = int(_cached.get("row_count", -1))
-                            _family_cache_can_reuse = True
-                            _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_hits=1.0)
-                            _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_hits=1.0)
                 if int(record) in cpp_direct_accumulated_records:
                     if int(element_z) == 12:
                         _speed_add_counter("skipped_records_by_source_data_type", int(_source_data_type), 1.0)
@@ -3747,18 +3777,33 @@ def assemble_element_matrix(
                                 n_source_clamps += 1
                                 record_results[-1]["source_ipmat_endpoint_clamped"] = True
                                 record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
-                            if int(element_z) == 12 and _transition_family_cache_enabled and _family_key is not None and _family_dtype in _transition_family_cache_dtypes:
+                            if int(element_z) == 12 and _transition_family_cache_enabled and _family_dtype in _transition_family_cache_dtypes:
                                 _row_count = int(len(new_terms))
-                                _sig = (int(result.rate_type), int(result.data_type), int(result.idest1), int(result.idest2), int(_row_count))
+                                _family_key = _transition_family_key(block, int(result.rate_type), int(result.data_type), int(result.idest1), int(result.idest2))
+                                _transition_family_record_key_event(_family_dtype, _family_key, "seen")
+                                _sig = (
+                                    int(result.rate_type),
+                                    int(result.data_type),
+                                    int(result.idest1),
+                                    int(result.idest2),
+                                    int(_row_count),
+                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "matrix")),
+                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "heat")),
+                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "cool")),
+                                )
                                 _cached = _transition_family_cache_store.get(_family_key)
                                 if _cached is None:
+                                    _transition_family_record_key_event(_family_dtype, _family_key, "miss")
+                                    _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=float(_row_count))
+                                    _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=float(_row_count))
                                     _transition_family_cache_store[_family_key] = {"signature": _sig, "row_count": _row_count}
                                 elif tuple(_cached.get("signature", ())) == _sig and _transition_family_cache_product_enabled and int(_cached.get("row_count", -1)) == _row_count:
-                                    _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
-                                    _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
+                                    _transition_family_record_key_event(_family_dtype, _family_key, "hit")
+                                    _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_hits=1.0, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
+                                    _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_hits=1.0, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
                                 else:
-                                    _transition_family_local_add(_transition_family_local, _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0)
-                                    _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0)
+                                    _transition_family_local_add(_transition_family_local, _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0, family_cache_rows_recomputed=float(_row_count))
+                                    _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0, family_cache_rows_recomputed=float(_row_count))
                                     _transition_family_cache_store[_family_key] = {"signature": _sig, "row_count": _row_count}
                             terms.extend(new_terms)
                             n_eval += 1
@@ -3909,6 +3954,16 @@ def assemble_element_matrix(
                 for _ion, _by_dtype in sorted(_transition_family_local_by_ion.items()):
                     for _dtype, _vals in sorted(_by_dtype.items()):
                         _matrix_diag_nested_add("transition_family_cache_candidates_by_ion", _ion, _dtype, **_vals)
+                for _dtype, _counts in sorted(_transition_family_key_seen_counts.items()):
+                    _matrix_diag_update("family_cache_key_diagnostics", _dtype, unique_family_cache_keys_by_data_type=float(len(_counts)))
+                    _repeated = float(sum(1 for _v in _counts.values() if int(_v) > 1))
+                    _matrix_diag_update("family_cache_key_diagnostics", _dtype, repeated_family_cache_keys_by_data_type=_repeated)
+                for _dtype, _counts in sorted(_transition_family_key_hit_counts.items()):
+                    _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
+                    _matrix_diag_update("top_cache_key_hit_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
+                for _dtype, _counts in sorted(_transition_family_key_miss_counts.items()):
+                    _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
+                    _matrix_diag_update("top_cache_key_miss_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
             ion_summaries.append(summary)
             if is_mg_profile:
                 _ion_total = time.perf_counter() - _ion_loop_t0
