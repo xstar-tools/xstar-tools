@@ -744,7 +744,7 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_cpp_error_present"] = 1.0
                 timing["final_product_build.spectrum.binemis_cpp_error_message_length"] = float(len(_err))
                 timing["final_product_build.spectrum.binemis_cpp_error_repr_length"] = float(len(_repr))
-                # v0.6.8: store the actual exception text in output_writer_timing_breakdown.
+                # v0.6.9: store the actual exception text in output_writer_timing_breakdown.
                 # The numeric timing total intentionally ignores non-numeric values.
                 timing["final_product_build.spectrum.binemis_cpp_error_type"] = type(exc).__name__
                 timing["final_product_build.spectrum.binemis_cpp_error_message"] = _err[:2048]

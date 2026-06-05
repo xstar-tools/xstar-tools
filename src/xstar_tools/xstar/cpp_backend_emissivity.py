@@ -140,9 +140,9 @@ def build_binemis_profile_cpp(
     if lib is None:
         raise RuntimeError("C++ binemis backend unavailable" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     epi = np.ascontiguousarray(np.asarray(epi_eV, dtype=np.float64).reshape(-1))
-    dp = np.ascontiguousarray(np.asarray(dpthc, dtype=np.float64))
-    lum = np.ascontiguousarray(np.asarray(elum, dtype=np.float64))
-    original = np.ascontiguousarray(np.asarray(zrems, dtype=np.float64))
+    dp2 = np.ascontiguousarray(np.asarray(dpthc, dtype=np.float64))
+    lum2 = np.ascontiguousarray(np.asarray(elum, dtype=np.float64))
+    original2 = np.ascontiguousarray(np.asarray(zrems, dtype=np.float64))
     incident = np.ascontiguousarray(np.asarray(zremsz, dtype=np.float64).reshape(-1))
     slots = np.ascontiguousarray(np.asarray(slot_line_indices, dtype=np.int64).reshape(-1))
     wavelength = np.ascontiguousarray(np.asarray(line_wavelength, dtype=np.float64).reshape(-1))
@@ -151,13 +151,19 @@ def build_binemis_profile_cpp(
     natural = np.ascontiguousarray(np.asarray(line_natural_rate_s, dtype=np.float64).reshape(-1))
     auger_width = np.ascontiguousarray(np.asarray(line_auger_width_eV, dtype=np.float64).reshape(-1))
     auger_rate = np.ascontiguousarray(np.asarray(line_auger_rate_s, dtype=np.float64).reshape(-1))
-    if dp.ndim != 2 or lum.ndim != 2 or original.ndim != 2:
+    if dp2.ndim != 2 or lum2.ndim != 2 or original2.ndim != 2:
         raise ValueError("binemis C++ arrays must be two-dimensional where expected")
+    # v0.6.9: ctypes ABI expects flat one-dimensional contiguous buffers for
+    # all matrix-like arrays.  Keep the Python-facing shape for comparison and
+    # reshape after the C++ call, but pass only 1-D buffers to ndpointer(ndim=1).
+    dp = np.ascontiguousarray(dp2.reshape(-1))
+    lum = np.ascontiguousarray(lum2.reshape(-1))
+    original = np.ascontiguousarray(original2.reshape(-1))
     out = np.ascontiguousarray(original.copy())
     stats = np.zeros(16, dtype=np.float64)
     buf = ctypes.create_string_buffer(512)
     rc = lib.xstar_emissivity_build_binemis_profile(
-        int(ncn2), int(epi.size), int(original.shape[1]), int(slots.size), int(lum.shape[1]),
+        int(ncn2), int(epi.size), int(original2.shape[1]), int(slots.size), int(lum2.shape[1]),
         float(xlum), float(temperature_1e4K), float(turbulent_velocity_km_s),
         epi, np.ascontiguousarray(dp), lum, original, incident,
         slots, wavelength, data_type, atomic_mass, natural, auger_width, auger_rate,
@@ -166,4 +172,4 @@ def build_binemis_profile_cpp(
     msg = buf.value.decode("utf-8", "replace")
     if rc != 0:
         raise RuntimeError(msg or f"xstar_emissivity_build_binemis_profile failed with code {rc}")
-    return out, {"cpp_profile_lines_attempted": float(stats[0]), "cpp_profile_lines_applied": float(stats[1]), "cpp_profile_slots": float(stats[2])}, msg
+    return out.reshape(original2.shape), {"cpp_profile_lines_attempted": float(stats[0]), "cpp_profile_lines_applied": float(stats[1]), "cpp_profile_slots": float(stats[2])}, msg
