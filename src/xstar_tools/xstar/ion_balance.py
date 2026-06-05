@@ -294,18 +294,32 @@ def calc_ion_rates(
     n_selected = len(selected_records)
     retain_contributions = bool(getattr(context, "retain_contributions", True))
 
-    # v0.6.0a18: optional Mg pre-matrix shortcut for the same rate_type=7
-    # photoionization families that now dominate/benefit from the direct C++
-    # accumulator in the level-matrix pass.  The preliminary calc_ion_rates
-    # source path uses ptmp1=ptmp2=0.5; pass the same escape factors and skip
-    # only records that C++ reports as successfully evaluated.
+    # v0.6.4: keep the preliminary Mg rate7 C++ path product-inactive by
+    # default.  v0.6.2 showed that enabling this shortcut changed ion/rate
+    # traversal counts and downstream Mg products.  The C++ evaluator can now be
+    # run in shadow mode to compare against the Python preliminary-rate path
+    # without skipping Python records.  Product use requires the explicit
+    # XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP opt-in.
+    _truthy = {"1", "true", "yes", "on"}
+    _prematrix_requested = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in _truthy
+    _prematrix_shadow = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_SHADOW_CPP", "0")).strip().lower() in _truthy
+    _prematrix_product = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP", "0")).strip().lower() in _truthy
     cpp_prematrix_records: set[int] = set()
+    cpp_prematrix_product_records: set[int] = set()
     cpp_prematrix_pirt = 0.0
-    cpp_prematrix_stats: Dict[str, float] = {}
+    cpp_prematrix_python_pirt = 0.0
+    cpp_prematrix_python_rrrt = 0.0
+    cpp_prematrix_python_records = 0
+    cpp_prematrix_stats: Dict[str, float] = {
+        "requested": 1.0 if _prematrix_requested else 0.0,
+        "shadow_enabled": 1.0 if _prematrix_shadow else 0.0,
+        "product_enabled": 1.0 if _prematrix_product else 0.0,
+    }
     if (
         int(element_z) == 12
-        and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
-        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and _prematrix_requested
+        and (_prematrix_shadow or _prematrix_product)
+        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in _truthy
     ):
         try:
             from .cpp_backend_matrix import (
@@ -351,6 +365,8 @@ def calc_ion_rates(
                     if str(_row.get("role")) == "scalar_pirt" and int(_row.get("idest1", 0)) == 1:
                         cpp_prematrix_pirt += float(_row.get("aj1", 0.0))
                 cpp_prematrix_records.update(_supported_records)
+                if _prematrix_product:
+                    cpp_prematrix_product_records.update(_supported_records)
                 for _k, _v in (_stats or {}).items():
                     try:
                         cpp_prematrix_stats[f"{_label}_{_k}"] = cpp_prematrix_stats.get(f"{_label}_{_k}", 0.0) + float(_v)
@@ -358,15 +374,16 @@ def calc_ion_rates(
                         pass
         except Exception as _exc:
             cpp_prematrix_records = set()
+            cpp_prematrix_product_records = set()
             cpp_prematrix_pirt = 0.0
-            cpp_prematrix_stats = {"fallback": 1.0, "error_hash": float(abs(hash(str(_exc))) % 1000000)}
+            cpp_prematrix_stats.update({"fallback": 1.0, "error_hash": float(abs(hash(str(_exc))) % 1000000)})
 
-    if cpp_prematrix_records:
+    if cpp_prematrix_product_records:
         pirti += float(cpp_prematrix_pirt)
-        n_evaluated += len(cpp_prematrix_records)
+        n_evaluated += len(cpp_prematrix_product_records)
 
     for rate_slot, record in selected_records:
-        if int(record) in cpp_prematrix_records:
+        if int(record) in cpp_prematrix_product_records:
             continue
         header = master.header(record)
         ints = master.record_integers(record)
@@ -431,6 +448,11 @@ def calc_ion_rates(
                 rrrti += add_rr
         else:
             n_blocked += 1
+
+        if int(record) in cpp_prematrix_records and result.status is UCalcStatus.EVALUATED:
+            cpp_prematrix_python_records += 1
+            cpp_prematrix_python_pirt += float(add_pi)
+            cpp_prematrix_python_rrrt += float(add_rr)
 
         if retain_contributions:
             diagnostics = dict(getattr(result, "diagnostics", {}) or {})
@@ -500,7 +522,13 @@ def calc_ion_rates(
             "cached_selected_records": isinstance(context.reusable_work_arrays, dict),
             "retain_contributions": retain_contributions,
             "prematrix_cpp_records": len(cpp_prematrix_records),
+            "prematrix_cpp_product_records": len(cpp_prematrix_product_records),
             "prematrix_cpp_pirt": float(cpp_prematrix_pirt),
+            "prematrix_python_records": int(cpp_prematrix_python_records),
+            "prematrix_python_pirt": float(cpp_prematrix_python_pirt),
+            "prematrix_python_rrrt": float(cpp_prematrix_python_rrrt),
+            "prematrix_shadow_pirt_abs_diff": float(abs(cpp_prematrix_python_pirt - cpp_prematrix_pirt)) if cpp_prematrix_records else 0.0,
+            "prematrix_shadow_product_active": bool(cpp_prematrix_product_records),
             "prematrix_cpp_stats": dict(cpp_prematrix_stats),
         },
     )
