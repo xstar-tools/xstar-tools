@@ -19,6 +19,9 @@ _KERNEL_ENV = {
     "rates": "XSTAR_ATOMIC_RATES_BACKEND",
     "matrix": "XSTAR_ATOMIC_MATRIX_BACKEND",
     "emissivity": "XSTAR_ATOMIC_EMISSIVITY_BACKEND",
+    "opacity": "XSTAR_ATOMIC_OPACITY_BACKEND",
+    "thermal": "XSTAR_ATOMIC_THERMAL_BACKEND",
+    "engine": "XSTAR_ATOMIC_ENGINE_BACKEND",
 }
 _GLOBAL_ENV = "XSTAR_ATOMIC_BACKEND"
 
@@ -32,6 +35,9 @@ class BackendSelection:
     rates_backend: BackendName
     matrix_backend: BackendName
     emissivity_backend: BackendName
+    opacity_backend: BackendName = "python"
+    thermal_backend: BackendName = "python"
+    engine_backend: BackendName = "python"
 
     def as_dict(self) -> dict[str, str]:
         return dict(asdict(self))
@@ -51,6 +57,9 @@ def resolve_backend_selection(
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
+    opacity_backend: str | None = None,
+    thermal_backend: str | None = None,
+    engine_backend: str | None = None,
 ) -> BackendSelection:
     """Resolve global and per-kernel backend selections.
 
@@ -75,6 +84,9 @@ def resolve_backend_selection(
         rates_backend=one("rates", rates_backend),
         matrix_backend=one("matrix", matrix_backend),
         emissivity_backend=one("emissivity", emissivity_backend),
+        opacity_backend=one("opacity", opacity_backend),
+        thermal_backend=one("thermal", thermal_backend),
+        engine_backend=one("engine", engine_backend),
     )
 
 
@@ -85,6 +97,9 @@ def install_backend_environment(selection: BackendSelection) -> None:
     os.environ[_KERNEL_ENV["rates"]] = selection.rates_backend
     os.environ[_KERNEL_ENV["matrix"]] = selection.matrix_backend
     os.environ[_KERNEL_ENV["emissivity"]] = selection.emissivity_backend
+    os.environ[_KERNEL_ENV["opacity"]] = selection.opacity_backend
+    os.environ[_KERNEL_ENV["thermal"]] = selection.thermal_backend
+    os.environ[_KERNEL_ENV["engine"]] = selection.engine_backend
 
 
 def backend_selection_from_mapping(mapping: Mapping[str, object] | None) -> BackendSelection:
@@ -95,4 +110,7 @@ def backend_selection_from_mapping(mapping: Mapping[str, object] | None) -> Back
         rates_backend=str(data.get("rates_backend", data.get("rates", "python"))),
         matrix_backend=str(data.get("matrix_backend", data.get("matrix", "python"))),
         emissivity_backend=str(data.get("emissivity_backend", data.get("emissivity", "python"))),
+        opacity_backend=str(data.get("opacity_backend", data.get("opacity", "python"))),
+        thermal_backend=str(data.get("thermal_backend", data.get("thermal", "python"))),
+        engine_backend=str(data.get("engine_backend", data.get("engine", "python"))),
     )

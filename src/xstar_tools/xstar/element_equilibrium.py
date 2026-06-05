@@ -1718,7 +1718,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.0a49",
+                "version": "0.6.1",
                 "description": "Observational counters for whether Mg rate7 data_type 49/53 C++ paths replace Python ucalc work.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),

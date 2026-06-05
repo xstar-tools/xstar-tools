@@ -15,3 +15,6 @@ build_one level_population.cpp libxstar_solver.so
 build_one rate_kernels.cpp libxstar_rates.so
 build_one matrix_kernels.cpp libxstar_matrix.so
 build_one line_emissivity.cpp libxstar_emissivity.so
+build_one opacity_kernels.cpp libxstar_opacity.so
+build_one thermal_kernels.cpp libxstar_thermal.so
+build_one xstar_engine.cpp libxstar_engine.so

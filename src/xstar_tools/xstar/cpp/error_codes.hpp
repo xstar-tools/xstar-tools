@@ -1,0 +1,12 @@
+#ifndef XSTAR_BACKEND_ERROR_CODES_HPP
+#define XSTAR_BACKEND_ERROR_CODES_HPP
+
+namespace xstar_backend {
+constexpr int XSTAR_BACKEND_OK = 0;
+constexpr int XSTAR_BACKEND_ERR_INVALID_ARGUMENT = 1;
+constexpr int XSTAR_BACKEND_ERR_BUFFER_TOO_SMALL = 2;
+constexpr int XSTAR_BACKEND_ERR_UNSUPPORTED = 3;
+constexpr int XSTAR_BACKEND_ERR_INTERNAL = 4;
+}
+
+#endif

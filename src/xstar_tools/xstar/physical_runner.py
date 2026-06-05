@@ -49,6 +49,7 @@ from .compact_active_atdb import export_compact_active_atdb
 from .cpp_backend_rates import rates_backend_status
 from .cpp_backend_matrix import matrix_backend_status
 from .cpp_backend_emissivity import emissivity_backend_status
+from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, probe_mg_ion_accumulator_skeleton
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
 from .performance import normalize_profile_level, profile_component, summarize_profile
@@ -2381,6 +2382,10 @@ def run_xstar_from_parameters(
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "mg_type7_terms_dense_fill_selected_ucalc_type51_mg_rates_matrix_and_type51_ucalc_rates_matrix_available_via_libxstar_matrix"},
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
+                "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "skeleton_only_no_product_active_opacity_physics"},
+                "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
+                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "skeleton_only_mg_ion_accumulator_abi_present_off_by_default"},
+                "mg_ion_accumulator_skeleton": probe_mg_ion_accumulator_skeleton(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),
