@@ -1835,6 +1835,14 @@ def assemble_element_matrix(
     _transition_family_key_hit_counts: Dict[int, Dict[str, int]] = {}
     _transition_family_key_miss_counts: Dict[int, Dict[str, int]] = {}
 
+    # v0.6.0a50: topology-bucket diagnostics are deliberately separate
+    # from the product cache key.  The product key remains conservative,
+    # while the bucket key asks whether records share row-shape/topology
+    # closely enough to justify a future row-template cache.
+    _transition_family_topology_bucket_seen_counts: Dict[int, Dict[Tuple[Any, ...], int]] = {}
+    _transition_family_topology_bucket_hit_counts: Dict[int, Dict[str, int]] = {}
+    _transition_family_topology_bucket_miss_counts: Dict[int, Dict[str, int]] = {}
+
     def _transition_family_key(
         block_obj: Any,
         rate_type: int,
@@ -1862,6 +1870,66 @@ def assemble_element_matrix(
             int(getattr(basis, "n_rows", 0)),
             int(getattr(basis, "normalization_row", 0)),
         )
+
+    def _transition_family_endpoint_bucket(endpoint: int, nlev: int) -> int:
+        iv = int(endpoint)
+        nl = max(0, int(nlev))
+        if iv <= 0:
+            return 0
+        if iv == 1:
+            return 1
+        if nl > 0 and iv < nl:
+            return 2
+        if nl > 0 and iv == nl:
+            return 3
+        return 4
+
+    def _transition_family_topology_bucket_key(
+        block_obj: Any,
+        rate_type: int,
+        data_type: int,
+        idest1: int,
+        idest2: int,
+        row_count: int,
+        matrix_count: int,
+        heat_count: int,
+        cool_count: int,
+    ) -> Tuple[Any, ...]:
+        nlev_val = int(getattr(block_obj, "nlev", 0))
+        return (
+            int(element_z),
+            int(getattr(block_obj, "ion_index", 0)),
+            int(getattr(block_obj, "ion_stage", 0)),
+            nlev_val,
+            nlev_val,  # nlevp-equivalent in this compact Mg path
+            int(rate_type),
+            int(data_type),
+            int(row_count),
+            int(matrix_count),
+            int(heat_count),
+            int(cool_count),
+            _transition_family_endpoint_bucket(int(idest1), nlev_val),
+            _transition_family_endpoint_bucket(int(idest2), nlev_val),
+            int(getattr(block_obj, "compact_start", 0)),
+            int(getattr(block_obj, "compact_stop", 0)),
+            int(getattr(basis, "n_rows", 0)),
+            int(getattr(basis, "normalization_row", 0)),
+        )
+
+    def _transition_family_record_topology_bucket_event(data_type: int, key: Tuple[Any, ...]) -> None:
+        dtype = int(data_type)
+        seen = _transition_family_topology_bucket_seen_counts.setdefault(dtype, {})
+        seen[key] = int(seen.get(key, 0)) + 1
+        skey = repr(key)
+        if seen[key] == 1:
+            _transition_family_local_add(_transition_family_local, dtype, unique_family_topology_buckets=1.0, topology_bucket_misses=1.0)
+            _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), dtype, unique_family_topology_buckets=1.0, topology_bucket_misses=1.0)
+            bucket = _transition_family_topology_bucket_miss_counts.setdefault(dtype, {})
+        else:
+            _transition_family_local_add(_transition_family_local, dtype, repeated_family_topology_buckets=1.0, topology_bucket_hits=1.0)
+            _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), dtype, repeated_family_topology_buckets=1.0, topology_bucket_hits=1.0)
+            bucket = _transition_family_topology_bucket_hit_counts.setdefault(dtype, {})
+        bucket[skey] = int(bucket.get(skey, 0)) + 1
 
     def _transition_family_record_key_event(data_type: int, key: Tuple[Any, ...], event: str) -> None:
         dtype = int(data_type)
@@ -2601,6 +2669,31 @@ def assemble_element_matrix(
                         )
                     for offset, (_pending_result, record_row_index) in enumerate(batch):
                         group = new_terms[4 * offset : 4 * offset + 4]
+                        if int(element_z) == 12 and _transition_family_cache_enabled and int(getattr(_pending_result, "data_type", 0)) in _transition_family_cache_dtypes:
+                            _row_count = int(len(group))
+                            _matrix_count = int(sum(1 for _t in group if getattr(_t, "kind", "matrix") == "matrix"))
+                            _heat_count = int(sum(1 for _t in group if getattr(_t, "kind", "matrix") == "heat"))
+                            _cool_count = int(sum(1 for _t in group if getattr(_t, "kind", "matrix") == "cool"))
+                            _family_dtype = int(getattr(_pending_result, "data_type", 0))
+                            _family_key = _transition_family_key(block, int(_pending_result.rate_type), _family_dtype, int(_pending_result.idest1), int(_pending_result.idest2))
+                            _transition_family_record_key_event(_family_dtype, _family_key, "seen")
+                            _bucket_key = _transition_family_topology_bucket_key(block, int(_pending_result.rate_type), _family_dtype, int(_pending_result.idest1), int(_pending_result.idest2), _row_count, _matrix_count, _heat_count, _cool_count)
+                            _transition_family_record_topology_bucket_event(_family_dtype, _bucket_key)
+                            _sig = (int(_pending_result.rate_type), _family_dtype, int(_pending_result.idest1), int(_pending_result.idest2), _row_count, _matrix_count, _heat_count, _cool_count)
+                            _cached = _transition_family_cache_store.get(_family_key)
+                            if _cached is None:
+                                _transition_family_record_key_event(_family_dtype, _family_key, "miss")
+                                _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=float(_row_count))
+                                _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_misses=1.0, family_cache_rows_recomputed=float(_row_count))
+                                _transition_family_cache_store[_family_key] = {"signature": _sig, "row_count": _row_count}
+                            elif tuple(_cached.get("signature", ())) == _sig and _transition_family_cache_product_enabled and int(_cached.get("row_count", -1)) == _row_count:
+                                _transition_family_record_key_event(_family_dtype, _family_key, "hit")
+                                _transition_family_local_add(_transition_family_local, _family_dtype, family_cache_product_hits=1.0, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
+                                _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, family_cache_product_hits=1.0, family_cache_rows_reused=float(_row_count), topology_stable_rows=float(_row_count), coefficient_only_rows=float(_row_count))
+                            else:
+                                _transition_family_local_add(_transition_family_local, _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0, family_cache_rows_recomputed=float(_row_count))
+                                _transition_family_local_add_by_ion(_transition_family_local_by_ion, int(block.ion_stage), _family_dtype, cache_invalidations=1.0, topology_signature_mismatch=1.0, family_cache_rows_recomputed=float(_row_count))
+                                _transition_family_cache_store[_family_key] = {"signature": _sig, "row_count": _row_count}
                         record_results[record_row_index]["rates_backend"] = "cpp_matrix_mg_rates_matrix_type51"
                         record_results[record_row_index]["rates_backend_message"] = cpp_message
                         if any(term.source_ipmat_clamped for term in group):
@@ -3791,6 +3884,18 @@ def assemble_element_matrix(
                                     int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "heat")),
                                     int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "cool")),
                                 )
+                                _bucket_key = _transition_family_topology_bucket_key(
+                                    block,
+                                    int(result.rate_type),
+                                    int(result.data_type),
+                                    int(result.idest1),
+                                    int(result.idest2),
+                                    _row_count,
+                                    int(_sig[5]),
+                                    int(_sig[6]),
+                                    int(_sig[7]),
+                                )
+                                _transition_family_record_topology_bucket_event(_family_dtype, _bucket_key)
                                 _cached = _transition_family_cache_store.get(_family_key)
                                 if _cached is None:
                                     _transition_family_record_key_event(_family_dtype, _family_key, "miss")
@@ -3958,6 +4063,16 @@ def assemble_element_matrix(
                     _matrix_diag_update("family_cache_key_diagnostics", _dtype, unique_family_cache_keys_by_data_type=float(len(_counts)))
                     _repeated = float(sum(1 for _v in _counts.values() if int(_v) > 1))
                     _matrix_diag_update("family_cache_key_diagnostics", _dtype, repeated_family_cache_keys_by_data_type=_repeated)
+                for _dtype, _counts in sorted(_transition_family_topology_bucket_seen_counts.items()):
+                    _matrix_diag_update("family_cache_key_diagnostics", _dtype, unique_family_topology_buckets_by_data_type=float(len(_counts)))
+                    _repeated_buckets = float(sum(1 for _v in _counts.values() if int(_v) > 1))
+                    _matrix_diag_update("family_cache_key_diagnostics", _dtype, repeated_family_topology_buckets_by_data_type=_repeated_buckets)
+                for _dtype, _counts in sorted(_transition_family_topology_bucket_hit_counts.items()):
+                    _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
+                    _matrix_diag_update("top_cache_topology_bucket_hit_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
+                for _dtype, _counts in sorted(_transition_family_topology_bucket_miss_counts.items()):
+                    _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
+                    _matrix_diag_update("top_cache_topology_bucket_miss_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
                 for _dtype, _counts in sorted(_transition_family_key_hit_counts.items()):
                     _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
                     _matrix_diag_update("top_cache_key_hit_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
