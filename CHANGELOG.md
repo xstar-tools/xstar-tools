@@ -48,8 +48,6 @@
 - Preserves opt-out controls: set `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=0` or `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO=0` to force Python handling of type49 while using the C++ matrix backend for other proven paths.
 - Renames the matrix backend implementation string to `xstar_matrix_mg_ion_type49_auto_default_type53_optin_v15`.
 
-# v0.6.0a23 - type49 shadow parity probe
-
 ## 0.6.0a27 - Type49 effective-scalar shadow comparator
 
 - Refines the Mg rate_type=7/data_type=49 shadow-parity comparator so scalar C++ rows are compared after the same calc_hmc_ion gates used by the Python reference and direct C++ application path: pirt contributes only when `idest1 == 1`, and rrrt contributes only when `idest2 >= nlev`.
@@ -78,8 +76,6 @@
 - Exposes `mg_type49_shadow_parity_summary` and `mg_type49_shadow_parity_samples` in run provenance.
 - Keeps C++ type49/type53 direct accumulators opt-in and non-default until Python-vs-C++ parity passes.
 
-# v0.6.0a22
-
 ## v0.6.0a22 - Python-reference C++ parity gates
 
 - Reframes parity policy: the current Python implementation is the physics reference for enabling C++ accelerators. Exact original Fortran-XSTAR product identity is not required before C++ development, but every C++ path must match the Python-reference run before becoming default.
@@ -87,7 +83,6 @@
 - Adds `xstar-tools-cpp-parity-gate` and `xstar_tools.xstar.cpp_parity_gate` to compare a Python-reference product directory against a C++ candidate directory. The gate checks `xout_step.log` summary rows, option 22 values, option 27 Mg ion columns, and FITS existence/size/structure/hash metadata.
 - Fixes provenance/summary reporting so a requested Python backend prints `python_reference` instead of showing an available C++ shared-library implementation name.
 - Fixes emissivity backend status resolution so `EMISSIVITY_BACKEND=python` reports active Python even when `libxstar_emissivity.so` is buildable.
-
 
 ## v0.6.0a21 - original-XSTAR parity defaults
 
@@ -97,12 +92,12 @@
 - Restores source-row RRC final-table emission by default so inactive RRC rows remain represented instead of being filtered out by nonzero luminosity.
 - Adds original-XSTAR parity gate tooling for xout_step.log option 17/22/27 and FITS hash/size/structure checks.
 
+## v0.6.0a20
 
 - Fixed v0.6.0a19 output-writer crash by keeping `output_writer_timing_breakdown` numeric-only and summing only numeric timing values.
 - Kept `MATRIX_MG_ION_DIRECT_ACCUM_CPP=1` as the default, but changed the experimental Mg `rate_type=7/data_type=53` photoionization accumulator default to off because it changes the thermal convergence printout (`h-c(%)` and final iteration column) relative to the validated a15/type49-only path.
 - Added explicit opt-in for type-53 experiments via `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP=1`; pre-matrix type-53 follows the same opt-in unless `XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP` is set.
 - Kept the C++ binemis backend enabled by default with numeric timing diagnostics only.
-
 
 ## v0.6.0a19 - C++ binemis emissivity backend
 
@@ -112,7 +107,6 @@
 - Kept the successful Mg rate_type=7/data_type=49 and data_type=53 direct accumulator enabled by default.
 - Updated build scripts so `make`, `build_lib.sh`, and `setup.py build_py` build `libxstar_emissivity.so` alongside solver/rates/matrix libraries while keeping all shared libraries only under `src/xstar_tools/xstar/cpp/`.
 
-
 ## v0.6.0a18 - Mg direct accumulator default and binemis sparse profile scan
 
 - Made the successful Mg ion direct accumulator path default-on. Set `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=0` to force the old Python path.
@@ -120,7 +114,6 @@
 - Retained the v0.6.0a16/v0.6.0a17 rate-type 7 type-49/type-53 direct accumulators.
 - Reduced `binemis` Python overhead by iterating only nonzero ranked line slots in source-equivalent `kl, rank` order instead of scanning all `ncn2 * 10` slots.
 - Added timing fields for nonzero ranked slots and skipped ranked slots in the binemis profile builder.
-
 
 ## v0.6.0a17 - Mg source-scan packing cache and post-type53 profiling cleanup
 
@@ -193,8 +186,6 @@
 - Supported first dominant non-type-51 groups: data types 1, 2, 3, 7, 8, and 20, including the rate-type 7/data-type 7 group that dominated the a8 timing report.
 - Added profile counter `calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel` to show `records_seen`, `records_supported`, `records_batched`, `cpp_calls`, and `ucalc_cpp_applied`.
 - Kept Python fallback for unsupported records and all grid/level/radiation-dependent branches.
-
-# Changelog
 
 ## v0.6.0a26
 
@@ -3547,8 +3538,6 @@ pytest tests/test_type50_line_escape.py tests/test_helike_triplet_balance_diagno
 - Missing optional audit CSVs still produce warnings/placeholders, but the printed case summary no longer degrades to `solver f/i/r=None` when comparison or solver summary products exist.
 - No core population matrix, type-99, type-71, type-77, type-53/type-74, ion-fraction, or line-depth physics were changed.
 
-# Changelog
-
 ## v0.3.102 - 2026-05-08
 
 - Made `examples/44_diagnose_helike_triplet_balance.py` robust to partially copied or older solver-output directories. Missing diagnostic audit CSVs are now treated as optional for the triplet-balance aggregator: the script records a warning, writes placeholder `missing_optional_audit` rows in the corresponding summary CSV, and continues collating the available triplet, type-50, type-71, type-99, and XSTAR-line-reference information.
@@ -3703,8 +3692,6 @@ pytest tests/test_type50_line_escape.py tests/test_helike_triplet_balance_diagno
 - Summary rows report `xstar_population_construction_mode`, `xstar_msolvelucy_uses_fortran_ajisb_pairs`, `xstar_msolvelucy_n_two_rate_pairs`, `xstar_msolvelucy_n_ajisb_entries_equivalent`, and final `p(superlevel)` JSON.
 - Keeps v0.3.83 behavior that `calc_ion_rates -> istruc` targets are metadata/seed-structure information, not hard per-stage Lucy constraints.
 - No intentional changes to type-50 escape rates, inverse-recombination rates, triplet coupling, suppression behavior, or default non-Lucy solvers.
-
-# Changelog
 
 ## v0.3.83 - 2026-05-06
 
@@ -3863,8 +3850,6 @@ Direct XSTAR-code implementation step for the full-global population path.
 - The audit reports, for each f/i/r candidate line, lower/upper level populations, A-values, photon energy, transparent `pop*A*E` emissivity, transparent `calc_emis_ion` channel proxies, `ans1/ans2` placeholders, `ptmp1/ptmp2` escape placeholders, and strong-line selection status.
 - Added component-level summaries for f/i/r fractions under the transparent `calc_emis_ion` proxy so line-output/accounting differences can be separated from population-balance differences.
 - No solver, matrix assembly, suppression treatment, or physical rate behavior is intentionally changed.
-
-# Changelog
 
 ## v0.3.63 - 2026-05-04
 
@@ -4509,8 +4494,6 @@ Direct XSTAR-code implementation step for the full-global population path.
 - The ground-coupling diagnostic now falls back to the standard per-case fit outputs (`o7_source_fit_weights.csv` and `o7_solver_source_fit_weights.csv`) when the summary omits a usable weights path.
 - Added a regression test for the empty-path/directory fallback.
 
-# Changelog
-
 ## v0.2.76 - 2026-04-27
 
 - Fixed the v0.2.75 O VII type-69 record-audit annotation lookup so `examples/28_o7_type69_record_audit.py` can find `o7_type69_transition_sensitivity.csv` when given either the CSV path, the output directory, or a parent directory.
@@ -4589,8 +4572,6 @@ Added:
 
 Notes:
 - The template intentionally reuses the packaged low-density O VII reference as a placeholder for every row. Replace each `xstar_lines_csv` entry with a converted density-specific XSTAR line CSV before using it for scientific validation.
-
-# CHANGELOG
 
 ## v0.2.68 - 2026-04-27
 
