@@ -9,7 +9,7 @@ bool is_supported_mg_record(long long rate_type, long long data_type) {
     if (rate_type == 7 && (data_type == 49 || data_type == 53)) {
         return true;
     }
-    // Type 50/51 are not product-active in v0.6.5, but the coarse ABI can
+    // Type 50/51 are not product-active in v0.6.6, but the coarse ABI can
     // identify their topology and count them as C++-supported classification
     // work.  Matrix/rate row generation remains disabled until a later parity
     // package owns the full row application boundary.
@@ -100,14 +100,14 @@ int eval_mg_ion_accumulator_impl(
     counters[MG_ACC_UNSUPPORTED_DATA_TYPE_RECORDS] = unsupported_data;
     counters[MG_ACC_SOURCE_ORDER_RECORDS] = source_order_records;
     counters[MG_ACC_PRODUCT_ACTIVE] = 0;
-    // Product-active row generation remains off in v0.6.5.
+    // Product-active row generation remains off in v0.6.6.
     counters[MG_ACC_MATRIX_TERMS_EMITTED] = 0;
     counters[MG_ACC_RATE_TERMS_EMITTED] = 0;
     counters[MG_ACC_HEAT_TERMS_EMITTED] = 0;
     counters[MG_ACC_COOL_TERMS_EMITTED] = 0;
 
     std::ostringstream out;
-    out << "Mg-ion accumulator v0.6.5 coarse ABI: element_z=" << element_z
+    out << "Mg-ion accumulator v0.6.6 coarse ABI: element_z=" << element_z
         << "; ion_index=" << ion_index
         << "; ion_stage=" << ion_stage
         << "; n_levels=" << n_levels
@@ -129,7 +129,7 @@ int xstar_engine_abi_version() {
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_ion_accumulator_coarse_abi_flat_cpp_v065";
+    return "xstar_engine_mg_ion_accumulator_coarse_abi_flat_cpp_v066";
 }
 
 int xstar_engine_feature_flags() {
@@ -145,7 +145,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.5 coarse Mg-ion accumulator ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.6 coarse Mg-ion accumulator ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
@@ -175,7 +175,7 @@ int xstar_matrix_eval_mg_ion_accumulator_v1(
 }
 
 // Backward-compatible v0.6.1 symbol.  It maps the shorter skeleton call onto
-// the v0.6.5 coarse ABI without product-active row generation.
+// the v0.6.6 coarse ABI without product-active row generation.
 int xstar_engine_eval_mg_ion_accumulator_v1(
     int element_z,
     int ion_index,

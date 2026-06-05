@@ -7,7 +7,7 @@ int xstar_backend_common_abi_version() {
 }
 
 const char* xstar_backend_common_backend_name() {
-    return "xstar_backend_common_flat_cpp_v064";
+    return "xstar_backend_common_flat_cpp_v066";
 }
 
 int xstar_backend_common_feature_flags() {

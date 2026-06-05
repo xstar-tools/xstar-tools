@@ -679,7 +679,16 @@ def build_binemis_spectrum(
     # and packs compact line metadata, but C++ owns the expensive voigte/profile
     # expansion plus final active-row packing.  Fallback preserves the validated
     # Python implementation when the optional library is absent or disabled.
-    if os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0") not in {"0", "false", "no", "off"} and _ranked_nonzero.shape[0] > 0:
+    #
+    # v0.6.6: split the C++ binemis path into PRODUCT and SHADOW gates.  Shadow
+    # mode evaluates C++ beside Python and records worst array/bin differences
+    # without allowing the C++ result to alter products.
+    _cpp_shadow_out = None
+    _cpp_shadow_stats = None
+    _cpp_enabled = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0") not in {"0", "false", "no", "off"}
+    _cpp_product = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP", "0") not in {"0", "false", "no", "off"}
+    _cpp_shadow = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP", "0") not in {"0", "false", "no", "off"}
+    if _cpp_enabled and _ranked_nonzero.shape[0] > 0:
         _cpp_t0 = time.perf_counter()
         try:
             from .cpp_backend_emissivity import build_binemis_profile_cpp
@@ -714,12 +723,19 @@ def build_binemis_spectrum(
             if timing is not None:
                 timing["final_product_build.spectrum.binemis_cpp_seconds"] = float(time.perf_counter() - _cpp_t0)
                 timing["final_product_build.spectrum.binemis_cpp_message_present"] = 1.0 if cpp_message else 0.0
-                timing["final_product_build.spectrum.binemis_profile_seconds"] = float(timing["final_product_build.spectrum.binemis_cpp_seconds"])
                 timing["final_product_build.spectrum.binemis_profile_lines_attempted"] = float(cpp_stats.get("cpp_profile_lines_attempted", 0.0))
                 timing["final_product_build.spectrum.binemis_profile_lines_applied"] = float(cpp_stats.get("cpp_profile_lines_applied", 0.0))
                 timing["final_product_build.spectrum.binemis_cpp_slots"] = float(cpp_stats.get("cpp_profile_slots", 0.0))
-                timing["final_product_build.spectrum.binemis_pack_seconds"] = 0.0
-            return cpp_out
+                timing["final_product_build.spectrum.binemis_cpp_product_enabled"] = 1.0 if _cpp_product else 0.0
+                timing["final_product_build.spectrum.binemis_cpp_shadow_enabled"] = 1.0 if _cpp_shadow else 0.0
+            if _cpp_product:
+                if timing is not None:
+                    timing["final_product_build.spectrum.binemis_profile_seconds"] = float(timing["final_product_build.spectrum.binemis_cpp_seconds"])
+                    timing["final_product_build.spectrum.binemis_pack_seconds"] = 0.0
+                return cpp_out
+            if _cpp_shadow:
+                _cpp_shadow_out = np.asarray(cpp_out, dtype=float).copy()
+                _cpp_shadow_stats = dict(cpp_stats)
         except Exception as exc:
             if timing is not None:
                 timing["final_product_build.spectrum.binemis_cpp_fallback"] = 1.0
@@ -905,6 +921,38 @@ def build_binemis_spectrum(
         out[:, n:] = original[:, n:]
     if timing is not None:
         timing["final_product_build.spectrum.binemis_pack_seconds"] = float(time.perf_counter() - _pack_t0)
+        if _cpp_shadow_out is not None:
+            try:
+                _active = slice(0, n)
+                _py_cmp = np.asarray(out[:, _active], dtype=float)
+                _cpp_cmp = np.asarray(_cpp_shadow_out[:, _active], dtype=float)
+                _abs = np.abs(_cpp_cmp - _py_cmp)
+                _den = np.maximum(np.abs(_py_cmp), np.finfo(float).tiny)
+                _rel = _abs / _den
+                _max_abs_flat = int(np.argmax(_abs)) if _abs.size else 0
+                _max_rel_flat = int(np.argmax(_rel)) if _rel.size else 0
+                _abs_row, _abs_bin = np.unravel_index(_max_abs_flat, _abs.shape) if _abs.size else (0, 0)
+                _rel_row, _rel_bin = np.unravel_index(_max_rel_flat, _rel.shape) if _rel.size else (0, 0)
+                _row_names = ("incident", "transmitted", "emit_inward", "emit_outward", "saved_row4")
+                timing["final_product_build.spectrum.binemis_shadow_compared"] = 1.0
+                timing["final_product_build.spectrum.binemis_shadow_max_abs_diff"] = float(_abs[_abs_row, _abs_bin]) if _abs.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_max_rel_diff"] = float(_rel[_rel_row, _rel_bin]) if _rel.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_max_abs_row"] = float(_abs_row)
+                timing["final_product_build.spectrum.binemis_shadow_max_abs_bin"] = float(_abs_bin)
+                timing["final_product_build.spectrum.binemis_shadow_max_rel_row"] = float(_rel_row)
+                timing["final_product_build.spectrum.binemis_shadow_max_rel_bin"] = float(_rel_bin)
+                timing["final_product_build.spectrum.binemis_shadow_max_abs_energy_eV"] = float(epi[_abs_bin]) if 0 <= _abs_bin < epi.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_max_rel_energy_eV"] = float(epi[_rel_bin]) if 0 <= _rel_bin < epi.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_rows_with_abs_diff"] = float(np.count_nonzero(np.any(_abs != 0.0, axis=1))) if _abs.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_bins_with_abs_diff"] = float(np.count_nonzero(np.any(_abs != 0.0, axis=0))) if _abs.size else 0.0
+                timing["final_product_build.spectrum.binemis_shadow_max_abs_row_name_code"] = float(_abs_row)
+                timing["final_product_build.spectrum.binemis_shadow_max_rel_row_name_code"] = float(_rel_row)
+                if _cpp_shadow_stats:
+                    for _k, _v in _cpp_shadow_stats.items():
+                        if isinstance(_v, (int, float)):
+                            timing[f"final_product_build.spectrum.binemis_shadow_cpp_{_k}"] = float(_v)
+            except Exception:
+                timing["final_product_build.spectrum.binemis_shadow_compare_error"] = 1.0
     return out
 
 def build_final_spectrum_table(

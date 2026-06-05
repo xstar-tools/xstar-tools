@@ -1719,7 +1719,7 @@ def assemble_element_matrix(
             profile_control["mg_rate7_applied_cpp_speed_summary"] = summary_obj
         if not summary_obj:
             summary_obj.update({
-                "version": "0.6.5",
+                "version": "0.6.6",
                 "description": "Observational counters for Mg applied C++ kernels and the coarse Mg-ion accumulator ABI.",
                 "flags": {
                     "source_scan_cpp": _env_enabled("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP"),
@@ -1737,6 +1737,9 @@ def assemble_element_matrix(
                     "transition_family_cache_product": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE_PRODUCT", "1"),
                     "engine_mg_ion_accumulator_cpp": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"),
                     "engine_mg_ion_accumulator_product": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_PRODUCT", "0"),
+                    "emissivity_binemis_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", os.environ.get("EMISSIVITY_BINEMIS_CPP", "0")),
+                    "emissivity_binemis_shadow_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP", "0"),
+                    "emissivity_binemis_product_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP", os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0")),
                 },
                 "source_scan_records_by_data_type": {},
                 "source_scan_rate7_records_by_data_type": {},

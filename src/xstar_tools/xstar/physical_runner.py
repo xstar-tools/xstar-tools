@@ -2384,7 +2384,7 @@ def run_xstar_from_parameters(
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
                 "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "skeleton_only_no_product_active_opacity_physics"},
                 "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
-                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "coarse_mg_ion_accumulator_abi_present_product_inactive_v062"},
+                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "coarse_mg_ion_accumulator_abi_present_product_inactive_v066"},
                 "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
