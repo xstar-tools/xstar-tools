@@ -2297,6 +2297,18 @@ def run_xstar_from_parameters(
         )
         writer_elapsed = time.perf_counter() - writer_start_time
         writer_breakdown = dict(getattr(writer, "timing_breakdown", {}) or {})
+        # v0.6.7: mirror binemis shadow/writer metrics into the Mg C++ speed
+        # summary so the normal checker can surface them without knowing the
+        # writer-specific provenance path.
+        try:
+            speed_summary = state.control.setdefault("mg_rate7_applied_cpp_speed_summary", {})
+            binemis_shadow = speed_summary.setdefault("emissivity_binemis_shadow", {})
+            for _k, _v in writer_breakdown.items():
+                if "binemis" in str(_k) and isinstance(_v, (int, float)):
+                    short = str(_k).split("final_product_build.spectrum.", 1)[-1]
+                    binemis_shadow[short] = float(_v)
+        except Exception:
+            pass
         _prepend_xout_step_startup_provenance(out, state=state, built=built)
         # The current writer API builds/writes the four final products as one
         # source-sequence call.  Record the exact aggregate elapsed time on
@@ -2384,7 +2396,7 @@ def run_xstar_from_parameters(
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
                 "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "skeleton_only_no_product_active_opacity_physics"},
                 "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
-                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "coarse_mg_ion_accumulator_abi_present_product_inactive_v066"},
+                "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "coarse_mg_ion_accumulator_abi_present_product_inactive_v067"},
                 "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
