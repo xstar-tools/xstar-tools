@@ -8,7 +8,7 @@ int xstar_opacity_abi_version() {
 }
 
 const char* xstar_opacity_backend_name() {
-    return "xstar_opacity_skeleton_flat_cpp_v062";
+    return "xstar_opacity_skeleton_flat_cpp_v063";
 }
 
 int xstar_opacity_feature_flags() {

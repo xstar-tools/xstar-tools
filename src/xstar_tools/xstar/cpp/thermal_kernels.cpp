@@ -8,7 +8,7 @@ int xstar_thermal_abi_version() {
 }
 
 const char* xstar_thermal_backend_name() {
-    return "xstar_thermal_skeleton_flat_cpp_v062";
+    return "xstar_thermal_skeleton_flat_cpp_v063";
 }
 
 int xstar_thermal_feature_flags() {

@@ -1,6 +1,6 @@
 """Load optional flat-layout C++ backend libraries.
 
-v0.6.2 keeps every C++ source and shared object directly in
+v0.6.3 keeps every C++ source and shared object directly in
 ``src/xstar_tools/xstar/cpp``.  The engine library now exposes a coarse
 Mg-ion accumulator ABI that can traverse/classify compact per-ion record
 packets and report fallback counters.  Product-active matrix/rate row
@@ -278,7 +278,7 @@ def eval_mg_ion_accumulator_cpp(
     record_source_index: np.ndarray | None = None,
     enabled: bool | None = None,
 ) -> MgIonAccumulatorProbe:
-    """Call the v0.6.2 coarse Mg-ion accumulator ABI.
+    """Call the v0.6.3 coarse Mg-ion accumulator ABI.
 
     This is a coarse per-ion packet call: C++ receives source-order record
     arrays, traverses/classifies supported groups, and returns fallback
