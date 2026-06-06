@@ -736,6 +736,9 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_cpp_slots"] = float(cpp_stats.get("cpp_profile_slots", 0.0))
                 timing["final_product_build.spectrum.binemis_cpp_product_enabled"] = 1.0 if _cpp_product else 0.0
                 timing["final_product_build.spectrum.binemis_cpp_shadow_enabled"] = 1.0 if _cpp_shadow else 0.0
+                timing["final_product_build.spectrum.binemis_cpp_source_real_literal_parity"] = 1.0
+                timing["final_product_build.spectrum.binemis_cpp_product_accepted_opt_in"] = 1.0 if _cpp_product else 0.0
+                timing["final_product_build.spectrum.binemis_cpp_product_scope_final_binemis_only"] = 1.0
             if _cpp_product:
                 if timing is not None:
                     timing["final_product_build.spectrum.binemis_profile_seconds"] = float(timing["final_product_build.spectrum.binemis_cpp_seconds"])
@@ -758,7 +761,7 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_cpp_error_message"] = _err[:2048]
                 timing["final_product_build.spectrum.binemis_cpp_error_repr"] = _repr[:2048]
 
-    # v0.6.14 emit_outward slot-contribution probe.  This remains
+    # v0.6.11 emit_outward slot-contribution probe.  This remains
     # diagnostic-only and is only active when C++ shadow mode is active.
     # Bin numbers use the same zero-based convention reported by v0.6.10.
     _slot_probe_enabled = _cpp_shadow and os.environ.get(
@@ -1020,12 +1023,12 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_shadow_bins_with_abs_diff"] = float(np.count_nonzero(np.any(_abs != 0.0, axis=0))) if _abs.size else 0.0
                 timing["final_product_build.spectrum.binemis_shadow_max_abs_row_name_code"] = float(_abs_row)
                 timing["final_product_build.spectrum.binemis_shadow_max_rel_row_name_code"] = float(_rel_row)
-                # v0.6.14 emit_outward-focused parity and slot-contribution probe.  Keep this
+                # v0.6.11 emit_outward-focused parity and slot-contribution probe.  Keep this
                 # product-inactive: these diagnostics only explain the shadow
                 # mismatch and never replace the Python spectrum.
                 try:
                     _probe_rows = [3] if _abs.shape[0] > 3 else list(range(_abs.shape[0]))
-                    timing["final_product_build.spectrum.binemis_shadow_probe_version"] = 614.0
+                    timing["final_product_build.spectrum.binemis_shadow_probe_version"] = 615.0
                     timing["final_product_build.spectrum.binemis_shadow_emit_outward_row"] = 3.0
                     for _row in _probe_rows:
                         _row_name = _row_names[_row] if 0 <= _row < len(_row_names) else f"row{_row}"
@@ -1091,7 +1094,7 @@ def build_binemis_spectrum(
                                     "rel_diff": abs(_d) / _denv,
                                 })
                             timing[f"{_prefix}_top_abs_bins_json"] = json.dumps(_top_items, separators=(",", ":"))[:8192]
-                    # v0.6.14: replay top Python-contributing slots through the C++
+                    # v0.6.11: replay top Python-contributing slots through the C++
                     # shadow kernel one slot at a time, using a zero original spectrum,
                     # so row 3 is the per-slot emit_outward contribution.  This is
                     # intentionally capped and product-inactive.
@@ -1180,7 +1183,7 @@ def build_binemis_spectrum(
                                     "max_abs_target_diff_bin": int(_item_max_bin),
                                 })
                             _probe_payload = {
-                                "probe_version": "0.6.14",
+                                "probe_version": "0.6.15",
                                 "row": 3,
                                 "row_name": "emit_outward",
                                 "target_bins": [int(_b) for _b in _slot_probe_targets],
@@ -1192,7 +1195,7 @@ def build_binemis_spectrum(
                                 "items": _probe_items,
                             }
                             timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 1.0
-                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_version"] = 614.0
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_version"] = 615.0
                             timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_targets_json"] = json.dumps([int(_b) for _b in _slot_probe_targets], separators=(",", ":"))
                             timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_windows_json"] = json.dumps([int(_b) for _b in sorted(_slot_probe_bin_set)], separators=(",", ":"))
                             timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_slots"] = float(len(_probe_items))

@@ -13,7 +13,9 @@
 
 namespace {
 
-static inline double source_real(double x) { return static_cast<double>(static_cast<float>(x)); }
+inline double source_real_literal(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
 
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (!errbuf || errbuf_size == 0) return;
@@ -64,7 +66,7 @@ static inline double voigte_cpp(double vs, double a) {
 }
 
 static inline int huntf_cpp(const double* xx, double x, int n) {
-    const double floor = 1.0e-34;
+    const double floor = source_real_literal(1.0e-34);
     if (!xx || n < 2) return 1;
     const double xx1 = xx[0];
     const double xx2 = xx[1];
@@ -140,8 +142,8 @@ int xstar_emissivity_build_binemis_profile(
     for (int i = 0; i < 16; ++i) stats[i] = 0.0;
     const int n = ncn2;
     const int rows = 5;
-    const double gate = source_real(1.0e-15) * xlum;
-    const double dpcrit = source_real(1.0e-6);
+    const double gate = 1.0e-15 * xlum;
+    const double dpcrit = 1.0e-6;
     // Source contract: copy original tail, zero active rows first.
     for (int r = 0; r < rows; ++r) {
         for (int k = 0; k < ncols; ++k) out_flat[r * ncols + k] = original_flat[r * ncols + k];
@@ -159,7 +161,7 @@ int xstar_emissivity_build_binemis_profile(
         ++attempted;
         const int j = static_cast<int>(line_index_ll) - 1;
         const double wl = std::fabs(line_wavelength[j]);
-        const double line_energy = source_real(12398.4016) / (source_real(1.0e-34) + wl);
+        const double line_energy = source_real_literal(12398.4016) / (source_real_literal(1.0e-34) + wl);
         const int nb1 = nbinc_cpp(line_energy, epi_ev, n);
         const double lum0 = elum_flat[j];
         const double lum1 = elum_flat[n_lum_lines + j];
@@ -175,16 +177,16 @@ int xstar_emissivity_build_binemis_profile(
             return 5;
         }
         const double mass = std::max(line_atomic_mass[j], std::numeric_limits<double>::min());
-        const double vth = source_real(12.0) * std::sqrt(temperature_1e4k / mass);
+        const double vth = 12.0 * std::sqrt(temperature_1e4k / mass);
         const double vturb = std::max(turbulent_velocity_km_s, vth);
-        const double e0 = source_real(12398.42) / std::max(wl, 1.0e-49);
-        const double deleturb = e0 * (vturb / source_real(3.0e5));
-        const double deleth = e0 * (vth / source_real(3.0e5));
+        const double e0 = source_real_literal(12398.42) / std::max(wl, 1.0e-49);
+        const double deleturb = e0 * (vturb / source_real_literal(3.0e5));
+        const double deleth = e0 * (vth / source_real_literal(3.0e5));
         const double dele = std::sqrt(deleth * deleth + deleturb * deleturb);
         if (!(dele > 0.0)) continue;
-        const double delea = (line_auger_rate_s[j] != 0.0) ? line_auger_rate_s[j] * source_real(4.14e-15) : line_auger_width_ev[j];
-        const double deler = line_natural_rate_s[j] * source_real(4.14e-15);
-        const double aasmall = (delea + deler) / (source_real(1.0e-36) + dele) / source_real(12.56);
+        const double delea = (line_auger_rate_s[j] != 0.0) ? line_auger_rate_s[j] * source_real_literal(4.14e-15) : line_auger_width_ev[j];
+        const double deler = line_natural_rate_s[j] * source_real_literal(4.14e-15);
+        const double aasmall = (delea + deler) / (source_real_literal(1.0e-36) + dele) / source_real_literal(12.56);
         const int ml1 = nb1;
         const double e00 = epi_ev[ml1 - 1];
         const double etmp = e0;
@@ -202,8 +204,8 @@ int xstar_emissivity_build_binemis_profile(
         const int ml2 = nbtpp / 2;
         const int center = ml2 - 1;
         double delet = (e00 - etmp) / dele;
-        double profile = (aasmall > source_real(1.0e-9) ? voigte_cpp(std::fabs(delet), aasmall) : std::exp(-delet * delet)) / source_real(1.772);
-        profile = profile / dele / source_real(1.602197e-12);
+        double profile = (aasmall > source_real_literal(1.0e-9) ? voigte_cpp(std::fabs(delet), aasmall) : std::exp(-delet * delet)) / source_real_literal(1.772);
+        profile = profile / dele / source_real_literal(1.602197e-12);
         temp_energy[center] = e00;
         temp_prof0[center] = lum0 * profile;
         temp_prof1[center] = lum1 * profile;
@@ -222,13 +224,13 @@ int xstar_emissivity_build_binemis_profile(
                     mlmax = std::max(mlm, mlmax);
                     temp_energy[mlm - 1] = etptst;
                     delet = (etptst - etmp) / dele;
-                    profile = (aasmall > source_real(1.0e-9) ? voigte_cpp(std::fabs(delet), aasmall) : std::exp(-delet * delet)) / source_real(1.772);
-                    profile = profile / dele / source_real(1.602197e-12);
+                    profile = (aasmall > source_real_literal(1.0e-9) ? voigte_cpp(std::fabs(delet), aasmall) : std::exp(-delet * delet)) / source_real_literal(1.772);
+                    profile = profile / dele / source_real_literal(1.602197e-12);
                     temp_prof0[mlm - 1] = lum0 * profile;
                     temp_prof1[mlm - 1] = lum1 * profile;
                     tst = profile;
                 }
-                const double deletmax = std::max(source_real(50.0), source_real(200.0) * aasmall);
+                const double deletmax = std::max(50.0, 200.0 * aasmall);
                 if (((tst < dpcrit) || mlm <= 1 || mlm >= nbtpp || etptst <= 0.0 || etptst >= epi_ev[n - 1] || mlc > nbtpp || std::fabs((etptst - etmp) / dele) > deletmax) &&
                     ml1min < ml1 - 2 && ml1max > ml1 + 2 && ml1min >= 1 && ml1max <= nbtpp) {
                     ldon = 1;
@@ -250,7 +252,7 @@ int xstar_emissivity_build_binemis_profile(
             zrsum2 += (temp_prof1[mlm - 1] + temp_prof1[mlm - 2]) * tmpe / 2.0;
             if (temp_energy[mlm - 1] > epi_ev[ml1m - 1]) {
                 if (mlm == mlmax) ml1m = std::max(1, ml1m - 1);
-                if (sume > source_real(1.0e-24)) {
+                if (sume > 1.0e-24) {
                     const double zrtp2 = zrsum2 / sume;
                     const double zrtp1 = zrsum1 / sume;
                     while (temp_energy[mlm - 1] > epi_ev[ml1m - 1] && ml1m < n) {
@@ -284,7 +286,6 @@ int xstar_emissivity_build_binemis_profile(
     stats[0] = static_cast<double>(attempted);
     stats[1] = static_cast<double>(applied);
     stats[2] = static_cast<double>(n_line_slots);
-    stats[3] = 1.0;
     delete[] temp_binned0; delete[] temp_binned1; delete[] temp_prof0; delete[] temp_prof1; delete[] temp_energy;
     write_message(errbuf, errbuf_size, "xstar_emissivity_build_binemis_profile evaluated");
     return 0;

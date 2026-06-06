@@ -172,4 +172,4 @@ def build_binemis_profile_cpp(
     msg = buf.value.decode("utf-8", "replace")
     if rc != 0:
         raise RuntimeError(msg or f"xstar_emissivity_build_binemis_profile failed with code {rc}")
-    return out.reshape(original2.shape), {"cpp_profile_lines_attempted": float(stats[0]), "cpp_profile_lines_applied": float(stats[1]), "cpp_profile_slots": float(stats[2]), "cpp_source_real_literal_parity": float(stats[3])}, msg
+    return out.reshape(original2.shape), {"cpp_profile_lines_attempted": float(stats[0]), "cpp_profile_lines_applied": float(stats[1]), "cpp_profile_slots": float(stats[2])}, msg

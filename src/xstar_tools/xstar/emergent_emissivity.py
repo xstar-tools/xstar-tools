@@ -804,13 +804,6 @@ def _compact_mg_line_emissivity_table(
 
 
 def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
-    # v0.6.14: keep the final-output binemis product-candidate gate
-    # independent from the earlier Mg type4 calc_emis/linopac C++ path.
-    # Product activation of binemis should not implicitly enable other
-    # emissivity-side kernels through EMISSIVITY_BACKEND=cpp; require an
-    # explicit opt-in for this upstream Mg line-emissivity path.
-    if os.environ.get("XSTAR_ATOMIC_EMISSIVITY_MG_TYPE4_CPP", "0").strip().lower() in {"0", "false", "no", "off"}:
-        return False
     requested = None
     control = getattr(context, "profile_control", None)
     if isinstance(control, MutableMapping):
