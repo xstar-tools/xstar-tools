@@ -818,11 +818,11 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
 
 
 def _emissivity_upstream_type4_product_enabled() -> bool:
-    """Opt-in product gate for the accepted-candidate Mg type-4/type-50 upstream C++ path.
+    """Opt-in product gate for the accepted/promoted Mg type-4/type-50 upstream C++ path.
 
     This gate is intentionally independent of EMISSIVITY_BACKEND=cpp so a
     wrapper can keep the broader emissivity backend on Python while enabling
-    exactly this one upstream product candidate.
+    exactly this one upstream promoted product path.
     """
     for name in (
         "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_PRODUCT_CPP",
@@ -936,6 +936,9 @@ def calc_emis_ion(
         "type50_reason_unsupported_data_type": 0.0,
         "type50_reason_linopac_cpp_failure": 0.0,
         "type50_reason_invalid_or_nonfinite_input": 0.0,
+        "upstream_type4_product_promoted_enabled": float(upstream_type4_product_enabled),
+        "upstream_type4_product_promoted_product_active": float(upstream_type4_product_enabled),
+        "upstream_type4_product_accepted": float(upstream_type4_product_enabled),
         "upstream_type4_product_candidate_enabled": float(upstream_type4_product_enabled),
         "upstream_type4_product_candidate_product_active": float(upstream_type4_product_enabled),
     }
@@ -968,7 +971,7 @@ def calc_emis_ion(
             upstream_type4_shadow_summary = profile_control.setdefault("mg_type4_upstream_shadow_probe_summary", {})
             upstream_type4_shadow_samples = profile_control.setdefault("mg_type4_upstream_shadow_probe_samples", [])
             upstream_type4_shadow_summary.update({
-                "probe_version": "0.6.19",
+                "probe_version": "0.6.20",
                 "enabled": True,
                 "product_active": False,
                 "live_path": "python",
@@ -990,11 +993,11 @@ def calc_emis_ion(
                 "top_abs_records": list(upstream_type4_shadow_summary.get("top_abs_records", []) or []),
                 "top_rel_records": list(upstream_type4_shadow_summary.get("top_rel_records", []) or []),
                 "source_real_literal_parity_audit": {
-                    "probe_version": "0.6.19",
+                    "probe_version": "0.6.20",
                     "status": "audit_only_not_product_active",
                     "flinel_formula": "(rcem1 + rcem2) * 2.0 / width / erg_per_ev",
                     "python_source_real_policy": "Python path uses source-real/default-real parity where ported from unsuffixed Fortran literals.",
-                    "cpp_type4_scalar_formula_policy": "C++ scalar type-4 applies source_real_literal(float32->double) to unsuffixed Fortran REAL literals, including 12398.4016, before promotion; upstream remains shadow-only.",
+                    "cpp_type4_scalar_formula_policy": "C++ scalar type-4 applies source_real_literal(float32->double) to unsuffixed Fortran REAL literals, including 12398.4016, before promotion; upstream type-4/type-50 is accepted as an opt-in product path; broad upstream emissivity remains disabled.",
                     "arrays_audited": ["opakc", "rccemis", "oplin", "fline", "flinel"],
                     "patched_cpp_literals": ["12398.4016"],
                 },
