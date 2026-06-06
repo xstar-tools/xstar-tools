@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import json
 import os
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -956,6 +957,82 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_shadow_bins_with_abs_diff"] = float(np.count_nonzero(np.any(_abs != 0.0, axis=0))) if _abs.size else 0.0
                 timing["final_product_build.spectrum.binemis_shadow_max_abs_row_name_code"] = float(_abs_row)
                 timing["final_product_build.spectrum.binemis_shadow_max_rel_row_name_code"] = float(_rel_row)
+                # v0.6.10 emit_outward-focused parity probe.  Keep this
+                # product-inactive: these diagnostics only explain the shadow
+                # mismatch and never replace the Python spectrum.
+                try:
+                    _probe_rows = [3] if _abs.shape[0] > 3 else list(range(_abs.shape[0]))
+                    timing["final_product_build.spectrum.binemis_shadow_probe_version"] = 610.0
+                    timing["final_product_build.spectrum.binemis_shadow_emit_outward_row"] = 3.0
+                    for _row in _probe_rows:
+                        _row_name = _row_names[_row] if 0 <= _row < len(_row_names) else f"row{_row}"
+                        _row_abs = _abs[_row, :]
+                        _row_rel = _rel[_row, :]
+                        _row_diff = _cpp_cmp[_row, :] - _py_cmp[_row, :]
+                        _r_abs_bin = int(np.argmax(_row_abs)) if _row_abs.size else 0
+                        _r_rel_bin = int(np.argmax(_row_rel)) if _row_rel.size else 0
+                        _prefix = f"final_product_build.spectrum.binemis_shadow_{_row_name}"
+                        timing[f"{_prefix}_max_abs_diff"] = float(_row_abs[_r_abs_bin]) if _row_abs.size else 0.0
+                        timing[f"{_prefix}_max_rel_diff"] = float(_row_rel[_r_rel_bin]) if _row_rel.size else 0.0
+                        timing[f"{_prefix}_max_abs_bin"] = float(_r_abs_bin)
+                        timing[f"{_prefix}_max_rel_bin"] = float(_r_rel_bin)
+                        timing[f"{_prefix}_max_abs_energy_eV"] = float(epi[_r_abs_bin]) if 0 <= _r_abs_bin < epi.size else 0.0
+                        timing[f"{_prefix}_max_rel_energy_eV"] = float(epi[_r_rel_bin]) if 0 <= _r_rel_bin < epi.size else 0.0
+                        timing[f"{_prefix}_max_abs_py_value"] = float(_py_cmp[_row, _r_abs_bin]) if _row_abs.size else 0.0
+                        timing[f"{_prefix}_max_abs_cpp_value"] = float(_cpp_cmp[_row, _r_abs_bin]) if _row_abs.size else 0.0
+                        timing[f"{_prefix}_max_abs_signed_diff"] = float(_row_diff[_r_abs_bin]) if _row_abs.size else 0.0
+                        timing[f"{_prefix}_max_rel_py_value"] = float(_py_cmp[_row, _r_rel_bin]) if _row_rel.size else 0.0
+                        timing[f"{_prefix}_max_rel_cpp_value"] = float(_cpp_cmp[_row, _r_rel_bin]) if _row_rel.size else 0.0
+                        timing[f"{_prefix}_max_rel_signed_diff"] = float(_row_diff[_r_rel_bin]) if _row_rel.size else 0.0
+                        timing[f"{_prefix}_bins_with_abs_diff"] = float(np.count_nonzero(_row_abs != 0.0)) if _row_abs.size else 0.0
+
+                        def _window_json(_center: int, _radius: int = 3) -> str:
+                            _lo = max(0, int(_center) - _radius)
+                            _hi = min(n, int(_center) + _radius + 1)
+                            _items = []
+                            for _b in range(_lo, _hi):
+                                _pyv = float(_py_cmp[_row, _b])
+                                _cppv = float(_cpp_cmp[_row, _b])
+                                _d = float(_cppv - _pyv)
+                                _denv = max(abs(_pyv), float(np.finfo(float).tiny))
+                                _items.append({
+                                    "bin": int(_b),
+                                    "energy_eV": float(epi[_b]) if 0 <= _b < epi.size else 0.0,
+                                    "python": _pyv,
+                                    "cpp": _cppv,
+                                    "signed_diff": _d,
+                                    "abs_diff": abs(_d),
+                                    "rel_diff": abs(_d) / _denv,
+                                })
+                            return json.dumps(_items, separators=(",", ":"))[:4096]
+
+                        timing[f"{_prefix}_max_abs_window_json"] = _window_json(_r_abs_bin)
+                        timing[f"{_prefix}_max_rel_window_json"] = _window_json(_r_rel_bin)
+                        if _row_abs.size:
+                            _top_n = min(10, int(_row_abs.size))
+                            _top_idx = np.argsort(_row_abs)[- _top_n:][::-1]
+                            _top_items = []
+                            for _b in _top_idx:
+                                _b = int(_b)
+                                _pyv = float(_py_cmp[_row, _b])
+                                _cppv = float(_cpp_cmp[_row, _b])
+                                _d = float(_cppv - _pyv)
+                                _denv = max(abs(_pyv), float(np.finfo(float).tiny))
+                                _top_items.append({
+                                    "bin": _b,
+                                    "energy_eV": float(epi[_b]) if 0 <= _b < epi.size else 0.0,
+                                    "python": _pyv,
+                                    "cpp": _cppv,
+                                    "signed_diff": _d,
+                                    "abs_diff": abs(_d),
+                                    "rel_diff": abs(_d) / _denv,
+                                })
+                            timing[f"{_prefix}_top_abs_bins_json"] = json.dumps(_top_items, separators=(",", ":"))[:8192]
+                    timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 0.0
+                except Exception as _probe_exc:
+                    timing["final_product_build.spectrum.binemis_shadow_probe_error"] = 1.0
+                    timing["final_product_build.spectrum.binemis_shadow_probe_error_type"] = type(_probe_exc).__name__
+                    timing["final_product_build.spectrum.binemis_shadow_probe_error_message"] = str(_probe_exc)[:2048]
                 if _cpp_shadow_stats:
                     for _k, _v in _cpp_shadow_stats.items():
                         if isinstance(_v, (int, float)):
