@@ -2402,6 +2402,8 @@ def run_xstar_from_parameters(
                 "mg_type53_shadow_parity_worst_rel_samples": list(state.control.get("mg_type53_shadow_parity_worst_rel_samples", [])),
                 "mg_rate7_applied_cpp_speed_summary": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {})),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
+                "mg_type4_upstream_shadow_probe_summary": dict(state.control.get("mg_type4_upstream_shadow_probe_summary", {})),
+                "mg_type4_upstream_shadow_probe_samples": list(state.control.get("mg_type4_upstream_shadow_probe_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
                 "output_writer_timing_breakdown": dict(state.outputs.get("output_writer_timing_breakdown", {})),

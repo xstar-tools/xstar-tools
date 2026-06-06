@@ -815,6 +815,30 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
     return bool(status.active == "cpp" and (int(status.cpp_feature_flags or 0) & 4))
 
 
+def _emissivity_upstream_type4_shadow_enabled() -> bool:
+    """Diagnostic-only Mg type-4 upstream emissivity C++ shadow gate.
+
+    This intentionally does not depend on XSTAR_ATOMIC_EMISSIVITY_BACKEND=cpp.
+    The live product path remains Python; selected C++ type-4/type-50 work is
+    replayed on copied arrays and compared before final binemis packing.
+    """
+    for name in (
+        "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_CPP",
+        "XSTAR_ATOMIC_EMISSIVITY_MG_TYPE4_SHADOW_CPP",
+    ):
+        value = os.environ.get(name)
+        if value is not None and str(value).strip().lower() not in {"", "0", "false", "no", "off"}:
+            return True
+    return False
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)) or str(default))
+    except Exception:
+        return int(default)
+
+
 def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -> None:
     """Accumulate all numeric C++ backend statistics.
 
@@ -907,6 +931,39 @@ def calc_emis_ion(
     retained_kkkl = 0
     diagnostics_enabled = bool(getattr(context, "retain_traces", True))
     profile_control = getattr(context, "profile_control", None) or {}
+    upstream_type4_shadow_enabled = (
+        int(getattr(ion, "element_z", 0)) == 12
+        and _emissivity_upstream_type4_shadow_enabled()
+    )
+    upstream_type4_shadow_max_records = max(0, _safe_int_env("XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_MAX_RECORDS", 256))
+    upstream_type4_shadow_top_n = max(1, _safe_int_env("XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_TOP_N", 16))
+    upstream_type4_shadow_summary: dict[str, Any] | None = None
+    upstream_type4_shadow_samples: list[Any] | None = None
+    if upstream_type4_shadow_enabled:
+        try:
+            upstream_type4_shadow_summary = profile_control.setdefault("mg_type4_upstream_shadow_probe_summary", {})
+            upstream_type4_shadow_samples = profile_control.setdefault("mg_type4_upstream_shadow_probe_samples", [])
+            upstream_type4_shadow_summary.update({
+                "probe_version": "0.6.16",
+                "enabled": True,
+                "product_active": False,
+                "live_path": "python",
+                "shadow_path": "cpp",
+                "target_failed_products_from_v013": ["xo01_detal4.fits:zrems(1)", "xout_spect1.fits:transmitted"],
+                "records_checked": int(upstream_type4_shadow_summary.get("records_checked", 0) or 0),
+                "records_supported": int(upstream_type4_shadow_summary.get("records_supported", 0) or 0),
+                "records_unsupported": int(upstream_type4_shadow_summary.get("records_unsupported", 0) or 0),
+                "records_errors": int(upstream_type4_shadow_summary.get("records_errors", 0) or 0),
+                "records_skipped_after_limit": int(upstream_type4_shadow_summary.get("records_skipped_after_limit", 0) or 0),
+                "max_abs_diff": float(upstream_type4_shadow_summary.get("max_abs_diff", 0.0) or 0.0),
+                "max_rel_diff": float(upstream_type4_shadow_summary.get("max_rel_diff", 0.0) or 0.0),
+                "max_abs_array": str(upstream_type4_shadow_summary.get("max_abs_array", "") or ""),
+                "max_abs_record": int(upstream_type4_shadow_summary.get("max_abs_record", -1) or -1),
+                "max_abs_line_index": int(upstream_type4_shadow_summary.get("max_abs_line_index", -1) or -1),
+            })
+        except Exception:
+            upstream_type4_shadow_summary = None
+            upstream_type4_shadow_samples = None
     progress_callback = getattr(context, "progress_callback", None)
     is_mg_profile = int(getattr(ion, "element_z", 0)) == 12 and profile_level_at_least(profile_control, "nested")
     is_mg_forensic_profile = int(getattr(ion, "element_z", 0)) == 12 and profile_level_at_least(profile_control, "forensic")
@@ -1106,6 +1163,162 @@ def calc_emis_ion(
                 ncn2=len(epi),
                 diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
             )
+
+    def _maybe_probe_upstream_type4_shadow(
+        *,
+        rec: int,
+        rate_type: int,
+        data_type: int,
+        line_index: int,
+        nb1: int,
+        idest1: int,
+        idest2: int,
+        lower: int,
+        upper: int,
+        e1: float,
+        e2: float,
+        energy: float,
+        wave: float,
+        width: float,
+        ptmp1: float,
+        ptmp2: float,
+        abund1: float,
+        abund2: float,
+        result: UCalcResult,
+        opakb1: float,
+        rcem1: float,
+        rcem2: float,
+        flinel_delta: float,
+        natural_width: float,
+        atomic_mass: float,
+        py_before: Mapping[str, np.ndarray] | None,
+    ) -> None:
+        """Replay one upstream Mg type-4 C++ path on copies and compare.
+
+        The live arrays have already been updated by Python when this is called.
+        C++ receives the pre-update copies and its output copies are compared to
+        the live Python post-update arrays. No C++ output is written back.
+        """
+        nonlocal upstream_type4_shadow_summary, upstream_type4_shadow_samples
+        if not upstream_type4_shadow_enabled or upstream_type4_shadow_summary is None:
+            return
+        if int(rate_type) != 4 or int(getattr(ion, "element_z", 0)) != 12:
+            return
+        checked = int(upstream_type4_shadow_summary.get("records_checked", 0) or 0)
+        if checked >= upstream_type4_shadow_max_records:
+            upstream_type4_shadow_summary["records_skipped_after_limit"] = int(upstream_type4_shadow_summary.get("records_skipped_after_limit", 0) or 0) + 1
+            return
+        upstream_type4_shadow_summary["records_checked"] = checked + 1
+        try:
+            if py_before is None:
+                raise RuntimeError("missing pre-update Python arrays for shadow comparison")
+            cpp_opakc = np.asarray(py_before["opakc"], dtype=float).copy()
+            cpp_rcc = np.asarray(py_before["rccemis"], dtype=float).copy()
+            cpp_oplin = np.asarray(py_before["oplin"], dtype=float).copy()
+            cpp_fline = np.asarray(py_before["fline"], dtype=float).copy()
+            cpp_flinel = np.asarray(py_before["flinel"], dtype=float).copy()
+            status_reason = "scalar_cpp_applied"
+            cpp_rows: list[Mapping[str, Any]] = []
+            if int(data_type) == 50:
+                reals_for_cpp = context.master.record_reals(int(rec))
+                wavelength_cpp = abs(float(reals_for_cpp[0])) if len(reals_for_cpp) > 0 else abs(float(wave))
+                aij_cpp = float(reals_for_cpp[2]) if len(reals_for_cpp) > 2 else 0.0
+                if float(e1) < float(e2):
+                    source_upper_id, source_lower_id = int(idest2), int(idest1)
+                else:
+                    source_upper_id, source_lower_id = int(idest1), int(idest2)
+                source_upper_weight = float(levels.weight(source_upper_id))
+                source_lower_weight = float(levels.weight(source_lower_id))
+                bremsa_nb1 = float(_brem_for_cpp[int(nb1)]) if int(nb1) >= 0 and int(nb1) < len(_brem_for_cpp) else 0.0
+                cpp_records = [{
+                    "record": int(rec), "data_type": int(data_type), "ion_index": int(ion.ion_index), "ion_stage": int(ion.ion_stage),
+                    "line_index": int(line_index), "nb1": int(nb1), "wavelength_A": float(wavelength_cpp), "aij_s": float(aij_cpp),
+                    "source_upper_weight": float(source_upper_weight), "source_lower_weight": float(source_lower_weight),
+                    "endpoint_energy_ev": abs(float(e2) - float(e1)), "bremsa_nb1": float(bremsa_nb1),
+                    "ptmp1": float(ptmp1), "ptmp2": float(ptmp2), "abund1": float(abund1), "abund2": float(abund2),
+                    "bin_width_ev": float(width), "natural_width_ev": float(natural_width),
+                }]
+                cpp_rows, _msg, _stats = apply_mg_type4_type50_coarse_cpp_detailed(
+                    cpp_records,
+                    cfrac=float(context.covering_fraction),
+                    hydrogen_density_cm3=float(xpx),
+                    turbulent_velocity_km_s=float(context.turbulent_velocity_km_s),
+                    temperature_1e4K=float(context.temperature_1e4K),
+                    atomic_mass_amu=float(atomic_mass),
+                    erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV,
+                    epi=epi,
+                    opakc=cpp_opakc,
+                    rccemis=cpp_rcc,
+                    oplin=cpp_oplin,
+                    fline=cpp_fline,
+                    flinel=cpp_flinel,
+                )
+                status_reason = str(cpp_rows[0].get("status_reason", "status_unknown")) if cpp_rows else "no_cpp_row"
+                if not cpp_rows or int(cpp_rows[0].get("status_code", 0)) != 1:
+                    upstream_type4_shadow_summary["records_unsupported"] = int(upstream_type4_shadow_summary.get("records_unsupported", 0) or 0) + 1
+                    return
+            else:
+                cpp_rows, _msg, _stats = build_mg_type4_line_emissivity_cpp_detailed([{
+                    "record": int(rec), "data_type": int(data_type), "ion_index": int(ion.ion_index), "ion_stage": int(ion.ion_stage),
+                    "line_index": int(line_index), "nb1": int(nb1), "ans1": float(result.ans1), "ans2": float(result.ans2),
+                    "opakab": float(result.opakab), "abund1": float(abund1), "abund2": float(abund2),
+                    "ptmp1": float(ptmp1), "ptmp2": float(ptmp2), "energy_ev": float(energy), "bin_width_ev": float(width),
+                }], erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV)
+                row = cpp_rows[0]
+                if int(line_index) > 0 and int(line_index) < cpp_oplin.size:
+                    cpp_oplin[int(line_index)] = float(row["opakb1"])
+                    cpp_fline[0, int(line_index)] = float(row["rcem1"])
+                    cpp_fline[1, int(line_index)] = float(row["rcem2"])
+                if int(nb1) > 0 and int(nb1) <= cpp_flinel.size:
+                    cpp_flinel[int(nb1) - 1] += float(row["flinel_delta"])
+                # The scalar C++ helper does not own linopac side effects; mirror Python
+                # for array-scope comparison so this probe isolates scalar line products.
+                cpp_opakc = context.workspace.base.opakc.copy()
+                cpp_rcc = context.workspace.base.rccemis.copy()
+            py_arrays = {
+                "opakc": context.workspace.base.opakc,
+                "rccemis": context.workspace.base.rccemis,
+                "oplin": context.workspace.base.oplin,
+                "fline": context.workspace.fline,
+                "flinel": context.workspace.flinel,
+            }
+            cpp_arrays = {"opakc": cpp_opakc, "rccemis": cpp_rcc, "oplin": cpp_oplin, "fline": cpp_fline, "flinel": cpp_flinel}
+            rec_max_abs = 0.0; rec_max_rel = 0.0; rec_array = ""; rec_index = -1
+            for name, py_arr in py_arrays.items():
+                c_arr = np.asarray(cpp_arrays[name], dtype=float)
+                p_arr = np.asarray(py_arr, dtype=float)
+                diff = np.abs(c_arr - p_arr)
+                if diff.size:
+                    idx = int(np.argmax(diff))
+                    abs_val = float(diff.reshape(-1)[idx])
+                    denom = max(float(abs(p_arr.reshape(-1)[idx])), 1.0e-300)
+                    rel_val = float(abs_val / denom)
+                    if abs_val > rec_max_abs:
+                        rec_max_abs = abs_val; rec_max_rel = rel_val; rec_array = name; rec_index = idx
+            upstream_type4_shadow_summary["records_supported"] = int(upstream_type4_shadow_summary.get("records_supported", 0) or 0) + 1
+            if rec_max_abs > float(upstream_type4_shadow_summary.get("max_abs_diff", 0.0) or 0.0):
+                upstream_type4_shadow_summary["max_abs_diff"] = float(rec_max_abs)
+                upstream_type4_shadow_summary["max_rel_diff"] = float(rec_max_rel)
+                upstream_type4_shadow_summary["max_abs_array"] = str(rec_array)
+                upstream_type4_shadow_summary["max_abs_record"] = int(rec)
+                upstream_type4_shadow_summary["max_abs_line_index"] = int(line_index)
+                upstream_type4_shadow_summary["max_abs_flat_index"] = int(rec_index)
+                upstream_type4_shadow_summary["max_abs_status_reason"] = str(status_reason)
+            if upstream_type4_shadow_samples is not None:
+                sample = {
+                    "record": int(rec), "rate_type": int(rate_type), "data_type": int(data_type), "line_index": int(line_index),
+                    "nb1": int(nb1), "ion_index": int(ion.ion_index), "ion_stage": int(ion.ion_stage),
+                    "status_reason": str(status_reason), "max_abs_diff": float(rec_max_abs), "max_rel_diff": float(rec_max_rel),
+                    "max_abs_array": str(rec_array), "max_abs_flat_index": int(rec_index),
+                    "energy_eV": float(energy), "wavelength_A": float(wave),
+                }
+                upstream_type4_shadow_samples.append(sample)
+                upstream_type4_shadow_samples.sort(key=lambda x: float(x.get("max_abs_diff", 0.0)), reverse=True)
+                del upstream_type4_shadow_samples[upstream_type4_shadow_top_n:]
+        except Exception as exc:
+            upstream_type4_shadow_summary["records_errors"] = int(upstream_type4_shadow_summary.get("records_errors", 0) or 0) + 1
+            upstream_type4_shadow_summary["last_error_type"] = type(exc).__name__
+            upstream_type4_shadow_summary["last_error_message"] = str(exc)[:512]
 
     def _apply_python_type4_line_job(job: Mapping[str, Any]) -> None:
         """Replay one selected type-4 line record through the source Python path."""
@@ -1583,6 +1796,15 @@ def calc_emis_ion(
                             natural_width = float(reals_for_line[2]) * 4.136e-15
                     except Exception:
                         natural_width = 0.0
+                    _upstream_type4_shadow_before = None
+                    if upstream_type4_shadow_enabled and int(rate_type) == 4:
+                        _upstream_type4_shadow_before = {
+                            "opakc": context.workspace.base.opakc.copy(),
+                            "rccemis": context.workspace.base.rccemis.copy(),
+                            "oplin": context.workspace.base.oplin.copy(),
+                            "fline": context.workspace.fline.copy(),
+                            "flinel": context.workspace.flinel.copy(),
+                        }
                     _line_opakc_before = context.workspace.base.opakc.copy() if diagnostics_enabled else None
                     _linopac_diag = _source_linopac_into_opakc(
                         optpp=opakb1,
@@ -1715,6 +1937,16 @@ def calc_emis_ion(
                     context.workspace.fline[0, line_index] = rcem1
                     context.workspace.fline[1, line_index] = rcem2
                     context.workspace.flinel[nb1 - 1] += flinel_delta
+                    _maybe_probe_upstream_type4_shadow(
+                        rec=int(rec), rate_type=int(rate_type), data_type=int(header.data_type),
+                        line_index=int(line_index), nb1=int(nb1), idest1=int(idest1), idest2=int(idest2),
+                        lower=int(lower), upper=int(upper), e1=float(e1), e2=float(e2), energy=float(energy),
+                        wave=float(wave), width=float(width), ptmp1=float(ptmp1), ptmp2=float(ptmp2),
+                        abund1=float(abund1), abund2=float(abund2), result=result, opakb1=float(opakb1),
+                        rcem1=float(rcem1), rcem2=float(rcem2), flinel_delta=float(flinel_delta),
+                        natural_width=float(natural_width), atomic_mass=float(atomic_mass),
+                        py_before=_upstream_type4_shadow_before,
+                    )
                     record_traces.append(CalcEmisRecordTrace(
                         rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, line_index,
