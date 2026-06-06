@@ -689,6 +689,13 @@ def build_binemis_spectrum(
     _cpp_enabled = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0") not in {"0", "false", "no", "off"}
     _cpp_product = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP", "0") not in {"0", "false", "no", "off"}
     _cpp_shadow = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP", "0") not in {"0", "false", "no", "off"}
+    line_wavelength = None
+    line_data_type = None
+    line_atomic_mass = None
+    line_natural_rate = None
+    line_auger_width = None
+    line_auger_rate = None
+    slot_line_indices = None
     if _cpp_enabled and _ranked_nonzero.shape[0] > 0:
         _cpp_t0 = time.perf_counter()
         try:
@@ -751,7 +758,37 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_cpp_error_message"] = _err[:2048]
                 timing["final_product_build.spectrum.binemis_cpp_error_repr"] = _repr[:2048]
 
-    for _kl0, _mm0 in _ranked_nonzero:
+    # v0.6.11 emit_outward slot-contribution probe.  This remains
+    # diagnostic-only and is only active when C++ shadow mode is active.
+    # Bin numbers use the same zero-based convention reported by v0.6.10.
+    _slot_probe_enabled = _cpp_shadow and os.environ.get(
+        "XSTAR_ATOMIC_EMISSIVITY_SLOT_CONTRIBUTION_PROBE", "1"
+    ).strip().lower() not in {"0", "false", "no", "off"}
+    _slot_probe_target_text = os.environ.get(
+        "XSTAR_ATOMIC_EMISSIVITY_SLOT_PROBE_TARGET_BINS",
+        "2981,2982,1894,1895,3875,3876,2788,2789,4945",
+    )
+    _slot_probe_radius = int(os.environ.get("XSTAR_ATOMIC_EMISSIVITY_SLOT_PROBE_RADIUS", "1") or "1")
+    _slot_probe_top_n = int(os.environ.get("XSTAR_ATOMIC_EMISSIVITY_SLOT_PROBE_TOP_N", "24") or "24")
+    _slot_probe_targets: list[int] = []
+    if _slot_probe_enabled:
+        for _part in str(_slot_probe_target_text).replace(";", ",").split(","):
+            _part = _part.strip()
+            if not _part:
+                continue
+            try:
+                _b = int(_part)
+            except Exception:
+                continue
+            if 0 <= _b < n and _b not in _slot_probe_targets:
+                _slot_probe_targets.append(_b)
+    _slot_probe_bin_set: set[int] = set()
+    for _b in _slot_probe_targets:
+        for _bb in range(max(0, _b - _slot_probe_radius), min(n, _b + _slot_probe_radius + 1)):
+            _slot_probe_bin_set.add(int(_bb))
+    _slot_probe_records: dict[int, dict[str, Any]] = {}
+
+    for _slot_ord, (_kl0, _mm0) in enumerate(_ranked_nonzero):
             kl_one_based = int(_kl0) + 1
             mm_one_based = int(_mm0) + 1
             line_index = int(ranked[mm_one_based - 1, kl_one_based - 1])
@@ -912,6 +949,32 @@ def build_binemis_spectrum(
             lo = max(1, ml1min)
             hi = min(n, ml1max)
             if lo <= hi:
+                if _slot_probe_enabled and _slot_probe_bin_set:
+                    _probe_bins_here = [
+                        int(_b) for _b in sorted(_slot_probe_bin_set)
+                        if (lo - 1) <= int(_b) < hi and (temporary_binned[0, int(_b)] != 0.0 or temporary_binned[1, int(_b)] != 0.0)
+                    ]
+                    if _probe_bins_here:
+                        _rec = _slot_probe_records.setdefault(int(_slot_ord), {
+                            "slot_index": int(_slot_ord),
+                            "rank_kl0": int(_kl0),
+                            "rank_mm0": int(_mm0),
+                            "line_index": int(line_index),
+                            "line_profile_id": int(line_index),
+                            "source_bin": int(nb1 - 1),
+                            "python_bin_choice_min": int(lo - 1),
+                            "python_bin_choice_max": int(hi - 1),
+                            "line_energy_eV": float(line_energy),
+                            "profile_center_eV": float(e0),
+                            "wavelength_angstrom": float(wavelength),
+                            "python_emit_outward_by_bin": {},
+                            "python_emit_inward_by_bin": {},
+                        })
+                        _rec["python_bin_choice_min"] = min(int(_rec.get("python_bin_choice_min", lo - 1)), int(lo - 1))
+                        _rec["python_bin_choice_max"] = max(int(_rec.get("python_bin_choice_max", hi - 1)), int(hi - 1))
+                        for _b in _probe_bins_here:
+                            _rec["python_emit_outward_by_bin"][str(_b)] = float(temporary_binned[1, _b])
+                            _rec["python_emit_inward_by_bin"][str(_b)] = float(temporary_binned[0, _b])
                 out[3, lo - 1 : hi] += temporary_binned[1, lo - 1 : hi]
                 out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
                 temporary_binned[:, lo - 1 : hi] = 0.0
@@ -957,12 +1020,12 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_shadow_bins_with_abs_diff"] = float(np.count_nonzero(np.any(_abs != 0.0, axis=0))) if _abs.size else 0.0
                 timing["final_product_build.spectrum.binemis_shadow_max_abs_row_name_code"] = float(_abs_row)
                 timing["final_product_build.spectrum.binemis_shadow_max_rel_row_name_code"] = float(_rel_row)
-                # v0.6.10 emit_outward-focused parity probe.  Keep this
+                # v0.6.11 emit_outward-focused parity and slot-contribution probe.  Keep this
                 # product-inactive: these diagnostics only explain the shadow
                 # mismatch and never replace the Python spectrum.
                 try:
                     _probe_rows = [3] if _abs.shape[0] > 3 else list(range(_abs.shape[0]))
-                    timing["final_product_build.spectrum.binemis_shadow_probe_version"] = 610.0
+                    timing["final_product_build.spectrum.binemis_shadow_probe_version"] = 611.0
                     timing["final_product_build.spectrum.binemis_shadow_emit_outward_row"] = 3.0
                     for _row in _probe_rows:
                         _row_name = _row_names[_row] if 0 <= _row < len(_row_names) else f"row{_row}"
@@ -1028,7 +1091,124 @@ def build_binemis_spectrum(
                                     "rel_diff": abs(_d) / _denv,
                                 })
                             timing[f"{_prefix}_top_abs_bins_json"] = json.dumps(_top_items, separators=(",", ":"))[:8192]
-                    timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 0.0
+                    # v0.6.11: replay top Python-contributing slots through the C++
+                    # shadow kernel one slot at a time, using a zero original spectrum,
+                    # so row 3 is the per-slot emit_outward contribution.  This is
+                    # intentionally capped and product-inactive.
+                    if _slot_probe_enabled and _slot_probe_records and _slot_probe_targets:
+                        try:
+                            from .cpp_backend_emissivity import build_binemis_profile_cpp as _build_binemis_profile_cpp_probe
+                            _probe_candidates = list(_slot_probe_records.values())
+                            def _py_probe_strength(_rec: Mapping[str, Any]) -> float:
+                                _vals = as_map(_rec.get("python_emit_outward_by_bin")) if "as_map" in globals() else _rec.get("python_emit_outward_by_bin", {})
+                                if not isinstance(_vals, Mapping):
+                                    return 0.0
+                                return max((abs(float(_v)) for _v in _vals.values()), default=0.0)
+                            _probe_candidates.sort(key=_py_probe_strength, reverse=True)
+                            _probe_candidates = _probe_candidates[:max(1, int(_slot_probe_top_n))]
+                            _zero_original = np.zeros_like(original, dtype=float)
+                            _probe_items = []
+                            _probe_max_abs_diff = 0.0
+                            _probe_max_abs_slot = -1
+                            _probe_max_abs_bin = -1
+                            _probe_t0 = time.perf_counter()
+                            for _rec in _probe_candidates:
+                                _line_index = int(_rec.get("line_index", 0))
+                                if _line_index <= 0:
+                                    continue
+                                _cpp_slot_out, _cpp_slot_stats, _cpp_slot_msg = _build_binemis_profile_cpp_probe(
+                                    epi_eV=epi, dpthc=dp, elum=lum, zrems=_zero_original, zremsz=incident,
+                                    slot_line_indices=np.asarray([_line_index], dtype=np.int64),
+                                    line_wavelength=line_wavelength if line_wavelength is not None else np.zeros(int(lum.shape[1]), dtype=float),
+                                    line_data_type=line_data_type if line_data_type is not None else np.zeros(int(lum.shape[1]), dtype=np.int64),
+                                    line_atomic_mass=line_atomic_mass if line_atomic_mass is not None else np.ones(int(lum.shape[1]), dtype=float),
+                                    line_natural_rate_s=line_natural_rate if line_natural_rate is not None else np.zeros(int(lum.shape[1]), dtype=float),
+                                    line_auger_width_eV=line_auger_width if line_auger_width is not None else np.zeros(int(lum.shape[1]), dtype=float),
+                                    line_auger_rate_s=line_auger_rate if line_auger_rate is not None else np.zeros(int(lum.shape[1]), dtype=float),
+                                    xlum=xlum, temperature_1e4K=temperature_1e4K,
+                                    turbulent_velocity_km_s=turbulent_velocity_km_s, ncn2=n,
+                                )
+                                _cpp_row = np.asarray(_cpp_slot_out[3, :n], dtype=float)
+                                _py_by_bin = dict(_rec.get("python_emit_outward_by_bin", {}))
+                                _cpp_by_bin = {}
+                                _diff_by_bin = {}
+                                _neighbor_items = []
+                                _item_max = 0.0
+                                _item_max_bin = -1
+                                for _b in sorted(_slot_probe_bin_set):
+                                    _pyv = float(_py_by_bin.get(str(_b), 0.0))
+                                    _cppv = float(_cpp_row[_b]) if 0 <= int(_b) < _cpp_row.size else 0.0
+                                    if _pyv != 0.0 or _cppv != 0.0:
+                                        _cpp_by_bin[str(int(_b))] = _cppv
+                                        _diff = _cppv - _pyv
+                                        _diff_by_bin[str(int(_b))] = _diff
+                                        _ad = abs(_diff)
+                                        if _ad > _item_max:
+                                            _item_max = _ad
+                                            _item_max_bin = int(_b)
+                                        _neighbor_items.append({
+                                            "bin": int(_b),
+                                            "energy_eV": float(epi[int(_b)]) if 0 <= int(_b) < epi.size else 0.0,
+                                            "python_contribution": _pyv,
+                                            "cpp_contribution": _cppv,
+                                            "signed_diff": _diff,
+                                        })
+                                _cpp_nonzero = np.flatnonzero(_cpp_row != 0.0)
+                                _cpp_choice_min = int(_cpp_nonzero[0]) if _cpp_nonzero.size else -1
+                                _cpp_choice_max = int(_cpp_nonzero[-1]) if _cpp_nonzero.size else -1
+                                if _item_max > _probe_max_abs_diff:
+                                    _probe_max_abs_diff = float(_item_max)
+                                    _probe_max_abs_slot = int(_rec.get("slot_index", -1))
+                                    _probe_max_abs_bin = int(_item_max_bin)
+                                _probe_items.append({
+                                    "slot_index": int(_rec.get("slot_index", -1)),
+                                    "line_profile_id": int(_rec.get("line_profile_id", _line_index)),
+                                    "line_index": _line_index,
+                                    "source_bin": int(_rec.get("source_bin", -1)),
+                                    "line_energy_eV": float(_rec.get("line_energy_eV", 0.0)),
+                                    "profile_center_eV": float(_rec.get("profile_center_eV", 0.0)),
+                                    "wavelength_angstrom": float(_rec.get("wavelength_angstrom", 0.0)),
+                                    "python_bin_choice_min": int(_rec.get("python_bin_choice_min", -1)),
+                                    "python_bin_choice_max": int(_rec.get("python_bin_choice_max", -1)),
+                                    "cpp_bin_choice_min": _cpp_choice_min,
+                                    "cpp_bin_choice_max": _cpp_choice_max,
+                                    "python_emit_outward_by_bin": _py_by_bin,
+                                    "cpp_emit_outward_by_bin": _cpp_by_bin,
+                                    "signed_diff_by_bin": _diff_by_bin,
+                                    "neighbor_bin_contributions": _neighbor_items,
+                                    "max_abs_target_diff": float(_item_max),
+                                    "max_abs_target_diff_bin": int(_item_max_bin),
+                                })
+                            _probe_payload = {
+                                "probe_version": "0.6.11",
+                                "row": 3,
+                                "row_name": "emit_outward",
+                                "target_bins": [int(_b) for _b in _slot_probe_targets],
+                                "target_window_radius": int(_slot_probe_radius),
+                                "target_window_bins": [int(_b) for _b in sorted(_slot_probe_bin_set)],
+                                "top_n": int(_slot_probe_top_n),
+                                "slots_recorded": int(len(_probe_items)),
+                                "slots_seen_with_python_target_contribution": int(len(_slot_probe_records)),
+                                "items": _probe_items,
+                            }
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 1.0
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_version"] = 611.0
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_targets_json"] = json.dumps([int(_b) for _b in _slot_probe_targets], separators=(",", ":"))
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_windows_json"] = json.dumps([int(_b) for _b in sorted(_slot_probe_bin_set)], separators=(",", ":"))
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_slots"] = float(len(_probe_items))
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_candidates"] = float(len(_slot_probe_records))
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_seconds"] = float(time.perf_counter() - _probe_t0)
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_max_abs_diff"] = float(_probe_max_abs_diff)
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_max_abs_slot"] = float(_probe_max_abs_slot)
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_max_abs_bin"] = float(_probe_max_abs_bin)
+                            timing["final_product_build.spectrum.binemis_shadow_emit_outward_slot_probe_json"] = json.dumps(_probe_payload, separators=(",", ":"))[:65536]
+                        except Exception as _slot_probe_exc:
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 0.0
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_error"] = 1.0
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_error_type"] = type(_slot_probe_exc).__name__
+                            timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_error_message"] = str(_slot_probe_exc)[:2048]
+                    else:
+                        timing["final_product_build.spectrum.binemis_shadow_slot_contribution_probe_available"] = 0.0
                 except Exception as _probe_exc:
                     timing["final_product_build.spectrum.binemis_shadow_probe_error"] = 1.0
                     timing["final_product_build.spectrum.binemis_shadow_probe_error_type"] = type(_probe_exc).__name__
