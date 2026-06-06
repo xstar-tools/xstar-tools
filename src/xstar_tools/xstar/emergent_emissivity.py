@@ -944,7 +944,7 @@ def calc_emis_ion(
             upstream_type4_shadow_summary = profile_control.setdefault("mg_type4_upstream_shadow_probe_summary", {})
             upstream_type4_shadow_samples = profile_control.setdefault("mg_type4_upstream_shadow_probe_samples", [])
             upstream_type4_shadow_summary.update({
-                "probe_version": "0.6.17",
+                "probe_version": "0.6.18",
                 "enabled": True,
                 "product_active": False,
                 "live_path": "python",
@@ -966,12 +966,13 @@ def calc_emis_ion(
                 "top_abs_records": list(upstream_type4_shadow_summary.get("top_abs_records", []) or []),
                 "top_rel_records": list(upstream_type4_shadow_summary.get("top_rel_records", []) or []),
                 "source_real_literal_parity_audit": {
-                    "probe_version": "0.6.17",
+                    "probe_version": "0.6.18",
                     "status": "audit_only_not_product_active",
                     "flinel_formula": "(rcem1 + rcem2) * 2.0 / width / erg_per_ev",
                     "python_source_real_policy": "Python path uses source-real/default-real parity where ported from unsuffixed Fortran literals.",
-                    "cpp_type4_scalar_formula_policy": "C++ scalar type-4 uses double intermediates; v0.6.17 reports any resulting array drift before promotion.",
+                    "cpp_type4_scalar_formula_policy": "C++ scalar type-4 applies source_real_literal(float32->double) to unsuffixed Fortran REAL literals, including 12398.4016, before promotion; upstream remains shadow-only.",
                     "arrays_audited": ["opakc", "rccemis", "oplin", "fline", "flinel"],
+                    "patched_cpp_literals": ["12398.4016"],
                 },
             })
         except Exception:

@@ -34,6 +34,14 @@ bool finite6(double a, double b, double c, double d, double e, double f) {
     return std::isfinite(a) && std::isfinite(b) && std::isfinite(c) &&
            std::isfinite(d) && std::isfinite(e) && std::isfinite(f);
 }
+
+// Fortran unsuffixed REAL literals in the original XSTAR source are default
+// real before assignment/use in REAL(8) expressions.  Mirror the Python
+// source-faithful _source_real policy by rounding those literals to float32
+// and promoting back to double.  Do not use this for D-suffixed literals.
+inline double source_real_literal(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
 }  // namespace
 
 extern "C" {
@@ -641,8 +649,8 @@ int xstar_rates_apply_mg_type4_type50_coarse(
         }
         const double opakb1 = opakab * ab1;
         const double net = escaped * ab2 - photo * ab1;
-        double rcem1 = net * (12398.4016 / lam) * erg_per_ev * p1;
-        double rcem2 = net * (12398.4016 / lam) * erg_per_ev * p2;
+        double rcem1 = net * (source_real_literal(12398.4016) / lam) * erg_per_ev * p1;
+        double rcem2 = net * (source_real_literal(12398.4016) / lam) * erg_per_ev * p2;
         if (rcem1 < 0.0) rcem1 = 0.0;
         if (rcem2 < 0.0) rcem2 = 0.0;
         const double flinel_delta = (rcem1 + rcem2) * 2.0 / width / erg_per_ev;
@@ -651,7 +659,7 @@ int xstar_rates_apply_mg_type4_type50_coarse(
         long long tmp_i[8] = {0,0,0,0,0,0,0,0};
         double tmp_f[12] = {0.0};
         int lrc = xstar_rates_apply_linopac_profile(
-            opakb1, rcem1, rcem2, 12398.4016 / lam,
+            opakb1, rcem1, rcem2, source_real_literal(12398.4016) / lam,
             turbulent_velocity_km_s, temperature_1e4k, atomic_mass_amu, natural_width_ev[k],
             epi, ncn2, opakc, rccemis, tmp_i, tmp_f, errbuf, errbuf_size);
         if (lrc == 0) {
