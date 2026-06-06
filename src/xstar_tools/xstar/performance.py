@@ -333,10 +333,11 @@ def summarize_runtime_phase_map(
 ) -> dict[str, Any]:
     """Build a coarse runtime phase map for port-planning decisions.
 
-    The map is intentionally observational: it groups already-recorded
-    ``performance_profile`` rows plus explicit runner/writer wall timers into
-    stable phase names used by release wrappers/checkers.  It does not alter
-    physics state or backend selection.
+    v0.6.22 cleanup rules:
+    - only aggregate explicit timing values or known profile elapsed rows;
+    - never treat row/slot/count/flag diagnostic values as seconds;
+    - keep sharper other-emissivity buckets and top-N groupings for the
+      next C++ port decision.
     """
     phases = [
         "initialization_atomic_data_loading",
@@ -358,11 +359,14 @@ def summarize_runtime_phase_map(
         for name in phases
     }
 
-    def _add(phase: str, seconds: Any, *, count: float = 1.0, component: str | None = None) -> None:
+    def _as_float(value: Any, default: float = 0.0) -> float:
         try:
-            value = float(seconds or 0.0)
+            return float(value if value is not None else default)
         except Exception:
-            value = 0.0
+            return default
+
+    def _add(phase: str, seconds: Any, *, count: float = 1.0, component: str | None = None) -> None:
+        value = _as_float(seconds, 0.0)
         if value == 0.0 and count == 0.0:
             return
         item = phase_map.setdefault(phase, {"wall_seconds": 0.0, "call_count": 0.0, "components": {}})
@@ -374,6 +378,75 @@ def summarize_runtime_phase_map(
             comp["wall_seconds"] = float(comp.get("wall_seconds", 0.0)) + value
             comp["call_count"] = float(comp.get("call_count", 0.0)) + float(count)
 
+    def _is_actual_timing_metric(key: str) -> bool:
+        """Return True only for writer/provenance values that are wall times.
+
+        The output writer breakdown also stores rows/slots/flags/counters.  In
+        v0.6.21 those were incorrectly summed as seconds.  This whitelist keeps
+        known timing names and drops diagnostic counters.
+        """
+        k = str(key).lower()
+        counter_markers = (
+            "_rows", ".rows", "rows", "_slots", ".slots", "slots",
+            "_applied", "_attempted", "_enabled", "_accepted", "_present",
+            "_scope", "_parity", "_count", "count", "nonzero", "saved",
+        )
+        if any(marker in k for marker in counter_markers):
+            return False
+        if k.endswith("_seconds") or "_seconds." in k or ".seconds" in k:
+            return True
+        known_exact = {
+            "detail_fits_write",
+            "final_fits_write",
+            "pprint_legacy",
+            "final_product_build",
+            "output_writer_sequence_seconds",
+        }
+        return k in known_exact
+
+    def _classify_profile_component(name: str) -> str:
+        lname = name.lower()
+        phase = "uncategorized_profiled"
+        if "pre_matrix" in lname or "calc_ion_rates" in lname or "rate" in lname:
+            phase = "rates"
+        if "matrix" in lname or "assembly" in lname or "level_table" in lname:
+            phase = "matrix_assembly"
+        if "solver_call" in lname or "msolvelucy" in lname or "leqt" in lname:
+            phase = "solver"
+        if "calc_emis" in lname or "emiss" in lname or "linopac" in lname:
+            if "type4" in lname or "type50" in lname or "upstream" in lname or "linopac" in lname:
+                phase = "emissivity_upstream_type4_type50"
+            else:
+                phase = "other_emissivity"
+        if "opac" in lname or "opacity" in lname:
+            phase = "opacity"
+        if "heat" in lname or "cool" in lname or "thermal" in lname or "heatt" in lname:
+            phase = "thermal_heating_cooling"
+        if "writer" in lname or "writespectra" in lname or "output" in lname or "pprint" in lname:
+            phase = "spectrum_output_construction"
+        if "radial" in lname or "dsec" in lname or "xstarcalc" in lname:
+            phase = "outer_zone_pass_orchestration"
+        return phase
+
+    def _group_add(group: dict[str, dict[str, Any]], key: Any, seconds: float, row: dict[str, Any]) -> None:
+        if key is None:
+            return
+        skey = str(key)
+        if skey == "" or skey.lower() == "none":
+            return
+        item = group.setdefault(skey, {"wall_seconds": 0.0, "call_count": 0.0})
+        item["wall_seconds"] = float(item.get("wall_seconds", 0.0)) + float(seconds)
+        item["call_count"] = float(item.get("call_count", 0.0)) + 1.0
+        for meta_key in ("component", "source_routine", "record_type"):
+            if meta_key in row and meta_key not in item:
+                item[meta_key] = row.get(meta_key)
+
+    def _top_group(group: dict[str, dict[str, Any]], key_name: str) -> list[dict[str, Any]]:
+        rows_out: list[dict[str, Any]] = []
+        for key, values in sorted(group.items(), key=lambda kv: float(kv[1].get("wall_seconds", 0.0)), reverse=True):
+            rows_out.append({key_name: key, **values})
+        return rows_out[:max(1, int(top_n))]
+
     explicit = dict(explicit_timing or {})
     for key, phase in (
         ("initialization_atomic_data_loading_seconds", "initialization_atomic_data_loading"),
@@ -384,11 +457,15 @@ def summarize_runtime_phase_map(
         ("output_writer_sequence_seconds", "spectrum_output_construction"),
         ("total_run_seconds", "outer_zone_pass_orchestration"),
     ):
-        if key in explicit:
+        if key in explicit and _is_actual_timing_metric(key):
             _add(phase, explicit[key], component=key)
 
     out = dict(output_breakdown or {})
+    dropped_output_metrics: dict[str, Any] = {}
     for key, value in out.items():
+        if not _is_actual_timing_metric(str(key)):
+            dropped_output_metrics[str(key)] = value
+            continue
         k = str(key).lower()
         if "fits_write" in k or k in {"pprint_legacy", "detail_fits_write", "final_fits_write"}:
             _add("fits_writing", value, component=str(key))
@@ -399,43 +476,47 @@ def summarize_runtime_phase_map(
 
     rows = control.get("performance_profile", [])
     top_sections: list[dict[str, Any]] = []
+    other_rows: list[dict[str, Any]] = []
+    other_by_element: dict[str, dict[str, Any]] = {}
+    other_by_ion: dict[str, dict[str, Any]] = {}
+    other_by_data_type: dict[str, dict[str, Any]] = {}
+    other_by_rate_type: dict[str, dict[str, Any]] = {}
+    other_by_record_type: dict[str, dict[str, Any]] = {}
+    other_by_component: dict[str, dict[str, Any]] = {}
+
     if isinstance(rows, list):
         for row in rows:
             if not isinstance(row, dict):
                 continue
             name = str(row.get("component", "unknown"))
-            lname = name.lower()
-            try:
-                elapsed = float(row.get("elapsed_seconds", 0.0) or 0.0)
-            except Exception:
-                elapsed = 0.0
-            phase = "uncategorized_profiled"
-            if "pre_matrix" in lname or "calc_ion_rates" in lname or "rate" in lname:
-                phase = "rates"
-            if "matrix" in lname or "assembly" in lname or "level_table" in lname:
-                phase = "matrix_assembly"
-            if "solver_call" in lname or "msolvelucy" in lname or "leqt" in lname:
-                phase = "solver"
-            if "calc_emis" in lname or "emiss" in lname or "linopac" in lname:
-                if "type4" in lname or "type50" in lname or "upstream" in lname or "linopac" in lname:
-                    phase = "emissivity_upstream_type4_type50"
-                else:
-                    phase = "other_emissivity"
-            if "opac" in lname or "opacity" in lname:
-                phase = "opacity"
-            if "heat" in lname or "cool" in lname or "thermal" in lname or "heatt" in lname:
-                phase = "thermal_heating_cooling"
-            if "writer" in lname or "writespectra" in lname or "output" in lname or "pprint" in lname:
-                phase = "spectrum_output_construction"
-            if "radial" in lname or "dsec" in lname or "xstarcalc" in lname:
-                phase = "outer_zone_pass_orchestration"
+            elapsed = _as_float(row.get("elapsed_seconds", 0.0), 0.0)
+            phase = _classify_profile_component(name)
             _add(phase, elapsed, component=name)
-            top_sections.append({
+            enriched = {
                 "component": name,
                 "phase": phase,
                 "elapsed_seconds": elapsed,
                 **{k: v for k, v in row.items() if k not in {"component", "elapsed_seconds"}},
-            })
+            }
+            top_sections.append(enriched)
+            if phase == "other_emissivity":
+                other_rows.append(enriched)
+                _group_add(other_by_component, name, elapsed, row)
+                _group_add(other_by_element, row.get("element_z"), elapsed, row)
+                ion_key = None
+                if row.get("ion_index") is not None:
+                    ion_key = row.get("ion_index")
+                    if row.get("ion_stage") is not None:
+                        ion_key = f"{row.get('ion_index')}|stage={row.get('ion_stage')}"
+                _group_add(other_by_ion, ion_key, elapsed, row)
+                _group_add(other_by_data_type, row.get("data_type") or row.get("result_data_type") or row.get("source_data_type"), elapsed, row)
+                # v0.6.21 stored by-rate-type rows in record_type.  Preserve that
+                # while also accepting future explicit rate_type metadata.
+                rate_key = row.get("rate_type")
+                if rate_key is None and name == "calc_emis_all.element.by_rate_type":
+                    rate_key = row.get("record_type")
+                _group_add(other_by_rate_type, rate_key, elapsed, row)
+                _group_add(other_by_record_type, row.get("record_type"), elapsed, row)
 
     top_sections = sorted(top_sections, key=lambda r: float(r.get("elapsed_seconds", 0.0)), reverse=True)[:max(1, int(top_n))]
     phase_totals = [
@@ -448,8 +529,20 @@ def summarize_runtime_phase_map(
     ]
     total_profiled = sum(float(item.get("wall_seconds", 0.0)) for item in phase_map.values())
     total_run = float(explicit.get("total_run_seconds", 0.0) or 0.0)
+
+    other_emissivity_hotspot_summary = {
+        "rows": len(other_rows),
+        "components": other_by_component,
+        "top_components": _top_group(other_by_component, "component"),
+        "top_by_element_z": _top_group(other_by_element, "element_z"),
+        "top_by_ion": _top_group(other_by_ion, "ion"),
+        "top_by_data_type": _top_group(other_by_data_type, "data_type"),
+        "top_by_rate_type": _top_group(other_by_rate_type, "rate_type"),
+        "top_by_record_type": _top_group(other_by_record_type, "record_type"),
+    }
+
     return {
-        "schema_version": "0.6.21",
+        "schema_version": "0.6.22",
         "observational_only": True,
         "profile_rows": len(rows) if isinstance(rows, list) else 0,
         "total_run_seconds": total_run,
@@ -457,10 +550,13 @@ def summarize_runtime_phase_map(
         "phase_map": phase_map,
         "phase_totals": phase_totals,
         "top_sections": top_sections,
+        "other_emissivity_hotspot_summary": other_emissivity_hotspot_summary,
         "explicit_timing": explicit,
         "output_writer_breakdown": out,
+        "dropped_non_timing_output_metrics": dropped_output_metrics,
         "notes": [
-            "Phase totals combine explicit wall timers and grouped profile rows; overlapping nested profile rows can make grouped totals exceed elapsed wall time.",
-            "Use phase_totals/top_sections to choose the next C++ porting target; do not use this diagnostic as a science-output input.",
+            "v0.6.22 only sums explicit *_seconds/known timing metrics and profile elapsed_seconds rows; rows/slots/counts/flags are retained but not added as seconds.",
+            "Phase totals still include nested profile rows, so grouped totals can exceed elapsed wall time; compare components/top sections rather than summing to wall time.",
+            "Use other_emissivity_hotspot_summary to choose the next C++ porting target; do not use this diagnostic as a science-output input.",
         ],
     }
