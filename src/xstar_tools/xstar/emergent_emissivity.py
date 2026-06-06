@@ -815,6 +815,24 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
     return bool(status.active == "cpp" and (int(status.cpp_feature_flags or 0) & 4))
 
 
+
+
+def _emissivity_upstream_type4_product_enabled() -> bool:
+    """Opt-in product gate for the accepted-candidate Mg type-4/type-50 upstream C++ path.
+
+    This gate is intentionally independent of EMISSIVITY_BACKEND=cpp so a
+    wrapper can keep the broader emissivity backend on Python while enabling
+    exactly this one upstream product candidate.
+    """
+    for name in (
+        "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_PRODUCT_CPP",
+        "XSTAR_ATOMIC_EMISSIVITY_MG_TYPE4_PRODUCT_CPP",
+    ):
+        value = os.environ.get(name)
+        if value is not None and str(value).strip().lower() not in {"", "0", "false", "no", "off"}:
+            return True
+    return False
+
 def _emissivity_upstream_type4_shadow_enabled() -> bool:
     """Diagnostic-only Mg type-4 upstream emissivity C++ shadow gate.
 
@@ -887,9 +905,13 @@ def calc_emis_ion(
         mg_line_table = _compact_mg_line_emissivity_table(
             context, ion, record_sequence, levels, line_rank_table, epi
         )
+    upstream_type4_product_enabled = (
+        int(getattr(ion, "element_z", 0)) == 12
+        and _emissivity_upstream_type4_product_enabled()
+    )
     use_cpp_mg_type4_line = (
         int(getattr(ion, "element_z", 0)) == 12
-        and _emissivity_cpp_active_for_mg_type4(context)
+        and (_emissivity_cpp_active_for_mg_type4(context) or upstream_type4_product_enabled)
     )
     cpp_mg_type4_stats: dict[str, float] = {
         "records_batched": 0.0,
@@ -914,6 +936,8 @@ def calc_emis_ion(
         "type50_reason_unsupported_data_type": 0.0,
         "type50_reason_linopac_cpp_failure": 0.0,
         "type50_reason_invalid_or_nonfinite_input": 0.0,
+        "upstream_type4_product_candidate_enabled": float(upstream_type4_product_enabled),
+        "upstream_type4_product_candidate_product_active": float(upstream_type4_product_enabled),
     }
     # v0.5.62: queue selected Mg record_type=4/data_type=50 records for a coarse
     # C++ path that evaluates ucalc type-50, scalar line emissivity, linopac, and
@@ -944,7 +968,7 @@ def calc_emis_ion(
             upstream_type4_shadow_summary = profile_control.setdefault("mg_type4_upstream_shadow_probe_summary", {})
             upstream_type4_shadow_samples = profile_control.setdefault("mg_type4_upstream_shadow_probe_samples", [])
             upstream_type4_shadow_summary.update({
-                "probe_version": "0.6.18",
+                "probe_version": "0.6.19",
                 "enabled": True,
                 "product_active": False,
                 "live_path": "python",
@@ -966,7 +990,7 @@ def calc_emis_ion(
                 "top_abs_records": list(upstream_type4_shadow_summary.get("top_abs_records", []) or []),
                 "top_rel_records": list(upstream_type4_shadow_summary.get("top_rel_records", []) or []),
                 "source_real_literal_parity_audit": {
-                    "probe_version": "0.6.18",
+                    "probe_version": "0.6.19",
                     "status": "audit_only_not_product_active",
                     "flinel_formula": "(rcem1 + rcem2) * 2.0 / width / erg_per_ev",
                     "python_source_real_policy": "Python path uses source-real/default-real parity where ported from unsuffixed Fortran literals.",
