@@ -52,7 +52,7 @@ from .cpp_backend_emissivity import emissivity_backend_status
 from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, eval_mg_ion_accumulator_cpp
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
-from .performance import normalize_profile_level, profile_component, summarize_profile
+from .performance import normalize_profile_level, profile_component, summarize_profile, summarize_runtime_phase_map
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -2162,6 +2162,7 @@ def run_xstar_from_parameters(
 ) -> XSTARPythonRunResult:
     """Execute the translated Python XSTAR path from normalized parameters."""
     total_start_time = time.perf_counter()
+    runtime_phase_wall_timing: dict[str, float] = {}
     diagnostics_mode = _normalize_diagnostics_mode(diagnostics_mode)
     backend_selection = resolve_backend_selection(
         global_backend=backend,
@@ -2188,6 +2189,7 @@ def run_xstar_from_parameters(
         rebuild_cache=bool(rebuild_cache),
     )
     out = Path(output_dir)
+    _output_setup_t0 = time.perf_counter()
     out.mkdir(parents=True, exist_ok=True)
     if not overwrite:
         _present, missing = products_present(out)
@@ -2199,7 +2201,9 @@ def run_xstar_from_parameters(
             if target.exists():
                 target.unlink()
         _remove_optional_diagnostic_products(out)
+    runtime_phase_wall_timing["output_cleanup_seconds"] = float(time.perf_counter() - _output_setup_t0)
 
+    _initial_state_t0 = time.perf_counter()
     state, built = _build_initial_state(
         normalized,
         atdb_path=resolved_atdb,
@@ -2210,6 +2214,8 @@ def run_xstar_from_parameters(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
     )
+    runtime_phase_wall_timing["initialization_atomic_data_loading_seconds"] = float(time.perf_counter() - _initial_state_t0)
+    state.control["runtime_phase_wall_timing"] = runtime_phase_wall_timing
     state.control["backend_selection"] = backend_selection.as_dict()
     state.provenance["backend_selection"] = backend_selection.as_dict()
     compact_export_summary = None
@@ -2251,11 +2257,13 @@ def run_xstar_from_parameters(
             requested_passes=int(normalized.get("npass")),
             first_pass_shell_count=int(normalized.get("nsteps")),
         )
+        _radial_t0 = time.perf_counter()
         radial = run_bounded_radial_multipass(
             state,
             first_pass_shell_count=int(normalized.get("nsteps")),
             pass_count=int(normalized.get("npass")),
         )
+        runtime_phase_wall_timing["radial_multipass_seconds"] = float(time.perf_counter() - _radial_t0)
         _emit_progress(
             progress_callback,
             "radial_done",
@@ -2263,7 +2271,9 @@ def run_xstar_from_parameters(
             completed_zones=sum(len(item.shell_results) for item in radial.pass_results),
         )
         if high_volume_diagnostics:
+            _radial_diag_t0 = time.perf_counter()
             radial_diag_products = write_python_runtime_radial_spectrum_diagnostics(state, out)
+            runtime_phase_wall_timing["radial_spectrum_diagnostics_seconds"] = float(time.perf_counter() - _radial_diag_t0)
             state.outputs["radial_spectrum_diagnostics_v0499_products"] = radial_diag_products
             _emit_progress(
                 progress_callback,
@@ -2296,6 +2306,7 @@ def run_xstar_from_parameters(
             progress_callback=progress_callback,
         )
         writer_elapsed = time.perf_counter() - writer_start_time
+        runtime_phase_wall_timing["output_writer_sequence_seconds"] = float(writer_elapsed)
         writer_breakdown = dict(getattr(writer, "timing_breakdown", {}) or {})
         _prepend_xout_step_startup_provenance(out, state=state, built=built)
         # The current writer API builds/writes the four final products as one
@@ -2321,7 +2332,9 @@ def run_xstar_from_parameters(
             timing_breakdown=dict(writer_breakdown),
         )
         if high_volume_diagnostics:
+            _continuum_diag_t0 = time.perf_counter()
             continuum_diag_products = write_continuum_diagnostics(state, out)
+            runtime_phase_wall_timing["continuum_diagnostics_seconds"] = float(time.perf_counter() - _continuum_diag_t0)
             if continuum_diag_products:
                 state.outputs["continuum_diagnostics_products_v0530"] = continuum_diag_products
             _emit_progress(
@@ -2347,6 +2360,14 @@ def run_xstar_from_parameters(
                 + ", ".join(missing)
             )
         source_order = tuple(state.provenance.get("completed_source_routines", ())) + tuple(writer.source_order)
+        runtime_phase_wall_timing["total_run_seconds"] = float(time.perf_counter() - total_start_time)
+        state.control["runtime_phase_wall_timing"] = dict(runtime_phase_wall_timing)
+        runtime_phase_timing_summary = summarize_runtime_phase_map(
+            state.control,
+            explicit_timing=runtime_phase_wall_timing,
+            output_breakdown=writer_breakdown,
+            top_n=int(os.environ.get("XSTAR_ATOMIC_RUNTIME_PHASE_TOP_N", "25") or "25"),
+        )
         result = XSTARPythonRunResult(
             ready=True,
             parameters=normalized,
@@ -2405,6 +2426,8 @@ def run_xstar_from_parameters(
                 "mg_type4_upstream_shadow_probe_summary": dict(state.control.get("mg_type4_upstream_shadow_probe_summary", {})),
                 "mg_type4_upstream_shadow_probe_samples": list(state.control.get("mg_type4_upstream_shadow_probe_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
+                "runtime_phase_timing_summary": runtime_phase_timing_summary,
+                "runtime_phase_wall_timing": dict(runtime_phase_wall_timing),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
                 "output_writer_timing_breakdown": dict(state.outputs.get("output_writer_timing_breakdown", {})),
                 "solver_backend": solver_backend_status(),

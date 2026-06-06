@@ -322,3 +322,145 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "top_by_source_routine": top_by_source_routine,
         "counter_totals": counter_totals,
     }
+
+
+def summarize_runtime_phase_map(
+    control: MutableMapping[str, Any],
+    *,
+    explicit_timing: dict[str, Any] | None = None,
+    output_breakdown: dict[str, Any] | None = None,
+    top_n: int = 20,
+) -> dict[str, Any]:
+    """Build a coarse runtime phase map for port-planning decisions.
+
+    The map is intentionally observational: it groups already-recorded
+    ``performance_profile`` rows plus explicit runner/writer wall timers into
+    stable phase names used by release wrappers/checkers.  It does not alter
+    physics state or backend selection.
+    """
+    phases = [
+        "initialization_atomic_data_loading",
+        "rates",
+        "matrix_assembly",
+        "solver",
+        "emissivity_upstream_type4_type50",
+        "other_emissivity",
+        "opacity",
+        "thermal_heating_cooling",
+        "spectrum_output_construction",
+        "fits_writing",
+        "outer_zone_pass_orchestration",
+        "diagnostics_overhead",
+        "uncategorized_profiled",
+    ]
+    phase_map: dict[str, dict[str, Any]] = {
+        name: {"wall_seconds": 0.0, "call_count": 0.0, "components": {}}
+        for name in phases
+    }
+
+    def _add(phase: str, seconds: Any, *, count: float = 1.0, component: str | None = None) -> None:
+        try:
+            value = float(seconds or 0.0)
+        except Exception:
+            value = 0.0
+        if value == 0.0 and count == 0.0:
+            return
+        item = phase_map.setdefault(phase, {"wall_seconds": 0.0, "call_count": 0.0, "components": {}})
+        item["wall_seconds"] = float(item.get("wall_seconds", 0.0)) + value
+        item["call_count"] = float(item.get("call_count", 0.0)) + float(count)
+        if component:
+            comps = item.setdefault("components", {})
+            comp = comps.setdefault(str(component), {"wall_seconds": 0.0, "call_count": 0.0})
+            comp["wall_seconds"] = float(comp.get("wall_seconds", 0.0)) + value
+            comp["call_count"] = float(comp.get("call_count", 0.0)) + float(count)
+
+    explicit = dict(explicit_timing or {})
+    for key, phase in (
+        ("initialization_atomic_data_loading_seconds", "initialization_atomic_data_loading"),
+        ("output_cleanup_seconds", "initialization_atomic_data_loading"),
+        ("radial_multipass_seconds", "outer_zone_pass_orchestration"),
+        ("radial_spectrum_diagnostics_seconds", "diagnostics_overhead"),
+        ("continuum_diagnostics_seconds", "diagnostics_overhead"),
+        ("output_writer_sequence_seconds", "spectrum_output_construction"),
+        ("total_run_seconds", "outer_zone_pass_orchestration"),
+    ):
+        if key in explicit:
+            _add(phase, explicit[key], component=key)
+
+    out = dict(output_breakdown or {})
+    for key, value in out.items():
+        k = str(key).lower()
+        if "fits_write" in k or k in {"pprint_legacy", "detail_fits_write", "final_fits_write"}:
+            _add("fits_writing", value, component=str(key))
+        elif k.startswith("final_product_build") or "spectrum_seconds" in k or "table_pack" in k or "binemis_profile_seconds" in k:
+            _add("spectrum_output_construction", value, component=str(key))
+        elif "final_local_recompute" in k:
+            _add("outer_zone_pass_orchestration", value, component=str(key))
+
+    rows = control.get("performance_profile", [])
+    top_sections: list[dict[str, Any]] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("component", "unknown"))
+            lname = name.lower()
+            try:
+                elapsed = float(row.get("elapsed_seconds", 0.0) or 0.0)
+            except Exception:
+                elapsed = 0.0
+            phase = "uncategorized_profiled"
+            if "pre_matrix" in lname or "calc_ion_rates" in lname or "rate" in lname:
+                phase = "rates"
+            if "matrix" in lname or "assembly" in lname or "level_table" in lname:
+                phase = "matrix_assembly"
+            if "solver_call" in lname or "msolvelucy" in lname or "leqt" in lname:
+                phase = "solver"
+            if "calc_emis" in lname or "emiss" in lname or "linopac" in lname:
+                if "type4" in lname or "type50" in lname or "upstream" in lname or "linopac" in lname:
+                    phase = "emissivity_upstream_type4_type50"
+                else:
+                    phase = "other_emissivity"
+            if "opac" in lname or "opacity" in lname:
+                phase = "opacity"
+            if "heat" in lname or "cool" in lname or "thermal" in lname or "heatt" in lname:
+                phase = "thermal_heating_cooling"
+            if "writer" in lname or "writespectra" in lname or "output" in lname or "pprint" in lname:
+                phase = "spectrum_output_construction"
+            if "radial" in lname or "dsec" in lname or "xstarcalc" in lname:
+                phase = "outer_zone_pass_orchestration"
+            _add(phase, elapsed, component=name)
+            top_sections.append({
+                "component": name,
+                "phase": phase,
+                "elapsed_seconds": elapsed,
+                **{k: v for k, v in row.items() if k not in {"component", "elapsed_seconds"}},
+            })
+
+    top_sections = sorted(top_sections, key=lambda r: float(r.get("elapsed_seconds", 0.0)), reverse=True)[:max(1, int(top_n))]
+    phase_totals = [
+        {"phase": name, **{k: v for k, v in values.items() if k != "components"}}
+        for name, values in sorted(
+            phase_map.items(),
+            key=lambda kv: float(kv[1].get("wall_seconds", 0.0)),
+            reverse=True,
+        )
+    ]
+    total_profiled = sum(float(item.get("wall_seconds", 0.0)) for item in phase_map.values())
+    total_run = float(explicit.get("total_run_seconds", 0.0) or 0.0)
+    return {
+        "schema_version": "0.6.21",
+        "observational_only": True,
+        "profile_rows": len(rows) if isinstance(rows, list) else 0,
+        "total_run_seconds": total_run,
+        "total_grouped_wall_seconds": float(total_profiled),
+        "phase_map": phase_map,
+        "phase_totals": phase_totals,
+        "top_sections": top_sections,
+        "explicit_timing": explicit,
+        "output_writer_breakdown": out,
+        "notes": [
+            "Phase totals combine explicit wall timers and grouped profile rows; overlapping nested profile rows can make grouped totals exceed elapsed wall time.",
+            "Use phase_totals/top_sections to choose the next C++ porting target; do not use this diagnostic as a science-output input.",
+        ],
+    }
