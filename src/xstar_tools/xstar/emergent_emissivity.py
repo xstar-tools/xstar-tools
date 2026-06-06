@@ -935,7 +935,7 @@ def calc_emis_ion(
         int(getattr(ion, "element_z", 0)) == 12
         and _emissivity_upstream_type4_shadow_enabled()
     )
-    upstream_type4_shadow_max_records = max(0, _safe_int_env("XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_MAX_RECORDS", 256))
+    upstream_type4_shadow_max_records = max(0, _safe_int_env("XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_MAX_RECORDS", 0))
     upstream_type4_shadow_top_n = max(1, _safe_int_env("XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_SHADOW_TOP_N", 16))
     upstream_type4_shadow_summary: dict[str, Any] | None = None
     upstream_type4_shadow_samples: list[Any] | None = None
@@ -944,7 +944,7 @@ def calc_emis_ion(
             upstream_type4_shadow_summary = profile_control.setdefault("mg_type4_upstream_shadow_probe_summary", {})
             upstream_type4_shadow_samples = profile_control.setdefault("mg_type4_upstream_shadow_probe_samples", [])
             upstream_type4_shadow_summary.update({
-                "probe_version": "0.6.16",
+                "probe_version": "0.6.17",
                 "enabled": True,
                 "product_active": False,
                 "live_path": "python",
@@ -960,6 +960,19 @@ def calc_emis_ion(
                 "max_abs_array": str(upstream_type4_shadow_summary.get("max_abs_array", "") or ""),
                 "max_abs_record": int(upstream_type4_shadow_summary.get("max_abs_record", -1) or -1),
                 "max_abs_line_index": int(upstream_type4_shadow_summary.get("max_abs_line_index", -1) or -1),
+                "max_records_limit": int(upstream_type4_shadow_max_records),
+                "max_records_limit_semantics": "0 means scan all supported records",
+                "per_array": dict(upstream_type4_shadow_summary.get("per_array", {}) or {}),
+                "top_abs_records": list(upstream_type4_shadow_summary.get("top_abs_records", []) or []),
+                "top_rel_records": list(upstream_type4_shadow_summary.get("top_rel_records", []) or []),
+                "source_real_literal_parity_audit": {
+                    "probe_version": "0.6.17",
+                    "status": "audit_only_not_product_active",
+                    "flinel_formula": "(rcem1 + rcem2) * 2.0 / width / erg_per_ev",
+                    "python_source_real_policy": "Python path uses source-real/default-real parity where ported from unsuffixed Fortran literals.",
+                    "cpp_type4_scalar_formula_policy": "C++ scalar type-4 uses double intermediates; v0.6.17 reports any resulting array drift before promotion.",
+                    "arrays_audited": ["opakc", "rccemis", "oplin", "fline", "flinel"],
+                },
             })
         except Exception:
             upstream_type4_shadow_summary = None
@@ -1205,7 +1218,7 @@ def calc_emis_ion(
         if int(rate_type) != 4 or int(getattr(ion, "element_z", 0)) != 12:
             return
         checked = int(upstream_type4_shadow_summary.get("records_checked", 0) or 0)
-        if checked >= upstream_type4_shadow_max_records:
+        if upstream_type4_shadow_max_records > 0 and checked >= upstream_type4_shadow_max_records:
             upstream_type4_shadow_summary["records_skipped_after_limit"] = int(upstream_type4_shadow_summary.get("records_skipped_after_limit", 0) or 0) + 1
             return
         upstream_type4_shadow_summary["records_checked"] = checked + 1
@@ -1284,17 +1297,49 @@ def calc_emis_ion(
             }
             cpp_arrays = {"opakc": cpp_opakc, "rccemis": cpp_rcc, "oplin": cpp_oplin, "fline": cpp_fline, "flinel": cpp_flinel}
             rec_max_abs = 0.0; rec_max_rel = 0.0; rec_array = ""; rec_index = -1
+            rec_max_rel_abs_at_rel = 0.0; rec_rel_array = ""; rec_rel_index = -1
+            per_array = upstream_type4_shadow_summary.setdefault("per_array", {})
             for name, py_arr in py_arrays.items():
                 c_arr = np.asarray(cpp_arrays[name], dtype=float)
                 p_arr = np.asarray(py_arr, dtype=float)
                 diff = np.abs(c_arr - p_arr)
                 if diff.size:
-                    idx = int(np.argmax(diff))
-                    abs_val = float(diff.reshape(-1)[idx])
-                    denom = max(float(abs(p_arr.reshape(-1)[idx])), 1.0e-300)
-                    rel_val = float(abs_val / denom)
+                    flat_diff = diff.reshape(-1)
+                    flat_py = p_arr.reshape(-1)
+                    idx = int(np.argmax(flat_diff))
+                    abs_val = float(flat_diff[idx])
+                    denom = np.maximum(np.abs(flat_py), 1.0e-300)
+                    rel = flat_diff / denom
+                    ridx = int(np.argmax(rel)) if rel.size else idx
+                    rel_val = float(rel[idx]) if rel.size else 0.0
+                    rel_peak = float(rel[ridx]) if rel.size else 0.0
+                    rel_peak_abs = float(flat_diff[ridx]) if flat_diff.size else 0.0
                     if abs_val > rec_max_abs:
                         rec_max_abs = abs_val; rec_max_rel = rel_val; rec_array = name; rec_index = idx
+                    if rel_peak > rec_max_rel:
+                        rec_max_rel = rel_peak; rec_max_rel_abs_at_rel = rel_peak_abs; rec_rel_array = name; rec_rel_index = ridx
+                    arr = per_array.setdefault(name, {
+                        "records_seen": 0, "max_abs_diff": 0.0, "max_rel_diff": 0.0,
+                        "max_abs_record": -1, "max_abs_line_index": -1, "max_abs_flat_index": -1,
+                        "max_rel_record": -1, "max_rel_line_index": -1, "max_rel_flat_index": -1,
+                    })
+                    arr["records_seen"] = int(arr.get("records_seen", 0) or 0) + 1
+                    if abs_val > float(arr.get("max_abs_diff", 0.0) or 0.0):
+                        arr["max_abs_diff"] = float(abs_val)
+                        arr["max_abs_rel_at_abs"] = float(rel_val)
+                        arr["max_abs_record"] = int(rec)
+                        arr["max_abs_line_index"] = int(line_index)
+                        arr["max_abs_flat_index"] = int(idx)
+                        arr["max_abs_status_reason"] = str(status_reason)
+                    if rel_peak > float(arr.get("max_rel_diff", 0.0) or 0.0):
+                        arr["max_rel_diff"] = float(rel_peak)
+                        arr["max_rel_abs_at_rel"] = float(rel_peak_abs)
+                        arr["max_rel_record"] = int(rec)
+                        arr["max_rel_line_index"] = int(line_index)
+                        arr["max_rel_flat_index"] = int(ridx)
+                        arr["max_rel_status_reason"] = str(status_reason)
+            if not rec_rel_array:
+                rec_rel_array = rec_array; rec_rel_index = rec_index; rec_max_rel_abs_at_rel = rec_max_abs
             upstream_type4_shadow_summary["records_supported"] = int(upstream_type4_shadow_summary.get("records_supported", 0) or 0) + 1
             if rec_max_abs > float(upstream_type4_shadow_summary.get("max_abs_diff", 0.0) or 0.0):
                 upstream_type4_shadow_summary["max_abs_diff"] = float(rec_max_abs)
@@ -1304,17 +1349,21 @@ def calc_emis_ion(
                 upstream_type4_shadow_summary["max_abs_line_index"] = int(line_index)
                 upstream_type4_shadow_summary["max_abs_flat_index"] = int(rec_index)
                 upstream_type4_shadow_summary["max_abs_status_reason"] = str(status_reason)
+            sample = {
+                "record": int(rec), "rate_type": int(rate_type), "data_type": int(data_type), "line_index": int(line_index),
+                "nb1": int(nb1), "ion_index": int(ion.ion_index), "ion_stage": int(ion.ion_stage),
+                "status_reason": str(status_reason), "max_abs_diff": float(rec_max_abs), "max_rel_diff": float(rec_max_rel),
+                "max_abs_array": str(rec_array), "max_abs_flat_index": int(rec_index),
+                "max_rel_array": str(rec_rel_array), "max_rel_flat_index": int(rec_rel_index),
+                "max_rel_abs_at_rel": float(rec_max_rel_abs_at_rel),
+                "energy_eV": float(energy), "wavelength_A": float(wave),
+            }
+            top_abs = upstream_type4_shadow_summary.setdefault("top_abs_records", [])
+            top_rel = upstream_type4_shadow_summary.setdefault("top_rel_records", [])
+            top_abs.append(dict(sample)); top_abs.sort(key=lambda x: float(x.get("max_abs_diff", 0.0)), reverse=True); del top_abs[upstream_type4_shadow_top_n:]
+            top_rel.append(dict(sample)); top_rel.sort(key=lambda x: float(x.get("max_rel_diff", 0.0)), reverse=True); del top_rel[upstream_type4_shadow_top_n:]
             if upstream_type4_shadow_samples is not None:
-                sample = {
-                    "record": int(rec), "rate_type": int(rate_type), "data_type": int(data_type), "line_index": int(line_index),
-                    "nb1": int(nb1), "ion_index": int(ion.ion_index), "ion_stage": int(ion.ion_stage),
-                    "status_reason": str(status_reason), "max_abs_diff": float(rec_max_abs), "max_rel_diff": float(rec_max_rel),
-                    "max_abs_array": str(rec_array), "max_abs_flat_index": int(rec_index),
-                    "energy_eV": float(energy), "wavelength_A": float(wave),
-                }
-                upstream_type4_shadow_samples.append(sample)
-                upstream_type4_shadow_samples.sort(key=lambda x: float(x.get("max_abs_diff", 0.0)), reverse=True)
-                del upstream_type4_shadow_samples[upstream_type4_shadow_top_n:]
+                upstream_type4_shadow_samples[:] = list(top_abs)
         except Exception as exc:
             upstream_type4_shadow_summary["records_errors"] = int(upstream_type4_shadow_summary.get("records_errors", 0) or 0) + 1
             upstream_type4_shadow_summary["last_error_type"] = type(exc).__name__
