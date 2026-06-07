@@ -52,7 +52,7 @@ from .cpp_backend_emissivity import emissivity_backend_status
 from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, eval_mg_ion_accumulator_cpp
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
-from .performance import normalize_profile_level, profile_component, summarize_profile, summarize_runtime_phase_map, summarize_matrix_assembly_dataflow, summarize_rate_payload_dataflow
+from .performance import normalize_profile_level, profile_component, summarize_profile, summarize_runtime_phase_map, summarize_matrix_assembly_dataflow, summarize_rate_payload_dataflow, summarize_rate_payload_batched_orchestration_shadow
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -2434,6 +2434,10 @@ def run_xstar_from_parameters(
                 "mg_rate_payload_dataflow_summary": summarize_rate_payload_dataflow(
                     state.control,
                     top_n=int(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_DATAFLOW_TOP_N", "25") or "25"),
+                ),
+                "mg_rate_payload_batched_orchestration_shadow_summary": summarize_rate_payload_batched_orchestration_shadow(
+                    state.control,
+                    top_n=int(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_BATCHED_SHADOW_TOP_N", "25") or "25"),
                 ),
                 "runtime_phase_wall_timing": dict(runtime_phase_wall_timing),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),

@@ -176,6 +176,16 @@ def _load_library(kind: str) -> ctypes.CDLL | None:
                     ctypes.c_char_p, ctypes.c_size_t,
                 ]
                 lib.xstar_engine_eval_mg_ion_accumulator_v1.restype = ctypes.c_int
+                try:
+                    f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
+                    lib.xstar_engine_eval_mg_rate_payload_shadow_v1.argtypes = [
+                        ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
+                        ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
+                        f64p, ctypes.c_int, i64p, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t,
+                    ]
+                    lib.xstar_engine_eval_mg_rate_payload_shadow_v1.restype = ctypes.c_int
+                except AttributeError:
+                    pass
             _LIBS[kind] = lib
             _PATHS[kind] = str(path)
             _ERRORS[kind] = None
@@ -335,3 +345,81 @@ def probe_mg_ion_accumulator_skeleton(
         record_data_type=record_data_type,
         enabled=enabled,
     )
+
+
+_RATE_PAYLOAD_SHADOW_ROLE = {1: "forward_offdiag", 2: "reverse_offdiag", 3: "forward_diag_loss", 4: "reverse_diag_loss"}
+
+def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Reconstruct supported Mg matrix rows in one diagnostic C++ call.
+
+    The accepted path supplies exact scalar ans1..ans6 channels and endpoint
+    metadata.  C++ validates the compact packet and performs the matrix-term
+    orchestration.  Returned rows are shadow-only and never enter live matrices.
+    """
+    lib = _load_library("engine")
+    if lib is None or not hasattr(lib, "xstar_engine_eval_mg_rate_payload_shadow_v1"):
+        raise RuntimeError("C++ rate-payload batched orchestration shadow is unavailable" + (f": {cpp_import_error('engine')}" if cpp_import_error('engine') else ""))
+    _time = __import__('time')
+    packing_t0 = _time.perf_counter()
+    n = len(records)
+    meta = np.zeros((n, 12), dtype=np.int64)
+    rates = np.zeros((n, 7), dtype=np.float64)
+    for k, row in enumerate(records):
+        meta[k] = [
+            int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
+            int(row["ion_index"]), int(row["ion_stage"]), int(row["compact_start"]),
+            int(row["basis_n_rows"]), int(row["idest1"]), int(row["idest2"]),
+            int(row["lower_endpoint"]), int(row["upper_endpoint"]), int(row["term_start"]),
+        ]
+        rates[k] = [float(row.get(f"ans{i}", 0.0)) for i in range(1, 7)] + [float(row["hydrogen_density_cm3"])]
+    meta_flat = np.ascontiguousarray(meta.reshape(-1))
+    rates_flat = np.ascontiguousarray(rates.reshape(-1))
+    max_terms = max(4, n * 4)
+    out_i64 = np.zeros(max_terms * 16, dtype=np.int64)
+    out_f64 = np.zeros(max_terms * 4, dtype=np.float64)
+    stats_i64 = np.zeros(16, dtype=np.int64)
+    timing_f64 = np.zeros(3, dtype=np.float64)
+    buf = ctypes.create_string_buffer(512)
+    packing_seconds = _time.perf_counter() - packing_t0
+    t0 = _time.perf_counter()
+    rc = lib.xstar_engine_eval_mg_rate_payload_shadow_v1(
+        n, meta_flat, 12, rates_flat, 7, max_terms,
+        out_i64, 16, out_f64, 4, timing_f64, int(timing_f64.size), stats_i64, int(stats_i64.size),
+        buf, ctypes.sizeof(buf),
+    )
+    elapsed = _time.perf_counter() - t0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_engine_eval_mg_rate_payload_shadow_v1 failed with code {rc}")
+    emitted = int(stats_i64[2])
+    oi = out_i64[: emitted * 16].reshape((emitted, 16)) if emitted else np.zeros((0,16),dtype=np.int64)
+    of = out_f64[: emitted * 4].reshape((emitted, 4)) if emitted else np.zeros((0,4),dtype=np.float64)
+    decode_t0 = _time.perf_counter()
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted):
+        rows.append({
+            "term_index": int(oi[j,0]), "record": int(oi[j,1]), "data_type": int(oi[j,2]), "rate_type": int(oi[j,3]),
+            "ion_index": int(oi[j,4]), "ion_stage": int(oi[j,5]), "role": _RATE_PAYLOAD_SHADOW_ROLE.get(int(oi[j,6]), f"role_{int(oi[j,6])}"),
+            "row": int(oi[j,7]), "column": int(oi[j,8]), "idest1": int(oi[j,9]), "idest2": int(oi[j,10]),
+            "lower_endpoint": int(oi[j,11]), "upper_endpoint": int(oi[j,12]),
+            "source_row_unclamped": int(oi[j,13]), "source_column_unclamped": int(oi[j,14]), "source_ipmat_clamped": bool(int(oi[j,15])),
+            "ucalc_status": "evaluated", "aj1": float(of[j,0]), "aj2": float(of[j,1]), "cj": float(of[j,2]), "cj2": float(of[j,3]),
+        })
+    output_decoding_seconds = _time.perf_counter() - decode_t0
+    names=("records_seen","records_supported","terms_emitted","records_emitted","unsupported_records","invalid_records","output_overflow","valid","family_4_50","family_3_51","family_3_63","family_42_88")
+    stats={name: float(stats_i64[i]) for i,name in enumerate(names)}
+    stats.update({
+        "cpp_calls": 1.0 if n else 0.0, "cpp_wall_seconds": float(elapsed),
+        "cpp_rate_evaluation_seconds": float(timing_f64[0]),
+        "cpp_matrix_term_construction_seconds": float(timing_f64[1]),
+        "cpp_internal_total_seconds": float(timing_f64[2]),
+        "packing_seconds": float(packing_seconds),
+        "python_to_cpp_call_seconds": max(0.0, float(elapsed) - float(timing_f64[2])),
+        "output_decoding_seconds": float(output_decoding_seconds),
+        "input_bytes": float(meta_flat.nbytes + rates_flat.nbytes),
+        "output_bytes": float(emitted * (16*8 + 4*8)),
+        "allocation_count": 5.0,
+    })
+    return rows, message, stats

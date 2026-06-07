@@ -35,7 +35,7 @@ from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
 from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, eval_mg_element_simple_payloads_batch_shadow_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
-from .cpp_backend_extra import eval_mg_ion_accumulator_cpp
+from .cpp_backend_extra import eval_mg_ion_accumulator_cpp, eval_mg_rate_payload_batched_orchestration_shadow_cpp
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -2141,6 +2141,264 @@ def _rate_payload_finalize(
     row["accounting_tolerance_seconds"] = float(tolerance)
     row["accounting_ok"] = bool(overrun <= tolerance)
 
+
+_RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES: Tuple[Tuple[int, int], ...] = (
+    (4, 50), (3, 51), (3, 63), (42, 88),
+)
+
+
+def _rate_payload_batched_shadow_enabled(element_z: int) -> bool:
+    return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_BATCHED_ORCHESTRATION_SHADOW")
+
+
+def _term_shadow_row(term: MatrixTerm) -> Dict[str, Any]:
+    return {
+        "term_index": int(term.term_index), "record": int(term.record),
+        "data_type": int(term.data_type), "rate_type": int(term.rate_type),
+        "ion_index": int(term.ion_index), "ion_stage": int(term.ion_stage),
+        "role": str(term.role), "row": int(term.row), "column": int(term.column),
+        "idest1": int(term.idest1), "idest2": int(term.idest2),
+        "lower_endpoint": int(term.lower_endpoint), "upper_endpoint": int(term.upper_endpoint),
+        "source_row_unclamped": int(term.source_row_unclamped),
+        "source_column_unclamped": int(term.source_column_unclamped),
+        "source_ipmat_clamped": bool(term.source_ipmat_clamped),
+        "aj1": float(term.aj1), "aj2": float(term.aj2),
+        "cj": float(term.cj), "cj2": float(term.cj2),
+    }
+
+
+def _run_rate_payload_batched_orchestration_shadow(
+    control: MutableMapping[str, Any],
+    *,
+    evaluation_index: int,
+    basis: ElementCompactBasis,
+    record_results: Sequence[Mapping[str, Any]],
+    terms: Sequence[MatrixTerm],
+    hydrogen_density_cm3: float,
+) -> None:
+    """Run one diagnostic C++ row-orchestration call without touching live terms.
+
+    v0.6.29 deliberately keeps accepted Python/C++ scalar-rate ownership
+    unchanged.  It captures the exact accepted ans1..ans6 channels for the four
+    selected families, passes one compact evaluation packet to C++, and asks
+    C++ to reconstruct the four matrix/heating rows per record.  This is the
+    parity gate for a later release that can move the scalar evaluators across
+    the same boundary.
+    """
+    summary: Dict[str, Any] = {
+        "schema_version": "0.6.29",
+        "enabled": True,
+        "shadow_only": True,
+        "live_matrix_commit": False,
+        "evaluation_index": int(evaluation_index),
+        "supported_families": [f"{rt}:{dt}" for rt, dt in _RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES],
+        "family_evaluation_modes": {
+            "4:50": "accepted_cpp_scalar_product_then_batched_cpp_rows",
+            "3:51": "accepted_cpp_scalar_product_then_batched_cpp_rows",
+            "3:63": "accepted_python_scalar_shadow_seed_then_batched_cpp_rows",
+            "42:88": "accepted_python_scalar_shadow_seed_then_batched_cpp_rows",
+        },
+        "shared_context_preparation_seconds": 0.0,
+        "compact_record_index_build_seconds": 0.0,
+        "python_to_cpp_call_seconds": 0.0,
+        "cpp_rate_evaluation_seconds": 0.0,
+        "cpp_matrix_term_construction_seconds": 0.0,
+        "output_decoding_seconds": 0.0,
+        "exact_row_comparison_seconds": 0.0,
+        "records_expected": 0,
+        "records_compared": 0,
+        "terms_expected": 0,
+        "terms_compared": 0,
+        "missing_terms": 0,
+        "extra_terms": 0,
+        "integer_field_mismatches": 0,
+        "float_field_mismatches": 0,
+        "float_fields_within_tolerance": 0,
+        "max_abs_diff": 0.0,
+        "max_rel_diff": 0.0,
+        "matrix_checkpoint_exact": False,
+        "status": "INITIALIZING",
+    }
+    rows = control.setdefault("mg_rate_payload_batched_orchestration_shadow_evaluations", [])
+    if isinstance(rows, list):
+        rows.append(summary)
+    try:
+        t0 = time.perf_counter()
+        family_set = set(_RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES)
+        blocks = {int(block.ion_index): block for block in basis.blocks}
+        accepted_terms = [term for term in terms if (int(term.rate_type), int(term.data_type)) in family_set]
+        accepted_by_record: Dict[int, List[MatrixTerm]] = {}
+        for term in accepted_terms:
+            accepted_by_record.setdefault(int(term.record), []).append(term)
+        result_by_record: Dict[int, Mapping[str, Any]] = {}
+        for row in record_results:
+            try:
+                key = (int(row.get("rate_type", -1)), int(row.get("data_type", -1)))
+                rec = int(row.get("record", 0))
+            except Exception:
+                continue
+            if rec > 0 and key in family_set and str(row.get("status", "")) == UCalcStatus.EVALUATED.value:
+                result_by_record[rec] = row
+        summary["shared_context_preparation_seconds"] = time.perf_counter() - t0
+
+        t1 = time.perf_counter()
+        packet: List[Dict[str, Any]] = []
+        accepted_rows: List[Dict[str, Any]] = []
+        family_counts: Dict[str, int] = {f"{rt}:{dt}": 0 for rt, dt in _RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES}
+        skipped: List[Dict[str, Any]] = []
+        for rec in sorted(set(accepted_by_record) & set(result_by_record)):
+            group = sorted(accepted_by_record[rec], key=lambda term: int(term.term_index))
+            result = result_by_record[rec]
+            if len(group) != 4:
+                skipped.append({"record": rec, "reason": f"accepted_term_count_{len(group)}"})
+                continue
+            block = blocks.get(int(group[0].ion_index))
+            if block is None:
+                skipped.append({"record": rec, "reason": "missing_ion_block"})
+                continue
+            try:
+                item = {
+                    "record": rec,
+                    "rate_type": int(result["rate_type"]), "data_type": int(result["data_type"]),
+                    "ion_index": int(group[0].ion_index), "ion_stage": int(group[0].ion_stage),
+                    "compact_start": int(block.compact_start), "basis_n_rows": int(basis.n_rows),
+                    "idest1": int(result["idest1"]), "idest2": int(result["idest2"]),
+                    "lower_endpoint": int(group[0].lower_endpoint), "upper_endpoint": int(group[0].upper_endpoint),
+                    "term_start": int(group[0].term_index),
+                    "hydrogen_density_cm3": float(hydrogen_density_cm3),
+                    **{f"ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+                }
+            except Exception as exc:
+                skipped.append({"record": rec, "reason": f"packet_error:{exc}"})
+                continue
+            if not all(np.isfinite(float(item[f"ans{i}"])) for i in range(1, 7)):
+                skipped.append({"record": rec, "reason": "nonfinite_scalar"})
+                continue
+            packet.append(item)
+            accepted_rows.extend(_term_shadow_row(term) for term in group)
+            family_counts[f"{item['rate_type']}:{item['data_type']}"] += 1
+        summary["compact_record_index_build_seconds"] = time.perf_counter() - t1
+        summary["records_expected"] = len(packet)
+        summary["terms_expected"] = len(accepted_rows)
+        summary["family_record_counts"] = family_counts
+        summary["skipped_records"] = skipped[:64]
+        summary["skipped_record_count"] = len(skipped)
+        if not packet:
+            summary["status"] = "NO_SUPPORTED_RECORDS"
+            return
+
+        call_t0 = time.perf_counter()
+        cpp_rows, message, stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(packet)
+        call_wall = time.perf_counter() - call_t0
+        summary["message"] = str(message)
+        summary["cpp_stats"] = dict(stats)
+        summary["python_to_cpp_call_seconds"] = float(stats.get("python_to_cpp_call_seconds", 0.0))
+        summary["cpp_rate_evaluation_seconds"] = float(stats.get("cpp_rate_evaluation_seconds", 0.0))
+        summary["cpp_matrix_term_construction_seconds"] = float(stats.get("cpp_matrix_term_construction_seconds", 0.0))
+        summary["output_decoding_seconds"] = float(stats.get("output_decoding_seconds", 0.0))
+        summary["input_packing_seconds"] = float(stats.get("packing_seconds", 0.0))
+        summary["call_wall_seconds"] = float(call_wall)
+        summary["input_bytes"] = float(stats.get("input_bytes", 0.0))
+        summary["output_bytes"] = float(stats.get("output_bytes", 0.0))
+
+        cmp_t0 = time.perf_counter()
+        int_fields = (
+            "term_index", "record", "data_type", "rate_type", "ion_index", "ion_stage",
+            "role", "row", "column", "idest1", "idest2", "lower_endpoint", "upper_endpoint",
+            "source_row_unclamped", "source_column_unclamped", "source_ipmat_clamped",
+        )
+        float_fields = ("aj1", "aj2", "cj", "cj2")
+        def sig(row: Mapping[str, Any]) -> Tuple[Any, ...]:
+            return (int(row["record"]), str(row["role"]), int(row["row"]), int(row["column"]))
+        py_map = {sig(row): row for row in accepted_rows}
+        cpp_map = {sig(row): row for row in cpp_rows}
+        missing = sorted(set(py_map) - set(cpp_map))
+        extra = sorted(set(cpp_map) - set(py_map))
+        summary["missing_terms"] = len(missing)
+        summary["extra_terms"] = len(extra)
+        summary["records_compared"] = len(packet)
+        summary["terms_compared"] = len(set(py_map) & set(cpp_map))
+        rtol = float(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_BATCHED_SHADOW_RTOL", "1e-12"))
+        atol = float(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_BATCHED_SHADOW_ATOL", "0"))
+        summary["rtol"] = rtol
+        summary["atol"] = atol
+        worst: Dict[str, Any] = {}
+        for key in sorted(set(py_map) & set(cpp_map)):
+            left, right = py_map[key], cpp_map[key]
+            for field in int_fields:
+                if left[field] != right[field]:
+                    summary["integer_field_mismatches"] += 1
+                    if not worst:
+                        worst = {"key": list(key), "field": field, "accepted": left[field], "cpp": right[field]}
+            for field in float_fields:
+                a, b = float(left[field]), float(right[field])
+                diff = abs(b - a)
+                rel = diff / max(abs(a), 1.0e-300)
+                summary["max_abs_diff"] = max(float(summary["max_abs_diff"]), diff)
+                summary["max_rel_diff"] = max(float(summary["max_rel_diff"]), rel)
+                if diff != 0.0:
+                    summary["float_field_mismatches"] += 1
+                    if diff <= atol or rel <= rtol:
+                        summary["float_fields_within_tolerance"] += 1
+                    elif not worst:
+                        worst = {"key": list(key), "field": field, "accepted": a, "cpp": b, "abs_diff": diff, "rel_diff": rel}
+        summary["worst_mismatch"] = worst
+
+        def contribution(rows_in: Sequence[Mapping[str, Any]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            d = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
+            h = np.zeros_like(d); h2 = np.zeros_like(d)
+            for row in sorted(rows_in, key=lambda item: int(item["term_index"])):
+                rr, cc = int(row["row"]) - 1, int(row["column"]) - 1
+                d[rr, cc] += float(row["aj1"])
+                h[rr, cc] += float(row["cj"])
+                h2[rr, cc] += float(row["cj2"])
+            return d, h, h2
+        # Check both the isolated supported-family contribution and the complete
+        # pre-normalization matrix payload that would result from replacing only
+        # those supported rows.  The candidate arrays are diagnostic temporaries;
+        # they are never returned to or committed by the live assembly path.
+        py_d, py_h, py_h2 = contribution(accepted_rows)
+        cp_d, cp_h, cp_h2 = contribution(cpp_rows)
+        py_contrib_cp = {"dense": _array_checkpoint(py_d), "heating": _array_checkpoint(py_h), "heating2": _array_checkpoint(py_h2)}
+        cp_contrib_cp = {"dense": _array_checkpoint(cp_d), "heating": _array_checkpoint(cp_h), "heating2": _array_checkpoint(cp_h2)}
+        cpp_by_term_index = {int(row["term_index"]): row for row in cpp_rows}
+        accepted_all_rows = [_term_shadow_row(term) for term in terms]
+        candidate_all_rows = [cpp_by_term_index.get(int(row["term_index"]), row) for row in accepted_all_rows]
+        full_py_d, full_py_h, full_py_h2 = contribution(accepted_all_rows)
+        full_cp_d, full_cp_h, full_cp_h2 = contribution(candidate_all_rows)
+        py_cp = {"dense": _array_checkpoint(full_py_d), "heating": _array_checkpoint(full_py_h), "heating2": _array_checkpoint(full_py_h2)}
+        cp_cp = {"dense": _array_checkpoint(full_cp_d), "heating": _array_checkpoint(full_cp_h), "heating2": _array_checkpoint(full_cp_h2)}
+        summary["accepted_supported_contribution_checkpoints"] = py_contrib_cp
+        summary["cpp_supported_contribution_checkpoints"] = cp_contrib_cp
+        summary["supported_contribution_checkpoint_exact"] = all(
+            py_contrib_cp[name]["sha256"] == cp_contrib_cp[name]["sha256"] for name in py_contrib_cp
+        )
+        summary["accepted_matrix_checkpoints"] = py_cp
+        summary["cpp_replacement_matrix_checkpoints"] = cp_cp
+        summary["matrix_checkpoint_exact"] = all(py_cp[name]["sha256"] == cp_cp[name]["sha256"] for name in py_cp)
+        summary["exact_row_comparison_seconds"] = time.perf_counter() - cmp_t0
+        exact = (
+            summary["missing_terms"] == 0 and summary["extra_terms"] == 0
+            and summary["integer_field_mismatches"] == 0
+            and summary["float_field_mismatches"] == 0
+            and summary["matrix_checkpoint_exact"]
+        )
+        tolerant = (
+            summary["missing_terms"] == 0 and summary["extra_terms"] == 0
+            and summary["integer_field_mismatches"] == 0
+            and summary["float_field_mismatches"] == summary["float_fields_within_tolerance"]
+            and bool(np.allclose(py_d, cp_d, rtol=rtol, atol=atol, equal_nan=False))
+            and bool(np.allclose(py_h, cp_h, rtol=rtol, atol=atol, equal_nan=False))
+            and bool(np.allclose(py_h2, cp_h2, rtol=rtol, atol=atol, equal_nan=False))
+        )
+        summary["all_rows_exact"] = bool(exact)
+        summary["all_rows_tolerance_approved"] = bool(tolerant)
+        summary["status"] = "EXACT" if exact else "TOLERANCE_APPROVED" if tolerant else "MISMATCH"
+    except Exception as exc:
+        summary["status"] = "ERROR"
+        summary["error"] = str(exc)
+
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -2154,6 +2412,11 @@ def assemble_element_matrix(
     profile_control = context.profile_control or {}
     _matrix_dataflow_probe = _matrix_dataflow_enabled(int(element_z))
     _rate_payload_probe = _rate_payload_dataflow_enabled(int(element_z))
+    _rate_payload_batched_shadow_probe = _rate_payload_batched_shadow_enabled(int(element_z))
+    _rate_payload_batched_shadow_eval_index = 0
+    if _rate_payload_batched_shadow_probe:
+        _rate_payload_batched_shadow_eval_index = int(profile_control.get("_mg_rate_payload_batched_shadow_evaluation_index", 0)) + 1
+        profile_control["_mg_rate_payload_batched_shadow_evaluation_index"] = int(_rate_payload_batched_shadow_eval_index)
     _matrix_dataflow_total_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
     _matrix_dataflow_eval_index = 0
     if _matrix_dataflow_probe:
@@ -5279,6 +5542,16 @@ def assemble_element_matrix(
                 profile_control, _matrix_dataflow_eval_index,
                 enclosing_seconds=_rate_payload_parent_seconds, matrix_dimension=int(basis.n_rows),
             )
+
+    if _rate_payload_batched_shadow_probe:
+        _run_rate_payload_batched_orchestration_shadow(
+            profile_control,
+            evaluation_index=int(_rate_payload_batched_shadow_eval_index),
+            basis=basis,
+            record_results=record_results,
+            terms=terms,
+            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+        )
 
     if _rate7_classifier_enabled:
         profile_control["remaining_rate7_classifier_samples"] = _remaining_rate7_samples

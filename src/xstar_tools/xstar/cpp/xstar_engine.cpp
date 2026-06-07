@@ -2,6 +2,9 @@
 #include "compact_arrays.hpp"
 #include <cstdint>
 #include <sstream>
+#include <algorithm>
+#include <cmath>
+#include <chrono>
 
 namespace {
 
@@ -125,18 +128,19 @@ int eval_mg_ion_accumulator_impl(
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 2;
+    return 3;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_ion_accumulator_coarse_abi_flat_cpp_v068";
+    return "xstar_engine_mg_rate_payload_batched_orchestration_shadow_v029";
 }
 
 int xstar_engine_feature_flags() {
     // bit 0: Mg-ion accumulator ABI present.
     // bit 1: coarse record traversal/classification implemented.
     // bit 2: compact packet counters implemented.
-    return 1 | 2 | 4;
+    // bit 3: evaluation-level Mg rate-payload orchestration shadow.
+    return 1 | 2 | 4 | 8;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -145,7 +149,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.8 coarse Mg-ion accumulator ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.29 Mg-ion accumulator and rate-payload orchestration shadow ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
@@ -193,4 +197,109 @@ int xstar_engine_eval_mg_ion_accumulator_v1(
         counters, counters_size, message, message_size);
 }
 
+}
+
+extern "C" int xstar_engine_eval_mg_rate_payload_shadow_v1(
+    int n_records,
+    const std::int64_t* meta_i64,
+    int meta_stride,
+    const double* rates_f64,
+    int rates_stride,
+    int max_terms,
+    std::int64_t* out_i64,
+    int out_i64_stride,
+    double* out_f64,
+    int out_f64_stride,
+    double* timing_f64,
+    int timing_size,
+    std::int64_t* stats,
+    int stats_size,
+    char* message,
+    std::size_t message_size
+) {
+    using namespace xstar_backend;
+    if (!valid_count(n_records) || meta_stride < 12 || rates_stride < 7 ||
+        out_i64_stride < 16 || out_f64_stride < 4 || max_terms < 0 ||
+        timing_f64 == nullptr || timing_size < 3 || stats == nullptr || stats_size < 16) {
+        write_message(message, message_size, "invalid rate-payload shadow arguments");
+        return XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
+    }
+    if (n_records > 0 && (meta_i64 == nullptr || rates_f64 == nullptr || out_i64 == nullptr || out_f64 == nullptr)) {
+        write_message(message, message_size, "null rate-payload shadow array");
+        return XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
+    }
+    for (int i = 0; i < stats_size; ++i) stats[i] = 0;
+    for (int i = 0; i < timing_size; ++i) timing_f64[i] = 0.0;
+    using clock_t = std::chrono::steady_clock;
+    const auto total_t0 = clock_t::now();
+    int emitted = 0;
+    for (int k = 0; k < n_records; ++k) {
+        const auto eval_t0 = clock_t::now();
+        const std::int64_t* m = meta_i64 + static_cast<std::int64_t>(k) * meta_stride;
+        const double* r = rates_f64 + static_cast<std::int64_t>(k) * rates_stride;
+        const long long record = m[0], rate_type = m[1], data_type = m[2];
+        const long long ion_index = m[3], ion_stage = m[4], compact_start = m[5];
+        const long long basis_n_rows = m[6], idest1 = m[7], idest2 = m[8];
+        const long long lower_endpoint = m[9], upper_endpoint = m[10], term_start = m[11];
+        stats[0] += 1;
+        bool family = (rate_type == 4 && data_type == 50) ||
+                      (rate_type == 3 && data_type == 51) ||
+                      (rate_type == 3 && data_type == 63) ||
+                      (rate_type == 42 && data_type == 88);
+        if (!family) { stats[4] += 1; timing_f64[0] += std::chrono::duration<double>(clock_t::now() - eval_t0).count(); continue; }
+        if (rate_type == 4 && data_type == 50) stats[8] += 1;
+        if (rate_type == 3 && data_type == 51) stats[9] += 1;
+        if (rate_type == 3 && data_type == 63) stats[10] += 1;
+        if (rate_type == 42 && data_type == 88) stats[11] += 1;
+        bool finite = true;
+        for (int j = 0; j < 7; ++j) finite = finite && std::isfinite(r[j]);
+        if (!finite || record <= 0 || basis_n_rows <= 0 || compact_start <= 0 ||
+            idest1 <= 0 || idest2 <= 0 || lower_endpoint <= 0 || upper_endpoint <= 0) {
+            stats[5] += 1;
+            timing_f64[0] += std::chrono::duration<double>(clock_t::now() - eval_t0).count();
+            continue;
+        }
+        timing_f64[0] += std::chrono::duration<double>(clock_t::now() - eval_t0).count();
+        if (emitted + 4 > max_terms) { stats[6] += 1; break; }
+        const auto terms_t0 = clock_t::now();
+        const double ans1 = r[0], ans2 = r[1], ans3 = r[2], ans4 = r[3], ans5 = r[4], ans6 = r[5];
+        const double xpx = r[6];
+        long long raw_lower = compact_start + lower_endpoint - 1;
+        long long raw_upper = compact_start + upper_endpoint - 1;
+        long long row_lower = std::min(basis_n_rows, raw_lower);
+        long long row_upper = std::min(basis_n_rows, raw_upper);
+        const long long rows[4] = {row_upper, row_lower, row_lower, row_upper};
+        const long long cols[4] = {row_lower, row_upper, row_lower, row_upper};
+        const long long raw_rows[4] = {raw_upper, raw_lower, raw_lower, raw_upper};
+        const long long raw_cols[4] = {raw_lower, raw_upper, raw_lower, raw_upper};
+        const long long roles[4] = {1, 2, 3, 4};
+        const double vals[4][4] = {
+            {ans1, ans2, 0.0, 0.0},
+            {ans2, ans1, 0.0, 0.0},
+            {-ans1, -ans1, ans4 * xpx, ans6 * xpx},
+            {-ans2, -ans2, -ans3 * xpx, -ans5 * xpx},
+        };
+        for (int q = 0; q < 4; ++q) {
+            std::int64_t* oi = out_i64 + static_cast<std::int64_t>(emitted) * out_i64_stride;
+            double* of = out_f64 + static_cast<std::int64_t>(emitted) * out_f64_stride;
+            oi[0] = term_start + q; oi[1] = record; oi[2] = data_type; oi[3] = rate_type;
+            oi[4] = ion_index; oi[5] = ion_stage; oi[6] = roles[q]; oi[7] = rows[q]; oi[8] = cols[q];
+            oi[9] = idest1; oi[10] = idest2; oi[11] = lower_endpoint; oi[12] = upper_endpoint;
+            oi[13] = raw_rows[q]; oi[14] = raw_cols[q]; oi[15] = (raw_rows[q] != rows[q] || raw_cols[q] != cols[q]) ? 1 : 0;
+            of[0] = vals[q][0]; of[1] = vals[q][1]; of[2] = vals[q][2]; of[3] = vals[q][3];
+            ++emitted;
+        }
+        stats[1] += 1;
+        timing_f64[1] += std::chrono::duration<double>(clock_t::now() - terms_t0).count();
+    }
+    timing_f64[2] = std::chrono::duration<double>(clock_t::now() - total_t0).count();
+    stats[2] = emitted;
+    stats[3] = emitted / 4;
+    stats[7] = (stats[5] == 0 && stats[6] == 0) ? 1 : 0;
+    std::ostringstream out;
+    out << "rate-payload batched orchestration shadow: records=" << n_records
+        << "; supported=" << stats[1] << "; terms=" << emitted
+        << "; invalid=" << stats[5] << "; overflow=" << stats[6];
+    write_message(message, message_size, out.str());
+    return XSTAR_BACKEND_OK;
 }

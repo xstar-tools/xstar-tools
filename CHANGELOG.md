@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# v0.6.29 - 2026-06-07
+
+## Added
+- Added one evaluation-level C++ Mg rate-payload orchestration shadow for rate/data families 4/50, 3/51, 3/63, and 42/88.
+- Added compact record indexing, one-call ABI transport, direct C++ matrix/heating term construction, exact row comparison, and independent contribution-matrix checkpoints.
+- Added `provenance.mg_rate_payload_batched_orchestration_shadow_summary`, a dedicated wrapper, and a strict acceptance checker.
+
+## Preserved
+- Kept all accepted scalar rates and matrix terms live on the accepted product path; C++ shadow rows are never committed.
+- Kept the promoted cached Mg simple-payload product active with reverse verification and heavy checkpoint hashing disabled.
+- Kept all accepted solver, rates, matrix, final-binemis, and upstream Mg type-4/type-50 paths unchanged.
+
 # v0.6.28 - 2026-06-07
 
 ## Added

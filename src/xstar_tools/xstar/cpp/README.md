@@ -144,3 +144,7 @@ The binemis C++ backend stores only numeric timing fields so output-writer timin
 ## v0.6.0a21 parity-first defaults
 
 C++ shared libraries remain buildable in the flat cpp directory, but the benchmark wrapper now defaults new C++ physics and output accelerators to opt-in only until original-XSTAR xout_step.log and FITS parity gates pass.  Enable individual paths explicitly for experiments, for example `XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP=1`, `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=1`, `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP=1`, or `XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP=1`.
+## v0.6.29 engine orchestration shadow
+
+`libxstar_engine.so` exports `xstar_engine_eval_mg_rate_payload_shadow_v1`, an evaluation-level diagnostic ABI for compact Mg rate-payload records. It supports rate/data families 4/50, 3/51, 3/63, and 42/88, returns four compact matrix/heating terms per valid record, and is never product-active in v0.6.29. The accepted path supplies exact scalar channels and remains the sole live owner.
+

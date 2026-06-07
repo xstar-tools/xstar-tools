@@ -1,3 +1,7 @@
+## v0.6.29 rate-payload batched orchestration shadow
+
+v0.6.29 adds one evaluation-level C++ shadow call for Mg rate/data families 4/50, 3/51, 3/63, and 42/88. It reconstructs compact matrix/heating rows, compares them exactly with the accepted path, checks independent contribution matrices, and never commits shadow rows. See `V0629_RATE_PAYLOAD_BATCHED_ORCHESTRATION_SHADOW.md`.
+
 ## v0.6.28 rate-payload generation dataflow probe
 
 v0.6.28 preserves the promoted Mg simple-payload batch and adds a closed per-evaluation decomposition of the remaining rate-payload generation hotspot. The main probe keeps reverse verification and checkpoint hashing disabled and reports grouped timing by rate/data type. See `V0628_RATE_PAYLOAD_GENERATION_DATAFLOW_PROBE.md`.
