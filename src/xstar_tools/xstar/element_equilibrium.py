@@ -2178,7 +2178,7 @@ def _run_rate_payload_batched_orchestration_shadow(
 ) -> None:
     """Run one diagnostic C++ row-orchestration call without touching live terms.
 
-    v0.6.29 deliberately keeps accepted Python/C++ scalar-rate ownership
+    v0.6.30 keeps accepted Python/C++ scalar-rate ownership
     unchanged.  It captures the exact accepted ans1..ans6 channels for the four
     selected families, passes one compact evaluation packet to C++, and asks
     C++ to reconstruct the four matrix/heating rows per record.  This is the
@@ -2186,7 +2186,7 @@ def _run_rate_payload_batched_orchestration_shadow(
     the same boundary.
     """
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.29",
+        "schema_version": "0.6.30",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -2217,6 +2217,12 @@ def _run_rate_payload_batched_orchestration_shadow(
         "max_abs_diff": 0.0,
         "max_rel_diff": 0.0,
         "matrix_checkpoint_exact": False,
+        "accepted_duplicate_term_index_count": 0,
+        "cpp_duplicate_term_index_count": 0,
+        "accepted_duplicate_replacement_key_count": 0,
+        "cpp_duplicate_replacement_key_count": 0,
+        "replacement_terms_expected": 0,
+        "replacement_terms_applied": 0,
         "status": "INITIALIZING",
     }
     rows = control.setdefault("mg_rate_payload_batched_orchestration_shadow_evaluations", [])
@@ -2361,9 +2367,49 @@ def _run_rate_payload_batched_orchestration_shadow(
         cp_d, cp_h, cp_h2 = contribution(cpp_rows)
         py_contrib_cp = {"dense": _array_checkpoint(py_d), "heating": _array_checkpoint(py_h), "heating2": _array_checkpoint(py_h2)}
         cp_contrib_cp = {"dense": _array_checkpoint(cp_d), "heating": _array_checkpoint(cp_h), "heating2": _array_checkpoint(cp_h2)}
-        cpp_by_term_index = {int(row["term_index"]): row for row in cpp_rows}
+        # term_index is diagnostic ordering metadata, not a globally unique row
+        # identity.  Direct C++ paths may reserve term-index ranges, after which
+        # later accepted paths can reuse a numeric index.  v0.6.30 therefore
+        # substitutes rows using the full stable matrix-term identity.
+        def replacement_key(row: Mapping[str, Any]) -> Tuple[Any, ...]:
+            return (
+                int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
+                int(row["ion_index"]), int(row["ion_stage"]), str(row["role"]),
+                int(row["row"]), int(row["column"]), int(row["idest1"]), int(row["idest2"]),
+                int(row["lower_endpoint"]), int(row["upper_endpoint"]),
+                int(row["source_row_unclamped"]), int(row["source_column_unclamped"]),
+                bool(row["source_ipmat_clamped"]),
+            )
+
+        def duplicate_count(values: Sequence[Any]) -> int:
+            counts: Dict[Any, int] = {}
+            for value in values:
+                counts[value] = counts.get(value, 0) + 1
+            return sum(count - 1 for count in counts.values() if count > 1)
+
         accepted_all_rows = [_term_shadow_row(term) for term in terms]
-        candidate_all_rows = [cpp_by_term_index.get(int(row["term_index"]), row) for row in accepted_all_rows]
+        summary["accepted_duplicate_term_index_count"] = duplicate_count(
+            [int(row["term_index"]) for row in accepted_all_rows]
+        )
+        summary["cpp_duplicate_term_index_count"] = duplicate_count(
+            [int(row["term_index"]) for row in cpp_rows]
+        )
+        accepted_keys = [replacement_key(row) for row in accepted_rows]
+        cpp_keys = [replacement_key(row) for row in cpp_rows]
+        summary["accepted_duplicate_replacement_key_count"] = duplicate_count(accepted_keys)
+        summary["cpp_duplicate_replacement_key_count"] = duplicate_count(cpp_keys)
+        cpp_by_key = {replacement_key(row): row for row in cpp_rows}
+        summary["replacement_terms_expected"] = len(cpp_by_key)
+        replacement_terms_applied = 0
+        candidate_all_rows: List[Dict[str, Any]] = []
+        for row in accepted_all_rows:
+            replacement = cpp_by_key.get(replacement_key(row))
+            if replacement is None:
+                candidate_all_rows.append(row)
+            else:
+                candidate_all_rows.append(replacement)
+                replacement_terms_applied += 1
+        summary["replacement_terms_applied"] = replacement_terms_applied
         full_py_d, full_py_h, full_py_h2 = contribution(accepted_all_rows)
         full_cp_d, full_cp_h, full_cp_h2 = contribution(candidate_all_rows)
         py_cp = {"dense": _array_checkpoint(full_py_d), "heating": _array_checkpoint(full_py_h), "heating2": _array_checkpoint(full_py_h2)}
@@ -2381,12 +2427,18 @@ def _run_rate_payload_batched_orchestration_shadow(
             summary["missing_terms"] == 0 and summary["extra_terms"] == 0
             and summary["integer_field_mismatches"] == 0
             and summary["float_field_mismatches"] == 0
+            and summary["accepted_duplicate_replacement_key_count"] == 0
+            and summary["cpp_duplicate_replacement_key_count"] == 0
+            and summary["replacement_terms_applied"] == summary["replacement_terms_expected"]
             and summary["matrix_checkpoint_exact"]
         )
         tolerant = (
             summary["missing_terms"] == 0 and summary["extra_terms"] == 0
             and summary["integer_field_mismatches"] == 0
             and summary["float_field_mismatches"] == summary["float_fields_within_tolerance"]
+            and summary["accepted_duplicate_replacement_key_count"] == 0
+            and summary["cpp_duplicate_replacement_key_count"] == 0
+            and summary["replacement_terms_applied"] == summary["replacement_terms_expected"]
             and bool(np.allclose(py_d, cp_d, rtol=rtol, atol=atol, equal_nan=False))
             and bool(np.allclose(py_h, cp_h, rtol=rtol, atol=atol, equal_nan=False))
             and bool(np.allclose(py_h2, cp_h2, rtol=rtol, atol=atol, equal_nan=False))

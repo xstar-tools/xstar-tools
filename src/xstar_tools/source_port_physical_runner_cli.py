@@ -224,18 +224,27 @@ def _format_float(value: object, width: int, precision: int) -> str:
 
 
 def _source_package_version() -> str:
+    # Prefer the active source tree.  importlib.metadata may describe an older
+    # installed distribution even when PYTHONPATH points at a newer checkout.
+    try:
+        import xstar_tools
+        source_version = str(getattr(xstar_tools, "__version__", "")).strip()
+        if source_version:
+            return source_version
+    except Exception:
+        pass
+    try:
+        init_text = (Path(__file__).resolve().parent / "__init__.py").read_text(encoding="utf-8")
+        for line in init_text.splitlines():
+            if line.startswith("__version__"):
+                return line.split("=", 1)[1].strip().strip("'\"")
+    except Exception:
+        pass
     try:
         from importlib.metadata import version
         return str(version("xstar_tools"))
     except Exception:
-        try:
-            init_text = (Path(__file__).resolve().parent / "__init__.py").read_text(encoding="utf-8")
-            for line in init_text.splitlines():
-                if line.startswith("__version__"):
-                    return line.split("=", 1)[1].strip().strip("'\"")
-        except Exception:
-            pass
-    return "unknown"
+        return "unknown"
 
 
 def _make_progress_printer(*, include_memory: bool = False, debug: bool = False):

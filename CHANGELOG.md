@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.30 - 2026-06-07
+
+- Hotfix the v0.6.29 orchestration-shadow complete-matrix checkpoint replacement to use a stable composite matrix-term identity rather than non-unique `term_index`.
+- Report duplicate term-index and replacement-key counts plus expected/applied replacement totals.
+- Keep the orchestration path shadow-only; accepted rows remain the sole live matrix source.
+- Prefer the active source-tree `xstar_tools.__version__` over stale installed distribution metadata in progress banners and wrappers.
+
 # v0.6.29 - 2026-06-07
 
 ## Added

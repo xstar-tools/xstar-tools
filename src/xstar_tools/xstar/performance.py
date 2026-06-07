@@ -776,7 +776,7 @@ def summarize_rate_payload_batched_orchestration_shadow(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.29", "enabled": False, "shadow_only": True,
+            "schema_version": "0.6.30", "enabled": False, "shadow_only": True,
             "evaluation_count": 0, "status": "DISABLED",
         }
     family_totals: dict[str, float] = {}
@@ -808,11 +808,15 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "integer_field_mismatches": int(row.get("integer_field_mismatches", 0) or 0),
         "float_field_mismatches": int(row.get("float_field_mismatches", 0) or 0),
         "matrix_checkpoint_exact": bool(row.get("matrix_checkpoint_exact", False)),
+        "accepted_duplicate_term_index_count": int(row.get("accepted_duplicate_term_index_count", 0) or 0),
+        "cpp_duplicate_term_index_count": int(row.get("cpp_duplicate_term_index_count", 0) or 0),
+        "replacement_terms_expected": int(row.get("replacement_terms_expected", 0) or 0),
+        "replacement_terms_applied": int(row.get("replacement_terms_applied", 0) or 0),
     } for row in top]
     exact_count = status_counts.get("EXACT", 0)
     tolerance_count = status_counts.get("TOLERANCE_APPROVED", 0)
     return {
-        "schema_version": "0.6.29",
+        "schema_version": "0.6.30",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -831,13 +835,19 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "integer_field_mismatches": int(sum(int(row.get("integer_field_mismatches", 0) or 0) for row in rows)),
         "float_field_mismatches": int(sum(int(row.get("float_field_mismatches", 0) or 0) for row in rows)),
         "float_fields_within_tolerance": int(sum(int(row.get("float_fields_within_tolerance", 0) or 0) for row in rows)),
+        "accepted_duplicate_term_index_count": int(sum(int(row.get("accepted_duplicate_term_index_count", 0) or 0) for row in rows)),
+        "cpp_duplicate_term_index_count": int(sum(int(row.get("cpp_duplicate_term_index_count", 0) or 0) for row in rows)),
+        "accepted_duplicate_replacement_key_count": int(sum(int(row.get("accepted_duplicate_replacement_key_count", 0) or 0) for row in rows)),
+        "cpp_duplicate_replacement_key_count": int(sum(int(row.get("cpp_duplicate_replacement_key_count", 0) or 0) for row in rows)),
+        "replacement_terms_expected": int(sum(int(row.get("replacement_terms_expected", 0) or 0) for row in rows)),
+        "replacement_terms_applied": int(sum(int(row.get("replacement_terms_applied", 0) or 0) for row in rows)),
         "max_abs_diff": max((float(row.get("max_abs_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "max_rel_diff": max((float(row.get("max_rel_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "family_record_counts": family_totals,
         "timing_totals": timing_totals,
         "top_evaluations": top_projection,
         "notes": [
-            "The accepted path owns every live scalar rate and matrix term in v0.6.29.",
+            "The accepted path owns every live scalar rate and matrix term in v0.6.30.",
             "One evaluation-level C++ call reconstructs four matrix/heating rows for selected families from exact accepted scalar channels.",
             "This shadow gate validates the orchestration boundary before moving remaining scalar evaluators into C++.",
         ],
