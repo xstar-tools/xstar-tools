@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.31 - 2026-06-07
+
+- Added a shadow-only native C++ scalar evaluator for Mg rate/data families 3/63 and 42/88.
+- Ported the type-63 same-n l-mixing and n-changing record-order formulas, including heating/cooling energy channels.
+- Ported type-88 photoionization scalar evaluation from raw cross-section pairs and the shared live radiation grid.
+- Kept accepted scalar rates and all live matrix terms unchanged; native results are compared only.
+- Preserved the v0.6.30 composite checkpoint substitution hotfix and exact row-orchestration gate.
+
 ## 0.6.30 - 2026-06-07
 
 - Hotfix the v0.6.29 orchestration-shadow complete-matrix checkpoint replacement to use a stable composite matrix-term identity rather than non-unique `term_index`.

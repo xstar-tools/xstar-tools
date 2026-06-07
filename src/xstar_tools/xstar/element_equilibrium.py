@@ -35,7 +35,7 @@ from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
 from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, eval_mg_element_simple_payloads_batch_shadow_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
-from .cpp_backend_extra import eval_mg_ion_accumulator_cpp, eval_mg_rate_payload_batched_orchestration_shadow_cpp
+from .cpp_backend_extra import eval_mg_ion_accumulator_cpp, eval_mg_rate_payload_batched_orchestration_shadow_cpp, eval_mg_rate_payload_native_scalar_shadow_cpp
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -45,6 +45,7 @@ from .ucalc import (
     UCalcProvenance,
     UCalcStatus,
     default_source_faithful_ucalc,
+    _radiation_arrays,
 )
 
 
@@ -2171,22 +2172,24 @@ def _run_rate_payload_batched_orchestration_shadow(
     control: MutableMapping[str, Any],
     *,
     evaluation_index: int,
+    master: XSTARMasterData,
     basis: ElementCompactBasis,
+    level_tables: Mapping[int, UCalcLevelTable],
+    context: ElementEquilibriumContext,
     record_results: Sequence[Mapping[str, Any]],
     terms: Sequence[MatrixTerm],
     hydrogen_density_cm3: float,
 ) -> None:
     """Run one diagnostic C++ row-orchestration call without touching live terms.
 
-    v0.6.30 keeps accepted Python/C++ scalar-rate ownership
-    unchanged.  It captures the exact accepted ans1..ans6 channels for the four
-    selected families, passes one compact evaluation packet to C++, and asks
-    C++ to reconstruct the four matrix/heating rows per record.  This is the
-    parity gate for a later release that can move the scalar evaluators across
-    the same boundary.
+    v0.6.31 keeps accepted Python/C++ scalar-rate ownership unchanged for the
+    live matrix.  In addition to the exact v0.6.30 row-orchestration shadow, it
+    independently evaluates native C++ scalar channels for rate/data families
+    3:63 and 42:88 and compares them against the accepted scalar results.  No
+    native scalar or reconstructed row can enter the live matrix.
     """
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.30",
+        "schema_version": "0.6.31",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -2195,8 +2198,8 @@ def _run_rate_payload_batched_orchestration_shadow(
         "family_evaluation_modes": {
             "4:50": "accepted_cpp_scalar_product_then_batched_cpp_rows",
             "3:51": "accepted_cpp_scalar_product_then_batched_cpp_rows",
-            "3:63": "accepted_python_scalar_shadow_seed_then_batched_cpp_rows",
-            "42:88": "accepted_python_scalar_shadow_seed_then_batched_cpp_rows",
+            "3:63": "native_cpp_scalar_shadow_plus_accepted_scalar_batched_cpp_rows",
+            "42:88": "native_cpp_scalar_shadow_plus_accepted_scalar_batched_cpp_rows",
         },
         "shared_context_preparation_seconds": 0.0,
         "compact_record_index_build_seconds": 0.0,
@@ -2223,6 +2226,26 @@ def _run_rate_payload_batched_orchestration_shadow(
         "cpp_duplicate_replacement_key_count": 0,
         "replacement_terms_expected": 0,
         "replacement_terms_applied": 0,
+        "native_scalar_enabled": bool(_env_true("XSTAR_ATOMIC_RATE_PAYLOAD_NATIVE_SCALAR_SHADOW")),
+        "native_scalar_status": "DISABLED",
+        "native_scalar_records_expected": 0,
+        "native_scalar_records_compared": 0,
+        "native_scalar_missing_records": 0,
+        "native_scalar_extra_records": 0,
+        "native_scalar_exact_field_mismatches": 0,
+        "native_scalar_fields_within_tolerance": 0,
+        "native_scalar_fields_outside_tolerance": 0,
+        "native_scalar_nonfinite_fields": 0,
+        "native_scalar_max_abs_diff": 0.0,
+        "native_scalar_max_rel_diff": 0.0,
+        "native_scalar_family_record_counts": {"3:63": 0, "42:88": 0},
+        "native_scalar_packet_build_seconds": 0.0,
+        "native_scalar_input_packing_seconds": 0.0,
+        "native_scalar_python_to_cpp_call_seconds": 0.0,
+        "native_scalar_cpp_seconds": 0.0,
+        "native_scalar_output_decoding_seconds": 0.0,
+        "native_scalar_comparison_seconds": 0.0,
+        "native_scalar_call_wall_seconds": 0.0,
         "status": "INITIALIZING",
     }
     rows = control.setdefault("mg_rate_payload_batched_orchestration_shadow_evaluations", [])
@@ -2292,6 +2315,121 @@ def _run_rate_payload_batched_orchestration_shadow(
         if not packet:
             summary["status"] = "NO_SUPPORTED_RECORDS"
             return
+
+        # v0.6.31 native scalar shadow for the two families that still used
+        # accepted Python scalar seeds in v0.6.30.  The live accepted scalar
+        # channels remain untouched and continue to own all matrix terms.
+        if bool(summary["native_scalar_enabled"]):
+            native_t0 = time.perf_counter()
+            native_packet: List[Dict[str, Any]] = []
+            native_skipped: List[Dict[str, Any]] = []
+            native_families = {(3, 63), (42, 88)}
+            for item in packet:
+                family = (int(item["rate_type"]), int(item["data_type"]))
+                if family not in native_families:
+                    continue
+                rec = int(item["record"]); ion_index = int(item["ion_index"])
+                result = result_by_record.get(rec, {})
+                levels = level_tables.get(ion_index)
+                if levels is None:
+                    native_skipped.append({"record": rec, "reason": "missing_level_table"})
+                    continue
+                try:
+                    row: Dict[str, Any] = {
+                        "record": rec, "rate_type": family[0], "data_type": family[1],
+                        "ion_index": ion_index, "ion_stage": int(item["ion_stage"]),
+                        "idest1": int(item["idest1"]), "idest2": int(item["idest2"]),
+                        "temperature_k": float(context.temperature_k),
+                        "electron_density_cm3": float(context.electron_density_cm3),
+                        **{f"accepted_ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+                    }
+                    if family == (3, 63):
+                        ints = np.asarray(master.record_integers(rec), dtype=np.int64).reshape(-1)
+                        if ints.size < 4:
+                            raise ValueError("type63_short_integer_payload")
+                        initial_index = int(ints[-4]); final_index = int(ints[-3]); iq = int(ints[-2])
+                        initial = levels.require(initial_index); final = levels.require(final_index)
+                        if initial.principal_n is None or initial.orbital_l is None or final.principal_n is None or final.orbital_l is None:
+                            raise ValueError("type63_missing_quantum_numbers")
+                        row.update({
+                            "ni": int(initial.principal_n), "li": int(initial.orbital_l),
+                            "nf": int(final.principal_n), "lf": int(final.orbital_l), "iq": iq,
+                            "initial_energy_eV": float(initial.energy_ev),
+                            "final_energy_eV": float(final.energy_ev),
+                            "initial_g": float(initial.statistical_weight),
+                            "final_g": float(final.statistical_weight),
+                            "raw_payload_f64": (),
+                        })
+                    else:
+                        raw = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
+                        threshold = result.get("diag_threshold_eV")
+                        if threshold is None:
+                            bound = levels.require(int(item["idest1"]))
+                            threshold = float(bound.ionization_potential_ev or bound.continuum_energy_ev or 0.0)
+                        row.update({
+                            "threshold_eV": float(threshold or 0.0),
+                            "raw_payload_f64": tuple(float(v) for v in raw),
+                        })
+                    if not all(np.isfinite(float(row[f"accepted_ans{i}"])) for i in range(1, 7)):
+                        raise ValueError("nonfinite_accepted_scalar")
+                    native_packet.append(row)
+                    summary["native_scalar_family_record_counts"][f"{family[0]}:{family[1]}"] += 1
+                except Exception as exc:
+                    native_skipped.append({"record": rec, "reason": str(exc)})
+            summary["native_scalar_packet_build_seconds"] = time.perf_counter() - native_t0
+            summary["native_scalar_records_expected"] = len(native_packet)
+            summary["native_scalar_skipped_records"] = native_skipped[:64]
+            summary["native_scalar_skipped_record_count"] = len(native_skipped)
+            if native_packet:
+                epi_eV, bremsa, _ = _radiation_arrays(context.radiation)
+                native_call_t0 = time.perf_counter()
+                native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+                    native_packet, epi_eV=epi_eV, bremsa=bremsa
+                )
+                summary["native_scalar_call_wall_seconds"] = time.perf_counter() - native_call_t0
+                summary["native_scalar_message"] = str(native_message)
+                summary["native_scalar_cpp_stats"] = dict(native_stats)
+                summary["native_scalar_input_packing_seconds"] = float(native_stats.get("packing_seconds", 0.0))
+                summary["native_scalar_python_to_cpp_call_seconds"] = float(native_stats.get("python_to_cpp_call_seconds", 0.0))
+                summary["native_scalar_cpp_seconds"] = float(native_stats.get("cpp_native_scalar_seconds", 0.0))
+                summary["native_scalar_output_decoding_seconds"] = float(native_stats.get("output_decoding_seconds", 0.0))
+                native_cmp_t0 = time.perf_counter()
+                expected_map = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in native_packet}
+                actual_map = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in native_rows}
+                missing_native = sorted(set(expected_map) - set(actual_map)); extra_native = sorted(set(actual_map) - set(expected_map))
+                summary["native_scalar_missing_records"] = len(missing_native)
+                summary["native_scalar_extra_records"] = len(extra_native)
+                summary["native_scalar_records_compared"] = len(set(expected_map) & set(actual_map))
+                nrtol = float(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_NATIVE_SCALAR_RTOL", "1e-12"))
+                natol = float(os.environ.get("XSTAR_ATOMIC_RATE_PAYLOAD_NATIVE_SCALAR_ATOL", "0"))
+                summary["native_scalar_rtol"] = nrtol; summary["native_scalar_atol"] = natol
+                native_worst: Dict[str, Any] = {}
+                for key in sorted(set(expected_map) & set(actual_map)):
+                    left, right = expected_map[key], actual_map[key]
+                    for i in range(1, 7):
+                        a = float(left[f"accepted_ans{i}"]); b = float(right[f"ans{i}"])
+                        if not (np.isfinite(a) and np.isfinite(b)):
+                            summary["native_scalar_nonfinite_fields"] += 1
+                            if not native_worst: native_worst = {"key": list(key), "field": f"ans{i}", "accepted": a, "cpp": b}
+                            continue
+                        diff = abs(b-a); rel = diff/max(abs(a), 1.0e-300)
+                        summary["native_scalar_max_abs_diff"] = max(float(summary["native_scalar_max_abs_diff"]), diff)
+                        summary["native_scalar_max_rel_diff"] = max(float(summary["native_scalar_max_rel_diff"]), rel)
+                        if diff != 0.0:
+                            summary["native_scalar_exact_field_mismatches"] += 1
+                            if diff <= natol or rel <= nrtol:
+                                summary["native_scalar_fields_within_tolerance"] += 1
+                            else:
+                                summary["native_scalar_fields_outside_tolerance"] += 1
+                                if not native_worst:
+                                    native_worst = {"key": list(key), "field": f"ans{i}", "accepted": a, "cpp": b, "abs_diff": diff, "rel_diff": rel}
+                summary["native_scalar_worst_mismatch"] = native_worst
+                summary["native_scalar_comparison_seconds"] = time.perf_counter() - native_cmp_t0
+                native_exact = (not missing_native and not extra_native and summary["native_scalar_nonfinite_fields"] == 0 and summary["native_scalar_exact_field_mismatches"] == 0)
+                native_tolerant = (not missing_native and not extra_native and summary["native_scalar_nonfinite_fields"] == 0 and summary["native_scalar_fields_outside_tolerance"] == 0)
+                summary["native_scalar_status"] = "EXACT" if native_exact else "TOLERANCE_APPROVED" if native_tolerant else "MISMATCH"
+            else:
+                summary["native_scalar_status"] = "NO_NATIVE_RECORDS"
 
         call_t0 = time.perf_counter()
         cpp_rows, message, stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(packet)
@@ -5599,7 +5737,10 @@ def assemble_element_matrix(
         _run_rate_payload_batched_orchestration_shadow(
             profile_control,
             evaluation_index=int(_rate_payload_batched_shadow_eval_index),
+            master=master,
             basis=basis,
+            level_tables=level_tables,
+            context=context,
             record_results=record_results,
             terms=terms,
             hydrogen_density_cm3=float(context.hydrogen_density_cm3),

@@ -186,6 +186,17 @@ def _load_library(kind: str) -> ctypes.CDLL | None:
                     lib.xstar_engine_eval_mg_rate_payload_shadow_v1.restype = ctypes.c_int
                 except AttributeError:
                     pass
+                try:
+                    f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
+                    lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1.argtypes = [
+                        ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
+                        f64p, ctypes.c_int, f64p, f64p, ctypes.c_int,
+                        f64p, ctypes.c_int, f64p, ctypes.c_int, i64p, ctypes.c_int,
+                        ctypes.c_char_p, ctypes.c_size_t,
+                    ]
+                    lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1.restype = ctypes.c_int
+                except AttributeError:
+                    pass
             _LIBS[kind] = lib
             _PATHS[kind] = str(path)
             _ERRORS[kind] = None
@@ -421,5 +432,111 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
         "input_bytes": float(meta_flat.nbytes + rates_flat.nbytes),
         "output_bytes": float(emitted * (16*8 + 4*8)),
         "allocation_count": 5.0,
+    })
+    return rows, message, stats
+
+
+
+def eval_mg_rate_payload_native_scalar_shadow_cpp(
+    records: list[dict[str, Any]],
+    *,
+    epi_eV: Any,
+    bremsa: Any,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Evaluate native C++ scalar channels for Mg 3:63 and 42:88 records.
+
+    The call is diagnostic only.  For 3:63 C++ receives quantum numbers,
+    endpoint level context, temperature, and electron density.  For 42:88 it
+    receives raw alternating energy/cross-section pairs and one shared live
+    radiation grid.  No returned scalar can enter a live matrix in v0.6.31.
+    """
+    lib = _load_library("engine")
+    symbol = "xstar_engine_eval_mg_rate_payload_native_scalars_v1"
+    if lib is None or not hasattr(lib, symbol):
+        raise RuntimeError("C++ native scalar shadow is unavailable" + (f": {cpp_import_error('engine')}" if cpp_import_error('engine') else ""))
+    _time = __import__("time")
+    packing_t0 = _time.perf_counter()
+    n = len(records)
+    meta = np.zeros((n, 14), dtype=np.int64)
+    context = np.zeros((n, 13), dtype=np.float64)
+    payload: list[float] = []
+    for k, row in enumerate(records):
+        raw = [float(v) for v in row.get("raw_payload_f64", ())]
+        offset = len(payload)
+        payload.extend(raw)
+        meta[k] = [
+            int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
+            int(row.get("ion_index", 0)), int(row.get("ion_stage", 0)),
+            int(row.get("idest1", 0)), int(row.get("idest2", 0)),
+            int(row.get("ni", 0)), int(row.get("li", 0)),
+            int(row.get("nf", 0)), int(row.get("lf", 0)), int(row.get("iq", 0)),
+            int(offset), int(len(raw)),
+        ]
+        context[k] = [
+            *[float(row.get(f"accepted_ans{i}", 0.0)) for i in range(1, 7)],
+            float(row.get("temperature_k", 0.0)),
+            float(row.get("electron_density_cm3", 0.0)),
+            float(row.get("initial_energy_eV", 0.0)),
+            float(row.get("final_energy_eV", 0.0)),
+            float(row.get("initial_g", 0.0)),
+            float(row.get("final_g", 0.0)),
+            float(row.get("threshold_eV", 0.0)),
+        ]
+    meta_flat = np.ascontiguousarray(meta.reshape(-1))
+    context_flat = np.ascontiguousarray(context.reshape(-1))
+    payload_flat = np.ascontiguousarray(np.asarray(payload, dtype=np.float64).reshape(-1))
+    epi = np.ascontiguousarray(np.asarray(epi_eV, dtype=np.float64).reshape(-1))
+    brem = np.ascontiguousarray(np.asarray(bremsa, dtype=np.float64).reshape(-1))
+    if epi.size < 3 or brem.size < epi.size:
+        raise ValueError("native scalar shadow requires a valid live radiation grid")
+    brem = np.ascontiguousarray(brem[: epi.size])
+    out = np.zeros(max(1, n * 6), dtype=np.float64)
+    timing = np.zeros(3, dtype=np.float64)
+    stats_i64 = np.zeros(16, dtype=np.int64)
+    buf = ctypes.create_string_buffer(512)
+    packing_seconds = _time.perf_counter() - packing_t0
+    t0 = _time.perf_counter()
+    rc = lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1(
+        n, meta_flat, 14, context_flat, 13,
+        payload_flat, int(payload_flat.size), epi, brem, int(epi.size),
+        out, 6, timing, int(timing.size), stats_i64, int(stats_i64.size),
+        buf, ctypes.sizeof(buf),
+    )
+    elapsed = _time.perf_counter() - t0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"{symbol} failed with code {rc}")
+    values = out[: n * 6].reshape((n, 6)) if n else np.zeros((0, 6), dtype=np.float64)
+    decode_t0 = _time.perf_counter()
+    rows: list[dict[str, Any]] = []
+    for k, source in enumerate(records):
+        rows.append({
+            "record": int(source["record"]),
+            "rate_type": int(source["rate_type"]),
+            "data_type": int(source["data_type"]),
+            "ion_index": int(source.get("ion_index", 0)),
+            "ion_stage": int(source.get("ion_stage", 0)),
+            **{f"ans{i}": float(values[k, i - 1]) for i in range(1, 7)},
+        })
+    decode_seconds = _time.perf_counter() - decode_t0
+    names = (
+        "records_seen", "records_evaluated", "scalar_fields_emitted", "reserved3",
+        "unsupported_records", "invalid_records", "reserved6", "valid",
+        "family_3_63", "family_42_88",
+    )
+    stats = {name: float(stats_i64[i]) for i, name in enumerate(names)}
+    stats.update({
+        "cpp_calls": 1.0 if n else 0.0,
+        "cpp_wall_seconds": float(elapsed),
+        "cpp_native_scalar_seconds": float(timing[0]),
+        "cpp_internal_total_seconds": float(timing[2]),
+        "packing_seconds": float(packing_seconds),
+        "python_to_cpp_call_seconds": max(0.0, float(elapsed) - float(timing[2])),
+        "output_decoding_seconds": float(decode_seconds),
+        "input_bytes": float(meta_flat.nbytes + context_flat.nbytes + payload_flat.nbytes + epi.nbytes + brem.nbytes),
+        "output_bytes": float(n * 6 * 8),
+        "payload_values": float(payload_flat.size),
+        "radiation_grid_points": float(epi.size),
+        "allocation_count": 7.0,
     })
     return rows, message, stats

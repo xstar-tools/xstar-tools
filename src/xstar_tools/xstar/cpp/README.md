@@ -148,3 +148,12 @@ C++ shared libraries remain buildable in the flat cpp directory, but the benchma
 
 `libxstar_engine.so` exports `xstar_engine_eval_mg_rate_payload_shadow_v1`, an evaluation-level diagnostic ABI for compact Mg rate-payload records. It supports rate/data families 4/50, 3/51, 3/63, and 42/88, returns four compact matrix/heating terms per valid record, and is never product-active in v0.6.29. The accepted path supplies exact scalar channels and remains the sole live owner.
 
+
+## v0.6.31 native scalar-rate shadow
+
+`libxstar_engine.so` ABI version 4 adds
+`xstar_engine_eval_mg_rate_payload_native_scalars_v1`. The diagnostic call
+computes native scalar channels for Mg rate/data 3/63 and 42/88 from compact
+quantum/plasma context, raw type-88 cross-section pairs, and one shared live
+radiation grid. It remains shadow-only: accepted scalar rates and matrix terms
+are the sole live source.

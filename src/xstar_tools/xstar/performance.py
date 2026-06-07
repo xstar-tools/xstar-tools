@@ -776,56 +776,90 @@ def summarize_rate_payload_batched_orchestration_shadow(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.30", "enabled": False, "shadow_only": True,
-            "evaluation_count": 0, "status": "DISABLED",
+            "schema_version": "0.6.31", "enabled": False, "shadow_only": True,
+            "evaluation_count": 0, "status": "DISABLED", "native_scalar_status": "DISABLED",
         }
     family_totals: dict[str, float] = {}
+    native_family_totals: dict[str, float] = {}
     timing_keys = (
         "shared_context_preparation_seconds", "compact_record_index_build_seconds",
         "input_packing_seconds", "python_to_cpp_call_seconds", "cpp_rate_evaluation_seconds",
         "cpp_matrix_term_construction_seconds", "output_decoding_seconds",
         "exact_row_comparison_seconds", "call_wall_seconds",
+        "native_scalar_packet_build_seconds", "native_scalar_input_packing_seconds",
+        "native_scalar_python_to_cpp_call_seconds", "native_scalar_cpp_seconds",
+        "native_scalar_output_decoding_seconds", "native_scalar_comparison_seconds",
+        "native_scalar_call_wall_seconds",
     )
     timing_totals = {key: 0.0 for key in timing_keys}
     status_counts: dict[str, int] = {}
+    native_status_counts: dict[str, int] = {}
     for row in rows:
         status = str(row.get("status", "UNKNOWN"))
+        native_status = str(row.get("native_scalar_status", "DISABLED"))
         status_counts[status] = status_counts.get(status, 0) + 1
+        native_status_counts[native_status] = native_status_counts.get(native_status, 0) + 1
         for key in timing_keys:
             timing_totals[key] += float(row.get(key, 0.0) or 0.0)
         for key, value in dict(row.get("family_record_counts", {})).items():
             family_totals[str(key)] = family_totals.get(str(key), 0.0) + float(value or 0.0)
-    top = sorted(rows, key=lambda row: float(row.get("call_wall_seconds", 0.0) or 0.0) + float(row.get("exact_row_comparison_seconds", 0.0) or 0.0), reverse=True)[:max(1, int(top_n))]
+        for key, value in dict(row.get("native_scalar_family_record_counts", {})).items():
+            native_family_totals[str(key)] = native_family_totals.get(str(key), 0.0) + float(value or 0.0)
+    top = sorted(
+        rows,
+        key=lambda row: (
+            float(row.get("call_wall_seconds", 0.0) or 0.0)
+            + float(row.get("exact_row_comparison_seconds", 0.0) or 0.0)
+            + float(row.get("native_scalar_call_wall_seconds", 0.0) or 0.0)
+            + float(row.get("native_scalar_comparison_seconds", 0.0) or 0.0)
+        ),
+        reverse=True,
+    )[:max(1, int(top_n))]
     top_projection = [{
         "evaluation_index": int(row.get("evaluation_index", 0) or 0),
         "status": str(row.get("status", "UNKNOWN")),
+        "native_scalar_status": str(row.get("native_scalar_status", "DISABLED")),
         "records_expected": int(row.get("records_expected", 0) or 0),
         "terms_expected": int(row.get("terms_expected", 0) or 0),
+        "native_scalar_records_expected": int(row.get("native_scalar_records_expected", 0) or 0),
+        "native_scalar_records_compared": int(row.get("native_scalar_records_compared", 0) or 0),
         "call_wall_seconds": float(row.get("call_wall_seconds", 0.0) or 0.0),
         "exact_row_comparison_seconds": float(row.get("exact_row_comparison_seconds", 0.0) or 0.0),
-        "missing_terms": int(row.get("missing_terms", 0) or 0),
-        "extra_terms": int(row.get("extra_terms", 0) or 0),
-        "integer_field_mismatches": int(row.get("integer_field_mismatches", 0) or 0),
-        "float_field_mismatches": int(row.get("float_field_mismatches", 0) or 0),
+        "native_scalar_call_wall_seconds": float(row.get("native_scalar_call_wall_seconds", 0.0) or 0.0),
+        "native_scalar_comparison_seconds": float(row.get("native_scalar_comparison_seconds", 0.0) or 0.0),
         "matrix_checkpoint_exact": bool(row.get("matrix_checkpoint_exact", False)),
-        "accepted_duplicate_term_index_count": int(row.get("accepted_duplicate_term_index_count", 0) or 0),
-        "cpp_duplicate_term_index_count": int(row.get("cpp_duplicate_term_index_count", 0) or 0),
-        "replacement_terms_expected": int(row.get("replacement_terms_expected", 0) or 0),
-        "replacement_terms_applied": int(row.get("replacement_terms_applied", 0) or 0),
+        "native_scalar_max_abs_diff": float(row.get("native_scalar_max_abs_diff", 0.0) or 0.0),
+        "native_scalar_max_rel_diff": float(row.get("native_scalar_max_rel_diff", 0.0) or 0.0),
     } for row in top]
     exact_count = status_counts.get("EXACT", 0)
     tolerance_count = status_counts.get("TOLERANCE_APPROVED", 0)
+    native_exact_count = native_status_counts.get("EXACT", 0)
+    native_tolerance_count = native_status_counts.get("TOLERANCE_APPROVED", 0)
+    row_ready = exact_count + tolerance_count == len(rows)
+    native_ready = native_exact_count + native_tolerance_count == len(rows)
+    combined_status = (
+        "NATIVE_SCALARS_EXACT"
+        if exact_count == len(rows) and native_exact_count == len(rows)
+        else "NATIVE_SCALARS_TOLERANCE_APPROVED"
+        if row_ready and native_ready
+        else "NOT_READY"
+    )
     return {
-        "schema_version": "0.6.30",
+        "schema_version": "0.6.31",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
         "evaluation_count": len(rows),
-        "status": "EXACT" if exact_count == len(rows) else "TOLERANCE_APPROVED" if exact_count + tolerance_count == len(rows) else "NOT_READY",
+        "status": combined_status,
+        "row_shadow_status": "EXACT" if exact_count == len(rows) else "TOLERANCE_APPROVED" if row_ready else "NOT_READY",
+        "native_scalar_status": "EXACT" if native_exact_count == len(rows) else "TOLERANCE_APPROVED" if native_ready else "NOT_READY",
         "status_counts": status_counts,
+        "native_scalar_status_counts": native_status_counts,
         "all_evaluations_exact": bool(exact_count == len(rows)),
-        "all_evaluations_tolerance_approved": bool(exact_count + tolerance_count == len(rows)),
+        "all_evaluations_tolerance_approved": bool(row_ready),
         "all_matrix_checkpoints_exact": bool(all(bool(row.get("matrix_checkpoint_exact", False)) for row in rows)),
+        "all_native_scalars_exact": bool(native_exact_count == len(rows)),
+        "all_native_scalars_tolerance_approved": bool(native_ready),
         "records_expected": int(sum(int(row.get("records_expected", 0) or 0) for row in rows)),
         "records_compared": int(sum(int(row.get("records_compared", 0) or 0) for row in rows)),
         "terms_expected": int(sum(int(row.get("terms_expected", 0) or 0) for row in rows)),
@@ -843,16 +877,27 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "replacement_terms_applied": int(sum(int(row.get("replacement_terms_applied", 0) or 0) for row in rows)),
         "max_abs_diff": max((float(row.get("max_abs_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "max_rel_diff": max((float(row.get("max_rel_diff", 0.0) or 0.0) for row in rows), default=0.0),
+        "native_scalar_records_expected": int(sum(int(row.get("native_scalar_records_expected", 0) or 0) for row in rows)),
+        "native_scalar_records_compared": int(sum(int(row.get("native_scalar_records_compared", 0) or 0) for row in rows)),
+        "native_scalar_missing_records": int(sum(int(row.get("native_scalar_missing_records", 0) or 0) for row in rows)),
+        "native_scalar_extra_records": int(sum(int(row.get("native_scalar_extra_records", 0) or 0) for row in rows)),
+        "native_scalar_exact_field_mismatches": int(sum(int(row.get("native_scalar_exact_field_mismatches", 0) or 0) for row in rows)),
+        "native_scalar_fields_within_tolerance": int(sum(int(row.get("native_scalar_fields_within_tolerance", 0) or 0) for row in rows)),
+        "native_scalar_fields_outside_tolerance": int(sum(int(row.get("native_scalar_fields_outside_tolerance", 0) or 0) for row in rows)),
+        "native_scalar_nonfinite_fields": int(sum(int(row.get("native_scalar_nonfinite_fields", 0) or 0) for row in rows)),
+        "native_scalar_max_abs_diff": max((float(row.get("native_scalar_max_abs_diff", 0.0) or 0.0) for row in rows), default=0.0),
+        "native_scalar_max_rel_diff": max((float(row.get("native_scalar_max_rel_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "family_record_counts": family_totals,
+        "native_scalar_family_record_counts": native_family_totals,
         "timing_totals": timing_totals,
         "top_evaluations": top_projection,
         "notes": [
-            "The accepted path owns every live scalar rate and matrix term in v0.6.30.",
-            "One evaluation-level C++ call reconstructs four matrix/heating rows for selected families from exact accepted scalar channels.",
-            "This shadow gate validates the orchestration boundary before moving remaining scalar evaluators into C++.",
+            "The accepted path owns every live scalar rate and matrix term in v0.6.31.",
+            "The v0.6.30 exact row/checkpoint orchestration shadow remains active for all four selected families.",
+            "Native C++ scalar formulas are independently evaluated for 3:63 and 42:88 and compared against accepted ans1..ans6 channels.",
+            "No native scalar or reconstructed row can enter a live matrix in this release.",
         ],
     }
-
 
 def summarize_runtime_phase_map(
     control: MutableMapping[str, Any],
