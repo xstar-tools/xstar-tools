@@ -1045,7 +1045,7 @@ def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
     """Evaluate supported Mg ions in one cached C++ call.
 
     The caller decides whether the validated result is shadow-only or a guarded
-    product candidate. Immutable arrays are cached once per process; per
+    promoted product path. Immutable arrays are cached once per process; per
     evaluation only compact active-ion metadata is packed.
     """
     lib = _load_cpp_library()

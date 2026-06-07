@@ -1784,16 +1784,23 @@ def assemble_element_matrix(
             max_ion_stage=context.max_ion_stage,
         )
         rnise_lte, level_tables = levwkelement(master, derived, basis, context)
-    # v0.6.25 cached one-call-per-element Mg simple-payload product candidate.
-    # Only this batch is newly product-active.  It is validated before any row
-    # can enter live matrix construction and falls back to the accepted per-ion
-    # implementation on any cache, C++, count, integer-field, or finiteness error.
+    # v0.6.26 promoted cached one-call-per-element Mg simple-payload product.
+    # Only this batch is newly promoted. It is validated before any row can enter
+    # live matrix construction and falls back to the accepted per-ion implementation
+    # on any cache, C++, count, integer-field, or finiteness error.
     _mg_simple_payload_eval_index = 0
     _mg_simple_payload_batch_rows_by_ion: Dict[int, List[Dict[str, Any]]] = {}
+    _mg_simple_payload_batch_product_promoted = bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_ACCEPTED")
+    )
     _mg_simple_payload_batch_product_requested = bool(
         int(element_z) == 12
         and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_CPP")
-        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_CANDIDATE")
+        and (
+            _mg_simple_payload_batch_product_promoted
+            or _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_CANDIDATE")
+        )
         and _env_true("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP")
     )
     _mg_simple_payload_batch_verify_old = bool(
@@ -1819,6 +1826,7 @@ def assemble_element_matrix(
         _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {
             "enabled": True,
             "product_requested": bool(_mg_simple_payload_batch_product_requested),
+            "product_promoted": bool(_mg_simple_payload_batch_product_promoted),
             "product_active": False,
             "verification_enabled": bool(_mg_simple_payload_batch_verify_old),
             "scope": "one_cpp_call_per_element_assembly",
@@ -1840,6 +1848,7 @@ def assemble_element_matrix(
             "all_rows_roundoff_equivalent": True,
         })
         _batch_summary["product_requested"] = bool(_mg_simple_payload_batch_product_requested)
+        _batch_summary["product_promoted"] = bool(_mg_simple_payload_batch_product_promoted)
         _batch_summary["verification_enabled"] = bool(_mg_simple_payload_batch_verify_old)
         _batch_summary["evaluations_attempted"] = float(_batch_summary.get("evaluations_attempted", 0.0)) + 1.0
         try:
@@ -1902,7 +1911,7 @@ def assemble_element_matrix(
                     matrix_dimension=int(basis.n_rows), batch_ion_count=_profile_batch_ion_count,
                     emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                     source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
-                    status=("product_candidate" if _mg_simple_payload_batch_product_active else "shadow_only"),
+                    status=("product_promoted" if _mg_simple_payload_batch_product_promoted and _mg_simple_payload_batch_product_active else "product_candidate" if _mg_simple_payload_batch_product_active else "shadow_only"),
                     product_active=bool(_mg_simple_payload_batch_product_active), **_batch_profile_stats,
                 )
             _batch_summary["evaluations_completed"] = float(_batch_summary.get("evaluations_completed", 0.0)) + 1.0
@@ -5433,11 +5442,12 @@ def solve_element_statistical_equilibrium(
                 dispatcher=dispatcher,
             )
         _matrix_assembly_seconds = time.perf_counter() - _matrix_assembly_t0
-        _record_mg_simple_payload_checkpoint(
-            profile_control,
-            evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
-            assembly=assembly,
-        )
+        if _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS"):
+            _record_mg_simple_payload_checkpoint(
+                profile_control,
+                evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
+                assembly=assembly,
+            )
         record_profile_event(
             profile_control,
             "calc_hmc_all.element_solver.matrix_assembly_after_type53_cpp",
@@ -5474,12 +5484,13 @@ def solve_element_statistical_equilibrium(
                     source_routine="msolvelucy/leqt2f",
                 ):
                     solve = msolvelucy(assembly, context)
-                _record_mg_simple_payload_checkpoint(
-                    profile_control,
-                    evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
-                    assembly=assembly,
-                    solve=solve,
-                )
+                if _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS"):
+                    _record_mg_simple_payload_checkpoint(
+                        profile_control,
+                        evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
+                        assembly=assembly,
+                        solve=solve,
+                    )
             else:
                 solve = msolvelucy(assembly, context)
     ready = bool(

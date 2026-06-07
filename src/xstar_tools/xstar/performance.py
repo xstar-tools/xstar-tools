@@ -439,6 +439,7 @@ def _summarize_simple_payload_batching_probe(
     product_active = bool(shadow.get("product_active", False))
     product_requested = bool(shadow.get("product_requested", False))
     verification_enabled = bool(shadow.get("verification_enabled", False))
+    product_promoted = bool(shadow.get("product_promoted", False))
     failed = float(shadow.get("evaluations_failed", 0.0) or 0.0)
     fallback = float(shadow.get("fallback_evaluations", 0.0) or 0.0)
     missing = float(shadow.get("missing_rows", 0.0) or 0.0)
@@ -449,6 +450,12 @@ def _summarize_simple_payload_batching_probe(
     comparison_exact = exact and missing == 0.0 and extra == 0.0 and integer_mismatches == 0.0 and float_mismatches == 0.0
     if product_requested and fallback != 0.0:
         parity_status = "PRODUCT_FALLBACK"
+    elif product_active and product_promoted and verification_enabled and comparison_exact:
+        parity_status = "PRODUCT_PROMOTED_VERIFIED_EXACT"
+    elif product_active and product_promoted and verification_enabled:
+        parity_status = "PRODUCT_PROMOTED_VERIFICATION_FAILED"
+    elif product_active and product_promoted:
+        parity_status = "PRODUCT_PROMOTED"
     elif product_active and verification_enabled and comparison_exact:
         parity_status = "PRODUCT_VERIFIED_EXACT"
     elif product_active and verification_enabled:
@@ -467,6 +474,7 @@ def _summarize_simple_payload_batching_probe(
         "observational_only": not product_active,
         "product_active": product_active,
         "product_requested": product_requested,
+        "product_promoted": product_promoted,
         "verification_enabled": verification_enabled,
         "rows": len(selected),
         "call_rows": len(call_rows),
@@ -498,10 +506,10 @@ def _summarize_simple_payload_batching_probe(
         "batch_shadow_samples": samples[:max(1, top_n)],
         "product_checkpoints": list(control.get("mg_simple_payload_product_checkpoints", []) or []),
         "notes": [
-            "v0.6.25 product-activates only the validated cached one-call-per-element Mg simple-payload batch.",
+            "v0.6.26 promotes the validated cached one-call-per-element Mg simple-payload batch.",
             "Any batch validation error falls back immediately to the accepted per-ion C++ implementation before live matrix consumption.",
             "Optional verification runs the old per-ion implementation in shadow and compares exact payload rows.",
-            "Pre-solver matrix, solved-population, and heating/cooling checkpoints are retained for accepted-baseline comparison.",
+            "Heavy matrix/population/heating checkpoints are opt-in via XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS.",
         ],
     }
 

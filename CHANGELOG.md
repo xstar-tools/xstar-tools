@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# v0.6.26 - 2026-06-07
+
+- Promotes the verified cached one-call-per-element Mg simple-payload batch as an accepted opt-in product path.
+- Preserves immediate fallback to the accepted per-ion path on cache, C++, count, identity, overflow, or non-finite validation failures.
+- Keeps old-per-ion reverse verification available as an opt-in diagnostic.
+- Makes expensive matrix/population/heating checkpoint hashing opt-in so the normal promoted wrapper does not carry diagnostic overhead.
+- Keeps the broad emissivity backend in Python and preserves all previously accepted solver, rates, matrix, final-binemis, and upstream Mg type-4/type-50 paths.
+
 # v0.6.25 - 2026-06-07
 
 - Product candidate for the cached Mg simple-payload batch path only.

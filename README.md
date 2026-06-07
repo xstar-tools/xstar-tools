@@ -1,3 +1,7 @@
+## v0.6.26 matrix simple-payload batched product promoted
+
+v0.6.26 promotes the verified cached Mg one-call-per-element simple-payload batch. The normal product wrapper keeps reverse verification and heavy checkpoint hashing disabled, while guarded fallback and dedicated diagnostic wrappers remain available. See `V0626_MATRIX_SIMPLE_PAYLOAD_BATCHED_PRODUCT_PROMOTED.md`.
+
 ## v0.6.24 matrix simple-payload batch shadow cache
 
 v0.6.24 keeps all accepted science paths unchanged and optimizes only the optional Mg simple-payload batch shadow. Immutable atomic arrays are cached once per process, zero-output ions are omitted from the batch, and output buffers are sized to exact expected rows. See `V0624_MATRIX_SIMPLE_PAYLOAD_BATCH_SHADOW_HOTFIX_AND_INPUT_CACHE.md`.
