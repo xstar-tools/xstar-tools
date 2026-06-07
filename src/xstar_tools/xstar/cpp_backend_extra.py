@@ -448,7 +448,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     The call is diagnostic only.  For 3:63 C++ receives quantum numbers,
     endpoint level context, temperature, and electron density.  For 42:88 it
     receives raw alternating energy/cross-section pairs and one shared live
-    radiation grid.  No returned scalar can enter a live matrix in v0.6.31.
+    radiation grid.  No returned scalar can enter a live matrix in v0.6.32. Type-88 callers must supply the full high-resolution radiation grid.
     """
     lib = _load_library("engine")
     symbol = "xstar_engine_eval_mg_rate_payload_native_scalars_v1"
@@ -458,7 +458,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     packing_t0 = _time.perf_counter()
     n = len(records)
     meta = np.zeros((n, 14), dtype=np.int64)
-    context = np.zeros((n, 13), dtype=np.float64)
+    context = np.zeros((n, 14), dtype=np.float64)
     payload: list[float] = []
     for k, row in enumerate(records):
         raw = [float(v) for v in row.get("raw_payload_f64", ())]
@@ -481,6 +481,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
             float(row.get("initial_g", 0.0)),
             float(row.get("final_g", 0.0)),
             float(row.get("threshold_eV", 0.0)),
+            float(row.get("type88_phextrap_grid_points", 0.0)),
         ]
     meta_flat = np.ascontiguousarray(meta.reshape(-1))
     context_flat = np.ascontiguousarray(context.reshape(-1))
@@ -497,7 +498,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     packing_seconds = _time.perf_counter() - packing_t0
     t0 = _time.perf_counter()
     rc = lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1(
-        n, meta_flat, 14, context_flat, 13,
+        n, meta_flat, 14, context_flat, 14,
         payload_flat, int(payload_flat.size), epi, brem, int(epi.size),
         out, 6, timing, int(timing.size), stats_i64, int(stats_i64.size),
         buf, ctypes.sizeof(buf),

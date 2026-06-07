@@ -776,7 +776,7 @@ def summarize_rate_payload_batched_orchestration_shadow(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.31", "enabled": False, "shadow_only": True,
+            "schema_version": "0.6.32", "enabled": False, "shadow_only": True,
             "evaluation_count": 0, "status": "DISABLED", "native_scalar_status": "DISABLED",
         }
     family_totals: dict[str, float] = {}
@@ -794,11 +794,14 @@ def summarize_rate_payload_batched_orchestration_shadow(
     timing_totals = {key: 0.0 for key in timing_keys}
     status_counts: dict[str, int] = {}
     native_status_counts: dict[str, int] = {}
+    type88_grid_source_counts: dict[str, int] = {}
     for row in rows:
         status = str(row.get("status", "UNKNOWN"))
         native_status = str(row.get("native_scalar_status", "DISABLED"))
         status_counts[status] = status_counts.get(status, 0) + 1
         native_status_counts[native_status] = native_status_counts.get(native_status, 0) + 1
+        grid_source = str(row.get("native_scalar_type88_grid_source", "missing"))
+        type88_grid_source_counts[grid_source] = type88_grid_source_counts.get(grid_source, 0) + 1
         for key in timing_keys:
             timing_totals[key] += float(row.get(key, 0.0) or 0.0)
         for key, value in dict(row.get("family_record_counts", {})).items():
@@ -845,7 +848,7 @@ def summarize_rate_payload_batched_orchestration_shadow(
         else "NOT_READY"
     )
     return {
-        "schema_version": "0.6.31",
+        "schema_version": "0.6.32",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -889,12 +892,32 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "native_scalar_max_rel_diff": max((float(row.get("native_scalar_max_rel_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "family_record_counts": family_totals,
         "native_scalar_family_record_counts": native_family_totals,
+        "native_scalar_type88_full_grid_required": True,
+        "native_scalar_type88_grid_source_counts": type88_grid_source_counts,
+        "native_scalar_type88_full_grid_evaluations": int(sum(
+            1 for row in rows if str(row.get("native_scalar_type88_grid_source", "")) == "full_epi_bremsa"
+        )),
+        "native_scalar_type88_reduced_grid_fallbacks": int(sum(
+            int(row.get("native_scalar_type88_reduced_grid_fallbacks", 0) or 0) for row in rows
+        )),
+        "native_scalar_type88_grid_validation_failures": int(sum(
+            int(row.get("native_scalar_type88_grid_validation_failures", 0) or 0) for row in rows
+        )),
+        "native_scalar_type88_min_full_grid_points": min((
+            int(row.get("native_scalar_type88_full_grid_points", 0) or 0)
+            for row in rows if int(row.get("native_scalar_family_record_counts", {}).get("42:88", 0) or 0) > 0
+        ), default=0),
+        "native_scalar_type88_max_full_grid_points": max((
+            int(row.get("native_scalar_type88_full_grid_points", 0) or 0)
+            for row in rows if int(row.get("native_scalar_family_record_counts", {}).get("42:88", 0) or 0) > 0
+        ), default=0),
         "timing_totals": timing_totals,
         "top_evaluations": top_projection,
         "notes": [
-            "The accepted path owns every live scalar rate and matrix term in v0.6.31.",
+            "The accepted path owns every live scalar rate and matrix term in v0.6.32.",
             "The v0.6.30 exact row/checkpoint orchestration shadow remains active for all four selected families.",
             "Native C++ scalar formulas are independently evaluated for 3:63 and 42:88 and compared against accepted ans1..ans6 channels.",
+            "Type-88 qualification requires the full high-resolution epi_eV/bremsa grid; reduced-grid fallback is prohibited and reported as NOT_READY.",
             "No native scalar or reconstructed row can enter a live matrix in this release.",
         ],
     }

@@ -447,14 +447,14 @@ int native_lower_bracket(double energy,const double* grid,int n) {
     return grid[hi]<=energy?hi:lo;
 }
 
-double native_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid) {
+double native_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid,int phextrap_limit) {
     const int n0=raw_count/2;
-    if (n0<=0||threshold<=0.0||n_grid<3) return 0.0;
+    if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
     std::vector<double> e,s;e.reserve(n_grid);s.reserve(n_grid);
     for (int j=0;j<n0;++j) {e.push_back(raw[2*j]);s.push_back(std::max(0.0,raw[2*j+1]*1.0e-18));}
     int base=std::max(static_cast<int>(e.size())-2,0);
     double e1=e[base]*13.6+threshold,s1=s[base];
-    while (s1>1.0e-27&&static_cast<int>(e.size())<n_grid&&e1<2.0e5) {
+    while (s1>1.0e-27&&static_cast<int>(e.size())<phextrap_limit&&e1<2.0e5) {
         const double e2=e1*1.3,s2=s1/(1.3*1.3*1.3);
         e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
     }
@@ -499,11 +499,11 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 4;
+    return 5;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_rate_payload_native_scalar_shadow_v031";
+    return "xstar_engine_mg_rate_payload_native_scalar_type88_full_grid_hotfix_v032";
 }
 
 int xstar_engine_feature_flags() {
@@ -511,7 +511,7 @@ int xstar_engine_feature_flags() {
     // bit 1: coarse record traversal/classification implemented.
     // bit 2: compact packet counters implemented.
     // bit 3: evaluation-level Mg rate-payload orchestration shadow.
-    return 1 | 2 | 4 | 8 | 16;
+    return 1 | 2 | 4 | 8 | 16 | 32;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -520,7 +520,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.31 Mg-ion accumulator, row orchestration, and native scalar shadow ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.32 Mg-ion accumulator, row orchestration, and native scalar shadow ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
@@ -697,7 +697,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
     std::size_t message_size
 ) {
     using namespace xstar_backend;
-    if (!valid_count(n_records) || meta_stride < 14 || context_stride < 13 || payload_size < 0 ||
+    if (!valid_count(n_records) || meta_stride < 14 || context_stride < 14 || payload_size < 0 ||
         n_grid < 3 || out_stride < 6 || timing_f64 == nullptr || timing_size < 3 ||
         stats == nullptr || stats_size < 16) {
         write_message(message, message_size, "invalid native scalar shadow arguments");
@@ -727,7 +727,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
             stats[8]+=1;
         } else if (rt==42&&dt==88) {
             if (off>=0&&count>=4&&off+count<=payload_size&&payload_f64) {
-                out[0]=native_type88_photo_rate(payload_f64+off,count,c[12],epi_f64,bremsa_f64,n_grid);
+                out[0]=native_type88_photo_rate(payload_f64+off,count,c[12],epi_f64,bremsa_f64,n_grid,static_cast<int>(c[13]));
                 ok=std::isfinite(out[0]);
             }
             stats[9]+=1;

@@ -157,3 +157,7 @@ computes native scalar channels for Mg rate/data 3/63 and 42/88 from compact
 quantum/plasma context, raw type-88 cross-section pairs, and one shared live
 radiation grid. It remains shadow-only: accepted scalar rates and matrix terms
 are the sole live source.
+
+## v0.6.32 Type-88 full-grid hotfix
+
+`libxstar_engine.so` ABI version 5 preserves the accepted mixed-grid Type-88 contract: the reduced mapped-grid point count limits `phextrap` extension, while the full high-resolution `epi_eV` / `bremsa` arrays are used for continuum integration. Reduced-grid integration is not a qualifying fallback.

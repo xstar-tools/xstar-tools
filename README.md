@@ -1,3 +1,7 @@
+## v0.6.32 Type-88 full-grid native scalar hotfix
+
+The native Mg rate/data 42/88 scalar shadow now requires the full high-resolution `epi_eV` / `bremsa` radiation grid used by the accepted Type-53-style continuum integration. The reduced mapped grid is not a qualifying fallback. The path remains shadow-only; accepted scalar rates and all live matrix terms are unchanged.
+
 ## v0.6.29 rate-payload batched orchestration shadow
 
 v0.6.29 adds one evaluation-level C++ shadow call for Mg rate/data families 4/50, 3/51, 3/63, and 42/88. It reconstructs compact matrix/heating rows, compares them exactly with the accepted path, checks independent contribution matrices, and never commits shadow rows. See `V0629_RATE_PAYLOAD_BATCHED_ORCHESTRATION_SHADOW.md`.

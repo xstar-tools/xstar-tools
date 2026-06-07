@@ -2182,14 +2182,15 @@ def _run_rate_payload_batched_orchestration_shadow(
 ) -> None:
     """Run one diagnostic C++ row-orchestration call without touching live terms.
 
-    v0.6.31 keeps accepted Python/C++ scalar-rate ownership unchanged for the
-    live matrix.  In addition to the exact v0.6.30 row-orchestration shadow, it
+    v0.6.32 keeps accepted Python/C++ scalar-rate ownership unchanged for the
+    live matrix and requires the full high-resolution radiation grid for the
+    native Type-88 photoionization scalar shadow.  In addition to the exact v0.6.30 row-orchestration shadow, it
     independently evaluates native C++ scalar channels for rate/data families
     3:63 and 42:88 and compares them against the accepted scalar results.  No
     native scalar or reconstructed row can enter the live matrix.
     """
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.31",
+        "schema_version": "0.6.32",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -2239,6 +2240,14 @@ def _run_rate_payload_batched_orchestration_shadow(
         "native_scalar_max_abs_diff": 0.0,
         "native_scalar_max_rel_diff": 0.0,
         "native_scalar_family_record_counts": {"3:63": 0, "42:88": 0},
+        "native_scalar_type88_full_grid_required": True,
+        "native_scalar_type88_grid_source": "not_evaluated",
+        "native_scalar_type88_full_grid_points": 0,
+        "native_scalar_type88_reduced_grid_points": 0,
+        "native_scalar_type88_full_grid_valid": False,
+        "native_scalar_type88_reduced_grid_fallbacks": 0,
+        "native_scalar_type88_grid_validation_failures": 0,
+        "native_scalar_type88_grid_validation_error": "",
         "native_scalar_packet_build_seconds": 0.0,
         "native_scalar_input_packing_seconds": 0.0,
         "native_scalar_python_to_cpp_call_seconds": 0.0,
@@ -2316,7 +2325,7 @@ def _run_rate_payload_batched_orchestration_shadow(
             summary["status"] = "NO_SUPPORTED_RECORDS"
             return
 
-        # v0.6.31 native scalar shadow for the two families that still used
+        # v0.6.32 native scalar shadow for the two families that still used
         # accepted Python scalar seeds in v0.6.30.  The live accepted scalar
         # channels remain untouched and continue to own all matrix terms.
         if bool(summary["native_scalar_enabled"]):
@@ -2381,7 +2390,93 @@ def _run_rate_payload_batched_orchestration_shadow(
             summary["native_scalar_skipped_records"] = native_skipped[:64]
             summary["native_scalar_skipped_record_count"] = len(native_skipped)
             if native_packet:
-                epi_eV, bremsa, _ = _radiation_arrays(context.radiation)
+                # Type-88 is a Type-53-style continuum integration and must use
+                # the full high-resolution epi_eV/bremsa arrays.  The reduced
+                # epim_eV/bremsam grid is intentionally not an admissible
+                # fallback for native scalar qualification.
+                radiation = context.radiation
+                full_epi = np.asarray(
+                    getattr(radiation, "epi_eV", getattr(radiation, "epi", ())),
+                    dtype=np.float64,
+                ).reshape(-1)
+                full_bremsa = np.asarray(
+                    getattr(radiation, "bremsa", ()), dtype=np.float64
+                ).reshape(-1)
+                reduced_epi = np.asarray(
+                    getattr(radiation, "epim_eV", getattr(radiation, "epim", ())),
+                    dtype=np.float64,
+                ).reshape(-1)
+                summary["native_scalar_type88_full_grid_points"] = int(full_epi.size)
+                summary["native_scalar_type88_reduced_grid_points"] = int(reduced_epi.size)
+                full_grid_valid = bool(
+                    full_epi.size >= 3
+                    and full_bremsa.size >= full_epi.size
+                    and np.all(np.isfinite(full_epi))
+                    and np.all(np.isfinite(full_bremsa[: full_epi.size]))
+                    and np.all(np.diff(full_epi) > 0.0)
+                )
+                summary["native_scalar_type88_full_grid_valid"] = full_grid_valid
+                has_type88 = bool(summary["native_scalar_family_record_counts"].get("42:88", 0))
+                reduced_grid_valid = bool(
+                    reduced_epi.size >= 3
+                    and np.all(np.isfinite(reduced_epi))
+                    and np.all(np.diff(reduced_epi) > 0.0)
+                )
+                summary["native_scalar_type88_phextrap_grid_points"] = int(reduced_epi.size)
+                summary["native_scalar_type88_phextrap_grid_valid"] = reduced_grid_valid
+                if has_type88 and (not full_grid_valid or not reduced_grid_valid):
+                    summary["native_scalar_type88_grid_source"] = "missing_or_invalid_required_grids"
+                    summary["native_scalar_type88_grid_validation_failures"] = 1
+                    if not full_grid_valid:
+                        if full_epi.size < 3:
+                            grid_error = "full_epi_too_short"
+                        elif full_bremsa.size < full_epi.size:
+                            grid_error = "full_bremsa_shorter_than_full_epi"
+                        elif not np.all(np.isfinite(full_epi)):
+                            grid_error = "full_epi_nonfinite"
+                        elif not np.all(np.isfinite(full_bremsa[: full_epi.size])):
+                            grid_error = "full_bremsa_nonfinite"
+                        else:
+                            grid_error = "full_epi_not_strictly_increasing"
+                    elif reduced_epi.size < 3:
+                        grid_error = "reduced_epi_too_short_for_phextrap_limit"
+                    elif not np.all(np.isfinite(reduced_epi)):
+                        grid_error = "reduced_epi_nonfinite"
+                    else:
+                        grid_error = "reduced_epi_not_strictly_increasing"
+                    summary["native_scalar_type88_grid_validation_error"] = grid_error
+                    # Keep the independent Type-63 diagnostic and the complete
+                    # row/checkpoint shadow running, but do not evaluate any
+                    # Type-88 record on a substitute grid.
+                    native_packet = [
+                        native_item for native_item in native_packet
+                        if (int(native_item["rate_type"]), int(native_item["data_type"])) != (42, 88)
+                    ]
+                    if reduced_grid_valid:
+                        epi_eV = reduced_epi
+                        reduced_bremsa = np.asarray(
+                            getattr(radiation, "bremsam", ()), dtype=np.float64
+                        ).reshape(-1)
+                        if reduced_bremsa.size >= reduced_epi.size and np.all(np.isfinite(reduced_bremsa[: reduced_epi.size])):
+                            bremsa = reduced_bremsa[: reduced_epi.size]
+                        else:
+                            epi_eV = np.asarray((1.0, 2.0, 3.0), dtype=np.float64)
+                            bremsa = np.zeros(3, dtype=np.float64)
+                    else:
+                        epi_eV = np.asarray((1.0, 2.0, 3.0), dtype=np.float64)
+                        bremsa = np.zeros(3, dtype=np.float64)
+                else:
+                    summary["native_scalar_type88_grid_source"] = (
+                        "full_epi_bremsa" if has_type88 else "not_needed_no_type88_records"
+                    )
+                    # Accepted Type-88 semantics are mixed by design: phextrap
+                    # extension is capped by the reduced mapped-grid point count,
+                    # while phint53-style integration uses the full grid.
+                    for native_item in native_packet:
+                        if (int(native_item["rate_type"]), int(native_item["data_type"])) == (42, 88):
+                            native_item["type88_phextrap_grid_points"] = int(reduced_epi.size)
+                    epi_eV = full_epi
+                    bremsa = full_bremsa[: full_epi.size]
                 native_call_t0 = time.perf_counter()
                 native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
                     native_packet, epi_eV=epi_eV, bremsa=bremsa
@@ -2428,6 +2523,8 @@ def _run_rate_payload_batched_orchestration_shadow(
                 native_exact = (not missing_native and not extra_native and summary["native_scalar_nonfinite_fields"] == 0 and summary["native_scalar_exact_field_mismatches"] == 0)
                 native_tolerant = (not missing_native and not extra_native and summary["native_scalar_nonfinite_fields"] == 0 and summary["native_scalar_fields_outside_tolerance"] == 0)
                 summary["native_scalar_status"] = "EXACT" if native_exact else "TOLERANCE_APPROVED" if native_tolerant else "MISMATCH"
+                if int(summary.get("native_scalar_type88_grid_validation_failures", 0) or 0) > 0:
+                    summary["native_scalar_status"] = "FULL_GRID_UNAVAILABLE"
             else:
                 summary["native_scalar_status"] = "NO_NATIVE_RECORDS"
 

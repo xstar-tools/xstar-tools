@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.32 - 2026-06-07
+
+- Hotfix the native Mg rate/data 42/88 scalar shadow to use the full high-resolution `epi_eV` / `bremsa` radiation grid.
+- Prohibit reduced `epim_eV` / `bremsam` fallback from qualifying Type-88 parity.
+- Report full/reduced grid point counts, grid source, validation failures, and reduced-grid fallback count.
+- Keep all accepted scalar rates, matrix terms, solver inputs, populations, and science products unchanged and live on the accepted path.
+- Preserve the v0.6.30 composite checkpoint hotfix and v0.6.31 native Type-63 scalar shadow.
+
 ## 0.6.31 - 2026-06-07
 
 - Added a shadow-only native C++ scalar evaluator for Mg rate/data families 3/63 and 42/88.
