@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.6.27 - 2026-06-07
+
+## Added
+- Added an observational Mg matrix-assembly dataflow probe with 16 named exclusive sections and per-evaluation accounting.
+- Added rows, matrix dimensions, nonzero counts, byte traffic, and allocation counts for each section.
+- Added `provenance.mg_matrix_assembly_dataflow_summary` with section totals, top evaluations, accounting failures, and full evaluation ledgers.
+- Added a dedicated promoted-product probe wrapper and checker.
+
+## Preserved
+- Kept the v0.6.26 cached Mg simple-payload batch promoted and product-active.
+- Kept reverse verification and full checkpoint hashing disabled in the main probe.
+- Kept all previously accepted solver, rates, matrix, final-binemis, and upstream Mg type-4/type-50 paths unchanged.
+
 # v0.6.26 - 2026-06-07
 
 - Promotes the verified cached one-call-per-element Mg simple-payload batch as an accepted opt-in product path.

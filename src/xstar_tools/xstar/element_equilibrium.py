@@ -1745,6 +1745,221 @@ def _record_mg_simple_payload_checkpoint(
         })
 
 
+
+MATRIX_ASSEMBLY_DATAFLOW_SECTIONS: Tuple[str, ...] = (
+    "matrix_workspace_allocation_zeroing",
+    "level_and_ion_index_construction",
+    "rate_payload_generation",
+    "batch_simple_payload_generation",
+    "python_payload_row_decoding",
+    "python_matrix_row_insertion",
+    "heating_matrix_row_insertion",
+    "type53_preparation",
+    "type53_cpp_call",
+    "type53_output_commit",
+    "normalization_row_construction",
+    "normalization_row_commit",
+    "repeated_matrix_traversal",
+    "dense_to_solver_workspace_copy",
+    "checkpoint_hashing",
+    "unclassified_matrix_assembly",
+)
+
+
+def _matrix_dataflow_enabled(element_z: int) -> bool:
+    return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_MATRIX_ASSEMBLY_DATAFLOW_PROBE")
+
+
+def _matrix_dataflow_new_evaluation(
+    control: MutableMapping[str, Any],
+    *,
+    evaluation_index: int,
+) -> Dict[str, Any]:
+    rows = control.setdefault("mg_matrix_assembly_dataflow_evaluations", [])
+    row = {
+        "schema_version": "0.6.27",
+        "evaluation_index": int(evaluation_index),
+        "element_z": 12,
+        "matrix_dimension": 0,
+        "term_count": 0,
+        "assembly_function_wall_seconds": 0.0,
+        "enclosing_matrix_assembly_wall_seconds": 0.0,
+        "exclusive_child_wall_seconds": 0.0,
+        "accounting_overrun_seconds": 0.0,
+        "accounting_ok": True,
+        "sections": {
+            name: {
+                "exclusive_wall_seconds": 0.0,
+                "call_count": 0.0,
+                "rows_processed": 0.0,
+                "matrix_dimension": 0,
+                "nonzero_entries_before": 0.0,
+                "nonzero_entries_after": 0.0,
+                "bytes_read": 0.0,
+                "bytes_written": 0.0,
+                "allocation_count": 0.0,
+            }
+            for name in MATRIX_ASSEMBLY_DATAFLOW_SECTIONS
+        },
+    }
+    if isinstance(rows, list):
+        rows.append(row)
+    return row
+
+
+def _matrix_dataflow_get_evaluation(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+) -> Optional[Dict[str, Any]]:
+    rows = control.get("mg_matrix_assembly_dataflow_evaluations", [])
+    if not isinstance(rows, list):
+        return None
+    for row in reversed(rows):
+        if isinstance(row, dict) and int(row.get("evaluation_index", -1)) == int(evaluation_index):
+            return row
+    return None
+
+
+def _matrix_dataflow_add(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    section: str,
+    elapsed_seconds: float,
+    *,
+    call_count: float = 1.0,
+    rows_processed: float = 0.0,
+    matrix_dimension: int = 0,
+    nonzero_entries_before: float = 0.0,
+    nonzero_entries_after: float = 0.0,
+    bytes_read: float = 0.0,
+    bytes_written: float = 0.0,
+    allocation_count: float = 0.0,
+) -> None:
+    row = _matrix_dataflow_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    sections = row.setdefault("sections", {})
+    item = sections.setdefault(section, {
+        "exclusive_wall_seconds": 0.0,
+        "call_count": 0.0,
+        "rows_processed": 0.0,
+        "matrix_dimension": 0,
+        "nonzero_entries_before": 0.0,
+        "nonzero_entries_after": 0.0,
+        "bytes_read": 0.0,
+        "bytes_written": 0.0,
+        "allocation_count": 0.0,
+    })
+    item["exclusive_wall_seconds"] = float(item.get("exclusive_wall_seconds", 0.0)) + max(0.0, float(elapsed_seconds))
+    item["call_count"] = float(item.get("call_count", 0.0)) + max(0.0, float(call_count))
+    item["rows_processed"] = float(item.get("rows_processed", 0.0)) + max(0.0, float(rows_processed))
+    item["matrix_dimension"] = max(int(item.get("matrix_dimension", 0)), int(matrix_dimension))
+    item["nonzero_entries_before"] = float(item.get("nonzero_entries_before", 0.0)) + max(0.0, float(nonzero_entries_before))
+    item["nonzero_entries_after"] = float(item.get("nonzero_entries_after", 0.0)) + max(0.0, float(nonzero_entries_after))
+    item["bytes_read"] = float(item.get("bytes_read", 0.0)) + max(0.0, float(bytes_read))
+    item["bytes_written"] = float(item.get("bytes_written", 0.0)) + max(0.0, float(bytes_written))
+    item["allocation_count"] = float(item.get("allocation_count", 0.0)) + max(0.0, float(allocation_count))
+    if matrix_dimension:
+        row["matrix_dimension"] = max(int(row.get("matrix_dimension", 0)), int(matrix_dimension))
+
+
+def _matrix_dataflow_section_seconds(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    section: str,
+) -> float:
+    row = _matrix_dataflow_get_evaluation(control, evaluation_index)
+    if row is None:
+        return 0.0
+    return float(row.get("sections", {}).get(section, {}).get("exclusive_wall_seconds", 0.0) or 0.0)
+
+
+def _matrix_dataflow_finish_assembly(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    *,
+    assembly_wall_seconds: float,
+    matrix_dimension: int,
+    term_count: int,
+) -> None:
+    row = _matrix_dataflow_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    row["assembly_function_wall_seconds"] = max(0.0, float(assembly_wall_seconds))
+    row["matrix_dimension"] = int(matrix_dimension)
+    row["term_count"] = int(term_count)
+
+
+def _matrix_dataflow_finalize_accounting(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+) -> None:
+    row = _matrix_dataflow_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    sections = row.get("sections", {})
+    assembly_wall = float(row.get("assembly_function_wall_seconds", 0.0) or 0.0)
+    checkpoint = float(sections.get("checkpoint_hashing", {}).get("exclusive_wall_seconds", 0.0) or 0.0)
+    solver_copy = float(sections.get("dense_to_solver_workspace_copy", {}).get("exclusive_wall_seconds", 0.0) or 0.0)
+    enclosing = assembly_wall + checkpoint + solver_copy
+    known = sum(
+        float(item.get("exclusive_wall_seconds", 0.0) or 0.0)
+        for name, item in sections.items()
+        if name != "unclassified_matrix_assembly"
+    )
+    remainder = max(0.0, enclosing - known)
+    unclassified = sections.setdefault("unclassified_matrix_assembly", {})
+    unclassified.update({
+        "exclusive_wall_seconds": float(remainder),
+        "call_count": 1.0,
+        "rows_processed": 0.0,
+        "matrix_dimension": int(row.get("matrix_dimension", 0)),
+        "nonzero_entries_before": 0.0,
+        "nonzero_entries_after": 0.0,
+        "bytes_read": 0.0,
+        "bytes_written": 0.0,
+        "allocation_count": 0.0,
+    })
+    total = known + remainder
+    tolerance = max(1.0e-9, enclosing * 1.0e-9)
+    overrun = max(0.0, total - enclosing)
+    row["enclosing_matrix_assembly_wall_seconds"] = float(enclosing)
+    row["exclusive_child_wall_seconds"] = float(total)
+    row["accounting_overrun_seconds"] = float(overrun)
+    row["accounting_tolerance_seconds"] = float(tolerance)
+    row["accounting_ok"] = bool(overrun <= tolerance)
+    if profile_level_at_least(control, "summary"):
+        for section_name in MATRIX_ASSEMBLY_DATAFLOW_SECTIONS:
+            item = sections.get(section_name, {})
+            record_profile_event(
+                control,
+                f"matrix_assembly_dataflow.{section_name}",
+                float(item.get("exclusive_wall_seconds", 0.0) or 0.0),
+                element_z=12,
+                evaluation_index=int(evaluation_index),
+                matrix_dimension=int(row.get("matrix_dimension", 0)),
+                rows_processed=float(item.get("rows_processed", 0.0) or 0.0),
+                nonzero_entries_before=float(item.get("nonzero_entries_before", 0.0) or 0.0),
+                nonzero_entries_after=float(item.get("nonzero_entries_after", 0.0) or 0.0),
+                bytes_read=float(item.get("bytes_read", 0.0) or 0.0),
+                bytes_written=float(item.get("bytes_written", 0.0) or 0.0),
+                allocation_count=float(item.get("allocation_count", 0.0) or 0.0),
+                source_routine="assemble_element_matrix/msolvelucy_setup",
+            )
+        record_profile_event(
+            control,
+            "matrix_assembly_dataflow.enclosing_total",
+            float(enclosing),
+            element_z=12,
+            evaluation_index=int(evaluation_index),
+            matrix_dimension=int(row.get("matrix_dimension", 0)),
+            term_count=float(row.get("term_count", 0)),
+            exclusive_child_wall_seconds=float(total),
+            accounting_overrun_seconds=float(overrun),
+            accounting_ok=bool(row.get("accounting_ok", False)),
+            source_routine="assemble_element_matrix/msolvelucy_setup",
+        )
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1756,10 +1971,18 @@ def assemble_element_matrix(
     """Translate ``calc_hmc_ion`` and ``calc_hmc_element`` matrix assembly."""
     dispatcher = dispatcher or default_source_faithful_ucalc()
     profile_control = context.profile_control or {}
+    _matrix_dataflow_probe = _matrix_dataflow_enabled(int(element_z))
+    _matrix_dataflow_total_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
+    _matrix_dataflow_eval_index = 0
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_eval_index = int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0)) + 1
+        profile_control["_mg_matrix_assembly_dataflow_evaluation_index"] = int(_matrix_dataflow_eval_index)
+        _matrix_dataflow_new_evaluation(profile_control, evaluation_index=int(_matrix_dataflow_eval_index))
     is_mg_summary_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "summary")
     is_mg_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "nested")
     is_mg_forensic_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "forensic")
     use_cpp_mg_type7_rates = int(element_z) == 12 and (_matrix_cpp_active_for_mg() or _rates_cpp_active_for_mg())
+    _level_index_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
     if is_mg_profile:
         with profile_component(
             profile_control,
@@ -1784,6 +2007,12 @@ def assemble_element_matrix(
             max_ion_stage=context.max_ion_stage,
         )
         rnise_lte, level_tables = levwkelement(master, derived, basis, context)
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "level_and_ion_index_construction",
+            time.perf_counter() - _level_index_t0, matrix_dimension=int(basis.n_rows),
+            rows_processed=float(basis.n_rows), allocation_count=1.0,
+        )
     # v0.6.26 promoted cached one-call-per-element Mg simple-payload product.
     # Only this batch is newly promoted. It is validated before any row can enter
     # live matrix construction and falls back to the accepted per-ion implementation
@@ -1822,6 +2051,7 @@ def assemble_element_matrix(
     if int(element_z) == 12:
         _mg_simple_payload_eval_index = int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)) + 1
         profile_control["_mg_simple_payload_batch_evaluation_index"] = int(_mg_simple_payload_eval_index)
+    _matrix_dataflow_batch_t0 = time.perf_counter() if (_matrix_dataflow_probe and _mg_simple_payload_batch_requested) else 0.0
     if _mg_simple_payload_batch_requested:
         _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {
             "enabled": True,
@@ -1935,6 +2165,17 @@ def assemble_element_matrix(
                     status="fallback" if _mg_simple_payload_batch_product_requested else "shadow_error",
                     product_active=False, error=str(_batch_exc),
                 )
+    if _matrix_dataflow_probe and _mg_simple_payload_batch_requested:
+        _batch_elapsed = time.perf_counter() - _matrix_dataflow_batch_t0
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "batch_simple_payload_generation",
+            _batch_elapsed, matrix_dimension=int(basis.n_rows),
+            rows_processed=float(_mg_simple_payload_batch_stats.get("terms_processed", 0.0) or 0.0),
+            bytes_read=float(_mg_simple_payload_batch_stats.get("actual_bytes_copied", 0.0) or 0.0),
+            bytes_written=float(_mg_simple_payload_batch_stats.get("output_emitted_bytes", 0.0) or 0.0),
+            allocation_count=float(_mg_simple_payload_batch_stats.get("allocation_count", 0.0) or 0.0),
+        )
+    _matrix_dataflow_post_batch_setup_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
 
     # Source ``rnise`` and the compact solver seed are independent arrays.
     # ``levwkelement`` owns the LTE vector used later for ``rnisg``/``bilevg``;
@@ -2368,6 +2609,14 @@ def assemble_element_matrix(
                 "matrix_inserted": bool(matrix_inserted),
                 "status": str(status.value if hasattr(status, "value") else status),
             })
+
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "level_and_ion_index_construction",
+            time.perf_counter() - _matrix_dataflow_post_batch_setup_t0,
+            matrix_dimension=int(basis.n_rows), rows_processed=float(len(basis.blocks)),
+        )
+    _matrix_dataflow_rate_loop_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
 
     for block in basis.blocks:
             _ion_loop_t0 = time.perf_counter() if is_mg_profile else 0.0
@@ -3486,6 +3735,7 @@ def assemble_element_matrix(
 
             if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_DIRECT_ACCUM_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"} and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
                 try:
+                    _type53_prep_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
                     _type53_candidates = []
                     for _rec, _rt, _dt in source_record_iter:
                         if int(_rt) == 7 and int(_dt) == 53 and int(_rec) not in cpp_direct_accumulated_records:
@@ -3495,7 +3745,15 @@ def assemble_element_matrix(
                     if int(element_z) == 12:
                         _speed_kernel_update("type53_applied", attempted=1.0, candidates=float(len(_type53_candidates)))
                         _speed_add_counter("escape_eligible_candidates_by_data_type", 53, float(len(_type53_candidates)))
+                    if _matrix_dataflow_probe:
+                        _matrix_dataflow_add(
+                            profile_control, _matrix_dataflow_eval_index, "type53_preparation",
+                            time.perf_counter() - _type53_prep_t0, matrix_dimension=int(basis.n_rows),
+                            rows_processed=float(len(_type53_candidates)), bytes_written=float(len(_type53_candidates) * 24),
+                            allocation_count=1.0,
+                        )
                     if _type53_candidates:
+                        _type53_cpp_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
                             master=master,
                             derived=derived,
@@ -3518,6 +3776,15 @@ def assemble_element_matrix(
                                 "type53_parent_maps_source": "element_equilibrium_parent_destination_context",
                             },
                         )
+                        if _matrix_dataflow_probe:
+                            _matrix_dataflow_add(
+                                profile_control, _matrix_dataflow_eval_index, "type53_cpp_call",
+                                time.perf_counter() - _type53_cpp_t0, matrix_dimension=int(basis.n_rows),
+                                rows_processed=float(len(_type53_candidates)),
+                                bytes_read=float(cpp_type53_stats.get("input_bytes", 0.0) or 0.0),
+                                bytes_written=float(cpp_type53_stats.get("output_emitted_bytes", 0.0) or 0.0),
+                                allocation_count=float(cpp_type53_stats.get("allocation_count", 0.0) or 0.0),
+                            )
                     else:
                         cpp_type53_rows, cpp_type53_message, cpp_type53_stats = [], "no type53 candidates", {"records_seen": 0.0, "records_supported": 0.0, "cpp_calls": 0.0, "fallback_count": 0.0}
                     _type53_row_decode_t0 = time.perf_counter()
@@ -3526,6 +3793,14 @@ def assemble_element_matrix(
                     cpp_type53_terms = _matrix_terms_from_cpp_rows(cpp_type53_matrix_rows)
                     cpp_type53_records = {int(row["record"]) for row in cpp_type53_rows}
                     _type53_row_decode_seconds = time.perf_counter() - _type53_row_decode_t0
+                    if _matrix_dataflow_probe:
+                        _matrix_dataflow_add(
+                            profile_control, _matrix_dataflow_eval_index, "python_payload_row_decoding",
+                            _type53_row_decode_seconds, matrix_dimension=int(basis.n_rows),
+                            rows_processed=float(len(cpp_type53_rows)),
+                            bytes_read=float(len(cpp_type53_rows) * 128),
+                            bytes_written=float(len(cpp_type53_terms) * 64), allocation_count=4.0,
+                        )
                     _type53_expected_matrix_terms = float(len(cpp_type53_records) * 4)
                     _type53_duplicate_matrix_rows = float(_duplicate_cpp_row_count(cpp_type53_matrix_rows))
                     _type53_duplicate_scalar_rows = float(_duplicate_cpp_row_count(cpp_type53_scalar_rows))
@@ -3572,6 +3847,14 @@ def assemble_element_matrix(
                         summary.n_records_evaluated += len(cpp_type53_records)
                         summary.n_matrix_terms += len(cpp_type53_terms)
                         _type53_apply_seconds = time.perf_counter() - _type53_apply_t0
+                        if _matrix_dataflow_probe:
+                            _matrix_dataflow_add(
+                                profile_control, _matrix_dataflow_eval_index, "type53_output_commit",
+                                _type53_apply_seconds, matrix_dimension=int(basis.n_rows),
+                                rows_processed=float(len(cpp_type53_terms) + len(cpp_type53_scalar_rows)),
+                                bytes_read=float(len(cpp_type53_rows) * 128),
+                                bytes_written=float(len(cpp_type53_terms) * 64),
+                            )
                         if int(element_z) == 12:
                             _speed_timing_add("type53_apply_rows_to_matrix", _type53_apply_seconds)
                             record_profile_event(
@@ -4678,6 +4961,18 @@ def assemble_element_matrix(
                             source_routine="ucalc",
                         )
 
+    if _matrix_dataflow_probe:
+        _rate_loop_wall = time.perf_counter() - _matrix_dataflow_rate_loop_t0
+        _rate_nested = sum(
+            _matrix_dataflow_section_seconds(profile_control, _matrix_dataflow_eval_index, _name)
+            for _name in ("type53_preparation", "type53_cpp_call", "python_payload_row_decoding", "type53_output_commit")
+        )
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "rate_payload_generation",
+            max(0.0, _rate_loop_wall - _rate_nested), matrix_dimension=int(basis.n_rows),
+            rows_processed=float(n_seen), bytes_written=float(len(terms) * 64),
+        )
+
     if _rate7_classifier_enabled:
         profile_control["remaining_rate7_classifier_samples"] = _remaining_rate7_samples
         for _source_dtype, _values in sorted(_remaining_rate7_by_source_header_data_type.items()):
@@ -4823,6 +5118,13 @@ def assemble_element_matrix(
                 per_ion["duplicate_merge_elapsed"] = float(per_ion.get("duplicate_merge_elapsed", 0.0)) + float(_dup_elapsed * _share)
 
         _row_prep_elapsed = time.perf_counter() - _row_prep_total_t0
+        if _matrix_dataflow_probe:
+            _matrix_dataflow_add(
+                profile_control, _matrix_dataflow_eval_index, "repeated_matrix_traversal",
+                _row_prep_elapsed, matrix_dimension=int(basis.n_rows),
+                rows_processed=float(len(terms) * 3), bytes_read=float(len(terms) * 3 * 64),
+                allocation_count=float(4 + len(_term_counts_by_ion)),
+            )
         _matrix_hidden_timing_add("matrix_row_pre_filtering", _row_prep_elapsed)
         _matrix_diag_update(
             "row_volume_totals",
@@ -4893,17 +5195,42 @@ def assemble_element_matrix(
         heat = np.zeros_like(dense)
         heat2 = np.zeros_like(dense)
         _alloc_seconds = time.perf_counter() - _alloc_t0
+        if _matrix_dataflow_probe:
+            _matrix_dataflow_add(
+                profile_control, _matrix_dataflow_eval_index, "matrix_workspace_allocation_zeroing",
+                _alloc_seconds, matrix_dimension=int(basis.n_rows),
+                rows_processed=float(basis.n_rows * basis.n_rows * 3),
+                bytes_written=float(dense.nbytes + heat.nbytes + heat2.nbytes), allocation_count=3.0,
+            )
         if int(element_z) == 12:
             _speed_timing_add("matrix_reset_zeroing", _alloc_seconds)
             _speed_timing_add("dense_matrix_allocation_zeroing", _alloc_seconds)
         _insert_t0 = time.perf_counter()
         for term in terms:
             dense[term.row - 1, term.column - 1] += term.aj1
+        _insert_seconds = time.perf_counter() - _insert_t0
+        if _matrix_dataflow_probe:
+            _matrix_dataflow_add(
+                profile_control, _matrix_dataflow_eval_index, "python_matrix_row_insertion",
+                _insert_seconds, matrix_dimension=int(basis.n_rows), rows_processed=float(len(terms)),
+                nonzero_entries_before=0.0, nonzero_entries_after=float(np.count_nonzero(dense)),
+                bytes_read=float(len(terms) * 64), bytes_written=float(len(terms) * 8),
+            )
+        _heat_insert_t0 = time.perf_counter()
+        for term in terms:
             heat[term.row - 1, term.column - 1] += term.cj
             heat2[term.row - 1, term.column - 1] += term.cj2
-        _insert_seconds = time.perf_counter() - _insert_t0
+        _heat_insert_seconds = time.perf_counter() - _heat_insert_t0
+        if _matrix_dataflow_probe:
+            _matrix_dataflow_add(
+                profile_control, _matrix_dataflow_eval_index, "heating_matrix_row_insertion",
+                _heat_insert_seconds, matrix_dimension=int(basis.n_rows), rows_processed=float(len(terms) * 2),
+                nonzero_entries_before=0.0,
+                nonzero_entries_after=float(np.count_nonzero(heat) + np.count_nonzero(heat2)),
+                bytes_read=float(len(terms) * 64), bytes_written=float(len(terms) * 16),
+            )
         if int(element_z) == 12:
-            _speed_timing_add("python_row_insertion_to_dense", _insert_seconds)
+            _speed_timing_add("python_row_insertion_to_dense", _insert_seconds + _heat_insert_seconds)
             _matrix_diag_update(
                 "row_volume_totals",
                 None,
@@ -4915,9 +5242,30 @@ def assemble_element_matrix(
     _norm_t0 = time.perf_counter()
     normalized = dense.copy()
     rhs = np.zeros(basis.n_rows, dtype=float)
+    _norm_construct_seconds = time.perf_counter() - _norm_t0
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "normalization_row_construction",
+            _norm_construct_seconds, matrix_dimension=int(basis.n_rows),
+            rows_processed=float(basis.n_rows * basis.n_rows + basis.n_rows),
+            nonzero_entries_before=float(np.count_nonzero(dense)),
+            nonzero_entries_after=float(np.count_nonzero(normalized)),
+            bytes_read=float(dense.nbytes), bytes_written=float(normalized.nbytes + rhs.nbytes),
+            allocation_count=2.0,
+        )
+    _norm_commit_t0 = time.perf_counter()
     normalized[basis.normalization_row - 1, :] = 1.0
     rhs[basis.normalization_row - 1] = 1.0
-    _norm_seconds = time.perf_counter() - _norm_t0
+    _norm_commit_seconds = time.perf_counter() - _norm_commit_t0
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "normalization_row_commit",
+            _norm_commit_seconds, matrix_dimension=int(basis.n_rows), rows_processed=float(basis.n_rows + 1),
+            nonzero_entries_before=float(np.count_nonzero(dense)),
+            nonzero_entries_after=float(np.count_nonzero(normalized)),
+            bytes_written=float((basis.n_rows + 1) * 8),
+        )
+    _norm_seconds = _norm_construct_seconds + _norm_commit_seconds
     if int(element_z) == 12:
         _speed_timing_add("dense_matrix_normalization_setup", _norm_seconds)
         _speed_timing_add("dense_sparse_matrix_construction", (time.perf_counter() - _dense_t0) if is_mg_profile else 0.0)
@@ -4942,6 +5290,13 @@ def assemble_element_matrix(
         )
         terminal_global_population = float(
             context.initial_global_populations.get(terminal_key, 0.0)
+        )
+
+    if _matrix_dataflow_probe:
+        _matrix_dataflow_finish_assembly(
+            profile_control, _matrix_dataflow_eval_index,
+            assembly_wall_seconds=time.perf_counter() - _matrix_dataflow_total_t0,
+            matrix_dimension=int(basis.n_rows), term_count=int(len(terms)),
         )
 
     return ElementMatrixAssembly(
@@ -5064,7 +5419,17 @@ def msolvelucy(
             pass
 
     n = basis.n_rows
+    _matrix_dataflow_eval_index = int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0))
+    _solver_input_copy_t0 = time.perf_counter() if _matrix_dataflow_enabled(int(getattr(basis, "element_z", 0) or 0)) else 0.0
     x = np.asarray(assembly.initial_populations[1 : n + 1], dtype=float).copy()
+    if _solver_input_copy_t0:
+        _matrix_dataflow_add(
+            profile_control, _matrix_dataflow_eval_index, "dense_to_solver_workspace_copy",
+            time.perf_counter() - _solver_input_copy_t0, matrix_dimension=int(n),
+            rows_processed=float(n), bytes_read=float(n * 8), bytes_written=float(x.nbytes),
+            allocation_count=1.0,
+        )
+        _matrix_dataflow_finalize_accounting(profile_control, _matrix_dataflow_eval_index)
     # Source ``msolvelucy.f90`` enters the first outer iteration with the
     # supplied population vector exactly as received.  It does not normalize
     # ``x`` until the fixed-point update.  Preserving the input scale is
@@ -5443,11 +5808,23 @@ def solve_element_statistical_equilibrium(
             )
         _matrix_assembly_seconds = time.perf_counter() - _matrix_assembly_t0
         if _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS"):
+            _checkpoint_t0 = time.perf_counter()
             _record_mg_simple_payload_checkpoint(
                 profile_control,
                 evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
                 assembly=assembly,
             )
+            if _matrix_dataflow_enabled(int(element_z)):
+                _checkpoint_bytes = float(
+                    assembly.dense_matrix.nbytes + assembly.normalized_matrix.nbytes + assembly.rhs.nbytes
+                    + assembly.heating_matrix.nbytes + assembly.heating_matrix2.nbytes
+                )
+                _matrix_dataflow_add(
+                    profile_control, int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0)),
+                    "checkpoint_hashing", time.perf_counter() - _checkpoint_t0,
+                    matrix_dimension=int(assembly.basis.n_rows), rows_processed=5.0,
+                    bytes_read=_checkpoint_bytes, bytes_written=0.0, allocation_count=5.0,
+                )
         record_profile_event(
             profile_control,
             "calc_hmc_all.element_solver.matrix_assembly_after_type53_cpp",
@@ -5493,6 +5870,10 @@ def solve_element_statistical_equilibrium(
                     )
             else:
                 solve = msolvelucy(assembly, context)
+    if int(element_z) == 12 and _matrix_dataflow_enabled(int(element_z)) and (solve is None or not assembly.terms):
+        _matrix_dataflow_finalize_accounting(
+            profile_control, int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0))
+        )
     ready = bool(
         assembly.strict_assembly_ready
         and solve is not None

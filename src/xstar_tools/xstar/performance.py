@@ -514,6 +514,131 @@ def _summarize_simple_payload_batching_probe(
     }
 
 
+
+MATRIX_ASSEMBLY_DATAFLOW_SECTIONS = (
+    "matrix_workspace_allocation_zeroing",
+    "level_and_ion_index_construction",
+    "rate_payload_generation",
+    "batch_simple_payload_generation",
+    "python_payload_row_decoding",
+    "python_matrix_row_insertion",
+    "heating_matrix_row_insertion",
+    "type53_preparation",
+    "type53_cpp_call",
+    "type53_output_commit",
+    "normalization_row_construction",
+    "normalization_row_commit",
+    "repeated_matrix_traversal",
+    "dense_to_solver_workspace_copy",
+    "checkpoint_hashing",
+    "unclassified_matrix_assembly",
+)
+
+
+def summarize_matrix_assembly_dataflow(
+    control: MutableMapping[str, Any],
+    *,
+    top_n: int = 20,
+) -> dict[str, Any]:
+    """Summarize v0.6.27 exclusive Mg matrix-assembly dataflow ledgers."""
+    raw = control.get("mg_matrix_assembly_dataflow_evaluations", [])
+    rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+    metric_fields = (
+        "exclusive_wall_seconds", "call_count", "rows_processed", "nonzero_entries_before",
+        "nonzero_entries_after", "bytes_read", "bytes_written", "allocation_count",
+    )
+    totals: dict[str, dict[str, Any]] = {
+        name: {field: 0.0 for field in metric_fields} | {"matrix_dimension": 0}
+        for name in MATRIX_ASSEMBLY_DATAFLOW_SECTIONS
+    }
+    missing_sections: dict[str, list[str]] = {}
+    accounting_failures: list[dict[str, Any]] = []
+    total_enclosing = 0.0
+    total_exclusive = 0.0
+    max_overrun = 0.0
+    for row in rows:
+        evaluation_index = int(row.get("evaluation_index", 0) or 0)
+        sections = row.get("sections", {}) if isinstance(row.get("sections", {}), dict) else {}
+        missing = [name for name in MATRIX_ASSEMBLY_DATAFLOW_SECTIONS if name not in sections]
+        if missing:
+            missing_sections[str(evaluation_index)] = missing
+        for name in MATRIX_ASSEMBLY_DATAFLOW_SECTIONS:
+            item = sections.get(name, {}) if isinstance(sections.get(name, {}), dict) else {}
+            target = totals[name]
+            for field in metric_fields:
+                target[field] += float(item.get(field, 0.0) or 0.0)
+            target["matrix_dimension"] = max(int(target.get("matrix_dimension", 0)), int(item.get("matrix_dimension", 0) or 0))
+        enclosing = float(row.get("enclosing_matrix_assembly_wall_seconds", 0.0) or 0.0)
+        exclusive = float(row.get("exclusive_child_wall_seconds", 0.0) or 0.0)
+        overrun = float(row.get("accounting_overrun_seconds", max(0.0, exclusive - enclosing)) or 0.0)
+        total_enclosing += enclosing
+        total_exclusive += exclusive
+        max_overrun = max(max_overrun, overrun)
+        if not bool(row.get("accounting_ok", False)):
+            accounting_failures.append({
+                "evaluation_index": evaluation_index,
+                "enclosing_matrix_assembly_wall_seconds": enclosing,
+                "exclusive_child_wall_seconds": exclusive,
+                "accounting_overrun_seconds": overrun,
+            })
+    top = sorted(
+        rows,
+        key=lambda row: float(row.get("enclosing_matrix_assembly_wall_seconds", 0.0) or 0.0),
+        reverse=True,
+    )[:max(1, int(top_n))]
+    top_projection = []
+    for row in top:
+        sections = row.get("sections", {}) if isinstance(row.get("sections", {}), dict) else {}
+        top_projection.append({
+            "evaluation_index": int(row.get("evaluation_index", 0) or 0),
+            "matrix_dimension": int(row.get("matrix_dimension", 0) or 0),
+            "term_count": int(row.get("term_count", 0) or 0),
+            "assembly_function_wall_seconds": float(row.get("assembly_function_wall_seconds", 0.0) or 0.0),
+            "enclosing_matrix_assembly_wall_seconds": float(row.get("enclosing_matrix_assembly_wall_seconds", 0.0) or 0.0),
+            "exclusive_child_wall_seconds": float(row.get("exclusive_child_wall_seconds", 0.0) or 0.0),
+            "unclassified_matrix_assembly_seconds": float(
+                sections.get("unclassified_matrix_assembly", {}).get("exclusive_wall_seconds", 0.0) or 0.0
+            ),
+            "accounting_overrun_seconds": float(row.get("accounting_overrun_seconds", 0.0) or 0.0),
+            "accounting_ok": bool(row.get("accounting_ok", False)),
+        })
+    batch = dict(control.get("mg_simple_payload_batch_shadow_summary", {}) or {})
+    checkpoints_enabled = any(
+        float(row.get("sections", {}).get("checkpoint_hashing", {}).get("call_count", 0.0) or 0.0) > 0.0
+        for row in rows
+    )
+    ready = bool(rows) and not missing_sections and not accounting_failures
+    return {
+        "schema_version": "0.6.27",
+        "observational_only": True,
+        "probe_enabled": bool(rows),
+        "status": "READY" if ready else "NOT_READY",
+        "evaluation_count": len(rows),
+        "required_sections": list(MATRIX_ASSEMBLY_DATAFLOW_SECTIONS),
+        "section_totals": totals,
+        "total_enclosing_matrix_assembly_wall_seconds": float(total_enclosing),
+        "total_exclusive_child_wall_seconds": float(total_exclusive),
+        "max_accounting_overrun_seconds": float(max_overrun),
+        "accounting_identity": "sum(exclusive child times) <= enclosing matrix assembly wall time",
+        "accounting_all_ok": not accounting_failures and bool(rows),
+        "accounting_failures": accounting_failures,
+        "missing_sections_by_evaluation": missing_sections,
+        "checkpoint_hashing_enabled": bool(checkpoints_enabled),
+        "batch_product_active": bool(batch.get("product_active", False)),
+        "batch_product_promoted": bool(batch.get("product_promoted", False)),
+        "batch_reverse_verification_enabled": bool(batch.get("verification_enabled", False)),
+        "batch_fallback_evaluations": float(batch.get("fallback_evaluations", 0.0) or 0.0),
+        "top_evaluations": top_projection,
+        "evaluations": rows,
+        "notes": [
+            "Every named section is exclusive; nested type-53 work is subtracted from the rate-payload residual.",
+            "unclassified_matrix_assembly is the non-negative remainder needed to close each per-evaluation ledger.",
+            "The enclosing time includes assemble_element_matrix, optional pre-solver checkpoint hashing, and the initial solver-input copy.",
+            "Checkpoint hashing is disabled in the main v0.6.27 probe wrapper and timed separately when explicitly enabled.",
+            "Byte counts are exact for NumPy buffers and C++ bridge statistics; Python object-row byte counts are conservative accounting estimates.",
+        ],
+    }
+
 def summarize_runtime_phase_map(
     control: MutableMapping[str, Any],
     *,
@@ -521,7 +646,7 @@ def summarize_runtime_phase_map(
     output_breakdown: dict[str, Any] | None = None,
     top_n: int = 20,
 ) -> dict[str, Any]:
-    """Build the runtime map and v0.6.25 batch product-candidate summary."""
+    """Build the runtime map plus promoted-batch and v0.6.27 dataflow summaries."""
     phases = [
         "initialization_atomic_data_loading", "rates", "matrix_assembly", "solver",
         "emissivity_upstream_type4_type50", "other_emissivity", "opacity",

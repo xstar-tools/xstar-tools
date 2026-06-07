@@ -52,7 +52,7 @@ from .cpp_backend_emissivity import emissivity_backend_status
 from .cpp_backend_extra import opacity_backend_status, thermal_backend_status, engine_backend_status, eval_mg_ion_accumulator_cpp
 from .dsec import CalcHMCAllDsecEvaluator, DsecMutableRuntimeState, dsec
 from .linear_algebra import solver_backend_status
-from .performance import normalize_profile_level, profile_component, summarize_profile, summarize_runtime_phase_map
+from .performance import normalize_profile_level, profile_component, summarize_profile, summarize_runtime_phase_map, summarize_matrix_assembly_dataflow
 from .element_equilibrium import EscapeProbabilityContext
 from .emergent_emissivity import CalcEmisContext, CalcEmisWorkspace
 from .continuum_diagnostics import write_continuum_diagnostics
@@ -2427,6 +2427,10 @@ def run_xstar_from_parameters(
                 "mg_type4_upstream_shadow_probe_samples": list(state.control.get("mg_type4_upstream_shadow_probe_samples", [])),
                 "aggregate_timing_summary": summarize_profile(state.control),
                 "runtime_phase_timing_summary": runtime_phase_timing_summary,
+                "mg_matrix_assembly_dataflow_summary": summarize_matrix_assembly_dataflow(
+                    state.control,
+                    top_n=int(os.environ.get("XSTAR_ATOMIC_MATRIX_ASSEMBLY_DATAFLOW_TOP_N", "25") or "25"),
+                ),
                 "runtime_phase_wall_timing": dict(runtime_phase_wall_timing),
                 "xout_step_timing_footer": dict(state.outputs.get("xout_step_timing_footer", {})),
                 "output_writer_timing_breakdown": dict(state.outputs.get("output_writer_timing_breakdown", {})),

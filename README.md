@@ -1,3 +1,7 @@
+## v0.6.27 matrix assembly dataflow probe
+
+v0.6.27 keeps the promoted cached Mg simple-payload batch active and adds non-overlapping per-evaluation matrix-assembly timing. The main probe disables reverse verification and checkpoint hashing, preserves all accepted science paths, and reports a closed exclusive ledger with `unclassified_matrix_assembly` as the residual. See `V0627_MATRIX_ASSEMBLY_DATAFLOW_PROBE.md`.
+
 ## v0.6.26 matrix simple-payload batched product promoted
 
 v0.6.26 promotes the verified cached Mg one-call-per-element simple-payload batch. The normal product wrapper keeps reverse verification and heavy checkpoint hashing disabled, while guarded fallback and dedicated diagnostic wrappers remain available. See `V0626_MATRIX_SIMPLE_PAYLOAD_BATCHED_PRODUCT_PROMOTED.md`.

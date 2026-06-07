@@ -331,3 +331,5 @@ recursive-include src/xstar_tools/xstar *.so *.dylib *.dll
 # Optional C++ shared-library solver backend sources/build helpers
 recursive-include src/xstar_tools/xstar/cpp *
 
+
+include V0627_MATRIX_ASSEMBLY_DATAFLOW_PROBE.md
