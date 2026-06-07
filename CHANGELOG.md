@@ -1,5 +1,77 @@
 # CHANGELOG
 
+# v0.6.25 - 2026-06-07
+
+- Product candidate for the cached Mg simple-payload batch path only.
+- Immediate accepted per-ion fallback on batch/cache/count/integer/non-finite validation failure.
+- Optional old-per-ion verification shadow.
+- Exact pre-solver matrix, solved-population, and heating/cooling checkpoints for baseline comparison.
+
+## 0.6.24
+
+- Keeps all accepted product paths unchanged; Mg simple-payload batching remains shadow-only and cannot affect live matrices or populations.
+- Fixes the v0.6.23 duplicate `batch_ion_count` profiling argument so completed shadow evaluations are not misreported as failures.
+- Caches immutable Mg atomic/source arrays once per process and reuses them across element evaluations.
+- Packs compact ion metadata and the selected `npfi` columns once per evaluation, filters statically zero-output ions, and sizes output buffers to the exact expected supported-row count.
+- Reports cache hits/misses, support-index hits/misses, actual copied bytes, immutable/evaluation buffer sizes, zero-output ions skipped, and peak working-set bytes.
+- Requires zero shadow failures, no missing/extra rows, and exact row parity before the checker returns an accepted shadow gate.
+
+## 0.6.23
+
+- Adds stage-level timing for the accepted Mg ion simple-payload C++ path: input preparation, Python-to-C++ call, internal C++ compute, output unpack/commit, allocation and byte counts.
+- Adds an optional one-call-per-element C++ batch implementation under `XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW=1`.
+- Compares batch rows against the accepted per-ion rows before live matrix consumption; batch output is shadow-only and cannot affect matrices, populations, or science products.
+- Adds top-N reporting by element, ion/stage, evaluation, matrix dimension, payload length, and source-record count.
+- Retains the v0.6.22 cleaned timing aggregation and all accepted product paths.
+
+## 0.6.0a37
+
+- Fixes v0.6.0a36 type53 shadow fallback regression: initialize parent map packing counters inside the type53 C++ bridge before use.
+- Adds checker reporting for enabled-but-empty shadow diagnostics and backend fallback counters so this failure mode is visible instead of only printing None fields.
+- Type53 remains shadow-only; C++ type53 is not applied to products.
+
+## 0.6.0a36
+
+- Fix type53 parent excitation packing for shadow parity when `context.extras` maps use string keys.
+- The a34 C++ path packed the parent-energy map but only looked up integer keys; many runs therefore still used the base threshold for `idest2 > nlevp`.
+- Adds robust int/string/float-key lookup for `parent_level_energy_ev_by_destination` and `parent_level_stat_weight_by_destination`.
+- Refreshes package metadata/egg-info version stamping so runtime reports 0.6.0a36.
+- Type53 remains shadow-only; C++ type53 is not applied to products.
+
+## 0.6.0a34
+
+- Fixes type53 C++ shadow parent-excitation packing.
+- Passes `context.extras["parent_level_energy_ev_by_destination"]` and parent statistical weights into the C++ type53 packing path.
+- Uses the explicit parent-excitation map for `idest2 > nlevp` threshold construction instead of relying on leveltemp destination energy.
+- Keeps type53 C++ shadow-only; no product physics are changed by the C++ candidate path.
+
+
+## v0.6.0a32
+
+- Baked the type53 shadow checker fix so diagnostics are found under `python_run.provenance` as well as the legacy top level.
+- Added per-record Mg type53 shadow intermediates for Python and C++: threshold, rnist, sumr, sumi, sumh, sumh2, sumc, sumc2, ans1..ans6, nb1, and klmax.
+- Extended the C++ type53 shadow ABI with a diagnostic buffer. This remains diagnostic-only; Python stays the applied physics and C++ type53 remains disabled for product application.
+
+## v0.6.0a30 - explicit C++ backend wrapper for proven type49 path
+
+- Adds a standalone full C++-requested benchmark wrapper (`run_v0600a30_xstar_tools_cpp_type49.sh`) outside the sdist artifacts.
+- The wrapper passes explicit CLI backend options instead of chaining through a Python-reference wrapper:
+  - `--backend cpp`
+  - `--solver-backend cpp`
+  - `--rates-backend cpp`
+  - `--matrix-backend cpp`
+  - `--emissivity-backend cpp`
+- Keeps unproven high-risk subpaths disabled by environment defaults: type53, pre-matrix photo shortcuts, broader direct accumulation, and C++ binemis.
+- Retains Mg rate_type=7/data_type=49 C++ matrix path as the only promoted matrix optimization, based on v0.6.0a28 shadow parity (`records_mismatched=0`, `records_failed_tolerance=0`).
+
+
+## v0.6.0a29 - Promote parity-proven Mg type49 C++ path for auto matrix backend
+
+- Promotes the Mg `rate_type=7` / `data_type=49` C++ matrix direct path for `matrix-backend=auto` and explicit `matrix-backend=cpp` after the v0.6.0a28 shadow gate matched all 48,343 compared records with only double-precision roundoff.
+- Keeps type51, the broader Mg direct accumulator, type53 photoionization path, pre-matrix shortcuts, and C++ binemis opt-in by default; source scanning remains allowed because the promoted type49 path uses it only to enumerate candidate records.
+- Preserves opt-out controls: set `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_CPP=0` or `XSTAR_ATOMIC_MATRIX_MG_ION_TYPE49_PHOTO_AUTO=0` to force Python handling of type49 while using the C++ matrix backend for other proven paths.
+- Renames the matrix backend implementation string to `xstar_matrix_mg_ion_type49_auto_default_type53_optin_v15`.
+
 ## 0.6.24 - 2026-06-06
 
 - Keeps all accepted product paths unchanged; Mg simple-payload batching remains shadow-only and cannot affect live matrices or populations.

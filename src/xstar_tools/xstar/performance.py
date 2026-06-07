@@ -370,7 +370,10 @@ def _summarize_simple_payload_batching_probe(
     names = {
         "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
         "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+        "calc_hmc_all.element_solver.mg_simple_payload_batch_product_cpp_kernel",
+        "calc_hmc_all.element_solver.mg_ion_simple_payload_verification_shadow_cpp_kernel",
         "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_compare",
+        "calc_hmc_all.element_solver.mg_simple_payload_batch_verification_compare",
     }
     selected = [r for r in rows if str(r.get("component", "")) in names]
     call_rows = [r for r in selected if str(r.get("component", "")).endswith("cpp_kernel")]
@@ -434,23 +437,37 @@ def _summarize_simple_payload_batching_probe(
     shadow = dict(control.get("mg_simple_payload_batch_shadow_summary", {}) or {})
     samples = list(control.get("mg_simple_payload_batch_shadow_samples", []) or [])
     product_active = bool(shadow.get("product_active", False))
+    product_requested = bool(shadow.get("product_requested", False))
+    verification_enabled = bool(shadow.get("verification_enabled", False))
     failed = float(shadow.get("evaluations_failed", 0.0) or 0.0)
+    fallback = float(shadow.get("fallback_evaluations", 0.0) or 0.0)
     missing = float(shadow.get("missing_rows", 0.0) or 0.0)
     extra = float(shadow.get("extra_rows", 0.0) or 0.0)
+    integer_mismatches = float(shadow.get("integer_field_mismatches", 0.0) or 0.0)
+    float_mismatches = float(shadow.get("float_field_mismatches", 0.0) or 0.0)
     exact = bool(shadow.get("all_rows_exact", False))
-    if product_active:
-        parity_status = "INVALID_PRODUCT_ACTIVE"
+    comparison_exact = exact and missing == 0.0 and extra == 0.0 and integer_mismatches == 0.0 and float_mismatches == 0.0
+    if product_requested and fallback != 0.0:
+        parity_status = "PRODUCT_FALLBACK"
+    elif product_active and verification_enabled and comparison_exact:
+        parity_status = "PRODUCT_VERIFIED_EXACT"
+    elif product_active and verification_enabled:
+        parity_status = "PRODUCT_VERIFICATION_FAILED"
+    elif product_active:
+        parity_status = "PRODUCT_ACTIVE_UNVERIFIED"
     elif failed != 0.0:
         parity_status = "SHADOW_ERRORS"
-    elif exact and missing == 0.0 and extra == 0.0:
+    elif comparison_exact:
         parity_status = "EXACT"
     elif bool(shadow.get("all_rows_roundoff_equivalent", False)):
         parity_status = "ROUNDOFF_EQUIVALENT"
     else:
         parity_status = "NOT_READY"
     return {
-        "observational_only": True,
-        "product_active": False,
+        "observational_only": not product_active,
+        "product_active": product_active,
+        "product_requested": product_requested,
+        "verification_enabled": verification_enabled,
         "rows": len(selected),
         "call_rows": len(call_rows),
         "stage_totals": stage_totals,
@@ -479,10 +496,12 @@ def _summarize_simple_payload_batching_probe(
             "zero_output_ions_skipped": float(shadow.get("zero_output_ions_skipped", 0.0) or 0.0),
         },
         "batch_shadow_samples": samples[:max(1, top_n)],
+        "product_checkpoints": list(control.get("mg_simple_payload_product_checkpoints", []) or []),
         "notes": [
-            "The optional batch implementation is shadow-only and its rows are never used to build live matrices or populations.",
-            "Per-ion accepted C++ payload rows are compared with the one-call-per-element batch result before live row consumption.",
-            "v0.6.24 caches immutable atomic arrays once per process, packs evaluation data once, skips statically zero-output ions, and sizes output buffers to expected supported rows.",
+            "v0.6.25 product-activates only the validated cached one-call-per-element Mg simple-payload batch.",
+            "Any batch validation error falls back immediately to the accepted per-ion C++ implementation before live matrix consumption.",
+            "Optional verification runs the old per-ion implementation in shadow and compares exact payload rows.",
+            "Pre-solver matrix, solved-population, and heating/cooling checkpoints are retained for accepted-baseline comparison.",
         ],
     }
 
@@ -494,7 +513,7 @@ def summarize_runtime_phase_map(
     output_breakdown: dict[str, Any] | None = None,
     top_n: int = 20,
 ) -> dict[str, Any]:
-    """Build the cleaned runtime map and v0.6.24 batching/cache probe summary."""
+    """Build the runtime map and v0.6.25 batch product-candidate summary."""
     phases = [
         "initialization_atomic_data_loading", "rates", "matrix_assembly", "solver",
         "emissivity_upstream_type4_type50", "other_emissivity", "opacity",
@@ -576,7 +595,7 @@ def summarize_runtime_phase_map(
     total_profiled = sum(float(item.get("wall_seconds", 0.0)) for item in phase_map.values())
     total_run = float(explicit.get("total_run_seconds", 0.0) or 0.0)
     return {
-        "schema_version": "0.6.24",
+        "schema_version": "0.6.25",
         "observational_only": True,
         "profile_rows": len(rows),
         "total_run_seconds": total_run,

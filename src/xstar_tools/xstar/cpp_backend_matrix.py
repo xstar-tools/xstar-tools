@@ -1042,11 +1042,11 @@ def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
     neutral_h_density_cm3: float,
     ionized_h_density_cm3: float,
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
-    """Evaluate supported Mg ions in one cached shadow-only C++ call.
+    """Evaluate supported Mg ions in one cached C++ call.
 
-    Immutable atomic arrays are cached once per process.  Per evaluation, only
-    compact metadata for ions with at least one statically supported output is
-    packed, and output capacity equals the exact expected supported-row count.
+    The caller decides whether the validated result is shadow-only or a guarded
+    product candidate. Immutable arrays are cached once per process; per
+    evaluation only compact active-ion metadata is packed.
     """
     lib = _load_cpp_library()
     if lib is None or not hasattr(lib, "xstar_matrix_eval_mg_ion_source_simple_payloads_batch"):
@@ -1163,11 +1163,11 @@ def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
         "payload_length": float(emitted), "terms_processed": float(emitted),
         "records_processed": float(out_stats[1]), "source_records": float(out_stats[1]),
         "fallback_count": float(out_stats[12]),
+        "output_overflow": float(out_stats[14]),
         "mg_ion_payload_type1_records": float(out_stats[5]), "mg_ion_payload_type2_records": float(out_stats[6]),
         "mg_ion_payload_type3_records": float(out_stats[7]), "mg_ion_payload_type7_records": float(out_stats[8]),
         "mg_ion_payload_type8_records": float(out_stats[9]), "mg_ion_payload_type20_records": float(out_stats[10]),
         "mg_ion_payload_skipped_records": float(out_stats[11]), "mg_ion_payload_loop_guard_hits": float(out_stats[13]),
-        "output_overflow": float(out_stats[14]),
     }
     return rows, message, stats
 

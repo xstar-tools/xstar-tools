@@ -22,6 +22,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 import csv
+import hashlib
 import json
 import math
 import os
@@ -1567,6 +1568,183 @@ def _matrix_terms_for_result(
     return out
 
 
+
+
+def _env_true(name: str, default: str = "0") -> bool:
+    return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _validate_mg_simple_payload_batch_rows(
+    rows: Sequence[Mapping[str, Any]],
+    stats: Mapping[str, Any],
+    basis: ElementCompactBasis,
+) -> None:
+    """Reject a batch result before it can become live matrix input."""
+    expected = int(stats.get("expected_supported_records", 0) or 0)
+    emitted = int(stats.get("emitted_records", len(rows)) or 0)
+    if emitted != expected or len(rows) != expected:
+        raise ElementEquilibriumError(
+            f"Mg simple-payload batch emitted {emitted}/{len(rows)} rows; expected {expected}"
+        )
+    if int(stats.get("output_overflow", 0) or 0) != 0:
+        raise ElementEquilibriumError("Mg simple-payload batch reported output overflow")
+    allowed_ions = {int(block.ion_index) for block in basis.blocks}
+    seen: set[tuple[int, int]] = set()
+    int_fields = (
+        "ion_index", "ion_record", "ion_stage", "record", "rate_type", "data_type",
+        "data_type_chain", "next_record", "idest1", "idest2", "status_code",
+        "supported_mask", "skip_mask",
+    )
+    float_fields = ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6")
+    for row in rows:
+        try:
+            integer_values = {field: int(row[field]) for field in int_fields}
+        except Exception as exc:
+            raise ElementEquilibriumError(f"invalid integer field in Mg batch row: {exc}") from exc
+        ion_index = integer_values["ion_index"]
+        record = integer_values["record"]
+        if ion_index not in allowed_ions or record <= 0:
+            raise ElementEquilibriumError(
+                f"invalid Mg batch row identity ion_index={ion_index} record={record}"
+            )
+        if integer_values["status_code"] != 1 or integer_values["supported_mask"] == 0:
+            raise ElementEquilibriumError(
+                f"invalid Mg batch row status for ion_index={ion_index} record={record}"
+            )
+        key = (ion_index, record)
+        if key in seen:
+            raise ElementEquilibriumError(f"duplicate Mg batch row ion_index={ion_index} record={record}")
+        seen.add(key)
+        for field in float_fields:
+            value = float(row.get(field, 0.0))
+            if not np.isfinite(value):
+                raise ElementEquilibriumError(
+                    f"non-finite Mg batch value {field} for ion_index={ion_index} record={record}"
+                )
+
+
+def _compare_mg_simple_payload_maps(
+    accepted: Mapping[int, Mapping[str, Any]],
+    candidate: Mapping[int, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Return an exact/roundoff comparison of two simple-payload row maps."""
+    accepted_keys = set(int(x) for x in accepted)
+    candidate_keys = set(int(x) for x in candidate)
+    missing = sorted(accepted_keys - candidate_keys)
+    extra = sorted(candidate_keys - accepted_keys)
+    integer_mismatches = 0
+    float_mismatches = 0
+    max_abs = 0.0
+    max_rel = 0.0
+    worst: Dict[str, Any] = {}
+    int_fields = (
+        "rate_type", "data_type", "data_type_chain", "next_record", "idest1", "idest2",
+        "status_code", "supported_mask", "skip_mask",
+    )
+    float_fields = ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6")
+    for rec in sorted(accepted_keys & candidate_keys):
+        left = accepted[rec]
+        right = candidate[rec]
+        for field in int_fields:
+            a = int(left.get(field, 0)); b = int(right.get(field, 0))
+            if a != b:
+                integer_mismatches += 1
+                if not worst:
+                    worst = {"record": rec, "field": field, "accepted": a, "candidate": b}
+        for field in float_fields:
+            a = float(left.get(field, 0.0)); b = float(right.get(field, 0.0))
+            diff = abs(b - a)
+            rel = diff / max(abs(a), 1.0e-300)
+            if diff != 0.0:
+                float_mismatches += 1
+            if diff > max_abs:
+                max_abs = diff
+                worst = {
+                    "record": rec, "field": field, "accepted": a, "candidate": b,
+                    "abs_diff": diff, "rel_diff": rel,
+                }
+            if np.isfinite(rel) and rel > max_rel:
+                max_rel = rel
+    exact = not missing and not extra and integer_mismatches == 0 and float_mismatches == 0
+    roundoff = (
+        not missing and not extra and integer_mismatches == 0
+        and max_abs <= 1.0e-12 and max_rel <= 1.0e-12
+    )
+    return {
+        "rows_compared": len(accepted_keys & candidate_keys),
+        "missing_records": missing,
+        "extra_records": extra,
+        "integer_field_mismatches": integer_mismatches,
+        "float_field_mismatches": float_mismatches,
+        "max_abs_diff": max_abs,
+        "max_rel_diff": max_rel,
+        "exact": exact,
+        "roundoff_equivalent": roundoff,
+        "worst": worst,
+    }
+
+
+def _array_checkpoint(value: Any) -> Dict[str, Any]:
+    """Return an exact byte fingerprint plus compact numeric diagnostics."""
+    arr = np.ascontiguousarray(np.asarray(value))
+    raw = arr.view(np.uint8).tobytes()
+    result: Dict[str, Any] = {
+        "shape": list(arr.shape),
+        "dtype": str(arr.dtype),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": int(arr.nbytes),
+    }
+    if np.issubdtype(arr.dtype, np.number):
+        finite = np.isfinite(arr)
+        result.update({
+            "finite_count": int(np.count_nonzero(finite)),
+            "nonzero_count": int(np.count_nonzero(arr)),
+            "sum": float(np.sum(arr[finite], dtype=np.float64)) if np.any(finite) else 0.0,
+            "l1": float(np.sum(np.abs(arr[finite]), dtype=np.float64)) if np.any(finite) else 0.0,
+            "max_abs": float(np.max(np.abs(arr[finite]))) if np.any(finite) else 0.0,
+        })
+    return result
+
+
+def _record_mg_simple_payload_checkpoint(
+    profile_control: MutableMapping[str, Any],
+    *,
+    evaluation_index: int,
+    assembly: ElementMatrixAssembly,
+    solve: Optional[LucySolveResult] = None,
+) -> None:
+    """Record pre-solver matrices and post-solver state for baseline comparison."""
+    rows = profile_control.setdefault("mg_simple_payload_product_checkpoints", [])
+    checkpoint = next(
+        (row for row in rows if int(row.get("evaluation_index", -1)) == int(evaluation_index)),
+        None,
+    )
+    if checkpoint is None:
+        checkpoint = {
+            "evaluation_index": int(evaluation_index),
+            "matrix_dimension": int(assembly.basis.n_rows),
+            "term_count": int(len(assembly.terms)),
+            "dense_matrix": _array_checkpoint(assembly.dense_matrix),
+            "normalized_matrix": _array_checkpoint(assembly.normalized_matrix),
+            "rhs": _array_checkpoint(assembly.rhs),
+            "heating_matrix": _array_checkpoint(assembly.heating_matrix),
+            "heating_matrix2": _array_checkpoint(assembly.heating_matrix2),
+        }
+        rows.append(checkpoint)
+    if solve is not None:
+        checkpoint.update({
+            "solved_populations": _array_checkpoint(solve.populations),
+            "final_outer_start_populations": _array_checkpoint(solve.final_outer_start_populations),
+            "heating": float(solve.heating),
+            "cooling": float(solve.cooling),
+            "heating2": float(solve.heating2),
+            "cooling2": float(solve.cooling2),
+            "outer_iterations": int(solve.outer_iterations),
+            "fixed_point_iterations": int(solve.fixed_point_iterations),
+            "converged": bool(solve.converged),
+        })
+
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1606,27 +1784,49 @@ def assemble_element_matrix(
             max_ion_stage=context.max_ion_stage,
         )
         rnise_lte, level_tables = levwkelement(master, derived, basis, context)
-    # v0.6.24 cached one-call-per-element Mg simple-payload batch shadow.
-    # The result is diagnostic only: accepted per-ion rows remain the sole live
-    # source and are compared before their later matrix consumption.
+    # v0.6.25 cached one-call-per-element Mg simple-payload product candidate.
+    # Only this batch is newly product-active.  It is validated before any row
+    # can enter live matrix construction and falls back to the accepted per-ion
+    # implementation on any cache, C++, count, integer-field, or finiteness error.
     _mg_simple_payload_eval_index = 0
     _mg_simple_payload_batch_rows_by_ion: Dict[int, List[Dict[str, Any]]] = {}
+    _mg_simple_payload_batch_product_requested = bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_CPP")
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_PRODUCT_CANDIDATE")
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP")
+    )
+    _mg_simple_payload_batch_verify_old = bool(
+        _mg_simple_payload_batch_product_requested
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_VERIFY_OLD")
+    )
     _mg_simple_payload_batch_shadow_enabled = bool(
         int(element_z) == 12
-        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW", "0")).strip().lower() in {"1", "true", "yes", "on"}
-        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and not _mg_simple_payload_batch_product_requested
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW")
+        and _env_true("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP")
     )
+    _mg_simple_payload_batch_requested = bool(
+        _mg_simple_payload_batch_product_requested or _mg_simple_payload_batch_shadow_enabled
+    )
+    _mg_simple_payload_batch_product_active = False
+    _mg_simple_payload_batch_message = ""
+    _mg_simple_payload_batch_stats: Dict[str, float] = {}
     if int(element_z) == 12:
         _mg_simple_payload_eval_index = int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)) + 1
         profile_control["_mg_simple_payload_batch_evaluation_index"] = int(_mg_simple_payload_eval_index)
-    if _mg_simple_payload_batch_shadow_enabled:
+    if _mg_simple_payload_batch_requested:
         _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {
             "enabled": True,
+            "product_requested": bool(_mg_simple_payload_batch_product_requested),
             "product_active": False,
+            "verification_enabled": bool(_mg_simple_payload_batch_verify_old),
             "scope": "one_cpp_call_per_element_assembly",
             "evaluations_attempted": 0.0,
             "evaluations_completed": 0.0,
             "evaluations_failed": 0.0,
+            "product_activations": 0.0,
+            "fallback_evaluations": 0.0,
             "batch_cpp_calls": 0.0,
             "accepted_per_ion_calls_compared": 0.0,
             "rows_compared": 0.0,
@@ -1639,6 +1839,8 @@ def assemble_element_matrix(
             "all_rows_exact": True,
             "all_rows_roundoff_equivalent": True,
         })
+        _batch_summary["product_requested"] = bool(_mg_simple_payload_batch_product_requested)
+        _batch_summary["verification_enabled"] = bool(_mg_simple_payload_batch_verify_old)
         _batch_summary["evaluations_attempted"] = float(_batch_summary.get("evaluations_attempted", 0.0)) + 1.0
         try:
             _batch_ion_specs = [
@@ -1654,8 +1856,17 @@ def assemble_element_matrix(
                 neutral_h_density_cm3=float(context.neutral_h_density_cm3),
                 ionized_h_density_cm3=float(context.ionized_h_density_cm3),
             )
+            _validate_mg_simple_payload_batch_rows(_batch_rows, _batch_stats, basis)
             for _row in _batch_rows:
                 _mg_simple_payload_batch_rows_by_ion.setdefault(int(_row["ion_index"]), []).append(_row)
+            _mg_simple_payload_batch_message = str(_batch_message)
+            _mg_simple_payload_batch_stats = dict(_batch_stats)
+            _mg_simple_payload_batch_product_active = bool(_mg_simple_payload_batch_product_requested)
+            _batch_summary["product_active"] = bool(
+                _batch_summary.get("product_active", False) or _mg_simple_payload_batch_product_active
+            )
+            if _mg_simple_payload_batch_product_active:
+                _batch_summary["product_activations"] = float(_batch_summary.get("product_activations", 0.0)) + 1.0
             _batch_summary["batch_cpp_calls"] = float(_batch_summary.get("batch_cpp_calls", 0.0)) + float(_batch_stats.get("cpp_calls", 0.0))
             for _k in (
                 "input_preparation_seconds", "python_to_cpp_call_seconds", "cpp_kernel_compute_seconds",
@@ -1678,12 +1889,12 @@ def assemble_element_matrix(
             )
             if is_mg_summary_profile:
                 _batch_profile_stats = dict(_batch_stats)
-                # v0.6.23 passed this both explicitly and through **stats.
-                # Keep one authoritative value to avoid the duplicate-key error.
                 _profile_batch_ion_count = float(_batch_profile_stats.pop("batch_ion_count", len(_batch_ion_specs)))
                 record_profile_event(
                     profile_control,
-                    "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+                    "calc_hmc_all.element_solver.mg_simple_payload_batch_product_cpp_kernel"
+                    if _mg_simple_payload_batch_product_active
+                    else "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
                     float(_batch_stats.get("input_preparation_seconds", 0.0))
                     + float(_batch_stats.get("python_to_cpp_call_seconds", 0.0))
                     + float(_batch_stats.get("output_copy_commit_seconds", 0.0)),
@@ -1691,21 +1902,29 @@ def assemble_element_matrix(
                     matrix_dimension=int(basis.n_rows), batch_ion_count=_profile_batch_ion_count,
                     emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                     source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
-                    status="shadow_only", product_active=False, **_batch_profile_stats,
+                    status=("product_candidate" if _mg_simple_payload_batch_product_active else "shadow_only"),
+                    product_active=bool(_mg_simple_payload_batch_product_active), **_batch_profile_stats,
                 )
             _batch_summary["evaluations_completed"] = float(_batch_summary.get("evaluations_completed", 0.0)) + 1.0
         except Exception as _batch_exc:
+            _mg_simple_payload_batch_product_active = False
+            _mg_simple_payload_batch_rows_by_ion.clear()
             _batch_summary["evaluations_failed"] = float(_batch_summary.get("evaluations_failed", 0.0)) + 1.0
+            if _mg_simple_payload_batch_product_requested:
+                _batch_summary["fallback_evaluations"] = float(_batch_summary.get("fallback_evaluations", 0.0)) + 1.0
             _batch_summary["last_error"] = str(_batch_exc)
             if is_mg_summary_profile:
                 record_profile_event(
                     profile_control,
-                    "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+                    "calc_hmc_all.element_solver.mg_simple_payload_batch_product_cpp_kernel"
+                    if _mg_simple_payload_batch_product_requested
+                    else "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
                     0.0, element_z=int(element_z), evaluation_index=int(_mg_simple_payload_eval_index),
                     matrix_dimension=int(basis.n_rows), batch_ion_count=float(len(basis.blocks)),
                     emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                     source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
-                    status="shadow_error", product_active=False, error=str(_batch_exc),
+                    status="fallback" if _mg_simple_payload_batch_product_requested else "shadow_error",
+                    product_active=False, error=str(_batch_exc),
                 )
 
     # Source ``rnise`` and the compact solver seed are independent arrays.
@@ -3405,100 +3624,137 @@ def assemble_element_matrix(
                             error=str(exc),
                         )
 
-            if mg_ion_source_scan_cpp_enabled and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+            if mg_ion_source_scan_cpp_enabled and _env_true("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP"):
                 try:
-                    cpp_simple_rows, cpp_simple_payload_message, cpp_simple_payload_stats = eval_mg_ion_source_simple_payloads_cpp_detailed(
-                        master=master,
-                        derived=derived,
-                        ion_index=int(block.ion_index),
-                        ion_record=int(block.ion_record),
-                        temperature_1e4k=float(context.temperature_k) / 1.0e4,
-                        electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
-                        neutral_h_density_cm3=float(context.neutral_h_density_cm3),
-                        ionized_h_density_cm3=float(context.ionized_h_density_cm3),
-                        nlevp=int(block.nlev),
-                    )
-                    cpp_simple_payload_by_record = {int(row["record"]): row for row in cpp_simple_rows if int(row.get("status_code", 0)) == 1}
+                    _accepted_shadow_by_record: Dict[int, Dict[str, Any]] = {}
+                    if _mg_simple_payload_batch_product_active:
+                        cpp_simple_rows = list(_mg_simple_payload_batch_rows_by_ion.get(int(block.ion_index), []))
+                        cpp_simple_payload_message = _mg_simple_payload_batch_message
+                        cpp_simple_payload_stats = {
+                            "records_seen": float(sum(1 for _ in cpp_simple_rows)),
+                            "records_supported": float(len(cpp_simple_rows)),
+                            "emitted_records": float(len(cpp_simple_rows)),
+                            "input_preparation_seconds": 0.0,
+                            "python_to_cpp_call_seconds": 0.0,
+                            "cpp_kernel_compute_seconds": 0.0,
+                            "output_copy_commit_seconds": 0.0,
+                            "bytes_copied": 0.0,
+                            "product_batch_rows": float(len(cpp_simple_rows)),
+                        }
+                        cpp_simple_payload_by_record = {
+                            int(row["record"]): row for row in cpp_simple_rows
+                            if int(row.get("status_code", 0)) == 1
+                        }
+                        if _mg_simple_payload_batch_verify_old:
+                            _accepted_rows, _accepted_message, _accepted_stats = eval_mg_ion_source_simple_payloads_cpp_detailed(
+                                master=master,
+                                derived=derived,
+                                ion_index=int(block.ion_index),
+                                ion_record=int(block.ion_record),
+                                temperature_1e4k=float(context.temperature_k) / 1.0e4,
+                                electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                                neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+                                ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+                                nlevp=int(block.nlev),
+                            )
+                            _accepted_shadow_by_record = {
+                                int(row["record"]): row for row in _accepted_rows
+                                if int(row.get("status_code", 0)) == 1
+                            }
+                            if is_mg_summary_profile:
+                                record_profile_event(
+                                    profile_control,
+                                    "calc_hmc_all.element_solver.mg_ion_simple_payload_verification_shadow_cpp_kernel",
+                                    float(_accepted_stats.get("input_preparation_seconds", 0.0))
+                                    + float(_accepted_stats.get("python_to_cpp_call_seconds", 0.0))
+                                    + float(_accepted_stats.get("output_copy_commit_seconds", 0.0)),
+                                    element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
+                                    evaluation_index=int(_mg_simple_payload_eval_index), matrix_dimension=int(basis.n_rows),
+                                    source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
+                                    status="verification_shadow", product_active=False, **_accepted_stats,
+                                )
+                    else:
+                        cpp_simple_rows, cpp_simple_payload_message, cpp_simple_payload_stats = eval_mg_ion_source_simple_payloads_cpp_detailed(
+                            master=master,
+                            derived=derived,
+                            ion_index=int(block.ion_index),
+                            ion_record=int(block.ion_record),
+                            temperature_1e4k=float(context.temperature_k) / 1.0e4,
+                            electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                            neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+                            ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+                            nlevp=int(block.nlev),
+                        )
+                        cpp_simple_payload_by_record = {
+                            int(row["record"]): row for row in cpp_simple_rows
+                            if int(row.get("status_code", 0)) == 1
+                        }
 
-                    # Compare the optional one-call-per-element batch shadow
-                    # before these accepted per-ion rows can be consumed by the
-                    # live record loop below.
-                    if _mg_simple_payload_batch_shadow_enabled:
+                    # Compare either old accepted rows against the active product
+                    # batch (verification mode), or accepted live rows against the
+                    # optional batch shadow.  This comparison always occurs before
+                    # the selected live rows enter the source-record loop below.
+                    _comparison_enabled = bool(
+                        (_mg_simple_payload_batch_product_active and _mg_simple_payload_batch_verify_old)
+                        or _mg_simple_payload_batch_shadow_enabled
+                    )
+                    if _comparison_enabled:
                         _cmp0 = time.perf_counter()
-                        _shadow_rows = _mg_simple_payload_batch_rows_by_ion.get(int(block.ion_index), [])
-                        _shadow_by_record = {int(_r["record"]): _r for _r in _shadow_rows if int(_r.get("status_code", 0)) == 1}
-                        _live_keys = set(cpp_simple_payload_by_record)
-                        _shadow_keys = set(_shadow_by_record)
-                        _missing = sorted(_live_keys - _shadow_keys)
-                        _extra = sorted(_shadow_keys - _live_keys)
-                        _int_mismatches = 0
-                        _float_mismatches = 0
-                        _max_abs = 0.0
-                        _max_rel = 0.0
-                        _worst: Dict[str, Any] = {}
-                        _int_fields = ("rate_type", "data_type", "data_type_chain", "next_record", "idest1", "idest2", "status_code", "supported_mask", "skip_mask")
-                        _float_fields = ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6")
-                        for _rec in sorted(_live_keys & _shadow_keys):
-                            _live = cpp_simple_payload_by_record[_rec]
-                            _shadow = _shadow_by_record[_rec]
-                            for _field in _int_fields:
-                                if int(_live.get(_field, 0)) != int(_shadow.get(_field, 0)):
-                                    _int_mismatches += 1
-                                    if not _worst:
-                                        _worst = {"record": int(_rec), "field": _field, "accepted": int(_live.get(_field, 0)), "batch_shadow": int(_shadow.get(_field, 0))}
-                            for _field in _float_fields:
-                                _a = float(_live.get(_field, 0.0)); _b = float(_shadow.get(_field, 0.0))
-                                _diff = abs(_b - _a)
-                                _rel = _diff / max(abs(_a), 1.0e-300)
-                                if _diff != 0.0:
-                                    _float_mismatches += 1
-                                if _diff > _max_abs:
-                                    _max_abs = float(_diff)
-                                    _worst = {"record": int(_rec), "field": _field, "accepted": _a, "batch_shadow": _b, "abs_diff": float(_diff), "rel_diff": float(_rel)}
-                                if np.isfinite(_rel) and _rel > _max_rel:
-                                    _max_rel = float(_rel)
+                        if _mg_simple_payload_batch_product_active:
+                            _accepted_map = _accepted_shadow_by_record
+                            _candidate_map = cpp_simple_payload_by_record
+                        else:
+                            _accepted_map = cpp_simple_payload_by_record
+                            _candidate_map = {
+                                int(row["record"]): row
+                                for row in _mg_simple_payload_batch_rows_by_ion.get(int(block.ion_index), [])
+                                if int(row.get("status_code", 0)) == 1
+                            }
+                        _cmp = _compare_mg_simple_payload_maps(_accepted_map, _candidate_map)
                         _cmp_elapsed = time.perf_counter() - _cmp0
                         _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {})
                         _batch_summary["accepted_per_ion_calls_compared"] = float(_batch_summary.get("accepted_per_ion_calls_compared", 0.0)) + 1.0
-                        _batch_summary["rows_compared"] = float(_batch_summary.get("rows_compared", 0.0)) + float(len(_live_keys & _shadow_keys))
-                        _batch_summary["missing_rows"] = float(_batch_summary.get("missing_rows", 0.0)) + float(len(_missing))
-                        _batch_summary["extra_rows"] = float(_batch_summary.get("extra_rows", 0.0)) + float(len(_extra))
-                        _batch_summary["integer_field_mismatches"] = float(_batch_summary.get("integer_field_mismatches", 0.0)) + float(_int_mismatches)
-                        _batch_summary["float_field_mismatches"] = float(_batch_summary.get("float_field_mismatches", 0.0)) + float(_float_mismatches)
+                        _batch_summary["rows_compared"] = float(_batch_summary.get("rows_compared", 0.0)) + float(_cmp["rows_compared"])
+                        _batch_summary["missing_rows"] = float(_batch_summary.get("missing_rows", 0.0)) + float(len(_cmp["missing_records"]))
+                        _batch_summary["extra_rows"] = float(_batch_summary.get("extra_rows", 0.0)) + float(len(_cmp["extra_records"]))
+                        _batch_summary["integer_field_mismatches"] = float(_batch_summary.get("integer_field_mismatches", 0.0)) + float(_cmp["integer_field_mismatches"])
+                        _batch_summary["float_field_mismatches"] = float(_batch_summary.get("float_field_mismatches", 0.0)) + float(_cmp["float_field_mismatches"])
                         _batch_summary["comparison_seconds"] = float(_batch_summary.get("comparison_seconds", 0.0)) + float(_cmp_elapsed)
-                        _batch_summary["max_abs_diff"] = max(float(_batch_summary.get("max_abs_diff", 0.0)), float(_max_abs))
-                        _batch_summary["max_rel_diff"] = max(float(_batch_summary.get("max_rel_diff", 0.0)), float(_max_rel))
-                        _exact = not _missing and not _extra and _int_mismatches == 0 and _float_mismatches == 0
-                        _roundoff = not _missing and not _extra and _int_mismatches == 0 and _max_abs <= 1.0e-12 and _max_rel <= 1.0e-12
-                        _batch_summary["all_rows_exact"] = bool(_batch_summary.get("all_rows_exact", True) and _exact)
-                        _batch_summary["all_rows_roundoff_equivalent"] = bool(_batch_summary.get("all_rows_roundoff_equivalent", True) and _roundoff)
-                        if not _exact:
+                        _batch_summary["max_abs_diff"] = max(float(_batch_summary.get("max_abs_diff", 0.0)), float(_cmp["max_abs_diff"]))
+                        _batch_summary["max_rel_diff"] = max(float(_batch_summary.get("max_rel_diff", 0.0)), float(_cmp["max_rel_diff"]))
+                        _batch_summary["all_rows_exact"] = bool(_batch_summary.get("all_rows_exact", True) and _cmp["exact"])
+                        _batch_summary["all_rows_roundoff_equivalent"] = bool(
+                            _batch_summary.get("all_rows_roundoff_equivalent", True) and _cmp["roundoff_equivalent"]
+                        )
+                        if not _cmp["exact"]:
                             _samples = profile_control.setdefault("mg_simple_payload_batch_shadow_samples", [])
                             _limit = max(1, int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW_MAX_SAMPLES", "32") or "32"))
                             if len(_samples) < _limit:
                                 _samples.append({
-                                    "evaluation_index": int(_mg_simple_payload_eval_index), "element_z": int(element_z),
-                                    "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
-                                    "matrix_dimension": int(basis.n_rows), "accepted_rows": int(len(_live_keys)),
-                                    "batch_shadow_rows": int(len(_shadow_keys)), "missing_records": _missing[:16],
-                                    "extra_records": _extra[:16], "integer_field_mismatches": int(_int_mismatches),
-                                    "float_field_mismatches": int(_float_mismatches), "max_abs_diff": float(_max_abs),
-                                    "max_rel_diff": float(_max_rel), "worst": _worst,
+                                    "evaluation_index": int(_mg_simple_payload_eval_index),
+                                    "element_z": int(element_z), "ion_index": int(block.ion_index),
+                                    "ion_stage": int(block.ion_stage), "matrix_dimension": int(basis.n_rows),
+                                    "accepted_rows": int(len(_accepted_map)), "candidate_rows": int(len(_candidate_map)),
+                                    **_cmp,
                                 })
                         if is_mg_summary_profile:
                             record_profile_event(
                                 profile_control,
-                                "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_compare",
+                                "calc_hmc_all.element_solver.mg_simple_payload_batch_verification_compare"
+                                if _mg_simple_payload_batch_product_active
+                                else "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_compare",
                                 float(_cmp_elapsed), element_z=int(element_z), ion_stage=int(block.ion_stage),
                                 ion_index=int(block.ion_index), evaluation_index=int(_mg_simple_payload_eval_index),
-                                matrix_dimension=int(basis.n_rows), payload_length=float(len(_live_keys)),
-                                source_records=float(cpp_simple_payload_stats.get("records_seen", 0.0)),
-                                missing_rows=float(len(_missing)), extra_rows=float(len(_extra)),
-                                integer_field_mismatches=float(_int_mismatches), float_field_mismatches=float(_float_mismatches),
-                                max_abs_diff=float(_max_abs), max_rel_diff=float(_max_rel), exact=bool(_exact),
-                                roundoff_equivalent=bool(_roundoff), product_active=False, status="shadow_compare",
+                                matrix_dimension=int(basis.n_rows), payload_length=float(len(_accepted_map)),
+                                missing_rows=float(len(_cmp["missing_records"])),
+                                extra_rows=float(len(_cmp["extra_records"])),
+                                integer_field_mismatches=float(_cmp["integer_field_mismatches"]),
+                                float_field_mismatches=float(_cmp["float_field_mismatches"]),
+                                max_abs_diff=float(_cmp["max_abs_diff"]), max_rel_diff=float(_cmp["max_rel_diff"]),
+                                exact=bool(_cmp["exact"]), roundoff_equivalent=bool(_cmp["roundoff_equivalent"]),
+                                product_active=bool(_mg_simple_payload_batch_product_active), status="verification_compare",
                             )
-                    if is_mg_summary_profile:
+                    if is_mg_summary_profile and not _mg_simple_payload_batch_product_active:
                         record_profile_event(
                             profile_control,
                             "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
@@ -3509,26 +3765,24 @@ def assemble_element_matrix(
                             evaluation_index=int(_mg_simple_payload_eval_index), matrix_dimension=int(basis.n_rows),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
-                            status="cpp", product_active=True, **cpp_simple_payload_stats,
+                            status=("fallback" if _mg_simple_payload_batch_product_requested else "cpp"),
+                            product_active=True, **cpp_simple_payload_stats,
                         )
                 except Exception as exc:
+                    # A product batch failure is caught before this loop and routes
+                    # here through the accepted per-ion path.  A per-ion fallback
+                    # failure retains the historical Python record evaluation.
                     cpp_simple_payload_by_record = {}
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
                             "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
                             0.0,
-                            element_z=int(element_z),
-                            ion_stage=int(block.ion_stage),
-                            ion_index=int(block.ion_index),
+                            element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
-                            records_seen=0.0,
-                            records_batched=0.0,
-                            cpp_calls=0.0,
-                            fallback_count=1.0,
-                            status="fallback",
-                            error=str(exc),
+                            records_seen=0.0, records_batched=0.0, cpp_calls=0.0, fallback_count=1.0,
+                            status="fallback", error=str(exc),
                         )
 
             _row_collection_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
@@ -5179,6 +5433,11 @@ def solve_element_statistical_equilibrium(
                 dispatcher=dispatcher,
             )
         _matrix_assembly_seconds = time.perf_counter() - _matrix_assembly_t0
+        _record_mg_simple_payload_checkpoint(
+            profile_control,
+            evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
+            assembly=assembly,
+        )
         record_profile_event(
             profile_control,
             "calc_hmc_all.element_solver.matrix_assembly_after_type53_cpp",
@@ -5215,6 +5474,12 @@ def solve_element_statistical_equilibrium(
                     source_routine="msolvelucy/leqt2f",
                 ):
                     solve = msolvelucy(assembly, context)
+                _record_mg_simple_payload_checkpoint(
+                    profile_control,
+                    evaluation_index=int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)),
+                    assembly=assembly,
+                    solve=solve,
+                )
             else:
                 solve = msolvelucy(assembly, context)
     ready = bool(
