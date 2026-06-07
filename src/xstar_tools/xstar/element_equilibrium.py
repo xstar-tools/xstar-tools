@@ -33,7 +33,7 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
-from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
+from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, eval_mg_element_simple_payloads_batch_shadow_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
 from .cpp_backend_extra import eval_mg_ion_accumulator_cpp
 from .ucalc import (
     SourceFaithfulUCalc,
@@ -1606,6 +1606,91 @@ def assemble_element_matrix(
             max_ion_stage=context.max_ion_stage,
         )
         rnise_lte, level_tables = levwkelement(master, derived, basis, context)
+    # v0.6.23 optional one-call-per-element Mg simple-payload batch shadow.
+    # The result is diagnostic only: accepted per-ion rows remain the sole live
+    # source and are compared before their later matrix consumption.
+    _mg_simple_payload_eval_index = 0
+    _mg_simple_payload_batch_rows_by_ion: Dict[int, List[Dict[str, Any]]] = {}
+    _mg_simple_payload_batch_shadow_enabled = bool(
+        int(element_z) == 12
+        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SIMPLE_PAYLOAD_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    )
+    if int(element_z) == 12:
+        _mg_simple_payload_eval_index = int(profile_control.get("_mg_simple_payload_batch_evaluation_index", 0)) + 1
+        profile_control["_mg_simple_payload_batch_evaluation_index"] = int(_mg_simple_payload_eval_index)
+    if _mg_simple_payload_batch_shadow_enabled:
+        _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {
+            "enabled": True,
+            "product_active": False,
+            "scope": "one_cpp_call_per_element_assembly",
+            "evaluations_attempted": 0.0,
+            "evaluations_completed": 0.0,
+            "evaluations_failed": 0.0,
+            "batch_cpp_calls": 0.0,
+            "accepted_per_ion_calls_compared": 0.0,
+            "rows_compared": 0.0,
+            "missing_rows": 0.0,
+            "extra_rows": 0.0,
+            "integer_field_mismatches": 0.0,
+            "float_field_mismatches": 0.0,
+            "max_abs_diff": 0.0,
+            "max_rel_diff": 0.0,
+            "all_rows_exact": True,
+            "all_rows_roundoff_equivalent": True,
+        })
+        _batch_summary["evaluations_attempted"] = float(_batch_summary.get("evaluations_attempted", 0.0)) + 1.0
+        try:
+            _batch_ion_specs = [
+                {"ion_index": int(_b.ion_index), "ion_record": int(_b.ion_record), "ion_stage": int(_b.ion_stage), "nlevp": int(_b.nlev)}
+                for _b in basis.blocks
+            ]
+            _batch_rows, _batch_message, _batch_stats = eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
+                master=master,
+                derived=derived,
+                ion_specs=_batch_ion_specs,
+                temperature_1e4k=float(context.temperature_k) / 1.0e4,
+                electron_density_cm3=float(context.hydrogen_density_cm3) * float(context.electron_fraction_xee),
+                neutral_h_density_cm3=float(context.neutral_h_density_cm3),
+                ionized_h_density_cm3=float(context.ionized_h_density_cm3),
+            )
+            for _row in _batch_rows:
+                _mg_simple_payload_batch_rows_by_ion.setdefault(int(_row["ion_index"]), []).append(_row)
+            _batch_summary["evaluations_completed"] = float(_batch_summary.get("evaluations_completed", 0.0)) + 1.0
+            _batch_summary["batch_cpp_calls"] = float(_batch_summary.get("batch_cpp_calls", 0.0)) + float(_batch_stats.get("cpp_calls", 0.0))
+            for _k in (
+                "input_preparation_seconds", "python_to_cpp_call_seconds", "cpp_kernel_compute_seconds",
+                "output_copy_commit_seconds", "allocation_count", "input_bytes", "output_capacity_bytes",
+                "output_emitted_bytes", "bytes_copied", "records_processed", "terms_processed",
+            ):
+                _batch_summary[_k] = float(_batch_summary.get(_k, 0.0)) + float(_batch_stats.get(_k, 0.0))
+            if is_mg_summary_profile:
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+                    float(_batch_stats.get("input_preparation_seconds", 0.0))
+                    + float(_batch_stats.get("python_to_cpp_call_seconds", 0.0))
+                    + float(_batch_stats.get("output_copy_commit_seconds", 0.0)),
+                    element_z=int(element_z), evaluation_index=int(_mg_simple_payload_eval_index),
+                    matrix_dimension=int(basis.n_rows), batch_ion_count=float(len(_batch_ion_specs)),
+                    emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                    source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
+                    status="shadow_only", product_active=False, **_batch_stats,
+                )
+        except Exception as _batch_exc:
+            _batch_summary["evaluations_failed"] = float(_batch_summary.get("evaluations_failed", 0.0)) + 1.0
+            _batch_summary["last_error"] = str(_batch_exc)
+            if is_mg_summary_profile:
+                record_profile_event(
+                    profile_control,
+                    "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+                    0.0, element_z=int(element_z), evaluation_index=int(_mg_simple_payload_eval_index),
+                    matrix_dimension=int(basis.n_rows), batch_ion_count=float(len(basis.blocks)),
+                    emit_progress=bool(profile_control.get("profile_backend_calls", False)),
+                    source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
+                    status="shadow_error", product_active=False, error=str(_batch_exc),
+                )
+
     # Source ``rnise`` and the compact solver seed are independent arrays.
     # ``levwkelement`` owns the LTE vector used later for ``rnisg``/``bilevg``;
     # ``calc_hmc_element`` maps the incoming global ``xileve`` state into
@@ -3317,18 +3402,97 @@ def assemble_element_matrix(
                         nlevp=int(block.nlev),
                     )
                     cpp_simple_payload_by_record = {int(row["record"]): row for row in cpp_simple_rows if int(row.get("status_code", 0)) == 1}
+
+                    # Compare the optional one-call-per-element batch shadow
+                    # before these accepted per-ion rows can be consumed by the
+                    # live record loop below.
+                    if _mg_simple_payload_batch_shadow_enabled:
+                        _cmp0 = time.perf_counter()
+                        _shadow_rows = _mg_simple_payload_batch_rows_by_ion.get(int(block.ion_index), [])
+                        _shadow_by_record = {int(_r["record"]): _r for _r in _shadow_rows if int(_r.get("status_code", 0)) == 1}
+                        _live_keys = set(cpp_simple_payload_by_record)
+                        _shadow_keys = set(_shadow_by_record)
+                        _missing = sorted(_live_keys - _shadow_keys)
+                        _extra = sorted(_shadow_keys - _live_keys)
+                        _int_mismatches = 0
+                        _float_mismatches = 0
+                        _max_abs = 0.0
+                        _max_rel = 0.0
+                        _worst: Dict[str, Any] = {}
+                        _int_fields = ("rate_type", "data_type", "data_type_chain", "next_record", "idest1", "idest2", "status_code", "supported_mask", "skip_mask")
+                        _float_fields = ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6")
+                        for _rec in sorted(_live_keys & _shadow_keys):
+                            _live = cpp_simple_payload_by_record[_rec]
+                            _shadow = _shadow_by_record[_rec]
+                            for _field in _int_fields:
+                                if int(_live.get(_field, 0)) != int(_shadow.get(_field, 0)):
+                                    _int_mismatches += 1
+                                    if not _worst:
+                                        _worst = {"record": int(_rec), "field": _field, "accepted": int(_live.get(_field, 0)), "batch_shadow": int(_shadow.get(_field, 0))}
+                            for _field in _float_fields:
+                                _a = float(_live.get(_field, 0.0)); _b = float(_shadow.get(_field, 0.0))
+                                _diff = abs(_b - _a)
+                                _rel = _diff / max(abs(_a), 1.0e-300)
+                                if _diff != 0.0:
+                                    _float_mismatches += 1
+                                if _diff > _max_abs:
+                                    _max_abs = float(_diff)
+                                    _worst = {"record": int(_rec), "field": _field, "accepted": _a, "batch_shadow": _b, "abs_diff": float(_diff), "rel_diff": float(_rel)}
+                                if np.isfinite(_rel) and _rel > _max_rel:
+                                    _max_rel = float(_rel)
+                        _cmp_elapsed = time.perf_counter() - _cmp0
+                        _batch_summary = profile_control.setdefault("mg_simple_payload_batch_shadow_summary", {})
+                        _batch_summary["accepted_per_ion_calls_compared"] = float(_batch_summary.get("accepted_per_ion_calls_compared", 0.0)) + 1.0
+                        _batch_summary["rows_compared"] = float(_batch_summary.get("rows_compared", 0.0)) + float(len(_live_keys & _shadow_keys))
+                        _batch_summary["missing_rows"] = float(_batch_summary.get("missing_rows", 0.0)) + float(len(_missing))
+                        _batch_summary["extra_rows"] = float(_batch_summary.get("extra_rows", 0.0)) + float(len(_extra))
+                        _batch_summary["integer_field_mismatches"] = float(_batch_summary.get("integer_field_mismatches", 0.0)) + float(_int_mismatches)
+                        _batch_summary["float_field_mismatches"] = float(_batch_summary.get("float_field_mismatches", 0.0)) + float(_float_mismatches)
+                        _batch_summary["comparison_seconds"] = float(_batch_summary.get("comparison_seconds", 0.0)) + float(_cmp_elapsed)
+                        _batch_summary["max_abs_diff"] = max(float(_batch_summary.get("max_abs_diff", 0.0)), float(_max_abs))
+                        _batch_summary["max_rel_diff"] = max(float(_batch_summary.get("max_rel_diff", 0.0)), float(_max_rel))
+                        _exact = not _missing and not _extra and _int_mismatches == 0 and _float_mismatches == 0
+                        _roundoff = not _missing and not _extra and _int_mismatches == 0 and _max_abs <= 1.0e-12 and _max_rel <= 1.0e-12
+                        _batch_summary["all_rows_exact"] = bool(_batch_summary.get("all_rows_exact", True) and _exact)
+                        _batch_summary["all_rows_roundoff_equivalent"] = bool(_batch_summary.get("all_rows_roundoff_equivalent", True) and _roundoff)
+                        if not _exact:
+                            _samples = profile_control.setdefault("mg_simple_payload_batch_shadow_samples", [])
+                            _limit = max(1, int(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW_MAX_SAMPLES", "32") or "32"))
+                            if len(_samples) < _limit:
+                                _samples.append({
+                                    "evaluation_index": int(_mg_simple_payload_eval_index), "element_z": int(element_z),
+                                    "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
+                                    "matrix_dimension": int(basis.n_rows), "accepted_rows": int(len(_live_keys)),
+                                    "batch_shadow_rows": int(len(_shadow_keys)), "missing_records": _missing[:16],
+                                    "extra_records": _extra[:16], "integer_field_mismatches": int(_int_mismatches),
+                                    "float_field_mismatches": int(_float_mismatches), "max_abs_diff": float(_max_abs),
+                                    "max_rel_diff": float(_max_rel), "worst": _worst,
+                                })
+                        if is_mg_summary_profile:
+                            record_profile_event(
+                                profile_control,
+                                "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_compare",
+                                float(_cmp_elapsed), element_z=int(element_z), ion_stage=int(block.ion_stage),
+                                ion_index=int(block.ion_index), evaluation_index=int(_mg_simple_payload_eval_index),
+                                matrix_dimension=int(basis.n_rows), payload_length=float(len(_live_keys)),
+                                source_records=float(cpp_simple_payload_stats.get("records_seen", 0.0)),
+                                missing_rows=float(len(_missing)), extra_rows=float(len(_extra)),
+                                integer_field_mismatches=float(_int_mismatches), float_field_mismatches=float(_float_mismatches),
+                                max_abs_diff=float(_max_abs), max_rel_diff=float(_max_rel), exact=bool(_exact),
+                                roundoff_equivalent=bool(_roundoff), product_active=False, status="shadow_compare",
+                            )
                     if is_mg_summary_profile:
                         record_profile_event(
                             profile_control,
                             "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
-                            float(cpp_simple_payload_stats.get("packing_seconds", 0.0)) + float(cpp_simple_payload_stats.get("cpp_kernel_seconds", 0.0)),
-                            element_z=int(element_z),
-                            ion_stage=int(block.ion_stage),
-                            ion_index=int(block.ion_index),
+                            float(cpp_simple_payload_stats.get("input_preparation_seconds", 0.0))
+                            + float(cpp_simple_payload_stats.get("python_to_cpp_call_seconds", 0.0))
+                            + float(cpp_simple_payload_stats.get("output_copy_commit_seconds", 0.0)),
+                            element_z=int(element_z), ion_stage=int(block.ion_stage), ion_index=int(block.ion_index),
+                            evaluation_index=int(_mg_simple_payload_eval_index), matrix_dimension=int(basis.n_rows),
                             emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                             source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads",
-                            status="cpp",
-                            **cpp_simple_payload_stats,
+                            status="cpp", product_active=True, **cpp_simple_payload_stats,
                         )
                 except Exception as exc:
                     cpp_simple_payload_by_record = {}

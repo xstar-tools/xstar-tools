@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.23 - 2026-06-06
+
+- Adds stage-level timing for the accepted Mg ion simple-payload C++ path: input preparation, Python-to-C++ call, internal C++ compute, output unpack/commit, allocation and byte counts.
+- Adds an optional one-call-per-element C++ batch implementation under `XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_BATCH_SHADOW=1`.
+- Compares batch rows against the accepted per-ion rows before live matrix consumption; batch output is shadow-only and cannot affect matrices, populations, or science products.
+- Adds top-N reporting by element, ion/stage, evaluation, matrix dimension, payload length, and source-record count.
+- Retains the v0.6.22 cleaned timing aggregation and all accepted product paths.
+
 ## 0.6.0a37
 
 - Fixes v0.6.0a36 type53 shadow fallback regression: initialize parent map packing counters inside the type53 C++ bridge before use.

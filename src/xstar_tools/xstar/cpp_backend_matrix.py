@@ -218,6 +218,17 @@ def _load_cpp_library() -> ctypes.CDLL | None:
             except AttributeError:
                 pass
             try:
+                lib.xstar_matrix_eval_mg_ion_source_simple_payloads_batch.argtypes = [
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                    i64p, i64p, i64p, i64p,
+                    i64p, i64p, i64p, i64p, f64p, i64p,
+                    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+                    i64p, f64p, i64p, ctypes.c_char_p, ctypes.c_size_t,
+                ]
+                lib.xstar_matrix_eval_mg_ion_source_simple_payloads_batch.restype = ctypes.c_int
+            except AttributeError:
+                pass
+            try:
                 lib.xstar_matrix_accumulate_mg_ion_source_simple_terms.argtypes = [
                     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                     ctypes.c_int, ctypes.c_int, ctypes.c_int,
@@ -874,17 +885,12 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
     ionized_h_density_cm3: float,
     nlevp: int,
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
-    """Scan and evaluate selected simple Mg ion payloads in libxstar_matrix.so.
-
-    This v0.6.0a9 helper widens the a8 source traversal ABI: C++ walks the
-    ion source-pointer chains, decodes packed REALS/INTEGERS for selected
-    no-grid/no-level ucalc branches, evaluates them, and returns UCalc-like
-    ans/idest rows. Unsupported records remain Python fallback.
-    """
+    """Evaluate accepted per-ion Mg simple payloads with stage-level timings."""
     lib = _load_cpp_library()
     if lib is None or not hasattr(lib, "xstar_matrix_eval_mg_ion_source_simple_payloads"):
         raise RuntimeError("C++ Mg ion source simple-payload evaluator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
-    t0 = time.perf_counter()
+
+    prep0 = time.perf_counter()
     npfi = np.ascontiguousarray(np.asarray(derived.npfi[:, int(ion_index)], dtype=np.int64))
     npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
     npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
@@ -895,10 +901,14 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
     max_out = max(1, n_records)
     out_i64 = np.zeros(max_out * 10, dtype=np.int64)
     out_f64 = np.zeros(max_out * 6, dtype=np.float64)
-    out_stats = np.zeros(18, dtype=np.int64)
-    packing_seconds = time.perf_counter() - t0
+    out_stats = np.zeros(20, dtype=np.int64)
+    input_preparation_seconds = time.perf_counter() - prep0
+    input_bytes = int(npfi.nbytes + npar.nbytes + npnxt.nbytes + ptrs.nbytes + rdat.nbytes + idat.nbytes)
+    output_capacity_bytes = int(out_i64.nbytes + out_f64.nbytes + out_stats.nbytes)
+    allocation_count = 9
+
     buf = ctypes.create_string_buffer(512)
-    k0 = time.perf_counter()
+    call0 = time.perf_counter()
     rc = lib.xstar_matrix_eval_mg_ion_source_simple_payloads(
         int(npfi.size), int(n_records), int(rdat.size), int(idat.size),
         int(ion_index), int(ion_record),
@@ -907,44 +917,45 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
         float(neutral_h_density_cm3), float(ionized_h_density_cm3), int(nlevp),
         out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
     )
-    cpp_kernel_seconds = time.perf_counter() - k0
+    python_to_cpp_call_seconds = time.perf_counter() - call0
     message = buf.value.decode("utf-8", errors="replace")
     if rc != 0:
         raise RuntimeError(message or f"xstar_matrix_eval_mg_ion_source_simple_payloads failed with code {rc}")
+
+    unpack0 = time.perf_counter()
     emitted = int(out_stats[4])
     oi = out_i64[: emitted * 10].reshape((emitted, 10)) if emitted else np.zeros((0, 10), dtype=np.int64)
     of = out_f64[: emitted * 6].reshape((emitted, 6)) if emitted else np.zeros((0, 6), dtype=np.float64)
     rows: list[dict[str, Any]] = []
     for j in range(emitted):
         rows.append({
-            "record": int(oi[j, 0]),
-            "rate_type": int(oi[j, 1]),
-            "data_type": int(oi[j, 2]),
-            "data_type_chain": int(oi[j, 3]),
-            "next_record": int(oi[j, 4]),
-            "idest1": int(oi[j, 5]),
-            "idest2": int(oi[j, 6]),
-            "status_code": int(oi[j, 7]),
-            "supported_mask": int(oi[j, 8]),
-            "skip_mask": int(oi[j, 9]),
-            "ans1": float(of[j, 0]),
-            "ans2": float(of[j, 1]),
-            "ans3": float(of[j, 2]),
-            "ans4": float(of[j, 3]),
-            "ans5": float(of[j, 4]),
-            "ans6": float(of[j, 5]),
+            "record": int(oi[j, 0]), "rate_type": int(oi[j, 1]), "data_type": int(oi[j, 2]),
+            "data_type_chain": int(oi[j, 3]), "next_record": int(oi[j, 4]),
+            "idest1": int(oi[j, 5]), "idest2": int(oi[j, 6]), "status_code": int(oi[j, 7]),
+            "supported_mask": int(oi[j, 8]), "skip_mask": int(oi[j, 9]),
+            "ans1": float(of[j, 0]), "ans2": float(of[j, 1]), "ans3": float(of[j, 2]),
+            "ans4": float(of[j, 3]), "ans5": float(of[j, 4]), "ans6": float(of[j, 5]),
         })
+    output_copy_commit_seconds = time.perf_counter() - unpack0
+    output_emitted_bytes = int(emitted * (10 * 8 + 6 * 8))
+    cpp_kernel_compute_seconds = float(out_stats[16]) * 1.0e-9
     stats = {
-        "records_seen": float(out_stats[0]),
-        "records_supported": float(out_stats[1]),
-        "records_batched": float(out_stats[2]),
-        "cpp_calls": float(out_stats[3]),
-        "packing_seconds": float(packing_seconds),
-        "cpp_kernel_seconds": float(cpp_kernel_seconds),
-        "fallback_count": float(out_stats[12]),
-        "ucalc_cpp_applied": float(out_stats[1]),
-        "ucalc_cpp_unsupported": float(out_stats[12]),
-        "emitted_records": float(emitted),
+        "records_seen": float(out_stats[0]), "records_supported": float(out_stats[1]),
+        "records_batched": float(out_stats[2]), "cpp_calls": float(out_stats[3]),
+        "packing_seconds": float(input_preparation_seconds),
+        "cpp_kernel_seconds": float(python_to_cpp_call_seconds),
+        "input_preparation_seconds": float(input_preparation_seconds),
+        "python_to_cpp_call_seconds": float(python_to_cpp_call_seconds),
+        "cpp_kernel_compute_seconds": float(cpp_kernel_compute_seconds),
+        "output_copy_commit_seconds": float(output_copy_commit_seconds),
+        "allocation_count": float(allocation_count), "input_bytes": float(input_bytes),
+        "output_capacity_bytes": float(output_capacity_bytes),
+        "output_emitted_bytes": float(output_emitted_bytes),
+        "bytes_copied": float(input_bytes + output_emitted_bytes),
+        "fallback_count": float(out_stats[12]), "ucalc_cpp_applied": float(out_stats[1]),
+        "ucalc_cpp_unsupported": float(out_stats[12]), "emitted_records": float(emitted),
+        "payload_length": float(emitted), "terms_processed": float(emitted),
+        "records_processed": float(out_stats[0]), "source_records": float(out_stats[0]),
         "mg_ion_payload_type1_records": float(out_stats[5]),
         "mg_ion_payload_type2_records": float(out_stats[6]),
         "mg_ion_payload_type3_records": float(out_stats[7]),
@@ -956,6 +967,96 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
     }
     return rows, message, stats
 
+
+def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
+    *,
+    master: Any,
+    derived: Any,
+    ion_specs: list[dict[str, int]],
+    temperature_1e4k: float,
+    electron_density_cm3: float,
+    neutral_h_density_cm3: float,
+    ionized_h_density_cm3: float,
+) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
+    """Evaluate all active Mg ions in one shadow-only C++ call."""
+    lib = _load_cpp_library()
+    if lib is None or not hasattr(lib, "xstar_matrix_eval_mg_ion_source_simple_payloads_batch"):
+        raise RuntimeError("C++ Mg element simple-payload batch shadow evaluator is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
+    if not ion_specs:
+        return [], "no ion specs", {"cpp_calls": 0.0, "batch_ion_count": 0.0}
+
+    prep0 = time.perf_counter()
+    ion_indices = np.ascontiguousarray(np.asarray([int(x["ion_index"]) for x in ion_specs], dtype=np.int64))
+    ion_records = np.ascontiguousarray(np.asarray([int(x["ion_record"]) for x in ion_specs], dtype=np.int64))
+    ion_stages = np.ascontiguousarray(np.asarray([int(x["ion_stage"]) for x in ion_specs], dtype=np.int64))
+    nlevp = np.ascontiguousarray(np.asarray([int(x["nlevp"]) for x in ion_specs], dtype=np.int64))
+    npfi_matrix = np.ascontiguousarray(np.asarray(derived.npfi[:, ion_indices].T, dtype=np.int64))
+    npar = np.ascontiguousarray(np.asarray(derived.npar, dtype=np.int64))
+    npnxt = np.ascontiguousarray(np.asarray(derived.npnxt, dtype=np.int64))
+    ptrs = np.ascontiguousarray(np.asarray(master.nptrs.numpy(copy=False), dtype=np.int64))
+    rdat = np.ascontiguousarray(np.asarray(master.rdat1.numpy(copy=False), dtype=np.float64))
+    idat = np.ascontiguousarray(np.asarray(master.idat1.numpy(copy=False), dtype=np.int64))
+    n_records = int(ptrs.shape[0]); max_out = max(1, n_records)
+    out_i64 = np.zeros(max_out * 14, dtype=np.int64)
+    out_f64 = np.zeros(max_out * 6, dtype=np.float64)
+    out_stats = np.zeros(20, dtype=np.int64)
+    input_preparation_seconds = time.perf_counter() - prep0
+    input_bytes = int(sum(x.nbytes for x in (ion_indices, ion_records, ion_stages, nlevp, npfi_matrix, npar, npnxt, ptrs, rdat, idat)))
+    output_capacity_bytes = int(out_i64.nbytes + out_f64.nbytes + out_stats.nbytes)
+    allocation_count = 13
+
+    buf = ctypes.create_string_buffer(512)
+    call0 = time.perf_counter()
+    rc = lib.xstar_matrix_eval_mg_ion_source_simple_payloads_batch(
+        int(len(ion_specs)), int(npfi_matrix.shape[1]), int(n_records), int(rdat.size), int(idat.size), int(max_out),
+        ion_indices, ion_records, ion_stages, nlevp,
+        npfi_matrix.ravel(), npar, npnxt, ptrs.ravel(), rdat, idat,
+        float(temperature_1e4k), float(electron_density_cm3),
+        float(neutral_h_density_cm3), float(ionized_h_density_cm3),
+        out_i64, out_f64, out_stats, buf, ctypes.sizeof(buf),
+    )
+    python_to_cpp_call_seconds = time.perf_counter() - call0
+    message = buf.value.decode("utf-8", errors="replace")
+    if rc != 0:
+        raise RuntimeError(message or f"xstar_matrix_eval_mg_ion_source_simple_payloads_batch failed with code {rc}")
+
+    unpack0 = time.perf_counter()
+    emitted = int(out_stats[3])
+    oi = out_i64[: emitted * 14].reshape((emitted, 14)) if emitted else np.zeros((0, 14), dtype=np.int64)
+    of = out_f64[: emitted * 6].reshape((emitted, 6)) if emitted else np.zeros((0, 6), dtype=np.float64)
+    rows: list[dict[str, Any]] = []
+    for j in range(emitted):
+        rows.append({
+            "ion_ordinal": int(oi[j, 0]), "ion_index": int(oi[j, 1]), "ion_record": int(oi[j, 2]),
+            "ion_stage": int(oi[j, 3]), "record": int(oi[j, 4]), "rate_type": int(oi[j, 5]),
+            "data_type": int(oi[j, 6]), "data_type_chain": int(oi[j, 7]), "next_record": int(oi[j, 8]),
+            "idest1": int(oi[j, 9]), "idest2": int(oi[j, 10]), "status_code": int(oi[j, 11]),
+            "supported_mask": int(oi[j, 12]), "skip_mask": int(oi[j, 13]),
+            "ans1": float(of[j, 0]), "ans2": float(of[j, 1]), "ans3": float(of[j, 2]),
+            "ans4": float(of[j, 3]), "ans5": float(of[j, 4]), "ans6": float(of[j, 5]),
+        })
+    output_copy_commit_seconds = time.perf_counter() - unpack0
+    output_emitted_bytes = int(emitted * (14 * 8 + 6 * 8))
+    stats = {
+        "batch_ion_count": float(out_stats[0]), "records_seen": float(out_stats[1]),
+        "records_supported": float(out_stats[2]), "emitted_records": float(out_stats[3]),
+        "cpp_calls": float(out_stats[4]), "input_preparation_seconds": float(input_preparation_seconds),
+        "python_to_cpp_call_seconds": float(python_to_cpp_call_seconds),
+        "cpp_kernel_compute_seconds": float(out_stats[15]) * 1.0e-9,
+        "output_copy_commit_seconds": float(output_copy_commit_seconds),
+        "packing_seconds": float(input_preparation_seconds), "cpp_kernel_seconds": float(python_to_cpp_call_seconds),
+        "allocation_count": float(allocation_count), "input_bytes": float(input_bytes),
+        "output_capacity_bytes": float(output_capacity_bytes), "output_emitted_bytes": float(output_emitted_bytes),
+        "bytes_copied": float(input_bytes + output_emitted_bytes), "payload_length": float(emitted),
+        "terms_processed": float(emitted), "records_processed": float(out_stats[1]),
+        "source_records": float(out_stats[1]), "fallback_count": float(out_stats[12]),
+        "mg_ion_payload_type1_records": float(out_stats[5]), "mg_ion_payload_type2_records": float(out_stats[6]),
+        "mg_ion_payload_type3_records": float(out_stats[7]), "mg_ion_payload_type7_records": float(out_stats[8]),
+        "mg_ion_payload_type8_records": float(out_stats[9]), "mg_ion_payload_type20_records": float(out_stats[10]),
+        "mg_ion_payload_skipped_records": float(out_stats[11]), "mg_ion_payload_loop_guard_hits": float(out_stats[13]),
+        "output_overflow": float(out_stats[14]),
+    }
+    return rows, message, stats
 
 def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     *,

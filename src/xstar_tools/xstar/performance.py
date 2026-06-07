@@ -324,6 +324,127 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_other_emissivity_hotspots(rows: list[dict[str, Any]], top_n: int) -> dict[str, Any]:
+    selected = [r for r in rows if str(r.get("component", "")).startswith("calc_emis")]
+
+    def _group(key_name: str, value_fn: Any) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for row in selected:
+            value = value_fn(row)
+            if value in {None, "", "none"}:
+                continue
+            key = str(value)
+            item = grouped.setdefault(key, {key_name: key, "wall_seconds": 0.0, "call_count": 0.0})
+            item["wall_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
+            item["call_count"] += 1.0
+            for field in ("component", "source_routine", "record_type"):
+                if field in row:
+                    item[field] = row[field]
+        return sorted(grouped.values(), key=lambda x: float(x.get("wall_seconds", 0.0)), reverse=True)[:max(1, top_n)]
+
+    components: dict[str, dict[str, Any]] = {}
+    for row in selected:
+        name = str(row.get("component", "unknown"))
+        item = components.setdefault(name, {"component": name, "wall_seconds": 0.0, "call_count": 0.0})
+        item["wall_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
+        item["call_count"] += 1.0
+        for field in ("source_routine", "record_type"):
+            if field in row:
+                item[field] = row[field]
+    top_components = sorted(components.values(), key=lambda x: float(x.get("wall_seconds", 0.0)), reverse=True)[:max(1, top_n)]
+    return {
+        "rows": len(selected),
+        "components": components,
+        "top_components": top_components,
+        "top_by_element_z": _group("element_z", lambda r: r.get("element_z")),
+        "top_by_ion": _group("ion", lambda r: f"{r.get('ion_index')}|stage={r.get('ion_stage')}" if r.get("ion_index") is not None else None),
+        "top_by_data_type": _group("data_type", lambda r: r.get("data_type")),
+        "top_by_rate_type": _group("rate_type", lambda r: r.get("rate_type")),
+        "top_by_record_type": _group("record_type", lambda r: r.get("record_type")),
+    }
+
+
+def _summarize_simple_payload_batching_probe(
+    control: MutableMapping[str, Any], rows: list[dict[str, Any]], top_n: int
+) -> dict[str, Any]:
+    names = {
+        "calc_hmc_all.element_solver.mg_ion_simple_payload_cpp_kernel",
+        "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
+        "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_compare",
+    }
+    selected = [r for r in rows if str(r.get("component", "")) in names]
+    call_rows = [r for r in selected if str(r.get("component", "")).endswith("cpp_kernel")]
+
+    def _call_projection(row: dict[str, Any]) -> dict[str, Any]:
+        fields = (
+            "component", "elapsed_seconds", "element_z", "ion_index", "ion_stage",
+            "evaluation_index", "matrix_dimension", "payload_length", "source_records",
+            "records_seen", "records_supported", "terms_processed", "records_processed",
+            "input_preparation_seconds", "python_to_cpp_call_seconds",
+            "cpp_kernel_compute_seconds", "output_copy_commit_seconds",
+            "allocation_count", "input_bytes", "output_capacity_bytes",
+            "output_emitted_bytes", "bytes_copied", "batch_ion_count", "status",
+        )
+        return {k: row.get(k) for k in fields if k in row}
+
+    top_calls = [
+        _call_projection(row)
+        for row in sorted(call_rows, key=lambda r: float(r.get("elapsed_seconds", 0.0) or 0.0), reverse=True)[:max(1, top_n)]
+    ]
+
+    def _group(label: str, key_fn: Any) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for row in call_rows:
+            value = key_fn(row)
+            if value in {None, ""}:
+                continue
+            key = str(value)
+            item = grouped.setdefault(key, {label: key, "wall_seconds": 0.0, "call_count": 0.0})
+            item["wall_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
+            item["call_count"] += 1.0
+            item["records_processed"] = float(item.get("records_processed", 0.0)) + float(row.get("records_processed", row.get("records_seen", 0.0)) or 0.0)
+            item["terms_processed"] = float(item.get("terms_processed", 0.0)) + float(row.get("terms_processed", row.get("emitted_records", 0.0)) or 0.0)
+            item["bytes_copied"] = float(item.get("bytes_copied", 0.0)) + float(row.get("bytes_copied", 0.0) or 0.0)
+        return sorted(grouped.values(), key=lambda x: float(x.get("wall_seconds", 0.0)), reverse=True)[:max(1, top_n)]
+
+    stage_totals = {
+        "input_preparation_seconds": 0.0,
+        "python_to_cpp_call_seconds": 0.0,
+        "cpp_kernel_compute_seconds": 0.0,
+        "output_copy_commit_seconds": 0.0,
+        "allocation_count": 0.0,
+        "bytes_copied": 0.0,
+        "records_processed": 0.0,
+        "terms_processed": 0.0,
+    }
+    for row in call_rows:
+        for key in stage_totals:
+            stage_totals[key] += float(row.get(key, 0.0) or 0.0)
+
+    shadow = dict(control.get("mg_simple_payload_batch_shadow_summary", {}) or {})
+    samples = list(control.get("mg_simple_payload_batch_shadow_samples", []) or [])
+    return {
+        "observational_only": True,
+        "product_active": False,
+        "rows": len(selected),
+        "call_rows": len(call_rows),
+        "stage_totals": stage_totals,
+        "top_calls": top_calls,
+        "top_by_element_z": _group("element_z", lambda r: r.get("element_z")),
+        "top_by_ion": _group("ion", lambda r: f"{r.get('ion_index')}|stage={r.get('ion_stage')}" if r.get("ion_index") is not None else "batch"),
+        "top_by_evaluation_index": _group("evaluation_index", lambda r: r.get("evaluation_index")),
+        "top_by_matrix_dimension": _group("matrix_dimension", lambda r: r.get("matrix_dimension")),
+        "top_by_payload_length": _group("payload_length", lambda r: r.get("payload_length")),
+        "top_by_source_records": _group("source_records", lambda r: r.get("source_records", r.get("records_seen"))),
+        "batch_shadow_summary": shadow,
+        "batch_shadow_samples": samples[:max(1, top_n)],
+        "notes": [
+            "The optional batch implementation is shadow-only and its rows are never used to build live matrices or populations.",
+            "Per-ion accepted C++ payload rows are compared with the one-call-per-element batch result before live row consumption.",
+        ],
+    }
+
+
 def summarize_runtime_phase_map(
     control: MutableMapping[str, Any],
     *,
@@ -331,121 +452,29 @@ def summarize_runtime_phase_map(
     output_breakdown: dict[str, Any] | None = None,
     top_n: int = 20,
 ) -> dict[str, Any]:
-    """Build a coarse runtime phase map for port-planning decisions.
-
-    v0.6.22 cleanup rules:
-    - only aggregate explicit timing values or known profile elapsed rows;
-    - never treat row/slot/count/flag diagnostic values as seconds;
-    - keep sharper other-emissivity buckets and top-N groupings for the
-      next C++ port decision.
-    """
+    """Build the cleaned runtime map and v0.6.23 batching probe summary."""
     phases = [
-        "initialization_atomic_data_loading",
-        "rates",
-        "matrix_assembly",
-        "solver",
-        "emissivity_upstream_type4_type50",
-        "other_emissivity",
-        "opacity",
-        "thermal_heating_cooling",
-        "spectrum_output_construction",
-        "fits_writing",
-        "outer_zone_pass_orchestration",
-        "diagnostics_overhead",
-        "uncategorized_profiled",
+        "initialization_atomic_data_loading", "rates", "matrix_assembly", "solver",
+        "emissivity_upstream_type4_type50", "other_emissivity", "opacity",
+        "thermal_heating_cooling", "spectrum_output_construction", "fits_writing",
+        "outer_zone_pass_orchestration", "diagnostics_overhead", "uncategorized_profiled",
     ]
     phase_map: dict[str, dict[str, Any]] = {
-        name: {"wall_seconds": 0.0, "call_count": 0.0, "components": {}}
-        for name in phases
+        name: {"wall_seconds": 0.0, "call_count": 0.0, "components": {}} for name in phases
     }
 
-    def _as_float(value: Any, default: float = 0.0) -> float:
-        try:
-            return float(value if value is not None else default)
-        except Exception:
-            return default
-
     def _add(phase: str, seconds: Any, *, count: float = 1.0, component: str | None = None) -> None:
-        value = _as_float(seconds, 0.0)
-        if value == 0.0 and count == 0.0:
-            return
+        try:
+            value = float(seconds or 0.0)
+        except Exception:
+            value = 0.0
         item = phase_map.setdefault(phase, {"wall_seconds": 0.0, "call_count": 0.0, "components": {}})
-        item["wall_seconds"] = float(item.get("wall_seconds", 0.0)) + value
-        item["call_count"] = float(item.get("call_count", 0.0)) + float(count)
+        item["wall_seconds"] += value
+        item["call_count"] += float(count)
         if component:
-            comps = item.setdefault("components", {})
-            comp = comps.setdefault(str(component), {"wall_seconds": 0.0, "call_count": 0.0})
-            comp["wall_seconds"] = float(comp.get("wall_seconds", 0.0)) + value
-            comp["call_count"] = float(comp.get("call_count", 0.0)) + float(count)
-
-    def _is_actual_timing_metric(key: str) -> bool:
-        """Return True only for writer/provenance values that are wall times.
-
-        The output writer breakdown also stores rows/slots/flags/counters.  In
-        v0.6.21 those were incorrectly summed as seconds.  This whitelist keeps
-        known timing names and drops diagnostic counters.
-        """
-        k = str(key).lower()
-        counter_markers = (
-            "_rows", ".rows", "rows", "_slots", ".slots", "slots",
-            "_applied", "_attempted", "_enabled", "_accepted", "_present",
-            "_scope", "_parity", "_count", "count", "nonzero", "saved",
-        )
-        if any(marker in k for marker in counter_markers):
-            return False
-        if k.endswith("_seconds") or "_seconds." in k or ".seconds" in k:
-            return True
-        known_exact = {
-            "detail_fits_write",
-            "final_fits_write",
-            "pprint_legacy",
-            "final_product_build",
-            "output_writer_sequence_seconds",
-        }
-        return k in known_exact
-
-    def _classify_profile_component(name: str) -> str:
-        lname = name.lower()
-        phase = "uncategorized_profiled"
-        if "pre_matrix" in lname or "calc_ion_rates" in lname or "rate" in lname:
-            phase = "rates"
-        if "matrix" in lname or "assembly" in lname or "level_table" in lname:
-            phase = "matrix_assembly"
-        if "solver_call" in lname or "msolvelucy" in lname or "leqt" in lname:
-            phase = "solver"
-        if "calc_emis" in lname or "emiss" in lname or "linopac" in lname:
-            if "type4" in lname or "type50" in lname or "upstream" in lname or "linopac" in lname:
-                phase = "emissivity_upstream_type4_type50"
-            else:
-                phase = "other_emissivity"
-        if "opac" in lname or "opacity" in lname:
-            phase = "opacity"
-        if "heat" in lname or "cool" in lname or "thermal" in lname or "heatt" in lname:
-            phase = "thermal_heating_cooling"
-        if "writer" in lname or "writespectra" in lname or "output" in lname or "pprint" in lname:
-            phase = "spectrum_output_construction"
-        if "radial" in lname or "dsec" in lname or "xstarcalc" in lname:
-            phase = "outer_zone_pass_orchestration"
-        return phase
-
-    def _group_add(group: dict[str, dict[str, Any]], key: Any, seconds: float, row: dict[str, Any]) -> None:
-        if key is None:
-            return
-        skey = str(key)
-        if skey == "" or skey.lower() == "none":
-            return
-        item = group.setdefault(skey, {"wall_seconds": 0.0, "call_count": 0.0})
-        item["wall_seconds"] = float(item.get("wall_seconds", 0.0)) + float(seconds)
-        item["call_count"] = float(item.get("call_count", 0.0)) + 1.0
-        for meta_key in ("component", "source_routine", "record_type"):
-            if meta_key in row and meta_key not in item:
-                item[meta_key] = row.get(meta_key)
-
-    def _top_group(group: dict[str, dict[str, Any]], key_name: str) -> list[dict[str, Any]]:
-        rows_out: list[dict[str, Any]] = []
-        for key, values in sorted(group.items(), key=lambda kv: float(kv[1].get("wall_seconds", 0.0)), reverse=True):
-            rows_out.append({key_name: key, **values})
-        return rows_out[:max(1, int(top_n))]
+            comp = item.setdefault("components", {}).setdefault(str(component), {"wall_seconds": 0.0, "call_count": 0.0})
+            comp["wall_seconds"] += value
+            comp["call_count"] += float(count)
 
     explicit = dict(explicit_timing or {})
     for key, phase in (
@@ -457,106 +486,70 @@ def summarize_runtime_phase_map(
         ("output_writer_sequence_seconds", "spectrum_output_construction"),
         ("total_run_seconds", "outer_zone_pass_orchestration"),
     ):
-        if key in explicit and _is_actual_timing_metric(key):
+        if key in explicit:
             _add(phase, explicit[key], component=key)
 
     out = dict(output_breakdown or {})
-    dropped_output_metrics: dict[str, Any] = {}
+    dropped: dict[str, Any] = {}
+    known_times = {"pprint_legacy", "detail_fits_write", "final_fits_write", "final_product_build"}
     for key, value in out.items():
-        if not _is_actual_timing_metric(str(key)):
-            dropped_output_metrics[str(key)] = value
+        skey = str(key)
+        k = skey.lower()
+        is_time = k.endswith("_seconds") or k in known_times
+        if not is_time:
+            dropped[skey] = value
             continue
-        k = str(key).lower()
         if "fits_write" in k or k in {"pprint_legacy", "detail_fits_write", "final_fits_write"}:
-            _add("fits_writing", value, component=str(key))
+            _add("fits_writing", value, component=skey)
         elif k.startswith("final_product_build") or "spectrum_seconds" in k or "table_pack" in k or "binemis_profile_seconds" in k:
-            _add("spectrum_output_construction", value, component=str(key))
+            _add("spectrum_output_construction", value, component=skey)
         elif "final_local_recompute" in k:
-            _add("outer_zone_pass_orchestration", value, component=str(key))
+            _add("outer_zone_pass_orchestration", value, component=skey)
 
-    rows = control.get("performance_profile", [])
+    raw_rows = control.get("performance_profile", [])
+    rows = [r for r in raw_rows if isinstance(r, dict)] if isinstance(raw_rows, list) else []
     top_sections: list[dict[str, Any]] = []
-    other_rows: list[dict[str, Any]] = []
-    other_by_element: dict[str, dict[str, Any]] = {}
-    other_by_ion: dict[str, dict[str, Any]] = {}
-    other_by_data_type: dict[str, dict[str, Any]] = {}
-    other_by_rate_type: dict[str, dict[str, Any]] = {}
-    other_by_record_type: dict[str, dict[str, Any]] = {}
-    other_by_component: dict[str, dict[str, Any]] = {}
-
-    if isinstance(rows, list):
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            name = str(row.get("component", "unknown"))
-            elapsed = _as_float(row.get("elapsed_seconds", 0.0), 0.0)
-            phase = _classify_profile_component(name)
-            _add(phase, elapsed, component=name)
-            enriched = {
-                "component": name,
-                "phase": phase,
-                "elapsed_seconds": elapsed,
-                **{k: v for k, v in row.items() if k not in {"component", "elapsed_seconds"}},
-            }
-            top_sections.append(enriched)
-            if phase == "other_emissivity":
-                other_rows.append(enriched)
-                _group_add(other_by_component, name, elapsed, row)
-                _group_add(other_by_element, row.get("element_z"), elapsed, row)
-                ion_key = None
-                if row.get("ion_index") is not None:
-                    ion_key = row.get("ion_index")
-                    if row.get("ion_stage") is not None:
-                        ion_key = f"{row.get('ion_index')}|stage={row.get('ion_stage')}"
-                _group_add(other_by_ion, ion_key, elapsed, row)
-                _group_add(other_by_data_type, row.get("data_type") or row.get("result_data_type") or row.get("source_data_type"), elapsed, row)
-                # v0.6.21 stored by-rate-type rows in record_type.  Preserve that
-                # while also accepting future explicit rate_type metadata.
-                rate_key = row.get("rate_type")
-                if rate_key is None and name == "calc_emis_all.element.by_rate_type":
-                    rate_key = row.get("record_type")
-                _group_add(other_by_rate_type, rate_key, elapsed, row)
-                _group_add(other_by_record_type, row.get("record_type"), elapsed, row)
+    for row in rows:
+        name = str(row.get("component", "unknown")); lname = name.lower()
+        try: elapsed = float(row.get("elapsed_seconds", 0.0) or 0.0)
+        except Exception: elapsed = 0.0
+        phase = "uncategorized_profiled"
+        if "pre_matrix" in lname or "calc_ion_rates" in lname or "rate" in lname: phase = "rates"
+        if "matrix" in lname or "assembly" in lname or "level_table" in lname or "simple_payload" in lname: phase = "matrix_assembly"
+        if "solver_call" in lname or "msolvelucy" in lname or "leqt" in lname: phase = "solver"
+        if "calc_emis" in lname or "emiss" in lname or "linopac" in lname:
+            phase = "emissivity_upstream_type4_type50" if any(x in lname for x in ("type4", "type50", "upstream", "linopac")) else "other_emissivity"
+        if "opac" in lname or "opacity" in lname: phase = "opacity"
+        if "heat" in lname or "cool" in lname or "thermal" in lname or "heatt" in lname: phase = "thermal_heating_cooling"
+        if "writer" in lname or "writespectra" in lname or "output" in lname or "pprint" in lname: phase = "spectrum_output_construction"
+        if "radial" in lname or "dsec" in lname or "xstarcalc" in lname: phase = "outer_zone_pass_orchestration"
+        _add(phase, elapsed, component=name)
+        top_sections.append({"component": name, "phase": phase, "elapsed_seconds": elapsed, **{k: v for k, v in row.items() if k not in {"component", "elapsed_seconds"}}})
 
     top_sections = sorted(top_sections, key=lambda r: float(r.get("elapsed_seconds", 0.0)), reverse=True)[:max(1, int(top_n))]
     phase_totals = [
         {"phase": name, **{k: v for k, v in values.items() if k != "components"}}
-        for name, values in sorted(
-            phase_map.items(),
-            key=lambda kv: float(kv[1].get("wall_seconds", 0.0)),
-            reverse=True,
-        )
+        for name, values in sorted(phase_map.items(), key=lambda kv: float(kv[1].get("wall_seconds", 0.0)), reverse=True)
     ]
     total_profiled = sum(float(item.get("wall_seconds", 0.0)) for item in phase_map.values())
     total_run = float(explicit.get("total_run_seconds", 0.0) or 0.0)
-
-    other_emissivity_hotspot_summary = {
-        "rows": len(other_rows),
-        "components": other_by_component,
-        "top_components": _top_group(other_by_component, "component"),
-        "top_by_element_z": _top_group(other_by_element, "element_z"),
-        "top_by_ion": _top_group(other_by_ion, "ion"),
-        "top_by_data_type": _top_group(other_by_data_type, "data_type"),
-        "top_by_rate_type": _top_group(other_by_rate_type, "rate_type"),
-        "top_by_record_type": _top_group(other_by_record_type, "record_type"),
-    }
-
     return {
-        "schema_version": "0.6.22",
+        "schema_version": "0.6.23",
         "observational_only": True,
-        "profile_rows": len(rows) if isinstance(rows, list) else 0,
+        "profile_rows": len(rows),
         "total_run_seconds": total_run,
         "total_grouped_wall_seconds": float(total_profiled),
+        "dropped_non_timing_output_metrics": dropped,
         "phase_map": phase_map,
         "phase_totals": phase_totals,
         "top_sections": top_sections,
-        "other_emissivity_hotspot_summary": other_emissivity_hotspot_summary,
+        "other_emissivity_hotspot_summary": _summarize_other_emissivity_hotspots(rows, int(top_n)),
+        "matrix_simple_payload_batching_probe": _summarize_simple_payload_batching_probe(control, rows, int(top_n)),
         "explicit_timing": explicit,
         "output_writer_breakdown": out,
-        "dropped_non_timing_output_metrics": dropped_output_metrics,
         "notes": [
-            "v0.6.22 only sums explicit *_seconds/known timing metrics and profile elapsed_seconds rows; rows/slots/counts/flags are retained but not added as seconds.",
-            "Phase totals still include nested profile rows, so grouped totals can exceed elapsed wall time; compare components/top sections rather than summing to wall time.",
-            "Use other_emissivity_hotspot_summary to choose the next C++ porting target; do not use this diagnostic as a science-output input.",
+            "Only explicit *_seconds, known writer timings, and profile elapsed_seconds rows are summed; rows/slots/counts/flags are retained but not treated as seconds.",
+            "Phase totals include nested profile rows and can exceed elapsed wall time; compare components and stage totals rather than summing them.",
+            "The Mg simple-payload batch implementation is shadow-only and cannot affect science products.",
         ],
     }
