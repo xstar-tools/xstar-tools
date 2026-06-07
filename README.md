@@ -1,3 +1,7 @@
+## v0.6.24 matrix simple-payload batch shadow cache
+
+v0.6.24 keeps all accepted science paths unchanged and optimizes only the optional Mg simple-payload batch shadow. Immutable atomic arrays are cached once per process, zero-output ions are omitted from the batch, and output buffers are sized to exact expected rows. See `V0624_MATRIX_SIMPLE_PAYLOAD_BATCH_SHADOW_HOTFIX_AND_INPUT_CACHE.md`.
+
 ## v0.4.98 xout_abund1 element-column header hotfix
 
 v0.4.98 fixes the legacy `pprint(11)` FITS column names for the `HEATING` and `COOLING` extensions of `xout_abund1.fits`. XSTAR uses full element names (`hydrogen`, `helium`, `lithium`, ...), while the Python writer had emitted element symbols (`H`, `He`, `Li`, ...). The fix only changes FITS table headers; abundance values, radial stepping, spectra, DSEC, rates, solvers, and diagnostics are unchanged.

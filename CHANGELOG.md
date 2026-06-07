@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.24 - 2026-06-06
+
+- Keeps all accepted product paths unchanged; Mg simple-payload batching remains shadow-only and cannot affect live matrices or populations.
+- Fixes the v0.6.23 duplicate `batch_ion_count` profiling argument so completed shadow evaluations are not misreported as failures.
+- Caches immutable Mg atomic/source arrays once per process and reuses them across element evaluations.
+- Packs compact ion metadata and the selected `npfi` columns once per evaluation, filters statically zero-output ions, and sizes output buffers to the exact expected supported-row count.
+- Reports cache hits/misses, support-index hits/misses, actual copied bytes, immutable/evaluation buffer sizes, zero-output ions skipped, and peak working-set bytes.
+- Requires zero shadow failures, no missing/extra rows, and exact row parity before the checker returns an accepted shadow gate.
+
 ## 0.6.23 - 2026-06-06
 
 - Adds stage-level timing for the accepted Mg ion simple-payload C++ path: input preparation, Python-to-C++ call, internal C++ compute, output unpack/commit, allocation and byte counts.

@@ -382,8 +382,12 @@ def _summarize_simple_payload_batching_probe(
             "records_seen", "records_supported", "terms_processed", "records_processed",
             "input_preparation_seconds", "python_to_cpp_call_seconds",
             "cpp_kernel_compute_seconds", "output_copy_commit_seconds",
-            "allocation_count", "input_bytes", "output_capacity_bytes",
-            "output_emitted_bytes", "bytes_copied", "batch_ion_count", "status",
+            "allocation_count", "input_bytes", "output_capacity_bytes", "output_emitted_bytes", "bytes_copied",
+            "actual_bytes_copied", "immutable_cache_bytes", "immutable_copy_bytes",
+            "evaluation_input_bytes", "compact_ion_metadata_bytes", "npfi_slice_bytes",
+            "source_index_entries", "peak_working_set_bytes", "cache_hits", "cache_misses",
+            "support_index_hits", "support_index_misses", "zero_output_ions_skipped",
+            "total_ion_count", "batch_ion_count", "expected_supported_records", "status",
         )
         return {k: row.get(k) for k in fields if k in row}
 
@@ -414,6 +418,12 @@ def _summarize_simple_payload_batching_probe(
         "output_copy_commit_seconds": 0.0,
         "allocation_count": 0.0,
         "bytes_copied": 0.0,
+        "actual_bytes_copied": 0.0,
+        "cache_hits": 0.0,
+        "cache_misses": 0.0,
+        "support_index_hits": 0.0,
+        "support_index_misses": 0.0,
+        "zero_output_ions_skipped": 0.0,
         "records_processed": 0.0,
         "terms_processed": 0.0,
     }
@@ -423,6 +433,21 @@ def _summarize_simple_payload_batching_probe(
 
     shadow = dict(control.get("mg_simple_payload_batch_shadow_summary", {}) or {})
     samples = list(control.get("mg_simple_payload_batch_shadow_samples", []) or [])
+    product_active = bool(shadow.get("product_active", False))
+    failed = float(shadow.get("evaluations_failed", 0.0) or 0.0)
+    missing = float(shadow.get("missing_rows", 0.0) or 0.0)
+    extra = float(shadow.get("extra_rows", 0.0) or 0.0)
+    exact = bool(shadow.get("all_rows_exact", False))
+    if product_active:
+        parity_status = "INVALID_PRODUCT_ACTIVE"
+    elif failed != 0.0:
+        parity_status = "SHADOW_ERRORS"
+    elif exact and missing == 0.0 and extra == 0.0:
+        parity_status = "EXACT"
+    elif bool(shadow.get("all_rows_roundoff_equivalent", False)):
+        parity_status = "ROUNDOFF_EQUIVALENT"
+    else:
+        parity_status = "NOT_READY"
     return {
         "observational_only": True,
         "product_active": False,
@@ -437,10 +462,27 @@ def _summarize_simple_payload_batching_probe(
         "top_by_payload_length": _group("payload_length", lambda r: r.get("payload_length")),
         "top_by_source_records": _group("source_records", lambda r: r.get("source_records", r.get("records_seen"))),
         "batch_shadow_summary": shadow,
+        "batch_shadow_parity_status": parity_status,
+        "cache_summary": {
+            "cache_hits": float(shadow.get("cache_hits", 0.0) or 0.0),
+            "cache_misses": float(shadow.get("cache_misses", 0.0) or 0.0),
+            "support_index_hits": float(shadow.get("support_index_hits", 0.0) or 0.0),
+            "support_index_misses": float(shadow.get("support_index_misses", 0.0) or 0.0),
+            "immutable_cache_bytes": float(shadow.get("immutable_cache_bytes", 0.0) or 0.0),
+            "immutable_copy_bytes": float(shadow.get("immutable_copy_bytes", 0.0) or 0.0),
+            "evaluation_input_bytes": float(shadow.get("evaluation_input_bytes", 0.0) or 0.0),
+            "compact_ion_metadata_bytes": float(shadow.get("compact_ion_metadata_bytes", 0.0) or 0.0),
+            "npfi_slice_bytes": float(shadow.get("npfi_slice_bytes", 0.0) or 0.0),
+            "source_index_entries": float(shadow.get("source_index_entries", 0.0) or 0.0),
+            "actual_bytes_copied": float(shadow.get("actual_bytes_copied", shadow.get("bytes_copied", 0.0)) or 0.0),
+            "peak_working_set_bytes": float(shadow.get("peak_working_set_bytes", 0.0) or 0.0),
+            "zero_output_ions_skipped": float(shadow.get("zero_output_ions_skipped", 0.0) or 0.0),
+        },
         "batch_shadow_samples": samples[:max(1, top_n)],
         "notes": [
             "The optional batch implementation is shadow-only and its rows are never used to build live matrices or populations.",
             "Per-ion accepted C++ payload rows are compared with the one-call-per-element batch result before live row consumption.",
+            "v0.6.24 caches immutable atomic arrays once per process, packs evaluation data once, skips statically zero-output ions, and sizes output buffers to expected supported rows.",
         ],
     }
 
@@ -452,7 +494,7 @@ def summarize_runtime_phase_map(
     output_breakdown: dict[str, Any] | None = None,
     top_n: int = 20,
 ) -> dict[str, Any]:
-    """Build the cleaned runtime map and v0.6.23 batching probe summary."""
+    """Build the cleaned runtime map and v0.6.24 batching/cache probe summary."""
     phases = [
         "initialization_atomic_data_loading", "rates", "matrix_assembly", "solver",
         "emissivity_upstream_type4_type50", "other_emissivity", "opacity",
@@ -534,7 +576,7 @@ def summarize_runtime_phase_map(
     total_profiled = sum(float(item.get("wall_seconds", 0.0)) for item in phase_map.values())
     total_run = float(explicit.get("total_run_seconds", 0.0) or 0.0)
     return {
-        "schema_version": "0.6.23",
+        "schema_version": "0.6.24",
         "observational_only": True,
         "profile_rows": len(rows),
         "total_run_seconds": total_run,

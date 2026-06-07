@@ -1606,7 +1606,7 @@ def assemble_element_matrix(
             max_ion_stage=context.max_ion_stage,
         )
         rnise_lte, level_tables = levwkelement(master, derived, basis, context)
-    # v0.6.23 optional one-call-per-element Mg simple-payload batch shadow.
+    # v0.6.24 cached one-call-per-element Mg simple-payload batch shadow.
     # The result is diagnostic only: accepted per-ion rows remain the sole live
     # source and are compared before their later matrix consumption.
     _mg_simple_payload_eval_index = 0
@@ -1656,15 +1656,31 @@ def assemble_element_matrix(
             )
             for _row in _batch_rows:
                 _mg_simple_payload_batch_rows_by_ion.setdefault(int(_row["ion_index"]), []).append(_row)
-            _batch_summary["evaluations_completed"] = float(_batch_summary.get("evaluations_completed", 0.0)) + 1.0
             _batch_summary["batch_cpp_calls"] = float(_batch_summary.get("batch_cpp_calls", 0.0)) + float(_batch_stats.get("cpp_calls", 0.0))
             for _k in (
                 "input_preparation_seconds", "python_to_cpp_call_seconds", "cpp_kernel_compute_seconds",
-                "output_copy_commit_seconds", "allocation_count", "input_bytes", "output_capacity_bytes",
-                "output_emitted_bytes", "bytes_copied", "records_processed", "terms_processed",
+                "output_copy_commit_seconds", "support_index_seconds", "allocation_count", "input_bytes",
+                "output_capacity_bytes", "output_emitted_bytes", "bytes_copied", "actual_bytes_copied",
+                "immutable_copy_bytes", "evaluation_input_bytes", "compact_ion_metadata_bytes",
+                "npfi_slice_bytes", "source_index_entries", "records_processed", "terms_processed",
+                "cache_hits", "cache_misses", "support_index_hits", "support_index_misses",
+                "zero_output_ions_skipped", "total_ion_count", "batch_ion_count",
+                "expected_supported_records", "expected_source_records",
             ):
                 _batch_summary[_k] = float(_batch_summary.get(_k, 0.0)) + float(_batch_stats.get(_k, 0.0))
+            _batch_summary["immutable_cache_bytes"] = max(
+                float(_batch_summary.get("immutable_cache_bytes", 0.0)),
+                float(_batch_stats.get("immutable_cache_bytes", 0.0)),
+            )
+            _batch_summary["peak_working_set_bytes"] = max(
+                float(_batch_summary.get("peak_working_set_bytes", 0.0)),
+                float(_batch_stats.get("peak_working_set_bytes", 0.0)),
+            )
             if is_mg_summary_profile:
+                _batch_profile_stats = dict(_batch_stats)
+                # v0.6.23 passed this both explicitly and through **stats.
+                # Keep one authoritative value to avoid the duplicate-key error.
+                _profile_batch_ion_count = float(_batch_profile_stats.pop("batch_ion_count", len(_batch_ion_specs)))
                 record_profile_event(
                     profile_control,
                     "calc_hmc_all.element_solver.mg_simple_payload_batch_shadow_cpp_kernel",
@@ -1672,11 +1688,12 @@ def assemble_element_matrix(
                     + float(_batch_stats.get("python_to_cpp_call_seconds", 0.0))
                     + float(_batch_stats.get("output_copy_commit_seconds", 0.0)),
                     element_z=int(element_z), evaluation_index=int(_mg_simple_payload_eval_index),
-                    matrix_dimension=int(basis.n_rows), batch_ion_count=float(len(_batch_ion_specs)),
+                    matrix_dimension=int(basis.n_rows), batch_ion_count=_profile_batch_ion_count,
                     emit_progress=bool(profile_control.get("profile_backend_calls", False)),
                     source_routine="libxstar_matrix.so:xstar_matrix_eval_mg_ion_source_simple_payloads_batch",
-                    status="shadow_only", product_active=False, **_batch_stats,
+                    status="shadow_only", product_active=False, **_batch_profile_stats,
                 )
+            _batch_summary["evaluations_completed"] = float(_batch_summary.get("evaluations_completed", 0.0)) + 1.0
         except Exception as _batch_exc:
             _batch_summary["evaluations_failed"] = float(_batch_summary.get("evaluations_failed", 0.0)) + 1.0
             _batch_summary["last_error"] = str(_batch_exc)
