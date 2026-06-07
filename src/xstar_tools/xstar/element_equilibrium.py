@@ -1960,6 +1960,187 @@ def _matrix_dataflow_finalize_accounting(
             source_routine="assemble_element_matrix/msolvelucy_setup",
         )
 
+
+RATE_PAYLOAD_DATAFLOW_SECTIONS: Tuple[str, ...] = (
+    "source_record_traversal",
+    "record_header_filter_dispatch",
+    "escape_factor_context_preparation",
+    "cpp_simple_payload_materialization",
+    "python_rate_evaluation",
+    "cpp_rate_kernel_calls",
+    "payload_object_creation",
+    "scalar_status_bookkeeping",
+    "matrix_term_payload_construction",
+    "deferred_type51_batch",
+    "deferred_type7_batch",
+    "transition_family_bookkeeping",
+    "per_ion_setup_finalization",
+    "list_array_materialization",
+    "heating_payload_generation",
+    "unclassified_rate_payload_generation",
+)
+
+
+def _rate_payload_dataflow_enabled(element_z: int) -> bool:
+    return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_DATAFLOW_PROBE")
+
+
+def _rate_payload_new_evaluation(
+    control: MutableMapping[str, Any],
+    *,
+    evaluation_index: int,
+) -> Dict[str, Any]:
+    rows = control.setdefault("mg_rate_payload_dataflow_evaluations", [])
+    row = {
+        "schema_version": "0.6.28",
+        "evaluation_index": int(evaluation_index),
+        "element_z": 12,
+        "matrix_dimension": 0,
+        "enclosing_rate_payload_wall_seconds": 0.0,
+        "exclusive_child_wall_seconds": 0.0,
+        "accounting_overrun_seconds": 0.0,
+        "accounting_ok": True,
+        "sections": {
+            name: {
+                "exclusive_wall_seconds": 0.0,
+                "call_count": 0.0,
+                "ions_processed": 0.0,
+                "records_processed": 0.0,
+                "terms_emitted": 0.0,
+                "bytes_read": 0.0,
+                "bytes_written": 0.0,
+                "allocation_count": 0.0,
+            }
+            for name in RATE_PAYLOAD_DATAFLOW_SECTIONS
+        },
+        "by_rate_type": {},
+        "by_data_type": {},
+        "by_rate_data_type": {},
+    }
+    if isinstance(rows, list):
+        rows.append(row)
+    return row
+
+
+def _rate_payload_get_evaluation(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+) -> Optional[Dict[str, Any]]:
+    rows = control.get("mg_rate_payload_dataflow_evaluations", [])
+    if not isinstance(rows, list):
+        return None
+    for row in reversed(rows):
+        if isinstance(row, dict) and int(row.get("evaluation_index", -1)) == int(evaluation_index):
+            return row
+    return None
+
+
+def _rate_payload_add(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    section: str,
+    elapsed_seconds: float,
+    *,
+    call_count: float = 1.0,
+    ions_processed: float = 0.0,
+    records_processed: float = 0.0,
+    terms_emitted: float = 0.0,
+    bytes_read: float = 0.0,
+    bytes_written: float = 0.0,
+    allocation_count: float = 0.0,
+) -> None:
+    row = _rate_payload_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    sections = row.setdefault("sections", {})
+    item = sections.setdefault(section, {
+        "exclusive_wall_seconds": 0.0,
+        "call_count": 0.0,
+        "ions_processed": 0.0,
+        "records_processed": 0.0,
+        "terms_emitted": 0.0,
+        "bytes_read": 0.0,
+        "bytes_written": 0.0,
+        "allocation_count": 0.0,
+    })
+    item["exclusive_wall_seconds"] = float(item.get("exclusive_wall_seconds", 0.0)) + max(0.0, float(elapsed_seconds))
+    item["call_count"] = float(item.get("call_count", 0.0)) + max(0.0, float(call_count))
+    item["ions_processed"] = float(item.get("ions_processed", 0.0)) + max(0.0, float(ions_processed))
+    item["records_processed"] = float(item.get("records_processed", 0.0)) + max(0.0, float(records_processed))
+    item["terms_emitted"] = float(item.get("terms_emitted", 0.0)) + max(0.0, float(terms_emitted))
+    item["bytes_read"] = float(item.get("bytes_read", 0.0)) + max(0.0, float(bytes_read))
+    item["bytes_written"] = float(item.get("bytes_written", 0.0)) + max(0.0, float(bytes_written))
+    item["allocation_count"] = float(item.get("allocation_count", 0.0)) + max(0.0, float(allocation_count))
+
+
+def _rate_payload_classify(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    *,
+    rate_type: int,
+    data_type: int,
+    elapsed_seconds: float,
+    records_processed: float = 1.0,
+    terms_emitted: float = 0.0,
+) -> None:
+    row = _rate_payload_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    for field, key in (
+        ("by_rate_type", str(int(rate_type))),
+        ("by_data_type", str(int(data_type))),
+        ("by_rate_data_type", f"{int(rate_type)}:{int(data_type)}"),
+    ):
+        bucket = row.setdefault(field, {}).setdefault(key, {
+            "exclusive_wall_seconds": 0.0,
+            "call_count": 0.0,
+            "records_processed": 0.0,
+            "terms_emitted": 0.0,
+        })
+        bucket["exclusive_wall_seconds"] += max(0.0, float(elapsed_seconds))
+        bucket["call_count"] += 1.0
+        bucket["records_processed"] += max(0.0, float(records_processed))
+        bucket["terms_emitted"] += max(0.0, float(terms_emitted))
+
+
+def _rate_payload_finalize(
+    control: MutableMapping[str, Any],
+    evaluation_index: int,
+    *,
+    enclosing_seconds: float,
+    matrix_dimension: int,
+) -> None:
+    row = _rate_payload_get_evaluation(control, evaluation_index)
+    if row is None:
+        return
+    sections = row.get("sections", {})
+    enclosing = max(0.0, float(enclosing_seconds))
+    known = sum(
+        float(item.get("exclusive_wall_seconds", 0.0) or 0.0)
+        for name, item in sections.items()
+        if name != "unclassified_rate_payload_generation"
+    )
+    remainder = max(0.0, enclosing - known)
+    sections["unclassified_rate_payload_generation"] = {
+        "exclusive_wall_seconds": float(remainder),
+        "call_count": 1.0,
+        "ions_processed": 0.0,
+        "records_processed": 0.0,
+        "terms_emitted": 0.0,
+        "bytes_read": 0.0,
+        "bytes_written": 0.0,
+        "allocation_count": 0.0,
+    }
+    total = known + remainder
+    tolerance = max(1.0e-9, enclosing * 1.0e-9)
+    overrun = max(0.0, total - enclosing)
+    row["matrix_dimension"] = int(matrix_dimension)
+    row["enclosing_rate_payload_wall_seconds"] = float(enclosing)
+    row["exclusive_child_wall_seconds"] = float(total)
+    row["accounting_overrun_seconds"] = float(overrun)
+    row["accounting_tolerance_seconds"] = float(tolerance)
+    row["accounting_ok"] = bool(overrun <= tolerance)
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1972,12 +2153,18 @@ def assemble_element_matrix(
     dispatcher = dispatcher or default_source_faithful_ucalc()
     profile_control = context.profile_control or {}
     _matrix_dataflow_probe = _matrix_dataflow_enabled(int(element_z))
+    _rate_payload_probe = _rate_payload_dataflow_enabled(int(element_z))
     _matrix_dataflow_total_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
     _matrix_dataflow_eval_index = 0
     if _matrix_dataflow_probe:
         _matrix_dataflow_eval_index = int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0)) + 1
         profile_control["_mg_matrix_assembly_dataflow_evaluation_index"] = int(_matrix_dataflow_eval_index)
         _matrix_dataflow_new_evaluation(profile_control, evaluation_index=int(_matrix_dataflow_eval_index))
+    if _rate_payload_probe:
+        if not _matrix_dataflow_probe:
+            _matrix_dataflow_eval_index = int(profile_control.get("_mg_rate_payload_dataflow_evaluation_index", 0)) + 1
+            profile_control["_mg_rate_payload_dataflow_evaluation_index"] = int(_matrix_dataflow_eval_index)
+        _rate_payload_new_evaluation(profile_control, evaluation_index=int(_matrix_dataflow_eval_index))
     is_mg_summary_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "summary")
     is_mg_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "nested")
     is_mg_forensic_profile = int(element_z) == 12 and profile_level_at_least(profile_control, "forensic")
@@ -2619,6 +2806,7 @@ def assemble_element_matrix(
     _matrix_dataflow_rate_loop_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
 
     for block in basis.blocks:
+            _rate_probe_ion_setup_t0 = time.perf_counter() if _rate_payload_probe else 0.0
             _ion_loop_t0 = time.perf_counter() if is_mg_profile else 0.0
             _ion_rate_elapsed = 0.0
             _ion_matrix_elapsed = 0.0
@@ -3292,6 +3480,32 @@ def assemble_element_matrix(
                 if is_mg_profile:
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
+            def _timed_flush_pending_mg_rates_matrix() -> None:
+                _probe_t0 = time.perf_counter() if _rate_payload_probe else 0.0
+                _records_before = int(len(pending_cpp_mg_type51_payload) + len(pending_cpp_mg_rates_matrix))
+                _terms_before = int(summary.n_matrix_terms)
+                _flush_pending_mg_rates_matrix()
+                if _rate_payload_probe and _records_before > 0:
+                    _rate_payload_add(
+                        profile_control, _matrix_dataflow_eval_index, "deferred_type51_batch",
+                        time.perf_counter() - _probe_t0, call_count=1.0,
+                        records_processed=float(_records_before),
+                        terms_emitted=float(max(0, int(summary.n_matrix_terms) - _terms_before)),
+                        bytes_written=float(max(0, int(summary.n_matrix_terms) - _terms_before) * 64),
+                        allocation_count=2.0,
+                    )
+
+            if _rate_payload_probe:
+                _rate_payload_add(
+                    profile_control, _matrix_dataflow_eval_index, "per_ion_setup_finalization",
+                    time.perf_counter() - _rate_probe_ion_setup_t0, ions_processed=1.0, allocation_count=1.0,
+                )
+            _rate_probe_source_t0 = time.perf_counter() if _rate_payload_probe else 0.0
+            _rate_probe_source_cpp_seconds = 0.0
+            _rate_probe_nested_before = sum(
+                _matrix_dataflow_section_seconds(profile_control, _matrix_dataflow_eval_index, _name)
+                for _name in ("type53_preparation", "type53_cpp_call", "python_payload_row_decoding", "type53_output_commit")
+            ) if (_rate_payload_probe and _matrix_dataflow_probe) else 0.0
             source_record_iter: List[Tuple[int, int, int]] = []
             source_scan_cpp_stats: Dict[str, float] = {}
             source_scan_cpp_message = ""
@@ -3336,6 +3550,8 @@ def assemble_element_matrix(
                         (int(row["record"]), int(row["rate_type"]), int(row["data_type"]))
                         for row in source_rows
                     ]
+                    if _rate_payload_probe:
+                        _rate_probe_source_cpp_seconds += float(source_scan_cpp_stats.get("packing_seconds", 0.0) or 0.0) + float(source_scan_cpp_stats.get("cpp_kernel_seconds", 0.0) or 0.0)
                     if int(element_z) == 12:
                         for _speed_rec, _speed_rt, _speed_dt in source_record_iter:
                             _speed_add_counter("source_scan_records_by_data_type", int(_speed_dt), 1.0)
@@ -4180,8 +4396,28 @@ def assemble_element_matrix(
                         error=str(exc),
                     )
 
+            if _rate_payload_probe:
+                _rate_probe_source_wall = time.perf_counter() - _rate_probe_source_t0
+                _rate_probe_nested_after = sum(
+                    _matrix_dataflow_section_seconds(profile_control, _matrix_dataflow_eval_index, _name)
+                    for _name in ("type53_preparation", "type53_cpp_call", "python_payload_row_decoding", "type53_output_commit")
+                ) if _matrix_dataflow_probe else 0.0
+                _rate_payload_add(
+                    profile_control, _matrix_dataflow_eval_index, "source_record_traversal",
+                    max(0.0, _rate_probe_source_wall - max(0.0, _rate_probe_nested_after - _rate_probe_nested_before) - _rate_probe_source_cpp_seconds),
+                    ions_processed=1.0, records_processed=float(len(source_record_iter)),
+                    bytes_written=float(len(source_record_iter) * 24), allocation_count=1.0,
+                )
+                if _rate_probe_source_cpp_seconds > 0.0:
+                    _rate_payload_add(
+                        profile_control, _matrix_dataflow_eval_index, "cpp_rate_kernel_calls",
+                        _rate_probe_source_cpp_seconds, call_count=1.0, ions_processed=1.0,
+                        records_processed=float(len(source_record_iter)),
+                    )
             _transition_bookkeeping_t0 = time.perf_counter() if int(element_z) == 12 else 0.0
             for record, _source_rate_type, _source_data_type in source_record_iter:
+                _rate_probe_record_start = time.perf_counter() if _rate_payload_probe else 0.0
+                _rate_probe_record_known = 0.0
                 _family_dtype = int(_source_data_type)
                 _family_key = None
                 _family_cached_row_count = None
@@ -4211,6 +4447,7 @@ def assemble_element_matrix(
                     n_seen += 1
                     summary.n_records_seen += 1
                     continue
+                _rate_probe_header_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 header = master.header(record)
                 n_seen += 1
                 summary.n_records_seen += 1
@@ -4221,6 +4458,11 @@ def assemble_element_matrix(
                     record = int(derived.npnxt[record])
                     continue
 
+                if _rate_payload_probe:
+                    _elapsed = time.perf_counter() - _rate_probe_header_t0
+                    _rate_probe_record_known += _elapsed
+                    _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "record_header_filter_dispatch", _elapsed, records_processed=1.0)
+                _rate_probe_context_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 ptmp1, ptmp2, escape_reason = _escape_factors(record, header.rate_type, derived, context)
                 ucontext = UCalcContext(
                     temperature_k=context.temperature_k,
@@ -4261,6 +4503,10 @@ def assemble_element_matrix(
                         "leveltemp_write_sequence": second_pass_write_sequence,
                     },
                 )
+                if _rate_payload_probe:
+                    _elapsed = time.perf_counter() - _rate_probe_context_t0
+                    _rate_probe_record_known += _elapsed
+                    _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "escape_factor_context_preparation", _elapsed, records_processed=1.0, allocation_count=1.0)
                 if escape_reason is not None:
                     result = dispatcher.evaluate_record_number(
                         master,
@@ -4286,6 +4532,7 @@ def assemble_element_matrix(
                     continue
 
                 if int(record) in cpp_simple_payload_by_record:
+                    _rate_probe_cpp_simple_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                     cpp_row = cpp_simple_payload_by_record[int(record)]
                     _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
                     result = UCalcResult(
@@ -4336,6 +4583,11 @@ def assemble_element_matrix(
                         "rates_backend_message": cpp_simple_payload_message,
                     })
                     record_results.append(row)
+                    if _rate_payload_probe:
+                        _elapsed = time.perf_counter() - _rate_probe_cpp_simple_t0
+                        _rate_probe_record_known += _elapsed
+                        _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "cpp_simple_payload_materialization", _elapsed, records_processed=1.0, allocation_count=2.0)
+                        _rate_payload_classify(profile_control, _matrix_dataflow_eval_index, rate_type=int(result.rate_type), data_type=int(result.data_type), elapsed_seconds=_elapsed)
                     if result.rate_type == 7:
                         pending_cpp_type7.append((result, len(record_results) - 1))
                     else:
@@ -4362,6 +4614,7 @@ def assemble_element_matrix(
                     record = int(derived.npnxt[record])
                     continue
 
+                _rate_probe_eval_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 _rate_t0 = time.perf_counter() if is_mg_profile else 0.0
                 if (
                     mg_rates_matrix_cpp_enabled
@@ -4455,6 +4708,11 @@ def assemble_element_matrix(
                         next_record=int(derived.npnxt[record]),
                         strict=False,
                     )
+                if _rate_payload_probe:
+                    _elapsed = time.perf_counter() - _rate_probe_eval_t0
+                    _rate_probe_record_known += _elapsed
+                    _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "python_rate_evaluation", _elapsed, records_processed=1.0)
+                    _rate_payload_classify(profile_control, _matrix_dataflow_eval_index, rate_type=int(result.rate_type), data_type=int(result.data_type), elapsed_seconds=_elapsed)
                 _dt = 0.0
                 if is_mg_profile or _rate7_classifier_enabled:
                     _dt = time.perf_counter() - _rate_t0
@@ -4495,6 +4753,7 @@ def assemble_element_matrix(
                         matrix_inserted=bool(result.status is UCalcStatus.EVALUATED and int(result.idest1) > 0 and int(result.idest2) > 0),
                         status=result.status,
                     )
+                _rate_probe_payload_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 row = result.to_dict()
                 destination_owner = leveltemp_owner_by_column.get(int(result.idest2), {})
                 source_leveltemp_destination = levels.get(int(result.idest2))
@@ -4527,7 +4786,12 @@ def assemble_element_matrix(
                     "leveltemp_idest2_owner_phase": destination_owner.get("phase"),
                 })
                 record_results.append(row)
+                if _rate_payload_probe:
+                    _elapsed = time.perf_counter() - _rate_probe_payload_t0
+                    _rate_probe_record_known += _elapsed
+                    _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "payload_object_creation", _elapsed, records_processed=1.0, bytes_written=256.0, allocation_count=2.0)
 
+                _rate_probe_bookkeeping_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 if result.status is UCalcStatus.SOURCE_NOOP:
                     n_noop += 1
                     summary.n_records_source_noop += 1
@@ -4637,11 +4901,15 @@ def assemble_element_matrix(
                             _mg_type53_shadow_add_sample(profile_control, _shadow_error53, sample_limit=type53_shadow_sample_limit)
                             record_results[-1]["type53_shadow_parity_status"] = "shadow_compare_error"
 
+                    if _rate_payload_probe:
+                        _elapsed = time.perf_counter() - _rate_probe_bookkeeping_t0
+                        _rate_probe_record_known += _elapsed
+                        _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "scalar_status_bookkeeping", _elapsed, records_processed=1.0)
                     # Source branches with a missing endpoint do not enter
                     # calc_hmc_ion's four-row matrix block.  They may still
                     # contribute the scalar totals accumulated above.
                     if result.idest1 <= 0 or result.idest2 <= 0:
-                        _flush_pending_mg_rates_matrix()
+                        _timed_flush_pending_mg_rates_matrix()
                         record_results[-1]["matrix_insertion_status"] = "source_nonmatrix_endpoint"
                         record = int(derived.npnxt[record])
                         continue
@@ -4652,14 +4920,15 @@ def assemble_element_matrix(
                     ):
                         pending_cpp_mg_rates_matrix.append((result, len(record_results) - 1))
                     elif use_cpp_mg_type7_rates and result.rate_type == 7:
-                        _flush_pending_mg_rates_matrix()
+                        _timed_flush_pending_mg_rates_matrix()
                         # Defer record_type=7 term construction to one compact C++
                         # batch per Mg ion.  Python still owns source-faithful ucalc
                         # physics for ans1..ans6 in this release.
                         pending_cpp_type7.append((result, len(record_results) - 1))
                     else:
-                        _flush_pending_mg_rates_matrix()
+                        _timed_flush_pending_mg_rates_matrix()
                         try:
+                            _rate_probe_terms_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                             _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                             new_terms = _matrix_terms_for_result(
                                 result=result,
@@ -4671,6 +4940,10 @@ def assemble_element_matrix(
                             )
                             if is_mg_profile:
                                 _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+                            if _rate_payload_probe:
+                                _elapsed = time.perf_counter() - _rate_probe_terms_t0
+                                _rate_probe_record_known += _elapsed
+                                _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "matrix_term_payload_construction", _elapsed, records_processed=1.0, terms_emitted=float(len(new_terms)), bytes_written=float(len(new_terms) * 64), allocation_count=float(len(new_terms)))
                         except (ElementEquilibriumError, IndexError) as exc:
                             n_unmapped += 1
                             summary.n_records_invalid_endpoint += 1
@@ -4729,10 +5002,14 @@ def assemble_element_matrix(
                             summary.n_records_evaluated += 1
                             summary.n_matrix_terms += len(new_terms)
                 record = int(derived.npnxt[record])
-            _flush_pending_mg_rates_matrix()
+            _timed_flush_pending_mg_rates_matrix()
             if pending_cpp_type7:
+                _rate_probe_type7_t0 = time.perf_counter() if _rate_payload_probe else 0.0
+                _rate_probe_type7_records = len(pending_cpp_type7)
+                _rate_probe_type7_terms_before = int(summary.n_matrix_terms)
                 _matrix_t0 = time.perf_counter() if is_mg_profile else 0.0
                 cpp_input: List[Dict[str, Any]] = []
+                cpp_stats: Dict[str, float] = {}
                 cpp_source_routine = "libxstar_matrix.so:xstar_matrix_build_mg_type7_terms" if _matrix_cpp_active_for_mg() else "libxstar_rates.so:xstar_rates_build_mg_type7_terms"
                 cpp_backend_label = "cpp_matrix_mg_type7_matrix_terms" if cpp_source_routine.startswith("libxstar_matrix") else "cpp_mg_type7_matrix_terms"
                 try:
@@ -4853,6 +5130,23 @@ def assemble_element_matrix(
                     summary.n_matrix_terms += len(new_terms)
                 if is_mg_profile:
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
+                if _rate_payload_probe:
+                    _elapsed = time.perf_counter() - _rate_probe_type7_t0
+                    _cpp_elapsed = float(cpp_stats.get("packing_seconds", 0.0) or 0.0) + float(cpp_stats.get("cpp_kernel_seconds", 0.0) or 0.0)
+                    if _cpp_elapsed > 0.0:
+                        _rate_payload_add(
+                            profile_control, _matrix_dataflow_eval_index, "cpp_rate_kernel_calls", _cpp_elapsed,
+                            call_count=float(cpp_stats.get("cpp_calls", 1.0) or 1.0),
+                            records_processed=float(cpp_stats.get("records_batched", _rate_probe_type7_records) or _rate_probe_type7_records),
+                            terms_emitted=float(cpp_stats.get("emitted_matrix_terms", 0.0) or 0.0),
+                        )
+                    _rate_payload_add(
+                        profile_control, _matrix_dataflow_eval_index, "deferred_type7_batch", max(0.0, _elapsed - _cpp_elapsed),
+                        call_count=1.0, records_processed=float(_rate_probe_type7_records),
+                        terms_emitted=float(max(0, int(summary.n_matrix_terms) - _rate_probe_type7_terms_before)),
+                        bytes_written=float(max(0, int(summary.n_matrix_terms) - _rate_probe_type7_terms_before) * 64),
+                        allocation_count=2.0,
+                    )
 
             if int(element_z) == 12:
                 _matrix_hidden_timing_add(
@@ -4867,6 +5161,7 @@ def assemble_element_matrix(
                     ion_stage=int(block.ion_stage),
                     field="per_ion_outer_loop_elapsed",
                 )
+            _rate_probe_transition_t0 = time.perf_counter() if _rate_payload_probe else 0.0
             if int(element_z) == 12 and _transition_family_cache_enabled:
                 for _dtype, _vals in sorted(_transition_family_local.items()):
                     _matrix_diag_update("transition_family_cache_candidates", _dtype, **_vals)
@@ -4893,6 +5188,12 @@ def assemble_element_matrix(
                 for _dtype, _counts in sorted(_transition_family_key_miss_counts.items()):
                     _top = sorted(_counts.items(), key=lambda _kv: (-int(_kv[1]), _kv[0]))[:8]
                     _matrix_diag_update("top_cache_key_miss_counts", _dtype, top=[{"key": _k, "count": int(_v)} for _k, _v in _top])
+            if _rate_payload_probe:
+                _rate_payload_add(
+                    profile_control, _matrix_dataflow_eval_index, "transition_family_bookkeeping",
+                    time.perf_counter() - _rate_probe_transition_t0, ions_processed=1.0,
+                    records_processed=float(summary.n_records_seen),
+                )
             ion_summaries.append(summary)
             if is_mg_profile:
                 _ion_total = time.perf_counter() - _ion_loop_t0
@@ -4967,11 +5268,17 @@ def assemble_element_matrix(
             _matrix_dataflow_section_seconds(profile_control, _matrix_dataflow_eval_index, _name)
             for _name in ("type53_preparation", "type53_cpp_call", "python_payload_row_decoding", "type53_output_commit")
         )
+        _rate_payload_parent_seconds = max(0.0, _rate_loop_wall - _rate_nested)
         _matrix_dataflow_add(
             profile_control, _matrix_dataflow_eval_index, "rate_payload_generation",
-            max(0.0, _rate_loop_wall - _rate_nested), matrix_dimension=int(basis.n_rows),
+            _rate_payload_parent_seconds, matrix_dimension=int(basis.n_rows),
             rows_processed=float(n_seen), bytes_written=float(len(terms) * 64),
         )
+        if _rate_payload_probe:
+            _rate_payload_finalize(
+                profile_control, _matrix_dataflow_eval_index,
+                enclosing_seconds=_rate_payload_parent_seconds, matrix_dimension=int(basis.n_rows),
+            )
 
     if _rate7_classifier_enabled:
         profile_control["remaining_rate7_classifier_samples"] = _remaining_rate7_samples

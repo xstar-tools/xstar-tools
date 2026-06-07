@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.6.28 - 2026-06-07
+
+## Added
+- Added an observational Mg rate-payload generation dataflow probe that decomposes the v0.6.27 exclusive `rate_payload_generation` parent section.
+- Added per-evaluation exclusive section metrics for wall time, calls, ions, records, emitted terms, byte traffic, and allocations.
+- Added grouped top-N diagnostics by rate type, data type, and rate-type/data-type pair.
+- Added `provenance.mg_rate_payload_dataflow_summary`, a dedicated probe wrapper, and an acceptance checker.
+
+## Preserved
+- Kept the promoted cached Mg simple-payload batch active with zero-change guarded fallback behavior.
+- Kept reverse verification and checkpoint hashing disabled in the main probe.
+- Kept all accepted solver, rates, matrix, final-binemis, and upstream Mg type-4/type-50 science paths unchanged.
+
 # v0.6.27 - 2026-06-07
 
 ## Added

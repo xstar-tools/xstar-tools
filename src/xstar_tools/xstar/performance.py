@@ -639,6 +639,133 @@ def summarize_matrix_assembly_dataflow(
         ],
     }
 
+
+RATE_PAYLOAD_DATAFLOW_SECTIONS = (
+    "source_record_traversal",
+    "record_header_filter_dispatch",
+    "escape_factor_context_preparation",
+    "cpp_simple_payload_materialization",
+    "python_rate_evaluation",
+    "cpp_rate_kernel_calls",
+    "payload_object_creation",
+    "scalar_status_bookkeeping",
+    "matrix_term_payload_construction",
+    "deferred_type51_batch",
+    "deferred_type7_batch",
+    "transition_family_bookkeeping",
+    "per_ion_setup_finalization",
+    "list_array_materialization",
+    "heating_payload_generation",
+    "unclassified_rate_payload_generation",
+)
+
+
+def summarize_rate_payload_dataflow(
+    control: MutableMapping[str, Any],
+    *,
+    top_n: int = 20,
+) -> dict[str, Any]:
+    """Summarize v0.6.28 exclusive Mg rate-payload dataflow ledgers."""
+    raw = control.get("mg_rate_payload_dataflow_evaluations", [])
+    rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+    metric_fields = (
+        "exclusive_wall_seconds", "call_count", "ions_processed", "records_processed",
+        "terms_emitted", "bytes_read", "bytes_written", "allocation_count",
+    )
+    totals: dict[str, dict[str, Any]] = {
+        name: {field: 0.0 for field in metric_fields}
+        for name in RATE_PAYLOAD_DATAFLOW_SECTIONS
+    }
+    missing_sections: dict[str, list[str]] = {}
+    accounting_failures: list[dict[str, Any]] = []
+    total_enclosing = 0.0
+    total_exclusive = 0.0
+    max_overrun = 0.0
+    grouped: dict[str, dict[str, dict[str, float]]] = {
+        "by_rate_type": {}, "by_data_type": {}, "by_rate_data_type": {},
+    }
+    for row in rows:
+        evaluation_index = int(row.get("evaluation_index", 0) or 0)
+        sections = row.get("sections", {}) if isinstance(row.get("sections", {}), dict) else {}
+        missing = [name for name in RATE_PAYLOAD_DATAFLOW_SECTIONS if name not in sections]
+        if missing:
+            missing_sections[str(evaluation_index)] = missing
+        for name in RATE_PAYLOAD_DATAFLOW_SECTIONS:
+            item = sections.get(name, {}) if isinstance(sections.get(name, {}), dict) else {}
+            target = totals[name]
+            for field in metric_fields:
+                target[field] += float(item.get(field, 0.0) or 0.0)
+        for group_name in grouped:
+            source = row.get(group_name, {}) if isinstance(row.get(group_name, {}), dict) else {}
+            for key, item in source.items():
+                if not isinstance(item, dict):
+                    continue
+                target = grouped[group_name].setdefault(str(key), {
+                    "exclusive_wall_seconds": 0.0, "call_count": 0.0,
+                    "records_processed": 0.0, "terms_emitted": 0.0,
+                })
+                for field in target:
+                    target[field] += float(item.get(field, 0.0) or 0.0)
+        enclosing = float(row.get("enclosing_rate_payload_wall_seconds", 0.0) or 0.0)
+        exclusive = float(row.get("exclusive_child_wall_seconds", 0.0) or 0.0)
+        overrun = float(row.get("accounting_overrun_seconds", max(0.0, exclusive - enclosing)) or 0.0)
+        total_enclosing += enclosing
+        total_exclusive += exclusive
+        max_overrun = max(max_overrun, overrun)
+        if not bool(row.get("accounting_ok", False)):
+            accounting_failures.append({
+                "evaluation_index": evaluation_index,
+                "enclosing_rate_payload_wall_seconds": enclosing,
+                "exclusive_child_wall_seconds": exclusive,
+                "accounting_overrun_seconds": overrun,
+            })
+    top = sorted(rows, key=lambda row: float(row.get("enclosing_rate_payload_wall_seconds", 0.0) or 0.0), reverse=True)[:max(1, int(top_n))]
+    top_projection = []
+    for row in top:
+        sections = row.get("sections", {}) if isinstance(row.get("sections", {}), dict) else {}
+        top_projection.append({
+            "evaluation_index": int(row.get("evaluation_index", 0) or 0),
+            "matrix_dimension": int(row.get("matrix_dimension", 0) or 0),
+            "enclosing_rate_payload_wall_seconds": float(row.get("enclosing_rate_payload_wall_seconds", 0.0) or 0.0),
+            "exclusive_child_wall_seconds": float(row.get("exclusive_child_wall_seconds", 0.0) or 0.0),
+            "python_rate_evaluation_seconds": float(sections.get("python_rate_evaluation", {}).get("exclusive_wall_seconds", 0.0) or 0.0),
+            "source_record_traversal_seconds": float(sections.get("source_record_traversal", {}).get("exclusive_wall_seconds", 0.0) or 0.0),
+            "unclassified_rate_payload_generation_seconds": float(sections.get("unclassified_rate_payload_generation", {}).get("exclusive_wall_seconds", 0.0) or 0.0),
+            "accounting_overrun_seconds": float(row.get("accounting_overrun_seconds", 0.0) or 0.0),
+            "accounting_ok": bool(row.get("accounting_ok", False)),
+        })
+    def _top_group(table: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
+        items = sorted(table.items(), key=lambda kv: float(kv[1].get("exclusive_wall_seconds", 0.0)), reverse=True)
+        return [{"key": key, **dict(values)} for key, values in items[:max(1, int(top_n))]]
+    ready = bool(rows) and not missing_sections and not accounting_failures
+    return {
+        "schema_version": "0.6.28",
+        "observational_only": True,
+        "probe_enabled": bool(rows),
+        "status": "READY" if ready else "NOT_READY",
+        "evaluation_count": len(rows),
+        "required_sections": list(RATE_PAYLOAD_DATAFLOW_SECTIONS),
+        "section_totals": totals,
+        "total_enclosing_rate_payload_wall_seconds": float(total_enclosing),
+        "total_exclusive_child_wall_seconds": float(total_exclusive),
+        "max_accounting_overrun_seconds": float(max_overrun),
+        "accounting_identity": "sum(exclusive child times) <= enclosing rate payload wall time",
+        "accounting_all_ok": not accounting_failures and bool(rows),
+        "accounting_failures": accounting_failures,
+        "missing_sections_by_evaluation": missing_sections,
+        "top_by_rate_type": _top_group(grouped["by_rate_type"]),
+        "top_by_data_type": _top_group(grouped["by_data_type"]),
+        "top_by_rate_data_type": _top_group(grouped["by_rate_data_type"]),
+        "top_evaluations": top_projection,
+        "evaluations": rows,
+        "notes": [
+            "The enclosing total is the v0.6.27 exclusive rate_payload_generation section for the same evaluation.",
+            "Named sections are measured directly and the non-negative residual is assigned to unclassified_rate_payload_generation.",
+            "Type groupings classify measured per-record rate evaluation/materialization time and are observational; they are not added to section totals.",
+            "The promoted Mg simple-payload batch remains live and reverse verification/checkpoint hashing remain disabled in the main probe.",
+        ],
+    }
+
 def summarize_runtime_phase_map(
     control: MutableMapping[str, Any],
     *,

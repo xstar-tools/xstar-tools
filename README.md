@@ -1,3 +1,7 @@
+## v0.6.28 rate-payload generation dataflow probe
+
+v0.6.28 preserves the promoted Mg simple-payload batch and adds a closed per-evaluation decomposition of the remaining rate-payload generation hotspot. The main probe keeps reverse verification and checkpoint hashing disabled and reports grouped timing by rate/data type. See `V0628_RATE_PAYLOAD_GENERATION_DATAFLOW_PROBE.md`.
+
 ## v0.6.27 matrix assembly dataflow probe
 
 v0.6.27 keeps the promoted cached Mg simple-payload batch active and adds non-overlapping per-evaluation matrix-assembly timing. The main probe disables reverse verification and checkpoint hashing, preserves all accepted science paths, and reports a closed exclusive ledger with `unclassified_matrix_assembly` as the residual. See `V0627_MATRIX_ASSEMBLY_DATAFLOW_PROBE.md`.
