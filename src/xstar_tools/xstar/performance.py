@@ -108,20 +108,38 @@ def record_profile_event(
     elapsed_seconds: float,
     *,
     emit_progress: Any = None,
+    counts_as_child: bool = False,
     **metadata: Any,
 ) -> None:
     """Append one pre-measured timing/RSS row when profiling is enabled.
 
-    This is used for low-overhead nested hot-path profiling where a context
-    manager around every tiny record branch would add too much noise.  It is
-    observational only and never mutates physics state.
+    ``counts_as_child=True`` marks an explicitly measured leaf region.  Legacy
+    aggregate events remain available as inclusive observations but do not
+    enter exclusive-time rankings, which prevents duplicated labels from being
+    mistaken for independent ownership.
     """
     if not performance_enabled(control):
         return
+    elapsed = float(elapsed_seconds)
+    stack = control.get("_performance_profile_stack", [])
+    depth = len(stack) if isinstance(stack, list) else 0
+    parent_name = None
+    if depth and isinstance(stack[-1], dict):
+        parent_name = str(stack[-1].get("name", "unknown"))
+        if counts_as_child:
+            stack[-1]["child_seconds"] = float(stack[-1].get("child_seconds", 0.0)) + elapsed
     record: dict[str, Any] = {
         "component": str(name),
-        "elapsed_seconds": float(elapsed_seconds),
+        "elapsed_seconds": elapsed,
+        "inclusive_seconds": elapsed,
+        "exclusive_seconds": elapsed if counts_as_child else 0.0,
+        "child_seconds": 0.0,
+        "profile_depth": int(depth),
+        "counts_as_child": bool(counts_as_child),
+        "exclusive_known": bool(counts_as_child),
     }
+    if parent_name is not None:
+        record["parent_component"] = parent_name
     if profile_rss_enabled(control):
         rss = current_rss_mb()
         if rss is not None:
@@ -142,14 +160,23 @@ def profile_component(
     emit_progress: Any = None,
     **metadata: Any,
 ) -> Iterator[None]:
-    """Record wall time and RSS delta for one named component.
+    """Record inclusive and exclusive wall time for one named component.
 
-    ``control['profile_components']`` gates the whole helper.  When disabled,
-    this context manager has almost no overhead beyond one dictionary lookup.
+    A lightweight stack stored in ``control`` subtracts directly nested
+    ``profile_component`` regions.  This makes the v0.6.42 profile useful for
+    finding real ownership rather than summing overlapping inclusive timers.
     """
     if not performance_enabled(control):
         yield
         return
+    stack = control.setdefault("_performance_profile_stack", [])
+    if not isinstance(stack, list):
+        stack = []
+        control["_performance_profile_stack"] = stack
+    parent_name = str(stack[-1]["name"]) if stack else None
+    frame = {"name": str(name), "child_seconds": 0.0}
+    depth = len(stack)
+    stack.append(frame)
     t0 = time.perf_counter()
     rss_enabled = profile_rss_enabled(control)
     rss0 = current_rss_mb() if rss_enabled else None
@@ -157,11 +184,32 @@ def profile_component(
         yield
     finally:
         t1 = time.perf_counter()
+        elapsed = float(t1 - t0)
         rss1 = current_rss_mb() if rss_enabled else None
+        if stack and stack[-1] is frame:
+            stack.pop()
+        else:
+            try:
+                stack.remove(frame)
+            except ValueError:
+                pass
+        child_seconds = min(elapsed, max(0.0, float(frame.get("child_seconds", 0.0))))
+        exclusive_seconds = max(0.0, elapsed - child_seconds)
+        if stack and isinstance(stack[-1], dict):
+            stack[-1]["child_seconds"] = float(stack[-1].get("child_seconds", 0.0)) + elapsed
+        elif not stack:
+            control.pop("_performance_profile_stack", None)
         record: dict[str, Any] = {
             "component": str(name),
-            "elapsed_seconds": float(t1 - t0),
+            "elapsed_seconds": elapsed,
+            "inclusive_seconds": elapsed,
+            "exclusive_seconds": exclusive_seconds,
+            "child_seconds": child_seconds,
+            "profile_depth": int(depth),
+            "exclusive_known": True,
         }
+        if parent_name is not None:
+            record["parent_component"] = parent_name
         if rss0 is not None:
             record["rss_start_mb"] = float(rss0)
         if rss1 is not None:
@@ -179,10 +227,22 @@ def profile_component(
 def _add_grouped(grouped: dict[str, dict[str, float]], name: str, row: dict[str, Any]) -> None:
     item = grouped.setdefault(
         name,
-        {"count": 0.0, "elapsed_seconds": 0.0, "max_rss_end_mb": 0.0, "max_rss_delta_mb": 0.0},
+        {
+            "count": 0.0,
+            "elapsed_seconds": 0.0,
+            "inclusive_seconds": 0.0,
+            "exclusive_seconds": 0.0,
+            "child_seconds": 0.0,
+            "max_rss_end_mb": 0.0,
+            "max_rss_delta_mb": 0.0,
+        },
     )
+    elapsed = float(row.get("elapsed_seconds", 0.0) or 0.0)
     item["count"] += 1.0
-    item["elapsed_seconds"] += float(row.get("elapsed_seconds", 0.0) or 0.0)
+    item["elapsed_seconds"] += elapsed
+    item["inclusive_seconds"] += float(row.get("inclusive_seconds", elapsed) or 0.0)
+    item["exclusive_seconds"] += float(row.get("exclusive_seconds", elapsed) or 0.0)
+    item["child_seconds"] += float(row.get("child_seconds", 0.0) or 0.0)
     if "rss_end_mb" in row:
         item["max_rss_end_mb"] = max(item["max_rss_end_mb"], float(row["rss_end_mb"]))
     if "rss_delta_mb" in row:
@@ -230,6 +290,9 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "ucalc_cpp_unsupported",
         "matrix_dense_terms",
         "matrix_dense_rows",
+        "allocation_count",
+        "bytes_allocated",
+        "svd_count",
     )
     counter_totals: dict[str, dict[str, float]] = {}
     for row in rows:
@@ -276,6 +339,14 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
             reverse=True,
         )[:20]
     ]
+    top_exclusive_components = [
+        {"component": name, **values}
+        for name, values in sorted(
+            grouped.items(),
+            key=lambda kv: float(kv[1].get("exclusive_seconds", 0.0)),
+            reverse=True,
+        )[:20]
+    ]
     top_by_element = [
         {"component_element": name, **values}
         for name, values in sorted(
@@ -312,6 +383,8 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
         "rows": len(rows),
         "components": grouped,
         "top_components": top_components,
+        "top_exclusive_components": top_exclusive_components,
+        "exclusive_timing_available": any(bool(row.get("exclusive_known", False)) for row in rows if isinstance(row, dict)),
         "by_element": by_element,
         "top_by_element": top_by_element,
         "by_ion": by_ion,
@@ -1060,7 +1133,7 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.40.1", "requested": False,
+            "schema_version": "0.6.41", "requested": False,
             "product_candidate": False, "product_promoted": False,
             "diagnostic_only": False, "seed_elision_differential": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
@@ -1068,9 +1141,15 @@ def summarize_rate_payload_four_family_product(
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
     diagnostic = bool(all(bool(row.get("seed_elision_differential", False)) for row in rows))
-    schema_version = str(rows[0].get("schema_version", "0.6.40.1"))
+    schema_version = str(rows[0].get("schema_version", "0.6.41"))
     success_status = (
         "SEED_ELISION_DIFFERENTIAL_COMPLETE" if diagnostic
+        else "V0641_FOUR_FAMILY_PRODUCT_CANDIDATE_EXACT" if candidate and schema_version == "0.6.41"
+        else "FOUR_FAMILY_PRODUCT_PROMOTED_EXACT" if promoted and schema_version == "0.6.41"
+        else "POSITION_SAFE_ORACLE_HOTFIX_CANDIDATE_EXACT" if candidate and schema_version == "0.6.40.3"
+        else "POSITION_SAFE_ORACLE_HOTFIX_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.40.3"
+        else "TYPE51_ORDER_RESTORATION_HOTFIX_CANDIDATE_EXACT" if candidate and schema_version == "0.6.40.2"
+        else "TYPE51_ORDER_RESTORATION_HOTFIX_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.40.2"
         else "TYPE88_THRESHOLD_HOTFIX_CANDIDATE_EXACT" if candidate and schema_version == "0.6.40.1"
         else "TYPE88_THRESHOLD_HOTFIX_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.40.1"
         else "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE_EXACT" if candidate and schema_version == "0.6.40"
@@ -1180,6 +1259,14 @@ def summarize_rate_payload_four_family_product(
         "type50_opakab_mismatches": int(sum(int(row.get("type50_opakab_mismatches", 0) or 0) for row in rows)),
         "result_state_records_compared": int(sum(int(row.get("result_state_records_compared", 0) or 0) for row in rows)),
         "result_state_mismatches": int(sum(int(row.get("result_state_mismatches", 0) or 0) for row in rows)),
+        "reverse_oracle_mapping_strategy": str(rows[0].get("reverse_oracle_mapping_strategy", "")),
+        "reverse_oracle_position_records": int(sum(int(row.get("reverse_oracle_position_records", 0) or 0) for row in rows)),
+        "reverse_oracle_duplicate_term_index_count": int(sum(int(row.get("reverse_oracle_duplicate_term_index_count", 0) or 0) for row in rows)),
+        "reverse_oracle_term_index_aliases_avoided": int(sum(int(row.get("reverse_oracle_term_index_aliases_avoided", 0) or 0) for row in rows)),
+        "qualification_candidate_version": str(rows[0].get("qualification_candidate_version", "")),
+        "qualification_evaluations": int(rows[0].get("qualification_evaluations", 0) or 0),
+        "qualification_type50_opakab_records": int(rows[0].get("qualification_type50_opakab_records", 0) or 0),
+        "qualification_science_products_exact": bool(rows[0].get("qualification_science_products_exact", False)),
         "native_scalar_family_record_counts": native_family_totals,
         "native_scalar_family_mismatch_fields": native_mismatch_totals,
         "existing_cpp_type51_records": int(sum(int(row.get("existing_cpp_type51_records", 0) or 0) for row in rows)),
@@ -1295,7 +1382,7 @@ def summarize_rate_payload_four_family_product(
                 "v0.6.38 promoted mode elides the Python seed path and flushes pending Type-51 batches before every Type-50/63/88 fast commit.",
                 "The structural order barrier preserves the accumulation order proven exact by v0.6.37 without production hashes or matrix reconstruction.",
                 "Setting XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1 routes execution through the complete order-preserving reverse-verification candidate.",
-            ] if promoted and schema_version not in {"0.6.40", "0.6.40.1"} else [
+            ] if promoted and schema_version not in {"0.6.40", "0.6.40.1", "0.6.40.2", "0.6.40.3", "0.6.41"} else [
                 "v0.6.40 runs the Type-50 opakab-restored seed-free product candidate live with whole-evaluation fallback.",
                 "The initial candidate reverse-verifies every Type-50/63/88 scalar, Type-50 opakab value, row, matrix checkpoint, and solver input.",
                 "The ineffective Type-51 per-record barrier is removed; exact science-product parity remains mandatory for promotion.",
@@ -1304,6 +1391,18 @@ def summarize_rate_payload_four_family_product(
                 "The Type-88 C++ kernel is unchanged; fallback provenance records mismatch family, accepted value, candidate value, and packet threshold.",
                 "The restored Type-50 opakab, full oracle, zero Type-51 barriers, and whole-evaluation fallback remain mandatory for all 61 evaluations.",
             ] if schema_version == "0.6.40.1" else [
+                "v0.6.40.2 restores the Type-51 ordering boundary required before later Type-50/63/88 fast commits.",
+                "The deferred Type-51 batch is flushed only when pending; boundary, flush, pending-record, and emitted-term coverage are recorded.",
+                "The corrected Type-88 threshold, restored Type-50 opakab, full oracle, whole-evaluation fallback, and 61-evaluation science gate remain active.",
+            ] if schema_version == "0.6.40.2" else [
+                "v0.6.40.3 keys reverse-oracle replacements by stable term-list position instead of non-unique deferred-batch term_index values.",
+                "Duplicate term indices and avoided aliases are recorded; Type-51 ordering, Type-88 threshold, Type-50 opakab, and whole-evaluation fallback remain unchanged.",
+                "The candidate disables the separate upstream Type-4 C++ line-opacity product so all eight detal4 opacity/depth one-ULP differences use the exact Python path.",
+            ] if schema_version == "0.6.40.3" else [
+                "v0.6.41 promotes the position-safe, order-preserving four-family product qualified by all 61 v0.6.40.3 evaluations.",
+                "Normal production execution disables the reverse oracle but retains whole-evaluation fallback and structural Type-51 ordering.",
+                "The upstream Type-4 C++ product uses pow(v2, 3.0) in the Voigt far wing and an exact parity gate to preserve detal4 payloads.",
+            ] if schema_version == "0.6.41" else [
                 "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
                 "C++ rows are replaced in-place with the accepted composite identity and original term index.",
                 "Ordered term-stream, pre-normalization matrix, and solver-input checkpoints must all be exact.",

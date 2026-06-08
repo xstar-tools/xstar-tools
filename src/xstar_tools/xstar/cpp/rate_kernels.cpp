@@ -51,7 +51,7 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_linopac_type50_voigt_v1";
+    return "xstar_rates_mg_type7_type4_linopac_type50_voigt_pow3_exact_v2";
 }
 
 int xstar_rates_feature_flags() {
@@ -308,7 +308,13 @@ static double xstar_rates_voigte(double vs, double a) {
         return v2 >= 100.0 ? 0.0 : std::exp(-v2);
     }
     if (aa <= 0.2 && v >= 5.0) {
-        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * v2 * v2 * v2 * sqp);
+        // Python's accepted voigte translation spells the denominator as
+        // ``v2**3``.  Use the corresponding libm power operation here rather
+        // than reassociating it into three multiplications; the latter shifts
+        // far-wing results by a few binary64 ULPs and can cross a float32
+        // science-output rounding boundary after many opacity additions.
+        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) /
+               (4.0 * std::pow(v2, 3.0) * sqp);
     }
     if (aa > 1.4 || u > 3.2) {
         const double a2 = aa * aa;
@@ -380,6 +386,8 @@ int xstar_rates_apply_linopac_profile(
     double temperature_1e4k,
     double atomic_mass_amu,
     double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
     const double* epi,
     int ncn2,
     double* opakc,
@@ -391,16 +399,23 @@ int xstar_rates_apply_linopac_profile(
 ) {
     (void)rcem1;
     (void)rcem2;
-    if (!epi || !opakc || !rccemis || !out_i64 || !out_f64) {
+    if (!seed_profiles || !epi || !opakc || !rccemis || !out_i64 || !out_f64) {
         write_message(errbuf, errbuf_size, "null pointer passed to xstar_rates_apply_linopac_profile");
         return 3;
     }
     const int n = static_cast<int>(ncn2);
     if (n < 3 || !std::isfinite(optpp) || !std::isfinite(line_energy_ev) ||
         !std::isfinite(vturb_km_s) || !std::isfinite(temperature_1e4k) ||
-        !std::isfinite(atomic_mass_amu) || !std::isfinite(natural_width_ev)) {
+        !std::isfinite(atomic_mass_amu) || !std::isfinite(natural_width_ev) ||
+        seed_radius < 0) {
         write_message(errbuf, errbuf_size, "invalid input to xstar_rates_apply_linopac_profile");
         return 4;
+    }
+    for (int i = 0; i < 2 * seed_radius + 1; ++i) {
+        if (!std::isfinite(seed_profiles[i])) {
+            write_message(errbuf, errbuf_size, "non-finite seed profile passed to xstar_rates_apply_linopac_profile");
+            return 4;
+        }
     }
     for (int i = 0; i < 8; ++i) out_i64[i] = 0;
     for (int i = 0; i < 12; ++i) out_f64[i] = 0.0;
@@ -425,6 +440,8 @@ int xstar_rates_apply_linopac_profile(
         return 0;
     }
     const double aasmall = natural_width_ev / (1.0e-24 + dele) / 12.56;
+    // The accepted seed contains the center sample with its stricter 1e-6
+    // branch threshold. The remaining C++ scan uses linopac's 1e-9 threshold.
     const bool use_voigt = (aasmall > 1.0e-9);
     const double e00 = epi[ml1 - 1];
     const double etmp = e0;
@@ -447,7 +464,7 @@ int xstar_rates_apply_linopac_profile(
     std::vector<double> etpp(nbtpp, 0.0);
     std::vector<double> optpp2(nbtpp, 0.0);
     double delet = (e00 - etmp) / dele;
-    double profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
+    double profile = seed_profiles[0];
     etpp[ml2 - 1] = e00;
     optpp2[ml2 - 1] = optpp * profile;
     double tst = 1.0;
@@ -464,7 +481,12 @@ int xstar_rates_apply_linopac_profile(
                 if (mlm > mlmax) mlmax = mlm;
                 etpp[mlm - 1] = etptst;
                 delet = (etptst - etmp) / dele;
-                profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
+                if (mlc <= seed_radius) {
+                    const int seed_index = 2 * mlc - ((ldir < 0) ? 1 : 0);
+                    profile = seed_profiles[seed_index];
+                } else {
+                    profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
+                }
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;
             }
@@ -567,6 +589,8 @@ int xstar_rates_apply_mg_type4_type50_coarse(
     double atomic_mass_amu,
     double erg_per_ev,
     const double* natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
     const double* epi,
     int ncn2,
     double* opakc,
@@ -588,7 +612,8 @@ int xstar_rates_apply_mg_type4_type50_coarse(
     if (!record || !data_type || !ion_index || !ion_stage || !line_index || !nb1 ||
         !wavelength_a || !aij_s || !source_upper_weight || !source_lower_weight ||
         !endpoint_energy_ev || !bremsa_nb1 || !ptmp1 || !ptmp2 || !abund_lower ||
-        !abund_upper || !bin_width_ev || !natural_width_ev || !epi || !opakc ||
+        !abund_upper || !bin_width_ev || !natural_width_ev || !seed_profiles ||
+        seed_radius < 0 || !epi || !opakc ||
         !rccemis || !oplin || !fline || !flinel || !out_i64 || !out_f64) {
         write_message(errbuf, errbuf_size, "null pointer passed to xstar_rates_apply_mg_type4_type50_coarse");
         return 3;
@@ -632,7 +657,17 @@ int xstar_rates_apply_mg_type4_type50_coarse(
         const double ab1 = abund_lower[k];
         const double ab2 = abund_upper[k];
         const double width = bin_width_ev[k];
+        bool finite_seed_profiles = true;
+        const double* record_seed_profiles = seed_profiles +
+            static_cast<std::size_t>(k) * static_cast<std::size_t>(2 * seed_radius + 1);
+        for (int j = 0; j < 2 * seed_radius + 1; ++j) {
+            if (!std::isfinite(record_seed_profiles[j])) {
+                finite_seed_profiles = false;
+                break;
+            }
+        }
         if (!finite6(lam, aij, gu, gl, de, brem) || !finite6(p1, p2, ab1, ab2, width, natural_width_ev[k]) ||
+            !finite_seed_profiles ||
             lam <= 0.0 || aij < 0.0 || gu <= 0.0 || gl <= 0.0 || de < 0.0 || width <= 0.0 || vtherm <= 0.0) {
             oi[7] = -1; ++unsupported; continue;
         }
@@ -661,6 +696,8 @@ int xstar_rates_apply_mg_type4_type50_coarse(
         int lrc = xstar_rates_apply_linopac_profile(
             opakb1, rcem1, rcem2, source_real_literal(12398.4016) / lam,
             turbulent_velocity_km_s, temperature_1e4k, atomic_mass_amu, natural_width_ev[k],
+            record_seed_profiles,
+            seed_radius,
             epi, ncn2, opakc, rccemis, tmp_i, tmp_f, errbuf, errbuf_size);
         if (lrc == 0) {
             if (li > 0 && li < n_lines_capacity) {

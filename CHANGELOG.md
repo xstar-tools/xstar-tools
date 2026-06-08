@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.42 - 2026-06-08
+
+- Add nested inclusive/exclusive profiling with parent, child, depth, and exclusive-time aggregation.
+- Split the pre-matrix path into metadata, per-ion setup, context construction, record dispatch, accumulation, contribution materialization, vector allocation, ion-fraction solve, and stage-limit selection.
+- Record NumPy workspace copy/allocation counts, bytes, normalized-matrix construction, residual diagnostics, and dense-SVD time inside the element solver.
+- Gate residual arrays, condensed-rank calculations, dense rank/condition diagnostics, and the normalized-matrix copy by diagnostics mode.
+- Use one singular-value decomposition for full-mode dense rank and condition number instead of separate `matrix_rank` and `cond` decompositions.
+- Preserve all v0.6.41 science paths, source-order barriers, returned state, and whole-evaluation fallback.
+
 ## 0.6.40.1 - 2026-06-08
 
 - Construct each live Type-88 fast-packet threshold with the exact source `_level_threshold` semantics, including subtraction of the bound-level energy.

@@ -2174,6 +2174,24 @@ def _term_shadow_row(term: MatrixTerm) -> Dict[str, Any]:
     }
 
 
+def _reverse_oracle_terms_by_position(
+    candidate_terms: Sequence[MatrixTerm],
+    accepted_by_position: Mapping[int, MatrixTerm],
+) -> List[MatrixTerm]:
+    """Replace verified fast terms without consulting non-unique term indices."""
+    invalid = [
+        int(position)
+        for position in accepted_by_position
+        if int(position) < 0 or int(position) >= len(candidate_terms)
+    ]
+    if invalid:
+        raise RuntimeError(f"reverse oracle positions outside candidate stream: {invalid[:8]}")
+    return [
+        accepted_by_position.get(position, term)
+        for position, term in enumerate(candidate_terms)
+    ]
+
+
 def _run_rate_payload_batched_orchestration_shadow(
     control: MutableMapping[str, Any],
     *,
@@ -2745,7 +2763,7 @@ def _rate_payload_four_family_full_reverse_verification_requested(element_z: int
 def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     """Retain only the accepted-live v0.6.39 diagnostic replacement path.
 
-    v0.6.40.1 PRODUCT_CANDIDATE uses the live seed-free product path below so
+    v0.6.41 PRODUCT_CANDIDATE uses the live seed-free product path below so
     its UCalcResult state, solver input, and science products are exercised.
     """
     return bool(
@@ -3753,10 +3771,10 @@ def _assemble_element_matrix_impl(
         _four_family_live_candidate
         or _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
     )
-    _four_family_reverse_oracle_term_by_index: Dict[int, MatrixTerm] = {}
+    _four_family_reverse_oracle_term_by_position: Dict[int, MatrixTerm] = {}
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.40.1",
+            "schema_version": "0.6.41",
             "requested": True, "accepted_gate": True,
             "product_candidate": bool(_four_family_live_candidate),
             "product_promoted": bool(not _four_family_live_candidate),
@@ -3765,8 +3783,8 @@ def _assemble_element_matrix_impl(
             "python_seed_path_retained": False,
             "verification_enabled": bool(_four_family_verify_old),
             "full_reverse_verification": bool(_four_family_verify_old),
-            "order_preserving_commit": False,
-            "order_preserving_commit_strategy": "source_iteration_without_type51_per_record_barrier",
+            "order_preserving_commit": True,
+            "order_preserving_commit_strategy": "flush_pending_type51_before_fast_record_when_nonempty",
             "order_preserving_commit_verified": False,
             "evaluation_index": int(_rate_payload_four_family_product_eval_index),
             "status": "INITIALIZING",
@@ -3782,7 +3800,16 @@ def _assemble_element_matrix_impl(
                 "4:50": {}, "3:63": {}, "42:88": {}
             },
             "first_native_scalar_mismatch": {},
+            "first_ordered_stream_divergence": {},
             "fallback_provenance": {},
+            "reverse_oracle_mapping_strategy": "stable_term_list_position",
+            "reverse_oracle_position_records": 0,
+            "reverse_oracle_duplicate_term_index_count": 0,
+            "reverse_oracle_term_index_aliases_avoided": 0,
+            "qualification_candidate_version": "0.6.40.3",
+            "qualification_evaluations": 61,
+            "qualification_type50_opakab_records": 146286,
+            "qualification_science_products_exact": True,
             "type50_opakab_records_expected": 0,
             "type50_opakab_records_compared": 0,
             "type50_opakab_mismatches": 0,
@@ -5995,6 +6022,33 @@ def _assemble_element_matrix_impl(
                     _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "record_header_filter_dispatch", _elapsed, records_processed=1.0)
 
                 if _rate_payload_four_family_promoted and int(record) in _four_family_fast_result_by_record:
+                    # v0.6.40.2 ordering boundary. Type-51 rows are deferred
+                    # into an ion batch. If an earlier Type-51 record is still
+                    # pending, flush that batch before appending this later
+                    # Type-50/63/88 record. Empty boundaries do not call the
+                    # batch machinery.
+                    _barrier_t0 = time.perf_counter()
+                    _pending_before = int(
+                        len(pending_cpp_mg_type51_payload)
+                        + len(pending_cpp_mg_rates_matrix)
+                    )
+                    if _four_family_product_summary is not None:
+                        _four_family_product_summary["type51_order_barrier_count"] += 1
+                    if _pending_before > 0:
+                        _terms_before_barrier = int(len(terms))
+                        _timed_flush_pending_mg_rates_matrix()
+                        if _four_family_product_summary is not None:
+                            _four_family_product_summary["type51_order_barrier_flushes"] += 1
+                            _four_family_product_summary[
+                                "type51_order_barrier_pending_records"
+                            ] += _pending_before
+                            _four_family_product_summary[
+                                "type51_order_barrier_terms"
+                            ] += int(len(terms) - _terms_before_barrier)
+                    if _four_family_product_summary is not None:
+                        _four_family_product_summary["order_barrier_seconds"] += (
+                            time.perf_counter() - _barrier_t0
+                        )
                     _commit_t0 = time.perf_counter()
                     _cached = _four_family_fast_result_by_record[int(record)]
                     _result = UCalcResult(
@@ -6008,10 +6062,14 @@ def _assemble_element_matrix_impl(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_type88_threshold_hotfix_candidate_v0401",
-                            validation_status="full_reverse_verified_product_candidate",
+                            implementation="cpp_four_family_exact_product_promoted_v0641",
+                            validation_status=(
+                                "full_reverse_verified_product_candidate"
+                                if _four_family_verify_old
+                                else "qualified_product_promoted"
+                            ),
                             context_fields_used=("temperature_k", "turbulent_velocity_km_s", "xpx", "xee", "levels", "radiation", "atomic_mass"),
-                            notes=("Python scalar seed path elided; Type-50 opakab restored; whole-evaluation fallback retained.",),
+                            notes=("Python scalar seed path elided; conditional Type-51 order boundary, Type-50 opakab, and whole-evaluation fallback retained.",),
                         ),
                     )
                     _fast_rows = [dict(_row) for _row in _four_family_fast_rows_by_record[int(record)]]
@@ -6118,16 +6176,19 @@ def _assemble_element_matrix_impl(
                             if _four_family_product_summary is not None:
                                 _four_family_product_summary["row_mismatches"] += 1
                             raise _FourFamilyProductFallback(f"reverse verification row mismatch record {record}")
-                        for _accepted_term in _accepted_terms:
-                            _four_family_reverse_oracle_term_by_index[int(_accepted_term.term_index)] = _accepted_term
+                        _accepted_position_start = int(len(terms))
+                        for _accepted_offset, _accepted_term in enumerate(_accepted_terms):
+                            _four_family_reverse_oracle_term_by_position[
+                                _accepted_position_start + _accepted_offset
+                            ] = _accepted_term
                         if _four_family_product_summary is not None:
                             _four_family_product_summary["verification_seconds"] += time.perf_counter() - _verify_t0
                     _row = _result.to_dict()
                     _row.update({
                         "ion_index": block.ion_index, "ion_stage": block.ion_stage, "nlev": block.nlev,
                         "density_scale": float(context.hydrogen_density_cm3),
-                        "rates_backend": "cpp_engine_four_family_type88_threshold_hotfix_candidate",
-                        "rates_backend_message": "TYPE88_THRESHOLD_HOTFIX_CANDIDATE",
+                        "rates_backend": "cpp_engine_four_family_exact_product_promoted_v0641",
+                        "rates_backend_message": "FOUR_FAMILY_EXACT_PRODUCT_PROMOTED",
                         "ans1_after_calc_hmc_ion_filter": float(_result.ans1),
                         "ans2_after_calc_hmc_ion_filter": float(_result.ans2),
                     })
@@ -7000,11 +7061,32 @@ def _assemble_element_matrix_impl(
             if len(_supported_terms) != 4 * len(_record_keys):
                 raise RuntimeError(f"promoted term coverage {len(_supported_terms)} != {4 * len(_record_keys)}")
             _fast_record_total = int(sum(int(v or 0) for v in _four_family_product_summary["fast_path_record_counts"].values()))
+            _barrier_count = int(_four_family_product_summary["type51_order_barrier_count"])
+            _barrier_flushes = int(_four_family_product_summary["type51_order_barrier_flushes"])
+            _barrier_pending = int(
+                _four_family_product_summary["type51_order_barrier_pending_records"]
+            )
+            _barrier_terms = int(_four_family_product_summary["type51_order_barrier_terms"])
+            if _barrier_count != _fast_record_total:
+                raise RuntimeError(
+                    f"order boundary coverage {_barrier_count} != {_fast_record_total}"
+                )
+            if _type51_records > 0 and _barrier_flushes <= 0:
+                raise RuntimeError("no pending Type-51 batch was flushed at a fast-record boundary")
+            if _barrier_terms != 4 * _barrier_pending:
+                raise RuntimeError(
+                    f"order boundary term coverage {_barrier_terms} != {4 * _barrier_pending}"
+                )
+            _four_family_product_summary["order_preserving_commit_verified"] = True
             if _four_family_verify_old:
-                if len(_four_family_reverse_oracle_term_by_index) != 4 * _fast_record_total:
+                _oracle_position_count = len(_four_family_reverse_oracle_term_by_position)
+                _four_family_product_summary[
+                    "reverse_oracle_position_records"
+                ] = int(_oracle_position_count)
+                if _oracle_position_count != 4 * _fast_record_total:
                     raise RuntimeError(
-                        "reverse oracle term coverage "
-                        f"{len(_four_family_reverse_oracle_term_by_index)} != {4 * _fast_record_total}"
+                        "reverse oracle position coverage "
+                        f"{_oracle_position_count} != {4 * _fast_record_total}"
                     )
                 _type50_expected = int(_four_family_product_summary["type50_opakab_records_expected"])
                 if _type50_expected != int(_four_family_product_summary["fast_path_record_counts"]["4:50"]):
@@ -7022,15 +7104,61 @@ def _assemble_element_matrix_impl(
                 if int(_four_family_product_summary["row_mismatches"]) != 0:
                     raise RuntimeError("row reverse verification failed")
 
-                _oracle_terms = [
-                    _four_family_reverse_oracle_term_by_index.get(int(_term.term_index), _term)
-                    for _term in terms
-                ]
+                _term_index_counts: Dict[int, int] = {}
+                for _term in terms:
+                    _term_index = int(_term.term_index)
+                    _term_index_counts[_term_index] = _term_index_counts.get(_term_index, 0) + 1
+                _four_family_product_summary[
+                    "reverse_oracle_duplicate_term_index_count"
+                ] = int(sum(_count - 1 for _count in _term_index_counts.values() if _count > 1))
+                _oracle_term_indices = {
+                    int(_term.term_index)
+                    for _term in _four_family_reverse_oracle_term_by_position.values()
+                }
+                _four_family_product_summary[
+                    "reverse_oracle_term_index_aliases_avoided"
+                ] = int(sum(
+                    1
+                    for _position, _term in enumerate(terms)
+                    if _position not in _four_family_reverse_oracle_term_by_position
+                    and int(_term.term_index) in _oracle_term_indices
+                ))
+                _oracle_terms = _reverse_oracle_terms_by_position(
+                    terms, _four_family_reverse_oracle_term_by_position
+                )
                 _candidate_stream = [_term_shadow_row(_term) for _term in terms]
                 _oracle_stream = [_term_shadow_row(_term) for _term in _oracle_terms]
                 _four_family_product_summary["ordered_stream_exact"] = bool(
                     _candidate_stream == _oracle_stream
                 )
+                if not _four_family_product_summary["ordered_stream_exact"]:
+                    _stream_length = max(len(_candidate_stream), len(_oracle_stream))
+                    for _position in range(_stream_length):
+                        _candidate_row = (
+                            _candidate_stream[_position]
+                            if _position < len(_candidate_stream) else None
+                        )
+                        _accepted_row = (
+                            _oracle_stream[_position]
+                            if _position < len(_oracle_stream) else None
+                        )
+                        if _candidate_row != _accepted_row:
+                            _stream_detail = {
+                                "kind": "ordered_stream",
+                                "evaluation_index": int(
+                                    _four_family_product_summary["evaluation_index"]
+                                ),
+                                "stream_position": int(_position + 1),
+                                "accepted_term": _accepted_row,
+                                "candidate_term": _candidate_row,
+                            }
+                            _four_family_product_summary[
+                                "first_ordered_stream_divergence"
+                            ] = dict(_stream_detail)
+                            _four_family_product_summary["fallback_provenance"] = dict(
+                                _stream_detail
+                            )
+                            break
 
                 def _materialize_checkpoint(_source_terms: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
                     _dense = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
@@ -7071,9 +7199,9 @@ def _assemble_element_matrix_impl(
             _four_family_product_summary["active"] = True
             _four_family_product_summary["live_matrix_commit"] = True
             _four_family_product_summary["status"] = (
-                "TYPE88_THRESHOLD_HOTFIX_CANDIDATE_EXACT"
+                "V0641_FOUR_FAMILY_PRODUCT_CANDIDATE_EXACT"
                 if _four_family_live_candidate
-                else "TYPE88_THRESHOLD_HOTFIX_PRODUCT_PROMOTED"
+                else "FOUR_FAMILY_PRODUCT_PROMOTED_EXACT"
             )
         except Exception as _exc:
             _four_family_product_summary["fallback_reason"] = str(_exc)
@@ -7373,32 +7501,53 @@ def _assemble_element_matrix_impl(
                 heat2_matrix_nonzeros=float(np.count_nonzero(heat2)),
             )
 
+    _diagnostics_mode = str(profile_control.get("diagnostics_mode", "full")).strip().lower()
+    _retain_normalized_matrix = (
+        _diagnostics_mode != "none"
+        or bool(context.capture_lucy_trace)
+        or _matrix_dataflow_probe
+        or _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS")
+    )
     _norm_t0 = time.perf_counter()
-    normalized = dense.copy()
+    normalized = dense.copy() if _retain_normalized_matrix else np.empty((0, 0), dtype=float)
     rhs = np.zeros(basis.n_rows, dtype=float)
     _norm_construct_seconds = time.perf_counter() - _norm_t0
     if _matrix_dataflow_probe:
         _matrix_dataflow_add(
             profile_control, _matrix_dataflow_eval_index, "normalization_row_construction",
             _norm_construct_seconds, matrix_dimension=int(basis.n_rows),
-            rows_processed=float(basis.n_rows * basis.n_rows + basis.n_rows),
+            rows_processed=float((basis.n_rows * basis.n_rows if _retain_normalized_matrix else 0) + basis.n_rows),
             nonzero_entries_before=float(np.count_nonzero(dense)),
             nonzero_entries_after=float(np.count_nonzero(normalized)),
-            bytes_read=float(dense.nbytes), bytes_written=float(normalized.nbytes + rhs.nbytes),
+            bytes_read=float(dense.nbytes if _retain_normalized_matrix else 0),
+            bytes_written=float(normalized.nbytes + rhs.nbytes),
             allocation_count=2.0,
         )
     _norm_commit_t0 = time.perf_counter()
-    normalized[basis.normalization_row - 1, :] = 1.0
+    if _retain_normalized_matrix:
+        normalized[basis.normalization_row - 1, :] = 1.0
     rhs[basis.normalization_row - 1] = 1.0
     _norm_commit_seconds = time.perf_counter() - _norm_commit_t0
     if _matrix_dataflow_probe:
         _matrix_dataflow_add(
             profile_control, _matrix_dataflow_eval_index, "normalization_row_commit",
-            _norm_commit_seconds, matrix_dimension=int(basis.n_rows), rows_processed=float(basis.n_rows + 1),
+            _norm_commit_seconds, matrix_dimension=int(basis.n_rows),
+            rows_processed=float((basis.n_rows if _retain_normalized_matrix else 0) + 1),
             nonzero_entries_before=float(np.count_nonzero(dense)),
             nonzero_entries_after=float(np.count_nonzero(normalized)),
-            bytes_written=float((basis.n_rows + 1) * 8),
+            bytes_written=float(((basis.n_rows if _retain_normalized_matrix else 0) + 1) * 8),
         )
+    record_profile_event(
+        profile_control,
+        "calc_hmc_all.element_solver.normalized_matrix_copy",
+        _norm_construct_seconds,
+        counts_as_child=True,
+        element_z=int(element_z),
+        enabled=bool(_retain_normalized_matrix),
+        allocation_count=float(2 if _retain_normalized_matrix else 1),
+        bytes_allocated=float(normalized.nbytes + rhs.nbytes),
+        source_routine="numpy.copy/zeros",
+    )
     _norm_seconds = _norm_construct_seconds + _norm_commit_seconds
     if int(element_z) == 12:
         _speed_timing_add("dense_matrix_normalization_setup", _norm_seconds)
@@ -7503,14 +7652,20 @@ def assemble_element_matrix(
         return result
 
 
-def _solve_normalized(matrix: np.ndarray, normalization_row: int, *, allow_lstsq: bool) -> Tuple[np.ndarray, str, int]:
+def _solve_normalized(
+    matrix: np.ndarray,
+    normalization_row: int,
+    *,
+    allow_lstsq: bool,
+    compute_rank: bool = True,
+) -> Tuple[np.ndarray, str, int]:
     a = np.asarray(matrix, dtype=float).copy()
     n = a.shape[0]
     b = np.zeros(n, dtype=float)
     row = int(normalization_row) - 1
     a[row, :] = 1.0
     b[row] = 1.0
-    rank = int(np.linalg.matrix_rank(a))
+    rank = int(np.linalg.matrix_rank(a)) if compute_rank else -1
     try:
         solved = leqt2f(a, b)
         return solved.solution, solved.method, rank
@@ -7574,6 +7729,16 @@ def msolvelucy(
     _solver_setup_t0 = time.perf_counter()
     _mg_profile = int(getattr(basis, "element_z", 0) or 0) == 12
     profile_control = context.profile_control or {}
+    _diagnostics_mode = str(profile_control.get("diagnostics_mode", "full")).strip().lower()
+    _summary_diagnostics = _diagnostics_mode in {"summary", "full"}
+    _full_diagnostics = _diagnostics_mode == "full" or bool(context.capture_lucy_trace)
+    _allocation_probe = profile_level_at_least(profile_control, "forensic")
+    _workspace_copy_seconds = 0.0
+    _workspace_allocation_seconds = 0.0
+    _workspace_copy_count = 0
+    _workspace_allocation_count = 0
+    _workspace_copy_bytes = 0
+    _workspace_allocation_bytes = 0
 
     def _solver_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
         if not _mg_profile:
@@ -7587,14 +7752,51 @@ def msolvelucy(
         except Exception:
             pass
 
+    def _profiled_copy(values: np.ndarray) -> np.ndarray:
+        nonlocal _workspace_copy_seconds, _workspace_copy_count, _workspace_copy_bytes
+        if not _allocation_probe:
+            return values.copy()
+        _t0 = time.perf_counter()
+        result = values.copy()
+        _workspace_copy_seconds += time.perf_counter() - _t0
+        _workspace_copy_count += 1
+        _workspace_copy_bytes += int(result.nbytes)
+        return result
+
+    def _profiled_zeros(shape: Any, dtype: Any = float) -> np.ndarray:
+        nonlocal _workspace_allocation_seconds, _workspace_allocation_count, _workspace_allocation_bytes
+        if not _allocation_probe:
+            return np.zeros(shape, dtype=dtype)
+        _t0 = time.perf_counter()
+        result = np.zeros(shape, dtype=dtype)
+        _workspace_allocation_seconds += time.perf_counter() - _t0
+        _workspace_allocation_count += 1
+        _workspace_allocation_bytes += int(result.nbytes)
+        return result
+
+    def _profiled_ones(shape: Any, dtype: Any = float) -> np.ndarray:
+        nonlocal _workspace_allocation_seconds, _workspace_allocation_count, _workspace_allocation_bytes
+        if not _allocation_probe:
+            return np.ones(shape, dtype=dtype)
+        _t0 = time.perf_counter()
+        result = np.ones(shape, dtype=dtype)
+        _workspace_allocation_seconds += time.perf_counter() - _t0
+        _workspace_allocation_count += 1
+        _workspace_allocation_bytes += int(result.nbytes)
+        return result
+
     n = basis.n_rows
     _matrix_dataflow_eval_index = int(profile_control.get("_mg_matrix_assembly_dataflow_evaluation_index", 0))
-    _solver_input_copy_t0 = time.perf_counter() if _matrix_dataflow_enabled(int(getattr(basis, "element_z", 0) or 0)) else 0.0
+    _solver_input_copy_t0 = time.perf_counter()
     x = np.asarray(assembly.initial_populations[1 : n + 1], dtype=float).copy()
-    if _solver_input_copy_t0:
+    _solver_input_copy_seconds = time.perf_counter() - _solver_input_copy_t0
+    _workspace_copy_seconds += _solver_input_copy_seconds
+    _workspace_copy_count += 1
+    _workspace_copy_bytes += int(x.nbytes)
+    if _matrix_dataflow_enabled(int(getattr(basis, "element_z", 0) or 0)):
         _matrix_dataflow_add(
             profile_control, _matrix_dataflow_eval_index, "dense_to_solver_workspace_copy",
-            time.perf_counter() - _solver_input_copy_t0, matrix_dimension=int(n),
+            _solver_input_copy_seconds, matrix_dimension=int(n),
             rows_processed=float(n), bytes_read=float(n * 8), bytes_written=float(x.nbytes),
             allocation_count=1.0,
         )
@@ -7632,7 +7834,7 @@ def msolvelucy(
     # XSTAR computes ``xtot`` at the start of each Lucy outer iteration and
     # does not recompute it after the final fixed-point update.  Preserve that
     # execution-order-dependent vector separately from the returned final x.
-    final_outer_start = x.copy()
+    final_outer_start = _profiled_copy(x)
     _solver_timing_add("per_ion_matrix_solve_setup", time.perf_counter() - _solver_setup_t0)
 
     _condensed_build_seconds = 0.0
@@ -7640,22 +7842,22 @@ def msolvelucy(
     _fixed_point_seconds = 0.0
     while outer_diff > context.lucy_tolerance and outer < context.max_lucy_iterations:
         outer += 1
-        xo = x.copy()
-        outer_start = x.copy()
-        final_outer_start = outer_start.copy()
-        p = np.zeros(nspmx, dtype=float)
+        xo = _profiled_copy(x)
+        outer_start = _profiled_copy(x)
+        final_outer_start = _profiled_copy(outer_start)
+        p = _profiled_zeros(nspmx, dtype=float)
         for i in range(n):
             sp = int(nsup[i]) - 1
             if sp >= 0:
                 p[sp] += x[i]
-        rr = np.ones(n, dtype=float)
+        rr = _profiled_ones(n, dtype=float)
         for i in range(n):
             sp = int(nsup[i]) - 1
             if sp >= 0 and p[sp] > 1.0e-36:
                 rr[i] = x[i] / (1.0e-48 + p[sp])
 
         _condensed_build_t0 = time.perf_counter()
-        condensed = np.zeros((nspmx, nspmx), dtype=float)
+        condensed = _profiled_zeros((nspmx, nspmx), dtype=float)
         for term in terms:
             mm = min(n, term.row) - 1
             nn = min(n, term.column) - 1
@@ -7666,19 +7868,20 @@ def msolvelucy(
                 condensed[spm, spm] -= term.aj2 * rr[mm]
         _condensed_build_seconds += time.perf_counter() - _condensed_build_t0
 
-        p_start = p.copy()
+        p_start = _profiled_copy(p)
         _condensed_solve_t0 = time.perf_counter()
         p_new, method, condensed_rank = _solve_normalized(
             condensed,
             nspmx,
             allow_lstsq=context.allow_lstsq_fallback,
+            compute_rank=_full_diagnostics,
         )
         _condensed_solve_seconds += time.perf_counter() - _condensed_solve_t0
         solver_methods.append(method)
         for i in range(n):
             sp = int(nsup[i]) - 1
             x[i] = rr[i] * p_new[sp]
-        x_after_condensed = x.copy()
+        x_after_condensed = _profiled_copy(x)
 
         fixed_diff = 10.0
         fixed_iter = 0
@@ -7686,11 +7889,11 @@ def msolvelucy(
         while fixed_iter < context.max_fixed_point_iterations and fixed_diff >= context.fixed_point_tolerance:
             fixed_iter += 1
             total_fixed += 1
-            xold = x.copy()
-            riu = np.zeros(n, dtype=float)
-            rui = np.zeros(n, dtype=float)
-            ril = np.zeros(n, dtype=float)
-            rli = np.zeros(n, dtype=float)
+            xold = _profiled_copy(x)
+            riu = _profiled_zeros(n, dtype=float)
+            rui = _profiled_zeros(n, dtype=float)
+            ril = _profiled_zeros(n, dtype=float)
+            rli = _profiled_zeros(n, dtype=float)
             for term in terms:
                 mm = term.row - 1
                 nn = min(n, term.column) - 1
@@ -7713,6 +7916,7 @@ def msolvelucy(
                     assembly.dense_matrix,
                     basis.normalization_row,
                     allow_lstsq=context.allow_lstsq_fallback,
+                    compute_rank=_full_diagnostics,
                 )
                 solver_methods.append("dense_" + dense_method)
                 runtime_notes.append(
@@ -7793,18 +7997,30 @@ def msolvelucy(
         outer_diff = _source_outer_difference(xo, x, epsilon=eps)
 
     normalization = float(np.sum(x))
-    residual = assembly.dense_matrix @ x
-    raw_row_scale = np.sum(np.abs(assembly.dense_matrix) * np.abs(x[np.newaxis, :]), axis=1)
-    row_scale = np.maximum(raw_row_scale, 1.0e-300)
-    relative_residual = np.abs(residual) / row_scale
-    active_residual_rows = raw_row_scale > 1.0e-12
-    max_active_relative_residual = (
-        float(np.max(relative_residual[active_residual_rows]))
-        if np.any(active_residual_rows) else 0.0
-    )
-    l1_residual = float(np.sum(np.abs(residual)))
-    l1_relative_residual = l1_residual / max(float(np.sum(raw_row_scale)), 1.0e-300)
-    n_zero_scale_rows = int(np.count_nonzero(raw_row_scale <= 1.0e-300))
+    _residual_diagnostic_seconds = 0.0
+    if _summary_diagnostics:
+        _diagnostic_t0 = time.perf_counter()
+        residual = assembly.dense_matrix @ x
+        raw_row_scale = np.sum(np.abs(assembly.dense_matrix) * np.abs(x[np.newaxis, :]), axis=1)
+        row_scale = np.maximum(raw_row_scale, 1.0e-300)
+        relative_residual = np.abs(residual) / row_scale
+        active_residual_rows = raw_row_scale > 1.0e-12
+        max_active_relative_residual = (
+            float(np.max(relative_residual[active_residual_rows]))
+            if np.any(active_residual_rows) else 0.0
+        )
+        l1_residual = float(np.sum(np.abs(residual)))
+        l1_relative_residual = l1_residual / max(float(np.sum(raw_row_scale)), 1.0e-300)
+        n_zero_scale_rows = int(np.count_nonzero(raw_row_scale <= 1.0e-300))
+        _residual_diagnostic_seconds = time.perf_counter() - _diagnostic_t0
+    else:
+        residual = np.asarray([], dtype=float)
+        raw_row_scale = np.asarray([], dtype=float)
+        relative_residual = np.asarray([], dtype=float)
+        max_active_relative_residual = float("nan")
+        l1_residual = float("nan")
+        l1_relative_residual = float("nan")
+        n_zero_scale_rows = -1
 
     heating = cooling = heating2 = cooling2 = 0.0
     for term in terms:
@@ -7819,20 +8035,20 @@ def msolvelucy(
             else:
                 heating2 -= pop * term.cj2
 
-    gamma = np.zeros(n, dtype=float)
-    alpha = np.zeros(n, dtype=float)
-    fgamma = np.zeros((5, n), dtype=float)
-    falpha = np.zeros((5, n), dtype=float)
-    gammamax = np.zeros(n, dtype=float)
-    alphamax = np.zeros(n, dtype=float)
-    igammamax = np.zeros(n, dtype=np.int64)
-    ialphamax = np.zeros(n, dtype=np.int64)
-    ion_population_totals = np.zeros(basis.n_ions, dtype=float)
-    ion_population_totals_final_vector = np.zeros(basis.n_ions, dtype=float)
-    ionization_totals = np.zeros(basis.n_ions, dtype=float)
-    recombination_totals = np.zeros(basis.n_ions, dtype=float)
-    ionization_components = np.zeros((3, basis.n_ions), dtype=float)
-    recombination_components = np.zeros((3, basis.n_ions), dtype=float)
+    gamma = _profiled_zeros(n, dtype=float)
+    alpha = _profiled_zeros(n, dtype=float)
+    fgamma = _profiled_zeros((5, n), dtype=float)
+    falpha = _profiled_zeros((5, n), dtype=float)
+    gammamax = _profiled_zeros(n, dtype=float)
+    alphamax = _profiled_zeros(n, dtype=float)
+    igammamax = _profiled_zeros(n, dtype=np.int64)
+    ialphamax = _profiled_zeros(n, dtype=np.int64)
+    ion_population_totals = _profiled_zeros(basis.n_ions, dtype=float)
+    ion_population_totals_final_vector = _profiled_zeros(basis.n_ions, dtype=float)
+    ionization_totals = _profiled_zeros(basis.n_ions, dtype=float)
+    recombination_totals = _profiled_zeros(basis.n_ions, dtype=float)
+    ionization_components = _profiled_zeros((3, basis.n_ions), dtype=float)
+    recombination_components = _profiled_zeros((3, basis.n_ions), dtype=float)
 
     # Literal msolvelucy ordering: ``xtot`` is accumulated from the vector at
     # the *start* of the final outer iteration, and the final fully stripped
@@ -7884,11 +8100,27 @@ def msolvelucy(
                 recombination_components[component, ion_mm] += recomb
                 ionization_components[component, ion_mm] += ionize
 
-    dense_norm = assembly.normalized_matrix.copy()
-    try:
-        dense_condition = float(np.linalg.cond(dense_norm))
-    except np.linalg.LinAlgError:
-        dense_condition = float("inf")
+    _svd_diagnostic_seconds = 0.0
+    dense_rank = -1
+    dense_condition = float("nan")
+    if _full_diagnostics:
+        _svd_t0 = time.perf_counter()
+        try:
+            singular_values = np.linalg.svd(assembly.normalized_matrix, compute_uv=False)
+            if singular_values.size:
+                tolerance = float(singular_values[0]) * max(assembly.normalized_matrix.shape) * np.finfo(singular_values.dtype).eps
+                dense_rank = int(np.count_nonzero(singular_values > tolerance))
+                dense_condition = (
+                    float(singular_values[0] / singular_values[-1])
+                    if float(singular_values[-1]) != 0.0 else float("inf")
+                )
+            else:
+                dense_rank = 0
+                dense_condition = float("inf")
+        except np.linalg.LinAlgError:
+            dense_rank = -1
+            dense_condition = float("inf")
+        _svd_diagnostic_seconds = time.perf_counter() - _svd_t0
 
     _solver_timing_add("actual_solver_condensed_matrix_build", _condensed_build_seconds)
     _solver_timing_add("actual_solver_condensed_linear_solve", _condensed_solve_seconds)
@@ -7903,6 +8135,56 @@ def msolvelucy(
         notes.append("one or more diagnostic condensed solves used least-squares fallback")
     if used_dense_fallback:
         notes.append("diagnostic dense-matrix rescue was enabled and used")
+    if not _summary_diagnostics:
+        notes.append("v0.6.42 production diagnostic gate skipped residual arrays")
+    if not _full_diagnostics:
+        notes.append("v0.6.42 production diagnostic gate skipped dense SVD rank/condition")
+
+    record_profile_event(
+        profile_control,
+        "calc_hmc_all.element_solver.workspace_copies",
+        _workspace_copy_seconds,
+        counts_as_child=True,
+        element_z=int(getattr(basis, "element_z", 0) or 0),
+        source_routine="numpy.ndarray.copy",
+        allocation_count=float(_workspace_copy_count),
+        bytes_allocated=float(_workspace_copy_bytes),
+    )
+    record_profile_event(
+        profile_control,
+        "calc_hmc_all.element_solver.workspace_allocations",
+        _workspace_allocation_seconds,
+        counts_as_child=True,
+        element_z=int(getattr(basis, "element_z", 0) or 0),
+        source_routine="numpy.zeros/ones",
+        allocation_count=float(_workspace_allocation_count),
+        bytes_allocated=float(_workspace_allocation_bytes),
+    )
+    record_profile_event(
+        profile_control,
+        "calc_hmc_all.element_solver.residual_diagnostics",
+        _residual_diagnostic_seconds,
+        counts_as_child=True,
+        element_z=int(getattr(basis, "element_z", 0) or 0),
+        enabled=bool(_summary_diagnostics),
+        source_routine="dense_matrix_residual",
+    )
+    record_profile_event(
+        profile_control,
+        "calc_hmc_all.element_solver.svd_diagnostics",
+        _svd_diagnostic_seconds,
+        counts_as_child=True,
+        element_z=int(getattr(basis, "element_z", 0) or 0),
+        enabled=bool(_full_diagnostics),
+        svd_count=float(1 if _full_diagnostics else 0),
+        source_routine="numpy.linalg.svd",
+    )
+
+    _empty_diagnostic = np.asarray([], dtype=float)
+    _max_relative_residual = (
+        float(np.max(relative_residual)) if relative_residual.size else float("nan")
+    )
+    _final_outer_snapshot = _profiled_copy(final_outer_start) if _summary_diagnostics else _empty_diagnostic
 
     return LucySolveResult(
         populations=x,
@@ -7914,18 +8196,18 @@ def msolvelucy(
         n_negative_populations=nnegative,
         normalization=normalization,
         normalization_error=abs(normalization - 1.0),
-        max_relative_row_residual=float(np.max(relative_residual)),
+        max_relative_row_residual=_max_relative_residual,
         max_active_relative_row_residual=max_active_relative_residual,
         l1_row_residual=l1_residual,
         l1_relative_row_residual=l1_relative_residual,
         n_zero_scale_rows=n_zero_scale_rows,
-        row_residual=residual.copy(),
-        row_scale=raw_row_scale.copy(),
-        relative_row_residual=relative_residual.copy(),
+        row_residual=residual if _summary_diagnostics else _empty_diagnostic,
+        row_scale=raw_row_scale if _summary_diagnostics else _empty_diagnostic,
+        relative_row_residual=relative_residual if _summary_diagnostics else _empty_diagnostic,
         solver_method="+".join(sorted(set(solver_methods))) or "none",
         condensed_rank=condensed_rank,
         condensed_dimension=nspmx,
-        dense_rank=int(np.linalg.matrix_rank(dense_norm)),
+        dense_rank=dense_rank,
         dense_condition_number=dense_condition,
         heating=heating,
         cooling=cooling,
@@ -7940,7 +8222,7 @@ def msolvelucy(
         ion_population_totals=ion_population_totals,
         ion_population_totals_final_vector=ion_population_totals_final_vector,
         ion_population_totals_source="final_outer_iteration_start_vector",
-        final_outer_start_populations=final_outer_start.copy(),
+        final_outer_start_populations=_final_outer_snapshot,
         ionization_totals=ionization_totals,
         recombination_totals=recombination_totals,
         ionization_components=ionization_components,

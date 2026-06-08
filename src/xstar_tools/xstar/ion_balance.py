@@ -13,14 +13,16 @@ multilevel operator.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 import math
 import os
+import time
 
 import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .element_equilibrium import build_level_table
+from .performance import profile_component, profile_level_at_least, record_profile_event
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -49,6 +51,7 @@ class CalcIonRatesContext:
     strict_context: bool = True
     retain_contributions: bool = True
     reusable_work_arrays: Optional[Dict[str, Any]] = None
+    profile_control: Optional[MutableMapping[str, Any]] = None
 
     @property
     def electron_density_cm3(self) -> float:
@@ -272,6 +275,9 @@ def calc_ion_rates(
     if context.temperature_k <= 0.0 or not math.isfinite(context.temperature_k):
         raise IonBalanceError("temperature_k must be finite and positive")
 
+    profile_control = context.profile_control or {}
+    _forensic_profile = profile_level_at_least(profile_control, "forensic")
+    _setup_t0 = time.perf_counter() if _forensic_profile else 0.0
     dispatch = dispatcher or default_source_faithful_ucalc()
     ion_record = int(derived.ion_records[ion_index])
     element_z = int(derived.ion_element_z[ion_index])
@@ -293,6 +299,19 @@ def calc_ion_rates(
     n_seen = len(selected_records)
     n_selected = len(selected_records)
     retain_contributions = bool(getattr(context, "retain_contributions", True))
+    if _forensic_profile:
+        record_profile_event(
+            profile_control,
+            "calc_hmc_all.pre_matrix.ion_setup",
+            time.perf_counter() - _setup_t0,
+            counts_as_child=True,
+            element_z=int(element_z),
+            ion_stage=int(ion_stage),
+            ion_index=int(ion_index),
+            selected_records=float(n_selected),
+            source_routine="build_level_table/selected_record_cache",
+            allocation_count=float(2 + int(bool(parent_energy)) + int(bool(parent_weight))),
+        )
 
     # v0.6.4: keep the preliminary Mg rate7 C++ path product-inactive by
     # default.  v0.6.2 showed that enabling this shortcut changed ion/rate
@@ -315,6 +334,7 @@ def calc_ion_rates(
         "shadow_enabled": 1.0 if _prematrix_shadow else 0.0,
         "product_enabled": 1.0 if _prematrix_product else 0.0,
     }
+    _cpp_t0 = time.perf_counter() if _forensic_profile else 0.0
     if (
         int(element_z) == 12
         and _prematrix_requested
@@ -377,17 +397,37 @@ def calc_ion_rates(
             cpp_prematrix_product_records = set()
             cpp_prematrix_pirt = 0.0
             cpp_prematrix_stats.update({"fallback": 1.0, "error_hash": float(abs(hash(str(_exc))) % 1000000)})
+    if _forensic_profile:
+        record_profile_event(
+            profile_control,
+            "calc_hmc_all.pre_matrix.cpp_shadow_or_product",
+            time.perf_counter() - _cpp_t0,
+            counts_as_child=True,
+            element_z=int(element_z),
+            ion_stage=int(ion_stage),
+            ion_index=int(ion_index),
+            selected_records=float(n_selected),
+            supported_records=float(len(cpp_prematrix_records)),
+            product_records=float(len(cpp_prematrix_product_records)),
+            source_routine="libxstar_matrix.so:pre_matrix_rate7",
+        )
 
     if cpp_prematrix_product_records:
         pirti += float(cpp_prematrix_pirt)
         n_evaluated += len(cpp_prematrix_product_records)
 
+    _context_build_seconds = 0.0
+    _dispatch_seconds = 0.0
+    _accumulation_seconds = 0.0
+    _contribution_seconds = 0.0
+    _context_allocations = 0
     for rate_slot, record in selected_records:
         if int(record) in cpp_prematrix_product_records:
             continue
         header = master.header(record)
         ints = master.record_integers(record)
         idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
+        _context_t0 = time.perf_counter() if _forensic_profile else 0.0
         ucontext = UCalcContext(
             temperature_k=float(context.temperature_k),
             hydrogen_density_cm3=float(context.hydrogen_density_cm3),
@@ -419,8 +459,12 @@ def calc_ion_rates(
                 "parent_level_stat_weight_by_destination": parent_weight,
             },
         )
+        if _forensic_profile:
+            _context_build_seconds += time.perf_counter() - _context_t0
+            _context_allocations += 2
         pirti_before = float(pirti)
         rrrti_before = float(rrrti)
+        _dispatch_t0 = time.perf_counter() if _forensic_profile else 0.0
         result = dispatch.evaluate_record_number(
             master,
             record,
@@ -429,6 +473,9 @@ def calc_ion_rates(
             next_record=int(derived.npnxt[record]),
             strict=False,
         )
+        if _forensic_profile:
+            _dispatch_seconds += time.perf_counter() - _dispatch_t0
+        _accum_t0 = time.perf_counter() if _forensic_profile else 0.0
         add_pi = 0.0
         add_rr = 0.0
         if result.status is UCalcStatus.EVALUATED:
@@ -453,8 +500,11 @@ def calc_ion_rates(
             cpp_prematrix_python_records += 1
             cpp_prematrix_python_pirt += float(add_pi)
             cpp_prematrix_python_rrrt += float(add_rr)
+        if _forensic_profile:
+            _accumulation_seconds += time.perf_counter() - _accum_t0
 
         if retain_contributions:
+            _contrib_t0 = time.perf_counter() if _forensic_profile else 0.0
             diagnostics = dict(getattr(result, "diagnostics", {}) or {})
             try:
                 parent_reals = np.asarray(master.record_reals(ion_record), dtype=float)
@@ -499,6 +549,29 @@ def calc_ion_rates(
                     reason=str(result.reason),
                     diagnostics=diagnostics,
                 )
+            )
+            if _forensic_profile:
+                _contribution_seconds += time.perf_counter() - _contrib_t0
+
+    if _forensic_profile:
+        for _name, _elapsed, _source, _allocations in (
+            ("calc_hmc_all.pre_matrix.ucalc_context_build", _context_build_seconds, "UCalcContext", _context_allocations),
+            ("calc_hmc_all.pre_matrix.record_dispatch", _dispatch_seconds, "SourceFaithfulUCalc.evaluate_record_number", 0),
+            ("calc_hmc_all.pre_matrix.rate_accumulation", _accumulation_seconds, "calc_ion_rates", 0),
+            ("calc_hmc_all.pre_matrix.contribution_materialization", _contribution_seconds, "CalcIonRateContribution", len(rows)),
+        ):
+            record_profile_event(
+                profile_control,
+                _name,
+                _elapsed,
+                counts_as_child=True,
+                element_z=int(element_z),
+                ion_stage=int(ion_stage),
+                ion_index=int(ion_index),
+                selected_records=float(n_selected),
+                contribution_rows=float(len(rows)),
+                allocation_count=float(_allocations),
+                source_routine=_source,
             )
 
     ready = n_blocked == 0
@@ -704,28 +777,73 @@ def calc_element_pre_matrix_balance(
     critf: float = 1.0e-8,
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]:
-    """Run the complete total-rate/``istruc``/stage-limit first pass."""
-    nnz = _element_nnz(master, derived, element_z)
-    ion_indices = _ion_indices_for_element(derived, element_z)
+    """Run the total-rate/``istruc``/stage-limit first pass with exclusive splits."""
+    profile_control = context.profile_control or {}
+    with profile_component(
+        profile_control,
+        "calc_hmc_all.pre_matrix.metadata_lookup",
+        element_z=int(element_z),
+        source_routine="calc_element_pre_matrix_balance",
+    ):
+        nnz = _element_nnz(master, derived, element_z)
+        ion_indices = _ion_indices_for_element(derived, element_z)
+
     by_stage: Dict[int, CalcIonRatesResult] = {}
-    for ion_index in ion_indices:
-        stage = int(derived.ion_stage[ion_index])
-        if stage < 1 or stage > nnz:
-            continue
-        by_stage[stage] = calc_ion_rates(
-            master,
-            derived,
-            ion_index=ion_index,
-            context=context,
-            dispatcher=dispatcher,
-        )
+    with profile_component(
+        profile_control,
+        "calc_hmc_all.pre_matrix.ion_rate_evaluation",
+        element_z=int(element_z),
+        source_routine="calc_ion_rates",
+        ion_count=float(len(ion_indices)),
+    ):
+        for ion_index in ion_indices:
+            stage = int(derived.ion_stage[ion_index])
+            if stage < 1 or stage > nnz:
+                continue
+            with profile_component(
+                profile_control,
+                "calc_hmc_all.pre_matrix.ion",
+                element_z=int(element_z),
+                ion_stage=int(stage),
+                ion_index=int(ion_index),
+                source_routine="calc_ion_rates",
+            ):
+                by_stage[stage] = calc_ion_rates(
+                    master,
+                    derived,
+                    ion_index=ion_index,
+                    context=context,
+                    dispatcher=dispatcher,
+                )
+
     missing = [stage for stage in range(1, nnz + 1) if stage not in by_stage]
     if missing:
         raise IonBalanceError(f"element Z={element_z} is missing ion headers for stages {missing}")
-    pirt = np.asarray([by_stage[stage].pirti for stage in range(1, nnz + 1)], dtype=float)
-    rrrt = np.asarray([by_stage[stage].rrrti for stage in range(1, nnz + 1)], dtype=float)
-    preliminary = istruc(pirt, rrrt)
-    limits = select_ion_stage_limits(preliminary.fractions, nnz=nnz, critf=critf)
+
+    with profile_component(
+        profile_control,
+        "calc_hmc_all.pre_matrix.rate_vector_allocation",
+        element_z=int(element_z),
+        source_routine="numpy.asarray",
+        allocation_count=2.0,
+        bytes_allocated=float(2 * nnz * 8),
+    ):
+        pirt = np.asarray([by_stage[stage].pirti for stage in range(1, nnz + 1)], dtype=float)
+        rrrt = np.asarray([by_stage[stage].rrrti for stage in range(1, nnz + 1)], dtype=float)
+    with profile_component(
+        profile_control,
+        "calc_hmc_all.pre_matrix.ion_fraction_solve",
+        element_z=int(element_z),
+        source_routine="istruc/ioneqm",
+    ):
+        preliminary = istruc(pirt, rrrt)
+    with profile_component(
+        profile_control,
+        "calc_hmc_all.pre_matrix.stage_limit_selection",
+        element_z=int(element_z),
+        source_routine="select_ion_stage_limits",
+    ):
+        limits = select_ion_stage_limits(preliminary.fractions, nnz=nnz, critf=critf)
     return by_stage, preliminary, limits
 
 

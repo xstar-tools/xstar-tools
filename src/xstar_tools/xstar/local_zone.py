@@ -743,6 +743,7 @@ def calc_hmc_all(
             strict_context=bool(effective_request.strict_context),
             retain_contributions=(_diagnostics_mode != "none"),
             reusable_work_arrays=_work_cache,
+            profile_control=_profile_map,
         )
         with profile_component(
             profile_control or {},

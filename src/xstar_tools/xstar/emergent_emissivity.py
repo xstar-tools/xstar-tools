@@ -624,6 +624,76 @@ def _source_linopac_into_opakc(
     }
 
 
+def _source_linopac_center_profile(
+    *,
+    line_energy_eV: float,
+    vturb_km_s: float,
+    temperature_1e4K: float,
+    atomic_mass_amu: float,
+    natural_width_eV: float,
+    epi: np.ndarray,
+    ncn2: int,
+) -> float:
+    """Return the accepted NumPy/voigte center sample for the C++ profile.
+
+    NumPy's scalar exponential can differ from the platform C++ libm by one
+    binary64 ULP. The shared seed helper avoids that implementation detail
+    while the expensive outward scan and rebinning remain entirely in C++.
+    """
+    return _source_linopac_seed_profiles(
+        line_energy_eV=line_energy_eV,
+        vturb_km_s=vturb_km_s,
+        temperature_1e4K=temperature_1e4K,
+        atomic_mass_amu=atomic_mass_amu,
+        natural_width_eV=natural_width_eV,
+        epi=epi,
+        ncn2=ncn2,
+    )[0]
+
+
+def _source_linopac_seed_profiles(
+    *,
+    line_energy_eV: float,
+    vturb_km_s: float,
+    temperature_1e4K: float,
+    atomic_mass_amu: float,
+    natural_width_eV: float,
+    epi: np.ndarray,
+    ncn2: int,
+) -> tuple[float, ...]:
+    """Return exact center and ten samples in each scan direction."""
+    n = int(ncn2)
+    e0 = float(line_energy_eV)
+    if n < 3 or e0 <= 0.0 or e0 <= float(epi[0]) or e0 >= float(epi[n - 1]):
+        return tuple(0.0 for _ in range(21))
+    ml1 = max(min(n - 1, int(nbinc(e0, epi, n))), 2)
+    mass = max(float(atomic_mass_amu), 1.0e-30)
+    vth = 12.9 * np.sqrt(float(temperature_1e4K) / mass)
+    deleturb = e0 * (float(vturb_km_s) / 3.0e5)
+    deleth = e0 * (vth / 3.0e5)
+    dele = float(np.sqrt(deleth * deleth + deleturb * deleturb))
+    if dele <= 0.0:
+        return tuple(0.0 for _ in range(21))
+    aasmall = float(natural_width_eV) / (1.0e-24 + dele) / 12.56
+    e00 = float(epi[ml1 - 1])
+    deleepi = float(epi[ml1] - epi[ml1 - 1])
+    ncut = max(1, min(int(deleepi / dele), 2000))
+    deleused = deleepi / float(ncut)
+
+    def _profile(etptst: float, threshold: float) -> float:
+        delet = (float(etptst) - e0) / dele
+        if aasmall > threshold:
+            from .output_writers import voigte
+            return float(voigte(abs(delet), aasmall) / 1.772)
+        return float(np.exp(-delet * delet) / 1.772)
+
+    values = [_profile(e00, 1.0e-6)]
+    for offset in range(1, 11):
+        values.append(_profile(e00 - float(offset) * deleused, 1.0e-9))
+        values.append(_profile(e00 + float(offset) * deleused, 1.0e-9))
+    return tuple(values)
+
+
 def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: int, opakab: float, epi: np.ndarray) -> None:
     """Do not re-bin ``opakab`` into the continuum optical-depth grid.
 
@@ -1121,6 +1191,15 @@ def calc_emis_ion(
                     temperature_1e4K=temperature_1e4K,
                     atomic_mass_amu=atomic_mass_amu,
                     natural_width_eV=natural_width_eV,
+                    seed_profiles=_source_linopac_seed_profiles(
+                        line_energy_eV=line_energy_eV,
+                        vturb_km_s=vturb_km_s,
+                        temperature_1e4K=temperature_1e4K,
+                        atomic_mass_amu=atomic_mass_amu,
+                        natural_width_eV=natural_width_eV,
+                        epi=epi,
+                        ncn2=len(epi),
+                    ),
                     epi=epi,
                     opakc=cpp_opakc,
                     rccemis=cpp_rcc,
@@ -1128,8 +1207,12 @@ def calc_emis_ion(
                 )
                 _add_cpp_counter_totals(cpp_mg_type4_stats, cpp_stats)
                 cpp_mg_type4_stats["linopac_cpp_parity_checks"] = cpp_mg_type4_stats.get("linopac_cpp_parity_checks", 0.0) + 1.0
-                opakc_ok = bool(np.allclose(py_opakc, cpp_opakc, rtol=1.0e-10, atol=1.0e-30))
-                rcc_ok = bool(np.allclose(py_rcc, cpp_rcc, rtol=1.0e-10, atol=1.0e-30))
+                # v0.6.41 promotion gate: the accelerated linopac path must be
+                # binary64 exact, not merely numerically close.  The earlier
+                # tolerant gate admitted far-wing Voigt differences that
+                # accumulated into eight one-ULP float32 detal4 differences.
+                opakc_ok = bool(np.array_equal(py_opakc, cpp_opakc))
+                rcc_ok = bool(np.array_equal(py_rcc, cpp_rcc))
                 diag_ok = int(py_diag.get("updated_bins", -1)) == int(cpp_diag.get("updated_bins", -2))
                 if not (opakc_ok and rcc_ok and diag_ok):
                     linopac_cpp_gate["failed"] = True
@@ -1179,6 +1262,15 @@ def calc_emis_ion(
                 temperature_1e4K=temperature_1e4K,
                 atomic_mass_amu=atomic_mass_amu,
                 natural_width_eV=natural_width_eV,
+                seed_profiles=_source_linopac_seed_profiles(
+                    line_energy_eV=line_energy_eV,
+                    vturb_km_s=vturb_km_s,
+                    temperature_1e4K=temperature_1e4K,
+                    atomic_mass_amu=atomic_mass_amu,
+                    natural_width_eV=natural_width_eV,
+                    epi=epi,
+                    ncn2=len(epi),
+                ),
                 epi=epi,
                 opakc=context.workspace.base.opakc,
                 rccemis=context.workspace.base.rccemis,
@@ -1278,6 +1370,15 @@ def calc_emis_ion(
                     "endpoint_energy_ev": abs(float(e2) - float(e1)), "bremsa_nb1": float(bremsa_nb1),
                     "ptmp1": float(ptmp1), "ptmp2": float(ptmp2), "abund1": float(abund1), "abund2": float(abund2),
                     "bin_width_ev": float(width), "natural_width_ev": float(natural_width),
+                    "linopac_seed_profiles": _source_linopac_seed_profiles(
+                        line_energy_eV=float(np.float32(12398.4016)) / max(float(wavelength_cpp), 1.0e-49),
+                        vturb_km_s=float(context.turbulent_velocity_km_s),
+                        temperature_1e4K=float(context.temperature_1e4K),
+                        atomic_mass_amu=float(atomic_mass),
+                        natural_width_eV=float(natural_width),
+                        epi=epi,
+                        ncn2=len(epi),
+                    ),
                 }]
                 cpp_rows, _msg, _stats = apply_mg_type4_type50_coarse_cpp_detailed(
                     cpp_records,
@@ -1784,6 +1885,15 @@ def calc_emis_ion(
                             "endpoint_energy_ev": abs(float(e2) - float(e1)), "bremsa_nb1": float(bremsa_nb1),
                             "ptmp1": float(ptmp1), "ptmp2": float(ptmp2), "abund1": float(abund1), "abund2": float(abund2),
                             "bin_width_ev": float(width), "natural_width_ev": float(natural_width_cpp),
+                            "linopac_seed_profiles": _source_linopac_seed_profiles(
+                                line_energy_eV=float(np.float32(12398.4016)) / max(float(wavelength_cpp), 1.0e-49),
+                                vturb_km_s=float(context.turbulent_velocity_km_s),
+                                temperature_1e4K=float(context.temperature_1e4K),
+                                atomic_mass_amu=float(_parent_element_atomic_mass(context.master, context.derived, rec)),
+                                natural_width_eV=float(natural_width_cpp),
+                                epi=epi,
+                                ncn2=len(epi),
+                            ),
                         })
                         pending_cpp_mg_type50_coarse_jobs.append({
                             "record": int(rec), "rate_type": int(rate_type), "data_type": int(header.data_type), "idest1": int(idest1), "idest2": int(idest2),

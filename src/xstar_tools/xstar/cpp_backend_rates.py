@@ -121,7 +121,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                 lib.xstar_rates_apply_linopac_profile.argtypes = [
                     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
                     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
-                    f64p, ctypes.c_int, f64p, f64p, i64p, f64p,
+                    f64p, ctypes.c_int, f64p, ctypes.c_int, f64p, f64p, i64p, f64p,
                     ctypes.c_char_p, ctypes.c_size_t,
                 ]
                 lib.xstar_rates_apply_linopac_profile.restype = ctypes.c_int
@@ -134,7 +134,7 @@ def _load_cpp_library() -> ctypes.CDLL | None:
                     i64p, i64p, i64p, i64p, i64p, i64p,
                     f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p, f64p,
                     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
-                    f64p, f64p, ctypes.c_int, f64p, f64p, f64p, ctypes.c_int, f64p, ctypes.c_int, f64p,
+                    f64p, f64p, ctypes.c_int, f64p, ctypes.c_int, f64p, f64p, f64p, ctypes.c_int, f64p, ctypes.c_int, f64p,
                     i64p, f64p, ctypes.c_char_p, ctypes.c_size_t,
                 ]
                 lib.xstar_rates_apply_mg_type4_type50_coarse.restype = ctypes.c_int
@@ -498,6 +498,10 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
     record_arr=i64("record"); data_type_arr=i64("data_type"); ion_index_arr=i64("ion_index"); ion_stage_arr=i64("ion_stage"); line_index_arr=i64("line_index"); nb1_arr=i64("nb1")
     wavelength_arr=f64("wavelength_A"); aij_arr=f64("aij_s"); gu_arr=f64("source_upper_weight"); gl_arr=f64("source_lower_weight"); endpoint_arr=f64("endpoint_energy_ev")
     bremsa_arr=f64("bremsa_nb1"); ptmp1_arr=f64("ptmp1"); ptmp2_arr=f64("ptmp2"); abund1_arr=f64("abund1"); abund2_arr=f64("abund2"); width_arr=f64("bin_width_ev"); natural_arr=f64("natural_width_ev")
+    seed_radius=10
+    seed_profile_arr=np.ascontiguousarray(
+        np.asarray([r["linopac_seed_profiles"] for r in records], dtype=np.float64).reshape(-1)
+    )
     epi_arr=np.ascontiguousarray(epi, dtype=np.float64)
     opakc_arr=np.asarray(opakc, dtype=np.float64); rcc_arr=np.asarray(rccemis, dtype=np.float64); oplin_arr=np.asarray(oplin, dtype=np.float64)
     fline_arr=np.asarray(fline, dtype=np.float64); flinel_arr=np.asarray(flinel, dtype=np.float64)
@@ -512,7 +516,8 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
         wavelength_arr, aij_arr, gu_arr, gl_arr, endpoint_arr, bremsa_arr, ptmp1_arr, ptmp2_arr, abund1_arr, abund2_arr, width_arr,
         ctypes.c_double(float(cfrac)), ctypes.c_double(float(hydrogen_density_cm3)), ctypes.c_double(float(turbulent_velocity_km_s)),
         ctypes.c_double(float(temperature_1e4K)), ctypes.c_double(float(atomic_mass_amu)), ctypes.c_double(float(erg_per_ev)),
-        natural_arr, epi_arr, ctypes.c_int(int(epi_arr.size)), opakc_arr, rcc_arr.reshape(-1), oplin_arr, ctypes.c_int(int(oplin_arr.size)),
+        natural_arr, seed_profile_arr, ctypes.c_int(seed_radius),
+        epi_arr, ctypes.c_int(int(epi_arr.size)), opakc_arr, rcc_arr.reshape(-1), oplin_arr, ctypes.c_int(int(oplin_arr.size)),
         fline_arr.reshape(-1), ctypes.c_int(int(fline_arr.shape[1] if fline_arr.ndim == 2 else max(1, oplin_arr.size))), flinel_arr,
         out_i64, out_f64, errbuf, ctypes.c_size_t(len(errbuf)))
     cpp_kernel_seconds=time.perf_counter()-cpp_t0
@@ -571,6 +576,7 @@ def apply_linopac_profile_cpp(
     temperature_1e4K: float,
     atomic_mass_amu: float,
     natural_width_eV: float,
+    seed_profiles: tuple[float, ...],
     epi: np.ndarray,
     opakc: np.ndarray,
     rccemis: np.ndarray,
@@ -602,6 +608,10 @@ def apply_linopac_profile_cpp(
     out_i64 = np.zeros(8, dtype=np.int64)
     out_f64 = np.zeros(12, dtype=np.float64)
     errbuf = ctypes.create_string_buffer(512)
+    seed_radius = (len(seed_profiles) - 1) // 2
+    if len(seed_profiles) != 2 * seed_radius + 1 or seed_radius < 0:
+        raise RuntimeError("linopac seed profile shape is invalid")
+    seed_profile_arr = np.ascontiguousarray(seed_profiles, dtype=np.float64)
     cpp_t0 = time.perf_counter()
     rc = lib.xstar_rates_apply_linopac_profile(
         ctypes.c_double(float(optpp)),
@@ -612,6 +622,8 @@ def apply_linopac_profile_cpp(
         ctypes.c_double(float(temperature_1e4K)),
         ctypes.c_double(float(atomic_mass_amu)),
         ctypes.c_double(float(natural_width_eV)),
+        seed_profile_arr,
+        ctypes.c_int(seed_radius),
         epi_arr,
         ctypes.c_int(n),
         opakc_arr,
