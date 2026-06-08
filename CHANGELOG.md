@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v0.6.34 - 2026-06-07
+
+### Added
+- Added the guarded four-family Mg rate-payload live product candidate for 4:50, 3:51, 3:63, and 42:88.
+- Added bit-exact native scalar use for 3:63 and 42:88, exact C++ row verification, composite-key live replacement, whole-evaluation fallback, and aggregate product provenance.
+- Retained the accepted seed path as the verification oracle in this candidate; Python per-record elision remains a later promotion step.
+
 ## 0.6.33 - 2026-06-07
 
 - Refined the shadow-only Mg rate/data 3/63 native scalar implementation to reproduce Python binary64 operation order.

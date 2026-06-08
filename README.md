@@ -1,3 +1,7 @@
+## v0.6.34 four-family rate-payload product candidate
+
+The validated Mg 4:50, 3:51, 3:63, and 42:88 C++ rows can now replace the corresponding live pre-normalization terms under an exact candidate gate and whole-evaluation fallback. The accepted seed path remains enabled as the candidate oracle. See `V0634_FOUR_FAMILY_RATE_PAYLOAD_PRODUCT_CANDIDATE.md`.
+
 ## v0.6.33 Type-63 bit-exact native scalar refinement
 
 The shadow-only Mg rate/data 3/63 native scalar path now mirrors Python binary64 operation order and uses exact CPython `math.lgamma(n+1)` constants through argument 256. Range coverage is reported and out-of-range exact qualification is rejected. Type-88 full-grid semantics, accepted rows, matrix checkpoints, and every live science path remain unchanged. See `V0633_RATE_PAYLOAD_NATIVE_SCALAR_TYPE63_BIT_EXACT_REFINEMENT.md`.

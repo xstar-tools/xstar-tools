@@ -2709,6 +2709,266 @@ def _run_rate_payload_batched_orchestration_shadow(
         summary["error"] = str(exc)
 
 
+
+def _rate_payload_four_family_product_enabled(element_z: int) -> bool:
+    return bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+    )
+
+
+def _run_rate_payload_four_family_product_candidate(
+    control: MutableMapping[str, Any],
+    *,
+    evaluation_index: int,
+    master: XSTARMasterData,
+    basis: ElementCompactBasis,
+    level_tables: Mapping[int, UCalcLevelTable],
+    context: ElementEquilibriumContext,
+    record_results: Sequence[Mapping[str, Any]],
+    terms: Sequence[MatrixTerm],
+    hydrogen_density_cm3: float,
+) -> List[MatrixTerm]:
+    """Use exact C++ rows live for the four validated Mg families.
+
+    v0.6.34 is intentionally a product *candidate*.  The accepted path is
+    retained as the whole-evaluation fallback and as the exact verification
+    oracle.  C++ native scalars are used for 3:63 and 42:88; the already
+    accepted scalar products are used for 4:50 and 3:51.  Only after exact
+    scalar, row, replacement, and optional full-matrix checks are satisfied are
+    the C++ rows committed to the live term list.
+    """
+    verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "1")
+    summary: Dict[str, Any] = {
+        "schema_version": "0.6.34",
+        "requested": True,
+        "accepted_gate": True,
+        "product_candidate": True,
+        "active": False,
+        "live_matrix_commit": False,
+        "whole_evaluation_fallback": True,
+        "python_seed_path_retained": True,
+        "verification_enabled": bool(verify_old),
+        "evaluation_index": int(evaluation_index),
+        "status": "INITIALIZING",
+        "records_expected": 0,
+        "records_completed": 0,
+        "terms_expected": 0,
+        "terms_committed": 0,
+        "missing_terms": 0,
+        "extra_terms": 0,
+        "integer_field_mismatches": 0,
+        "float_field_mismatches": 0,
+        "native_scalar_records_expected": 0,
+        "native_scalar_records_completed": 0,
+        "native_scalar_mismatches": 0,
+        "family_record_counts": {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0},
+        "packet_build_seconds": 0.0,
+        "native_scalar_call_seconds": 0.0,
+        "row_cpp_call_seconds": 0.0,
+        "verification_seconds": 0.0,
+        "replacement_seconds": 0.0,
+        "fallback_reason": "",
+    }
+    control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(summary)
+    original_terms = list(terms)
+    try:
+        t0 = time.perf_counter()
+        family_set = set(_RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES)
+        blocks = {int(block.ion_index): block for block in basis.blocks}
+        accepted_by_record: Dict[int, List[MatrixTerm]] = {}
+        for term in original_terms:
+            if (int(term.rate_type), int(term.data_type)) in family_set:
+                accepted_by_record.setdefault(int(term.record), []).append(term)
+        result_by_record: Dict[int, Mapping[str, Any]] = {}
+        for row in record_results:
+            try:
+                rec = int(row.get("record", 0))
+                family = (int(row.get("rate_type", -1)), int(row.get("data_type", -1)))
+            except Exception:
+                continue
+            if rec > 0 and family in family_set and str(row.get("status", "")) == UCalcStatus.EVALUATED.value:
+                result_by_record[rec] = row
+        packet: List[Dict[str, Any]] = []
+        accepted_rows: List[Dict[str, Any]] = []
+        for rec in sorted(set(accepted_by_record) & set(result_by_record)):
+            group = sorted(accepted_by_record[rec], key=lambda term: int(term.term_index))
+            if len(group) != 4:
+                raise RuntimeError(f"record {rec} has {len(group)} accepted terms, expected 4")
+            result = result_by_record[rec]
+            block = blocks[int(group[0].ion_index)]
+            item = {
+                "record": rec,
+                "rate_type": int(result["rate_type"]), "data_type": int(result["data_type"]),
+                "ion_index": int(group[0].ion_index), "ion_stage": int(group[0].ion_stage),
+                "compact_start": int(block.compact_start), "basis_n_rows": int(basis.n_rows),
+                "idest1": int(result["idest1"]), "idest2": int(result["idest2"]),
+                "lower_endpoint": int(group[0].lower_endpoint), "upper_endpoint": int(group[0].upper_endpoint),
+                "term_start": int(group[0].term_index),
+                "hydrogen_density_cm3": float(hydrogen_density_cm3),
+                **{f"ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+            }
+            if not all(np.isfinite(float(item[f"ans{i}"])) for i in range(1, 7)):
+                raise RuntimeError(f"record {rec} has non-finite accepted scalar")
+            packet.append(item)
+            accepted_rows.extend(_term_shadow_row(term) for term in group)
+            summary["family_record_counts"][f"{item['rate_type']}:{item['data_type']}"] += 1
+        summary["packet_build_seconds"] = time.perf_counter() - t0
+        summary["records_expected"] = len(packet)
+        summary["terms_expected"] = len(accepted_rows)
+        if not packet:
+            raise RuntimeError("no supported records")
+        if any(int(v) <= 0 for v in summary["family_record_counts"].values()):
+            raise RuntimeError(f"not all four families present: {summary['family_record_counts']}")
+
+        native_packet: List[Dict[str, Any]] = []
+        for item in packet:
+            family = (int(item["rate_type"]), int(item["data_type"]))
+            if family not in {(3, 63), (42, 88)}:
+                continue
+            rec = int(item["record"]); ion_index = int(item["ion_index"])
+            result = result_by_record[rec]
+            levels = level_tables[ion_index]
+            row: Dict[str, Any] = {
+                "record": rec, "rate_type": family[0], "data_type": family[1],
+                "ion_index": ion_index, "ion_stage": int(item["ion_stage"]),
+                "idest1": int(item["idest1"]), "idest2": int(item["idest2"]),
+                "temperature_k": float(context.temperature_k),
+                "electron_density_cm3": float(context.electron_density_cm3),
+                **{f"accepted_ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+            }
+            if family == (3, 63):
+                ints = np.asarray(master.record_integers(rec), dtype=np.int64).reshape(-1)
+                if ints.size < 4:
+                    raise RuntimeError(f"type63 record {rec} has short integer payload")
+                initial = levels.require(int(ints[-4])); final = levels.require(int(ints[-3]))
+                if None in (initial.principal_n, initial.orbital_l, final.principal_n, final.orbital_l):
+                    raise RuntimeError(f"type63 record {rec} missing quantum numbers")
+                max_factorial_arg = max(0, 2 * max(int(initial.principal_n), int(final.principal_n)) - 1)
+                if max_factorial_arg > 256:
+                    raise RuntimeError(f"type63 record {rec} exceeds exact lgamma table")
+                row.update({
+                    "ni": int(initial.principal_n), "li": int(initial.orbital_l),
+                    "nf": int(final.principal_n), "lf": int(final.orbital_l), "iq": int(ints[-2]),
+                    "initial_energy_eV": float(initial.energy_ev), "final_energy_eV": float(final.energy_ev),
+                    "initial_g": float(initial.statistical_weight), "final_g": float(final.statistical_weight),
+                    "raw_payload_f64": (),
+                })
+            else:
+                raw = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
+                threshold = result.get("diag_threshold_eV")
+                if threshold is None:
+                    bound = levels.require(int(item["idest1"]))
+                    threshold = float(bound.ionization_potential_ev or bound.continuum_energy_ev or 0.0)
+                row.update({"threshold_eV": float(threshold or 0.0), "raw_payload_f64": tuple(float(v) for v in raw)})
+            native_packet.append(row)
+        summary["native_scalar_records_expected"] = len(native_packet)
+
+        radiation = context.radiation
+        full_epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=np.float64).reshape(-1)
+        full_bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
+        reduced_epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=np.float64).reshape(-1)
+        if full_epi.size < 3 or full_bremsa.size < full_epi.size or not np.all(np.isfinite(full_epi)) or not np.all(np.isfinite(full_bremsa[:full_epi.size])) or not np.all(np.diff(full_epi) > 0.0):
+            raise RuntimeError("Type-88 full radiation grid unavailable")
+        if reduced_epi.size < 3 or not np.all(np.isfinite(reduced_epi)) or not np.all(np.diff(reduced_epi) > 0.0):
+            raise RuntimeError("Type-88 reduced phextrap grid unavailable")
+        for row in native_packet:
+            if (int(row["rate_type"]), int(row["data_type"])) == (42, 88):
+                row["type88_phextrap_grid_points"] = int(reduced_epi.size)
+        nt0 = time.perf_counter()
+        native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+            native_packet, epi_eV=full_epi, bremsa=full_bremsa[:full_epi.size]
+        )
+        summary["native_scalar_call_seconds"] = time.perf_counter() - nt0
+        summary["native_scalar_message"] = str(native_message)
+        summary["native_scalar_cpp_stats"] = dict(native_stats)
+        native_map = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in native_rows}
+        if len(native_map) != len(native_packet):
+            raise RuntimeError("native scalar output record count mismatch")
+        packet_by_key = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in packet}
+        for expected in native_packet:
+            key = (int(expected["record"]), int(expected["rate_type"]), int(expected["data_type"]))
+            actual = native_map.get(key)
+            if actual is None:
+                raise RuntimeError(f"missing native scalar record {key}")
+            for i in range(1, 7):
+                a = float(expected[f"accepted_ans{i}"]); b = float(actual[f"ans{i}"])
+                if a != b:
+                    summary["native_scalar_mismatches"] += 1
+            if summary["native_scalar_mismatches"]:
+                raise RuntimeError(f"native scalar mismatch at {key}")
+            for i in range(1, 7):
+                packet_by_key[key][f"ans{i}"] = float(actual[f"ans{i}"])
+        summary["native_scalar_records_completed"] = len(native_rows)
+
+        rt0 = time.perf_counter()
+        cpp_rows, row_message, row_stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(packet)
+        summary["row_cpp_call_seconds"] = time.perf_counter() - rt0
+        summary["row_message"] = str(row_message)
+        summary["row_cpp_stats"] = dict(row_stats)
+
+        def sig(row: Mapping[str, Any]) -> Tuple[Any, ...]:
+            return (int(row["record"]), str(row["role"]), int(row["row"]), int(row["column"]))
+        py_map = {sig(row): row for row in accepted_rows}
+        cpp_map = {sig(row): row for row in cpp_rows}
+        summary["missing_terms"] = len(set(py_map) - set(cpp_map))
+        summary["extra_terms"] = len(set(cpp_map) - set(py_map))
+        vt0 = time.perf_counter()
+        if summary["missing_terms"] or summary["extra_terms"]:
+            raise RuntimeError("C++ row identity mismatch")
+        int_fields = ("record","data_type","rate_type","ion_index","ion_stage","role","row","column","idest1","idest2","lower_endpoint","upper_endpoint","source_row_unclamped","source_column_unclamped","source_ipmat_clamped")
+        float_fields = ("aj1","aj2","cj","cj2")
+        for key in sorted(py_map):
+            left, right = py_map[key], cpp_map[key]
+            for field in int_fields:
+                if left[field] != right[field]:
+                    summary["integer_field_mismatches"] += 1
+            for field in float_fields:
+                if float(left[field]) != float(right[field]):
+                    summary["float_field_mismatches"] += 1
+        if summary["integer_field_mismatches"] or summary["float_field_mismatches"]:
+            raise RuntimeError("C++ rows are not exact")
+        if verify_old:
+            def contribution(rows_in: Sequence[Mapping[str, Any]]) -> Tuple[np.ndarray,np.ndarray,np.ndarray]:
+                d=np.zeros((basis.n_rows,basis.n_rows),dtype=np.float64); h=np.zeros_like(d); h2=np.zeros_like(d)
+                for row in sorted(rows_in,key=lambda r:int(r["term_index"])):
+                    rr=int(row["row"])-1; cc=int(row["column"])-1
+                    d[rr,cc]+=float(row["aj1"]); h[rr,cc]+=float(row["cj"]); h2[rr,cc]+=float(row["cj2"])
+                return d,h,h2
+            pd,ph,ph2=contribution(accepted_rows); cd,ch,ch2=contribution(cpp_rows)
+            if not (np.array_equal(pd,cd) and np.array_equal(ph,ch) and np.array_equal(ph2,ch2)):
+                raise RuntimeError("supported contribution checkpoint mismatch")
+        summary["verification_seconds"] = time.perf_counter() - vt0
+
+        def replacement_key(row: Mapping[str, Any]) -> Tuple[Any,...]:
+            return (int(row["record"]),int(row["rate_type"]),int(row["data_type"]),int(row["ion_index"]),int(row["ion_stage"]),str(row["role"]),int(row["row"]),int(row["column"]),int(row["idest1"]),int(row["idest2"]),int(row["lower_endpoint"]),int(row["upper_endpoint"]),int(row["source_row_unclamped"]),int(row["source_column_unclamped"]),bool(row["source_ipmat_clamped"]))
+        rep0=time.perf_counter()
+        cpp_by_key={replacement_key(row):row for row in cpp_rows}
+        replaced: List[MatrixTerm]=[]; committed=0
+        for term in original_terms:
+            key=replacement_key(_term_shadow_row(term))
+            row=cpp_by_key.get(key)
+            if row is None:
+                replaced.append(term)
+            else:
+                replaced.extend(_matrix_terms_from_cpp_rows([row])); committed+=1
+        if committed != len(cpp_rows):
+            raise RuntimeError(f"replacement coverage {committed}!={len(cpp_rows)}")
+        summary["replacement_seconds"] = time.perf_counter()-rep0
+        summary["records_completed"] = len(packet)
+        summary["terms_committed"] = committed
+        summary["active"] = True
+        summary["live_matrix_commit"] = True
+        summary["status"] = "PRODUCT_CANDIDATE_EXACT"
+        return replaced
+    except Exception as exc:
+        summary["fallback_reason"] = str(exc)
+        summary["status"] = "FALLBACK_ACCEPTED_PATH"
+        summary["active"] = False
+        summary["live_matrix_commit"] = False
+        return original_terms
+
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -2727,6 +2987,11 @@ def assemble_element_matrix(
     if _rate_payload_batched_shadow_probe:
         _rate_payload_batched_shadow_eval_index = int(profile_control.get("_mg_rate_payload_batched_shadow_evaluation_index", 0)) + 1
         profile_control["_mg_rate_payload_batched_shadow_evaluation_index"] = int(_rate_payload_batched_shadow_eval_index)
+    _rate_payload_four_family_product = _rate_payload_four_family_product_enabled(int(element_z))
+    _rate_payload_four_family_product_eval_index = 0
+    if _rate_payload_four_family_product:
+        _rate_payload_four_family_product_eval_index = int(profile_control.get("_mg_rate_payload_four_family_product_evaluation_index", 0)) + 1
+        profile_control["_mg_rate_payload_four_family_product_evaluation_index"] = int(_rate_payload_four_family_product_eval_index)
     _matrix_dataflow_total_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
     _matrix_dataflow_eval_index = 0
     if _matrix_dataflow_probe:
@@ -5852,6 +6117,19 @@ def assemble_element_matrix(
                 profile_control, _matrix_dataflow_eval_index,
                 enclosing_seconds=_rate_payload_parent_seconds, matrix_dimension=int(basis.n_rows),
             )
+
+    if _rate_payload_four_family_product:
+        terms = _run_rate_payload_four_family_product_candidate(
+            profile_control,
+            evaluation_index=int(_rate_payload_four_family_product_eval_index),
+            master=master,
+            basis=basis,
+            level_tables=level_tables,
+            context=context,
+            record_results=record_results,
+            terms=terms,
+            hydrogen_density_cm3=float(context.hydrogen_density_cm3),
+        )
 
     if _rate_payload_batched_shadow_probe:
         _run_rate_payload_batched_orchestration_shadow(

@@ -1049,3 +1049,71 @@ def summarize_runtime_phase_map(
             "The Mg simple-payload batch implementation is shadow-only and cannot affect science products.",
         ],
     }
+
+
+def summarize_rate_payload_four_family_product(
+    control: MutableMapping[str, Any],
+    *,
+    top_n: int = 20,
+) -> dict[str, Any]:
+    raw = control.get("mg_rate_payload_four_family_product_evaluations", [])
+    rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+    if not rows:
+        return {
+            "schema_version": "0.6.34", "requested": False, "product_candidate": True,
+            "active": False, "evaluation_count": 0, "status": "DISABLED",
+        }
+    family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
+    for row in rows:
+        for key, value in dict(row.get("family_record_counts", {})).items():
+            family_totals[str(key)] = family_totals.get(str(key), 0) + int(value or 0)
+    attempted = len(rows)
+    completed = sum(1 for row in rows if str(row.get("status")) == "PRODUCT_CANDIDATE_EXACT")
+    failed = attempted - completed
+    activations = sum(1 for row in rows if bool(row.get("active")) and bool(row.get("live_matrix_commit")))
+    fallbacks = sum(1 for row in rows if str(row.get("status")) == "FALLBACK_ACCEPTED_PATH")
+    status = "PRODUCT_CANDIDATE_EXACT" if completed == attempted and attempted > 0 else "FALLBACK" if fallbacks else "NOT_READY"
+    timing_keys = (
+        "packet_build_seconds", "native_scalar_call_seconds", "row_cpp_call_seconds",
+        "verification_seconds", "replacement_seconds",
+    )
+    timing_totals = {key: sum(float(row.get(key, 0.0) or 0.0) for row in rows) for key in timing_keys}
+    return {
+        "schema_version": "0.6.34",
+        "requested": True,
+        "accepted_gate": bool(all(bool(row.get("accepted_gate")) for row in rows)),
+        "product_candidate": True,
+        "product_promoted": False,
+        "active": bool(activations == attempted and attempted > 0),
+        "live_matrix_commit": bool(activations == attempted and attempted > 0),
+        "whole_evaluation_fallback": True,
+        "python_seed_path_retained": bool(all(bool(row.get("python_seed_path_retained")) for row in rows)),
+        "verification_enabled": bool(all(bool(row.get("verification_enabled")) for row in rows)),
+        "evaluation_count": attempted,
+        "evaluations_attempted": attempted,
+        "evaluations_completed": completed,
+        "evaluations_failed": failed,
+        "product_activations": activations,
+        "fallback_evaluations": fallbacks,
+        "status": status,
+        "records_expected": int(sum(int(row.get("records_expected", 0) or 0) for row in rows)),
+        "records_completed": int(sum(int(row.get("records_completed", 0) or 0) for row in rows)),
+        "terms_expected": int(sum(int(row.get("terms_expected", 0) or 0) for row in rows)),
+        "terms_committed": int(sum(int(row.get("terms_committed", 0) or 0) for row in rows)),
+        "missing_terms": int(sum(int(row.get("missing_terms", 0) or 0) for row in rows)),
+        "extra_terms": int(sum(int(row.get("extra_terms", 0) or 0) for row in rows)),
+        "integer_field_mismatches": int(sum(int(row.get("integer_field_mismatches", 0) or 0) for row in rows)),
+        "float_field_mismatches": int(sum(int(row.get("float_field_mismatches", 0) or 0) for row in rows)),
+        "native_scalar_records_expected": int(sum(int(row.get("native_scalar_records_expected", 0) or 0) for row in rows)),
+        "native_scalar_records_completed": int(sum(int(row.get("native_scalar_records_completed", 0) or 0) for row in rows)),
+        "native_scalar_mismatches": int(sum(int(row.get("native_scalar_mismatches", 0) or 0) for row in rows)),
+        "family_record_counts": family_totals,
+        "timing_totals": timing_totals,
+        "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
+        "evaluations": rows,
+        "notes": [
+            "v0.6.34 commits exact C++ matrix terms for the four validated Mg families.",
+            "The accepted path is retained as the whole-evaluation fallback and verification oracle in this candidate.",
+            "A later promoted release may elide the accepted seed path after external product-candidate acceptance.",
+        ],
+    }
