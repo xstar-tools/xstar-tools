@@ -56,6 +56,10 @@ class ElementEquilibriumError(RuntimeError):
     """Raised when a source-faithful element matrix cannot be constructed."""
 
 
+class _FourFamilyProductFallback(RuntimeError):
+    """Request one clean accepted-path retry for a promoted-product failure."""
+
+
 @dataclass(frozen=True)
 class ElementIonBlock:
     """One ion block in the compact ``ipmat2`` element basis."""
@@ -2710,11 +2714,22 @@ def _run_rate_payload_batched_orchestration_shadow(
 
 
 
-def _rate_payload_four_family_product_enabled(element_z: int) -> bool:
+def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     return bool(
         int(element_z) == 12
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+    )
+
+
+def _rate_payload_four_family_product_promoted_enabled(
+    element_z: int, profile_control: Mapping[str, Any]
+) -> bool:
+    return bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+        and not bool(profile_control.get("_mg_rate_payload_four_family_product_retry_disabled", False))
     )
 
 
@@ -2969,7 +2984,7 @@ def _run_rate_payload_four_family_product_candidate(
         summary["live_matrix_commit"] = False
         return original_terms
 
-def assemble_element_matrix(
+def _assemble_element_matrix_impl(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
     *,
@@ -2987,9 +3002,12 @@ def assemble_element_matrix(
     if _rate_payload_batched_shadow_probe:
         _rate_payload_batched_shadow_eval_index = int(profile_control.get("_mg_rate_payload_batched_shadow_evaluation_index", 0)) + 1
         profile_control["_mg_rate_payload_batched_shadow_evaluation_index"] = int(_rate_payload_batched_shadow_eval_index)
-    _rate_payload_four_family_product = _rate_payload_four_family_product_enabled(int(element_z))
+    _rate_payload_four_family_candidate = _rate_payload_four_family_product_candidate_enabled(int(element_z))
+    _rate_payload_four_family_promoted = _rate_payload_four_family_product_promoted_enabled(
+        int(element_z), profile_control
+    )
     _rate_payload_four_family_product_eval_index = 0
-    if _rate_payload_four_family_product:
+    if _rate_payload_four_family_candidate or _rate_payload_four_family_promoted:
         _rate_payload_four_family_product_eval_index = int(profile_control.get("_mg_rate_payload_four_family_product_evaluation_index", 0)) + 1
         profile_control["_mg_rate_payload_four_family_product_evaluation_index"] = int(_rate_payload_four_family_product_eval_index)
     _matrix_dataflow_total_t0 = time.perf_counter() if _matrix_dataflow_probe else 0.0
@@ -3284,6 +3302,40 @@ def assemble_element_matrix(
     ion_summaries: List[IonAssemblySummary] = []
     n_seen = n_eval = n_noop = n_skipped = n_blocked = n_unmapped = 0
     n_source_clamps = 0
+
+    _four_family_product_summary: Optional[Dict[str, Any]] = None
+    _four_family_verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
+    if _rate_payload_four_family_promoted:
+        _four_family_product_summary = {
+            "schema_version": "0.6.35",
+            "requested": True, "accepted_gate": True,
+            "product_candidate": False, "product_promoted": True,
+            "active": False, "live_matrix_commit": False,
+            "whole_evaluation_fallback": True,
+            "python_seed_path_retained": False,
+            "verification_enabled": bool(_four_family_verify_old),
+            "evaluation_index": int(_rate_payload_four_family_product_eval_index),
+            "status": "INITIALIZING",
+            "records_expected": 0, "records_completed": 0,
+            "terms_expected": 0, "terms_committed": 0,
+            "missing_terms": 0, "extra_terms": 0,
+            "integer_field_mismatches": 0, "float_field_mismatches": 0,
+            "native_scalar_records_expected": 0,
+            "native_scalar_records_completed": 0,
+            "native_scalar_mismatches": 0,
+            "family_record_counts": {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0},
+            "fast_path_record_counts": {"4:50": 0, "3:63": 0, "42:88": 0},
+            "existing_cpp_type51_records": 0,
+            "packet_build_seconds": 0.0,
+            "native_scalar_call_seconds": 0.0,
+            "row_cpp_call_seconds": 0.0,
+            "verification_seconds": 0.0,
+            "live_commit_seconds": 0.0,
+            "fallback_reason": "",
+        }
+        profile_control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(
+            _four_family_product_summary
+        )
 
     # v0.6.0a15 diagnostic classifier for the remaining Python-evaluated
     # Mg rate_type=7 records after the direct C++ accumulator has already
@@ -5153,6 +5205,139 @@ def assemble_element_matrix(
                     field="row_collection_elapsed",
                 )
 
+            # v0.6.35 promoted product: prepare exact native scalar and C++
+            # matrix-row caches before the per-record Python ucalc path.  The
+            # existing accepted C++ Type-51 ion batch remains its live owner.
+            _four_family_fast_result_by_record: Dict[int, Dict[str, Any]] = {}
+            _four_family_fast_rows_by_record: Dict[int, List[Dict[str, Any]]] = {}
+            if _rate_payload_four_family_promoted:
+                try:
+                    _prep_t0 = time.perf_counter()
+                    _native_packet: List[Dict[str, Any]] = []
+                    _row_packet: List[Dict[str, Any]] = []
+                    _expected_fast_records: set[int] = set()
+                    _full_epi = np.asarray(getattr(context.radiation, "epi_eV", getattr(context.radiation, "epi", ())), dtype=np.float64).reshape(-1)
+                    _full_bremsa = np.asarray(getattr(context.radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
+                    _reduced_epi = np.asarray(getattr(context.radiation, "epim_eV", getattr(context.radiation, "epim", ())), dtype=np.float64).reshape(-1)
+                    for _record, _rt, _dt in source_record_iter:
+                        _family = (int(_rt), int(_dt))
+                        if _family not in {(4, 50), (3, 63), (42, 88)}:
+                            continue
+                        _expected_fast_records.add(int(_record))
+                        if _family == (4, 50):
+                            _source = cpp_simple_payload_by_record.get(int(_record))
+                            if _source is None:
+                                raise RuntimeError(f"missing promoted 4:50 scalar row for record {_record}")
+                            _result_row = {
+                                "record": int(_record), "rate_type": 4, "data_type": 50,
+                                "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
+                                "idest1": int(_source.get("idest1", 0)), "idest2": int(_source.get("idest2", 0)),
+                                **{f"ans{i}": float(_source.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+                            }
+                            _four_family_fast_result_by_record[int(_record)] = _result_row
+                        elif _family == (3, 63):
+                            _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
+                            if _ints.size < 4:
+                                raise RuntimeError(f"type63 record {_record} has short integer payload")
+                            _idest1, _idest2 = int(_ints[-4]), int(_ints[-3])
+                            _initial = levels.require(_idest1); _final = levels.require(_idest2)
+                            if None in (_initial.principal_n, _initial.orbital_l, _final.principal_n, _final.orbital_l):
+                                raise RuntimeError(f"type63 record {_record} missing quantum numbers")
+                            _max_factorial_arg = max(0, 2 * max(int(_initial.principal_n), int(_final.principal_n)) - 1)
+                            if _max_factorial_arg > 256:
+                                raise RuntimeError(f"type63 record {_record} exceeds exact lgamma table")
+                            _native_packet.append({
+                                "record": int(_record), "rate_type": 3, "data_type": 63,
+                                "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
+                                "idest1": _idest1, "idest2": _idest2,
+                                "ni": int(_initial.principal_n), "li": int(_initial.orbital_l),
+                                "nf": int(_final.principal_n), "lf": int(_final.orbital_l), "iq": int(_ints[-2]),
+                                "temperature_k": float(context.temperature_k),
+                                "electron_density_cm3": float(context.electron_density_cm3),
+                                "initial_energy_eV": float(_initial.energy_ev), "final_energy_eV": float(_final.energy_ev),
+                                "initial_g": float(_initial.statistical_weight), "final_g": float(_final.statistical_weight),
+                                "raw_payload_f64": (),
+                            })
+                        else:
+                            _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
+                            if _ints.size < 2:
+                                raise RuntimeError(f"type88 record {_record} has short integer payload")
+                            _idest1, _idest2 = int(_ints[-2]), int(block.nlev)
+                            _bound = levels.require(_idest1)
+                            _threshold = float(_bound.ionization_potential_ev or _bound.continuum_energy_ev or 0.0)
+                            _raw = np.asarray(master.record_reals(int(_record)), dtype=np.float64).reshape(-1)
+                            _native_packet.append({
+                                "record": int(_record), "rate_type": 42, "data_type": 88,
+                                "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
+                                "idest1": _idest1, "idest2": _idest2,
+                                "temperature_k": float(context.temperature_k),
+                                "electron_density_cm3": float(context.electron_density_cm3),
+                                "threshold_eV": _threshold,
+                                "type88_phextrap_grid_points": int(_reduced_epi.size),
+                                "raw_payload_f64": tuple(float(v) for v in _raw),
+                            })
+                    if _native_packet:
+                        if _full_epi.size < 3 or _full_bremsa.size < _full_epi.size or not np.all(np.isfinite(_full_epi)) or not np.all(np.isfinite(_full_bremsa[:_full_epi.size])) or not np.all(np.diff(_full_epi) > 0.0):
+                            raise RuntimeError("Type-88 full radiation grid unavailable")
+                        if _reduced_epi.size < 3 or not np.all(np.isfinite(_reduced_epi)) or not np.all(np.diff(_reduced_epi) > 0.0):
+                            raise RuntimeError("Type-88 reduced phextrap grid unavailable")
+                        _native_t0 = time.perf_counter()
+                        _native_rows, _native_message, _native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+                            _native_packet, epi_eV=_full_epi, bremsa=_full_bremsa[:_full_epi.size]
+                        )
+                        if _four_family_product_summary is not None:
+                            _four_family_product_summary["native_scalar_call_seconds"] += time.perf_counter() - _native_t0
+                            _four_family_product_summary["native_scalar_records_expected"] += len(_native_packet)
+                            _four_family_product_summary["native_scalar_records_completed"] += len(_native_rows)
+                        if len(_native_rows) != len(_native_packet):
+                            raise RuntimeError("native scalar output record count mismatch")
+                        for _source, _native in zip(_native_packet, _native_rows):
+                            _key = int(_source["record"])
+                            _result_row = {
+                                "record": _key, "rate_type": int(_source["rate_type"]), "data_type": int(_source["data_type"]),
+                                "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
+                                "idest1": int(_source["idest1"]), "idest2": int(_source["idest2"]),
+                                **{f"ans{i}": float(_native[f"ans{i}"]) for i in range(1, 7)},
+                            }
+                            _four_family_fast_result_by_record[_key] = _result_row
+                    for _record in sorted(_four_family_fast_result_by_record):
+                        _result_row = _four_family_fast_result_by_record[_record]
+                        _ures = UCalcResult(
+                            record=int(_record), data_type=int(_result_row["data_type"]), rate_type=int(_result_row["rate_type"]),
+                            status=UCalcStatus.EVALUATED,
+                            **{f"ans{i}": float(_result_row[f"ans{i}"]) for i in range(1, 7)},
+                            idest1=int(_result_row["idest1"]), idest2=int(_result_row["idest2"]),
+                            idest3=int(block.ion_index), idest4=int(block.ion_index) + 1,
+                        )
+                        _lower, _upper = _lower_upper(_ures, levels)
+                        _row_packet.append({
+                            **_result_row,
+                            "compact_start": int(block.compact_start), "basis_n_rows": int(basis.n_rows),
+                            "lower_endpoint": int(_lower), "upper_endpoint": int(_upper),
+                            "term_start": 1, "hydrogen_density_cm3": float(context.hydrogen_density_cm3),
+                        })
+                    if _row_packet:
+                        _row_t0 = time.perf_counter()
+                        _cpp_rows, _row_message, _row_stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(_row_packet)
+                        if _four_family_product_summary is not None:
+                            _four_family_product_summary["row_cpp_call_seconds"] += time.perf_counter() - _row_t0
+                        for _row in _cpp_rows:
+                            _four_family_fast_rows_by_record.setdefault(int(_row["record"]), []).append(dict(_row))
+                        for _record in _expected_fast_records:
+                            _group = _four_family_fast_rows_by_record.get(int(_record), [])
+                            if len(_group) != 4:
+                                raise RuntimeError(f"promoted record {_record} emitted {len(_group)} C++ rows")
+                    if set(_four_family_fast_result_by_record) != _expected_fast_records:
+                        _missing = sorted(_expected_fast_records - set(_four_family_fast_result_by_record))
+                        raise RuntimeError(f"promoted fast scalar cache missing records: {_missing[:8]}")
+                    if _four_family_product_summary is not None:
+                        _four_family_product_summary["packet_build_seconds"] += time.perf_counter() - _prep_t0
+                except Exception as _exc:
+                    if _four_family_product_summary is not None:
+                        _four_family_product_summary["fallback_reason"] = str(_exc)
+                        _four_family_product_summary["status"] = "FALLBACK_ACCEPTED_PATH"
+                    raise _FourFamilyProductFallback(str(_exc)) from _exc
+
             if int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"):
                 _acc_t0 = time.perf_counter()
                 try:
@@ -5300,6 +5485,96 @@ def assemble_element_matrix(
                     _elapsed = time.perf_counter() - _rate_probe_header_t0
                     _rate_probe_record_known += _elapsed
                     _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "record_header_filter_dispatch", _elapsed, records_processed=1.0)
+
+                if _rate_payload_four_family_promoted and int(record) in _four_family_fast_result_by_record:
+                    _commit_t0 = time.perf_counter()
+                    _cached = _four_family_fast_result_by_record[int(record)]
+                    _result = UCalcResult(
+                        record=int(record), data_type=int(_cached["data_type"]), rate_type=int(_cached["rate_type"]),
+                        status=UCalcStatus.EVALUATED,
+                        **{f"ans{i}": float(_cached[f"ans{i}"]) for i in range(1, 7)},
+                        idest1=int(_cached["idest1"]), idest2=int(_cached["idest2"]),
+                        idest3=int(block.ion_index), idest4=int(block.ion_index) + 1,
+                        provenance=UCalcProvenance(
+                            source_label=int(_cached["data_type"]),
+                            source_routines=("ucalc", "libxstar_engine"),
+                            branch_name="promoted_four_family_rate_payload",
+                            implementation="cpp_four_family_rate_payload_product_v035",
+                            validation_status="product_promoted_exact",
+                            context_fields_used=("temperature_k", "xpx", "xee", "levels", "radiation"),
+                            notes=("Python scalar seed path elided; whole-evaluation fallback retained.",),
+                        ),
+                    )
+                    _fast_rows = [dict(_row) for _row in _four_family_fast_rows_by_record[int(record)]]
+                    _fast_rows.sort(key=lambda _row: int(_row.get("term_index", 0)))
+                    for _offset, _row in enumerate(_fast_rows):
+                        _row["term_index"] = int(len(terms) + _offset + 1)
+                    _new_terms = _matrix_terms_from_cpp_rows(_fast_rows)
+                    if len(_new_terms) != 4:
+                        raise _FourFamilyProductFallback(f"record {record} committed {len(_new_terms)} terms")
+                    if _four_family_verify_old:
+                        _verify_t0 = time.perf_counter()
+                        _ptmp1, _ptmp2, _escape_reason = _escape_factors(record, header.rate_type, derived, context)
+                        if _escape_reason is not None:
+                            raise _FourFamilyProductFallback(f"verification escape context blocked record {record}: {_escape_reason}")
+                        _verify_context = UCalcContext(
+                            temperature_k=context.temperature_k, hydrogen_density_cm3=context.hydrogen_density_cm3,
+                            electron_fraction_xee=context.electron_fraction_xee, neutral_h_density_cm3=context.neutral_h_density_cm3,
+                            ionized_h_density_cm3=context.ionized_h_density_cm3, turbulent_velocity_km_s=context.turbulent_velocity_km_s,
+                            covering_fraction=context.covering_fraction, ptmp1=_ptmp1, ptmp2=_ptmp2, abund1=0.0, abund2=0.0,
+                            jkion=block.ion_index, nlev=block.nlev, lfast=context.lfast, levels=levels, radiation=context.radiation,
+                            derived_pointers=derived, master=master, extras={
+                                "element_z": element_z, "ion_stage": block.ion_stage, "ion_charge": block.ion_stage - 1,
+                                "ion_record": block.ion_record, "rnise": rnise_lte, "compact_start": block.compact_start,
+                                "parent_level_energy_ev_by_destination": parent_energy_map,
+                                "parent_level_stat_weight_by_destination": parent_weight_map,
+                            },
+                        )
+                        _accepted_result = dispatcher.evaluate_record_number(
+                            master, record, _verify_context, parent_record=block.ion_record,
+                            next_record=int(derived.npnxt[record]), strict=False
+                        )
+                        for _i in range(1, 7):
+                            if float(getattr(_accepted_result, f"ans{_i}")) != float(getattr(_result, f"ans{_i}")):
+                                raise _FourFamilyProductFallback(f"reverse verification scalar mismatch record {record} ans{_i}")
+                        _accepted_terms = _matrix_terms_for_result(
+                            result=_accepted_result, basis=basis, block=block, levels=levels,
+                            term_start=len(terms) + 1, xpx=context.hydrogen_density_cm3
+                        )
+                        if [_term_shadow_row(_t) for _t in _accepted_terms] != [_term_shadow_row(_t) for _t in _new_terms]:
+                            raise _FourFamilyProductFallback(f"reverse verification row mismatch record {record}")
+                        if _four_family_product_summary is not None:
+                            _four_family_product_summary["verification_seconds"] += time.perf_counter() - _verify_t0
+                    _row = _result.to_dict()
+                    _row.update({
+                        "ion_index": block.ion_index, "ion_stage": block.ion_stage, "nlev": block.nlev,
+                        "density_scale": float(context.hydrogen_density_cm3),
+                        "rates_backend": "cpp_engine_four_family_product_promoted",
+                        "rates_backend_message": "PRODUCT_PROMOTED",
+                        "ans1_after_calc_hmc_ion_filter": float(_result.ans1),
+                        "ans2_after_calc_hmc_ion_filter": float(_result.ans2),
+                    })
+                    record_results.append(_row)
+                    if _result.rate_type in {1, 7, 40, 42}:
+                        if _result.idest1 == 1:
+                            summary.second_pass_pirt += float(_result.ans1)
+                        if _result.idest2 >= block.nlev:
+                            summary.second_pass_rrrt += float(_result.ans2)
+                    if any(_term.source_ipmat_clamped for _term in _new_terms):
+                        n_source_clamps += 1
+                        record_results[-1]["source_ipmat_endpoint_clamped"] = True
+                        record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
+                    terms.extend(_new_terms)
+                    n_eval += 1
+                    summary.n_records_evaluated += 1
+                    summary.n_matrix_terms += len(_new_terms)
+                    if _four_family_product_summary is not None:
+                        _family_name = f"{int(_result.rate_type)}:{int(_result.data_type)}"
+                        _four_family_product_summary["fast_path_record_counts"][_family_name] += 1
+                        _four_family_product_summary["live_commit_seconds"] += time.perf_counter() - _commit_t0
+                    record = int(derived.npnxt[record])
+                    continue
+
                 _rate_probe_context_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 ptmp1, ptmp2, escape_reason = _escape_factors(record, header.rate_type, derived, context)
                 ucontext = UCalcContext(
@@ -6118,7 +6393,44 @@ def assemble_element_matrix(
                 enclosing_seconds=_rate_payload_parent_seconds, matrix_dimension=int(basis.n_rows),
             )
 
-    if _rate_payload_four_family_product:
+    if _rate_payload_four_family_promoted and _four_family_product_summary is not None:
+        try:
+            _family_set = set(_RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES)
+            _record_keys: set[Tuple[int, int, int]] = set()
+            _type51_records = 0
+            for _row in record_results:
+                _family = (int(_row.get("rate_type", -1)), int(_row.get("data_type", -1)))
+                if _family not in _family_set or str(_row.get("status", "")) != UCalcStatus.EVALUATED.value:
+                    continue
+                _record_keys.add((int(_row.get("record", 0)), _family[0], _family[1]))
+                _four_family_product_summary["family_record_counts"][f"{_family[0]}:{_family[1]}"] += 1
+                if _family == (3, 51):
+                    _backend = str(_row.get("rates_backend", ""))
+                    if not _backend.startswith("cpp_matrix_mg_type51"):
+                        raise RuntimeError(f"Type-51 record {_row.get('record')} used non-C++ backend {_backend}")
+                    _type51_records += 1
+            _supported_terms = [
+                _term for _term in terms
+                if (int(_term.rate_type), int(_term.data_type)) in _family_set
+            ]
+            _four_family_product_summary["existing_cpp_type51_records"] = int(_type51_records)
+            _four_family_product_summary["records_expected"] = int(len(_record_keys))
+            _four_family_product_summary["records_completed"] = int(len(_record_keys))
+            _four_family_product_summary["terms_expected"] = int(4 * len(_record_keys))
+            _four_family_product_summary["terms_committed"] = int(len(_supported_terms))
+            if any(int(_four_family_product_summary["family_record_counts"].get(_name, 0)) <= 0 for _name in ("4:50", "3:51", "3:63", "42:88")):
+                raise RuntimeError(f"not all four promoted families present: {_four_family_product_summary['family_record_counts']}")
+            if len(_supported_terms) != 4 * len(_record_keys):
+                raise RuntimeError(f"promoted term coverage {len(_supported_terms)} != {4 * len(_record_keys)}")
+            _four_family_product_summary["active"] = True
+            _four_family_product_summary["live_matrix_commit"] = True
+            _four_family_product_summary["status"] = "PRODUCT_PROMOTED"
+        except Exception as _exc:
+            _four_family_product_summary["fallback_reason"] = str(_exc)
+            _four_family_product_summary["status"] = "FALLBACK_ACCEPTED_PATH"
+            raise _FourFamilyProductFallback(str(_exc)) from _exc
+
+    if _rate_payload_four_family_candidate:
         terms = _run_rate_payload_four_family_product_candidate(
             profile_control,
             evaluation_index=int(_rate_payload_four_family_product_eval_index),
@@ -6503,6 +6815,41 @@ def assemble_element_matrix(
             solver_initial[basis.normalization_row]
         ),
     )
+
+
+def assemble_element_matrix(
+    master: XSTARMasterData,
+    derived: XSTARDerivedPointers,
+    *,
+    element_z: int,
+    context: ElementEquilibriumContext,
+    dispatcher: Optional[SourceFaithfulUCalc] = None,
+) -> ElementMatrixAssembly:
+    """Assemble one element with whole-evaluation promoted-product fallback."""
+    try:
+        return _assemble_element_matrix_impl(
+            master, derived, element_z=element_z, context=context, dispatcher=dispatcher
+        )
+    except _FourFamilyProductFallback as exc:
+        profile_control = context.profile_control
+        if profile_control is None or not _rate_payload_four_family_product_promoted_enabled(
+            int(element_z), profile_control
+        ):
+            raise
+        _rows = profile_control.get("mg_rate_payload_four_family_product_evaluations", [])
+        if isinstance(_rows, list) and _rows and isinstance(_rows[-1], dict):
+            _rows[-1]["status"] = "FALLBACK_ACCEPTED_PATH"
+            _rows[-1]["fallback_reason"] = str(exc)
+            _rows[-1]["active"] = False
+            _rows[-1]["live_matrix_commit"] = False
+        profile_control["_mg_rate_payload_four_family_product_retry_disabled"] = True
+        try:
+            result = _assemble_element_matrix_impl(
+                master, derived, element_z=element_z, context=context, dispatcher=dispatcher
+            )
+        finally:
+            profile_control.pop("_mg_rate_payload_four_family_product_retry_disabled", None)
+        return result
 
 
 def _solve_normalized(matrix: np.ndarray, normalization_row: int, *, allow_lstsq: bool) -> Tuple[np.ndarray, str, int]:

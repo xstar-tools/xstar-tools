@@ -1060,34 +1060,42 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.34", "requested": False, "product_candidate": True,
+            "schema_version": "0.6.35", "requested": False,
+            "product_candidate": False, "product_promoted": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
         }
+    promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
+    candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
+    success_status = "PRODUCT_PROMOTED" if promoted else "PRODUCT_CANDIDATE_EXACT"
+    schema_version = "0.6.35" if promoted else str(rows[0].get("schema_version", "0.6.34"))
     family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
+    fast_totals: dict[str, int] = {"4:50": 0, "3:63": 0, "42:88": 0}
     for row in rows:
         for key, value in dict(row.get("family_record_counts", {})).items():
             family_totals[str(key)] = family_totals.get(str(key), 0) + int(value or 0)
+        for key, value in dict(row.get("fast_path_record_counts", {})).items():
+            fast_totals[str(key)] = fast_totals.get(str(key), 0) + int(value or 0)
     attempted = len(rows)
-    completed = sum(1 for row in rows if str(row.get("status")) == "PRODUCT_CANDIDATE_EXACT")
+    completed = sum(1 for row in rows if str(row.get("status")) == success_status)
     failed = attempted - completed
     activations = sum(1 for row in rows if bool(row.get("active")) and bool(row.get("live_matrix_commit")))
     fallbacks = sum(1 for row in rows if str(row.get("status")) == "FALLBACK_ACCEPTED_PATH")
-    status = "PRODUCT_CANDIDATE_EXACT" if completed == attempted and attempted > 0 else "FALLBACK" if fallbacks else "NOT_READY"
+    status = success_status if completed == attempted and attempted > 0 else "FALLBACK" if fallbacks else "NOT_READY"
     timing_keys = (
         "packet_build_seconds", "native_scalar_call_seconds", "row_cpp_call_seconds",
-        "verification_seconds", "replacement_seconds",
+        "verification_seconds", "replacement_seconds", "live_commit_seconds",
     )
     timing_totals = {key: sum(float(row.get(key, 0.0) or 0.0) for row in rows) for key in timing_keys}
     return {
-        "schema_version": "0.6.34",
+        "schema_version": schema_version,
         "requested": True,
         "accepted_gate": bool(all(bool(row.get("accepted_gate")) for row in rows)),
-        "product_candidate": True,
-        "product_promoted": False,
+        "product_candidate": candidate,
+        "product_promoted": promoted,
         "active": bool(activations == attempted and attempted > 0),
         "live_matrix_commit": bool(activations == attempted and attempted > 0),
-        "whole_evaluation_fallback": True,
-        "python_seed_path_retained": bool(all(bool(row.get("python_seed_path_retained")) for row in rows)),
+        "whole_evaluation_fallback": bool(all(bool(row.get("whole_evaluation_fallback", True)) for row in rows)),
+        "python_seed_path_retained": bool(any(bool(row.get("python_seed_path_retained")) for row in rows)),
         "verification_enabled": bool(all(bool(row.get("verification_enabled")) for row in rows)),
         "evaluation_count": attempted,
         "evaluations_attempted": attempted,
@@ -1107,13 +1115,17 @@ def summarize_rate_payload_four_family_product(
         "native_scalar_records_expected": int(sum(int(row.get("native_scalar_records_expected", 0) or 0) for row in rows)),
         "native_scalar_records_completed": int(sum(int(row.get("native_scalar_records_completed", 0) or 0) for row in rows)),
         "native_scalar_mismatches": int(sum(int(row.get("native_scalar_mismatches", 0) or 0) for row in rows)),
+        "existing_cpp_type51_records": int(sum(int(row.get("existing_cpp_type51_records", 0) or 0) for row in rows)),
         "family_record_counts": family_totals,
+        "fast_path_record_counts": fast_totals,
         "timing_totals": timing_totals,
         "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
         "evaluations": rows,
         "notes": [
-            "v0.6.34 commits exact C++ matrix terms for the four validated Mg families.",
-            "The accepted path is retained as the whole-evaluation fallback and verification oracle in this candidate.",
-            "A later promoted release may elide the accepted seed path after external product-candidate acceptance.",
+            "v0.6.35 promotes exact C++ rate-payload terms for four Mg families.",
+            "Normal execution elides the Python scalar seed/oracle path for 4:50, 3:63, and 42:88; the accepted C++ Type-51 ion batch remains live for 3:51.",
+            "Any preparation, validation, or coverage failure retries the complete element evaluation on the accepted path.",
+            "Reverse verification is opt-in and disabled in the production wrapper.",
         ],
     }
+

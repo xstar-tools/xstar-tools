@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.6.35 - 2026-06-07
+
+- Promoted the exact four-family Mg rate-payload product for 4:50, 3:51, 3:63, and 42:88.
+- Elided the Python scalar seed/oracle from normal 4:50, 3:63, and 42:88 execution.
+- Retained the accepted ion-level C++ Type-51 rate-and-matrix batch for 3:51.
+- Added whole-element accepted-path retry on any promoted-product failure.
+- Kept reverse verification opt-in and disabled it in the production wrapper.
+- Added promoted-product provenance and strict acceptance checks.
+
 ## v0.6.34 - 2026-06-07
 
 ### Added
