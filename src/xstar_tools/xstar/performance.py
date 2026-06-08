@@ -1060,17 +1060,20 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.38", "requested": False,
+            "schema_version": "0.6.39", "requested": False,
             "product_candidate": False, "product_promoted": False,
+            "diagnostic_only": False, "seed_elision_differential": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
         }
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
-    schema_version = str(rows[0].get("schema_version", "0.6.38"))
+    diagnostic = bool(all(bool(row.get("seed_elision_differential", False)) for row in rows))
+    schema_version = str(rows[0].get("schema_version", "0.6.39"))
     success_status = (
-        "ORDER_PRESERVING_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.38"
+        "SEED_ELISION_DIFFERENTIAL_COMPLETE" if diagnostic
+        else "ORDER_PRESERVING_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.38"
         else "PRODUCT_PROMOTED" if promoted
-        else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version in {"0.6.37", "0.6.38"}
+        else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version in {"0.6.37", "0.6.38", "0.6.39"}
         else "PRODUCT_CANDIDATE_EXACT"
     )
     family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
@@ -1090,6 +1093,10 @@ def summarize_rate_payload_four_family_product(
     completed = sum(1 for row in rows if str(row.get("status")) == success_status)
     failed = attempted - completed
     activations = sum(1 for row in rows if bool(row.get("active")) and bool(row.get("live_matrix_commit")))
+    diagnostic_completions = sum(
+        1 for row in rows
+        if bool(row.get("diagnostic_complete")) and str(row.get("status")) == "SEED_ELISION_DIFFERENTIAL_COMPLETE"
+    )
     fallbacks = sum(1 for row in rows if str(row.get("status")) == "FALLBACK_ACCEPTED_PATH")
     status = success_status if completed == attempted and attempted > 0 else "FALLBACK" if fallbacks else "NOT_READY"
     timing_keys = (
@@ -1104,7 +1111,11 @@ def summarize_rate_payload_four_family_product(
         "accepted_gate": bool(all(bool(row.get("accepted_gate")) for row in rows)),
         "product_candidate": candidate,
         "product_promoted": promoted,
-        "active": bool(activations == attempted and attempted > 0),
+        "diagnostic_only": diagnostic,
+        "seed_elision_differential": diagnostic,
+        "diagnostic_complete": bool(diagnostic_completions == attempted and attempted > 0) if diagnostic else False,
+        "accepted_terms_live": bool(all(bool(row.get("accepted_terms_live")) for row in rows)) if diagnostic else False,
+        "active": bool((diagnostic_completions if diagnostic else activations) == attempted and attempted > 0),
         "live_matrix_commit": bool(activations == attempted and attempted > 0),
         "whole_evaluation_fallback": bool(all(bool(row.get("whole_evaluation_fallback", True)) for row in rows)),
         "python_seed_path_retained": bool(any(bool(row.get("python_seed_path_retained")) for row in rows)),
@@ -1149,11 +1160,106 @@ def summarize_rate_payload_four_family_product(
             [str(row.get("ordered_stream_hash_accepted", "")), str(row.get("ordered_stream_hash_candidate", ""))]
             for row in rows[:max(1, int(top_n))]
         ],
+        "accepted_result_state_records": int(sum(int(row.get("accepted_result_state_records", 0) or 0) for row in rows)),
+        "seed_elided_result_state_records": int(sum(int(row.get("seed_elided_result_state_records", 0) or 0) for row in rows)),
+        "result_state_mismatch_fields": int(sum(int(row.get("result_state_mismatch_fields", 0) or 0) for row in rows)),
+        "result_state_mismatch_records": int(sum(int(row.get("result_state_mismatch_records", 0) or 0) for row in rows)),
+        "result_state_mismatch_fields_by_family": {
+            family: {
+                field: int(sum(
+                    int(dict(dict(row.get("result_state_mismatch_fields_by_family", {})).get(family, {})).get(field, 0) or 0)
+                    for row in rows
+                ))
+                for field in sorted({
+                    str(field)
+                    for row in rows
+                    for field in dict(dict(row.get("result_state_mismatch_fields_by_family", {})).get(family, {}))
+                })
+            }
+            for family in ("4:50", "3:63", "42:88")
+        },
+        "accepted_opakab_nonzero_records_by_family": {
+            family: int(sum(
+                int(dict(row.get("accepted_opakab_nonzero_records_by_family", {})).get(family, 0) or 0)
+                for row in rows
+            ))
+            for family in ("4:50", "3:63", "42:88")
+        },
+        "accepted_opakab_max_abs_by_family": {
+            family: float(max(
+                [float(dict(row.get("accepted_opakab_max_abs_by_family", {})).get(family, 0.0) or 0.0) for row in rows]
+                or [0.0]
+            ))
+            for family in ("4:50", "3:63", "42:88")
+        },
+        "first_result_state_divergences": [
+            dict(row.get("first_result_state_divergence", {}))
+            for row in rows if row.get("first_result_state_divergence")
+        ][:max(1, int(top_n))],
+        "first_ordered_stream_divergences": [
+            dict(row.get("first_ordered_stream_divergence", {}))
+            for row in rows if row.get("first_ordered_stream_divergence")
+        ][:max(1, int(top_n))],
+        "first_cell_contribution_divergences": [
+            dict(row.get("first_cell_contribution_divergence", {}))
+            for row in rows if row.get("first_cell_contribution_divergence")
+        ][:max(1, int(top_n))],
+        "per_cell_contribution_sequence_exact": bool(all(bool(row.get("per_cell_contribution_sequence_exact")) for row in rows)),
+        "second_pass_totals_exact": bool(all(bool(row.get("second_pass_totals_exact")) for row in rows)),
+        "seed_elision_difference_found": bool(any(bool(row.get("seed_elision_difference_found")) for row in rows)),
+        "ablation_count": int(sum(int(row.get("ablation_count", 0) or 0) for row in rows)),
+        "ablation_term_matrix_exact_count": int(sum(int(row.get("ablation_term_matrix_exact_count", 0) or 0) for row in rows)),
+        "ablation_result_state_exact_count": int(sum(int(row.get("ablation_result_state_exact_count", 0) or 0) for row in rows)),
+        "family_ablation_ledger": {
+            name: {
+                "evaluation_count": int(sum(1 for row in rows if name in dict(row.get("family_ablation_ledger", {})))),
+                "all_ordered_streams_exact": bool(all(
+                    bool(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("ordered_stream_exact"))
+                    for row in rows if name in dict(row.get("family_ablation_ledger", {}))
+                )),
+                "all_cell_sequences_exact": bool(all(
+                    bool(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("per_cell_contribution_sequence_exact"))
+                    for row in rows if name in dict(row.get("family_ablation_ledger", {}))
+                )),
+                "all_matrix_checkpoints_exact": bool(all(
+                    bool(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("all_matrix_checkpoints_exact"))
+                    for row in rows if name in dict(row.get("family_ablation_ledger", {}))
+                )),
+                "all_solver_inputs_exact": bool(all(
+                    bool(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("solver_input_checkpoint_exact"))
+                    for row in rows if name in dict(row.get("family_ablation_ledger", {}))
+                )),
+                "all_result_states_exact": bool(all(
+                    bool(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("result_state_exact"))
+                    for row in rows if name in dict(row.get("family_ablation_ledger", {}))
+                )),
+                "result_state_mismatch_records": int(sum(
+                    int(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("result_state_mismatch_records", 0) or 0)
+                    for row in rows
+                )),
+                "result_state_mismatch_fields": int(sum(
+                    int(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("result_state_mismatch_fields", 0) or 0)
+                    for row in rows
+                )),
+                "first_result_state_divergences": [
+                    dict(dict(row.get("family_ablation_ledger", {})).get(name, {}).get("first_result_state_divergence", {}))
+                    for row in rows
+                    if dict(row.get("family_ablation_ledger", {})).get(name, {}).get("first_result_state_divergence")
+                ][:max(1, int(top_n))],
+            }
+            for name in sorted({
+                str(name) for row in rows for name in dict(row.get("family_ablation_ledger", {}))
+            })
+        },
         "timing_totals": timing_totals,
         "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
         "evaluations": rows,
         "notes": (
             [
+                "v0.6.39 keeps the accepted assembly live and compares seven isolated Type-50/63/88 seed-elision variants.",
+                "Each variant records exact term-stream, per-cell contribution, matrix, solver-input, second-pass, and UCalcResult-state comparisons.",
+                "Result-state differences are diagnostic findings and do not alter the accepted live matrix or science products.",
+            ] if diagnostic else [
                 "v0.6.38 promoted mode elides the Python seed path and flushes pending Type-51 batches before every Type-50/63/88 fast commit.",
                 "The structural order barrier preserves the accumulation order proven exact by v0.6.37 without production hashes or matrix reconstruction.",
                 "Setting XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1 routes execution through the complete order-preserving reverse-verification candidate.",

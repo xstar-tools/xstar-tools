@@ -1,3 +1,9 @@
+# v0.6.39 four-family seed-elision differential diagnostic
+
+The `v0.6.39` package keeps the accepted Mg assembly live and compares seven isolated Type-50/63/88 seed-elision variants. It verifies native scalars, C++ rows, ordered terms, per-cell contribution sequences, matrices, solver inputs, second-pass totals, and non-scalar `UCalcResult` state. Product promotion is disabled. See `V0639_FOUR_FAMILY_SEED_ELISION_DIFFERENTIAL_DIAGNOSTIC.md`.
+
+The v0.6.38 seed-free promotion is retained only as a rejected experiment: its Type-51 barriers completed, but its science products reproduced the v0.6.36 drift.
+
 # v0.6.38 four-family order-preserving product promoted
 
 The `v0.6.38` package promotes the seed-free four-family Mg rate-payload path while preserving accepted floating-point accumulation order. Before each Type-50/63/88 fast commit, pending Type-51 rows are flushed so exact C++ terms remain in source order. Normal execution skips full reverse verification and checkpoint reconstruction; `XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1` routes through the complete v0.6.37 diagnostic oracle. See `V0638_FOUR_FAMILY_ORDER_PRESERVING_PRODUCT_PROMOTED.md`.

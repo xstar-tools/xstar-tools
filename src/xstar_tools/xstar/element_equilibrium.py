@@ -2715,6 +2715,16 @@ def _run_rate_payload_batched_orchestration_shadow(
 
 
 
+def _rate_payload_four_family_seed_elision_differential_requested(element_z: int) -> bool:
+    """Enable the v0.6.39 accepted-live seed-elision differential diagnostic."""
+    return bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_SEED_ELISION_DIFFERENTIAL")
+    )
+
+
+
 def _rate_payload_four_family_full_reverse_verification_requested(element_z: int) -> bool:
     """Route promoted verification requests through the complete v0.6.37 oracle.
 
@@ -2737,6 +2747,7 @@ def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
         and (
             _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
             or _rate_payload_four_family_full_reverse_verification_requested(element_z)
+            or _rate_payload_four_family_seed_elision_differential_requested(element_z)
         )
     )
 
@@ -2749,6 +2760,7 @@ def _rate_payload_four_family_product_promoted_enabled(
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
         and not _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD")
+        and not _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_SEED_ELISION_DIFFERENTIAL")
         and not bool(profile_control.get("_mg_rate_payload_four_family_product_retry_disabled", False))
     )
 
@@ -2774,12 +2786,16 @@ def _run_rate_payload_four_family_product_candidate(
     using the accepted composite identity and original term index, and checks
     the ordered term stream plus full pre-normalization matrices before commit.
     """
+    seed_differential = _rate_payload_four_family_seed_elision_differential_requested(12)
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.38",
+        "schema_version": "0.6.39" if seed_differential else "0.6.38",
         "requested": True,
         "accepted_gate": True,
-        "product_candidate": True,
+        "product_candidate": not seed_differential,
         "product_promoted": False,
+        "diagnostic_only": bool(seed_differential),
+        "seed_elision_differential": bool(seed_differential),
+        "accepted_terms_live": bool(seed_differential),
         "active": False,
         "live_matrix_commit": False,
         "whole_evaluation_fallback": True,
@@ -2827,6 +2843,27 @@ def _run_rate_payload_four_family_product_candidate(
         "replacement_seconds": 0.0,
         "checkpoint_seconds": 0.0,
         "fallback_reason": "",
+        "diagnostic_complete": False,
+        "accepted_result_state_records": 0,
+        "seed_elided_result_state_records": 0,
+        "result_state_mismatch_fields": 0,
+        "result_state_mismatch_records": 0,
+        "result_state_mismatch_fields_by_family": {"4:50": {}, "3:63": {}, "42:88": {}},
+        "accepted_opakab_nonzero_records_by_family": {"4:50": 0, "3:63": 0, "42:88": 0},
+        "accepted_opakab_max_abs_by_family": {"4:50": 0.0, "3:63": 0.0, "42:88": 0.0},
+        "first_result_state_divergence": {},
+        "first_ordered_stream_divergence": {},
+        "first_cell_contribution_divergence": {},
+        "per_cell_contribution_sequence_exact": False,
+        "second_pass_totals_exact": False,
+        "accepted_second_pass_pirt_supported": 0.0,
+        "seed_elided_second_pass_pirt_supported": 0.0,
+        "accepted_second_pass_rrrt_supported": 0.0,
+        "seed_elided_second_pass_rrrt_supported": 0.0,
+        "family_ablation_ledger": {},
+        "ablation_count": 0,
+        "ablation_term_matrix_exact_count": 0,
+        "ablation_result_state_exact_count": 0,
     }
     control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(summary)
     original_terms = list(terms)
@@ -2863,6 +2900,46 @@ def _run_rate_payload_four_family_product_candidate(
         normalized[basis.normalization_row - 1, :] = 1.0
         rhs[basis.normalization_row - 1] = 1.0
         return dense, heat, heat2, normalized, rhs
+
+    def first_sequence_difference(
+        left: Sequence[Mapping[str, Any]], right: Sequence[Mapping[str, Any]]
+    ) -> Dict[str, Any]:
+        limit = min(len(left), len(right))
+        for index in range(limit):
+            if left[index] != right[index]:
+                return {
+                    "index": int(index),
+                    "accepted": dict(left[index]),
+                    "seed_elided": dict(right[index]),
+                }
+        if len(left) != len(right):
+            return {
+                "index": int(limit),
+                "accepted": dict(left[limit]) if limit < len(left) else None,
+                "seed_elided": dict(right[limit]) if limit < len(right) else None,
+                "accepted_length": int(len(left)),
+                "seed_elided_length": int(len(right)),
+            }
+        return {}
+
+    def cell_contribution_rows(term_list: Sequence[MatrixTerm]) -> List[Dict[str, Any]]:
+        cells: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
+        for position, term in enumerate(term_list):
+            cell = (int(term.row), int(term.column))
+            cells.setdefault(cell, []).append({
+                "position": int(position),
+                "record": int(term.record),
+                "family": f"{int(term.rate_type)}:{int(term.data_type)}",
+                "role": str(term.role),
+                "aj1": float(term.aj1),
+                "aj2": float(term.aj2),
+                "cj": float(term.cj),
+                "cj2": float(term.cj2),
+            })
+        return [
+            {"cell": [int(cell[0]), int(cell[1])], "contributions": cells[cell]}
+            for cell in sorted(cells)
+        ]
 
     try:
         t0 = time.perf_counter()
@@ -3096,6 +3173,224 @@ def _run_rate_payload_four_family_product_candidate(
             raise RuntimeError("pre-normalization matrix checkpoint mismatch")
         if not summary["solver_input_checkpoint_exact"]:
             raise RuntimeError("solver input checkpoint mismatch")
+
+        if seed_differential:
+            # v0.6.39 keeps the accepted assembly live and compares seven isolated
+            # seed-elision variants.  Exact rows and matrices are necessary but
+            # not sufficient: the accepted UCalcResult state is also part of the
+            # differential contract because downstream code may observe fields
+            # such as opakab even when ans1..ans6 and matrix rows are exact.
+            source_position = {
+                int(row.get("record", 0)): int(index)
+                for index, row in enumerate(record_results)
+                if int(row.get("record", 0) or 0) > 0
+            }
+            state_fields = (
+                "status", "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
+                "idest1", "idest2", "opakab",
+                "ans1_after_calc_hmc_ion_filter", "ans2_after_calc_hmc_ion_filter",
+            )
+            accepted_state_by_record: Dict[int, Dict[str, Any]] = {}
+            seed_state_by_record: Dict[int, Dict[str, Any]] = {}
+            mismatch_fields_by_record: Dict[int, List[str]] = {}
+            diagnostic_families = {(4, 50), (3, 63), (42, 88)}
+            for rec, accepted in result_by_record.items():
+                family = (int(accepted.get("rate_type", -1)), int(accepted.get("data_type", -1)))
+                if family not in diagnostic_families:
+                    continue
+                key = (int(rec), family[0], family[1])
+                native = native_map.get(key)
+                if native is None:
+                    raise RuntimeError(f"missing seed-elided state record {key}")
+                accepted_state = {
+                    "status": str(accepted.get("status", "")),
+                    **{f"ans{i}": float(accepted.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+                    "idest1": int(accepted.get("idest1", 0) or 0),
+                    "idest2": int(accepted.get("idest2", 0) or 0),
+                    "opakab": float(accepted.get("opakab", 0.0) or 0.0),
+                    "ans1_after_calc_hmc_ion_filter": float(
+                        accepted.get("ans1_after_calc_hmc_ion_filter", accepted.get("ans1", 0.0)) or 0.0
+                    ),
+                    "ans2_after_calc_hmc_ion_filter": float(
+                        accepted.get("ans2_after_calc_hmc_ion_filter", accepted.get("ans2", 0.0)) or 0.0
+                    ),
+                }
+                seed_state = {
+                    "status": UCalcStatus.EVALUATED.value,
+                    **{f"ans{i}": float(native.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
+                    "idest1": int(native.get("idest1", accepted_state["idest1"]) or accepted_state["idest1"]),
+                    "idest2": int(native.get("idest2", accepted_state["idest2"]) or accepted_state["idest2"]),
+                    # This intentionally reproduces the v0.6.36/v0.6.38 fast
+                    # UCalcResult constructor, whose unspecified opacity field
+                    # takes the dataclass default.
+                    "opakab": 0.0,
+                    "ans1_after_calc_hmc_ion_filter": float(native.get("ans1", 0.0) or 0.0),
+                    "ans2_after_calc_hmc_ion_filter": float(native.get("ans2", 0.0) or 0.0),
+                }
+                accepted_state_by_record[int(rec)] = accepted_state
+                seed_state_by_record[int(rec)] = seed_state
+                family_name = f"{family[0]}:{family[1]}"
+                opak = abs(float(accepted_state["opakab"]))
+                if opak != 0.0:
+                    summary["accepted_opakab_nonzero_records_by_family"][family_name] += 1
+                summary["accepted_opakab_max_abs_by_family"][family_name] = max(
+                    float(summary["accepted_opakab_max_abs_by_family"][family_name]), opak
+                )
+                mismatches = [field for field in state_fields if accepted_state[field] != seed_state[field]]
+                if mismatches:
+                    mismatch_fields_by_record[int(rec)] = mismatches
+                    summary["result_state_mismatch_records"] += 1
+                    summary["result_state_mismatch_fields"] += len(mismatches)
+                    family_counts = summary["result_state_mismatch_fields_by_family"][family_name]
+                    for field in mismatches:
+                        family_counts[field] = int(family_counts.get(field, 0)) + 1
+            summary["accepted_result_state_records"] = len(accepted_state_by_record)
+            summary["seed_elided_result_state_records"] = len(seed_state_by_record)
+            if mismatch_fields_by_record:
+                first_record = min(
+                    mismatch_fields_by_record,
+                    key=lambda rec: (source_position.get(int(rec), 1 << 60), int(rec)),
+                )
+                accepted = result_by_record[first_record]
+                family_name = f"{int(accepted.get('rate_type', -1))}:{int(accepted.get('data_type', -1))}"
+                first_field = mismatch_fields_by_record[first_record][0]
+                summary["first_result_state_divergence"] = {
+                    "source_position": int(source_position.get(first_record, -1)),
+                    "record": int(first_record),
+                    "family": family_name,
+                    "field": first_field,
+                    "accepted": accepted_state_by_record[first_record][first_field],
+                    "seed_elided": seed_state_by_record[first_record][first_field],
+                    "all_mismatched_fields": list(mismatch_fields_by_record[first_record]),
+                }
+
+            accepted_pirt = accepted_rrrt = seed_pirt = seed_rrrt = 0.0
+            for rec, accepted_state in accepted_state_by_record.items():
+                row = result_by_record[rec]
+                rate_type = int(row.get("rate_type", -1))
+                idest1 = int(accepted_state["idest1"]); idest2 = int(accepted_state["idest2"])
+                ion_index = int(row.get("ion_index", 0) or 0)
+                block = blocks.get(ion_index)
+                nlev = int(block.nlev) if block is not None else int(row.get("nlev", 0) or 0)
+                seed_state = seed_state_by_record[rec]
+                if rate_type in {1, 7, 40, 42}:
+                    if idest1 == 1:
+                        accepted_pirt += float(accepted_state["ans1_after_calc_hmc_ion_filter"])
+                        seed_pirt += float(seed_state["ans1_after_calc_hmc_ion_filter"])
+                    if idest2 >= nlev:
+                        accepted_rrrt += float(accepted_state["ans2_after_calc_hmc_ion_filter"])
+                        seed_rrrt += float(seed_state["ans2_after_calc_hmc_ion_filter"])
+            summary["accepted_second_pass_pirt_supported"] = float(accepted_pirt)
+            summary["seed_elided_second_pass_pirt_supported"] = float(seed_pirt)
+            summary["accepted_second_pass_rrrt_supported"] = float(accepted_rrrt)
+            summary["seed_elided_second_pass_rrrt_supported"] = float(seed_rrrt)
+            summary["second_pass_totals_exact"] = bool(accepted_pirt == seed_pirt and accepted_rrrt == seed_rrrt)
+
+            accepted_cell_rows = cell_contribution_rows(original_terms)
+            candidate_cell_rows = cell_contribution_rows(replaced)
+            summary["per_cell_contribution_sequence_exact"] = bool(accepted_cell_rows == candidate_cell_rows)
+            if not summary["per_cell_contribution_sequence_exact"]:
+                summary["first_cell_contribution_divergence"] = first_sequence_difference(
+                    accepted_cell_rows, candidate_cell_rows
+                )
+            if not summary["ordered_stream_exact"]:
+                summary["first_ordered_stream_divergence"] = first_sequence_difference(
+                    accepted_stream, candidate_stream
+                )
+
+            ablations: Tuple[Tuple[str, frozenset[Tuple[int, int]]], ...] = (
+                ("type50_only", frozenset({(4, 50)})),
+                ("type63_only", frozenset({(3, 63)})),
+                ("type88_only", frozenset({(42, 88)})),
+                ("type50_type63", frozenset({(4, 50), (3, 63)})),
+                ("type50_type88", frozenset({(4, 50), (42, 88)})),
+                ("type63_type88", frozenset({(3, 63), (42, 88)})),
+                ("all_three", frozenset({(4, 50), (3, 63), (42, 88)})),
+            )
+            ledger: Dict[str, Any] = {}
+            for name, selected_families in ablations:
+                variant: List[MatrixTerm] = []
+                selected_records: set[int] = set()
+                for term in original_terms:
+                    family = (int(term.rate_type), int(term.data_type))
+                    if family not in selected_families:
+                        variant.append(term)
+                        continue
+                    accepted_row = _term_shadow_row(term)
+                    cpp_row = cpp_map.get(replacement_key(accepted_row))
+                    if cpp_row is None:
+                        raise RuntimeError(f"ablation {name} missing C++ row for term {term.term_index}")
+                    exact_row = dict(cpp_row); exact_row["term_index"] = int(term.term_index)
+                    converted = _matrix_terms_from_cpp_rows([exact_row])
+                    if len(converted) != 1:
+                        raise RuntimeError(f"ablation {name} row conversion failed")
+                    variant.append(converted[0])
+                    selected_records.add(int(term.record))
+                variant_stream = [_term_shadow_row(term) for term in variant]
+                vd, vh, vh2, vn, vr = materialize(variant)
+                stream_exact = bool(variant_stream == accepted_stream)
+                matrix_exact = bool(
+                    np.array_equal(ad, vd) and np.array_equal(ah, vh) and np.array_equal(ah2, vh2)
+                )
+                solver_exact = bool(np.array_equal(an, vn) and np.array_equal(ar, vr))
+                cell_rows = cell_contribution_rows(variant)
+                cell_exact = bool(cell_rows == accepted_cell_rows)
+                mismatch_records = [rec for rec in selected_records if rec in mismatch_fields_by_record]
+                mismatch_field_count = int(sum(len(mismatch_fields_by_record[rec]) for rec in mismatch_records))
+                first_state = {}
+                if mismatch_records:
+                    rec = min(mismatch_records, key=lambda value: (source_position.get(value, 1 << 60), value))
+                    accepted = result_by_record[rec]
+                    field = mismatch_fields_by_record[rec][0]
+                    first_state = {
+                        "source_position": int(source_position.get(rec, -1)),
+                        "record": int(rec),
+                        "family": f"{int(accepted.get('rate_type', -1))}:{int(accepted.get('data_type', -1))}",
+                        "field": field,
+                        "accepted": accepted_state_by_record[rec][field],
+                        "seed_elided": seed_state_by_record[rec][field],
+                    }
+                result_state_exact = not mismatch_records
+                term_matrix_exact = bool(stream_exact and matrix_exact and solver_exact and cell_exact)
+                if term_matrix_exact:
+                    summary["ablation_term_matrix_exact_count"] += 1
+                if result_state_exact:
+                    summary["ablation_result_state_exact_count"] += 1
+                ledger[name] = {
+                    "families": [f"{family[0]}:{family[1]}" for family in sorted(selected_families)],
+                    "selected_record_count": int(len(selected_records)),
+                    "ordered_stream_exact": stream_exact,
+                    "per_cell_contribution_sequence_exact": cell_exact,
+                    "all_matrix_checkpoints_exact": matrix_exact,
+                    "solver_input_checkpoint_exact": solver_exact,
+                    "result_state_exact": result_state_exact,
+                    "result_state_mismatch_records": int(len(mismatch_records)),
+                    "result_state_mismatch_fields": mismatch_field_count,
+                    "first_result_state_divergence": first_state,
+                    "first_ordered_stream_divergence": (
+                        {} if stream_exact else first_sequence_difference(accepted_stream, variant_stream)
+                    ),
+                    "first_cell_contribution_divergence": (
+                        {} if cell_exact else first_sequence_difference(accepted_cell_rows, cell_rows)
+                    ),
+                    "status": (
+                        "TERM_MATRIX_EXACT_RESULT_STATE_EXACT"
+                        if term_matrix_exact and result_state_exact
+                        else "TERM_MATRIX_EXACT_RESULT_STATE_DIFFERENT"
+                        if term_matrix_exact
+                        else "TERM_OR_MATRIX_DIFFERENT"
+                    ),
+                }
+            summary["family_ablation_ledger"] = ledger
+            summary["ablation_count"] = len(ledger)
+            summary["seed_elision_difference_found"] = bool(summary["result_state_mismatch_fields"] > 0)
+            summary["diagnostic_complete"] = True
+            summary["records_completed"] = len(packet)
+            summary["terms_committed"] = 0
+            summary["active"] = True
+            summary["live_matrix_commit"] = False
+            summary["status"] = "SEED_ELISION_DIFFERENTIAL_COMPLETE"
+            return original_terms
 
         summary["records_completed"] = len(packet)
         summary["terms_committed"] = committed

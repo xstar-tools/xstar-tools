@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.39 - 2026-06-08
+
+- Add an accepted-live four-family seed-elision differential diagnostic for Mg Type-50, Type-63, and Type-88.
+- Compare exact native scalars, C++ rows, ordered term streams, per-cell contribution sequences, dense/heating matrices, normalized solver inputs, and second-pass totals.
+- Add seven family-ablation variants and first-divergence provenance.
+- Compare accepted and seed-elided `UCalcResult` state, including `opakab`, while keeping accepted terms live.
+- Disable the promoted fast path whenever the differential diagnostic is active.
+- Keep the engine ABI at version 8 and feature flags at 511.
+
 ## 0.6.38 - 2026-06-08
 
 - Promote the four-family Mg rate-payload product with the Python scalar seed/oracle removed from normal execution.
