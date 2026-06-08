@@ -1,0 +1,390 @@
+#include "xstar_api.h"
+#include "xstar_backend_plugin.h"
+#include "xstar_standalone_internal.hpp"
+
+#include <array>
+#include <cstdlib>
+#include <dlfcn.h>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace {
+
+using xstar_standalone::copy_text;
+using xstar_standalone::field_text;
+
+constexpr std::array<const char*, 2> kBackends{{"cpp", "python"}};
+thread_local std::string g_api_last_error;
+
+struct LoadedPlugin {
+    void* handle = nullptr;
+    const xstar_backend_descriptor_v1* descriptor = nullptr;
+    std::string path;
+
+    ~LoadedPlugin() {
+        if (handle != nullptr) dlclose(handle);
+    }
+};
+
+struct xstar_context_impl {
+    xstar_config_v1 config{};
+    std::unique_ptr<LoadedPlugin> plugin;
+    void* backend_context = nullptr;
+    std::string last_error;
+    mutable std::mutex mutex;
+};
+
+std::vector<std::filesystem::path> plugin_directories(const xstar_config_v1& config) {
+    std::vector<std::filesystem::path> result;
+    const std::string configured = field_text(config.plugin_directory, XSTAR_PATH_SIZE);
+    if (!configured.empty()) result.emplace_back(configured);
+    if (const char* env = std::getenv("XSTAR_PLUGIN_PATH")) {
+        std::stringstream stream(env);
+        std::string item;
+        while (std::getline(stream, item, ':')) {
+            if (!item.empty()) result.emplace_back(item);
+        }
+    }
+    result.push_back(xstar_standalone::executable_or_library_directory(
+        reinterpret_cast<const void*>(&xstar_api_abi_version)));
+    result.push_back(std::filesystem::current_path());
+    std::vector<std::filesystem::path> unique;
+    for (const auto& path : result) {
+        if (path.empty()) continue;
+        std::error_code error;
+        auto normalized = std::filesystem::weakly_canonical(path, error);
+        if (error) normalized = path;
+        if (std::find(unique.begin(), unique.end(), normalized) == unique.end()) {
+            unique.push_back(normalized);
+        }
+    }
+    return unique;
+}
+
+std::unique_ptr<LoadedPlugin> load_plugin(
+    const xstar_config_v1& config,
+    const std::string& backend,
+    std::string& error_message
+) {
+    const std::string filename = "libxstar_backend_" + backend + ".so";
+    std::vector<std::string> failures;
+    for (const auto& directory : plugin_directories(config)) {
+        const auto candidate = directory / filename;
+        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_GLOBAL);
+        if (handle == nullptr) {
+            const char* error = dlerror();
+            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            continue;
+        }
+        dlerror();
+        auto getter = reinterpret_cast<xstar_backend_get_descriptor_v1_fn>(
+            dlsym(handle, "xstar_backend_get_descriptor_v1"));
+        const char* symbol_error = dlerror();
+        if (getter == nullptr || symbol_error != nullptr) {
+            failures.push_back(candidate.string() + ": missing xstar_backend_get_descriptor_v1");
+            dlclose(handle);
+            continue;
+        }
+        const xstar_backend_descriptor_v1* descriptor = getter();
+        if (descriptor == nullptr ||
+            descriptor->struct_size < sizeof(xstar_backend_descriptor_v1) ||
+            descriptor->plugin_abi_version != XSTAR_BACKEND_PLUGIN_ABI_VERSION ||
+            descriptor->backend_name == nullptr ||
+            backend != descriptor->backend_name) {
+            failures.push_back(candidate.string() + ": incompatible backend descriptor");
+            dlclose(handle);
+            continue;
+        }
+        auto plugin = std::make_unique<LoadedPlugin>();
+        plugin->handle = handle;
+        plugin->descriptor = descriptor;
+        plugin->path = candidate.string();
+        return plugin;
+    }
+    std::ostringstream output;
+    output << "could not load backend '" << backend << "'";
+    for (const auto& failure : failures) output << "\n  " << failure;
+    error_message = output.str();
+    return nullptr;
+}
+
+int validate_config(const xstar_config_v1* config, std::string& error) {
+    if (config == nullptr) {
+        error = "config is null";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (config->struct_size < sizeof(xstar_config_v1)) {
+        error = "config struct is too small";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (config->abi_version != XSTAR_API_ABI_VERSION) {
+        error = "config ABI version mismatch";
+        return XSTAR_STATUS_ABI_MISMATCH;
+    }
+    const std::string backend = field_text(config->backend, XSTAR_BACKEND_NAME_SIZE);
+    if (backend.empty()) {
+        error = "backend name is empty";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (std::find_if(kBackends.begin(), kBackends.end(), [&](const char* name) {
+            return backend == name;
+        }) == kBackends.end()) {
+        error = "backend is not registered: " + backend;
+        return XSTAR_STATUS_BACKEND_NOT_FOUND;
+    }
+    return XSTAR_STATUS_OK;
+}
+
+int validate_io(const xstar_zone_input_v1* input, xstar_zone_output_v1* output, std::string& error) {
+    if (input == nullptr || output == nullptr) {
+        error = "zone input/output is null";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (input->struct_size < sizeof(xstar_zone_input_v1) ||
+        output->struct_size < sizeof(xstar_zone_output_v1)) {
+        error = "zone input/output struct is too small";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (input->abundance_count > 0 && input->abundances == nullptr) {
+        error = "abundances pointer is null";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    if (input->radiation_bin_count > 0 &&
+        (input->radiation_energy == nullptr || input->radiation_flux == nullptr)) {
+        error = "radiation arrays are incomplete";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    return XSTAR_STATUS_OK;
+}
+
+xstar_context_impl* impl(xstar_context* context) {
+    return reinterpret_cast<xstar_context_impl*>(context);
+}
+const xstar_context_impl* impl(const xstar_context* context) {
+    return reinterpret_cast<const xstar_context_impl*>(context);
+}
+
+} // namespace
+
+extern "C" {
+
+uint32_t xstar_api_abi_version(void) { return XSTAR_API_ABI_VERSION; }
+const char* xstar_api_version_string(void) { return XSTAR_API_VERSION_STRING; }
+size_t xstar_backend_count(void) { return kBackends.size(); }
+const char* xstar_backend_name(size_t index) {
+    return index < kBackends.size() ? kBackends[index] : nullptr;
+}
+
+const char* xstar_api_last_error(void) { return g_api_last_error.c_str(); }
+
+const char* xstar_status_string(int status) {
+    switch (status) {
+        case XSTAR_STATUS_OK: return "ok";
+        case XSTAR_STATUS_INVALID_ARGUMENT: return "invalid argument";
+        case XSTAR_STATUS_ABI_MISMATCH: return "ABI mismatch";
+        case XSTAR_STATUS_BACKEND_NOT_FOUND: return "backend not found";
+        case XSTAR_STATUS_BACKEND_LOAD_FAILED: return "backend load failed";
+        case XSTAR_STATUS_BACKEND_ERROR: return "backend error";
+        case XSTAR_STATUS_BUFFER_TOO_SMALL: return "buffer too small";
+        case XSTAR_STATUS_NOT_IMPLEMENTED: return "not implemented";
+        case XSTAR_STATUS_INTERNAL_ERROR: return "internal error";
+        default: return "unknown status";
+    }
+}
+
+int xstar_config_init_v1(xstar_config_v1* config) {
+    if (config == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *config = {};
+    config->struct_size = sizeof(*config);
+    config->abi_version = XSTAR_API_ABI_VERSION;
+    config->flags = XSTAR_CONFIG_ENABLE_FALLBACK | XSTAR_CONFIG_STRICT_SOURCE_ORDER;
+    config->thread_count = 1;
+    copy_text(config->backend, sizeof(config->backend), "cpp");
+    copy_text(config->engine_backend, sizeof(config->engine_backend), "inherit");
+    copy_text(config->rates_backend, sizeof(config->rates_backend), "inherit");
+    copy_text(config->matrix_backend, sizeof(config->matrix_backend), "inherit");
+    copy_text(config->solver_backend, sizeof(config->solver_backend), "inherit");
+    copy_text(config->emissivity_backend, sizeof(config->emissivity_backend), "inherit");
+    copy_text(config->opacity_backend, sizeof(config->opacity_backend), "inherit");
+    copy_text(config->thermal_backend, sizeof(config->thermal_backend), "inherit");
+    return XSTAR_STATUS_OK;
+}
+
+int xstar_zone_input_init_v1(xstar_zone_input_v1* input) {
+    if (input == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *input = {};
+    input->struct_size = sizeof(*input);
+    return XSTAR_STATUS_OK;
+}
+
+int xstar_zone_output_init_v1(xstar_zone_output_v1* output) {
+    if (output == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *output = {};
+    output->struct_size = sizeof(*output);
+    return XSTAR_STATUS_OK;
+}
+
+int xstar_context_stats_init_v1(xstar_context_stats_v1* stats) {
+    if (stats == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *stats = {};
+    stats->struct_size = sizeof(*stats);
+    return XSTAR_STATUS_OK;
+}
+
+int xstar_component_info_init_v1(xstar_component_info_v1* info) {
+    if (info == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *info = {};
+    info->struct_size = sizeof(*info);
+    return XSTAR_STATUS_OK;
+}
+
+int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** context) {
+    if (context == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    *context = nullptr;
+    std::string error;
+    int status = validate_config(config, error);
+    if (status != XSTAR_STATUS_OK) { g_api_last_error = error; return status; }
+
+    auto result = std::make_unique<xstar_context_impl>();
+    result->config = *config;
+    const std::string backend = field_text(config->backend, XSTAR_BACKEND_NAME_SIZE);
+    result->plugin = load_plugin(*config, backend, error);
+    if (!result->plugin) { g_api_last_error = error; return XSTAR_STATUS_BACKEND_LOAD_FAILED; }
+    if (result->plugin->descriptor->create == nullptr) {
+        g_api_last_error = "backend create callback is missing";
+        return XSTAR_STATUS_BACKEND_ERROR;
+    }
+
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    status = result->plugin->descriptor->create(
+        config, &result->backend_context, message.data(), message.size());
+    if (status != XSTAR_STATUS_OK) {
+        result->last_error = message.data();
+        g_api_last_error = result->last_error;
+        return status;
+    }
+    result->last_error.clear();
+    g_api_last_error.clear();
+    *context = reinterpret_cast<xstar_context*>(result.release());
+    return XSTAR_STATUS_OK;
+}
+
+void xstar_context_destroy(xstar_context* context) {
+    auto* value = impl(context);
+    if (value == nullptr) return;
+    if (value->plugin && value->plugin->descriptor && value->plugin->descriptor->destroy) {
+        value->plugin->descriptor->destroy(value->backend_context);
+    }
+    delete value;
+}
+
+int xstar_context_reset(xstar_context* context) {
+    auto* value = impl(context);
+    if (value == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if (!value->plugin->descriptor->reset) return XSTAR_STATUS_NOT_IMPLEMENTED;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = value->plugin->descriptor->reset(
+        value->backend_context, message.data(), message.size());
+    value->last_error = message.data();
+    return status;
+}
+
+const char* xstar_context_backend_name(const xstar_context* context) {
+    const auto* value = impl(context);
+    if (!value || !value->plugin || !value->plugin->descriptor) return nullptr;
+    return value->plugin->descriptor->backend_name;
+}
+
+const char* xstar_context_last_error(const xstar_context* context) {
+    const auto* value = impl(context);
+    return value ? value->last_error.c_str() : "null context";
+}
+
+int xstar_context_get_stats_v1(const xstar_context* context, xstar_context_stats_v1* stats) {
+    const auto* value = impl(context);
+    if (value == nullptr || stats == nullptr || stats->struct_size < sizeof(*stats)) {
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if (!value->plugin->descriptor->get_stats) return XSTAR_STATUS_NOT_IMPLEMENTED;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = value->plugin->descriptor->get_stats(
+        value->backend_context, stats, message.data(), message.size());
+    const_cast<xstar_context_impl*>(value)->last_error = message.data();
+    return status;
+}
+
+int xstar_context_get_component_info_v1(
+    const xstar_context* context,
+    uint32_t component_id,
+    xstar_component_info_v1* info
+) {
+    const auto* value = impl(context);
+    if (value == nullptr || info == nullptr || info->struct_size < sizeof(*info) ||
+        component_id >= XSTAR_COMPONENT_COUNT) {
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if (!value->plugin->descriptor->get_component_info) return XSTAR_STATUS_NOT_IMPLEMENTED;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = value->plugin->descriptor->get_component_info(
+        value->backend_context, component_id, info, message.data(), message.size());
+    const_cast<xstar_context_impl*>(value)->last_error = message.data();
+    return status;
+}
+
+int xstar_context_run_zone_v1(
+    xstar_context* context,
+    const xstar_zone_input_v1* input,
+    xstar_zone_output_v1* output
+) {
+    auto* value = impl(context);
+    if (value == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::string validation_error;
+    const int validation = validate_io(input, output, validation_error);
+    if (validation != XSTAR_STATUS_OK) {
+        value->last_error = validation_error;
+        return validation;
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if (!value->plugin->descriptor->run_zone) return XSTAR_STATUS_NOT_IMPLEMENTED;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = value->plugin->descriptor->run_zone(
+        value->backend_context, input, output, message.data(), message.size());
+    value->last_error = message.data();
+    return status;
+}
+
+int xstar_context_run_batch_v1(
+    xstar_context* context,
+    const xstar_zone_input_v1* inputs,
+    size_t zone_count,
+    xstar_zone_output_v1* outputs
+) {
+    auto* value = impl(context);
+    if (value == nullptr || (zone_count > 0 && (inputs == nullptr || outputs == nullptr))) {
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0; index < zone_count; ++index) {
+        std::string error;
+        const int validation = validate_io(inputs + index, outputs + index, error);
+        if (validation != XSTAR_STATUS_OK) {
+            value->last_error = "zone " + std::to_string(index) + ": " + error;
+            return validation;
+        }
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    if (!value->plugin->descriptor->run_batch) return XSTAR_STATUS_NOT_IMPLEMENTED;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = value->plugin->descriptor->run_batch(
+        value->backend_context, inputs, zone_count, outputs, message.data(), message.size());
+    value->last_error = message.data();
+    return status;
+}
+
+} // extern "C"

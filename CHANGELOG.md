@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.44 - 2026-06-08
+
+- Added the standalone `xstar_cpp` executable.
+- Added stable `libxstar_api.so` C ABI version 60440.
+- Added runtime backend registry with C++ and embedded-Python plugins.
+- Added persistent single-zone and batch-zone contexts.
+- Added per-component backend requests and component ownership reporting.
+- Added `libxstar_backend_python.so` JSON bridge for adapted Python routines.
+- Kept every native header, source, shared object, executable, and Makefile in
+  `src/xstar_tools/xstar/cpp/`; Python XSTAR code remains in
+  `src/xstar_tools/xstar/`.
+- Kept the v0.6.44 typed zone boundary explicitly scaffold-only pending the
+  complete native physics port.
+
 ## 0.6.43.1 - 2026-06-08
 
 - Exclude the non-bit-exact preliminary Type-53 C++ kernel from the coarse Mg pre-matrix product.

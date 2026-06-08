@@ -354,3 +354,9 @@ include V0641_EXACT_FOUR_FAMILY_PRODUCT_PROMOTION.md
 include run_v041_xstar_tools_python.sh
 include run_v041_xstar_tools_four_family_product_promoted.sh
 include check_v041_four_family_product_promoted.py
+
+include V0644_STANDALONE_SHARED_LIBRARY_ABI.md
+include run_v044_xstar_standalone_abi.sh
+include run_v044_xstar_tools_python.sh
+include run_v044_xstar_tools_hybrid_accepted.sh
+include check_v044_standalone_abi.py
