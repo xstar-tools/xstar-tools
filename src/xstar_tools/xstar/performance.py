@@ -1060,7 +1060,7 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.39", "requested": False,
+            "schema_version": "0.6.40", "requested": False,
             "product_candidate": False, "product_promoted": False,
             "diagnostic_only": False, "seed_elision_differential": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
@@ -1068,9 +1068,11 @@ def summarize_rate_payload_four_family_product(
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
     diagnostic = bool(all(bool(row.get("seed_elision_differential", False)) for row in rows))
-    schema_version = str(rows[0].get("schema_version", "0.6.39"))
+    schema_version = str(rows[0].get("schema_version", "0.6.40"))
     success_status = (
         "SEED_ELISION_DIFFERENTIAL_COMPLETE" if diagnostic
+        else "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE_EXACT" if candidate and schema_version == "0.6.40"
+        else "TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.40"
         else "ORDER_PRESERVING_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.38"
         else "PRODUCT_PROMOTED" if promoted
         else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version in {"0.6.37", "0.6.38", "0.6.39"}
@@ -1145,9 +1147,15 @@ def summarize_rate_payload_four_family_product(
         "duplicate_cpp_keys": int(sum(int(row.get("duplicate_cpp_keys", 0) or 0) for row in rows)),
         "integer_field_mismatches": int(sum(int(row.get("integer_field_mismatches", 0) or 0) for row in rows)),
         "float_field_mismatches": int(sum(int(row.get("float_field_mismatches", 0) or 0) for row in rows)),
+        "row_mismatches": int(sum(int(row.get("row_mismatches", 0) or 0) for row in rows)),
         "native_scalar_records_expected": int(sum(int(row.get("native_scalar_records_expected", 0) or 0) for row in rows)),
         "native_scalar_records_completed": int(sum(int(row.get("native_scalar_records_completed", 0) or 0) for row in rows)),
         "native_scalar_mismatches": int(sum(int(row.get("native_scalar_mismatches", 0) or 0) for row in rows)),
+        "type50_opakab_records_expected": int(sum(int(row.get("type50_opakab_records_expected", 0) or 0) for row in rows)),
+        "type50_opakab_records_compared": int(sum(int(row.get("type50_opakab_records_compared", 0) or 0) for row in rows)),
+        "type50_opakab_mismatches": int(sum(int(row.get("type50_opakab_mismatches", 0) or 0) for row in rows)),
+        "result_state_records_compared": int(sum(int(row.get("result_state_records_compared", 0) or 0) for row in rows)),
+        "result_state_mismatches": int(sum(int(row.get("result_state_mismatches", 0) or 0) for row in rows)),
         "native_scalar_family_record_counts": native_family_totals,
         "native_scalar_family_mismatch_fields": native_mismatch_totals,
         "existing_cpp_type51_records": int(sum(int(row.get("existing_cpp_type51_records", 0) or 0) for row in rows)),
@@ -1263,7 +1271,11 @@ def summarize_rate_payload_four_family_product(
                 "v0.6.38 promoted mode elides the Python seed path and flushes pending Type-51 batches before every Type-50/63/88 fast commit.",
                 "The structural order barrier preserves the accumulation order proven exact by v0.6.37 without production hashes or matrix reconstruction.",
                 "Setting XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1 routes execution through the complete order-preserving reverse-verification candidate.",
-            ] if promoted else [
+            ] if promoted and schema_version != "0.6.40" else [
+                "v0.6.40 runs the Type-50 opakab-restored seed-free product candidate live with whole-evaluation fallback.",
+                "The initial candidate reverse-verifies every Type-50/63/88 scalar, Type-50 opakab value, row, matrix checkpoint, and solver input.",
+                "The ineffective Type-51 per-record barrier is removed; exact science-product parity remains mandatory for promotion.",
+            ] if schema_version == "0.6.40" else [
                 "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
                 "C++ rows are replaced in-place with the accepted composite identity and original term index.",
                 "Ordered term-stream, pre-normalization matrix, and solver-input checkpoints must all be exact.",

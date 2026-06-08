@@ -170,3 +170,11 @@ are the sole live source.
 ## v0.6.37 native Type-50 and ordered verification
 
 `libxstar_engine.so` ABI 8 extends `xstar_engine_eval_mg_rate_payload_native_scalars_v1` with native rate 4/data 50 scalar channels. The diagnostic Python boundary performs full reverse verification and order-preserving row replacement; the C++ ABI itself remains a compact scalar and row-construction engine.
+
+## v0.6.40 Type-50 opakab state restoration
+
+`libxstar_engine.so` ABI 9 adds a seventh native result channel containing the
+source-faithful Type-50 line-center `opakab`. The input packet includes
+temperature, turbulent velocity, and the parent-element atomic mass. Type-63
+and Type-88 return zero in this state channel and retain their existing scalar
+formulas. Feature bit 9 advertises the restored state field.

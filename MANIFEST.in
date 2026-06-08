@@ -334,3 +334,7 @@ recursive-include src/xstar_tools/xstar/cpp *
 
 include V0627_MATRIX_ASSEMBLY_DATAFLOW_PROBE.md
 include V0633_RATE_PAYLOAD_NATIVE_SCALAR_TYPE63_BIT_EXACT_REFINEMENT.md
+include V0640_TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_CANDIDATE.md
+include run_v040_xstar_tools_python.sh
+include run_v040_xstar_tools_type50_opakab_state_restoration_product_candidate.sh
+include check_v040_type50_opakab_state_restoration_product_candidate.py

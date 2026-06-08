@@ -458,7 +458,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     packing_t0 = _time.perf_counter()
     n = len(records)
     meta = np.zeros((n, 14), dtype=np.int64)
-    context = np.zeros((n, 24), dtype=np.float64)
+    context = np.zeros((n, 27), dtype=np.float64)
     payload: list[float] = []
     for k, row in enumerate(records):
         raw = [float(v) for v in row.get("raw_payload_f64", ())]
@@ -492,6 +492,9 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
             float(row.get("type50_bremsa_nb1", 0.0)),
             float(row.get("type50_hydrogen_density_cm3", 0.0)),
             float(row.get("type50_endpoint_energy_eV", 0.0)),
+            float(row.get("temperature_k", 0.0)),
+            float(row.get("turbulent_velocity_km_s", 0.0)),
+            float(row.get("type50_atomic_mass_amu", 0.0)),
         ]
     meta_flat = np.ascontiguousarray(meta.reshape(-1))
     context_flat = np.ascontiguousarray(context.reshape(-1))
@@ -501,23 +504,23 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     if epi.size < 3 or brem.size < epi.size:
         raise ValueError("native scalar shadow requires a valid live radiation grid")
     brem = np.ascontiguousarray(brem[: epi.size])
-    out = np.zeros(max(1, n * 6), dtype=np.float64)
+    out = np.zeros(max(1, n * 7), dtype=np.float64)
     timing = np.zeros(3, dtype=np.float64)
     stats_i64 = np.zeros(16, dtype=np.int64)
     buf = ctypes.create_string_buffer(512)
     packing_seconds = _time.perf_counter() - packing_t0
     t0 = _time.perf_counter()
     rc = lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1(
-        n, meta_flat, 14, context_flat, 24,
+        n, meta_flat, 14, context_flat, 27,
         payload_flat, int(payload_flat.size), epi, brem, int(epi.size),
-        out, 6, timing, int(timing.size), stats_i64, int(stats_i64.size),
+        out, 7, timing, int(timing.size), stats_i64, int(stats_i64.size),
         buf, ctypes.sizeof(buf),
     )
     elapsed = _time.perf_counter() - t0
     message = buf.value.decode("utf-8", errors="replace")
     if rc != 0:
         raise RuntimeError(message or f"{symbol} failed with code {rc}")
-    values = out[: n * 6].reshape((n, 6)) if n else np.zeros((0, 6), dtype=np.float64)
+    values = out[: n * 7].reshape((n, 7)) if n else np.zeros((0, 7), dtype=np.float64)
     decode_t0 = _time.perf_counter()
     rows: list[dict[str, Any]] = []
     for k, source in enumerate(records):
@@ -528,6 +531,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
             "ion_index": int(source.get("ion_index", 0)),
             "ion_stage": int(source.get("ion_stage", 0)),
             **{f"ans{i}": float(values[k, i - 1]) for i in range(1, 7)},
+            "opakab": float(values[k, 6]),
         })
     decode_seconds = _time.perf_counter() - decode_t0
     names = (
@@ -545,7 +549,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
         "python_to_cpp_call_seconds": max(0.0, float(elapsed) - float(timing[2])),
         "output_decoding_seconds": float(decode_seconds),
         "input_bytes": float(meta_flat.nbytes + context_flat.nbytes + payload_flat.nbytes + epi.nbytes + brem.nbytes),
-        "output_bytes": float(n * 6 * 8),
+        "output_bytes": float(n * 7 * 8),
         "payload_values": float(payload_flat.size),
         "radiation_grid_points": float(epi.size),
         "allocation_count": 7.0,

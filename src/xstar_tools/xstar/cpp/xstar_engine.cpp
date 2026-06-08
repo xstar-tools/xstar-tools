@@ -574,15 +574,20 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
 bool native_type50_scalars(
     double wavelength_a, double aij, double ggup, double gglo,
     double ptmp1, double ptmp2, double cfrac, double bremsa_nb1,
-    double hydrogen_density_cm3, double endpoint_energy_ev, double out[6]
+    double hydrogen_density_cm3, double endpoint_energy_ev,
+    double temperature_k, double turbulent_velocity_km_s,
+    double atomic_mass_amu, double out[7]
 ) {
-    for (int i = 0; i < 6; ++i) out[i] = 0.0;
+    for (int i = 0; i < 7; ++i) out[i] = 0.0;
     if (!std::isfinite(wavelength_a) || !std::isfinite(aij) ||
         !std::isfinite(ggup) || !std::isfinite(gglo) ||
         !std::isfinite(ptmp1) || !std::isfinite(ptmp2) ||
         !std::isfinite(cfrac) || !std::isfinite(bremsa_nb1) ||
         !std::isfinite(hydrogen_density_cm3) || !std::isfinite(endpoint_energy_ev) ||
-        wavelength_a <= 0.0 || ggup <= 0.0 || gglo <= 0.0 || endpoint_energy_ev < 0.0) {
+        !std::isfinite(temperature_k) || !std::isfinite(turbulent_velocity_km_s) ||
+        !std::isfinite(atomic_mass_amu) || wavelength_a <= 0.0 || ggup <= 0.0 ||
+        gglo <= 0.0 || endpoint_energy_ev < 0.0 || temperature_k <= 0.0 ||
+        atomic_mass_amu <= 0.0) {
         return false;
     }
     const double flin = 1.0e-16 * aij * ggup * wavelength_a * wavelength_a / (0.667274 * gglo);
@@ -601,7 +606,14 @@ bool native_type50_scalars(
     out[3] = -photo * endpoint_energy_ev * erg_per_ev;
     out[4] = 0.0;
     out[5] = 0.0;
-    for (int i = 0; i < 6; ++i) if (!std::isfinite(out[i])) return false;
+    if (!(wavelength_a > 0.99e9) && flin > 0.0) {
+        const double t_1e4 = temperature_k / 1.0e4;
+        const double thermal = 1.29e6 / std::sqrt(std::max(atomic_mass_amu / t_1e4, 1.0e-48));
+        const double turbulent = turbulent_velocity_km_s * 1.0e5;
+        const double vtherm = std::sqrt(turbulent * turbulent + thermal * thermal);
+        if (vtherm > 0.0) out[6] = 0.02655 * flin * wavelength_a * 1.0e-8 / vtherm;
+    }
+    for (int i = 0; i < 7; ++i) if (!std::isfinite(out[i])) return false;
     return true;
 }
 
@@ -610,11 +622,11 @@ bool native_type50_scalars(
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 8;
+    return 9;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_rate_payload_order_preserving_full_verify_v037";
+    return "xstar_engine_type50_opakab_state_restoration_candidate_v040";
 }
 
 int xstar_engine_feature_flags() {
@@ -625,7 +637,8 @@ int xstar_engine_feature_flags() {
     // bit 4: native Type-63/Type-88 scalar shadow.
     // bit 5: Type-88 mixed-grid full-integration semantics.
     // bit 6: Type-63 Python-operation-order exactness refinement.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256;
+    // bit 9: native Type-50 line-center opakab result channel.
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -811,8 +824,8 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
     std::size_t message_size
 ) {
     using namespace xstar_backend;
-    if (!valid_count(n_records) || meta_stride < 14 || context_stride < 24 || payload_size < 0 ||
-        n_grid < 3 || out_stride < 6 || timing_f64 == nullptr || timing_size < 3 ||
+    if (!valid_count(n_records) || meta_stride < 14 || context_stride < 27 || payload_size < 0 ||
+        n_grid < 3 || out_stride < 7 || timing_f64 == nullptr || timing_size < 3 ||
         stats == nullptr || stats_size < 16) {
         write_message(message, message_size, "invalid native scalar shadow arguments");
         return XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
@@ -837,7 +850,10 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
         stats[0]+=1;
         bool ok=false;
         if (rt==4&&dt==50) {
-            ok=native_type50_scalars(c[14],c[15],c[16],c[17],c[18],c[19],c[20],c[21],c[22],c[23],out);
+            ok=native_type50_scalars(
+                c[14],c[15],c[16],c[17],c[18],c[19],c[20],c[21],c[22],c[23],
+                c[24],c[25],c[26],out
+            );
             stats[10]+=1;
         } else if (rt==3&&dt==63) {
             ok=native_type63_scalars(ni,li,nf,lf,iq,c[6],c[7],c[8],c[9],c[10],c[11],out);
@@ -855,7 +871,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
         timing_f64[0]+=std::chrono::duration<double>(clock_t::now()-eval_t0).count();
     }
     timing_f64[2]=std::chrono::duration<double>(clock_t::now()-total_t0).count();
-    stats[2]=n_records*6;
+    stats[2]=n_records*7;
     stats[7]=(stats[5]==0&&stats[4]==0)?1:0;
     std::ostringstream out;
     out << "native scalar shadow: records=" << n_records << "; evaluated=" << stats[1]

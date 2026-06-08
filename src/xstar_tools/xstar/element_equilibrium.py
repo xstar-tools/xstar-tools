@@ -2741,14 +2741,15 @@ def _rate_payload_four_family_full_reverse_verification_requested(element_z: int
 
 
 def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
+    """Retain only the accepted-live v0.6.39 diagnostic replacement path.
+
+    v0.6.40 PRODUCT_CANDIDATE uses the live seed-free product path below so
+    its UCalcResult state, solver input, and science products are exercised.
+    """
     return bool(
         int(element_z) == 12
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
-        and (
-            _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
-            or _rate_payload_four_family_full_reverse_verification_requested(element_z)
-            or _rate_payload_four_family_seed_elision_differential_requested(element_z)
-        )
+        and _rate_payload_four_family_seed_elision_differential_requested(element_z)
     )
 
 
@@ -2757,12 +2758,26 @@ def _rate_payload_four_family_product_promoted_enabled(
 ) -> bool:
     return bool(
         int(element_z) == 12
-        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
+        and (
+            _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
+            or _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
+        )
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
-        and not _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD")
         and not _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_SEED_ELISION_DIFFERENTIAL")
         and not bool(profile_control.get("_mg_rate_payload_four_family_product_retry_disabled", False))
     )
+
+
+def _parent_element_atomic_mass(
+    master: XSTARMasterData, derived: XSTARDerivedPointers, record: int
+) -> float:
+    """Return the exact parent-element mass consumed by Type-50 ``ucalc``."""
+    ion_record = int(derived.npar[int(record)])
+    element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
+    values = master.record_reals(element_record) if element_record > 0 else ()
+    if len(values) <= 1 or not math.isfinite(float(values[1])) or float(values[1]) <= 0.0:
+        raise RuntimeError(f"Type-50 record {record} has no positive parent-element atomic mass")
+    return float(values[1])
 
 
 def _run_rate_payload_four_family_product_candidate(
@@ -3037,6 +3052,9 @@ def _run_rate_payload_four_family_product_candidate(
                     "type50_bremsa_nb1": bremsa_nb1,
                     "type50_hydrogen_density_cm3": float(context.hydrogen_density_cm3),
                     "type50_endpoint_energy_eV": abs(e1 - e2),
+                    "temperature_k": float(context.temperature_k),
+                    "turbulent_velocity_km_s": float(context.turbulent_velocity_km_s),
+                    "type50_atomic_mass_amu": _parent_element_atomic_mass(master, derived, rec),
                     "raw_payload_f64": (),
                 })
             elif family == (3, 63):
@@ -3725,19 +3743,27 @@ def _assemble_element_matrix_impl(
     n_source_clamps = 0
 
     _four_family_product_summary: Optional[Dict[str, Any]] = None
-    _four_family_verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
+    _four_family_live_candidate = _env_true(
+        "XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE", "0"
+    )
+    _four_family_verify_old = bool(
+        _four_family_live_candidate
+        or _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
+    )
+    _four_family_reverse_oracle_term_by_index: Dict[int, MatrixTerm] = {}
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.38",
+            "schema_version": "0.6.40",
             "requested": True, "accepted_gate": True,
-            "product_candidate": False, "product_promoted": True,
+            "product_candidate": bool(_four_family_live_candidate),
+            "product_promoted": bool(not _four_family_live_candidate),
             "active": False, "live_matrix_commit": False,
             "whole_evaluation_fallback": True,
             "python_seed_path_retained": False,
-            "verification_enabled": False,
-            "full_reverse_verification": False,
-            "order_preserving_commit": True,
-            "order_preserving_commit_strategy": "flush_pending_type51_before_each_fast_record",
+            "verification_enabled": bool(_four_family_verify_old),
+            "full_reverse_verification": bool(_four_family_verify_old),
+            "order_preserving_commit": False,
+            "order_preserving_commit_strategy": "source_iteration_without_type51_per_record_barrier",
             "order_preserving_commit_verified": False,
             "evaluation_index": int(_rate_payload_four_family_product_eval_index),
             "status": "INITIALIZING",
@@ -3745,9 +3771,15 @@ def _assemble_element_matrix_impl(
             "terms_expected": 0, "terms_committed": 0,
             "missing_terms": 0, "extra_terms": 0,
             "integer_field_mismatches": 0, "float_field_mismatches": 0,
+            "row_mismatches": 0,
             "native_scalar_records_expected": 0,
             "native_scalar_records_completed": 0,
             "native_scalar_mismatches": 0,
+            "type50_opakab_records_expected": 0,
+            "type50_opakab_records_compared": 0,
+            "type50_opakab_mismatches": 0,
+            "result_state_records_compared": 0,
+            "result_state_mismatches": 0,
             "family_record_counts": {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0},
             "fast_path_record_counts": {"4:50": 0, "3:63": 0, "42:88": 0},
             "existing_cpp_type51_records": 0,
@@ -3762,6 +3794,9 @@ def _assemble_element_matrix_impl(
             "type51_order_barrier_pending_records": 0,
             "type51_order_barrier_terms": 0,
             "fallback_reason": "",
+            "ordered_stream_exact": False,
+            "all_matrix_checkpoints_exact": False,
+            "solver_input_checkpoint_exact": False,
         }
         profile_control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(
             _four_family_product_summary
@@ -5655,6 +5690,8 @@ def _assemble_element_matrix_impl(
                             continue
                         _expected_fast_records.add(int(_record))
                         if _family == (4, 50):
+                            if _four_family_product_summary is not None:
+                                _four_family_product_summary["type50_opakab_records_expected"] += 1
                             _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
                             _raw = np.asarray(master.record_reals(int(_record)), dtype=np.float64).reshape(-1)
                             if _ints.size < 2 or _raw.size < 3:
@@ -5684,6 +5721,11 @@ def _assemble_element_matrix_impl(
                                 "type50_bremsa_nb1": float(_bremsa_nb1),
                                 "type50_hydrogen_density_cm3": float(context.hydrogen_density_cm3),
                                 "type50_endpoint_energy_eV": abs(_e1 - _e2),
+                                "temperature_k": float(context.temperature_k),
+                                "turbulent_velocity_km_s": float(context.turbulent_velocity_km_s),
+                                "type50_atomic_mass_amu": _parent_element_atomic_mass(
+                                    master, derived, int(_record)
+                                ),
                                 "raw_payload_f64": (),
                             })
                         elif _family == (3, 63):
@@ -5750,6 +5792,7 @@ def _assemble_element_matrix_impl(
                                 "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
                                 "idest1": int(_source["idest1"]), "idest2": int(_source["idest2"]),
                                 **{f"ans{i}": float(_native[f"ans{i}"]) for i in range(1, 7)},
+                                "opakab": float(_native.get("opakab", 0.0)),
                             }
                             _four_family_fast_result_by_record[_key] = _result_row
                     for _record in sorted(_four_family_fast_result_by_record):
@@ -5939,21 +5982,6 @@ def _assemble_element_matrix_impl(
                     _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "record_header_filter_dispatch", _elapsed, records_processed=1.0)
 
                 if _rate_payload_four_family_promoted and int(record) in _four_family_fast_result_by_record:
-                    # v0.6.38 ordering barrier.  Type-51 rows are produced by a
-                    # deferred ion batch.  Before committing a later Type-50/63/88
-                    # fast record, flush any pending Type-51 rows so the live term
-                    # stream preserves the accepted source/accumulation order.
-                    _barrier_t0 = time.perf_counter()
-                    _pending_before = int(len(pending_cpp_mg_type51_payload) + len(pending_cpp_mg_rates_matrix))
-                    _terms_before_barrier = int(len(terms))
-                    _timed_flush_pending_mg_rates_matrix()
-                    if _four_family_product_summary is not None:
-                        _four_family_product_summary["type51_order_barrier_count"] += 1
-                        _four_family_product_summary["order_barrier_seconds"] += time.perf_counter() - _barrier_t0
-                        if _pending_before > 0:
-                            _four_family_product_summary["type51_order_barrier_flushes"] += 1
-                            _four_family_product_summary["type51_order_barrier_pending_records"] += _pending_before
-                            _four_family_product_summary["type51_order_barrier_terms"] += int(len(terms) - _terms_before_barrier)
                     _commit_t0 = time.perf_counter()
                     _cached = _four_family_fast_result_by_record[int(record)]
                     _result = UCalcResult(
@@ -5962,14 +5990,15 @@ def _assemble_element_matrix_impl(
                         **{f"ans{i}": float(_cached[f"ans{i}"]) for i in range(1, 7)},
                         idest1=int(_cached["idest1"]), idest2=int(_cached["idest2"]),
                         idest3=int(block.ion_index), idest4=int(block.ion_index) + 1,
+                        opakab=float(_cached.get("opakab", 0.0)),
                         provenance=UCalcProvenance(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_rate_payload_order_preserving_product_v038",
-                            validation_status="order_preserving_product_promoted",
-                            context_fields_used=("temperature_k", "xpx", "xee", "levels", "radiation"),
-                            notes=("Python scalar seed path elided; Type-51 order barriers and whole-evaluation fallback retained.",),
+                            implementation="cpp_four_family_type50_opakab_state_restoration_candidate_v040",
+                            validation_status="full_reverse_verified_product_candidate",
+                            context_fields_used=("temperature_k", "turbulent_velocity_km_s", "xpx", "xee", "levels", "radiation", "atomic_mass"),
+                            notes=("Python scalar seed path elided; Type-50 opakab restored; whole-evaluation fallback retained.",),
                         ),
                     )
                     _fast_rows = [dict(_row) for _row in _four_family_fast_rows_by_record[int(record)]]
@@ -6003,21 +6032,46 @@ def _assemble_element_matrix_impl(
                         )
                         for _i in range(1, 7):
                             if float(getattr(_accepted_result, f"ans{_i}")) != float(getattr(_result, f"ans{_i}")):
+                                if _four_family_product_summary is not None:
+                                    _four_family_product_summary["native_scalar_mismatches"] += 1
                                 raise _FourFamilyProductFallback(f"reverse verification scalar mismatch record {record} ans{_i}")
+                        if _four_family_product_summary is not None:
+                            _four_family_product_summary["result_state_records_compared"] += 1
+                        if int(_result.rate_type) == 4 and int(_result.data_type) == 50:
+                            if _four_family_product_summary is not None:
+                                _four_family_product_summary["type50_opakab_records_compared"] += 1
+                            if float(_accepted_result.opakab) != float(_result.opakab):
+                                if _four_family_product_summary is not None:
+                                    _four_family_product_summary["type50_opakab_mismatches"] += 1
+                                    _four_family_product_summary["result_state_mismatches"] += 1
+                                raise _FourFamilyProductFallback(
+                                    f"reverse verification Type-50 opakab mismatch record {record}: "
+                                    f"{_result.opakab!r} != {_accepted_result.opakab!r}"
+                                )
+                        elif float(_accepted_result.opakab) != float(_result.opakab):
+                            if _four_family_product_summary is not None:
+                                _four_family_product_summary["result_state_mismatches"] += 1
+                            raise _FourFamilyProductFallback(
+                                f"reverse verification result-state mismatch record {record} opakab"
+                            )
                         _accepted_terms = _matrix_terms_for_result(
                             result=_accepted_result, basis=basis, block=block, levels=levels,
                             term_start=len(terms) + 1, xpx=context.hydrogen_density_cm3
                         )
                         if [_term_shadow_row(_t) for _t in _accepted_terms] != [_term_shadow_row(_t) for _t in _new_terms]:
+                            if _four_family_product_summary is not None:
+                                _four_family_product_summary["row_mismatches"] += 1
                             raise _FourFamilyProductFallback(f"reverse verification row mismatch record {record}")
+                        for _accepted_term in _accepted_terms:
+                            _four_family_reverse_oracle_term_by_index[int(_accepted_term.term_index)] = _accepted_term
                         if _four_family_product_summary is not None:
                             _four_family_product_summary["verification_seconds"] += time.perf_counter() - _verify_t0
                     _row = _result.to_dict()
                     _row.update({
                         "ion_index": block.ion_index, "ion_stage": block.ion_stage, "nlev": block.nlev,
                         "density_scale": float(context.hydrogen_density_cm3),
-                        "rates_backend": "cpp_engine_four_family_product_promoted",
-                        "rates_backend_message": "PRODUCT_PROMOTED",
+                        "rates_backend": "cpp_engine_four_family_type50_opakab_candidate",
+                        "rates_backend_message": "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE",
                         "ans1_after_calc_hmc_ion_filter": float(_result.ans1),
                         "ans2_after_calc_hmc_ion_filter": float(_result.ans2),
                     })
@@ -6890,16 +6944,81 @@ def _assemble_element_matrix_impl(
             if len(_supported_terms) != 4 * len(_record_keys):
                 raise RuntimeError(f"promoted term coverage {len(_supported_terms)} != {4 * len(_record_keys)}")
             _fast_record_total = int(sum(int(v or 0) for v in _four_family_product_summary["fast_path_record_counts"].values()))
-            if int(_four_family_product_summary.get("type51_order_barrier_count", 0)) != _fast_record_total:
-                raise RuntimeError(
-                    f"order barrier coverage {_four_family_product_summary.get('type51_order_barrier_count', 0)} != {_fast_record_total}"
+            if _four_family_verify_old:
+                if len(_four_family_reverse_oracle_term_by_index) != 4 * _fast_record_total:
+                    raise RuntimeError(
+                        "reverse oracle term coverage "
+                        f"{len(_four_family_reverse_oracle_term_by_index)} != {4 * _fast_record_total}"
+                    )
+                _type50_expected = int(_four_family_product_summary["type50_opakab_records_expected"])
+                if _type50_expected != int(_four_family_product_summary["fast_path_record_counts"]["4:50"]):
+                    raise RuntimeError("Type-50 opakab expected count does not cover the fast path")
+                if int(_four_family_product_summary["type50_opakab_records_compared"]) != _type50_expected:
+                    raise RuntimeError("Type-50 opakab comparison coverage is incomplete")
+                if int(_four_family_product_summary["type50_opakab_mismatches"]) != 0:
+                    raise RuntimeError("Type-50 opakab reverse verification failed")
+                if int(_four_family_product_summary["result_state_records_compared"]) != _fast_record_total:
+                    raise RuntimeError("result-state reverse verification coverage is incomplete")
+                if int(_four_family_product_summary["result_state_mismatches"]) != 0:
+                    raise RuntimeError("result-state reverse verification failed")
+                if int(_four_family_product_summary["native_scalar_mismatches"]) != 0:
+                    raise RuntimeError("native scalar reverse verification failed")
+                if int(_four_family_product_summary["row_mismatches"]) != 0:
+                    raise RuntimeError("row reverse verification failed")
+
+                _oracle_terms = [
+                    _four_family_reverse_oracle_term_by_index.get(int(_term.term_index), _term)
+                    for _term in terms
+                ]
+                _candidate_stream = [_term_shadow_row(_term) for _term in terms]
+                _oracle_stream = [_term_shadow_row(_term) for _term in _oracle_terms]
+                _four_family_product_summary["ordered_stream_exact"] = bool(
+                    _candidate_stream == _oracle_stream
                 )
-            if _type51_records > 0 and int(_four_family_product_summary.get("type51_order_barrier_flushes", 0)) <= 0:
-                raise RuntimeError("no pending Type-51 batch was flushed at a fast-record order barrier")
-            _four_family_product_summary["order_preserving_commit_verified"] = True
+
+                def _materialize_checkpoint(_source_terms: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                    _dense = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
+                    _heat = np.zeros_like(_dense)
+                    _heat2 = np.zeros_like(_dense)
+                    for _term in _source_terms:
+                        _rr, _cc = int(_term.row) - 1, int(_term.column) - 1
+                        _dense[_rr, _cc] += float(_term.aj1)
+                        _heat[_rr, _cc] += float(_term.cj)
+                        _heat2[_rr, _cc] += float(_term.cj2)
+                    return _dense, _heat, _heat2
+
+                _candidate_dense, _candidate_heat, _candidate_heat2 = _materialize_checkpoint(terms)
+                _oracle_dense, _oracle_heat, _oracle_heat2 = _materialize_checkpoint(_oracle_terms)
+                _four_family_product_summary["all_matrix_checkpoints_exact"] = bool(
+                    np.array_equal(_candidate_dense, _oracle_dense)
+                    and np.array_equal(_candidate_heat, _oracle_heat)
+                    and np.array_equal(_candidate_heat2, _oracle_heat2)
+                )
+                _candidate_normalized = _candidate_dense.copy()
+                _oracle_normalized = _oracle_dense.copy()
+                _candidate_normalized[basis.normalization_row - 1, :] = 1.0
+                _oracle_normalized[basis.normalization_row - 1, :] = 1.0
+                _candidate_rhs = np.zeros(basis.n_rows, dtype=np.float64)
+                _oracle_rhs = np.zeros(basis.n_rows, dtype=np.float64)
+                _candidate_rhs[basis.normalization_row - 1] = 1.0
+                _oracle_rhs[basis.normalization_row - 1] = 1.0
+                _four_family_product_summary["solver_input_checkpoint_exact"] = bool(
+                    np.array_equal(_candidate_normalized, _oracle_normalized)
+                    and np.array_equal(_candidate_rhs, _oracle_rhs)
+                )
+                if not _four_family_product_summary["ordered_stream_exact"]:
+                    raise RuntimeError("reverse oracle ordered stream mismatch")
+                if not _four_family_product_summary["all_matrix_checkpoints_exact"]:
+                    raise RuntimeError("reverse oracle matrix checkpoint mismatch")
+                if not _four_family_product_summary["solver_input_checkpoint_exact"]:
+                    raise RuntimeError("reverse oracle solver input mismatch")
             _four_family_product_summary["active"] = True
             _four_family_product_summary["live_matrix_commit"] = True
-            _four_family_product_summary["status"] = "ORDER_PRESERVING_PRODUCT_PROMOTED"
+            _four_family_product_summary["status"] = (
+                "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE_EXACT"
+                if _four_family_live_candidate
+                else "TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_PROMOTED"
+            )
         except Exception as _exc:
             _four_family_product_summary["fallback_reason"] = str(_exc)
             _four_family_product_summary["status"] = "FALLBACK_ACCEPTED_PATH"

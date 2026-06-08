@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.40 - 2026-06-08
+
+- Add native, source-faithful Type-50 line-center `opakab` to the engine fast result (ABI 9, feature flags 1023).
+- Run the Type-50/63/88 seed-free path live in product-candidate mode and populate `UCalcResult.opakab` from the native packet.
+- Leave Type-63 and Type-88 scalar/state formulas unchanged.
+- Remove the ineffective per-record Type-51 flush barrier while retaining the accepted Type-51 ion batch.
+- Retain whole-evaluation fallback and enable complete reverse verification for the initial candidate.
+- Require exact Type-50 `opakab`, native scalars, rows, result state, matrices, solver inputs, and FITS science payloads before promotion.
+
 ## 0.6.39 - 2026-06-08
 
 - Add an accepted-live four-family seed-elision differential diagnostic for Mg Type-50, Type-63, and Type-88.
