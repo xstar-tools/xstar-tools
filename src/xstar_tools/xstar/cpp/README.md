@@ -158,6 +158,10 @@ quantum/plasma context, raw type-88 cross-section pairs, and one shared live
 radiation grid. It remains shadow-only: accepted scalar rates and matrix terms
 are the sole live source.
 
-## v0.6.32 Type-88 full-grid hotfix
+## v0.6.33 Type-88 full-grid hotfix
 
 `libxstar_engine.so` ABI version 5 preserves the accepted mixed-grid Type-88 contract: the reduced mapped-grid point count limits `phextrap` extension, while the full high-resolution `epi_eV` / `bremsa` arrays are used for continuum integration. Reduced-grid integration is not a qualifying fallback.
+## v0.6.33 Type-63 exact-order diagnostic
+
+`libxstar_engine` ABI 6 adds no live product path. It refines the native 3/63 scalar shadow with Python-equivalent operation grouping and a static CPython `math.lgamma` binary64 table through integer argument 256. Feature bit 6 reports this exactness refinement.
+

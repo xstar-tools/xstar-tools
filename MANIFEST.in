@@ -333,3 +333,4 @@ recursive-include src/xstar_tools/xstar/cpp *
 
 
 include V0627_MATRIX_ASSEMBLY_DATAFLOW_PROBE.md
+include V0633_RATE_PAYLOAD_NATIVE_SCALAR_TYPE63_BIT_EXACT_REFINEMENT.md

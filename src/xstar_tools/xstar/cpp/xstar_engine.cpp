@@ -131,7 +131,79 @@ double native_expo(double x) {
 }
 
 double native_dfact_log(int n) {
-    return n <= 0 ? 0.0 : std::lgamma(static_cast<double>(n) + 1.0);
+    if (n <= 0) return 0.0;
+    // Exact CPython math.lgamma(n + 1.0) binary64 results for n=0..256.
+    // The hex literals avoid platform std::lgamma differences in Type-63.
+    static const double table[] = {
+        0x0.0p+0, 0x0.0p+0, 0x1.62e42fefa39ecp-1, 0x1.cab0bfa2a2004p+0,
+        0x1.96ca77c922cf7p+1, 0x1.326643c4479cap+2, 0x1.a51273acf01cbp+2, 0x1.10ce1f32dcc30p+3,
+        0x1.5358e82fcb70cp+3, 0x1.99a8921a7f7cep+3, 0x1.e357590954d14p+3, 0x1.180973f3a8d74p+4,
+        0x1.3fcba16d50143p+4, 0x1.68d5a9c3b32cdp+4, 0x1.930f3df162a43p+4, 0x1.be636a63fd346p+4,
+        0x1.eabff061f1a84p+4, 0x1.0c0a63f2f353ap+5, 0x1.2329df2d5ee52p+5, 0x1.3ab8153363985p+5,
+        0x1.52af57aed77bep+5, 0x1.6b0a8643472a9p+5, 0x1.83c4faba84f05p+5, 0x1.9cda78b856a45p+5,
+        0x1.b6472034e8d14p+5, 0x1.d007622cd65e7p+5, 0x1.ea17f717c6795p+5, 0x1.023aeb67e4fefp+6,
+        0x1.0f8f18d33023fp+6, 0x1.1d07353917230p+6, 0x1.2aa208b59d0e6p+6, 0x1.385e6fd9e5a40p+6,
+        0x1.463b59b942083p+6, 0x1.5437c633ace4ap+6, 0x1.6252c474896bap+6, 0x1.708b719e11658p+6,
+        0x1.7ee0f79b26758p+6, 0x1.8d528c1243d96p+6, 0x1.9bdf6f75257a3p+6, 0x1.aa86ec2969812p+6,
+        0x1.b94855c702ba1p+6, 0x1.c8230869ca104p+6, 0x1.d7166813e12eep+6, 0x1.e621e01eeba4fp+6,
+        0x1.f544e2ba69cf1p+6, 0x1.023f743addd9fp+7, 0x1.09e7b7ea41ea9p+7, 0x1.119afe762626bp+7,
+        0x1.19590c853a559p+7, 0x1.2121a930c6ec3p+7, 0x1.28f49ddeb1f32p+7, 0x1.30d1b61e86334p+7,
+        0x1.38b8bf8931ddbp+7, 0x1.40a989a33a6cdp+7, 0x1.48a3e5c12af18p+7, 0x1.50a7a6ee08711p+7,
+        0x1.58b4a1d39da74p+7, 0x1.60caaca474747p+7, 0x1.68e99f0757978p+7, 0x1.711152043b2c4p+7,
+        0x1.79419ff26dc5ap+7, 0x1.817a6467f6fb9p+7, 0x1.89bb7c2a0aea0p+7, 0x1.9204c51e7c761p+7,
+        0x1.9a561e3e1a4bep+7, 0x1.a2af6787e4609p+7, 0x1.ab1081f509726p+7, 0x1.b3794f6d9d7aep+7,
+        0x1.bbe9b2bdfb622p+7, 0x1.c4618f8cc56f7p+7, 0x1.cce0ca51790ffp+7, 0x1.d567484b8b7b6p+7,
+        0x1.ddf4ef7a05a70p+7, 0x1.e689a69396bf1p+7, 0x1.ef2554ff15149p+7, 0x1.f7c7e2cc66182p+7,
+        0x1.00389c56e3462p+8, 0x1.04909ff8b652bp+8, 0x1.08ebf13dbf264p+8, 0x1.0d4a85602b129p+8,
+        0x1.11ac51df8932ap+8, 0x1.16114c7e34736p+8, 0x1.1a796b3ede1abp+8, 0x1.1ee4a46236d3ep+8,
+        0x1.2352ee64b46d6p+8, 0x1.27c43ffc72961p+8, 0x1.2c3890172d057p+8, 0x1.30afd5d851955p+8,
+        0x1.352a089728f1cp+8, 0x1.39a71fdd14947p+8, 0x1.3e271363e0df8p+8, 0x1.42a9db142a36cp+8,
+        0x1.472f6f03d410cp+8, 0x1.4bb7c77491066p+8, 0x1.5042dcd27af65p+8, 0x1.54d0a7b2ba657p+8,
+        0x1.596120d23c4ecp+8, 0x1.5df4411475a1cp+8, 0x1.628a018233beep+8, 0x1.67225b4879462p+8,
+        0x1.6bbd47b7669b6p+8, 0x1.705ac0412d89fp+8, 0x1.74fabe790f7bep+8, 0x1.799d3c1265c0dp+8,
+        0x1.7e4232dfb367ep+8, 0x1.82e99cd1c0368p+8, 0x1.879373f6bc4ffp+8, 0x1.8c3fb2796c21bp+8,
+        0x1.90ee52a05c35fp+8, 0x1.959f4ecd1c8b2p+8, 0x1.9a52a17b831cbp+8, 0x1.9f084540f545ep+8,
+        0x1.a3c034cbb7b2dp+8, 0x1.a87a6ae24493ap+8, 0x1.ad36e262a7cc1p+8, 0x1.b1f59641e0db5p+8,
+        0x1.b6b6818b4a3ebp+8, 0x1.bb799f600610ap+8, 0x1.c03eeaf66faccp+8, 0x1.c5065f9992227p+8,
+        0x1.c9cff8a8a340cp+8, 0x1.ce9bb196830ebp+8, 0x1.d36985e93f7b7p+8, 0x1.d83971399c213p+8,
+        0x1.dd0b6f329dea5p+8, 0x1.e1df7b911a74cp+8, 0x1.e6b592234b0c9p+8, 0x1.eb8daec863182p+8,
+        0x1.f067cd7029d4dp+8, 0x1.f543ea1a97428p+8, 0x1.fa2200d7741ecp+8, 0x1.ff020dc5fcd0dp+8,
+        0x1.01f2068a4395dp+9, 0x1.0463fd801573dp+9, 0x1.06d6e9ea365edp+9, 0x1.094ac9f576038p+9,
+        0x1.0bbf9bd589663p+9, 0x1.0e355dc4e4164p+9, 0x1.10ac0e0492828p+9, 0x1.1323aadc1563fp+9,
+        0x1.159c32993e34fp+9, 0x1.1815a3900cac2p+9, 0x1.1a8ffc1a8d2fep+9, 0x1.1d0b3a98b83c1p+9,
+        0x1.1f875d7052afep+9, 0x1.2204630ccefc3p+9, 0x1.248249df2f2b2p+9, 0x1.2701105de7b8dp+9,
+        0x1.2980b504c3372p+9, 0x1.2c013654c6b40p+9, 0x1.2e8292d416ddep+9, 0x1.3104c90dddddep+9,
+        0x1.3387d79231e3dp+9, 0x1.360bbcf5fc5bfp+9, 0x1.389077d2e1cb3p+9, 0x1.3b1606c72a4a4p+9,
+        0x1.3d9c6875aa9cfp+9, 0x1.40239b85adde0p+9, 0x1.42ab9ea2dfbd0p+9, 0x1.4534707d3748fp+9,
+        0x1.47be0fc8e241ep+9, 0x1.4a487b3e30effp+9, 0x1.4cd3b19982794p+9, 0x1.4f5fb19b31b3fp+9,
+        0x1.51ec7a0782708p+9, 0x1.547a09a68f387p+9, 0x1.57085f44377dfp+9, 0x1.599779b00e38dp+9,
+        0x1.5c2757bd48ee7p+9, 0x1.5eb7f842af200p+9, 0x1.61495a1a8a1d5p+9, 0x1.63db7c229538bp+9,
+        0x1.666e5d3bee594p+9, 0x1.6901fc4b06e89p+9, 0x1.6b96583795197p+9, 0x1.6e2b6fec85852p+9,
+        0x1.70c14257ed1c2p+9, 0x1.7357ce6afb698p+9, 0x1.75ef1319ed23cp+9, 0x1.78870f5bff0cdp+9,
+        0x1.7b1fc22b611b3p+9, 0x1.7db92a8529ed2p+9, 0x1.805347694a81ap+9, 0x1.82ee17da82374p+9,
+        0x1.85899ade530d2p+9, 0x1.8825cf7cf6261p+9, 0x1.8ac2b4c15089cp+9, 0x1.8d6049b8e8253p+9,
+        0x1.8ffe8d73d9060p+9, 0x1.929d7f04cad13p+9, 0x1.953d1d80e671cp+9, 0x1.97dd67ffcbffdp+9,
+        0x1.9a7e5d9b88dd4p+9, 0x1.9d1ffd708e071p+9, 0x1.9fc2469da6997p+9, 0x1.a2653843ee86dp+9,
+        0x1.a508d186c97e3p+9, 0x1.a7ad118bda02bp+9, 0x1.aa51f77af8af4p+9, 0x1.acf7827e2ba8fp+9,
+        0x1.af9db1c19e3c7p+9, 0x1.b244847398a6bp+9, 0x1.b4ebf9c47806dp+9, 0x1.b79410e6a679ap+9,
+        0x1.ba3cc90e935b7p+9, 0x1.bce62172abb2ap+9, 0x1.bf90194b52be1p+9, 0x1.c23aafd2daa99p+9,
+        0x1.c4e5e4457d65dp+9, 0x1.c791b5e155a49p+9, 0x1.ca3e23e657f4cp+9, 0x1.cceb2d964c030p+9,
+        0x1.cf98d234c5f8ap+9, 0x1.d24711071ffb9p+9, 0x1.d4f5e95473cd6p+9, 0x1.d7a55a6594889p+9,
+        0x1.da556385087b9p+9, 0x1.dd0603ff03210p+9, 0x1.dfb73b215f34bp+9, 0x1.e269083b98e2bp+9,
+        0x1.e51b6a9ec8145p+9, 0x1.e7ce619d9ad53p+9, 0x1.ea81ec8c4fd29p+9, 0x1.ed360ac0b0f5ep+9,
+        0x1.efeabb920e155p+9, 0x1.f29ffe5937be4p+9, 0x1.f555d2707a17ap+9, 0x1.f80c373397d9dp+9,
+        0x1.fac32bffc55eep+9, 0x1.fd7ab033a3c7fp+9, 0x1.001961979e1c4p+10, 0x1.0175b229fd937p+10,
+        0x1.02d2498255e0cp+10, 0x1.042f2752b9b42p+10, 0x1.058c4b4de69d1p+10, 0x1.06e9b52742dadp+10,
+        0x1.08476492db365p+10, 0x1.09a5594560e57p+10, 0x1.0b0392f427774p+10, 0x1.0c62115522c95p+10,
+        0x1.0dc0d41ee5057p+10, 0x1.0f1fdb089ca83p+10, 0x1.107f25ca12902p+10, 0x1.11deb41ba8145p+10,
+        0x1.133e85b65523fp+10, 0x1.149e9a53a66d0p+10, 0x1.15fef1adbb8aep+10, 0x1.175f8b7f453cep+10,
+        0x1.18c0678383a39p+10, 0x1.1a2185764485fp+10, 0x1.1b82e513e19d0p+10, 0x1.1ce486193ee71p+10,
+        0x1.1e466843c9018p+10, 0x1.1fa88b517388ep+10, 0x1.210aef00b7804p+10, 0x1.226d931091be7p+10,
+        0x1.23d0774081621p+10,
+    };
+    const int size = static_cast<int>(sizeof(table) / sizeof(table[0]));
+    if (n < size) return table[n];
+    return std::lgamma(static_cast<double>(n) + 1.0);
 }
 
 double native_hgf_int(int ia, int ib, int ic, double x) {
@@ -179,7 +251,7 @@ void native_anl1(int ni, int nf, int lf, int iq, double& alm, double& alp) {
         if (rev <= 0.0 || rn <= 0.0) continue;
         double tlog = (static_cast<double>(l) + 1.0) * std::log(4.0 * static_cast<double>(n * np));
         tlog += (rn - 2.0 * static_cast<double>(l) - 2.0) * std::log(rev);
-        tlog -= std::log(4.0) + rn * std::log(rn);
+        tlog = tlog - std::log(4.0) - rn * std::log(rn);
         const double diff = std::abs(y1 - y2 * std::pow(rev / rn, 2.0));
         if (!(diff > 0.0)) continue;
         const double ylog = std::log(diff) + tlog;
@@ -188,7 +260,8 @@ void native_anl1(int ni, int nf, int lf, int iq, double& alm, double& alp) {
         if (elog < -745.0) t = 0.0;
         else if (elog > 700.0) t = std::exp(700.0);
         else t = std::exp(elog);
-        double an = 2.6761e09 * std::pow(static_cast<double>(iq), 4.0) * static_cast<double>(std::max(li, lf)) * t / (2.0 * static_cast<double>(li) + 1.0);
+        const int iq4_i = iq * iq * iq * iq;
+        double an = 2.6761e09 * static_cast<double>(iq4_i) * static_cast<double>(std::max(li, lf)) * t / (2.0 * static_cast<double>(li) + 1.0);
         const double dum = std::pow(1.0 / static_cast<double>(nf * nf) - 1.0 / static_cast<double>(ni * ni), 3.0);
         an *= dum;
         if (li < lf) alm = an;
@@ -204,11 +277,9 @@ void native_impcfn(double x, double& xsi, double& phi) {
     if (x <= 2.0) {
         xsi = 0.0; phi = 0.0;
         const double y = std::log(x);
-        double xp = 1.0, yp = 1.0;
         for (int n = 0; n < 6; ++n) {
-            xsi += a[n] * xp;
-            phi += b[n] * yp;
-            xp *= x; yp *= y;
+            xsi += a[n] * std::pow(x, n);
+            phi += b[n] * std::pow(y, n);
         }
         if (x == 1.0) phi = b[0];
         if (x < 0.05) {
@@ -230,7 +301,7 @@ double native_impactn(int n, int m, double temp, int ic, double amn) {
     const double tk = 8.617e-5 * temp;
     const int inc = 1, jm = 90 * inc;
     double ecm = 109737.0 * static_cast<double>(ic * ic) * (1.0 / static_cast<double>(n * n) - 1.0 / static_cast<double>(m * m));
-    const double ecm3 = ecm * ecm * ecm;
+    const double ecm3 = std::pow(ecm, 3.0);
     ecm = -ecm;
     if (ecm3 == 0.0) return 0.0;
     const double psi = 1.644e5 * amn / ecm3;
@@ -266,7 +337,7 @@ double native_impactn(int n, int m, double temp, int ic, double amn) {
     }
     if (tk == 0.0) return 0.0;
     cr = 6.900e-5 * z1 * z1 * std::sqrt(rm / temp) * psi * cr / tk;
-    const double cmm = cr * static_cast<double>(m * m) * std::exp(std::min(xm, 700.0));
+    const double cmm = cr * static_cast<double>(m) * static_cast<double>(m) * std::exp(std::min(xm, 700.0));
     return std::max(0.0, cmm);
 }
 
@@ -274,14 +345,13 @@ double native_expint_scaled(double x) {
     if (x > 1.0) {
         const double b1=9.5733223454,b2=25.6329561486,b3=21.0996530827,b4=3.9584969228;
         const double c1=8.5733287401,c2=18.0590169730,c3=8.6347608925,c4=0.2677737343;
-        const double x2=x*x,x3=x2*x,x4=x2*x2;
-        return (x4+c1*x3+c2*x2+c3*x+c4)/(x4+b1*x3+b2*x2+b3*x+b4);
+        return (std::pow(x,4.0)+c1*std::pow(x,3.0)+c2*x*x+c3*x+c4)/(std::pow(x,4.0)+b1*std::pow(x,3.0)+b2*x*x+b3*x+b4);
     }
     const double a0=-0.57721566,a1=0.99999193,a2=-0.24991055,a3=0.05519968,a4=-0.00976004,a5=0.00107857;
     if (x == 0.0) return std::numeric_limits<double>::infinity();
     double e1 = 0.0;
-    if (x > 0.0) e1 = a0+a1*x+a2*x*x+a3*x*x*x+a4*std::pow(x,4.0)+a5*std::pow(x,5.0)-std::log(x);
-    else e1 = -a0+a1*x+a2*x*x+a3*x*x*x+a4*std::pow(x,4.0)+a5*std::pow(x,5.0)-std::log(-x);
+    if (x > 0.0) e1 = a0+a1*x+a2*x*x+a3*std::pow(x,3.0)+a4*std::pow(x,4.0)+a5*std::pow(x,5.0)-std::log(x);
+    else e1 = -a0+a1*x+a2*x*x+a3*std::pow(x,3.0)+a4*std::pow(x,4.0)+a5*std::pow(x,5.0)-std::log(-x);
     return e1*x*native_expo(x);
 }
 
@@ -310,14 +380,20 @@ double native_szcoll(int ni, int nj, double tt, int ic) {
     const double xx=1.0-rn2;
     if (xx==0.0) return 0.0;
     const double gaunt=g1+g2/xx+g3/(xx*xx);
-    const double fnn=1.9603*gaunt/std::pow(xx,3.0)*ni/std::pow(static_cast<double>(nj),3.0);
+    const int nj3_i = nj * nj * nj;
+    const double fnn=1.9603*gaunt/std::pow(xx,3.0)*ni/static_cast<double>(nj3_i);
     double an=0,hn=0,rrn=0;
     if (ni<11) {an=abethe[ni-1];hn=hbethe[ni-1];rrn=rbethe[ni-1];}
     else {an=abethe[10]/ni;hn=hbethe[10]*ni;rrn=rbethe[10];}
-    const double ann=fnn*4.0*std::pow(static_cast<double>(ni),4.0)/xx;
+    const int ni4_i = ni * ni * ni * ni;
+    const double ann=fnn*4.0*static_cast<double>(ni4_i)/xx;
     const double dnn=ann*hn*(std::pow(xx,rrn)-an*rn2);
     double cnn=1.12*ni*ann*xx;
-    if ((nj-ni)==1) cnn*=std::exp(-0.006*std::pow(static_cast<double>(ni-1),6.0)/ic);
+    if ((nj-ni)==1) {
+        const int nim1 = ni - 1;
+        const int nim1_6 = nim1 * nim1 * nim1 * nim1 * nim1 * nim1;
+        cnn*=std::exp(-0.006*static_cast<double>(nim1_6)/ic);
+    }
     const double yy=eion*ic*ic*(1.0/static_cast<double>(ni*ni)-1.0/static_cast<double>(nj*nj))/tt;
     double e1=0,e2=0,e3=0; native_eint(yy,e1,e2,e3); (void)e2;(void)e3;
     const double rate=cons/std::sqrt(tt)/ni/ni/ic/ic*(dnn*std::exp(-yy)+(ann+yy*(cnn-dnn))*e1);
@@ -343,7 +419,7 @@ void native_erc(int n, int m, double temp, int ic, double asum, double& se, doub
         }
         se=native_szcoll(n,m,temp,ic);
         const double yn=157803.0*ric*ric*(1.0/(rn*rn)-1.0/(rm*rm))/temp;
-        sd=se*std::exp(std::min(50.0,yn))*rn*rn/(rm*rm);
+        sd=se*std::exp(std::min(50.0,yn))*(rn*rn)/(rm*rm);
         se=std::max(0.0,se);sd=std::max(0.0,sd);return;
     }
     const double xn=1.0/(rn*rn)-1.0/(rm*rm);
@@ -384,11 +460,11 @@ double native_velimp(int n,int l,double temp,int ic,double ne,double asum) {
     const double ea=ava<50.0?native_e1_from_scaled(ava):0.0,eb=native_e1_from_scaled(avb),ed=avd<50.0?native_e1_from_scaled(avd):0.0;
     double cn=0.0;
     if (va>vd) {
-        if (avb>1.0e-3) cn=std::sqrt(pi*alfa)*(pa*pa*(2.0/(alfa*alfa)-xb*(std::pow(vb,4.0)+2.0*vb*vb/alfa+2.0/(alfa*alfa)))+bb*xb+2.0*bb*eb-bb*ea);
+        if (avb>1.0e-3) cn=std::sqrt(pi*alfa)*(pa*pa*(2.0/alfa/alfa-xb*(std::pow(vb,4.0)+2.0*vb*vb/alfa+2.0/alfa/alfa))+bb*xb+2.0*bb*eb-bb*ea);
         else cn=std::sqrt(pi*alfa)*bb*(1.0+avb*(1.0/3.0-avb/4.0)+2.0*eb-ea);
     } else {
         double ca=0.0;
-        if (ava>1.0e-3) ca=std::sqrt(pi*alfa)*pa*pa*(2.0/(alfa*alfa)-xa*(std::pow(va,4.0)+2.0*va*va/alfa+2.0/(alfa*alfa)));
+        if (ava>1.0e-3) ca=std::sqrt(pi*alfa)*pa*pa*(2.0/alfa/alfa-xa*(std::pow(va,4.0)+2.0*va*va/alfa+2.0/alfa/alfa));
         else ca=std::sqrt(pi*alfa)*pd*pd*std::pow(va,4.0)*alfa*(1.0/3.0-ava/4.0+ava*ava/10.0);
         const double cad=std::sqrt(pi*alfa)*pd*pd/alfa*(xa*(1.0+ava)-xd*(1.0+avd));
         const double cd=std::sqrt(pi*alfa)*bb*(xd+ed);
@@ -499,11 +575,11 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 5;
+    return 6;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_rate_payload_native_scalar_type88_full_grid_hotfix_v032";
+    return "xstar_engine_mg_rate_payload_type63_bit_exact_refinement_v033";
 }
 
 int xstar_engine_feature_flags() {
@@ -511,7 +587,10 @@ int xstar_engine_feature_flags() {
     // bit 1: coarse record traversal/classification implemented.
     // bit 2: compact packet counters implemented.
     // bit 3: evaluation-level Mg rate-payload orchestration shadow.
-    return 1 | 2 | 4 | 8 | 16 | 32;
+    // bit 4: native Type-63/Type-88 scalar shadow.
+    // bit 5: Type-88 mixed-grid full-integration semantics.
+    // bit 6: Type-63 Python-operation-order exactness refinement.
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -520,7 +599,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.32 Mg-ion accumulator, row orchestration, and native scalar shadow ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.33 Type-63 bit-exact native scalar shadow ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());

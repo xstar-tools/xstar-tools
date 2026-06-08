@@ -448,7 +448,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     The call is diagnostic only.  For 3:63 C++ receives quantum numbers,
     endpoint level context, temperature, and electron density.  For 42:88 it
     receives raw alternating energy/cross-section pairs and one shared live
-    radiation grid.  No returned scalar can enter a live matrix in v0.6.32. Type-88 callers must supply the full high-resolution radiation grid.
+    radiation grid.  No returned scalar can enter a live matrix in v0.6.33. Type-88 callers must supply the full high-resolution radiation grid.
     """
     lib = _load_library("engine")
     symbol = "xstar_engine_eval_mg_rate_payload_native_scalars_v1"

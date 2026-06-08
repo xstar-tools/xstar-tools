@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.33 - 2026-06-07
+
+- Refined the shadow-only Mg rate/data 3/63 native scalar implementation to reproduce Python binary64 operation order.
+- Added exact CPython `math.lgamma(n + 1.0)` hexadecimal constants for integer arguments 0 through 256.
+- Added per-evaluation Type-63 range coverage, maximum quantum/factorial arguments, and exact-validation provenance.
+- Reject exact qualification when the required log-factorial argument exceeds the static reference table.
+- Preserve v0.6.32 Type-88 mixed-grid semantics, exact orchestration rows/checkpoints, and all accepted live science paths.
+
 ## 0.6.32 - 2026-06-07
 
 - Hotfix the native Mg rate/data 42/88 scalar shadow to use the full high-resolution `epi_eV` / `bremsa` radiation grid.

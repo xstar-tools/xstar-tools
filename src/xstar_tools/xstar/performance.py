@@ -776,7 +776,7 @@ def summarize_rate_payload_batched_orchestration_shadow(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.32", "enabled": False, "shadow_only": True,
+            "schema_version": "0.6.33", "enabled": False, "shadow_only": True,
             "evaluation_count": 0, "status": "DISABLED", "native_scalar_status": "DISABLED",
         }
     family_totals: dict[str, float] = {}
@@ -848,7 +848,7 @@ def summarize_rate_payload_batched_orchestration_shadow(
         else "NOT_READY"
     )
     return {
-        "schema_version": "0.6.32",
+        "schema_version": "0.6.33",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -892,6 +892,24 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "native_scalar_max_rel_diff": max((float(row.get("native_scalar_max_rel_diff", 0.0) or 0.0) for row in rows), default=0.0),
         "family_record_counts": family_totals,
         "native_scalar_family_record_counts": native_family_totals,
+        "native_scalar_type63_exact_operation_order_refinement": bool(all(
+            bool(row.get("native_scalar_type63_exact_operation_order_refinement", False)) for row in rows
+        )),
+        "native_scalar_type63_python_lgamma_table_max_argument": min((
+            int(row.get("native_scalar_type63_python_lgamma_table_max_argument", 0) or 0) for row in rows
+        ), default=0),
+        "native_scalar_type63_max_principal_n": max((
+            int(row.get("native_scalar_type63_max_principal_n", 0) or 0) for row in rows
+        ), default=0),
+        "native_scalar_type63_max_factorial_argument": max((
+            int(row.get("native_scalar_type63_max_factorial_argument", 0) or 0) for row in rows
+        ), default=0),
+        "native_scalar_type63_lgamma_table_coverage_ok": bool(all(
+            bool(row.get("native_scalar_type63_lgamma_table_coverage_ok", False)) for row in rows
+        )),
+        "native_scalar_type63_exact_validation_failures": int(sum(
+            int(row.get("native_scalar_type63_exact_validation_failures", 0) or 0) for row in rows
+        )),
         "native_scalar_type88_full_grid_required": True,
         "native_scalar_type88_grid_source_counts": type88_grid_source_counts,
         "native_scalar_type88_full_grid_evaluations": int(sum(
@@ -914,9 +932,10 @@ def summarize_rate_payload_batched_orchestration_shadow(
         "timing_totals": timing_totals,
         "top_evaluations": top_projection,
         "notes": [
-            "The accepted path owns every live scalar rate and matrix term in v0.6.32.",
+            "The accepted path owns every live scalar rate and matrix term in v0.6.33.",
             "The v0.6.30 exact row/checkpoint orchestration shadow remains active for all four selected families.",
             "Native C++ scalar formulas are independently evaluated for 3:63 and 42:88 and compared against accepted ans1..ans6 channels.",
+            "Type-63 uses literal Python operation grouping plus a CPython math.lgamma binary64 table through argument 256; out-of-range qualification is rejected.",
             "Type-88 qualification requires the full high-resolution epi_eV/bremsa grid; reduced-grid fallback is prohibited and reported as NOT_READY.",
             "No native scalar or reconstructed row can enter a live matrix in this release.",
         ],

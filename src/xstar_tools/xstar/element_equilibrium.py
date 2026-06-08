@@ -2182,7 +2182,7 @@ def _run_rate_payload_batched_orchestration_shadow(
 ) -> None:
     """Run one diagnostic C++ row-orchestration call without touching live terms.
 
-    v0.6.32 keeps accepted Python/C++ scalar-rate ownership unchanged for the
+    v0.6.33 keeps accepted Python/C++ scalar-rate ownership unchanged for the
     live matrix and requires the full high-resolution radiation grid for the
     native Type-88 photoionization scalar shadow.  In addition to the exact v0.6.30 row-orchestration shadow, it
     independently evaluates native C++ scalar channels for rate/data families
@@ -2190,7 +2190,7 @@ def _run_rate_payload_batched_orchestration_shadow(
     native scalar or reconstructed row can enter the live matrix.
     """
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.32",
+        "schema_version": "0.6.33",
         "enabled": True,
         "shadow_only": True,
         "live_matrix_commit": False,
@@ -2199,7 +2199,7 @@ def _run_rate_payload_batched_orchestration_shadow(
         "family_evaluation_modes": {
             "4:50": "accepted_cpp_scalar_product_then_batched_cpp_rows",
             "3:51": "accepted_cpp_scalar_product_then_batched_cpp_rows",
-            "3:63": "native_cpp_scalar_shadow_plus_accepted_scalar_batched_cpp_rows",
+            "3:63": "bit_exact_native_cpp_scalar_shadow_plus_accepted_scalar_batched_cpp_rows",
             "42:88": "native_cpp_scalar_shadow_plus_accepted_scalar_batched_cpp_rows",
         },
         "shared_context_preparation_seconds": 0.0,
@@ -2240,6 +2240,12 @@ def _run_rate_payload_batched_orchestration_shadow(
         "native_scalar_max_abs_diff": 0.0,
         "native_scalar_max_rel_diff": 0.0,
         "native_scalar_family_record_counts": {"3:63": 0, "42:88": 0},
+        "native_scalar_type63_exact_operation_order_refinement": True,
+        "native_scalar_type63_python_lgamma_table_max_argument": 256,
+        "native_scalar_type63_max_principal_n": 0,
+        "native_scalar_type63_max_factorial_argument": 0,
+        "native_scalar_type63_lgamma_table_coverage_ok": True,
+        "native_scalar_type63_exact_validation_failures": 0,
         "native_scalar_type88_full_grid_required": True,
         "native_scalar_type88_grid_source": "not_evaluated",
         "native_scalar_type88_full_grid_points": 0,
@@ -2325,7 +2331,7 @@ def _run_rate_payload_batched_orchestration_shadow(
             summary["status"] = "NO_SUPPORTED_RECORDS"
             return
 
-        # v0.6.32 native scalar shadow for the two families that still used
+        # v0.6.33 native scalar shadow for the two families that still used
         # accepted Python scalar seeds in v0.6.30.  The live accepted scalar
         # channels remain untouched and continue to own all matrix terms.
         if bool(summary["native_scalar_enabled"]):
@@ -2360,9 +2366,24 @@ def _run_rate_payload_batched_orchestration_shadow(
                         initial = levels.require(initial_index); final = levels.require(final_index)
                         if initial.principal_n is None or initial.orbital_l is None or final.principal_n is None or final.orbital_l is None:
                             raise ValueError("type63_missing_quantum_numbers")
+                        ni = int(initial.principal_n); li = int(initial.orbital_l)
+                        nf = int(final.principal_n); lf = int(final.orbital_l)
+                        max_n = max(ni, nf)
+                        # native_anl1 can request log-factorials through n+l,
+                        # whose maximum physical value is 2*n-1 for l<=n-1.
+                        max_factorial_arg = max(0, 2 * max_n - 1)
+                        summary["native_scalar_type63_max_principal_n"] = max(
+                            int(summary["native_scalar_type63_max_principal_n"]), max_n
+                        )
+                        summary["native_scalar_type63_max_factorial_argument"] = max(
+                            int(summary["native_scalar_type63_max_factorial_argument"]), max_factorial_arg
+                        )
+                        if max_factorial_arg > int(summary["native_scalar_type63_python_lgamma_table_max_argument"]):
+                            summary["native_scalar_type63_lgamma_table_coverage_ok"] = False
+                            summary["native_scalar_type63_exact_validation_failures"] += 1
                         row.update({
-                            "ni": int(initial.principal_n), "li": int(initial.orbital_l),
-                            "nf": int(final.principal_n), "lf": int(final.orbital_l), "iq": iq,
+                            "ni": ni, "li": li,
+                            "nf": nf, "lf": lf, "iq": iq,
                             "initial_energy_eV": float(initial.energy_ev),
                             "final_energy_eV": float(final.energy_ev),
                             "initial_g": float(initial.statistical_weight),
@@ -2525,6 +2546,8 @@ def _run_rate_payload_batched_orchestration_shadow(
                 summary["native_scalar_status"] = "EXACT" if native_exact else "TOLERANCE_APPROVED" if native_tolerant else "MISMATCH"
                 if int(summary.get("native_scalar_type88_grid_validation_failures", 0) or 0) > 0:
                     summary["native_scalar_status"] = "FULL_GRID_UNAVAILABLE"
+                if not bool(summary.get("native_scalar_type63_lgamma_table_coverage_ok", False)):
+                    summary["native_scalar_status"] = "TYPE63_EXACT_RANGE_UNAVAILABLE"
             else:
                 summary["native_scalar_status"] = "NO_NATIVE_RECORDS"
 

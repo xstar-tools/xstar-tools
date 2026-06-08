@@ -1,3 +1,7 @@
+## v0.6.33 Type-63 bit-exact native scalar refinement
+
+The shadow-only Mg rate/data 3/63 native scalar path now mirrors Python binary64 operation order and uses exact CPython `math.lgamma(n+1)` constants through argument 256. Range coverage is reported and out-of-range exact qualification is rejected. Type-88 full-grid semantics, accepted rows, matrix checkpoints, and every live science path remain unchanged. See `V0633_RATE_PAYLOAD_NATIVE_SCALAR_TYPE63_BIT_EXACT_REFINEMENT.md`.
+
 ## v0.6.32 Type-88 full-grid native scalar hotfix
 
 The native Mg rate/data 42/88 scalar shadow now requires the full high-resolution `epi_eV` / `bremsa` radiation grid used by the accepted Type-53-style continuum integration. The reduced mapped grid is not a qualifying fallback. The path remains shadow-only; accepted scalar rates and all live matrix terms are unchanged.
