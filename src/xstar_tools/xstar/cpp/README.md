@@ -165,3 +165,8 @@ are the sole live source.
 
 `libxstar_engine` ABI 6 adds no live product path. It refines the native 3/63 scalar shadow with Python-equivalent operation grouping and a static CPython `math.lgamma` binary64 table through integer argument 256. Feature bit 6 reports this exactness refinement.
 
+
+
+## v0.6.37 native Type-50 and ordered verification
+
+`libxstar_engine.so` ABI 8 extends `xstar_engine_eval_mg_rate_payload_native_scalars_v1` with native rate 4/data 50 scalar channels. The diagnostic Python boundary performs full reverse verification and order-preserving row replacement; the C++ ABI itself remains a compact scalar and row-construction engine.

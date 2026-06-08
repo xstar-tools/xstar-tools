@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.37 - 2026-06-08
+
+- Add a diagnostic four-family order-preserving C++ commit candidate.
+- Add full-record native Type-50, Type-63, and Type-88 scalar reverse verification.
+- Preserve accepted composite row identity, term index, and global term-stream order.
+- Require exact ordered-stream, dense/heating, normalized-matrix, and RHS checkpoints before commit.
+- Keep product promotion disabled and preserve accepted fallback behavior.
+- Extend the engine ABI to version 8 with native Type-50 scalar support and order-verification capability flags.
+
 ## 0.6.36 - 2026-06-07
 
 - Correct the promoted four-family Type-50 dependency: the simple-payload batch never owned rate 4 / data 50.

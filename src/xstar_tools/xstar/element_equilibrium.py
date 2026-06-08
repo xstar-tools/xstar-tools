@@ -47,7 +47,6 @@ from .ucalc import (
     default_source_faithful_ucalc,
     _radiation_arrays,
     _nbinc,
-    XSTAR_SOURCE_ERG_PER_EV,
 )
 
 
@@ -2740,6 +2739,7 @@ def _run_rate_payload_four_family_product_candidate(
     *,
     evaluation_index: int,
     master: XSTARMasterData,
+    derived: XSTARDerivedPointers,
     basis: ElementCompactBasis,
     level_tables: Mapping[int, UCalcLevelTable],
     context: ElementEquilibriumContext,
@@ -2747,26 +2747,27 @@ def _run_rate_payload_four_family_product_candidate(
     terms: Sequence[MatrixTerm],
     hydrogen_density_cm3: float,
 ) -> List[MatrixTerm]:
-    """Use exact C++ rows live for the four validated Mg families.
+    """Order-preserving four-family C++ candidate with full reverse verification.
 
-    v0.6.34 is intentionally a product *candidate*.  The accepted path is
-    retained as the whole-evaluation fallback and as the exact verification
-    oracle.  C++ native scalars are used for 3:63 and 42:88; the already
-    accepted scalar products are used for 4:50 and 3:51.  Only after exact
-    scalar, row, replacement, and optional full-matrix checks are satisfied are
-    the C++ rows committed to the live term list.
+    v0.6.37 deliberately retains the accepted path as the complete oracle.  It
+    evaluates native Type-50/63/88 scalar channels, constructs all four family
+    rows in C++, compares every scalar and row exactly, replaces rows in-place
+    using the accepted composite identity and original term index, and checks
+    the ordered term stream plus full pre-normalization matrices before commit.
     """
-    verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "1")
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.34",
+        "schema_version": "0.6.37",
         "requested": True,
         "accepted_gate": True,
         "product_candidate": True,
+        "product_promoted": False,
         "active": False,
         "live_matrix_commit": False,
         "whole_evaluation_fallback": True,
         "python_seed_path_retained": True,
-        "verification_enabled": bool(verify_old),
+        "verification_enabled": True,
+        "full_reverse_verification": True,
+        "order_preserving_commit": True,
         "evaluation_index": int(evaluation_index),
         "status": "INITIALIZING",
         "records_expected": 0,
@@ -2775,21 +2776,75 @@ def _run_rate_payload_four_family_product_candidate(
         "terms_committed": 0,
         "missing_terms": 0,
         "extra_terms": 0,
+        "duplicate_accepted_keys": 0,
+        "duplicate_cpp_keys": 0,
         "integer_field_mismatches": 0,
         "float_field_mismatches": 0,
         "native_scalar_records_expected": 0,
         "native_scalar_records_completed": 0,
         "native_scalar_mismatches": 0,
+        "native_scalar_family_record_counts": {"4:50": 0, "3:63": 0, "42:88": 0},
+        "native_scalar_family_mismatch_fields": {"4:50": 0, "3:63": 0, "42:88": 0},
         "family_record_counts": {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0},
+        "ordered_stream_hash_accepted": "",
+        "ordered_stream_hash_candidate": "",
+        "ordered_stream_exact": False,
+        "dense_matrix_hash_accepted": "",
+        "dense_matrix_hash_candidate": "",
+        "heating_matrix_hash_accepted": "",
+        "heating_matrix_hash_candidate": "",
+        "heating_matrix2_hash_accepted": "",
+        "heating_matrix2_hash_candidate": "",
+        "normalized_matrix_hash_accepted": "",
+        "normalized_matrix_hash_candidate": "",
+        "rhs_hash_accepted": "",
+        "rhs_hash_candidate": "",
+        "all_matrix_checkpoints_exact": False,
+        "solver_input_checkpoint_exact": False,
         "packet_build_seconds": 0.0,
         "native_scalar_call_seconds": 0.0,
         "row_cpp_call_seconds": 0.0,
         "verification_seconds": 0.0,
         "replacement_seconds": 0.0,
+        "checkpoint_seconds": 0.0,
         "fallback_reason": "",
     }
     control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(summary)
     original_terms = list(terms)
+
+    def replacement_key(row: Mapping[str, Any]) -> Tuple[Any, ...]:
+        return (
+            int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
+            int(row["ion_index"]), int(row["ion_stage"]), str(row["role"]),
+            int(row["row"]), int(row["column"]), int(row["idest1"]), int(row["idest2"]),
+            int(row["lower_endpoint"]), int(row["upper_endpoint"]),
+            int(row["source_row_unclamped"]), int(row["source_column_unclamped"]),
+            bool(row["source_ipmat_clamped"]),
+        )
+
+    def ordered_hash(term_rows: Sequence[Mapping[str, Any]]) -> str:
+        payload = json.dumps(list(term_rows), sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+    def array_hash(array: np.ndarray) -> str:
+        value = np.ascontiguousarray(np.asarray(array, dtype=np.float64))
+        return hashlib.sha256(value.view(np.uint8)).hexdigest()
+
+    def materialize(term_list: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        dense = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
+        heat = np.zeros_like(dense)
+        heat2 = np.zeros_like(dense)
+        for term in term_list:
+            rr, cc = int(term.row) - 1, int(term.column) - 1
+            dense[rr, cc] += float(term.aj1)
+            heat[rr, cc] += float(term.cj)
+            heat2[rr, cc] += float(term.cj2)
+        normalized = dense.copy()
+        rhs = np.zeros(basis.n_rows, dtype=np.float64)
+        normalized[basis.normalization_row - 1, :] = 1.0
+        rhs[basis.normalization_row - 1] = 1.0
+        return dense, heat, heat2, normalized, rhs
+
     try:
         t0 = time.perf_counter()
         family_set = set(_RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES)
@@ -2807,6 +2862,7 @@ def _run_rate_payload_four_family_product_candidate(
                 continue
             if rec > 0 and family in family_set and str(row.get("status", "")) == UCalcStatus.EVALUATED.value:
                 result_by_record[rec] = row
+
         packet: List[Dict[str, Any]] = []
         accepted_rows: List[Dict[str, Any]] = []
         for rec in sorted(set(accepted_by_record) & set(result_by_record)):
@@ -2826,25 +2882,30 @@ def _run_rate_payload_four_family_product_candidate(
                 "hydrogen_density_cm3": float(hydrogen_density_cm3),
                 **{f"ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
             }
-            if not all(np.isfinite(float(item[f"ans{i}"])) for i in range(1, 7)):
-                raise RuntimeError(f"record {rec} has non-finite accepted scalar")
             packet.append(item)
             accepted_rows.extend(_term_shadow_row(term) for term in group)
             summary["family_record_counts"][f"{item['rate_type']}:{item['data_type']}"] += 1
         summary["packet_build_seconds"] = time.perf_counter() - t0
         summary["records_expected"] = len(packet)
         summary["terms_expected"] = len(accepted_rows)
-        if not packet:
-            raise RuntimeError("no supported records")
-        if any(int(v) <= 0 for v in summary["family_record_counts"].values()):
+        if not packet or any(int(v) <= 0 for v in summary["family_record_counts"].values()):
             raise RuntimeError(f"not all four families present: {summary['family_record_counts']}")
 
+        radiation = context.radiation
+        full_epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=np.float64).reshape(-1)
+        full_bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
+        reduced_epi, reduced_bremsa, _ = _radiation_arrays(radiation)
+        if full_epi.size < 3 or full_bremsa.size < full_epi.size or not np.all(np.isfinite(full_epi)) or not np.all(np.isfinite(full_bremsa[:full_epi.size])) or not np.all(np.diff(full_epi) > 0.0):
+            raise RuntimeError("Type-88 full radiation grid unavailable")
+
+        packet_by_key = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in packet}
         native_packet: List[Dict[str, Any]] = []
         for item in packet:
             family = (int(item["rate_type"]), int(item["data_type"]))
-            if family not in {(3, 63), (42, 88)}:
+            if family not in {(4, 50), (3, 63), (42, 88)}:
                 continue
-            rec = int(item["record"]); ion_index = int(item["ion_index"])
+            rec = int(item["record"])
+            ion_index = int(item["ion_index"])
             result = result_by_record[rec]
             levels = level_tables[ion_index]
             row: Dict[str, Any] = {
@@ -2855,7 +2916,34 @@ def _run_rate_payload_four_family_product_candidate(
                 "electron_density_cm3": float(context.electron_density_cm3),
                 **{f"accepted_ans{i}": float(result.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
             }
-            if family == (3, 63):
+            if family == (4, 50):
+                ints = np.asarray(master.record_integers(rec), dtype=np.int64).reshape(-1)
+                raw = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
+                if ints.size < 2 or raw.size < 3:
+                    raise RuntimeError(f"type50 record {rec} has short payload")
+                id1, id2 = int(ints[0]), int(ints[1])
+                wavelength = abs(float(raw[0])); aij = float(raw[2])
+                e1, e2 = float(levels.energy(id1)), float(levels.energy(id2))
+                upper_id, lower_id = (id2, id1) if e1 < e2 else (id1, id2)
+                ptmp1, ptmp2, escape_reason = _escape_factors(rec, 4, derived, context)
+                if escape_reason is not None:
+                    raise RuntimeError(f"type50 record {rec} escape context blocked: {escape_reason}")
+                bremsa_nb1 = 0.0
+                if float(context.covering_fraction) < 1.0 and wavelength <= 0.99e9:
+                    bremsa_nb1 = float(reduced_bremsa[_nbinc(12398.54 / wavelength, reduced_epi)])
+                row.update({
+                    "type50_wavelength_A": wavelength,
+                    "type50_aij_s_inv": aij,
+                    "type50_upper_g": float(levels.weight(upper_id)),
+                    "type50_lower_g": float(levels.weight(lower_id)),
+                    "type50_ptmp1": float(ptmp1), "type50_ptmp2": float(ptmp2),
+                    "type50_cfrac": float(context.covering_fraction),
+                    "type50_bremsa_nb1": bremsa_nb1,
+                    "type50_hydrogen_density_cm3": float(context.hydrogen_density_cm3),
+                    "type50_endpoint_energy_eV": abs(e1 - e2),
+                    "raw_payload_f64": (),
+                })
+            elif family == (3, 63):
                 ints = np.asarray(master.record_integers(rec), dtype=np.int64).reshape(-1)
                 if ints.size < 4:
                     raise RuntimeError(f"type63 record {rec} has short integer payload")
@@ -2878,21 +2966,15 @@ def _run_rate_payload_four_family_product_candidate(
                 if threshold is None:
                     bound = levels.require(int(item["idest1"]))
                     threshold = float(bound.ionization_potential_ev or bound.continuum_energy_ev or 0.0)
-                row.update({"threshold_eV": float(threshold or 0.0), "raw_payload_f64": tuple(float(v) for v in raw)})
+                row.update({
+                    "threshold_eV": float(threshold or 0.0),
+                    "type88_phextrap_grid_points": int(reduced_epi.size),
+                    "raw_payload_f64": tuple(float(v) for v in raw),
+                })
             native_packet.append(row)
+            summary["native_scalar_family_record_counts"][f"{family[0]}:{family[1]}"] += 1
         summary["native_scalar_records_expected"] = len(native_packet)
 
-        radiation = context.radiation
-        full_epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=np.float64).reshape(-1)
-        full_bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
-        reduced_epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=np.float64).reshape(-1)
-        if full_epi.size < 3 or full_bremsa.size < full_epi.size or not np.all(np.isfinite(full_epi)) or not np.all(np.isfinite(full_bremsa[:full_epi.size])) or not np.all(np.diff(full_epi) > 0.0):
-            raise RuntimeError("Type-88 full radiation grid unavailable")
-        if reduced_epi.size < 3 or not np.all(np.isfinite(reduced_epi)) or not np.all(np.diff(reduced_epi) > 0.0):
-            raise RuntimeError("Type-88 reduced phextrap grid unavailable")
-        for row in native_packet:
-            if (int(row["rate_type"]), int(row["data_type"])) == (42, 88):
-                row["type88_phextrap_grid_points"] = int(reduced_epi.size)
         nt0 = time.perf_counter()
         native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
             native_packet, epi_eV=full_epi, bremsa=full_bremsa[:full_epi.size]
@@ -2903,17 +2985,17 @@ def _run_rate_payload_four_family_product_candidate(
         native_map = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in native_rows}
         if len(native_map) != len(native_packet):
             raise RuntimeError("native scalar output record count mismatch")
-        packet_by_key = {(int(r["record"]), int(r["rate_type"]), int(r["data_type"])): r for r in packet}
         for expected in native_packet:
             key = (int(expected["record"]), int(expected["rate_type"]), int(expected["data_type"]))
             actual = native_map.get(key)
             if actual is None:
                 raise RuntimeError(f"missing native scalar record {key}")
+            family_name = f"{key[1]}:{key[2]}"
             for i in range(1, 7):
-                a = float(expected[f"accepted_ans{i}"]); b = float(actual[f"ans{i}"])
-                if a != b:
+                if float(expected[f"accepted_ans{i}"]) != float(actual[f"ans{i}"]):
                     summary["native_scalar_mismatches"] += 1
-            if summary["native_scalar_mismatches"]:
+                    summary["native_scalar_family_mismatch_fields"][family_name] += 1
+            if summary["native_scalar_family_mismatch_fields"][family_name]:
                 raise RuntimeError(f"native scalar mismatch at {key}")
             for i in range(1, 7):
                 packet_by_key[key][f"ans{i}"] = float(actual[f"ans{i}"])
@@ -2925,18 +3007,20 @@ def _run_rate_payload_four_family_product_candidate(
         summary["row_message"] = str(row_message)
         summary["row_cpp_stats"] = dict(row_stats)
 
-        def sig(row: Mapping[str, Any]) -> Tuple[Any, ...]:
-            return (int(row["record"]), str(row["role"]), int(row["row"]), int(row["column"]))
-        py_map = {sig(row): row for row in accepted_rows}
-        cpp_map = {sig(row): row for row in cpp_rows}
+        vt0 = time.perf_counter()
+        accepted_key_list = [replacement_key(row) for row in accepted_rows]
+        cpp_key_list = [replacement_key(row) for row in cpp_rows]
+        summary["duplicate_accepted_keys"] = len(accepted_key_list) - len(set(accepted_key_list))
+        summary["duplicate_cpp_keys"] = len(cpp_key_list) - len(set(cpp_key_list))
+        py_map = {replacement_key(row): row for row in accepted_rows}
+        cpp_map = {replacement_key(row): row for row in cpp_rows}
         summary["missing_terms"] = len(set(py_map) - set(cpp_map))
         summary["extra_terms"] = len(set(cpp_map) - set(py_map))
-        vt0 = time.perf_counter()
-        if summary["missing_terms"] or summary["extra_terms"]:
+        if summary["duplicate_accepted_keys"] or summary["duplicate_cpp_keys"] or summary["missing_terms"] or summary["extra_terms"]:
             raise RuntimeError("C++ row identity mismatch")
-        int_fields = ("record","data_type","rate_type","ion_index","ion_stage","role","row","column","idest1","idest2","lower_endpoint","upper_endpoint","source_row_unclamped","source_column_unclamped","source_ipmat_clamped")
+        int_fields = ("term_index","record","data_type","rate_type","ion_index","ion_stage","role","row","column","idest1","idest2","lower_endpoint","upper_endpoint","source_row_unclamped","source_column_unclamped","source_ipmat_clamped")
         float_fields = ("aj1","aj2","cj","cj2")
-        for key in sorted(py_map):
+        for key in py_map:
             left, right = py_map[key], cpp_map[key]
             for field in int_fields:
                 if left[field] != right[field]:
@@ -2946,38 +3030,59 @@ def _run_rate_payload_four_family_product_candidate(
                     summary["float_field_mismatches"] += 1
         if summary["integer_field_mismatches"] or summary["float_field_mismatches"]:
             raise RuntimeError("C++ rows are not exact")
-        if verify_old:
-            def contribution(rows_in: Sequence[Mapping[str, Any]]) -> Tuple[np.ndarray,np.ndarray,np.ndarray]:
-                d=np.zeros((basis.n_rows,basis.n_rows),dtype=np.float64); h=np.zeros_like(d); h2=np.zeros_like(d)
-                for row in sorted(rows_in,key=lambda r:int(r["term_index"])):
-                    rr=int(row["row"])-1; cc=int(row["column"])-1
-                    d[rr,cc]+=float(row["aj1"]); h[rr,cc]+=float(row["cj"]); h2[rr,cc]+=float(row["cj2"])
-                return d,h,h2
-            pd,ph,ph2=contribution(accepted_rows); cd,ch,ch2=contribution(cpp_rows)
-            if not (np.array_equal(pd,cd) and np.array_equal(ph,ch) and np.array_equal(ph2,ch2)):
-                raise RuntimeError("supported contribution checkpoint mismatch")
         summary["verification_seconds"] = time.perf_counter() - vt0
 
-        def replacement_key(row: Mapping[str, Any]) -> Tuple[Any,...]:
-            return (int(row["record"]),int(row["rate_type"]),int(row["data_type"]),int(row["ion_index"]),int(row["ion_stage"]),str(row["role"]),int(row["row"]),int(row["column"]),int(row["idest1"]),int(row["idest2"]),int(row["lower_endpoint"]),int(row["upper_endpoint"]),int(row["source_row_unclamped"]),int(row["source_column_unclamped"]),bool(row["source_ipmat_clamped"]))
-        rep0=time.perf_counter()
-        cpp_by_key={replacement_key(row):row for row in cpp_rows}
-        replaced: List[MatrixTerm]=[]; committed=0
+        rep0 = time.perf_counter()
+        replaced: List[MatrixTerm] = []
+        committed = 0
         for term in original_terms:
-            key=replacement_key(_term_shadow_row(term))
-            row=cpp_by_key.get(key)
+            accepted_row = _term_shadow_row(term)
+            row = cpp_map.get(replacement_key(accepted_row))
             if row is None:
                 replaced.append(term)
             else:
-                replaced.extend(_matrix_terms_from_cpp_rows([row])); committed+=1
+                exact_row = dict(row)
+                exact_row["term_index"] = int(term.term_index)
+                converted = _matrix_terms_from_cpp_rows([exact_row])
+                if len(converted) != 1:
+                    raise RuntimeError("single-row replacement conversion failed")
+                replaced.append(converted[0])
+                committed += 1
         if committed != len(cpp_rows):
             raise RuntimeError(f"replacement coverage {committed}!={len(cpp_rows)}")
-        summary["replacement_seconds"] = time.perf_counter()-rep0
+        summary["replacement_seconds"] = time.perf_counter() - rep0
+
+        cp0 = time.perf_counter()
+        accepted_stream = [_term_shadow_row(term) for term in original_terms]
+        candidate_stream = [_term_shadow_row(term) for term in replaced]
+        summary["ordered_stream_hash_accepted"] = ordered_hash(accepted_stream)
+        summary["ordered_stream_hash_candidate"] = ordered_hash(candidate_stream)
+        summary["ordered_stream_exact"] = bool(accepted_stream == candidate_stream)
+        ad, ah, ah2, an, ar = materialize(original_terms)
+        cd, ch, ch2, cn, cr = materialize(replaced)
+        for name, left, right in (
+            ("dense_matrix", ad, cd), ("heating_matrix", ah, ch),
+            ("heating_matrix2", ah2, ch2), ("normalized_matrix", an, cn), ("rhs", ar, cr),
+        ):
+            summary[f"{name}_hash_accepted"] = array_hash(left)
+            summary[f"{name}_hash_candidate"] = array_hash(right)
+        summary["all_matrix_checkpoints_exact"] = bool(
+            np.array_equal(ad, cd) and np.array_equal(ah, ch) and np.array_equal(ah2, ch2)
+        )
+        summary["solver_input_checkpoint_exact"] = bool(np.array_equal(an, cn) and np.array_equal(ar, cr))
+        summary["checkpoint_seconds"] = time.perf_counter() - cp0
+        if not summary["ordered_stream_exact"]:
+            raise RuntimeError("ordered term stream mismatch")
+        if not summary["all_matrix_checkpoints_exact"]:
+            raise RuntimeError("pre-normalization matrix checkpoint mismatch")
+        if not summary["solver_input_checkpoint_exact"]:
+            raise RuntimeError("solver input checkpoint mismatch")
+
         summary["records_completed"] = len(packet)
         summary["terms_committed"] = committed
         summary["active"] = True
         summary["live_matrix_commit"] = True
-        summary["status"] = "PRODUCT_CANDIDATE_EXACT"
+        summary["status"] = "ORDER_PRESERVING_CANDIDATE_EXACT"
         return replaced
     except Exception as exc:
         summary["fallback_reason"] = str(exc)
@@ -3309,7 +3414,7 @@ def _assemble_element_matrix_impl(
     _four_family_verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.36",
+            "schema_version": "0.6.37",
             "requested": True, "accepted_gate": True,
             "product_candidate": False, "product_promoted": True,
             "active": False, "live_matrix_commit": False,
@@ -5207,7 +5312,7 @@ def _assemble_element_matrix_impl(
                     field="row_collection_elapsed",
                 )
 
-            # v0.6.36 promoted product: prepare exact native scalar and C++
+            # v0.6.37 retained promoted path: native Type-50/63/88 scalar and C++
             # matrix-row caches before the per-record Python ucalc path.  The
             # existing accepted C++ Type-51 ion batch remains its live owner.
             _four_family_fast_result_by_record: Dict[int, Dict[str, Any]] = {}
@@ -5220,7 +5325,7 @@ def _assemble_element_matrix_impl(
                     _expected_fast_records: set[int] = set()
                     _full_epi = np.asarray(getattr(context.radiation, "epi_eV", getattr(context.radiation, "epi", ())), dtype=np.float64).reshape(-1)
                     _full_bremsa = np.asarray(getattr(context.radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
-                    _reduced_epi = np.asarray(getattr(context.radiation, "epim_eV", getattr(context.radiation, "epim", ())), dtype=np.float64).reshape(-1)
+                    _reduced_epi, _reduced_bremsa, _ = _radiation_arrays(context.radiation)
                     for _record, _rt, _dt in source_record_iter:
                         _family = (int(_rt), int(_dt))
                         if _family not in {(4, 50), (3, 63), (42, 88)}:
@@ -5232,32 +5337,31 @@ def _assemble_element_matrix_impl(
                             if _ints.size < 2 or _raw.size < 3:
                                 raise RuntimeError(f"type50 record {_record} has short payload")
                             _idest1, _idest2 = int(_ints[0]), int(_ints[1])
-                            _level1 = levels.require(_idest1)
-                            _level2 = levels.require(_idest2)
+                            _e1, _e2 = float(levels.energy(_idest1)), float(levels.energy(_idest2))
+                            _upper_id, _lower_id = (_idest2, _idest1) if _e1 < _e2 else (_idest1, _idest2)
+                            _wavelength = abs(float(_raw[0]))
                             _ptmp1, _ptmp2, _escape_reason = _escape_factors(int(_record), 4, derived, context)
                             if _escape_reason is not None:
                                 raise RuntimeError(f"type50 record {_record} escape context blocked: {_escape_reason}")
-                            _wavelength = abs(float(_raw[0]))
                             _bremsa_nb1 = 0.0
                             if float(context.covering_fraction) < 1.0 and _wavelength <= 0.99e9:
-                                _type50_epi, _type50_brem, _ = _radiation_arrays(context.radiation)
-                                if _wavelength <= 0.0:
-                                    raise RuntimeError(f"type50 record {_record} has invalid wavelength")
-                                _bremsa_nb1 = float(_type50_brem[_nbinc(12398.54 / _wavelength, _type50_epi)])
+                                if _reduced_epi.size < 3 or _reduced_bremsa.size < _reduced_epi.size:
+                                    raise RuntimeError("Type-50 reduced radiation grid unavailable")
+                                _bremsa_nb1 = float(_reduced_bremsa[_nbinc(12398.54 / _wavelength, _reduced_epi)])
                             _native_packet.append({
                                 "record": int(_record), "rate_type": 4, "data_type": 50,
                                 "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
                                 "idest1": _idest1, "idest2": _idest2,
-                                "ptmp1": float(_ptmp1), "ptmp2": float(_ptmp2),
-                                "covering_fraction": float(context.covering_fraction),
-                                "bremsa_nb1": float(_bremsa_nb1),
-                                "hydrogen_density_cm3": float(context.hydrogen_density_cm3),
-                                "type50_endpoint1_energy_eV": float(_level1.energy_ev),
-                                "type50_endpoint2_energy_eV": float(_level2.energy_ev),
-                                "type50_endpoint1_g": float(_level1.statistical_weight),
-                                "type50_endpoint2_g": float(_level2.statistical_weight),
-                                "source_erg_per_eV": float(XSTAR_SOURCE_ERG_PER_EV),
-                                "raw_payload_f64": tuple(float(v) for v in _raw),
+                                "type50_wavelength_A": _wavelength,
+                                "type50_aij_s_inv": float(_raw[2]),
+                                "type50_upper_g": float(levels.weight(_upper_id)),
+                                "type50_lower_g": float(levels.weight(_lower_id)),
+                                "type50_ptmp1": float(_ptmp1), "type50_ptmp2": float(_ptmp2),
+                                "type50_cfrac": float(context.covering_fraction),
+                                "type50_bremsa_nb1": float(_bremsa_nb1),
+                                "type50_hydrogen_density_cm3": float(context.hydrogen_density_cm3),
+                                "type50_endpoint_energy_eV": abs(_e1 - _e2),
+                                "raw_payload_f64": (),
                             })
                         elif _family == (3, 63):
                             _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
@@ -5301,7 +5405,7 @@ def _assemble_element_matrix_impl(
                                 "raw_payload_f64": tuple(float(v) for v in _raw),
                             })
                     if _native_packet:
-                        _has_type88 = any(int(_item.get("rate_type", 0)) == 42 and int(_item.get("data_type", 0)) == 88 for _item in _native_packet)
+                        _has_type88 = any((int(_row.get("rate_type", -1)), int(_row.get("data_type", -1))) == (42, 88) for _row in _native_packet)
                         if _has_type88 and (_full_epi.size < 3 or _full_bremsa.size < _full_epi.size or not np.all(np.isfinite(_full_epi)) or not np.all(np.isfinite(_full_bremsa[:_full_epi.size])) or not np.all(np.diff(_full_epi) > 0.0)):
                             raise RuntimeError("Type-88 full radiation grid unavailable")
                         if _has_type88 and (_reduced_epi.size < 3 or not np.all(np.isfinite(_reduced_epi)) or not np.all(np.diff(_reduced_epi) > 0.0)):
@@ -5524,7 +5628,7 @@ def _assemble_element_matrix_impl(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_rate_payload_product_v036",
+                            implementation="cpp_four_family_rate_payload_product_v037",
                             validation_status="product_promoted_exact",
                             context_fields_used=("temperature_k", "xpx", "xee", "levels", "radiation"),
                             notes=("Python scalar seed path elided; whole-evaluation fallback retained.",),
@@ -6460,6 +6564,7 @@ def _assemble_element_matrix_impl(
             profile_control,
             evaluation_index=int(_rate_payload_four_family_product_eval_index),
             master=master,
+            derived=derived,
             basis=basis,
             level_tables=level_tables,
             context=context,

@@ -516,75 +516,6 @@ bool native_type63_scalars(int ni,int li,int nf,int lf,int iq,double temp,double
     return std::isfinite(out[0])&&std::isfinite(out[1])&&std::isfinite(out[4])&&std::isfinite(out[5]);
 }
 
-
-bool native_type50_scalars(
-    const double* raw,
-    int raw_count,
-    double ptmp1,
-    double ptmp2,
-    double cfrac,
-    double bremsa_nb1,
-    double hydrogen_density_cm3,
-    double endpoint1_energy_ev,
-    double endpoint2_energy_ev,
-    double endpoint1_g,
-    double endpoint2_g,
-    double source_erg_per_ev,
-    double out[6]
-) {
-    for (int q = 0; q < 6; ++q) out[q] = 0.0;
-    if (!raw || raw_count < 3) return false;
-    const double wavelength = std::abs(raw[0]);
-    const double aij = raw[2];
-    if (!std::isfinite(wavelength) || !std::isfinite(aij) ||
-        !std::isfinite(ptmp1) || !std::isfinite(ptmp2) ||
-        !std::isfinite(cfrac) || !std::isfinite(hydrogen_density_cm3) ||
-        !std::isfinite(endpoint1_energy_ev) || !std::isfinite(endpoint2_energy_ev) ||
-        !std::isfinite(endpoint1_g) || !std::isfinite(endpoint2_g) ||
-        !std::isfinite(source_erg_per_ev)) {
-        return false;
-    }
-
-    double upper_g = endpoint1_g;
-    double lower_g = endpoint2_g;
-    if (endpoint1_energy_ev < endpoint2_energy_ev) {
-        upper_g = endpoint2_g;
-        lower_g = endpoint1_g;
-    }
-    double flin = 0.0;
-    if (wavelength > 0.0 && upper_g > 0.0 && lower_g > 0.0) {
-        flin = 1.0e-16;
-        flin *= aij;
-        flin *= upper_g;
-        flin *= wavelength;
-        flin *= wavelength;
-        flin /= (0.667274 * lower_g);
-    }
-
-    const double escaped_raw = aij * (ptmp1 + ptmp2);
-    const double density_floor = 1.0e-20 * hydrogen_density_cm3;
-    const double escaped = std::max(escaped_raw, density_floor);
-    const double cover = std::max(0.0, 1.0 - cfrac);
-    double photo = 0.0;
-    if (!(wavelength > 0.99e9) && cover != 0.0) {
-        if (!std::isfinite(bremsa_nb1)) return false;
-        photo = 0.02655;
-        photo *= flin;
-        photo *= wavelength;
-        photo *= 1.0e-8;
-        photo *= bremsa_nb1;
-        photo /= 3.0e10;
-        photo *= cover;
-    }
-    const double endpoint_energy = std::abs(endpoint1_energy_ev - endpoint2_energy_ev);
-    out[0] = photo;
-    out[1] = escaped;
-    out[2] = -escaped * endpoint_energy * source_erg_per_ev;
-    out[3] = -photo * endpoint_energy * source_erg_per_ev;
-    return std::isfinite(out[0]) && std::isfinite(out[1]) &&
-           std::isfinite(out[2]) && std::isfinite(out[3]);
-}
-
 int native_lower_bracket(double energy,const double* grid,int n) {
     if (n<=1||energy<=grid[0]) return 0;
     int lo=0,hi=n-1;
@@ -639,16 +570,51 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
     return std::isfinite(sumr)?sumr:0.0;
 }
 
+
+bool native_type50_scalars(
+    double wavelength_a, double aij, double ggup, double gglo,
+    double ptmp1, double ptmp2, double cfrac, double bremsa_nb1,
+    double hydrogen_density_cm3, double endpoint_energy_ev, double out[6]
+) {
+    for (int i = 0; i < 6; ++i) out[i] = 0.0;
+    if (!std::isfinite(wavelength_a) || !std::isfinite(aij) ||
+        !std::isfinite(ggup) || !std::isfinite(gglo) ||
+        !std::isfinite(ptmp1) || !std::isfinite(ptmp2) ||
+        !std::isfinite(cfrac) || !std::isfinite(bremsa_nb1) ||
+        !std::isfinite(hydrogen_density_cm3) || !std::isfinite(endpoint_energy_ev) ||
+        wavelength_a <= 0.0 || ggup <= 0.0 || gglo <= 0.0 || endpoint_energy_ev < 0.0) {
+        return false;
+    }
+    const double flin = 1.0e-16 * aij * ggup * wavelength_a * wavelength_a / (0.667274 * gglo);
+    const double escaped_raw = aij * (ptmp1 + ptmp2);
+    const double density_floor = 1.0e-20 * hydrogen_density_cm3;
+    const double escaped = std::max(escaped_raw, density_floor);
+    const double cover = std::max(0.0, 1.0 - cfrac);
+    double photo = 0.0;
+    if (!(wavelength_a > 0.99e9) && cover != 0.0) {
+        photo = 0.02655 * flin * wavelength_a * 1.0e-8 * bremsa_nb1 / 3.0e10 * 1.0 * cover;
+    }
+    const double erg_per_ev = 1.602176634e-12;
+    out[0] = photo;
+    out[1] = escaped;
+    out[2] = -escaped * endpoint_energy_ev * erg_per_ev;
+    out[3] = -photo * endpoint_energy_ev * erg_per_ev;
+    out[4] = 0.0;
+    out[5] = 0.0;
+    for (int i = 0; i < 6; ++i) if (!std::isfinite(out[i])) return false;
+    return true;
+}
+
 } // namespace
 
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 7;
+    return 8;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_mg_rate_payload_type50_native_dependency_hotfix_v036";
+    return "xstar_engine_mg_rate_payload_order_preserving_full_verify_v037";
 }
 
 int xstar_engine_feature_flags() {
@@ -659,8 +625,7 @@ int xstar_engine_feature_flags() {
     // bit 4: native Type-63/Type-88 scalar shadow.
     // bit 5: Type-88 mixed-grid full-integration semantics.
     // bit 6: Type-63 Python-operation-order exactness refinement.
-    // bit 7: native Type-50 scalar evaluation for the promoted four-family product.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128;
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -669,7 +634,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.36 Type-50 native scalar product hotfix ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.33 Type-63 bit-exact native scalar shadow ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
@@ -871,7 +836,10 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
         const int off=static_cast<int>(m[12]),count=static_cast<int>(m[13]);
         stats[0]+=1;
         bool ok=false;
-        if (rt==3&&dt==63) {
+        if (rt==4&&dt==50) {
+            ok=native_type50_scalars(c[14],c[15],c[16],c[17],c[18],c[19],c[20],c[21],c[22],c[23],out);
+            stats[10]+=1;
+        } else if (rt==3&&dt==63) {
             ok=native_type63_scalars(ni,li,nf,lf,iq,c[6],c[7],c[8],c[9],c[10],c[11],out);
             stats[8]+=1;
         } else if (rt==42&&dt==88) {
@@ -880,15 +848,6 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
                 ok=std::isfinite(out[0]);
             }
             stats[9]+=1;
-        } else if (rt==4&&dt==50) {
-            if (off>=0&&count>=3&&off+count<=payload_size&&payload_f64) {
-                ok=native_type50_scalars(
-                    payload_f64+off,count,
-                    c[14],c[15],c[16],c[17],c[18],
-                    c[19],c[20],c[21],c[22],c[23],out
-                );
-            }
-            stats[10]+=1;
         } else {
             stats[4]+=1;
         }
@@ -900,7 +859,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
     stats[7]=(stats[5]==0&&stats[4]==0)?1:0;
     std::ostringstream out;
     out << "native scalar shadow: records=" << n_records << "; evaluated=" << stats[1]
-        << "; type63=" << stats[8] << "; type88=" << stats[9] << "; type50=" << stats[10] << "; invalid=" << stats[5];
+        << "; type50=" << stats[10] << "; type63=" << stats[8] << "; type88=" << stats[9] << "; invalid=" << stats[5];
     write_message(message,message_size,out.str());
     return XSTAR_BACKEND_OK;
 }

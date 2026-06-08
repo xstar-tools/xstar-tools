@@ -6,7 +6,7 @@ Normal execution elides the Python scalar seed/oracle for 4:50, 3:63, and 42:88.
 
 See `V0635_FOUR_FAMILY_RATE_PAYLOAD_PRODUCT_PROMOTED.md` for controls, provenance, and acceptance requirements.
 
-## v0.6.36 promoted Type-50 dependency hotfix
+## v0.6.37 diagnostic four-family candidate
 
-The four-family Mg rate-payload product now evaluates rate 4 / data 50 through a dedicated native engine scalar path instead of consulting the simple-payload cache, which never contained Type-50 records. See `V0636_FOUR_FAMILY_RATE_PAYLOAD_PRODUCT_PROMOTED_TYPE50_NATIVE_HOTFIX.md`.
+The `v0.6.37` package adds an order-preserving four-family rate-payload candidate with mandatory full reverse verification. It retains the accepted path as the oracle, evaluates native Type-50/63/88 scalars for every supported record, replaces exact C++ rows in-place, and requires exact ordered-stream and solver-input checkpoints before live commit. See `V0637_FOUR_FAMILY_ORDER_PRESERVING_COMMIT_AND_FULL_REVERSE_VERIFICATION.md`.
 

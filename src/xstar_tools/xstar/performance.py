@@ -1060,19 +1060,29 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.36", "requested": False,
+            "schema_version": "0.6.37", "requested": False,
             "product_candidate": False, "product_promoted": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
         }
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
-    success_status = "PRODUCT_PROMOTED" if promoted else "PRODUCT_CANDIDATE_EXACT"
-    schema_version = str(rows[0].get("schema_version", "0.6.36" if promoted else "0.6.34"))
+    schema_version = str(rows[0].get("schema_version", "0.6.37"))
+    success_status = (
+        "PRODUCT_PROMOTED" if promoted
+        else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version == "0.6.37"
+        else "PRODUCT_CANDIDATE_EXACT"
+    )
     family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
+    native_family_totals: dict[str, int] = {"4:50": 0, "3:63": 0, "42:88": 0}
+    native_mismatch_totals: dict[str, int] = {"4:50": 0, "3:63": 0, "42:88": 0}
     fast_totals: dict[str, int] = {"4:50": 0, "3:63": 0, "42:88": 0}
     for row in rows:
         for key, value in dict(row.get("family_record_counts", {})).items():
             family_totals[str(key)] = family_totals.get(str(key), 0) + int(value or 0)
+        for key, value in dict(row.get("native_scalar_family_record_counts", {})).items():
+            native_family_totals[str(key)] = native_family_totals.get(str(key), 0) + int(value or 0)
+        for key, value in dict(row.get("native_scalar_family_mismatch_fields", {})).items():
+            native_mismatch_totals[str(key)] = native_mismatch_totals.get(str(key), 0) + int(value or 0)
         for key, value in dict(row.get("fast_path_record_counts", {})).items():
             fast_totals[str(key)] = fast_totals.get(str(key), 0) + int(value or 0)
     attempted = len(rows)
@@ -1083,7 +1093,7 @@ def summarize_rate_payload_four_family_product(
     status = success_status if completed == attempted and attempted > 0 else "FALLBACK" if fallbacks else "NOT_READY"
     timing_keys = (
         "packet_build_seconds", "native_scalar_call_seconds", "row_cpp_call_seconds",
-        "verification_seconds", "replacement_seconds", "live_commit_seconds",
+        "verification_seconds", "replacement_seconds", "checkpoint_seconds", "live_commit_seconds",
     )
     timing_totals = {key: sum(float(row.get(key, 0.0) or 0.0) for row in rows) for key in timing_keys}
     return {
@@ -1097,6 +1107,8 @@ def summarize_rate_payload_four_family_product(
         "whole_evaluation_fallback": bool(all(bool(row.get("whole_evaluation_fallback", True)) for row in rows)),
         "python_seed_path_retained": bool(any(bool(row.get("python_seed_path_retained")) for row in rows)),
         "verification_enabled": bool(all(bool(row.get("verification_enabled")) for row in rows)),
+        "full_reverse_verification": bool(all(bool(row.get("full_reverse_verification")) for row in rows)),
+        "order_preserving_commit": bool(all(bool(row.get("order_preserving_commit")) for row in rows)),
         "evaluation_count": attempted,
         "evaluations_attempted": attempted,
         "evaluations_completed": completed,
@@ -1110,22 +1122,32 @@ def summarize_rate_payload_four_family_product(
         "terms_committed": int(sum(int(row.get("terms_committed", 0) or 0) for row in rows)),
         "missing_terms": int(sum(int(row.get("missing_terms", 0) or 0) for row in rows)),
         "extra_terms": int(sum(int(row.get("extra_terms", 0) or 0) for row in rows)),
+        "duplicate_accepted_keys": int(sum(int(row.get("duplicate_accepted_keys", 0) or 0) for row in rows)),
+        "duplicate_cpp_keys": int(sum(int(row.get("duplicate_cpp_keys", 0) or 0) for row in rows)),
         "integer_field_mismatches": int(sum(int(row.get("integer_field_mismatches", 0) or 0) for row in rows)),
         "float_field_mismatches": int(sum(int(row.get("float_field_mismatches", 0) or 0) for row in rows)),
         "native_scalar_records_expected": int(sum(int(row.get("native_scalar_records_expected", 0) or 0) for row in rows)),
         "native_scalar_records_completed": int(sum(int(row.get("native_scalar_records_completed", 0) or 0) for row in rows)),
         "native_scalar_mismatches": int(sum(int(row.get("native_scalar_mismatches", 0) or 0) for row in rows)),
+        "native_scalar_family_record_counts": native_family_totals,
+        "native_scalar_family_mismatch_fields": native_mismatch_totals,
         "existing_cpp_type51_records": int(sum(int(row.get("existing_cpp_type51_records", 0) or 0) for row in rows)),
         "family_record_counts": family_totals,
         "fast_path_record_counts": fast_totals,
+        "ordered_stream_exact": bool(all(bool(row.get("ordered_stream_exact")) for row in rows)),
+        "all_matrix_checkpoints_exact": bool(all(bool(row.get("all_matrix_checkpoints_exact")) for row in rows)),
+        "solver_input_checkpoint_exact": bool(all(bool(row.get("solver_input_checkpoint_exact")) for row in rows)),
+        "ordered_stream_hash_pairs": [
+            [str(row.get("ordered_stream_hash_accepted", "")), str(row.get("ordered_stream_hash_candidate", ""))]
+            for row in rows[:max(1, int(top_n))]
+        ],
         "timing_totals": timing_totals,
         "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
         "evaluations": rows,
         "notes": [
-            "v0.6.36 repairs the promoted Type-50 scalar dependency with a dedicated native C++ scalar packet.",
-            "Normal execution elides the Python scalar seed/oracle path for 4:50, 3:63, and 42:88; the accepted C++ Type-51 ion batch remains live for 3:51.",
-            "Any preparation, validation, or coverage failure retries the complete element evaluation on the accepted path.",
-            "Reverse verification is opt-in and disabled in the production wrapper.",
+            "v0.6.37 is a diagnostic order-preserving product candidate, not a promotion.",
+            "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
+            "C++ rows are replaced in-place with the accepted composite identity and original term index.",
+            "Ordered term-stream, pre-normalization matrix, and solver-input checkpoints must all be exact.",
         ],
     }
-
