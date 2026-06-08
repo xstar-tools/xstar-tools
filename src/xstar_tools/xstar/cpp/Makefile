@@ -8,31 +8,13 @@ PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 RPATH_ORIGIN := -Wl,-rpath,'$$ORIGIN'
 
-# GCC 8 and older expose C++17 std::filesystem through libstdc++fs.
-# Newer libstdc++ versions provide it directly. Detect the required link mode
-# once at make parse time; callers may override FILESYSTEM_LIBS explicitly.
-ifeq ($(origin FILESYSTEM_LIBS), undefined)
-FILESYSTEM_LINK_MODE := $(shell \
-	tmp=$$(mktemp -d /tmp/xstar-fs-link.XXXXXX); \
-	printf '%s\n' '#include <filesystem>' 'int main() { return std::filesystem::current_path().empty(); }' > $$tmp/test.cpp; \
-	if $(CXX) $(CPPFLAGS) $(CXXFLAGS) $$tmp/test.cpp -o $$tmp/test >/dev/null 2>&1; then \
-		printf '%s' builtin; \
-	elif $(CXX) $(CPPFLAGS) $(CXXFLAGS) $$tmp/test.cpp -o $$tmp/test -lstdc++fs >/dev/null 2>&1; then \
-		printf '%s' stdc++fs; \
-	else \
-		printf '%s' unavailable; \
-	fi; \
-	rm -rf $$tmp)
-ifeq ($(FILESYSTEM_LINK_MODE),stdc++fs)
-FILESYSTEM_LIBS := -lstdc++fs
-else ifeq ($(FILESYSTEM_LINK_MODE),builtin)
-FILESYSTEM_LIBS :=
-else
-$(error C++17 std::filesystem link test failed; use a compatible compiler or set FILESYSTEM_LIBS explicitly)
-endif
-else
-FILESYSTEM_LINK_MODE := override
-endif
+# C++17 filesystem compatibility.  GCC 8 and some vendor toolchains require
+# libstdc++fs, while current GNU libstdc++ accepts the extra compatibility
+# library as well.  Use a deterministic default to avoid fragile parse-time
+# $(shell ...) probes; callers using a non-GNU standard library may override
+# this on the command line with FILESYSTEM_LIBS=.
+FILESYSTEM_LINK_MODE ?= compatibility-default
+FILESYSTEM_LIBS ?= -lstdc++fs
 
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
@@ -114,7 +96,7 @@ test: all
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.44.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.44.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

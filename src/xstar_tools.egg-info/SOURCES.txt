@@ -22,6 +22,7 @@ V06403_POSITION_SAFE_ORACLE_AND_DETAL4_EXACTNESS_HOTFIX.md
 V0640_TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_CANDIDATE.md
 V0641_EXACT_FOUR_FAMILY_PRODUCT_PROMOTION.md
 V06441_FILESYSTEM_LINK_HOTFIX.md
+V06442_MAKEFILE_FILESYSTEM_PROBE_PARSE_HOTFIX.md
 V0644_STANDALONE_SHARED_LIBRARY_ABI.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -30,6 +31,7 @@ check_v0403_position_safe_oracle_hotfix_product_candidate.py
 check_v040_type50_opakab_state_restoration_product_candidate.py
 check_v041_four_family_product_promoted.py
 check_v0441_standalone_abi.py
+check_v0442_standalone_abi.py
 check_v044_standalone_abi.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -45,6 +47,7 @@ run_v041_xstar_tools_python.sh
 run_v0441_xstar_standalone_abi.sh
 run_v0441_xstar_tools_hybrid_accepted.sh
 run_v0441_xstar_tools_python.sh
+run_v0442_xstar_standalone_abi.sh
 run_v044_xstar_standalone_abi.sh
 run_v044_xstar_tools_hybrid_accepted.sh
 run_v044_xstar_tools_python.sh
@@ -259,6 +262,7 @@ xstar_o_element_equilibrium_v0420_diagnosis_v0421.md
 xstar_o_element_equilibrium_v0421_diagnosis_v0422.md
 xstar_o_element_equilibrium_v0422_diagnosis_v0423.md
 xstar_tools_v0.6.44.1_handoff.md
+xstar_tools_v0.6.44.2_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
 benchmarks/oxygen_call73_v0434_acceptance/xstar_calc_hmc_all_pre_continuum_parity_summary.json
@@ -785,16 +789,6 @@ src/xstar_tools/xstar/cpp/build_lib.sh
 src/xstar_tools/xstar/cpp/compact_arrays.hpp
 src/xstar_tools/xstar/cpp/error_codes.hpp
 src/xstar_tools/xstar/cpp/level_population.cpp
-src/xstar_tools/xstar/cpp/libxstar_api.so
-src/xstar_tools/xstar/cpp/libxstar_backend_cpp.so
-src/xstar_tools/xstar/cpp/libxstar_backend_python.so
-src/xstar_tools/xstar/cpp/libxstar_emissivity.so
-src/xstar_tools/xstar/cpp/libxstar_engine.so
-src/xstar_tools/xstar/cpp/libxstar_matrix.so
-src/xstar_tools/xstar/cpp/libxstar_opacity.so
-src/xstar_tools/xstar/cpp/libxstar_rates.so
-src/xstar_tools/xstar/cpp/libxstar_solver.so
-src/xstar_tools/xstar/cpp/libxstar_thermal.so
 src/xstar_tools/xstar/cpp/line_emissivity.cpp
 src/xstar_tools/xstar/cpp/matrix_kernels.cpp
 src/xstar_tools/xstar/cpp/opacity_kernels.cpp
@@ -808,7 +802,6 @@ src/xstar_tools/xstar/cpp/xstar_backend_common.hpp
 src/xstar_tools/xstar/cpp/xstar_backend_cpp.cpp
 src/xstar_tools/xstar/cpp/xstar_backend_plugin.h
 src/xstar_tools/xstar/cpp/xstar_backend_python.cpp
-src/xstar_tools/xstar/cpp/xstar_cpp
 src/xstar_tools/xstar/cpp/xstar_engine.cpp
 src/xstar_tools/xstar/cpp/xstar_python_bridge.h
 src/xstar_tools/xstar/cpp/xstar_standalone.cpp

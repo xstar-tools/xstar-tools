@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.44.2 - 2026-06-08
+
+- Removed the fragile parse-time GNU make filesystem-link probe.
+- Defaulted filesystem compatibility linkage to `-lstdc++fs`, with an explicit override supported.
+- Retained ABI 60440 and explicit plugin linkage to `libxstar_api.so`.
+
 ## 0.6.44.1 - 2026-06-08
 
 - Detect whether C++17 `std::filesystem` is provided by the main C++ standard library or requires `-lstdc++fs`.

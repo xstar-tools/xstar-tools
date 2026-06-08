@@ -43,7 +43,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.44.1 freezes the standalone ABI and persistent context. The typed\n"
+        "v0.6.44.2 freezes the standalone ABI and persistent context. The typed\n"
         "zone boundary is scaffold-only; production science remains on the\n"
         "accepted Python/hybrid runners until the complete engine is ported.\n";
 }
