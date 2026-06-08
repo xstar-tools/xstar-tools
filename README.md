@@ -1,3 +1,7 @@
+# v0.6.38 four-family order-preserving product promoted
+
+The `v0.6.38` package promotes the seed-free four-family Mg rate-payload path while preserving accepted floating-point accumulation order. Before each Type-50/63/88 fast commit, pending Type-51 rows are flushed so exact C++ terms remain in source order. Normal execution skips full reverse verification and checkpoint reconstruction; `XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1` routes through the complete v0.6.37 diagnostic oracle. See `V0638_FOUR_FAMILY_ORDER_PRESERVING_PRODUCT_PROMOTED.md`.
+
 ## v0.6.35 four-family rate-payload product promoted
 
 This package promotes exact C++ rate-payload execution for Mg 4:50, 3:51, 3:63, and 42:88.

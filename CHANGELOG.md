@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.38 - 2026-06-08
+
+- Promote the four-family Mg rate-payload product with the Python scalar seed/oracle removed from normal execution.
+- Preserve accepted source accumulation order by flushing pending Type-51 batches before every Type-50/63/88 fast commit.
+- Add structural order-barrier provenance and whole-evaluation fallback invariants.
+- Route `XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1` through the complete v0.6.37 reverse-verification candidate.
+- Keep the engine ABI at version 8 because scalar formulas and row construction are unchanged.
+
 ## 0.6.37 - 2026-06-08
 
 - Add a diagnostic four-family order-preserving C++ commit candidate.

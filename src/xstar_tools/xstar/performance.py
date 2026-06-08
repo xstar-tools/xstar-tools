@@ -1060,16 +1060,17 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.37", "requested": False,
+            "schema_version": "0.6.38", "requested": False,
             "product_candidate": False, "product_promoted": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
         }
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
-    schema_version = str(rows[0].get("schema_version", "0.6.37"))
+    schema_version = str(rows[0].get("schema_version", "0.6.38"))
     success_status = (
-        "PRODUCT_PROMOTED" if promoted
-        else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version == "0.6.37"
+        "ORDER_PRESERVING_PRODUCT_PROMOTED" if promoted and schema_version == "0.6.38"
+        else "PRODUCT_PROMOTED" if promoted
+        else "ORDER_PRESERVING_CANDIDATE_EXACT" if schema_version in {"0.6.37", "0.6.38"}
         else "PRODUCT_CANDIDATE_EXACT"
     )
     family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
@@ -1094,6 +1095,7 @@ def summarize_rate_payload_four_family_product(
     timing_keys = (
         "packet_build_seconds", "native_scalar_call_seconds", "row_cpp_call_seconds",
         "verification_seconds", "replacement_seconds", "checkpoint_seconds", "live_commit_seconds",
+        "order_barrier_seconds",
     )
     timing_totals = {key: sum(float(row.get(key, 0.0) or 0.0) for row in rows) for key in timing_keys}
     return {
@@ -1109,6 +1111,12 @@ def summarize_rate_payload_four_family_product(
         "verification_enabled": bool(all(bool(row.get("verification_enabled")) for row in rows)),
         "full_reverse_verification": bool(all(bool(row.get("full_reverse_verification")) for row in rows)),
         "order_preserving_commit": bool(all(bool(row.get("order_preserving_commit")) for row in rows)),
+        "order_preserving_commit_strategy": str(rows[0].get("order_preserving_commit_strategy", "")),
+        "order_preserving_commit_verified": bool(all(bool(row.get("order_preserving_commit_verified")) for row in rows)),
+        "type51_order_barrier_count": int(sum(int(row.get("type51_order_barrier_count", 0) or 0) for row in rows)),
+        "type51_order_barrier_flushes": int(sum(int(row.get("type51_order_barrier_flushes", 0) or 0) for row in rows)),
+        "type51_order_barrier_pending_records": int(sum(int(row.get("type51_order_barrier_pending_records", 0) or 0) for row in rows)),
+        "type51_order_barrier_terms": int(sum(int(row.get("type51_order_barrier_terms", 0) or 0) for row in rows)),
         "evaluation_count": attempted,
         "evaluations_attempted": attempted,
         "evaluations_completed": completed,
@@ -1144,10 +1152,15 @@ def summarize_rate_payload_four_family_product(
         "timing_totals": timing_totals,
         "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
         "evaluations": rows,
-        "notes": [
-            "v0.6.37 is a diagnostic order-preserving product candidate, not a promotion.",
-            "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
-            "C++ rows are replaced in-place with the accepted composite identity and original term index.",
-            "Ordered term-stream, pre-normalization matrix, and solver-input checkpoints must all be exact.",
-        ],
+        "notes": (
+            [
+                "v0.6.38 promoted mode elides the Python seed path and flushes pending Type-51 batches before every Type-50/63/88 fast commit.",
+                "The structural order barrier preserves the accumulation order proven exact by v0.6.37 without production hashes or matrix reconstruction.",
+                "Setting XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1 routes execution through the complete order-preserving reverse-verification candidate.",
+            ] if promoted else [
+                "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
+                "C++ rows are replaced in-place with the accepted composite identity and original term index.",
+                "Ordered term-stream, pre-normalization matrix, and solver-input checkpoints must all be exact.",
+            ]
+        ),
     }

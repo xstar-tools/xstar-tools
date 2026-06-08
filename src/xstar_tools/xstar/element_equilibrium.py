@@ -2715,11 +2715,29 @@ def _run_rate_payload_batched_orchestration_shadow(
 
 
 
+def _rate_payload_four_family_full_reverse_verification_requested(element_z: int) -> bool:
+    """Route promoted verification requests through the complete v0.6.37 oracle.
+
+    Normal v0.6.38 execution is seed-free.  Setting VERIFY_OLD=1 deliberately
+    disables the promoted fast path and activates the order-preserving candidate
+    after the accepted path has assembled the complete oracle term stream.
+    """
+    return bool(
+        int(element_z) == 12
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD")
+    )
+
+
 def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     return bool(
         int(element_z) == 12
-        and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+        and (
+            _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_CANDIDATE")
+            or _rate_payload_four_family_full_reverse_verification_requested(element_z)
+        )
     )
 
 
@@ -2730,6 +2748,7 @@ def _rate_payload_four_family_product_promoted_enabled(
         int(element_z) == 12
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_PROMOTED")
         and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_PRODUCT_ACCEPTED")
+        and not _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD")
         and not bool(profile_control.get("_mg_rate_payload_four_family_product_retry_disabled", False))
     )
 
@@ -2749,14 +2768,14 @@ def _run_rate_payload_four_family_product_candidate(
 ) -> List[MatrixTerm]:
     """Order-preserving four-family C++ candidate with full reverse verification.
 
-    v0.6.37 deliberately retains the accepted path as the complete oracle.  It
+    v0.6.38 retains the accepted v0.6.37 diagnostic path as the complete oracle.  It
     evaluates native Type-50/63/88 scalar channels, constructs all four family
     rows in C++, compares every scalar and row exactly, replaces rows in-place
     using the accepted composite identity and original term index, and checks
     the ordered term stream plus full pre-normalization matrices before commit.
     """
     summary: Dict[str, Any] = {
-        "schema_version": "0.6.37",
+        "schema_version": "0.6.38",
         "requested": True,
         "accepted_gate": True,
         "product_candidate": True,
@@ -3414,13 +3433,17 @@ def _assemble_element_matrix_impl(
     _four_family_verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.37",
+            "schema_version": "0.6.38",
             "requested": True, "accepted_gate": True,
             "product_candidate": False, "product_promoted": True,
             "active": False, "live_matrix_commit": False,
             "whole_evaluation_fallback": True,
             "python_seed_path_retained": False,
-            "verification_enabled": bool(_four_family_verify_old),
+            "verification_enabled": False,
+            "full_reverse_verification": False,
+            "order_preserving_commit": True,
+            "order_preserving_commit_strategy": "flush_pending_type51_before_each_fast_record",
+            "order_preserving_commit_verified": False,
             "evaluation_index": int(_rate_payload_four_family_product_eval_index),
             "status": "INITIALIZING",
             "records_expected": 0, "records_completed": 0,
@@ -3438,6 +3461,11 @@ def _assemble_element_matrix_impl(
             "row_cpp_call_seconds": 0.0,
             "verification_seconds": 0.0,
             "live_commit_seconds": 0.0,
+            "order_barrier_seconds": 0.0,
+            "type51_order_barrier_count": 0,
+            "type51_order_barrier_flushes": 0,
+            "type51_order_barrier_pending_records": 0,
+            "type51_order_barrier_terms": 0,
             "fallback_reason": "",
         }
         profile_control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(
@@ -5312,7 +5340,7 @@ def _assemble_element_matrix_impl(
                     field="row_collection_elapsed",
                 )
 
-            # v0.6.37 retained promoted path: native Type-50/63/88 scalar and C++
+            # v0.6.38 order-preserving promoted path: native Type-50/63/88 scalar and C++
             # matrix-row caches before the per-record Python ucalc path.  The
             # existing accepted C++ Type-51 ion batch remains its live owner.
             _four_family_fast_result_by_record: Dict[int, Dict[str, Any]] = {}
@@ -5616,6 +5644,21 @@ def _assemble_element_matrix_impl(
                     _rate_payload_add(profile_control, _matrix_dataflow_eval_index, "record_header_filter_dispatch", _elapsed, records_processed=1.0)
 
                 if _rate_payload_four_family_promoted and int(record) in _four_family_fast_result_by_record:
+                    # v0.6.38 ordering barrier.  Type-51 rows are produced by a
+                    # deferred ion batch.  Before committing a later Type-50/63/88
+                    # fast record, flush any pending Type-51 rows so the live term
+                    # stream preserves the accepted source/accumulation order.
+                    _barrier_t0 = time.perf_counter()
+                    _pending_before = int(len(pending_cpp_mg_type51_payload) + len(pending_cpp_mg_rates_matrix))
+                    _terms_before_barrier = int(len(terms))
+                    _timed_flush_pending_mg_rates_matrix()
+                    if _four_family_product_summary is not None:
+                        _four_family_product_summary["type51_order_barrier_count"] += 1
+                        _four_family_product_summary["order_barrier_seconds"] += time.perf_counter() - _barrier_t0
+                        if _pending_before > 0:
+                            _four_family_product_summary["type51_order_barrier_flushes"] += 1
+                            _four_family_product_summary["type51_order_barrier_pending_records"] += _pending_before
+                            _four_family_product_summary["type51_order_barrier_terms"] += int(len(terms) - _terms_before_barrier)
                     _commit_t0 = time.perf_counter()
                     _cached = _four_family_fast_result_by_record[int(record)]
                     _result = UCalcResult(
@@ -5628,10 +5671,10 @@ def _assemble_element_matrix_impl(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_rate_payload_product_v037",
-                            validation_status="product_promoted_exact",
+                            implementation="cpp_four_family_rate_payload_order_preserving_product_v038",
+                            validation_status="order_preserving_product_promoted",
                             context_fields_used=("temperature_k", "xpx", "xee", "levels", "radiation"),
-                            notes=("Python scalar seed path elided; whole-evaluation fallback retained.",),
+                            notes=("Python scalar seed path elided; Type-51 order barriers and whole-evaluation fallback retained.",),
                         ),
                     )
                     _fast_rows = [dict(_row) for _row in _four_family_fast_rows_by_record[int(record)]]
@@ -6551,9 +6594,17 @@ def _assemble_element_matrix_impl(
                 raise RuntimeError(f"not all four promoted families present: {_four_family_product_summary['family_record_counts']}")
             if len(_supported_terms) != 4 * len(_record_keys):
                 raise RuntimeError(f"promoted term coverage {len(_supported_terms)} != {4 * len(_record_keys)}")
+            _fast_record_total = int(sum(int(v or 0) for v in _four_family_product_summary["fast_path_record_counts"].values()))
+            if int(_four_family_product_summary.get("type51_order_barrier_count", 0)) != _fast_record_total:
+                raise RuntimeError(
+                    f"order barrier coverage {_four_family_product_summary.get('type51_order_barrier_count', 0)} != {_fast_record_total}"
+                )
+            if _type51_records > 0 and int(_four_family_product_summary.get("type51_order_barrier_flushes", 0)) <= 0:
+                raise RuntimeError("no pending Type-51 batch was flushed at a fast-record order barrier")
+            _four_family_product_summary["order_preserving_commit_verified"] = True
             _four_family_product_summary["active"] = True
             _four_family_product_summary["live_matrix_commit"] = True
-            _four_family_product_summary["status"] = "PRODUCT_PROMOTED"
+            _four_family_product_summary["status"] = "ORDER_PRESERVING_PRODUCT_PROMOTED"
         except Exception as _exc:
             _four_family_product_summary["fallback_reason"] = str(_exc)
             _four_family_product_summary["status"] = "FALLBACK_ACCEPTED_PATH"
