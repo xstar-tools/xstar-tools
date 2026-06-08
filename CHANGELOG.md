@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.44.1 - 2026-06-08
+
+- Detect whether C++17 `std::filesystem` is provided by the main C++ standard library or requires `-lstdc++fs`.
+- Link `libxstar_api.so`, both backend plugins, and `xstar_cpp` with the detected filesystem compatibility library.
+- Add filesystem link mode to `make print-config`.
+- Add relocation checks that reject unresolved dynamic symbols in the standalone executable and plugin libraries.
+- Preserve ABI version 60440 and the v0.6.44 native/Python directory layout.
+
 ## 0.6.44 - 2026-06-08
 
 - Added the standalone `xstar_cpp` executable.

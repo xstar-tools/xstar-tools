@@ -1,6 +1,6 @@
-"""Python adapter for the v0.6.44 standalone shared-library ABI.
+"""Python adapter for the v0.6.44.1 standalone shared-library ABI.
 
-This module intentionally provides only the ABI-validation scaffold in v0.6.44.
+This module intentionally provides only the ABI-validation scaffold in v0.6.44.1.
 The existing production Python and hybrid physics paths remain unchanged.  The
 shared-library adapter will acquire full zone physics in later releases.
 """
@@ -48,7 +48,7 @@ def run_zone(
     context.zones_attempted += 1
     if not allow_scaffold:
         raise NotImplementedError(
-            "v0.6.44 Python standalone zone boundary is architecture-only; "
+            "v0.6.44.1 Python standalone zone boundary is architecture-only; "
             "use the existing xstar_tools Python runner for production physics"
         )
 
@@ -81,4 +81,4 @@ def run_batch(
 
 def echo_json(request: Any) -> Any:
     """Small JSON-bridge self-test callable."""
-    return {"backend": "python", "request": request, "version": "0.6.44"}
+    return {"backend": "python", "request": request, "version": "0.6.44.1"}

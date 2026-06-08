@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.44
+Version: 0.6.44.1
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,13 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.44.1 filesystem linker compatibility hotfix
+
+This hotfix preserves ABI version 60440 and the v0.6.44 architecture while
+automatically linking `-lstdc++fs` on older GCC/libstdc++ toolchains that need
+it for C++17 `std::filesystem`. Newer toolchains continue to link without the
+extra compatibility library. See `V06441_FILESYSTEM_LINK_HOTFIX.md`.
 
 # v0.6.39 four-family seed-elision differential diagnostic
 

@@ -8,6 +8,32 @@ PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 RPATH_ORIGIN := -Wl,-rpath,'$$ORIGIN'
 
+# GCC 8 and older expose C++17 std::filesystem through libstdc++fs.
+# Newer libstdc++ versions provide it directly. Detect the required link mode
+# once at make parse time; callers may override FILESYSTEM_LIBS explicitly.
+ifeq ($(origin FILESYSTEM_LIBS), undefined)
+FILESYSTEM_LINK_MODE := $(shell \
+	tmp=$$(mktemp -d /tmp/xstar-fs-link.XXXXXX); \
+	printf '%s\n' '#include <filesystem>' 'int main() { return std::filesystem::current_path().empty(); }' > $$tmp/test.cpp; \
+	if $(CXX) $(CPPFLAGS) $(CXXFLAGS) $$tmp/test.cpp -o $$tmp/test >/dev/null 2>&1; then \
+		printf '%s' builtin; \
+	elif $(CXX) $(CPPFLAGS) $(CXXFLAGS) $$tmp/test.cpp -o $$tmp/test -lstdc++fs >/dev/null 2>&1; then \
+		printf '%s' stdc++fs; \
+	else \
+		printf '%s' unavailable; \
+	fi; \
+	rm -rf $$tmp)
+ifeq ($(FILESYSTEM_LINK_MODE),stdc++fs)
+FILESYSTEM_LIBS := -lstdc++fs
+else ifeq ($(FILESYSTEM_LINK_MODE),builtin)
+FILESYSTEM_LIBS :=
+else
+$(error C++17 std::filesystem link test failed; use a compatible compiler or set FILESYSTEM_LIBS explicitly)
+endif
+else
+FILESYSTEM_LINK_MODE := override
+endif
+
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
 MATRIX_TARGET := libxstar_matrix.so
@@ -57,25 +83,27 @@ $(ENGINE_TARGET): xstar_engine.cpp xstar_backend_common.hpp compact_arrays.hpp e
 
 $(API_TARGET): xstar_api.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \
-		-o $@ xstar_api.cpp $(COMMON_LIBS) $(RPATH_ORIGIN)
+		-o $@ xstar_api.cpp $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
-$(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp $(PHYSICS_TARGETS)
+$(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp $(PHYSICS_TARGETS) $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) \
-		-o $@ xstar_backend_cpp.cpp $(COMMON_LIBS) $(RPATH_ORIGIN)
+		-o $@ xstar_backend_cpp.cpp -L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
-$(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp
+$(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
-		-o $@ xstar_backend_python.cpp $(PYTHON_LIBS) $(COMMON_LIBS) $(RPATH_ORIGIN)
+		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_api.h xstar_api.hpp xstar_python_bridge.h $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp \
-		-L. -lxstar_api $(COMMON_LIBS) $(RPATH_ORIGIN)
+		-L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:
 	@echo CXX=$(CXX)
 	@echo PYTHON_CONFIG=$(PYTHON_CONFIG)
 	@echo PYTHON_INCLUDES=$(PYTHON_INCLUDES)
 	@echo PYTHON_LIBS=$(PYTHON_LIBS)
+	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
+	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 
 # These are ABI/scaffold tests only. They deliberately do not claim science parity.
 test: all
@@ -86,7 +114,7 @@ test: all
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.44 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.44.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

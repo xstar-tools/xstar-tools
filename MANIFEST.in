@@ -360,3 +360,10 @@ include run_v044_xstar_standalone_abi.sh
 include run_v044_xstar_tools_python.sh
 include run_v044_xstar_tools_hybrid_accepted.sh
 include check_v044_standalone_abi.py
+
+include V06441_FILESYSTEM_LINK_HOTFIX.md
+include xstar_tools_v0.6.44.1_handoff.md
+include run_v0441_xstar_standalone_abi.sh
+include run_v0441_xstar_tools_python.sh
+include run_v0441_xstar_tools_hybrid_accepted.sh
+include check_v0441_standalone_abi.py

@@ -1,3 +1,10 @@
+## v0.6.44.1 filesystem linker compatibility hotfix
+
+This hotfix preserves ABI version 60440 and the v0.6.44 architecture while
+automatically linking `-lstdc++fs` on older GCC/libstdc++ toolchains that need
+it for C++17 `std::filesystem`. Newer toolchains continue to link without the
+extra compatibility library. See `V06441_FILESYSTEM_LINK_HOTFIX.md`.
+
 # v0.6.39 four-family seed-elision differential diagnostic
 
 The `v0.6.39` package keeps the accepted Mg assembly live and compares seven isolated Type-50/63/88 seed-elision variants. It verifies native scalars, C++ rows, ordered terms, per-cell contribution sequences, matrices, solver inputs, second-pass totals, and non-scalar `UCalcResult` state. Product promotion is disabled. See `V0639_FOUR_FAMILY_SEED_ELISION_DIFFERENTIAL_DIAGNOSTIC.md`.
