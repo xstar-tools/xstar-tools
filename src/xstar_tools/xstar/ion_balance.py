@@ -225,6 +225,96 @@ def _selected_rate_records_for_ion(
     return list(selected_records)
 
 
+def _mg_pre_matrix_candidate_topology(
+    master: XSTARMasterData,
+    *,
+    ion_index: int,
+    selected_records: Sequence[Tuple[int, int]],
+    cache: Optional[Dict[str, Any]] = None,
+    enable_type53: bool = True,
+) -> Tuple[Tuple[Tuple[int, float, float], ...], Tuple[Tuple[int, float, float], ...], bool]:
+    """Return cached Mg Type-49/53 candidate lists in source order.
+
+    The topology is immutable for one atomic database.  v0.6.43 classifies it
+    once and reuses it across all 61 evaluations.  The 0.5 escape factors are
+    the literal preliminary ``calc_ion_rates`` values.
+    """
+    key = ("calc_ion_rates.mg_pre_matrix_coarse_topology", int(ion_index), bool(enable_type53))
+    if isinstance(cache, dict) and key in cache:
+        value = cache[key]
+        return tuple(value[0]), tuple(value[1]), True
+    cand49: List[Tuple[int, float, float]] = []
+    cand53: List[Tuple[int, float, float]] = []
+    for _rate_slot, record in selected_records:
+        header = master.header(int(record))
+        if int(header.rate_type) != 7:
+            continue
+        if int(header.data_type) == 49:
+            cand49.append((int(record), 0.5, 0.5))
+        elif enable_type53 and int(header.data_type) == 53:
+            cand53.append((int(record), 0.5, 0.5))
+    value = (tuple(cand49), tuple(cand53))
+    if isinstance(cache, dict):
+        cache[key] = value
+    return value[0], value[1], False
+
+
+def _pre_matrix_rate_additions(
+    *, rate_type: int, idest1: int, idest2: int, nlev: int, ans1: float
+) -> Tuple[float, float]:
+    """Return the literal calc_ion_rates pirt/rrrt contribution."""
+    add_pi = 0.0
+    add_rr = 0.0
+    if int(rate_type) in {1, 15} or (
+        int(rate_type) == 7 and int(idest1) == 1 and int(idest2) <= int(nlev) + 2
+    ):
+        add_pi = float(ans1)
+    if int(rate_type) in {8, 6}:
+        add_rr = float(ans1)
+    return add_pi, add_rr
+
+
+def _mg_pre_matrix_summary(control: Optional[MutableMapping[str, Any]]) -> Optional[MutableMapping[str, Any]]:
+    if not isinstance(control, MutableMapping):
+        return None
+    summary = control.setdefault(
+        "mg_pre_matrix_coarse_cpp_summary",
+        {
+            "schema_version": "0.6.43.1",
+            "requested": False,
+            "shadow_enabled": False,
+            "product_candidate": False,
+            "product_enabled": False,
+            "source_order_commit": True,
+            "whole_record_fallback": True,
+            "evaluations_attempted": 0,
+            "evaluations_completed": 0,
+            "ions_attempted": 0,
+            "ions_completed": 0,
+            "selected_records": 0,
+            "selected_type49_records": 0,
+            "selected_type53_records": 0,
+            "cpp_supported_records": 0,
+            "cpp_type49_supported_records": 0,
+            "cpp_type53_supported_records": 0,
+            "cpp_committed_records": 0,
+            "python_fallback_records": 0,
+            "type53_product_enabled": False,
+            "type53_excluded_from_product": True,
+            "shadow_records_compared": 0,
+            "shadow_mismatches": 0,
+            "topology_cache_hits": 0,
+            "topology_cache_misses": 0,
+            "cpp_calls": 0,
+            "packing_seconds": 0.0,
+            "cpp_kernel_seconds": 0.0,
+            "errors": 0,
+            "first_shadow_mismatch": {},
+        },
+    )
+    return summary if isinstance(summary, MutableMapping) else None
+
+
 def _parent_destination_context(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -275,7 +365,7 @@ def calc_ion_rates(
     if context.temperature_k <= 0.0 or not math.isfinite(context.temperature_k):
         raise IonBalanceError("temperature_k must be finite and positive")
 
-    profile_control = context.profile_control or {}
+    profile_control = context.profile_control if context.profile_control is not None else {}
     _forensic_profile = profile_level_at_least(profile_control, "forensic")
     _setup_t0 = time.perf_counter() if _forensic_profile else 0.0
     dispatch = dispatcher or default_source_faithful_ucalc()
@@ -320,11 +410,27 @@ def calc_ion_rates(
     # without skipping Python records.  Product use requires the explicit
     # XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP opt-in.
     _truthy = {"1", "true", "yes", "on"}
-    _prematrix_requested = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in _truthy
-    _prematrix_shadow = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_SHADOW_CPP", "0")).strip().lower() in _truthy
-    _prematrix_product = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP", "0")).strip().lower() in _truthy
+    _coarse_requested = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_CPP", "0")).strip().lower() in _truthy
+    _prematrix_requested = _coarse_requested or str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PHOTO_CPP", "0")).strip().lower() in _truthy
+    _prematrix_shadow = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_SHADOW", os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_SHADOW_CPP", "0"))).strip().lower() in _truthy
+    _prematrix_product_candidate = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_PRODUCT_CANDIDATE", "0")).strip().lower() in _truthy
+    _prematrix_product = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_PRODUCT", os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_PRODUCT_CPP", "0"))).strip().lower() in _truthy
+    # v0.6.43.1: the inherited Type-53 preliminary kernel is not bit-exact
+    # against SourceFaithfulUCalc (the v0.6.43 qualification found one mismatch
+    # for every Mg ion/evaluation).  Keep Type-53 on Python until a separately
+    # qualified exact kernel is available.  This flag is deliberately distinct
+    # from the accepted element-matrix Type-53 feature flag.
+    _coarse_type53_enabled = str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_COARSE_TYPE53", "0")).strip().lower() in _truthy
+    # Contribution rows require all six Python ans channels.  The production
+    # coarse path is therefore active only when high-volume contribution
+    # materialization is disabled; qualification/full diagnostics retain the
+    # complete Python record object and can run the C++ path in shadow mode.
+    _prematrix_product_live = bool(_prematrix_product and not retain_contributions and not _prematrix_shadow)
     cpp_prematrix_records: set[int] = set()
     cpp_prematrix_product_records: set[int] = set()
+    cpp_prematrix_result_by_record: Dict[int, Dict[str, Any]] = {}
+    cpp_prematrix_result_by_position: Dict[int, Dict[str, Any]] = {}
+    cpp_prematrix_product_positions: set[int] = set()
     cpp_prematrix_pirt = 0.0
     cpp_prematrix_python_pirt = 0.0
     cpp_prematrix_python_rrrt = 0.0
@@ -332,8 +438,32 @@ def calc_ion_rates(
     cpp_prematrix_stats: Dict[str, float] = {
         "requested": 1.0 if _prematrix_requested else 0.0,
         "shadow_enabled": 1.0 if _prematrix_shadow else 0.0,
-        "product_enabled": 1.0 if _prematrix_product else 0.0,
+        "product_enabled": 1.0 if _prematrix_product_live else 0.0,
+        "product_candidate": 1.0 if _prematrix_product_candidate else 0.0,
+        "coarse_requested": 1.0 if _coarse_requested else 0.0,
     }
+    _selected_type49_records = 0
+    _selected_type53_records = 0
+    if int(element_z) == 12:
+        for _rate_slot_count, _record_count in selected_records:
+            _header_count = master.header(int(_record_count))
+            if int(_header_count.rate_type) == 7 and int(_header_count.data_type) == 49:
+                _selected_type49_records += 1
+            elif int(_header_count.rate_type) == 7 and int(_header_count.data_type) == 53:
+                _selected_type53_records += 1
+
+    _coarse_summary = _mg_pre_matrix_summary(profile_control)
+    if _coarse_summary is not None and int(element_z) == 12:
+        _coarse_summary["requested"] = bool(_prematrix_requested)
+        _coarse_summary["shadow_enabled"] = bool(_prematrix_shadow)
+        _coarse_summary["product_candidate"] = bool(_prematrix_product_candidate)
+        _coarse_summary["product_enabled"] = bool(_prematrix_product_live)
+        _coarse_summary["ions_attempted"] = int(_coarse_summary.get("ions_attempted", 0)) + 1
+        _coarse_summary["selected_records"] = int(_coarse_summary.get("selected_records", 0)) + int(n_selected)
+        _coarse_summary["selected_type49_records"] = int(_coarse_summary.get("selected_type49_records", 0)) + int(_selected_type49_records)
+        _coarse_summary["selected_type53_records"] = int(_coarse_summary.get("selected_type53_records", 0)) + int(_selected_type53_records)
+        _coarse_summary["type53_product_enabled"] = bool(_coarse_type53_enabled)
+        _coarse_summary["type53_excluded_from_product"] = not bool(_coarse_type53_enabled)
     _cpp_t0 = time.perf_counter() if _forensic_profile else 0.0
     if (
         int(element_z) == 12
@@ -347,16 +477,14 @@ def calc_ion_rates(
                 accumulate_mg_ion_rate7_type53_terms_cpp_detailed,
             )
 
-            cand49: List[Tuple[int, float, float]] = []
-            cand53: List[Tuple[int, float, float]] = []
-            for _rate_slot, _record in selected_records:
-                _header = master.header(_record)
-                if int(_header.rate_type) != 7:
-                    continue
-                if int(_header.data_type) == 49:
-                    cand49.append((int(_record), 0.5, 0.5))
-                elif int(_header.data_type) == 53 and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP", os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "0"))).strip().lower() in {"1", "true", "yes", "on"}:
-                    cand53.append((int(_record), 0.5, 0.5))
+            _enable_type53 = bool(_coarse_type53_enabled) and str(os.environ.get("XSTAR_ATOMIC_PRE_MATRIX_MG_RATE7_TYPE53_CPP", os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_TYPE53_PHOTO_CPP", "0"))).strip().lower() in _truthy
+            cand49, cand53, _topology_hit = _mg_pre_matrix_candidate_topology(
+                master, ion_index=int(ion_index), selected_records=selected_records,
+                cache=context.reusable_work_arrays, enable_type53=_enable_type53,
+            )
+            if _coarse_summary is not None:
+                _key = "topology_cache_hits" if _topology_hit else "topology_cache_misses"
+                _coarse_summary[_key] = int(_coarse_summary.get(_key, 0)) + 1
 
             for _label, _func, _cands in (
                 ("type49", accumulate_mg_ion_rate7_type49_terms_cpp_detailed, cand49),
@@ -380,13 +508,38 @@ def calc_ion_rates(
                     nlevp=int(nlev),
                     candidates=_cands,
                 )
-                _supported_records = {int(row.get("record", 0)) for row in _rows if int(row.get("record", 0)) > 0}
+                _supported_records: set[int] = set()
                 for _row in _rows:
-                    if str(_row.get("role")) == "scalar_pirt" and int(_row.get("idest1", 0)) == 1:
-                        cpp_prematrix_pirt += float(_row.get("aj1", 0.0))
+                    if str(_row.get("role")) != "scalar_pirt":
+                        continue
+                    _record_number = int(_row.get("record", 0))
+                    if _record_number <= 0:
+                        continue
+                    _supported_records.add(_record_number)
+                    _candidate = {
+                        "record": _record_number,
+                        "data_type": int(_row.get("data_type", 0)),
+                        "rate_type": int(_row.get("rate_type", 7)),
+                        "idest1": int(_row.get("idest1", 0)),
+                        "idest2": int(_row.get("idest2", 0)),
+                        "ans1": float(_row.get("aj1", 0.0)),
+                        "ans2": float(_row.get("aj2", 0.0)),
+                        "ans3": float(_row.get("cj", 0.0)),
+                        "ans4": float(_row.get("cj2", 0.0)),
+                    }
+                    cpp_prematrix_result_by_record[_record_number] = _candidate
+                    if _coarse_summary is not None:
+                        _dtype_key = "cpp_type49_supported_records" if int(_candidate["data_type"]) == 49 else "cpp_type53_supported_records"
+                        _coarse_summary[_dtype_key] = int(_coarse_summary.get(_dtype_key, 0)) + 1
+                    if int(_candidate["idest1"]) == 1:
+                        cpp_prematrix_pirt += float(_candidate["ans1"])
                 cpp_prematrix_records.update(_supported_records)
-                if _prematrix_product:
+                if _prematrix_product_live:
                     cpp_prematrix_product_records.update(_supported_records)
+                if _coarse_summary is not None:
+                    _coarse_summary["cpp_calls"] = int(_coarse_summary.get("cpp_calls", 0)) + int(float((_stats or {}).get("cpp_calls", 0.0)))
+                    _coarse_summary["packing_seconds"] = float(_coarse_summary.get("packing_seconds", 0.0)) + float((_stats or {}).get("packing_seconds", 0.0))
+                    _coarse_summary["cpp_kernel_seconds"] = float(_coarse_summary.get("cpp_kernel_seconds", 0.0)) + float((_stats or {}).get("cpp_kernel_seconds", 0.0))
                 for _k, _v in (_stats or {}).items():
                     try:
                         cpp_prematrix_stats[f"{_label}_{_k}"] = cpp_prematrix_stats.get(f"{_label}_{_k}", 0.0) + float(_v)
@@ -395,38 +548,70 @@ def calc_ion_rates(
         except Exception as _exc:
             cpp_prematrix_records = set()
             cpp_prematrix_product_records = set()
+            cpp_prematrix_result_by_record = {}
+            cpp_prematrix_result_by_position = {}
+            cpp_prematrix_product_positions = set()
             cpp_prematrix_pirt = 0.0
             cpp_prematrix_stats.update({"fallback": 1.0, "error_hash": float(abs(hash(str(_exc))) % 1000000)})
+            if _coarse_summary is not None:
+                _coarse_summary["errors"] = int(_coarse_summary.get("errors", 0)) + 1
+    # Convert record-keyed kernel output to the literal selected-stream
+    # position.  This remains safe even if a packed record is aliased by more
+    # than one source chain.
+    cpp_prematrix_result_by_position = {
+        int(position): cpp_prematrix_result_by_record[int(record)]
+        for position, (_rate_slot, record) in enumerate(selected_records)
+        if int(record) in cpp_prematrix_result_by_record
+    }
+    if _prematrix_product_live:
+        cpp_prematrix_product_positions = set(cpp_prematrix_result_by_position)
+
     if _forensic_profile:
         record_profile_event(
             profile_control,
-            "calc_hmc_all.pre_matrix.cpp_shadow_or_product",
+            ("calc_hmc_all.pre_matrix.mg_coarse_cpp_kernel" if _coarse_requested else "calc_hmc_all.pre_matrix.cpp_shadow_or_product"),
             time.perf_counter() - _cpp_t0,
             counts_as_child=True,
             element_z=int(element_z),
             ion_stage=int(ion_stage),
             ion_index=int(ion_index),
             selected_records=float(n_selected),
-            supported_records=float(len(cpp_prematrix_records)),
-            product_records=float(len(cpp_prematrix_product_records)),
+            supported_records=float(len(cpp_prematrix_result_by_position)),
+            product_records=float(len(cpp_prematrix_product_positions)),
             source_routine="libxstar_matrix.so:pre_matrix_rate7",
         )
 
-    if cpp_prematrix_product_records:
-        pirti += float(cpp_prematrix_pirt)
-        n_evaluated += len(cpp_prematrix_product_records)
+    # v0.6.43 never pre-sums C++ records by family.  Each supported result is
+    # committed below at its original selected-record position.
 
     _context_build_seconds = 0.0
     _dispatch_seconds = 0.0
     _accumulation_seconds = 0.0
     _contribution_seconds = 0.0
     _context_allocations = 0
-    for rate_slot, record in selected_records:
-        if int(record) in cpp_prematrix_product_records:
-            continue
+    for source_position, (rate_slot, record) in enumerate(selected_records):
         header = master.header(record)
         ints = master.record_integers(record)
         idest1_packed = int(ints[-2]) if ints.size >= 2 else 0
+        pirti_before = float(pirti)
+        rrrti_before = float(rrrti)
+        _cpp_candidate = cpp_prematrix_result_by_position.get(int(source_position))
+        if int(source_position) in cpp_prematrix_product_positions and _cpp_candidate is not None:
+            add_pi, add_rr = _pre_matrix_rate_additions(
+                rate_type=int(header.rate_type),
+                idest1=int(_cpp_candidate.get("idest1", 0)),
+                idest2=int(_cpp_candidate.get("idest2", 0)),
+                nlev=int(nlev),
+                ans1=float(_cpp_candidate.get("ans1", 0.0)),
+            )
+            n_evaluated += 1
+            pirti += add_pi
+            rrrti += add_rr
+            if _coarse_summary is not None:
+                _coarse_summary["cpp_committed_records"] = int(_coarse_summary.get("cpp_committed_records", 0)) + 1
+            continue
+        if _coarse_summary is not None and int(element_z) == 12:
+            _coarse_summary["python_fallback_records"] = int(_coarse_summary.get("python_fallback_records", 0)) + 1
         _context_t0 = time.perf_counter() if _forensic_profile else 0.0
         ucontext = UCalcContext(
             temperature_k=float(context.temperature_k),
@@ -462,8 +647,6 @@ def calc_ion_rates(
         if _forensic_profile:
             _context_build_seconds += time.perf_counter() - _context_t0
             _context_allocations += 2
-        pirti_before = float(pirti)
-        rrrti_before = float(rrrti)
         _dispatch_t0 = time.perf_counter() if _forensic_profile else 0.0
         result = dispatch.evaluate_record_number(
             master,
@@ -480,19 +663,12 @@ def calc_ion_rates(
         add_rr = 0.0
         if result.status is UCalcStatus.EVALUATED:
             n_evaluated += 1
-            if (
-                header.rate_type in {1, 15}
-                or (
-                    header.rate_type == 7
-                    and result.idest1 == 1
-                    and result.idest2 <= nlev + 2
-                )
-            ):
-                add_pi = float(result.ans1)
-                pirti += add_pi
-            if header.rate_type in {8, 6}:
-                add_rr = float(result.ans1)
-                rrrti += add_rr
+            add_pi, add_rr = _pre_matrix_rate_additions(
+                rate_type=int(header.rate_type), idest1=int(result.idest1),
+                idest2=int(result.idest2), nlev=int(nlev), ans1=float(result.ans1),
+            )
+            pirti += add_pi
+            rrrti += add_rr
         else:
             n_blocked += 1
 
@@ -500,6 +676,36 @@ def calc_ion_rates(
             cpp_prematrix_python_records += 1
             cpp_prematrix_python_pirt += float(add_pi)
             cpp_prematrix_python_rrrt += float(add_rr)
+            if _prematrix_shadow and _cpp_candidate is not None:
+                _candidate_add_pi, _candidate_add_rr = _pre_matrix_rate_additions(
+                    rate_type=int(header.rate_type),
+                    idest1=int(_cpp_candidate.get("idest1", 0)),
+                    idest2=int(_cpp_candidate.get("idest2", 0)),
+                    nlev=int(nlev),
+                    ans1=float(_cpp_candidate.get("ans1", 0.0)),
+                )
+                _exact = (
+                    float(add_pi).hex() == float(_candidate_add_pi).hex()
+                    and int(result.idest1) == int(_cpp_candidate.get("idest1", 0))
+                    and int(result.idest2) == int(_cpp_candidate.get("idest2", 0))
+                )
+                if _coarse_summary is not None:
+                    _coarse_summary["shadow_records_compared"] = int(_coarse_summary.get("shadow_records_compared", 0)) + 1
+                    if not _exact:
+                        _coarse_summary["shadow_mismatches"] = int(_coarse_summary.get("shadow_mismatches", 0)) + 1
+                        if not _coarse_summary.get("first_shadow_mismatch"):
+                            _coarse_summary["first_shadow_mismatch"] = {
+                                "record": int(record),
+                                "ion_index": int(ion_index),
+                                "ion_stage": int(ion_stage),
+                                "data_type": int(header.data_type),
+                                "python_add_pi": float(add_pi),
+                                "candidate_add_pi": float(_candidate_add_pi),
+                                "python_idest1": int(result.idest1),
+                                "candidate_idest1": int(_cpp_candidate.get("idest1", 0)),
+                                "python_idest2": int(result.idest2),
+                                "candidate_idest2": int(_cpp_candidate.get("idest2", 0)),
+                            }
         if _forensic_profile:
             _accumulation_seconds += time.perf_counter() - _accum_t0
 
@@ -575,6 +781,9 @@ def calc_ion_rates(
             )
 
     ready = n_blocked == 0
+    if _coarse_summary is not None and int(element_z) == 12:
+        _coarse_summary["cpp_supported_records"] = int(_coarse_summary.get("cpp_supported_records", 0)) + len(cpp_prematrix_result_by_position)
+        _coarse_summary["ions_completed"] = int(_coarse_summary.get("ions_completed", 0)) + 1
     return CalcIonRatesResult(
         ion_index=int(ion_index),
         ion_record=ion_record,
@@ -594,14 +803,18 @@ def calc_ion_rates(
             "local_lfpi": 1,
             "cached_selected_records": isinstance(context.reusable_work_arrays, dict),
             "retain_contributions": retain_contributions,
-            "prematrix_cpp_records": len(cpp_prematrix_records),
-            "prematrix_cpp_product_records": len(cpp_prematrix_product_records),
+            "prematrix_cpp_records": len(cpp_prematrix_result_by_position),
+            "prematrix_cpp_product_records": len(cpp_prematrix_product_positions),
             "prematrix_cpp_pirt": float(cpp_prematrix_pirt),
             "prematrix_python_records": int(cpp_prematrix_python_records),
             "prematrix_python_pirt": float(cpp_prematrix_python_pirt),
             "prematrix_python_rrrt": float(cpp_prematrix_python_rrrt),
             "prematrix_shadow_pirt_abs_diff": float(abs(cpp_prematrix_python_pirt - cpp_prematrix_pirt)) if cpp_prematrix_records else 0.0,
             "prematrix_shadow_product_active": bool(cpp_prematrix_product_records),
+            "prematrix_source_order_commit": True,
+            "prematrix_coarse_requested": bool(_coarse_requested),
+            "prematrix_product_candidate": bool(_prematrix_product_candidate),
+            "prematrix_product_live": bool(_prematrix_product_live),
             "prematrix_cpp_stats": dict(cpp_prematrix_stats),
         },
     )
@@ -778,7 +991,10 @@ def calc_element_pre_matrix_balance(
     dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]:
     """Run the total-rate/``istruc``/stage-limit first pass with exclusive splits."""
-    profile_control = context.profile_control or {}
+    profile_control = context.profile_control if context.profile_control is not None else {}
+    _coarse_summary = _mg_pre_matrix_summary(profile_control) if int(element_z) == 12 else None
+    if _coarse_summary is not None:
+        _coarse_summary["evaluations_attempted"] = int(_coarse_summary.get("evaluations_attempted", 0)) + 1
     with profile_component(
         profile_control,
         "calc_hmc_all.pre_matrix.metadata_lookup",
@@ -844,6 +1060,8 @@ def calc_element_pre_matrix_balance(
         source_routine="select_ion_stage_limits",
     ):
         limits = select_ion_stage_limits(preliminary.fractions, nnz=nnz, critf=critf)
+    if _coarse_summary is not None:
+        _coarse_summary["evaluations_completed"] = int(_coarse_summary.get("evaluations_completed", 0)) + 1
     return by_stage, preliminary, limits
 
 

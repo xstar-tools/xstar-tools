@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.43.1 - 2026-06-08
+
+- Exclude the non-bit-exact preliminary Type-53 C++ kernel from the coarse Mg pre-matrix product.
+- Retain exact Type-49 C++ acceleration and literal source-position commit.
+- Add per-type selected/supported coverage and explicit Type-53 fallback provenance.
+- Add qualification and production runners plus a parity-first acceptance checker.
+
 ## 0.6.42 - 2026-06-08
 
 - Add nested inclusive/exclusive profiling with parent, child, depth, and exclusive-time aggregation.

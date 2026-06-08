@@ -930,6 +930,7 @@ tests/test_v06403_position_safe_oracle_hotfix.py
 tests/test_v0640_type50_opakab_candidate.py
 tests/test_v0641_exact_product_promotion.py
 tests/test_v0642_exclusive_profile.py
+tests/test_v0643_coarse_mg_prematrix.py
 tests/test_validation_artifacts.py
 tests/test_workflow_api_v03131.py
 tests/test_xstar_benchmark_api_v03134.py
