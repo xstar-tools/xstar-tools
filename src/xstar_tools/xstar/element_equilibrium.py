@@ -47,6 +47,7 @@ from .ucalc import (
     default_source_faithful_ucalc,
     _radiation_arrays,
     _nbinc,
+    _source_faithful_level_threshold,
 )
 
 
@@ -2399,8 +2400,9 @@ def _run_rate_payload_batched_orchestration_shadow(
                         raw = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
                         threshold = result.get("diag_threshold_eV")
                         if threshold is None:
-                            bound = levels.require(int(item["idest1"]))
-                            threshold = float(bound.ionization_potential_ev or bound.continuum_energy_ev or 0.0)
+                            threshold = _source_faithful_level_threshold(
+                                levels, int(item["idest1"]), int(levels.nlev)
+                            )
                         row.update({
                             "threshold_eV": float(threshold or 0.0),
                             "raw_payload_f64": tuple(float(v) for v in raw),
@@ -2743,7 +2745,7 @@ def _rate_payload_four_family_full_reverse_verification_requested(element_z: int
 def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     """Retain only the accepted-live v0.6.39 diagnostic replacement path.
 
-    v0.6.40 PRODUCT_CANDIDATE uses the live seed-free product path below so
+    v0.6.40.1 PRODUCT_CANDIDATE uses the live seed-free product path below so
     its UCalcResult state, solver input, and science products are exercised.
     """
     return bool(
@@ -3078,8 +3080,9 @@ def _run_rate_payload_four_family_product_candidate(
                 raw = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
                 threshold = result.get("diag_threshold_eV")
                 if threshold is None:
-                    bound = levels.require(int(item["idest1"]))
-                    threshold = float(bound.ionization_potential_ev or bound.continuum_energy_ev or 0.0)
+                    threshold = _source_faithful_level_threshold(
+                        levels, int(item["idest1"]), int(levels.nlev)
+                    )
                 row.update({
                     "threshold_eV": float(threshold or 0.0),
                     "type88_phextrap_grid_points": int(reduced_epi.size),
@@ -3753,7 +3756,7 @@ def _assemble_element_matrix_impl(
     _four_family_reverse_oracle_term_by_index: Dict[int, MatrixTerm] = {}
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.40",
+            "schema_version": "0.6.40.1",
             "requested": True, "accepted_gate": True,
             "product_candidate": bool(_four_family_live_candidate),
             "product_promoted": bool(not _four_family_live_candidate),
@@ -3775,6 +3778,11 @@ def _assemble_element_matrix_impl(
             "native_scalar_records_expected": 0,
             "native_scalar_records_completed": 0,
             "native_scalar_mismatches": 0,
+            "native_scalar_mismatch_fields_by_family": {
+                "4:50": {}, "3:63": {}, "42:88": {}
+            },
+            "first_native_scalar_mismatch": {},
+            "fallback_provenance": {},
             "type50_opakab_records_expected": 0,
             "type50_opakab_records_compared": 0,
             "type50_opakab_mismatches": 0,
@@ -5756,8 +5764,9 @@ def _assemble_element_matrix_impl(
                             if _ints.size < 2:
                                 raise RuntimeError(f"type88 record {_record} has short integer payload")
                             _idest1, _idest2 = int(_ints[-2]), int(block.nlev)
-                            _bound = levels.require(_idest1)
-                            _threshold = float(_bound.ionization_potential_ev or _bound.continuum_energy_ev or 0.0)
+                            _threshold = _source_faithful_level_threshold(
+                                levels, _idest1, int(block.nlev)
+                            )
                             _raw = np.asarray(master.record_reals(int(_record)), dtype=np.float64).reshape(-1)
                             _native_packet.append({
                                 "record": int(_record), "rate_type": 42, "data_type": 88,
@@ -5793,6 +5802,10 @@ def _assemble_element_matrix_impl(
                                 "idest1": int(_source["idest1"]), "idest2": int(_source["idest2"]),
                                 **{f"ans{i}": float(_native[f"ans{i}"]) for i in range(1, 7)},
                                 "opakab": float(_native.get("opakab", 0.0)),
+                                "packet_threshold_eV": (
+                                    float(_source["threshold_eV"])
+                                    if "threshold_eV" in _source else None
+                                ),
                             }
                             _four_family_fast_result_by_record[_key] = _result_row
                     for _record in sorted(_four_family_fast_result_by_record):
@@ -5995,7 +6008,7 @@ def _assemble_element_matrix_impl(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_type50_opakab_state_restoration_candidate_v040",
+                            implementation="cpp_four_family_type88_threshold_hotfix_candidate_v0401",
                             validation_status="full_reverse_verified_product_candidate",
                             context_fields_used=("temperature_k", "turbulent_velocity_km_s", "xpx", "xee", "levels", "radiation", "atomic_mass"),
                             notes=("Python scalar seed path elided; Type-50 opakab restored; whole-evaluation fallback retained.",),
@@ -6033,7 +6046,50 @@ def _assemble_element_matrix_impl(
                         for _i in range(1, 7):
                             if float(getattr(_accepted_result, f"ans{_i}")) != float(getattr(_result, f"ans{_i}")):
                                 if _four_family_product_summary is not None:
+                                    _family_name = f"{int(_result.rate_type)}:{int(_result.data_type)}"
+                                    _field_name = f"ans{_i}"
+                                    _mismatch_detail = {
+                                        "evaluation_index": int(
+                                            _four_family_product_summary["evaluation_index"]
+                                        ),
+                                        "record": int(record),
+                                        "family": _family_name,
+                                        "field": _field_name,
+                                        "accepted_value": float(
+                                            getattr(_accepted_result, _field_name)
+                                        ),
+                                        "candidate_value": float(
+                                            getattr(_result, _field_name)
+                                        ),
+                                        "packet_threshold_eV": (
+                                            float(_cached["packet_threshold_eV"])
+                                            if _cached.get("packet_threshold_eV") is not None
+                                            else None
+                                        ),
+                                    }
+                                    _accepted_threshold = _accepted_result.diagnostics.get(
+                                        "threshold_eV"
+                                    )
+                                    if _accepted_threshold is not None:
+                                        _mismatch_detail["accepted_threshold_eV"] = float(
+                                            _accepted_threshold
+                                        )
                                     _four_family_product_summary["native_scalar_mismatches"] += 1
+                                    _family_fields = _four_family_product_summary[
+                                        "native_scalar_mismatch_fields_by_family"
+                                    ].setdefault(_family_name, {})
+                                    _family_fields[_field_name] = int(
+                                        _family_fields.get(_field_name, 0)
+                                    ) + 1
+                                    if not _four_family_product_summary[
+                                        "first_native_scalar_mismatch"
+                                    ]:
+                                        _four_family_product_summary[
+                                            "first_native_scalar_mismatch"
+                                        ] = dict(_mismatch_detail)
+                                    _four_family_product_summary["fallback_provenance"] = dict(
+                                        _mismatch_detail
+                                    )
                                 raise _FourFamilyProductFallback(f"reverse verification scalar mismatch record {record} ans{_i}")
                         if _four_family_product_summary is not None:
                             _four_family_product_summary["result_state_records_compared"] += 1
@@ -6070,8 +6126,8 @@ def _assemble_element_matrix_impl(
                     _row.update({
                         "ion_index": block.ion_index, "ion_stage": block.ion_stage, "nlev": block.nlev,
                         "density_scale": float(context.hydrogen_density_cm3),
-                        "rates_backend": "cpp_engine_four_family_type50_opakab_candidate",
-                        "rates_backend_message": "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE",
+                        "rates_backend": "cpp_engine_four_family_type88_threshold_hotfix_candidate",
+                        "rates_backend_message": "TYPE88_THRESHOLD_HOTFIX_CANDIDATE",
                         "ans1_after_calc_hmc_ion_filter": float(_result.ans1),
                         "ans2_after_calc_hmc_ion_filter": float(_result.ans2),
                     })
@@ -7015,9 +7071,9 @@ def _assemble_element_matrix_impl(
             _four_family_product_summary["active"] = True
             _four_family_product_summary["live_matrix_commit"] = True
             _four_family_product_summary["status"] = (
-                "TYPE50_OPAKAB_STATE_RESTORATION_CANDIDATE_EXACT"
+                "TYPE88_THRESHOLD_HOTFIX_CANDIDATE_EXACT"
                 if _four_family_live_candidate
-                else "TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_PROMOTED"
+                else "TYPE88_THRESHOLD_HOTFIX_PRODUCT_PROMOTED"
             )
         except Exception as _exc:
             _four_family_product_summary["fallback_reason"] = str(_exc)

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.40.1 - 2026-06-08
+
+- Construct each live Type-88 fast-packet threshold with the exact source `_level_threshold` semantics, including subtraction of the bound-level energy.
+- Leave the Type-88 C++ kernel and engine ABI unchanged.
+- Record scalar-mismatch family, accepted value, candidate value, and packet threshold in whole-evaluation fallback provenance.
+- Retain native Type-50 `opakab`, full reverse verification, zero Type-51 per-record barriers, and whole-evaluation fallback.
+- Require all 61 evaluations, all 146,286 Type-50 `opakab` comparisons, exact matrix and solver checkpoints, and exact FITS science payloads before acceptance.
+
 ## 0.6.40 - 2026-06-08
 
 - Add native, source-faithful Type-50 line-center `opakab` to the engine fast result (ABI 9, feature flags 1023).

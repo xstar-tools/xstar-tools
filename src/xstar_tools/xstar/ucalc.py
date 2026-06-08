@@ -503,6 +503,24 @@ class UCalcLevelTable:
         return float(level.statistical_weight) if level is not None else float(default)
 
 
+def _source_faithful_level_threshold(
+    levels: UCalcLevelTable, index: int, nlevp: int
+) -> float:
+    """Return the literal bound-level threshold used by ``ucalc``.
+
+    This shared helper prevents live fast packets from treating an absolute
+    ionization potential as an above-level threshold.  The operation order and
+    fallbacks are identical to ``SourceFaithfulUCalc._level_threshold``.
+    """
+    level = levels.require(index)
+    if level.ionization_potential_ev > 0:
+        return max(level.ionization_potential_ev - level.energy_ev, 0.0)
+    if level.continuum_energy_ev > 0:
+        return max(level.continuum_energy_ev - level.energy_ev, 0.0)
+    continuum = levels.get(nlevp)
+    return max((continuum.energy_ev if continuum else 0.0) - level.energy_ev, 0.0)
+
+
 @dataclass(frozen=True)
 class UCalcRecord:
     """Decoded packed ATDB record passed to one ``ucalc`` source branch."""
@@ -1197,13 +1215,7 @@ class SourceFaithfulUCalc:
         return abs(float(fallback))
 
     def _level_threshold(self, context: UCalcContext, index: int) -> float:
-        level=context.levels.require(index)
-        if level.ionization_potential_ev>0:
-            return max(level.ionization_potential_ev-level.energy_ev,0.0)
-        if level.continuum_energy_ev>0:
-            return max(level.continuum_energy_ev-level.energy_ev,0.0)
-        continuum=context.levels.get(context.nlevp)
-        return max((continuum.energy_ev if continuum else 0.0)-level.energy_ev,0.0)
+        return _source_faithful_level_threshold(context.levels, index, context.nlevp)
 
     def _parent_destination_context(self, context: UCalcContext, idest2: int) -> tuple[float,float]:
         if idest2<=context.nlevp:

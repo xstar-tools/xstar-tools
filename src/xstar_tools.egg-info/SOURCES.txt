@@ -22,10 +22,14 @@ V0631_RATE_PAYLOAD_NATIVE_SCALAR_RATES_SHADOW.md
 V0632_RATE_PAYLOAD_NATIVE_SCALAR_TYPE88_FULL_GRID_HOTFIX.md
 V0633_RATE_PAYLOAD_NATIVE_SCALAR_TYPE63_BIT_EXACT_REFINEMENT.md
 V0634_FOUR_FAMILY_RATE_PAYLOAD_PRODUCT_CANDIDATE.md
+V06401_TYPE88_FAST_PACKET_THRESHOLD_HOTFIX.md
 V0640_TYPE50_OPAKAB_STATE_RESTORATION_PRODUCT_CANDIDATE.md
 XSTAR_PYTHON_PORT.md
+check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
 check_v040_type50_opakab_state_restoration_product_candidate.py
 pyproject.toml
+run_v0401_xstar_tools_python.sh
+run_v0401_xstar_tools_type88_fast_packet_threshold_hotfix_product_candidate.sh
 run_v040_xstar_tools_python.sh
 run_v040_xstar_tools_type50_opakab_state_restoration_product_candidate.sh
 setup.cfg
@@ -762,6 +766,13 @@ src/xstar_tools/xstar/cpp/build_lib.sh
 src/xstar_tools/xstar/cpp/compact_arrays.hpp
 src/xstar_tools/xstar/cpp/error_codes.hpp
 src/xstar_tools/xstar/cpp/level_population.cpp
+src/xstar_tools/xstar/cpp/libxstar_emissivity.so
+src/xstar_tools/xstar/cpp/libxstar_engine.so
+src/xstar_tools/xstar/cpp/libxstar_matrix.so
+src/xstar_tools/xstar/cpp/libxstar_opacity.so
+src/xstar_tools/xstar/cpp/libxstar_rates.so
+src/xstar_tools/xstar/cpp/libxstar_solver.so
+src/xstar_tools/xstar/cpp/libxstar_thermal.so
 src/xstar_tools/xstar/cpp/line_emissivity.cpp
 src/xstar_tools/xstar/cpp/matrix_kernels.cpp
 src/xstar_tools/xstar/cpp/opacity_kernels.cpp
@@ -908,6 +919,7 @@ tests/test_type50_line_pumping_matrix_v03144.py
 tests/test_type50_pumping_non_type50_v03145.py
 tests/test_type50_xstar_output_radiation_v03146.py
 tests/test_type51_98_api_with_atdb.py
+tests/test_v06401_type88_threshold_hotfix.py
 tests/test_v0640_type50_opakab_candidate.py
 tests/test_validation_artifacts.py
 tests/test_workflow_api_v03131.py
