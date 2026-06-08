@@ -1060,14 +1060,14 @@ def summarize_rate_payload_four_family_product(
     rows = [dict(row) for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
     if not rows:
         return {
-            "schema_version": "0.6.35", "requested": False,
+            "schema_version": "0.6.36", "requested": False,
             "product_candidate": False, "product_promoted": False,
             "active": False, "evaluation_count": 0, "status": "DISABLED",
         }
     promoted = bool(all(bool(row.get("product_promoted", False)) for row in rows))
     candidate = bool(all(bool(row.get("product_candidate", False)) for row in rows))
     success_status = "PRODUCT_PROMOTED" if promoted else "PRODUCT_CANDIDATE_EXACT"
-    schema_version = "0.6.35" if promoted else str(rows[0].get("schema_version", "0.6.34"))
+    schema_version = str(rows[0].get("schema_version", "0.6.36" if promoted else "0.6.34"))
     family_totals: dict[str, int] = {"4:50": 0, "3:51": 0, "3:63": 0, "42:88": 0}
     fast_totals: dict[str, int] = {"4:50": 0, "3:63": 0, "42:88": 0}
     for row in rows:
@@ -1122,7 +1122,7 @@ def summarize_rate_payload_four_family_product(
         "fallback_reasons": [str(row.get("fallback_reason")) for row in rows if row.get("fallback_reason")][:max(1, int(top_n))],
         "evaluations": rows,
         "notes": [
-            "v0.6.35 promotes exact C++ rate-payload terms for four Mg families.",
+            "v0.6.36 repairs the promoted Type-50 scalar dependency with a dedicated native C++ scalar packet.",
             "Normal execution elides the Python scalar seed/oracle path for 4:50, 3:63, and 42:88; the accepted C++ Type-51 ion batch remains live for 3:51.",
             "Any preparation, validation, or coverage failure retries the complete element evaluation on the accepted path.",
             "Reverse verification is opt-in and disabled in the production wrapper.",

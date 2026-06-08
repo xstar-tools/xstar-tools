@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.36 - 2026-06-07
+
+- Correct the promoted four-family Type-50 dependency: the simple-payload batch never owned rate 4 / data 50.
+- Add bit-exact native Type-50 scalar evaluation to the engine ABI.
+- Feed 4:50, 3:63, and 42:88 through one native scalar packet while retaining whole-evaluation fallback and optional reverse verification.
+- Report engine ABI 7 and feature flags 255.
+
 ## v0.6.35 - 2026-06-07
 
 - Promoted the exact four-family Mg rate-payload product for 4:50, 3:51, 3:63, and 42:88.

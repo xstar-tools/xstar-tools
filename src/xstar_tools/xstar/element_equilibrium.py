@@ -46,6 +46,8 @@ from .ucalc import (
     UCalcStatus,
     default_source_faithful_ucalc,
     _radiation_arrays,
+    _nbinc,
+    XSTAR_SOURCE_ERG_PER_EV,
 )
 
 
@@ -3307,7 +3309,7 @@ def _assemble_element_matrix_impl(
     _four_family_verify_old = _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD", "0")
     if _rate_payload_four_family_promoted:
         _four_family_product_summary = {
-            "schema_version": "0.6.35",
+            "schema_version": "0.6.36",
             "requested": True, "accepted_gate": True,
             "product_candidate": False, "product_promoted": True,
             "active": False, "live_matrix_commit": False,
@@ -5205,7 +5207,7 @@ def _assemble_element_matrix_impl(
                     field="row_collection_elapsed",
                 )
 
-            # v0.6.35 promoted product: prepare exact native scalar and C++
+            # v0.6.36 promoted product: prepare exact native scalar and C++
             # matrix-row caches before the per-record Python ucalc path.  The
             # existing accepted C++ Type-51 ion batch remains its live owner.
             _four_family_fast_result_by_record: Dict[int, Dict[str, Any]] = {}
@@ -5225,16 +5227,38 @@ def _assemble_element_matrix_impl(
                             continue
                         _expected_fast_records.add(int(_record))
                         if _family == (4, 50):
-                            _source = cpp_simple_payload_by_record.get(int(_record))
-                            if _source is None:
-                                raise RuntimeError(f"missing promoted 4:50 scalar row for record {_record}")
-                            _result_row = {
+                            _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
+                            _raw = np.asarray(master.record_reals(int(_record)), dtype=np.float64).reshape(-1)
+                            if _ints.size < 2 or _raw.size < 3:
+                                raise RuntimeError(f"type50 record {_record} has short payload")
+                            _idest1, _idest2 = int(_ints[0]), int(_ints[1])
+                            _level1 = levels.require(_idest1)
+                            _level2 = levels.require(_idest2)
+                            _ptmp1, _ptmp2, _escape_reason = _escape_factors(int(_record), 4, derived, context)
+                            if _escape_reason is not None:
+                                raise RuntimeError(f"type50 record {_record} escape context blocked: {_escape_reason}")
+                            _wavelength = abs(float(_raw[0]))
+                            _bremsa_nb1 = 0.0
+                            if float(context.covering_fraction) < 1.0 and _wavelength <= 0.99e9:
+                                _type50_epi, _type50_brem, _ = _radiation_arrays(context.radiation)
+                                if _wavelength <= 0.0:
+                                    raise RuntimeError(f"type50 record {_record} has invalid wavelength")
+                                _bremsa_nb1 = float(_type50_brem[_nbinc(12398.54 / _wavelength, _type50_epi)])
+                            _native_packet.append({
                                 "record": int(_record), "rate_type": 4, "data_type": 50,
                                 "ion_index": int(block.ion_index), "ion_stage": int(block.ion_stage),
-                                "idest1": int(_source.get("idest1", 0)), "idest2": int(_source.get("idest2", 0)),
-                                **{f"ans{i}": float(_source.get(f"ans{i}", 0.0) or 0.0) for i in range(1, 7)},
-                            }
-                            _four_family_fast_result_by_record[int(_record)] = _result_row
+                                "idest1": _idest1, "idest2": _idest2,
+                                "ptmp1": float(_ptmp1), "ptmp2": float(_ptmp2),
+                                "covering_fraction": float(context.covering_fraction),
+                                "bremsa_nb1": float(_bremsa_nb1),
+                                "hydrogen_density_cm3": float(context.hydrogen_density_cm3),
+                                "type50_endpoint1_energy_eV": float(_level1.energy_ev),
+                                "type50_endpoint2_energy_eV": float(_level2.energy_ev),
+                                "type50_endpoint1_g": float(_level1.statistical_weight),
+                                "type50_endpoint2_g": float(_level2.statistical_weight),
+                                "source_erg_per_eV": float(XSTAR_SOURCE_ERG_PER_EV),
+                                "raw_payload_f64": tuple(float(v) for v in _raw),
+                            })
                         elif _family == (3, 63):
                             _ints = np.asarray(master.record_integers(int(_record)), dtype=np.int64).reshape(-1)
                             if _ints.size < 4:
@@ -5277,9 +5301,10 @@ def _assemble_element_matrix_impl(
                                 "raw_payload_f64": tuple(float(v) for v in _raw),
                             })
                     if _native_packet:
-                        if _full_epi.size < 3 or _full_bremsa.size < _full_epi.size or not np.all(np.isfinite(_full_epi)) or not np.all(np.isfinite(_full_bremsa[:_full_epi.size])) or not np.all(np.diff(_full_epi) > 0.0):
+                        _has_type88 = any(int(_item.get("rate_type", 0)) == 42 and int(_item.get("data_type", 0)) == 88 for _item in _native_packet)
+                        if _has_type88 and (_full_epi.size < 3 or _full_bremsa.size < _full_epi.size or not np.all(np.isfinite(_full_epi)) or not np.all(np.isfinite(_full_bremsa[:_full_epi.size])) or not np.all(np.diff(_full_epi) > 0.0)):
                             raise RuntimeError("Type-88 full radiation grid unavailable")
-                        if _reduced_epi.size < 3 or not np.all(np.isfinite(_reduced_epi)) or not np.all(np.diff(_reduced_epi) > 0.0):
+                        if _has_type88 and (_reduced_epi.size < 3 or not np.all(np.isfinite(_reduced_epi)) or not np.all(np.diff(_reduced_epi) > 0.0)):
                             raise RuntimeError("Type-88 reduced phextrap grid unavailable")
                         _native_t0 = time.perf_counter()
                         _native_rows, _native_message, _native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
@@ -5499,7 +5524,7 @@ def _assemble_element_matrix_impl(
                             source_label=int(_cached["data_type"]),
                             source_routines=("ucalc", "libxstar_engine"),
                             branch_name="promoted_four_family_rate_payload",
-                            implementation="cpp_four_family_rate_payload_product_v035",
+                            implementation="cpp_four_family_rate_payload_product_v036",
                             validation_status="product_promoted_exact",
                             context_fields_used=("temperature_k", "xpx", "xee", "levels", "radiation"),
                             notes=("Python scalar seed path elided; whole-evaluation fallback retained.",),

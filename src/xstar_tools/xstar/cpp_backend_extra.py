@@ -443,7 +443,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     epi_eV: Any,
     bremsa: Any,
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
-    """Evaluate native C++ scalar channels for Mg 3:63 and 42:88 records.
+    """Evaluate native C++ scalar channels for Mg 4:50, 3:63, and 42:88 records.
 
     The call is diagnostic only.  For 3:63 C++ receives quantum numbers,
     endpoint level context, temperature, and electron density.  For 42:88 it
@@ -458,7 +458,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     packing_t0 = _time.perf_counter()
     n = len(records)
     meta = np.zeros((n, 14), dtype=np.int64)
-    context = np.zeros((n, 14), dtype=np.float64)
+    context = np.zeros((n, 24), dtype=np.float64)
     payload: list[float] = []
     for k, row in enumerate(records):
         raw = [float(v) for v in row.get("raw_payload_f64", ())]
@@ -482,6 +482,16 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
             float(row.get("final_g", 0.0)),
             float(row.get("threshold_eV", 0.0)),
             float(row.get("type88_phextrap_grid_points", 0.0)),
+            float(row.get("ptmp1", 0.0)),
+            float(row.get("ptmp2", 0.0)),
+            float(row.get("covering_fraction", 1.0)),
+            float(row.get("bremsa_nb1", 0.0)),
+            float(row.get("hydrogen_density_cm3", 0.0)),
+            float(row.get("type50_endpoint1_energy_eV", 0.0)),
+            float(row.get("type50_endpoint2_energy_eV", 0.0)),
+            float(row.get("type50_endpoint1_g", 0.0)),
+            float(row.get("type50_endpoint2_g", 0.0)),
+            float(row.get("source_erg_per_eV", 1.602176634e-12)),
         ]
     meta_flat = np.ascontiguousarray(meta.reshape(-1))
     context_flat = np.ascontiguousarray(context.reshape(-1))
@@ -498,7 +508,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     packing_seconds = _time.perf_counter() - packing_t0
     t0 = _time.perf_counter()
     rc = lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1(
-        n, meta_flat, 14, context_flat, 14,
+        n, meta_flat, 14, context_flat, 24,
         payload_flat, int(payload_flat.size), epi, brem, int(epi.size),
         out, 6, timing, int(timing.size), stats_i64, int(stats_i64.size),
         buf, ctypes.sizeof(buf),
@@ -523,7 +533,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     names = (
         "records_seen", "records_evaluated", "scalar_fields_emitted", "reserved3",
         "unsupported_records", "invalid_records", "reserved6", "valid",
-        "family_3_63", "family_42_88",
+        "family_3_63", "family_42_88", "family_4_50",
     )
     stats = {name: float(stats_i64[i]) for i, name in enumerate(names)}
     stats.update({
