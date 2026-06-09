@@ -20,6 +20,7 @@ import csv
 import json
 import math
 import copy
+import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
@@ -784,6 +785,46 @@ def _fortran_divide(numerator: float, denominator: float) -> float:
         return float(np.float64(numerator) / np.float64(denominator))
 
 
+def _native_dsec_requested() -> bool:
+    value = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP", "").strip().lower()
+    enabled = value not in {"", "0", "false", "no", "off"}
+    product = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP_PRODUCT", "").strip().lower()
+    return enabled and product not in {"", "0", "false", "no", "off"}
+
+
+def _native_trace_events(rows: Sequence[Mapping[str, Any]], state: DsecMutableRuntimeState, *, nlim: int, tinf_t4: float) -> Tuple[DsecTrajectoryEvent, ...]:
+    names = {
+        1: "begin", 2: "after_calc_hmc_all", 3: "charge_multiply_xee",
+        4: "charge_divide_xee", 5: "charge_secant", 6: "charge_loop_exit",
+        7: "temperature_multiply", 8: "temperature_divide", 9: "temperature_secant",
+        10: "temperature_stagnation", 11: "finish",
+    }
+    result: list[DsecTrajectoryEvent] = []
+    for index, row in enumerate(rows, start=1):
+        hmctot = float(row.get("hmctot", float("nan")))
+        elcter = float(row.get("elcter", float("nan")))
+        charge = float(row.get("normalized_charge_residual", float("nan")))
+        stagnation = float(row.get("temperature_stagnation_metric", float("nan")))
+        temp = float(row.get("temperature_t4", state.temperature_t4))
+        result.append(DsecTrajectoryEvent(
+            event_index=index, event=names.get(int(row.get("event_code", 0)), "native_event"),
+            evaluation_index=int(row.get("evaluation_index", 0)), ntotit=int(row.get("ntotit", 0)),
+            nnx=int(row.get("nnx", 0)), nnxx=int(row.get("nnxx", 0)), nnt=int(row.get("nnt", 0)),
+            nntt=int(row.get("nntt", 0)), nlim=int(nlim), nlimt=max(int(nlim), 0),
+            nlimx=abs(int(nlim)), nlimtt=max(max(int(nlim), 0), 1), nlimxx=max(abs(int(nlim)), 1),
+            temperature_t4=temp, temperature_k=temp * 1.0e4, tinf_t4=float(tinf_t4),
+            electron_fraction_xee=float(row.get("electron_fraction_xee", state.electron_fraction_xee)),
+            hydrogen_density_cm3=float(state.hydrogen_density_cm3), tl=0.0, th=0.0, xeel=0.0, xeeh=1.0,
+            elcter=None if not math.isfinite(elcter) else elcter, elctrl=1.0, elctrh=-1.0,
+            hmctot=None if not math.isfinite(hmctot) else hmctot, hmcttl=0.0, hmctth=0.0,
+            previous_temperature_t4=0.0,
+            normalized_charge_residual=None if not math.isfinite(charge) else charge,
+            temperature_stagnation_metric=None if not math.isfinite(stagnation) else stagnation,
+            lnerr=int(row.get("lnerr", 0)), iht=0, ilt=0, iuht=0, iult=0, ihx=0, ilx=0,
+        ))
+    return tuple(result)
+
+
 def dsec(
     state: DsecMutableRuntimeState,
     *,
@@ -811,6 +852,42 @@ def dsec(
             raise DsecPortError("maximum_evaluations must be positive")
     if not math.isfinite(tinf_t4) or tinf_t4 < 0.0:
         raise DsecPortError("tinf_t4 must be finite and nonnegative")
+
+    if _native_dsec_requested():
+        from .cpp_backend_thermal import run_dsec_cpp
+
+        native = run_dsec_cpp(
+            state, evaluator, nlim=nlim, tinf_t4=tinf_t4,
+            charge_tolerance=float(charge_tolerance),
+            thermal_tolerance=float(thermal_tolerance),
+            temperature_stagnation_tolerance=float(temperature_stagnation_tolerance),
+            maximum_evaluations=maximum_evaluations,
+        )
+        state.last_hmctot = float(native["final_hmctot"])
+        state.last_elcter = float(native["final_elcter"])
+        state.provenance.update({
+            "dsec_source_file": "xstar/xstarlib/src/dsec.f90",
+            "dsec_exact_control_flow": True,
+            "dsec_native_orchestration": True,
+            "dsec_callback_evaluation": True,
+            "dsec_nlim": nlim,
+            "dsec_ntotit": int(native["ntotit"]),
+            "dsec_lnerr": int(native["lnerr"]),
+            "dsec_orchestration_seconds": float(native["orchestration_seconds"]),
+            "dsec_callback_seconds": float(native["callback_seconds"]),
+        })
+        return DsecResult(
+            state=state, trajectory=_native_trace_events(native.get("trace", ()), state, nlim=nlim, tinf_t4=tinf_t4),
+            nlim=nlim, tinf_t4=tinf_t4, lnerr=int(native["lnerr"]), ntotit=int(native["ntotit"]),
+            temperature_iterations=int(native["temperature_iterations"]),
+            temperature_attempts=int(native["temperature_attempts"]),
+            charge_converged=bool(native["charge_converged"]),
+            thermal_converged=bool(native["thermal_converged"]),
+            requested_thermal_iteration=nlim > 0,
+            source_returned=not bool(native["prefix_terminated"]),
+            prefix_terminated=bool(native["prefix_terminated"]),
+            maximum_evaluations=maximum_evaluations,
+        )
 
     crite = float(charge_tolerance)
     crith = float(thermal_tolerance)

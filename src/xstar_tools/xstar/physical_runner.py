@@ -1731,6 +1731,23 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
             tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
         )
+        if bool(result.state.provenance.get("dsec_native_orchestration", False)):
+            summary = runtime_state.control.setdefault("native_thermal_engine_summary", {
+                "schema_version": "0.6.47", "heatt_calls": 0, "continuum_bins": 0,
+                "line_records": 0, "rrc_records": 0, "heatt_state_commits": 0,
+                "heatt_ffi_seconds": 0.0, "heatt_native_seconds": 0.0,
+                "dsec_calls": 0, "dsec_evaluations": 0, "dsec_state_commits": 0,
+                "dsec_orchestration_seconds": 0.0, "dsec_callback_seconds": 0.0,
+                "fallbacks": 0,
+            })
+            summary["dsec_calls"] += 1
+            summary["dsec_evaluations"] += int(result.ntotit)
+            summary["dsec_state_commits"] += int(result.state.calc_hmc_all_call_count)
+            summary["dsec_orchestration_seconds"] += float(result.state.provenance.get("dsec_orchestration_seconds", 0.0))
+            summary["dsec_callback_seconds"] += float(result.state.provenance.get("dsec_callback_seconds", 0.0))
+            summary["charge_converged"] = bool(result.charge_converged)
+            summary["thermal_converged"] = bool(result.thermal_converged)
+            summary["lnerr"] = int(result.lnerr)
         if bool(runtime_state.control.get("zone1_dsec_capture_all_inputs", False)) and evaluator.input_snapshots:
             target_temperature_k = float(
                 runtime_state.control.get("zone1_dsec_target_temperature_k", 73198.4)
@@ -2398,7 +2415,7 @@ def run_xstar_from_parameters(
                 "profile_components_level": normalize_profile_level(profile_components),
                 "exclusive_profile_timing_enabled": normalize_profile_level(profile_components) != "none",
                 "element_solver_diagnostic_gating": {
-                    "schema_version": "0.6.46.3",
+                    "schema_version": "0.6.47",
                     "diagnostics_mode": diagnostics_mode,
                     "residual_arrays_enabled": diagnostics_mode in {"summary", "full"},
                     "dense_svd_enabled": diagnostics_mode == "full",
@@ -2415,7 +2432,7 @@ def run_xstar_from_parameters(
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "compact_record_contributions_with_native_element_construction_solve_commit_v06451"},
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "native_source_ordered_spectral_contribution_engine_v0646"},
                 "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "native_line_profile_and_spectral_opacity_engine_v0646"},
-                "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
+                "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "native_heatt_and_dsec_orchestration_v0647"},
                 "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "h_he_mg_native_construction_boundary_v06451"},
                 "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
@@ -2436,6 +2453,7 @@ def run_xstar_from_parameters(
                 "mg_pre_matrix_coarse_cpp_summary": dict(state.control.get("mg_pre_matrix_coarse_cpp_summary", {})),
                 "native_element_engine_summary": dict(state.control.get("native_element_engine_summary", {})),
                 "native_spectral_engine_summary": dict(state.control.get("native_spectral_engine_summary", {})),
+                "native_thermal_engine_summary": dict(state.control.get("native_thermal_engine_summary", {})),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "mg_type4_upstream_shadow_probe_summary": dict(state.control.get("mg_type4_upstream_shadow_probe_summary", {})),
                 "mg_type4_upstream_shadow_probe_samples": list(state.control.get("mg_type4_upstream_shadow_probe_samples", [])),

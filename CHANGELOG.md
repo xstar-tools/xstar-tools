@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.47 - 2026-06-09
+
+- Added persistent native `heatt` continuum, line, and RRC transfer.
+- Added source-faithful native DSEC temperature/electron convergence control.
+- Added state propagation and one native evaluation-loop controller per zone.
+- Added stable API wrappers and C++ RAII methods for thermal execution.
+- Retained the v0.6.46.3 spectral shadow mismatch as a documented known issue.
+
 # v0.6.46.3 - 2026-06-09
 
 - Correct the native opacity `huntf` floor from `1e-24` to XSTAR's float32-promoted `1e-34`.

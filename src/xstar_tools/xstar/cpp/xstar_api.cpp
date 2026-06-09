@@ -32,6 +32,11 @@ using spectral_create_fn = int (*)(xstar_spectral_context**, char*, size_t);
 using spectral_destroy_fn = void (*)(xstar_spectral_context*);
 using spectral_reset_fn = int (*)(xstar_spectral_context*, char*, size_t);
 using spectral_apply_fn = int (*)(xstar_spectral_context*, const xstar_spectral_contribution_v1*, size_t, const double*, size_t, xstar_spectral_workspace_v1*, xstar_spectral_stats_v1*, char*, size_t);
+using thermal_create_fn = int (*)(xstar_thermal_context**, char*, size_t);
+using thermal_destroy_fn = void (*)(xstar_thermal_context*);
+using thermal_reset_fn = int (*)(xstar_thermal_context*, char*, size_t);
+using thermal_heatt_fn = int (*)(xstar_thermal_context*, xstar_heatt_workspace_v1*, const xstar_heatt_line_v1*, size_t, const xstar_heatt_rrc_v1*, size_t, xstar_heatt_stats_v1*, char*, size_t);
+using thermal_loop_fn = int (*)(xstar_thermal_context*, const xstar_dsec_config_v1*, xstar_thermal_state_v1*, xstar_thermal_evaluator_fn_v1, void*, xstar_thermal_trace_event_v1*, size_t, size_t*, xstar_dsec_stats_v1*, char*, size_t);
 
 struct LoadedPlugin {
     void* handle = nullptr;
@@ -63,6 +68,13 @@ struct xstar_context_impl {
     spectral_destroy_fn spectral_destroy = nullptr;
     spectral_reset_fn spectral_reset = nullptr;
     spectral_apply_fn spectral_apply = nullptr;
+    void* thermal_handle = nullptr;
+    xstar_thermal_context* thermal_context = nullptr;
+    thermal_create_fn thermal_create = nullptr;
+    thermal_destroy_fn thermal_destroy = nullptr;
+    thermal_reset_fn thermal_reset = nullptr;
+    thermal_heatt_fn thermal_heatt = nullptr;
+    thermal_loop_fn thermal_loop = nullptr;
     std::string last_error;
     mutable std::mutex mutex;
 };
@@ -255,6 +267,59 @@ int ensure_spectral_engine(xstar_context_impl& context) {
     return XSTAR_STATUS_BACKEND_LOAD_FAILED;
 }
 
+int ensure_thermal_engine(xstar_context_impl& context) {
+    if (context.thermal_context != nullptr) return XSTAR_STATUS_OK;
+    const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
+    const std::string thermal_backend = field_text(context.config.thermal_backend, XSTAR_BACKEND_NAME_SIZE);
+    if (backend != "cpp" || (!thermal_backend.empty() && thermal_backend != "inherit" && thermal_backend != "cpp")) {
+        context.last_error = "native thermal API requires backend=cpp and thermal_backend=cpp/inherit";
+        return XSTAR_STATUS_NOT_IMPLEMENTED;
+    }
+    std::vector<std::string> failures;
+    for (const auto& directory : plugin_directories(context.config)) {
+        const auto candidate = directory / "libxstar_thermal.so";
+        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            const char* error = dlerror();
+            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            continue;
+        }
+        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_thermal_engine_abi_version"));
+        auto create = reinterpret_cast<thermal_create_fn>(dlsym(handle, "xstar_thermal_context_create_v1"));
+        auto destroy = reinterpret_cast<thermal_destroy_fn>(dlsym(handle, "xstar_thermal_context_destroy"));
+        auto reset = reinterpret_cast<thermal_reset_fn>(dlsym(handle, "xstar_thermal_context_reset_v1"));
+        auto heatt = reinterpret_cast<thermal_heatt_fn>(dlsym(handle, "xstar_thermal_apply_heatt_v1"));
+        auto loop = reinterpret_cast<thermal_loop_fn>(dlsym(handle, "xstar_thermal_run_evaluation_loop_v1"));
+        if (!abi || abi() != XSTAR_THERMAL_ENGINE_ABI_VERSION || !create || !destroy || !reset || !heatt || !loop) {
+            failures.push_back(candidate.string() + ": incompatible thermal-engine ABI");
+            dlclose(handle);
+            continue;
+        }
+        std::array<char, XSTAR_MESSAGE_SIZE> message{};
+        xstar_thermal_context* thermal_context = nullptr;
+        const int rc = create(&thermal_context, message.data(), message.size());
+        if (rc != 0 || !thermal_context) {
+            failures.push_back(candidate.string() + ": " + std::string(message.data()));
+            dlclose(handle);
+            continue;
+        }
+        context.thermal_handle = handle;
+        context.thermal_context = thermal_context;
+        context.thermal_create = create;
+        context.thermal_destroy = destroy;
+        context.thermal_reset = reset;
+        context.thermal_heatt = heatt;
+        context.thermal_loop = loop;
+        context.last_error = message.data();
+        return XSTAR_STATUS_OK;
+    }
+    std::ostringstream text;
+    text << "could not load native thermal engine";
+    for (const auto& failure : failures) text << "\n  " << failure;
+    context.last_error = text.str();
+    return XSTAR_STATUS_BACKEND_LOAD_FAILED;
+}
+
 int validate_config(const xstar_config_v1* config, std::string& error) {
     if (config == nullptr) {
         error = "config is null";
@@ -419,6 +484,14 @@ int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** conte
 void xstar_context_destroy(xstar_context* context) {
     auto* value = impl(context);
     if (value == nullptr) return;
+    if (value->thermal_context && value->thermal_destroy) {
+        value->thermal_destroy(value->thermal_context);
+        value->thermal_context = nullptr;
+    }
+    if (value->thermal_handle) {
+        dlclose(value->thermal_handle);
+        value->thermal_handle = nullptr;
+    }
     if (value->spectral_context && value->spectral_destroy) {
         value->spectral_destroy(value->spectral_context);
         value->spectral_context = nullptr;
@@ -450,6 +523,15 @@ int xstar_context_reset(xstar_context* context) {
     const int status = value->plugin->descriptor->reset(
         value->backend_context, message.data(), message.size());
     value->last_error = message.data();
+    if (status == XSTAR_STATUS_OK && value->thermal_context && value->thermal_reset) {
+        std::array<char, XSTAR_MESSAGE_SIZE> thermal_message{};
+        const int thermal_status = value->thermal_reset(
+            value->thermal_context, thermal_message.data(), thermal_message.size());
+        if (thermal_status != 0) {
+            value->last_error = thermal_message.data();
+            return XSTAR_STATUS_BACKEND_ERROR;
+        }
+    }
     if (status == XSTAR_STATUS_OK && value->spectral_context && value->spectral_reset) {
         std::array<char, XSTAR_MESSAGE_SIZE> spectral_message{};
         const int spectral_status = value->spectral_reset(
@@ -670,6 +752,50 @@ int xstar_context_apply_spectral_contributions_v1(
         value->spectral_context, contributions, contribution_count,
         seed_profiles, seed_profile_stride, workspace, stats,
         message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_apply_heatt_v1(
+    xstar_context* context,
+    xstar_heatt_workspace_v1* workspace,
+    const xstar_heatt_line_v1* lines,
+    size_t line_count,
+    const xstar_heatt_rrc_v1* rrcs,
+    size_t rrc_count,
+    xstar_heatt_stats_v1* stats
+) {
+    auto* value = impl(context);
+    if (!value || !workspace || !stats || (line_count && !lines) || (rrc_count && !rrcs)) {
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_thermal_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->thermal_heatt(value->thermal_context, workspace, lines, line_count, rrcs, rrc_count, stats, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_run_thermal_evaluation_loop_v1(
+    xstar_context* context,
+    const xstar_dsec_config_v1* config,
+    xstar_thermal_state_v1* state,
+    xstar_thermal_evaluator_fn_v1 evaluator,
+    void* user_data,
+    xstar_thermal_trace_event_v1* trace,
+    size_t trace_capacity,
+    size_t* trace_count,
+    xstar_dsec_stats_v1* stats
+) {
+    auto* value = impl(context);
+    if (!value || !config || !state || !evaluator || !stats) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_thermal_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->thermal_loop(value->thermal_context, config, state, evaluator, user_data, trace, trace_capacity, trace_count, stats, message.data(), message.size());
     value->last_error = message.data();
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }

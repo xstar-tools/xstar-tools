@@ -4,6 +4,7 @@ CXXFLAGS ?= -O3 -std=c++17 -fPIC -Wall -Wextra -Wpedantic
 CPPFLAGS ?=
 SO_LDFLAGS ?= -shared
 OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
+THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 COMMON_LIBS ?= -ldl -pthread
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
@@ -36,7 +37,7 @@ PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
-PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h
+PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h
 INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 
 .PHONY: all physics standalone test clean install print-config
@@ -60,8 +61,8 @@ $(EMISSIVITY_TARGET): line_emissivity.cpp xstar_spectral_engine.h $(OPACITY_TARG
 $(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp
 
-$(THERMAL_TARGET): thermal_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ thermal_kernels.cpp
+$(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ thermal_kernels.cpp
 
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
@@ -90,6 +91,7 @@ print-config:
 	@echo PYTHON_LIBDIRS=$(PYTHON_LIBDIRS)
 	@echo PYTHON_RPATHS=$(PYTHON_RPATHS)
 	@echo OPACITY_STRICT_FP_FLAGS=$(OPACITY_STRICT_FP_FLAGS)
+	@echo THERMAL_STRICT_FP_FLAGS=$(THERMAL_STRICT_FP_FLAGS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 
@@ -103,11 +105,13 @@ test: all
 	./$(EXECUTABLE_TARGET) construction-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) construction-evaluation-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.46.3 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.47 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

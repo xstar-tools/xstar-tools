@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
+#include "xstar_thermal_engine.h"
 
 #ifdef _WIN32
 #  ifdef XSTAR_API_BUILD
@@ -20,8 +21,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_API_ABI_VERSION 60460u
-#define XSTAR_API_VERSION_STRING "0.6.46.3"
+#define XSTAR_API_ABI_VERSION 60470u
+#define XSTAR_API_VERSION_STRING "0.6.47"
 #define XSTAR_BACKEND_NAME_SIZE 32u
 #define XSTAR_PATH_SIZE 1024u
 #define XSTAR_MESSAGE_SIZE 1024u
@@ -233,6 +234,26 @@ XSTAR_API_EXPORT int xstar_context_apply_spectral_contributions_v1(
     size_t seed_profile_stride,
     xstar_spectral_workspace_v1* workspace,
     xstar_spectral_stats_v1* stats
+);
+XSTAR_API_EXPORT int xstar_context_apply_heatt_v1(
+    xstar_context* context,
+    xstar_heatt_workspace_v1* workspace,
+    const xstar_heatt_line_v1* lines,
+    size_t line_count,
+    const xstar_heatt_rrc_v1* rrcs,
+    size_t rrc_count,
+    xstar_heatt_stats_v1* stats
+);
+XSTAR_API_EXPORT int xstar_context_run_thermal_evaluation_loop_v1(
+    xstar_context* context,
+    const xstar_dsec_config_v1* config,
+    xstar_thermal_state_v1* state,
+    xstar_thermal_evaluator_fn_v1 evaluator,
+    void* user_data,
+    xstar_thermal_trace_event_v1* trace,
+    size_t trace_capacity,
+    size_t* trace_count,
+    xstar_dsec_stats_v1* stats
 );
 
 #ifdef __cplusplus

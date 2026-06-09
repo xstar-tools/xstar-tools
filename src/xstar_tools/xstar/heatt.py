@@ -25,8 +25,9 @@ summary as source-uninitialized instead of inventing values.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
+import os
 from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
@@ -96,6 +97,7 @@ class HeattResult:
     compton_coefficients_source_initialized: bool
     line_traces: tuple[HeattLineTrace, ...]
     rrc_traces: tuple[HeattRRCTrace, ...]
+    native_metrics: Mapping[str, Any] = field(default_factory=dict)
     source_file: str = "xstar/xstarlib/src/heatt.f90"
 
 
@@ -161,6 +163,144 @@ def _source_fac(tau: float) -> float:
     return 1.0
 
 
+
+def _native_heatt_requested() -> bool:
+    enabled = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP", "").strip().lower()
+    product = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP_PRODUCT", "").strip().lower()
+    return enabled not in {"", "0", "false", "no", "off"} and product not in {"", "0", "false", "no", "off"}
+
+
+def _heatt_native(
+    *, temperature_1e4K: float, radius_cm: float, covering_fraction: float,
+    zone_thickness_cm: float, electron_fraction_xee: float,
+    hydrogen_density_cm3: float, abundances_by_z: Mapping[int, float] | Sequence[float],
+    epi_eV: Sequence[float], bremsa: Sequence[float],
+    leveltemp_workspace: Optional[UCalcLevelTable], zrems_before: Sequence[Sequence[float]],
+    zremso: Sequence[Sequence[float]], elumab_before: Sequence[Sequence[float]],
+    elumabo: Sequence[Sequence[float]], elum_before: Sequence[Sequence[float]],
+    elumo: Sequence[Sequence[float]], rcem: Sequence[Sequence[float]],
+    rccemis: Sequence[Sequence[float]], opakc: Sequence[float],
+    opakcont: Sequence[float], cemab: Sequence[Sequence[float]],
+    flinel: Sequence[float], brcems: Sequence[float], master: Any, derived: Any,
+    ncn2: int, n_lines: int, n_continua: int,
+) -> HeattResult:
+    from .cpp_backend_thermal import apply_heatt_cpp
+
+    n, nl, nc = int(ncn2), int(n_lines), int(n_continua)
+    epi = _vector(epi_eV, name="epi", minimum=n)
+    incident = _vector(bremsa, name="bremsa", minimum=n)
+    opacity = _vector(opakc, name="opakc", minimum=n)
+    opacity_cont = _vector(opakcont, name="opakcont", minimum=n)
+    line_bins = _vector(flinel, name="flinel", minimum=n)
+    brems = _vector(brcems, name="brcems", minimum=n)
+    old_cont = _matrix(zremso, name="zremso", rows=5, columns=n)
+    current_cont = _matrix(zrems_before, name="zrems", rows=5, columns=n)
+    old_lines = _matrix(elumo, name="elumo", rows=2, columns=nl)
+    current_lines = _matrix(elum_before, name="elum", rows=2, columns=nl)
+    old_rrc = _matrix(elumabo, name="elumabo", rows=2, columns=nc)
+    current_rrc = _matrix(elumab_before, name="elumab", rows=2, columns=nc)
+    line_emis = _matrix(rcem, name="rcem", rows=2, columns=nl)
+    continuum_emis = _matrix(rccemis, name="rccemis", rows=2, columns=n)
+    rrc_emis = _matrix(cemab, name="cemab", rows=2, columns=nc)
+    if master is None or derived is None:
+        if nl or nc:
+            raise HeattPortError("native heatt line/RRC traversal requires master and derived pointers")
+
+    line_rows: list[dict[str, Any]] = []
+    line_traces: list[HeattLineTrace] = []
+    inherited = max(XSTAR_HEATT_OPACITY_FLOOR, float(opacity_cont[n - 1]))
+    for jk in range(1, nl + 1):
+        record = int(derived.nplin[jk]) if jk < len(derived.nplin) else 0
+        rate_type = 0
+        wavelength = 0.0
+        evaluated = False
+        if record:
+            header = master.header(record)
+            rate_type = int(header.rate_type)
+            reals = master.record_reals(record)
+            wavelength = abs(float(reals[0])) if len(reals) else 0.0
+            evaluated = bool(1.0 < wavelength < 1.0e8 and rate_type == 4)
+        line_rows.append({"record": record, "rate_type": rate_type, "wavelength_angstrom": wavelength})
+        inward_absorption = float(old_lines[0, jk - 1]) * inherited / (XSTAR_HEATT_FOUR_PI * (float(radius_cm) * XSTAR_HEATT_RADIUS_SCALE) ** 2) if evaluated and radius_cm else 0.0
+        line_traces.append(HeattLineTrace(
+            line_index_one_based=jk, record=record, rate_type=rate_type,
+            wavelength_angstrom=wavelength, evaluated=evaluated,
+            inherited_optp2=inherited, inward_absorption_term=inward_absorption,
+            inward_emissivity=float(line_emis[0, jk - 1]) if evaluated else 0.0,
+            outward_emissivity=float(line_emis[1, jk - 1]) if evaluated else 0.0,
+        ))
+        if evaluated:
+            inherited = 0.0
+
+    leveltemp = _copy_leveltemp(leveltemp_workspace)
+    rrc_rows: list[dict[str, Any]] = []
+    rrc_traces: list[HeattRRCTrace] = []
+    element_record = int(derived.npfirst[11]) if len(derived.npfirst) > 11 else 0
+    while element_record:
+        element_ints = master.record_integers(element_record)
+        if len(element_ints) > 0:
+            element_z = int(element_ints[-1]); nnz = int(element_ints[0])
+            if _abundance(abundances_by_z, element_z) >= XSTAR_HEATT_ABUNDANCE_FLOOR:
+                ion_record = int(derived.npfirst[12]) if len(derived.npfirst) > 12 else 0
+                ion_index = 0; matched_stages = 0
+                while ion_record and matched_stages < nnz:
+                    ion_index += 1
+                    ion_ints = master.record_integers(ion_record)
+                    ion_element_z = int(ion_ints[-2]) if len(ion_ints) >= 2 else 0
+                    if ion_element_z == element_z:
+                        matched_stages += 1
+                        _overwrite_leveltemp(leveltemp, build_level_table(master, derived, ion_index))
+                        rec = int(derived.npfi[7, ion_index])
+                        parent = int(derived.npar[rec]) if rec else 0
+                        while rec and int(derived.npar[rec]) == parent:
+                            header = master.header(rec)
+                            if int(header.rate_type) != 7:
+                                break
+                            ci = int(derived.npconi2[rec])
+                            ints = master.record_integers(rec)
+                            idest1 = int(ints[-2]) if len(ints) >= 2 else 0
+                            in_range = 1 <= ci <= nc
+                            active = bool(in_range and (float(rrc_emis[0, ci - 1]) > XSTAR_HEATT_RRC_FLOOR or float(rrc_emis[1, ci - 1]) > XSTAR_HEATT_RRC_FLOOR))
+                            if active and (idest1 <= 0 or leveltemp.get(idest1) is None):
+                                raise HeattPortError(f"RRC record {rec} references missing level {idest1}")
+                            emissivity_sum = float(rrc_emis[0, ci - 1] + rrc_emis[1, ci - 1]) if active else 0.0
+                            rrc_rows.append({"record": rec, "continuum_index_one_based": ci, "destination_level": idest1, "active": active})
+                            rrc_traces.append(HeattRRCTrace(element_z=element_z, ion_index=ion_index, record=rec,
+                                continuum_index_one_based=ci, destination_level=idest1, evaluated=active,
+                                emissivity_sum=emissivity_sum))
+                            rec = int(derived.npnxt[rec])
+                    ion_record = int(derived.npnxt[ion_record])
+        element_record = int(derived.npnxt[element_record])
+
+    z_after = current_cont.copy(); line_after = current_lines.copy(); rrc_after = current_rrc.copy()
+    metrics = apply_heatt_cpp(
+        lines=line_rows, rrcs=rrc_rows, temperature_1e4K=temperature_1e4K,
+        radius_cm=radius_cm, covering_fraction=covering_fraction,
+        zone_thickness_cm=zone_thickness_cm, electron_fraction_xee=electron_fraction_xee,
+        hydrogen_density_cm3=hydrogen_density_cm3, epi_eV=epi, bremsa=incident,
+        opakc=opacity, opakcont=opacity_cont, flinel=line_bins, brcems=brems,
+        zrems=z_after, zremso=old_cont, elum=line_after, elumo=old_lines,
+        rcem=line_emis, elumab=rrc_after, elumabo=old_rrc, cemab=rrc_emis,
+        rccemis=continuum_emis, ncn2=n, n_lines=nl, n_continua=nc,
+    )
+    return HeattResult(
+        ncn2=n, n_lines=nl, n_continua=nc, fpr2=float(metrics["fpr2"]),
+        zrems_before=current_cont.copy(), zrems_after=z_after,
+        elum_before=current_lines.copy(), elum_after=line_after,
+        elumab_before=current_rrc.copy(), elumab_after=rrc_after,
+        leveltemp_workspace=leveltemp,
+        continuum_net_integral=float(metrics["continuum_net_integral"]),
+        continuum_positive_integral=float(metrics["continuum_positive_integral"]),
+        pre_compton_heating=float(metrics["pre_compton_heating"]),
+        pre_compton_cooling=float(metrics["pre_compton_cooling"]),
+        bremsstrahlung_integral=float(metrics["bremsstrahlung_integral"]),
+        compton_coefficients_source_initialized=False,
+        line_traces=tuple(line_traces), rrc_traces=tuple(rrc_traces),
+        native_metrics=dict(metrics),
+        source_file="xstar/xstarlib/src/heatt.f90 (native v0.6.47)",
+    )
+
+
 def heatt(
     *,
     temperature_1e4K: float,
@@ -193,6 +333,18 @@ def heatt(
     n_continua: int,
 ) -> HeattResult:
     """Translate ``heatt.f90`` in literal loop and mutation order."""
+    if _native_heatt_requested():
+        return _heatt_native(
+            temperature_1e4K=temperature_1e4K, radius_cm=radius_cm,
+            covering_fraction=covering_fraction, zone_thickness_cm=zone_thickness_cm,
+            electron_fraction_xee=electron_fraction_xee, hydrogen_density_cm3=hydrogen_density_cm3,
+            abundances_by_z=abundances_by_z, epi_eV=epi_eV, bremsa=bremsa,
+            leveltemp_workspace=leveltemp_workspace, zrems_before=zrems_before, zremso=zremso,
+            elumab_before=elumab_before, elumabo=elumabo, elum_before=elum_before, elumo=elumo,
+            rcem=rcem, rccemis=rccemis, opakc=opakc, opakcont=opakcont, cemab=cemab,
+            flinel=flinel, brcems=brcems, master=master, derived=derived, ncn2=ncn2,
+            n_lines=n_lines, n_continua=n_continua,
+        )
     n = int(ncn2)
     nl = int(n_lines)
     nc = int(n_continua)

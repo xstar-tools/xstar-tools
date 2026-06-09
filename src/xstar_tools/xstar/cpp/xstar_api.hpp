@@ -127,6 +127,44 @@ public:
         return stats;
     }
 
+    xstar_heatt_stats_v1 apply_heatt(
+        xstar_heatt_workspace_v1& workspace,
+        const std::vector<xstar_heatt_line_v1>& lines,
+        const std::vector<xstar_heatt_rrc_v1>& rrcs
+    ) {
+        xstar_heatt_stats_v1 stats{};
+        stats.struct_size = sizeof(stats);
+        stats.abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
+        const int status = xstar_context_apply_heatt_v1(
+            context_, &workspace, lines.empty() ? nullptr : lines.data(), lines.size(),
+            rrcs.empty() ? nullptr : rrcs.data(), rrcs.size(), &stats);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+        return stats;
+    }
+
+    xstar_dsec_stats_v1 run_thermal_evaluation_loop(
+        const xstar_dsec_config_v1& config,
+        xstar_thermal_state_v1& state,
+        xstar_thermal_evaluator_fn_v1 evaluator,
+        void* user_data,
+        std::vector<xstar_thermal_trace_event_v1>& trace
+    ) {
+        xstar_dsec_stats_v1 stats{};
+        stats.struct_size = sizeof(stats);
+        stats.abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
+        std::size_t trace_count = 0;
+        const int status = xstar_context_run_thermal_evaluation_loop_v1(
+            context_, &config, &state, evaluator, user_data,
+            trace.empty() ? nullptr : trace.data(), trace.size(), &trace_count, &stats);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+        if (trace_count < trace.size()) trace.resize(trace_count);
+        return stats;
+    }
+
     xstar_element_engine_stats_v1 element_stats() const {
         xstar_element_engine_stats_v1 stats{};
         xstar_element_engine_stats_init_v1(&stats);

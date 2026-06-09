@@ -929,11 +929,28 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     state.transfer.provenance["heatt"] = {
         "source_file": result.source_file,
         "translated_physics": True,
+        "native_heatt": bool(result.native_metrics),
         "active_ncn2": result.ncn2,
         "n_lines": result.n_lines,
         "n_continua": result.n_continua,
         "compton_coefficients_source_initialized": result.compton_coefficients_source_initialized,
     }
+    if result.native_metrics:
+        summary = state.control.setdefault("native_thermal_engine_summary", {
+            "schema_version": "0.6.47", "heatt_calls": 0, "continuum_bins": 0,
+            "line_records": 0, "rrc_records": 0, "heatt_state_commits": 0,
+            "heatt_ffi_seconds": 0.0, "heatt_native_seconds": 0.0,
+            "dsec_calls": 0, "dsec_evaluations": 0, "dsec_state_commits": 0,
+            "dsec_orchestration_seconds": 0.0, "dsec_callback_seconds": 0.0,
+            "fallbacks": 0,
+        })
+        summary["heatt_calls"] += int(result.native_metrics.get("calls", 0))
+        summary["continuum_bins"] += int(result.native_metrics.get("continuum_bins", 0))
+        summary["line_records"] += int(result.native_metrics.get("line_records", 0))
+        summary["rrc_records"] += int(result.native_metrics.get("rrc_records", 0))
+        summary["heatt_state_commits"] += int(result.native_metrics.get("state_commits", 0))
+        summary["heatt_ffi_seconds"] += float(result.native_metrics.get("ffi_seconds", 0.0))
+        summary["heatt_native_seconds"] += float(result.native_metrics.get("commit_seconds", 0.0))
     from .continuum_diagnostics import append_phase_snapshot
 
     phase = "final heatt" if state.control.get("continuum_phase_context") == "final" else "heatt"

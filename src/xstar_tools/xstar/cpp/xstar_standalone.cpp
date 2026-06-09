@@ -45,13 +45,15 @@ void usage(std::ostream& output) {
         "  xstar_cpp construction-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp construction-evaluation-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp spectral-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp thermal-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
         "  Component overrides: --engine-backend, --rates-backend, --matrix-backend,\n"
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.46.3 adds persistent source-ordered emissivity and opacity contributions:\n"
-        "C++ commits line, RRC, continuum, and line-profile opacity arrays in\n"
-        "libxstar_emissivity.so and libxstar_opacity.so.\n";
+        "v0.6.47 adds persistent native heatt and dsec orchestration:\n"
+        "C++ owns continuum/line/RRC transfer, temperature/electron convergence,\n"
+        "state propagation, and the per-zone evaluation-loop controller.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -546,6 +548,110 @@ int command_spectral_self_test(const Options& options) {
     return accepted ? 0 : 9;
 }
 
+
+int thermal_test_evaluator(
+    void*, const xstar_thermal_state_v1* state,
+    xstar_thermal_evaluation_v1* result, char*, std::size_t
+) {
+    if (!state || !result) return 1;
+    std::memset(result, 0, sizeof(*result)); result->struct_size=sizeof(*result); result->abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    result->hmctot = 2.0 - state->temperature_t4;
+    result->elcter = state->electron_fraction_xee - 1.5;
+    result->hydrogen_density_cm3 = state->hydrogen_density_cm3;
+    result->state_generation = state->state_generation + 1;
+    return 0;
+}
+
+int command_thermal_self_test(const Options& options) {
+    xstar_context* context = nullptr;
+    const int create_status = create_context(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    constexpr std::size_t n = 4, nl = 2, nc = 2;
+    std::array<double, n> epi{{1.0, 10.0, 100.0, 1000.0}};
+    std::array<double, n> incident{{2.0, 3.0, 4.0, 5.0}};
+    std::array<double, n> opakc{{0.02, 0.1, 1.0, 0.04}};
+    std::array<double, n> opakcont{{0.01, 0.2, 0.8, 0.4}};
+    std::array<double, n> flinel{{1.0, 2.0, 3.0, 4.0}};
+    std::array<double, n> brcems{{0.005, 0.006, 0.007, 0.008}};
+    std::array<double, 2*n> rccemis{{0.01,0.02,0.03,0.04, 0.04,0.03,0.02,0.01}};
+    std::array<double, 5*n> zrems{};
+    std::array<double, 5*n> zremso{};
+    for (std::size_t row=0; row<5; ++row) for(std::size_t col=0; col<n; ++col) {
+        zrems[row*n+col] = -1000.0 * static_cast<double>(row+1) - static_cast<double>(col+1);
+        zremso[row*n+col] = 100.0 * static_cast<double>(row+1) + static_cast<double>(col+1);
+    }
+    std::array<double, 2*nl> elum{{-900,-900,-900,-900}};
+    std::array<double, 2*nl> elumo{{5,7,6,8}};
+    std::array<double, 2*nl> rcem{{0.1,0.3,0.2,0.4}};
+    std::array<double, 2*nc> elumab{{-600,-600,-600,-600}};
+    std::array<double, 2*nc> elumabo{{9,11,10,12}};
+    std::array<double, 2*nc> cemab{{0.03,0.0,0.05,0.0}};
+    std::array<xstar_heatt_line_v1, nl> lines{{
+        {4,4,0,10.0}, {5,50,0,20.0}
+    }};
+    std::array<xstar_heatt_rrc_v1, 2> rrcs{{
+        {6,1,1,1,0}, {7,2,1,0,0}
+    }};
+    xstar_heatt_workspace_v1 w{}; w.struct_size=sizeof(w); w.abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    w.temperature_t4=2.0; w.radius_cm=2.0e19; w.covering_fraction=0.3;
+    w.zone_thickness_cm=0.25; w.electron_fraction_xee=1.2; w.hydrogen_density_cm3=5.0;
+    w.epi_eV=epi.data(); w.bremsa=incident.data(); w.opakc=opakc.data();
+    w.opakcont=opakcont.data(); w.flinel=flinel.data(); w.brcems=brcems.data(); w.ncn2=n;
+    w.zrems=zrems.data(); w.zremso=zremso.data(); w.zrems_count=zrems.size();
+    w.elum=elum.data(); w.elumo=elumo.data(); w.rcem=rcem.data(); w.n_lines=nl;
+    w.elumab=elumab.data(); w.elumabo=elumabo.data(); w.cemab=cemab.data(); w.n_continua=nc;
+    w.rccemis=rccemis.data(); w.rccemis_count=rccemis.size();
+    xstar_heatt_stats_v1 stats{}; stats.struct_size=sizeof(stats); stats.abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    const int status = xstar_context_apply_heatt_v1(context, &w, lines.data(), lines.size(), rrcs.data(), rrcs.size(), &stats);
+    const bool accepted = status == XSTAR_STATUS_OK && stats.calls == 1 && stats.continuum_bins == n &&
+        std::fabs(zrems[0] - 109.17404856295778) < 1.0e-12 &&
+        std::fabs(elum[0] - 5.75600004196167) < 1.0e-12 &&
+        std::fabs(elumab[0] - 9.502400016784668) < 1.0e-12;
+    std::cout << "backend=" << xstar_context_backend_name(context) << "\n"
+              << "continuum_bins=" << stats.continuum_bins << "\n"
+              << "line_records=" << stats.line_records << "\n"
+              << "rrc_records=" << stats.rrc_records << "\n"
+              << "state_commits=" << stats.state_commits << "\n"
+              << "persistent_context=true\n"
+              << "native_heatt=true\n"
+              << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    if (!accepted && status != XSTAR_STATUS_OK) std::cerr << xstar_context_last_error(context) << "\n";
+    xstar_context_destroy(context);
+    return accepted ? 0 : 10;
+}
+
+int command_convergence_self_test(const Options& options) {
+    xstar_context* context = nullptr;
+    const int create_status = create_context(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    xstar_dsec_config_v1 config{}; config.struct_size=sizeof(config); config.abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION; config.charge_tolerance=static_cast<double>(static_cast<float>(1.0e-4)); config.thermal_tolerance=static_cast<double>(static_cast<float>(1.0e-4)); config.temperature_stagnation_tolerance=static_cast<double>(static_cast<float>(2.0e-9));
+    config.nlim = 24; config.maximum_evaluations = 128; config.tinf_t4 = 0.099;
+    xstar_thermal_state_v1 state{}; state.struct_size=sizeof(state); state.abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    state.temperature_t4 = 1.0; state.electron_fraction_xee = 1.0; state.hydrogen_density_cm3 = 1.0e8;
+    std::array<xstar_thermal_trace_event_v1, 256> trace{};
+    std::size_t trace_count = 0;
+    xstar_dsec_stats_v1 stats{}; stats.struct_size=sizeof(stats); stats.abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    const int status = xstar_context_run_thermal_evaluation_loop_v1(
+        context, &config, &state, thermal_test_evaluator, nullptr,
+        trace.data(), trace.size(), &trace_count, &stats);
+    const bool accepted = status == XSTAR_STATUS_OK && stats.charge_converged && stats.thermal_converged &&
+        std::fabs(state.temperature_t4 - 2.0) < 1.0e-8 &&
+        std::fabs(state.electron_fraction_xee - 1.5) < 1.0e-8 && stats.ntotit > 1;
+    std::cout << "backend=" << xstar_context_backend_name(context) << "\n"
+              << "evaluations_completed=" << stats.evaluations_completed << "\n"
+              << "temperature_iterations=" << stats.temperature_iterations << "\n"
+              << "charge_converged=" << (stats.charge_converged ? "true" : "false") << "\n"
+              << "thermal_converged=" << (stats.thermal_converged ? "true" : "false") << "\n"
+              << "final_temperature_t4=" << std::setprecision(17) << state.temperature_t4 << "\n"
+              << "final_electron_fraction=" << state.electron_fraction_xee << "\n"
+              << "one_native_loop_per_zone=true\n"
+              << "callback_evaluation=true\n"
+              << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    if (!accepted && status != XSTAR_STATUS_OK) std::cerr << xstar_context_last_error(context) << "\n";
+    xstar_context_destroy(context);
+    return accepted ? 0 : 11;
+}
+
 int command_element_self_test(const Options& options, bool evaluation, bool construction) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -707,6 +813,8 @@ int main(int argc, char** argv) {
     if (options.command == "construction-self-test") return command_element_self_test(options, false, true);
     if (options.command == "construction-evaluation-self-test") return command_element_self_test(options, true, true);
     if (options.command == "spectral-self-test") return command_spectral_self_test(options);
+    if (options.command == "thermal-self-test") return command_thermal_self_test(options);
+    if (options.command == "convergence-self-test") return command_convergence_self_test(options);
     if (options.command == "run-zone") return command_run_zone(options);
     if (options.command == "python-bridge-test") return command_python_bridge_test(options);
     std::cerr << "unknown command: " << options.command << "\n";
