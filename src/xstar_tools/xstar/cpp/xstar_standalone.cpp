@@ -49,7 +49,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.46.1 adds persistent source-ordered emissivity and opacity contributions:\n"
+        "v0.6.46.2 adds persistent source-ordered emissivity and opacity contributions:\n"
         "C++ commits line, RRC, continuum, and line-profile opacity arrays in\n"
         "libxstar_emissivity.so and libxstar_opacity.so.\n";
 }

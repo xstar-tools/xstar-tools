@@ -402,3 +402,10 @@ include run_v046_xstar_tools_python.sh
 include run_v046_xstar_tools_spectral_qualification.sh
 include run_v046_xstar_tools_spectral_candidate.sh
 include check_v046_native_emissivity_opacity.py
+include V06462_EXACT_GAUSSIAN_VOIGT_PROFILE_QUALIFICATION.md
+include xstar_tools_v0.6.46.2_handoff.md
+include run_v0462_xstar_standalone_spectral_engine.sh
+include run_v0462_xstar_tools_python.sh
+include run_v0462_xstar_tools_spectral_qualification.sh
+include run_v0462_xstar_tools_spectral_candidate.sh
+include check_v0462_native_emissivity_opacity.py

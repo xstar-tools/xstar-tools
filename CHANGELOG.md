@@ -1,5 +1,23 @@
 # CHANGELOG
 
+# v0.6.46.2 - 2026-06-09
+
+- Replace the rejected final-array one-ULP opacity policy with a qualification-only complete Gaussian/Voigt source-profile oracle.
+- Keep production native profile generation unchanged and require exact final spectral-array parity.
+- Record exact-profile oracle calls, values, and line-profile coverage; product mode requires all three counters to remain zero.
+- Keep the stable shared-library ABI at 60460 because no function signature or structure layout changed.
+- Raise the default absolute timing guard to 275 seconds and optionally enforce a same-session control ratio of 0.90.
+
+# Changelog
+
+## 0.6.46.1
+
+- Preserve the v0.6.46 native emissivity/opacity product implementation and ABI 60460.
+- Classify NumPy scalar-exp versus C++ libm Gaussian-tail differences of at most one binary64 ULP in `calc_emis_all` `opakc` as explicitly bounded qualification events.
+- Keep all other spectral arrays bit-exact; two ULPs, a non-`opakc` difference, source-order drift, fallbacks, or science-file drift remain hard failures.
+- Add `shadow_ulp_tolerated_calls`, `shadow_ulp_tolerated_values`, `shadow_max_ulp`, and `first_ulp_tolerated` provenance.
+- Add isolated ULP-policy tests and a v0.6.46.1 acceptance checker.
+
 ## 0.6.46.1 - 2026-06-09
 
 - Preserve the v0.6.46 native emissivity/opacity product implementation and ABI 60460.

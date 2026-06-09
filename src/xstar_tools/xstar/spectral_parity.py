@@ -1,9 +1,8 @@
 """Strict binary64 parity classification for native spectral shadows.
 
-Every field remains bit-exact except ``opakc`` in the emissivity phase, where
-one ULP is explicitly tolerated for the far Gaussian-profile tail.  This
-bounded exception accounts for NumPy scalar ``exp`` versus platform C++ libm
-without permitting any material physics or ordering drift.
+v0.6.46.2 removes final-array ULP tolerance. Qualification supplies complete
+source-profile samples for Gaussian/Voigt lines, so every committed spectral
+array must compare exactly.
 """
 from __future__ import annotations
 
@@ -13,7 +12,7 @@ import numpy as np
 
 
 def binary64_ordered_bits(values: np.ndarray) -> np.ndarray:
-    """Return monotonic unsigned encodings for binary64 ULP comparisons."""
+    """Return monotonic unsigned encodings for diagnostic ULP reporting."""
     bits = np.ascontiguousarray(np.asarray(values, dtype=np.float64)).view(np.uint64)
     sign = np.uint64(0x8000000000000000)
     return np.where((bits & sign) != 0, ~bits, bits | sign)
@@ -22,8 +21,7 @@ def binary64_ordered_bits(values: np.ndarray) -> np.ndarray:
 def classify_spectral_shadow_arrays(
     pairs: Sequence[tuple[str, Any, Any]], *, phase: str
 ) -> tuple[str, dict[str, Any]]:
-    """Classify exact spectral parity, allowing one ULP only for ``opakc``."""
-    tolerated: dict[str, Any] = {}
+    """Require exact equality for every spectral shadow array."""
     for name, accepted, candidate in pairs:
         left = np.asarray(accepted, dtype=np.float64).reshape(-1)
         right = np.asarray(candidate, dtype=np.float64).reshape(-1)
@@ -47,25 +45,15 @@ def classify_spectral_shadow_arrays(
             "python": left[at].item(),
             "native": right[at].item(),
             "differing_values": int(where.size),
+            "policy": "exact_profile_oracle",
         }
-        if (
-            name == "opakc"
-            and phase == "emis"
-            and bool(np.all(np.isfinite(left[where])))
-            and bool(np.all(np.isfinite(right[where])))
-        ):
+        finite = np.isfinite(left[where]) & np.isfinite(right[where])
+        if bool(np.all(finite)):
             lbits = binary64_ordered_bits(left[where])
             rbits = binary64_ordered_bits(right[where])
             distances = np.where(lbits >= rbits, lbits - rbits, rbits - lbits)
-            max_ulp = int(np.max(distances)) if distances.size else 0
-            detail["max_ulp"] = max_ulp
-            detail["policy"] = "emis_opakc_only_max_1_ulp"
-            if max_ulp <= 1:
-                tolerated = detail
-                continue
+            detail["max_ulp"] = int(np.max(distances)) if distances.size else 0
         return "shadow_mismatch", detail
-    if tolerated:
-        return "shadow_ulp_tolerated", tolerated
     return "shadow_match", {}
 
 

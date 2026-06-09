@@ -1,4 +1,4 @@
-"""Persistent native emissivity/opacity contribution engine for v0.6.46.1.
+"""Persistent native emissivity/opacity contribution engine for v0.6.46.2.
 
 Python retains atomic-data traversal and scalar UCalc evaluation in this
 candidate.  Source-ordered line/RRC/continuum contribution construction,
@@ -182,10 +182,19 @@ def _as_f64(value: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(value, dtype=np.float64).reshape(-1))
 
 
-def _pack_contributions(values: Iterable[Mapping[str, Any]]) -> tuple[Any, np.ndarray, list[Mapping[str, Any]]]:
+def _pack_contributions(
+    values: Iterable[Mapping[str, Any]],
+    *,
+    seed_profile_stride: int = 21,
+    seed_overrides: Mapping[int, np.ndarray] | None = None,
+) -> tuple[Any, np.ndarray, list[Mapping[str, Any]]]:
     rows = list(values)
+    stride = int(seed_profile_stride)
+    if stride < 21 or stride % 2 != 1:
+        raise ValueError(f"seed profile stride must be odd and at least 21, got {stride}")
     packed = (_Contribution * len(rows))()
-    seeds = np.zeros((len(rows), 21), dtype=np.float64)
+    seeds = np.zeros((len(rows), stride), dtype=np.float64)
+    overrides = dict(seed_overrides or {})
     for i, item in enumerate(rows):
         packed[i] = _Contribution(
             int(item.get("source_position", i + 1)),
@@ -213,18 +222,22 @@ def _pack_contributions(values: Iterable[Mapping[str, Any]]) -> tuple[Any, np.nd
             float(item.get("turbulent_velocity_km_s", 0.0)),
             float(item.get("temperature_1e4K", 0.0)),
         )
-        seed = item.get("seed_profiles")
-        if seed is not None:
-            arr = np.asarray(seed, dtype=np.float64).reshape(-1)
-            if arr.size != 21:
-                raise ValueError(f"line seed profile must contain 21 values, got {arr.size}")
-            seeds[i, :] = arr
+        if i in overrides:
+            arr = np.asarray(overrides[i], dtype=np.float64).reshape(-1)
+        else:
+            seed = item.get("seed_profiles")
+            arr = np.asarray(seed, dtype=np.float64).reshape(-1) if seed is not None else np.zeros(21, dtype=np.float64)
+        if arr.size not in (21, stride):
+            raise ValueError(f"line seed profile must contain 21 or {stride} values, got {arr.size}")
+        seeds[i, :arr.size] = arr
     return packed, np.ascontiguousarray(seeds.reshape(-1)), rows
 
 
-def apply_spectral_contributions_cpp(
-    contributions: Iterable[Mapping[str, Any]],
+def _apply_spectral_batch(
+    rows: list[Mapping[str, Any]],
     *,
+    seed_profile_stride: int,
+    seed_overrides: Mapping[int, np.ndarray] | None,
     rcem: np.ndarray,
     oplin: np.ndarray,
     cemab: np.ndarray,
@@ -237,10 +250,11 @@ def apply_spectral_contributions_cpp(
     flinel: np.ndarray,
     epi_eV: np.ndarray,
 ) -> dict[str, Any]:
-    """Apply source-ordered compact spectral contributions in-place."""
     lib = _load()
     packing_started = time.perf_counter()
-    packed, seeds, rows = _pack_contributions(contributions)
+    packed, seeds, rows = _pack_contributions(
+        rows, seed_profile_stride=seed_profile_stride, seed_overrides=seed_overrides
+    )
     arrays = {
         "rcem": np.ascontiguousarray(np.asarray(rcem, dtype=np.float64)),
         "oplin": np.ascontiguousarray(np.asarray(oplin, dtype=np.float64)),
@@ -281,20 +295,19 @@ def apply_spectral_contributions_cpp(
     ffi_started = time.perf_counter()
     seed_ptr = _p(seeds) if seeds.size else ctypes.POINTER(ctypes.c_double)()
     rc = lib.xstar_spectral_apply_contributions_v1(
-        _context(), packed, len(rows), seed_ptr, 21,
+        _context(), packed, len(rows), seed_ptr, int(seed_profile_stride),
         ctypes.byref(workspace), ctypes.byref(stats), error, len(error),
     )
     ffi_seconds = time.perf_counter() - ffi_started
     if rc != 0:
         raise RuntimeError(error.value.decode("utf-8", "replace") or f"native spectral engine failed: {rc}")
-    # Copy back only when ctypes had to materialize a contiguous temporary.
     for name, target in original_refs.items():
         target_array = np.asarray(target)
         native_array = arrays[name]
         if target_array.ctypes.data != native_array.ctypes.data:
             np.copyto(target_array, native_array.reshape(target_array.shape))
     return {
-        "schema_version": "0.6.46.1",
+        "schema_version": "0.6.46.2",
         "contributions": len(rows),
         "calls": int(stats.calls),
         "contributions_attempted": int(stats.contributions_attempted),
@@ -308,8 +321,124 @@ def apply_spectral_contributions_cpp(
         "construction_seconds": float(stats.construction_seconds),
         "opacity_seconds": float(stats.opacity_seconds),
         "commit_seconds": float(stats.commit_seconds),
+        "exact_profile_oracle_calls": 0,
+        "exact_profile_oracle_values": 0,
+        "exact_profile_oracle_line_profiles": 0,
         "message": error.value.decode("utf-8", "replace"),
     }
+
+
+def _merge_metrics(total: dict[str, Any], item: Mapping[str, Any]) -> None:
+    for key in (
+        "contributions", "calls", "contributions_attempted", "contributions_committed",
+        "emissivity_contributions", "opacity_contributions", "line_profiles",
+        "source_order_violations", "exact_profile_oracle_calls",
+        "exact_profile_oracle_values", "exact_profile_oracle_line_profiles",
+    ):
+        total[key] = int(total.get(key, 0) or 0) + int(item.get(key, 0) or 0)
+    for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
+        total[key] = float(total.get(key, 0.0) or 0.0) + float(item.get(key, 0.0) or 0.0)
+    if item.get("message"):
+        total["message"] = str(item["message"])
+
+
+def apply_spectral_contributions_cpp(
+    contributions: Iterable[Mapping[str, Any]],
+    *,
+    rcem: np.ndarray,
+    oplin: np.ndarray,
+    cemab: np.ndarray,
+    cabab: np.ndarray,
+    opakab: np.ndarray,
+    rccemis: np.ndarray,
+    opakc: np.ndarray,
+    opakcont: np.ndarray,
+    fline: np.ndarray,
+    flinel: np.ndarray,
+    epi_eV: np.ndarray,
+    exact_profile_oracle: bool = False,
+    exact_profile_radius: int = 10000,
+) -> dict[str, Any]:
+    """Apply source-ordered compact spectral contributions in-place.
+
+    Product execution uses 21 source seeds and native C++ Gaussian/Voigt
+    evaluation. Qualification may set ``exact_profile_oracle``; each line is
+    then supplied the complete NumPy/Python profile sample stream while C++
+    still performs temporary-grid traversal, integration, rebinning, and
+    source-ordered array commit.
+    """
+    rows = list(contributions)
+    previous = 0
+    for row in rows:
+        position = int(row.get("source_position", 0))
+        if position <= previous:
+            raise ValueError("spectral contribution source order violation before FFI")
+        previous = position
+    if not exact_profile_oracle or not any(int(row.get("kind", 0)) == KIND_EMIS_LINE for row in rows):
+        return _apply_spectral_batch(
+            rows, seed_profile_stride=21, seed_overrides=None,
+            rcem=rcem, oplin=oplin, cemab=cemab, cabab=cabab, opakab=opakab,
+            rccemis=rccemis, opakc=opakc, opakcont=opakcont,
+            fline=fline, flinel=flinel, epi_eV=epi_eV,
+        )
+
+    from .spectral_profile_oracle import source_linopac_profile_samples
+
+    total: dict[str, Any] = {
+        "schema_version": "0.6.46.2", "message": "exact source-profile oracle applied",
+        "contributions": 0, "calls": 0, "contributions_attempted": 0,
+        "contributions_committed": 0, "emissivity_contributions": 0,
+        "opacity_contributions": 0, "line_profiles": 0,
+        "source_order_violations": 0, "packing_seconds": 0.0,
+        "ffi_seconds": 0.0, "construction_seconds": 0.0,
+        "opacity_seconds": 0.0, "commit_seconds": 0.0,
+        "exact_profile_oracle_calls": 0, "exact_profile_oracle_values": 0,
+        "exact_profile_oracle_line_profiles": 0,
+    }
+    pending: list[Mapping[str, Any]] = []
+
+    def flush_pending() -> None:
+        nonlocal pending
+        if not pending:
+            return
+        item = _apply_spectral_batch(
+            pending, seed_profile_stride=21, seed_overrides=None,
+            rcem=rcem, oplin=oplin, cemab=cemab, cabab=cabab, opakab=opakab,
+            rccemis=rccemis, opakc=opakc, opakcont=opakcont,
+            fline=fline, flinel=flinel, epi_eV=epi_eV,
+        )
+        _merge_metrics(total, item)
+        pending = []
+
+    radius = int(exact_profile_radius)
+    if radius != 10000:
+        raise ValueError("exact source-profile qualification requires radius=10000")
+    stride = 2 * radius + 1
+    for row in rows:
+        if int(row.get("kind", 0)) != KIND_EMIS_LINE:
+            pending.append(row)
+            continue
+        flush_pending()
+        profile = source_linopac_profile_samples(
+            line_energy_eV=float(row.get("line_energy_eV", 0.0)),
+            vturb_km_s=float(row.get("turbulent_velocity_km_s", 0.0)),
+            temperature_1e4K=float(row.get("temperature_1e4K", 0.0)),
+            atomic_mass_amu=float(row.get("atomic_mass_amu", 0.0)),
+            natural_width_eV=float(row.get("natural_width_eV", 0.0)),
+            epi=epi_eV, ncn2=np.asarray(epi_eV).size, radius=radius,
+        )
+        item = _apply_spectral_batch(
+            [row], seed_profile_stride=stride, seed_overrides={0: profile},
+            rcem=rcem, oplin=oplin, cemab=cemab, cabab=cabab, opakab=opakab,
+            rccemis=rccemis, opakc=opakc, opakcont=opakcont,
+            fline=fline, flinel=flinel, epi_eV=epi_eV,
+        )
+        item["exact_profile_oracle_calls"] = 1
+        item["exact_profile_oracle_values"] = int(profile.size)
+        item["exact_profile_oracle_line_profiles"] = int(item.get("line_profiles", 0) or 0)
+        _merge_metrics(total, item)
+    flush_pending()
+    return total
 
 
 __all__ = [

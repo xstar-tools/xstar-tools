@@ -117,3 +117,51 @@ def test_native_line_profile_and_product_source_validations(monkeypatch) -> None
     from xstar_tools.xstar.emergent_emissivity import run_calc_emis_source_order_validation
     assert run_source_order_validation()["calc_emisab_all_source_acceptance_ready"] is True
     assert run_calc_emis_source_order_validation()["calc_emis_all_source_acceptance_ready"] is True
+
+
+def test_exact_profile_oracle_reproduces_python_opakc(monkeypatch) -> None:
+    _install_astropy_stub()
+    from xstar_tools.xstar.cpp_backend_spectral import apply_spectral_contributions_cpp
+    from xstar_tools.xstar.emergent_emissivity import _source_linopac_into_opakc
+
+    epi = np.geomspace(1.0, 2.0e4, 600, dtype=np.float64)
+    row = {
+        "source_position": 1, "record": 9, "kind": 4, "rate_type": 4,
+        "output_index": 2, "bin_one_based": 300,
+        "ptmp1": 0.55, "ptmp2": 0.45,
+        "abundance_lower": 0.2, "abundance_upper": 0.8,
+        "ans1": 1.0, "ans2": 2.0, "opakab": 0.5,
+        "line_energy_eV": 400.0, "bin_width_eV": 2.0,
+        "atomic_mass_amu": 24.0, "natural_width_eV": 0.0,
+        "turbulent_velocity_km_s": 37.0, "temperature_1e4K": 6.5,
+        "seed_profiles": np.ones(21, dtype=np.float64),
+    }
+    expected_opakc = np.zeros(epi.size, dtype=np.float64)
+    expected_rccemis = np.zeros((2, epi.size), dtype=np.float64)
+    _source_linopac_into_opakc(
+        optpp=row["opakab"] * row["abundance_lower"], rcem1=0.0, rcem2=0.0,
+        line_energy_eV=row["line_energy_eV"], vturb_km_s=row["turbulent_velocity_km_s"],
+        temperature_1e4K=row["temperature_1e4K"], atomic_mass_amu=row["atomic_mass_amu"],
+        natural_width_eV=row["natural_width_eV"], epi=epi, opakc=expected_opakc,
+        rccemis=expected_rccemis, ncn2=epi.size,
+    )
+
+    rcem = np.zeros((2, 8), dtype=np.float64)
+    oplin = np.zeros(8, dtype=np.float64)
+    cemab = np.zeros((2, 8), dtype=np.float64)
+    cabab = np.zeros(8, dtype=np.float64)
+    opakab = np.zeros(8, dtype=np.float64)
+    rccemis = np.zeros((2, epi.size), dtype=np.float64)
+    opakc = np.zeros(epi.size, dtype=np.float64)
+    opakcont = np.zeros(epi.size, dtype=np.float64)
+    fline = np.zeros((2, 8), dtype=np.float64)
+    flinel = np.zeros(epi.size, dtype=np.float64)
+    metrics = apply_spectral_contributions_cpp(
+        [row], rcem=rcem, oplin=oplin, cemab=cemab, cabab=cabab,
+        opakab=opakab, rccemis=rccemis, opakc=opakc, opakcont=opakcont,
+        fline=fline, flinel=flinel, epi_eV=epi, exact_profile_oracle=True,
+    )
+    assert metrics["exact_profile_oracle_calls"] == 1
+    assert metrics["exact_profile_oracle_values"] == 20001
+    assert metrics["exact_profile_oracle_line_profiles"] == 1
+    assert np.array_equal(opakc, expected_opakc)

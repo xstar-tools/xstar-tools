@@ -5,45 +5,30 @@ import numpy as np
 from xstar_tools.xstar.spectral_parity import classify_spectral_shadow_arrays
 
 
-def test_opakc_one_ulp_is_explicitly_tolerated() -> None:
-    accepted = np.asarray([0.0, 1.0, 2.0], dtype=np.float64)
-    candidate = accepted.copy()
-    candidate[1] = np.nextafter(candidate[1], np.inf)
+def test_exact_spectral_match_is_accepted() -> None:
+    accepted = np.array([1.0, 2.0], dtype=np.float64)
+    status, detail = classify_spectral_shadow_arrays(
+        (("opakc", accepted, accepted.copy()),), phase="emis"
+    )
+    assert status == "shadow_match"
+    assert detail == {}
+
+
+def test_one_ulp_final_array_difference_is_rejected() -> None:
+    accepted = np.array([1.0], dtype=np.float64)
+    candidate = np.nextafter(accepted, np.inf)
     status, detail = classify_spectral_shadow_arrays(
         (("opakc", accepted, candidate),), phase="emis"
     )
-    assert status == "shadow_ulp_tolerated"
+    assert status == "shadow_mismatch"
     assert detail["field"] == "opakc"
     assert detail["max_ulp"] == 1
-    assert detail["differing_values"] == 1
+    assert detail["policy"] == "exact_profile_oracle"
 
 
-def test_opakc_two_ulps_is_rejected() -> None:
-    accepted = np.asarray([1.0], dtype=np.float64)
-    candidate = np.nextafter(np.nextafter(accepted, np.inf), np.inf)
+def test_shape_difference_is_rejected() -> None:
     status, detail = classify_spectral_shadow_arrays(
-        (("opakc", accepted, candidate),), phase="emis"
+        (("oplin", np.zeros(2), np.zeros(3)),), phase="emis"
     )
     assert status == "shadow_mismatch"
-    assert detail["max_ulp"] == 2
-
-
-def test_non_opakc_one_ulp_is_rejected() -> None:
-    accepted = np.asarray([1.0], dtype=np.float64)
-    candidate = np.nextafter(accepted, np.inf)
-    status, detail = classify_spectral_shadow_arrays(
-        (("fline", accepted, candidate),), phase="emis"
-    )
-    assert status == "shadow_mismatch"
-    assert detail["field"] == "fline"
-
-
-def test_later_exact_field_does_not_hide_tolerated_opakc() -> None:
-    accepted = np.asarray([1.0], dtype=np.float64)
-    candidate = np.nextafter(accepted, np.inf)
-    status, detail = classify_spectral_shadow_arrays(
-        (("opakc", accepted, candidate), ("fline", accepted, accepted.copy())),
-        phase="emis",
-    )
-    assert status == "shadow_ulp_tolerated"
-    assert detail["max_ulp"] == 1
+    assert detail["reason"] == "shape"

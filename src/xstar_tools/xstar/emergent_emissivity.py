@@ -2295,6 +2295,10 @@ def calc_emis_ion(
                     cemab=target.base.cemab, cabab=target.base.cabab, opakab=target.base.opakab,
                     rccemis=target.base.rccemis, opakc=target.base.opakc, opakcont=target.base.opakcont,
                     fline=target.fline, flinel=target.flinel, epi_eV=epi,
+                    exact_profile_oracle=(
+                        native_spectral_shadow and not native_spectral_product
+                        and _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_EXACT_PROFILE_ORACLE")
+                    ),
                 )
                 _add_spectral_metrics(
                     _spectral_summary_bucket(context), metrics, phase="emis",

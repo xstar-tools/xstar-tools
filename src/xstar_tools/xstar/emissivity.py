@@ -73,15 +73,16 @@ class _TraceSink(list):
 def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
     control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
     summary = control.setdefault("native_spectral_engine_summary", {
-        "schema_version": "0.6.46.1",
+        "schema_version": "0.6.46.2",
         "emisab_calls": 0, "emis_calls": 0,
         "contributions_attempted": 0, "contributions_committed": 0,
         "emissivity_contributions": 0, "opacity_contributions": 0,
         "line_profiles": 0, "source_order_violations": 0,
         "shadow_compared": 0, "shadow_mismatches": 0,
-        "shadow_ulp_tolerated_calls": 0, "shadow_ulp_tolerated_values": 0,
-        "shadow_max_ulp": 0, "shadow_ulp_policy": "emis_opakc_only_max_1_ulp",
-        "first_ulp_tolerated": {},
+        "shadow_policy": "exact_profile_oracle",
+        "exact_profile_oracle_calls": 0,
+        "exact_profile_oracle_values": 0,
+        "exact_profile_oracle_line_profiles": 0,
         "product_commits": 0, "fallbacks": 0,
         "packing_seconds": 0.0, "ffi_seconds": 0.0,
         "construction_seconds": 0.0, "opacity_seconds": 0.0, "commit_seconds": 0.0,
@@ -101,27 +102,17 @@ def _record_spectral_shadow_result(
         summary["shadow_mismatches"] = int(summary.get("shadow_mismatches", 0)) + 1
         if detail and not summary.get("first_mismatch"):
             summary["first_mismatch"] = dict(detail)
-    elif status == "shadow_ulp_tolerated":
-        summary["shadow_ulp_tolerated_calls"] = int(summary.get("shadow_ulp_tolerated_calls", 0)) + 1
-        summary["shadow_ulp_tolerated_values"] = int(summary.get("shadow_ulp_tolerated_values", 0)) + int((detail or {}).get("differing_values", 0) or 0)
-        summary["shadow_max_ulp"] = max(
-            int(summary.get("shadow_max_ulp", 0) or 0),
-            int((detail or {}).get("max_ulp", 0) or 0),
-        )
-        summary["shadow_ulp_policy"] = "emis_opakc_only_max_1_ulp"
-        if detail and not summary.get("first_ulp_tolerated"):
-            summary["first_ulp_tolerated"] = dict(detail)
 
 
 def _add_spectral_metrics(summary: MutableMapping[str, Any], metrics: Mapping[str, Any], *, phase: str, status: str, mismatch: Optional[Mapping[str, Any]] = None) -> None:
     summary[f"{phase}_calls"] = int(summary.get(f"{phase}_calls", 0)) + 1
-    for key in ("contributions_attempted", "contributions_committed", "emissivity_contributions", "opacity_contributions", "line_profiles", "source_order_violations"):
+    for key in ("contributions_attempted", "contributions_committed", "emissivity_contributions", "opacity_contributions", "line_profiles", "source_order_violations", "exact_profile_oracle_calls", "exact_profile_oracle_values", "exact_profile_oracle_line_profiles"):
         summary[key] = int(summary.get(key, 0)) + int(metrics.get(key, 0) or 0)
     for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
         summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(key, 0.0) or 0.0)
     if status == "product":
         summary["product_commits"] = int(summary.get("product_commits", 0)) + 1
-    elif status in {"shadow_match", "shadow_mismatch", "shadow_ulp_tolerated"}:
+    elif status in {"shadow_match", "shadow_mismatch"}:
         _record_spectral_shadow_result(summary, status, mismatch)
     elif status == "fallback":
         summary["fallbacks"] = int(summary.get("fallbacks", 0)) + 1

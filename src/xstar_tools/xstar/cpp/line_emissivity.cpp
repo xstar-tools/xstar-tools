@@ -530,11 +530,13 @@ int xstar_spectral_apply_contributions_v1(
             ++stats->emissivity_contributions;
             ++stats->opacity_contributions;
             const double* seed = nullptr;
-            if (seed_profiles && seed_profile_stride >= 21) {
+            int seed_radius = 0;
+            if (seed_profiles && seed_profile_stride >= 21 && (seed_profile_stride % 2) == 1) {
                 seed = seed_profiles + i * seed_profile_stride;
+                seed_radius = static_cast<int>((seed_profile_stride - 1) / 2);
             }
-            if (!seed) {
-                write_message(error, error_size, "native line contribution lacks seed profiles");
+            if (!seed || seed_radius < 10) {
+                write_message(error, error_size, "native line contribution lacks valid seed profiles");
                 return 9;
             }
             long long updated = 0;
@@ -543,7 +545,7 @@ int xstar_spectral_apply_contributions_v1(
             const int rc = xstar_opacity_apply_line_profile_v1(
                 opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
                 c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
-                seed, 10, workspace->epi_eV, static_cast<int>(workspace->energy_count),
+                seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                 workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                 opacity_error, sizeof(opacity_error));
             stats->opacity_seconds += opacity_elapsed;

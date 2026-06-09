@@ -1,4 +1,4 @@
-## v0.6.46.1 native spectral architecture
+## v0.6.46.2 exact-profile native spectral architecture
 
 `xstar_spectral_engine.h` defines the persistent source-ordered emissivity and
 opacity ABI. `libxstar_emissivity.so` owns scalar spectral contributions and
@@ -169,3 +169,10 @@ loading them does not mean those physics paths are active.
 - Do not add per-record Python/C++ transitions to the production path.
 - Keep Python backends and whole-evaluation fallback available during porting.
 - Do not report scaffold output as a science result.
+
+### Qualification profile oracle
+
+`xstar_spectral_apply_contributions_v1` accepts any odd seed stride of at least 21.
+Product mode uses stride 21. Qualification uses stride 20001 for each line,
+so C++ performs integration/rebinning with the exact Python source profile and
+all final arrays can be compared bit-for-bit. The ABI remains 60460.
