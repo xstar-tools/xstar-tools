@@ -297,7 +297,7 @@ def _heatt_native(
         compton_coefficients_source_initialized=False,
         line_traces=tuple(line_traces), rrc_traces=tuple(rrc_traces),
         native_metrics=dict(metrics),
-        source_file="xstar/xstarlib/src/heatt.f90 (native v0.6.48)",
+        source_file="xstar/xstarlib/src/heatt.f90 (native v0.6.48.1)",
     )
 
 

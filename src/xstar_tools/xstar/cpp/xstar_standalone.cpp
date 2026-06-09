@@ -56,7 +56,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48 adds a callback-free ahead-of-time compiled-case runtime.\n"
+        "v0.6.48.1 adds a callback-free ahead-of-time compiled-case runtime.\n"
         "The validated case bundle executes 61 state records in C++, writes exact\n"
         "reference science products, and retains the whole-run Python backend.\n";
 }
@@ -796,9 +796,10 @@ int command_production_self_test(const Options& options) {
     std::array<char, XSTAR_MESSAGE_SIZE> message{};
     const int status = xstar_compiled_case_run_files_v1(
         context, output.c_str(), &stats, message.data(), message.size());
+    const bool step_log_written = std::filesystem::is_regular_file(output / "xout_step.log");
     const bool accepted = status == XSTAR_STATUS_OK && stats.evaluations_native == 61 &&
         stats.python_callbacks == 0 && stats.science_files_written == 9 &&
-        stats.science_files_verified == 9 &&
+        stats.science_files_verified == 9 && step_log_written &&
         (stats.status_flags & XSTAR_COMPILED_CASE_STATUS_CALLBACK_FREE) != 0 &&
         (stats.status_flags & XSTAR_COMPILED_CASE_STATUS_EXACT_REFERENCE_STATE) != 0;
     std::cout << std::setprecision(17)
@@ -807,6 +808,8 @@ int command_production_self_test(const Options& options) {
               << "python_callbacks=" << stats.python_callbacks << "\n"
               << "science_files_written=" << stats.science_files_written << "\n"
               << "science_files_verified=" << stats.science_files_verified << "\n"
+              << "xout_step_log_written=" << (step_log_written ? "true" : "false") << "\n"
+              << "output_artifacts_written=" << (stats.science_files_written + (step_log_written ? 1 : 0)) << "\n"
               << "final_temperature_t4=" << stats.final_temperature_t4 << "\n"
               << "final_electron_fraction=" << stats.final_electron_fraction_xee << "\n"
               << "run_seconds=" << stats.run_seconds << "\n"
@@ -863,12 +866,16 @@ int command_run_compiled_case(const Options& options) {
     std::array<char, XSTAR_MESSAGE_SIZE> message{};
     const int status = xstar_compiled_case_run_files_v1(
         context, options.output_dir.c_str(), &stats, message.data(), message.size());
+    const bool step_log_written = status == XSTAR_STATUS_OK &&
+        std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "xout_step.log");
     std::cout << std::setprecision(17)
               << "case_id=" << stats.case_id << "\n"
               << "parameter_fingerprint=" << stats.parameter_fingerprint << "\n"
               << "evaluations_native=" << stats.evaluations_native << "\n"
               << "python_callbacks=" << stats.python_callbacks << "\n"
               << "science_files_written=" << stats.science_files_written << "\n"
+              << "xout_step_log_written=" << (step_log_written ? "true" : "false") << "\n"
+              << "output_artifacts_written=" << (stats.science_files_written + (step_log_written ? 1 : 0)) << "\n"
               << "final_temperature_t4=" << stats.final_temperature_t4 << "\n"
               << "final_electron_fraction=" << stats.final_electron_fraction_xee << "\n"
               << "run_seconds=" << stats.run_seconds << "\n"

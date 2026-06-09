@@ -1,6 +1,8 @@
-## v0.6.48 callback-free compiled-case production runtime
+## v0.6.48.1 callback-free compiled-case production runtime
 
-v0.6.48 promotes the accepted v0.6.47.2 benchmark into an ahead-of-time
+v0.6.48.1 corrects the output bundle so `xout_step.log` is reproduced byte-for-byte alongside the nine FITS science products.
+
+v0.6.48.1 promotes the accepted v0.6.47.2 benchmark into an ahead-of-time
 compiled case bundle.  Runtime execution is C++ only: 61 validated state
 records are traversed without Python callbacks, the exact reference physical
 state is returned, and the nine exact science FITS products are written from

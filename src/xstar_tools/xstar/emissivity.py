@@ -73,7 +73,7 @@ class _TraceSink(list):
 def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
     control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
     summary = control.setdefault("native_spectral_engine_summary", {
-        "schema_version": "0.6.48",
+        "schema_version": "0.6.48.1",
         "emisab_calls": 0, "emis_calls": 0,
         "contributions_attempted": 0, "contributions_committed": 0,
         "emissivity_contributions": 0, "opacity_contributions": 0,

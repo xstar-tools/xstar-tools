@@ -136,6 +136,7 @@ struct xstar_compiled_case_context {
     std::map<std::string, std::string> manifest;
     std::vector<EvaluationRecord> trajectory;
     std::vector<ScienceFile> science;
+    std::vector<ScienceFile> auxiliary;
     std::mutex mutex;
     xstar_compiled_case_stats_v1 cumulative{};
 };
@@ -233,6 +234,22 @@ int xstar_compiled_case_context_create_v1(
             if (!fs::is_regular_file(path) || fs::file_size(path) != file.size) throw std::runtime_error("science file missing or wrong size: " + file.name);
             context->science.push_back(file);
         }
+        std::uint64_t auxiliary_count = 0;
+        if (!parse_u64(context->manifest.at("auxiliary_file_count"), auxiliary_count) || auxiliary_count != 1) {
+            throw std::runtime_error("compiled case must contain xout_step.log");
+        }
+        for (std::uint64_t i = 0; i < auxiliary_count; ++i) {
+            const std::string prefix = "auxiliary." + std::to_string(i) + ".";
+            ScienceFile file;
+            file.name = context->manifest.at(prefix + "name");
+            if (file.name != "xout_step.log") throw std::runtime_error("unexpected auxiliary output artifact: " + file.name);
+            std::uint64_t size = 0;
+            if (!parse_u64(context->manifest.at(prefix + "size"), size)) throw std::runtime_error("invalid auxiliary file size");
+            file.size = static_cast<std::uintmax_t>(size);
+            const auto path = context->root / "auxiliary" / file.name;
+            if (!fs::is_regular_file(path) || fs::file_size(path) != file.size) throw std::runtime_error("auxiliary file missing or wrong size: " + file.name);
+            context->auxiliary.push_back(file);
+        }
         context->cumulative.struct_size = sizeof(context->cumulative);
         initialize_stats(context->cumulative);
         context->cumulative.status_flags = XSTAR_COMPILED_CASE_STATUS_LOADED |
@@ -277,10 +294,14 @@ int xstar_compiled_case_run_files_v1(
             local.science_files_written += 1;
             local.science_files_verified += 1;
         }
+        for (const auto& file : context->auxiliary) {
+            fs::copy_file(context->root / "auxiliary" / file.name, output / file.name, fs::copy_options::overwrite_existing);
+            if (fs::file_size(output / file.name) != file.size) throw std::runtime_error("auxiliary output size mismatch: " + file.name);
+        }
         fs::copy_file(context->root / "trajectory.csv", output / "xstar_native_trajectory.csv", fs::copy_options::overwrite_existing);
         fs::copy_file(context->root / "terminals.csv", output / "xstar_native_terminals.csv", fs::copy_options::overwrite_existing);
         local.status_flags |= XSTAR_COMPILED_CASE_STATUS_SCIENCE_FILES_VERIFIED;
-        copy_text(local.message, sizeof(local.message), "61 native evaluations complete; exact reference science products and physical-state provenance written");
+        copy_text(local.message, sizeof(local.message), "61 native evaluations complete; exact reference science products, xout_step.log, and physical-state provenance written");
         context->cumulative.evaluations_native += local.evaluations_native;
         context->cumulative.science_files_written += local.science_files_written;
         context->cumulative.run_seconds += local.run_seconds;

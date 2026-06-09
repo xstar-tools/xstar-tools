@@ -1,4 +1,4 @@
-"""Callback-free v0.6.48 compiled-case runtime.
+"""Callback-free v0.6.48.1 compiled-case runtime.
 
 The compiled case is an ahead-of-time specialization of an accepted whole-run
 Python reference.  Runtime execution traverses all 61 state records in C++ and
@@ -83,7 +83,7 @@ def _load() -> ctypes.CDLL:
 
 
 def bundled_case_path() -> Path:
-    """Return the installed v0.6.48 compiled benchmark case directory."""
+    """Return the installed v0.6.48.1 compiled benchmark case directory."""
     item = resources.files("xstar_tools.benchmarks").joinpath(
         "v0648_compiled_case_helike_type69_mg11_ne1e8"
     )
@@ -107,6 +107,8 @@ def compiled_case_status(case_dir: str | Path | None = None) -> dict[str, Any]:
             "evaluation_count": int(values.get("evaluation_count", "0")),
             "python_callback_count": int(values.get("python_callback_count", "-1")),
             "science_file_count": int(values.get("science_file_count", "0")),
+            "auxiliary_file_count": int(values.get("auxiliary_file_count", "0")),
+            "output_artifact_count": int(values.get("output_artifact_count", "0")),
             "parameter_fingerprint": values.get("parameter_fingerprint"),
         }
     except Exception as exc:
@@ -140,7 +142,7 @@ def run_compiled_case(
         if rc != 0:
             raise RuntimeError(error.value.decode("utf-8", "replace"))
         return {
-            "schema_version": "0.6.48",
+            "schema_version": "0.6.48.1",
             "case_id": bytes(stats.case_id).split(b"\0", 1)[0].decode(),
             "parameter_fingerprint": bytes(stats.parameter_fingerprint)
             .split(b"\0", 1)[0]
@@ -149,6 +151,8 @@ def run_compiled_case(
             "python_callbacks": int(stats.python_callbacks),
             "science_files_written": int(stats.science_files_written),
             "science_files_verified": int(stats.science_files_verified),
+            "xout_step_log_written": (output / "xout_step.log").is_file(),
+            "output_artifacts_written": int(stats.science_files_written) + int((output / "xout_step.log").is_file()),
             "run_seconds": float(stats.run_seconds),
             "final_temperature_t4": float(stats.final_temperature_t4),
             "final_electron_fraction_xee": float(stats.final_electron_fraction_xee),

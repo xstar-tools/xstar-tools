@@ -113,7 +113,7 @@ test: all
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.48 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.48.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

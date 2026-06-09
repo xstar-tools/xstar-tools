@@ -7,7 +7,7 @@ operations: trapezoid integration, continuum rebinning, and ordered commit.
 
 The v0.6.46.2 profile-only oracle still allowed C++ to recompute ``nbinc``, the
 Doppler width, temporary-grid coordinates, and ``optpp * profile``.  The
-v0.6.48 exact-grid oracle removes those hidden cross-runtime rounding points.
+v0.6.48.1 exact-grid oracle removes those hidden cross-runtime rounding points.
 """
 from __future__ import annotations
 

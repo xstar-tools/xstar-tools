@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.1 - 2026-06-09
+
+- Include `xout_step.log` in the compiled-case bundle as a separately classified auxiliary output artifact.
+- Write the log alongside the nine FITS science products during callback-free C++ execution.
+- Require `science_file_count=9`, `auxiliary_file_count=1`, and `output_artifact_count=10` in the manifest.
+- Reject bundles with a missing, renamed, or wrong-size step log.
+- Add byte-identical `xout_step.log` validation to the production checker and run summary.
+- Keep public and compiled-case ABI `60480`.
+
 ## 0.6.48 - 2026-06-09
 
 - Add an ahead-of-time compiled-case runtime with 61 native C++ state evaluations and zero Python callbacks during execution.

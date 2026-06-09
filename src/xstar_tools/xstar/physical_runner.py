@@ -1733,7 +1733,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         )
         if bool(result.state.provenance.get("dsec_native_orchestration", False)):
             summary = runtime_state.control.setdefault("native_thermal_engine_summary", {
-                "schema_version": "0.6.48", "heatt_calls": 0, "continuum_bins": 0,
+                "schema_version": "0.6.48.1", "heatt_calls": 0, "continuum_bins": 0,
                 "line_records": 0, "rrc_records": 0, "heatt_state_commits": 0,
                 "heatt_ffi_seconds": 0.0, "heatt_native_seconds": 0.0,
                 "dsec_calls": 0, "dsec_evaluations": 0, "dsec_state_commits": 0,
@@ -2450,9 +2450,9 @@ def run_xstar_from_parameters(
             ,) if int(normalized.get("lprint")) > 0 else (),
             provenance={
                 "runner": "run_xstar_from_parameters",
-                "package_version": "0.6.48",
-                "release_source_version": "0.6.48",
-                "reference_trace_schema_version": "0.6.48",
+                "package_version": "0.6.48.1",
+                "release_source_version": "0.6.48.1",
+                "reference_trace_schema_version": "0.6.48.1",
                 "source_faithful_calculation_path": True,
                 "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
                 "strict_ten_product_contract": True,
@@ -2465,7 +2465,7 @@ def run_xstar_from_parameters(
                 "profile_components_level": normalize_profile_level(profile_components),
                 "exclusive_profile_timing_enabled": normalize_profile_level(profile_components) != "none",
                 "element_solver_diagnostic_gating": {
-                    "schema_version": "0.6.48",
+                    "schema_version": "0.6.48.1",
                     "diagnostics_mode": diagnostics_mode,
                     "residual_arrays_enabled": diagnostics_mode in {"summary", "full"},
                     "dense_svd_enabled": diagnostics_mode == "full",
