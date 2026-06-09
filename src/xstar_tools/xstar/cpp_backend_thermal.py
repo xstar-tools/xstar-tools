@@ -1,4 +1,4 @@
-"""Persistent native thermal-transfer and convergence engine for v0.6.47.
+"""Persistent native thermal-transfer and convergence engine for v0.6.47.2.
 
 The native library owns the translated ``heatt`` arithmetic and the complete
 ``dsec`` temperature/electron iteration state machine.  The fixed-state
@@ -17,7 +17,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 import numpy as np
 
-_ABI = 60470
+_ABI = 60471
 _LIB: ctypes.CDLL | None = None
 _TLS = threading.local()
 
@@ -98,6 +98,7 @@ class _Evaluation(ctypes.Structure):
         ("struct_size", ctypes.c_uint32), ("abi_version", ctypes.c_uint32),
         ("flags", ctypes.c_uint32), ("reserved0", ctypes.c_uint32),
         ("hmctot", ctypes.c_double), ("elcter", ctypes.c_double),
+        ("temperature_t4", ctypes.c_double), ("electron_fraction_xee", ctypes.c_double),
         ("hydrogen_density_cm3", ctypes.c_double), ("state_generation", ctypes.c_uint64),
     ]
 
@@ -127,6 +128,9 @@ class _DsecStats(ctypes.Structure):
         ("orchestration_seconds", ctypes.c_double), ("callback_seconds", ctypes.c_double),
         ("final_hmctot", ctypes.c_double), ("final_elcter", ctypes.c_double),
         ("final_charge_residual", ctypes.c_double),
+        ("final_temperature_t4", ctypes.c_double),
+        ("final_electron_fraction_xee", ctypes.c_double),
+        ("final_temperature_stagnation_metric", ctypes.c_double),
     ]
 
 _EVALUATOR = ctypes.CFUNCTYPE(
@@ -256,7 +260,7 @@ def apply_heatt_cpp(*, lines: Iterable[Mapping[str, Any]], rrcs: Iterable[Mappin
     for name in ("zrems", "elum", "elumab"):
         np.copyto(np.asarray(values[name]), arrays[name].reshape(np.asarray(values[name]).shape))
     return {
-        "schema_version": "0.6.47", "calls": int(stats.calls),
+        "schema_version": "0.6.47.2", "calls": int(stats.calls),
         "continuum_bins": int(stats.continuum_bins), "line_records": int(stats.line_records),
         "rrc_records": int(stats.rrc_records), "state_commits": int(stats.state_commits),
         "continuum_seconds": float(stats.continuum_seconds), "line_seconds": float(stats.line_seconds),
@@ -302,6 +306,10 @@ def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf
             out.abi_version = _ABI
             out.hmctot = float(result.hmctot)
             out.elcter = float(result.elcter)
+            # calc_hmc_all commits temperature/electron state before returning.
+            # Preserve that source state across the native callback boundary.
+            out.temperature_t4 = float(state.temperature_t4)
+            out.electron_fraction_xee = float(state.electron_fraction_xee)
             out.hydrogen_density_cm3 = float(state.hydrogen_density_cm3)
             out.state_generation = int(getattr(state, "calc_hmc_all_call_count", 0))
             return 0
@@ -329,7 +337,7 @@ def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf
         row = trace[i]
         rows.append({name: getattr(row, name) for name, _ctype in _Trace._fields_})
     return {
-        "schema_version": "0.6.47", "lnerr": int(stats.lnerr), "ntotit": int(stats.ntotit),
+        "schema_version": "0.6.47.2", "lnerr": int(stats.lnerr), "ntotit": int(stats.ntotit),
         "temperature_iterations": int(stats.temperature_iterations),
         "temperature_attempts": int(stats.temperature_attempts),
         "charge_converged": bool(stats.charge_converged),
@@ -342,5 +350,11 @@ def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf
         "callback_seconds": float(stats.callback_seconds),
         "final_hmctot": float(stats.final_hmctot), "final_elcter": float(stats.final_elcter),
         "final_charge_residual": float(stats.final_charge_residual),
+        "final_temperature_t4": float(stats.final_temperature_t4),
+        "final_electron_fraction_xee": float(stats.final_electron_fraction_xee),
+        "final_temperature_stagnation_metric": float(stats.final_temperature_stagnation_metric),
+        "trace_count": int(trace_count.value),
+        "trace_truncated": bool(int(trace_count.value) > len(trace)),
         "trace": rows, "native_dsec": True, "callback_evaluation": True,
+        "callback_state_propagation": True,
     }

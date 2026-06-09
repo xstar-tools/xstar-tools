@@ -89,13 +89,14 @@ struct xstar_thermal_context {
 extern "C" {
 
 uint32_t xstar_thermal_engine_abi_version(void) { return XSTAR_THERMAL_ENGINE_ABI_VERSION; }
-const char *xstar_thermal_engine_backend_name(void) { return "xstar_thermal_heatt_dsec_native_engine_v0647"; }
+const char *xstar_thermal_engine_backend_name(void) { return "xstar_thermal_heatt_dsec_state_commit_engine_v06471"; }
 uint32_t xstar_thermal_engine_feature_flags(void) {
     return XSTAR_THERMAL_STATUS_NATIVE_HEATT |
            XSTAR_THERMAL_STATUS_NATIVE_DSEC |
            XSTAR_THERMAL_STATUS_NATIVE_STATE_PROPAGATION |
            XSTAR_THERMAL_STATUS_PERSISTENT_CONTEXT |
-           XSTAR_THERMAL_STATUS_CALLBACK_EVALUATION;
+           XSTAR_THERMAL_STATUS_CALLBACK_EVALUATION |
+           XSTAR_THERMAL_STATUS_CALLBACK_STATE_PROPAGATION;
 }
 
 void xstar_heatt_workspace_init_v1(xstar_heatt_workspace_v1 *workspace) {
@@ -133,6 +134,11 @@ void xstar_thermal_evaluation_init_v1(xstar_thermal_evaluation_v1 *evaluation) {
     std::memset(evaluation, 0, sizeof(*evaluation));
     evaluation->struct_size = sizeof(*evaluation);
     evaluation->abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
+    evaluation->hmctot = std::numeric_limits<double>::quiet_NaN();
+    evaluation->elcter = std::numeric_limits<double>::quiet_NaN();
+    evaluation->temperature_t4 = std::numeric_limits<double>::quiet_NaN();
+    evaluation->electron_fraction_xee = std::numeric_limits<double>::quiet_NaN();
+    evaluation->hydrogen_density_cm3 = std::numeric_limits<double>::quiet_NaN();
 }
 void xstar_dsec_stats_init_v1(xstar_dsec_stats_v1 *stats) {
     if (!stats) return;
@@ -402,7 +408,21 @@ int xstar_thermal_run_evaluation_loop_v1(
                 set_error(error, error_size, "thermal evaluator returned non-finite residuals");
                 return XSTAR_THERMAL_ERROR_NONFINITE;
             }
-            if (finite_nonnegative(result.hydrogen_density_cm3)) state->hydrogen_density_cm3 = result.hydrogen_density_cm3;
+            // Source calc_hmc_all commits its mutable state before returning to
+            // dsec.  v0.6.47 propagated only density/generation, leaving the
+            // controller on the pre-callback temperature/electron state.  That
+            // can alter the terminal secant/stagnation branch and downstream
+            // float32 optical-depth writes.  Commit all callback-owned state
+            // before residual tests, exactly where the Python source path does.
+            if (!std::isfinite(result.temperature_t4) || result.temperature_t4 <= 0.0 ||
+                !finite_nonnegative(result.electron_fraction_xee) ||
+                !finite_nonnegative(result.hydrogen_density_cm3)) {
+                set_error(error, error_size, "thermal evaluator returned invalid committed state");
+                return XSTAR_THERMAL_ERROR_NONFINITE;
+            }
+            state->temperature_t4 = result.temperature_t4;
+            state->electron_fraction_xee = result.electron_fraction_xee;
+            state->hydrogen_density_cm3 = result.hydrogen_density_cm3;
             if (result.state_generation > state->state_generation) state->state_generation = result.state_generation;
             last_hmctot = result.hmctot;
             last_elcter = result.elcter;
@@ -504,13 +524,16 @@ int xstar_thermal_run_evaluation_loop_v1(
     local.final_hmctot = last_hmctot;
     local.final_elcter = last_elcter;
     local.final_charge_residual = last_tst;
+    local.final_temperature_t4 = state->temperature_t4;
+    local.final_electron_fraction_xee = state->electron_fraction_xee;
+    local.final_temperature_stagnation_metric = testt;
     *stats = local;
     ++context->dsec_calls;
     set_error(error, error_size, "");
     return XSTAR_THERMAL_OK;
 }
 
-// Legacy probes retained for compatibility with pre-v0.6.47 component loading.
+// Legacy probes retained for compatibility with pre-v0.6.47.1 component loading.
 int xstar_thermal_probe() { return 1; }
 int xstar_thermal_abi_version() { return static_cast<int>(XSTAR_THERMAL_ENGINE_ABI_VERSION); }
 const char *xstar_thermal_backend_name() { return xstar_thermal_engine_backend_name(); }

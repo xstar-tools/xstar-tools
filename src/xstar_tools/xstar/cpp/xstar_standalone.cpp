@@ -51,7 +51,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.47 adds persistent native heatt and dsec orchestration:\n"
+        "v0.6.47.2 retains persistent native heatt and dsec orchestration:\n"
         "C++ owns continuum/line/RRC transfer, temperature/electron convergence,\n"
         "state propagation, and the per-zone evaluation-loop controller.\n";
 }
@@ -557,6 +557,8 @@ int thermal_test_evaluator(
     std::memset(result, 0, sizeof(*result)); result->struct_size=sizeof(*result); result->abi_version=XSTAR_THERMAL_ENGINE_ABI_VERSION;
     result->hmctot = 2.0 - state->temperature_t4;
     result->elcter = state->electron_fraction_xee - 1.5;
+    result->temperature_t4 = state->temperature_t4;
+    result->electron_fraction_xee = state->electron_fraction_xee;
     result->hydrogen_density_cm3 = state->hydrogen_density_cm3;
     result->state_generation = state->state_generation + 1;
     return 0;
@@ -646,6 +648,7 @@ int command_convergence_self_test(const Options& options) {
               << "final_electron_fraction=" << state.electron_fraction_xee << "\n"
               << "one_native_loop_per_zone=true\n"
               << "callback_evaluation=true\n"
+              << "callback_state_propagation=true\n"
               << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     if (!accepted && status != XSTAR_STATUS_OK) std::cerr << xstar_context_last_error(context) << "\n";
     xstar_context_destroy(context);

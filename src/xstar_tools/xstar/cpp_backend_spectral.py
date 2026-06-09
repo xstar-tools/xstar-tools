@@ -1,4 +1,4 @@
-"""Persistent native emissivity/opacity contribution engine for v0.6.46.3.
+"""Persistent native emissivity/opacity contribution engine for v0.6.47.2.
 
 Python retains atomic-data traversal and scalar UCalc evaluation in this
 candidate.  Source-ordered line/RRC/continuum contribution construction,
@@ -190,8 +190,11 @@ def _pack_contributions(
 ) -> tuple[Any, np.ndarray, list[Mapping[str, Any]]]:
     rows = list(values)
     stride = int(seed_profile_stride)
-    if stride < 21 or stride % 2 != 1:
-        raise ValueError(f"seed profile stride must be odd and at least 21, got {stride}")
+    from .spectral_profile_oracle import EXACT_GRID_STRIDE
+    if stride != EXACT_GRID_STRIDE and (stride < 21 or stride % 2 != 1):
+        raise ValueError(
+            f"seed profile stride must be odd and at least 21, or exact-grid stride {EXACT_GRID_STRIDE}; got {stride}"
+        )
     packed = (_Contribution * len(rows))()
     seeds = np.zeros((len(rows), stride), dtype=np.float64)
     overrides = dict(seed_overrides or {})
@@ -228,7 +231,7 @@ def _pack_contributions(
             seed = item.get("seed_profiles")
             arr = np.asarray(seed, dtype=np.float64).reshape(-1) if seed is not None else np.zeros(21, dtype=np.float64)
         if arr.size not in (21, stride):
-            raise ValueError(f"line seed profile must contain 21 or {stride} values, got {arr.size}")
+            raise ValueError(f"line seed/oracle payload must contain 21 or {stride} values, got {arr.size}")
         seeds[i, :arr.size] = arr
     return packed, np.ascontiguousarray(seeds.reshape(-1)), rows
 
@@ -307,7 +310,7 @@ def _apply_spectral_batch(
         if target_array.ctypes.data != native_array.ctypes.data:
             np.copyto(target_array, native_array.reshape(target_array.shape))
     return {
-        "schema_version": "0.6.46.3",
+        "schema_version": "0.6.47.2",
         "contributions": len(rows),
         "calls": int(stats.calls),
         "contributions_attempted": int(stats.contributions_attempted),
@@ -324,6 +327,9 @@ def _apply_spectral_batch(
         "exact_profile_oracle_calls": 0,
         "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "exact_grid_oracle_calls": 0,
+        "exact_grid_oracle_energy_values": 0,
+        "exact_grid_oracle_opacity_values": 0,
         "strict_source_rounding": True,
         "source_hunt_floor": float(np.float32(1.0e-34)),
         "message": error.value.decode("utf-8", "replace"),
@@ -336,6 +342,8 @@ def _merge_metrics(total: dict[str, Any], item: Mapping[str, Any]) -> None:
         "emissivity_contributions", "opacity_contributions", "line_profiles",
         "source_order_violations", "exact_profile_oracle_calls",
         "exact_profile_oracle_values", "exact_profile_oracle_line_profiles",
+        "exact_grid_oracle_calls", "exact_grid_oracle_energy_values",
+        "exact_grid_oracle_opacity_values",
     ):
         total[key] = int(total.get(key, 0) or 0) + int(item.get(key, 0) or 0)
     for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
@@ -368,9 +376,9 @@ def apply_spectral_contributions_cpp(
     """Apply source-ordered compact spectral contributions in-place.
 
     Product execution uses 21 source seeds and native C++ Gaussian/Voigt
-    evaluation. Qualification may set ``exact_profile_oracle``; each line is
-    then supplied the complete NumPy/Python profile sample stream while C++
-    still performs temporary-grid traversal, integration, rebinning, and
+    evaluation. Qualification may set ``exact_profile_oracle``; v0.6.47.2 then
+    supplies the complete Python temporary energy grid and exact ``optpp2``
+    samples. C++ still performs trapezoid integration, continuum rebinning, and
     source-ordered array commit.
     """
     rows = list(contributions)
@@ -388,10 +396,12 @@ def apply_spectral_contributions_cpp(
             fline=fline, flinel=flinel, epi_eV=epi_eV,
         )
 
-    from .spectral_profile_oracle import source_linopac_profile_samples
+    from .spectral_profile_oracle import (
+        EXACT_GRID_POINTS, EXACT_GRID_STRIDE, source_linopac_exact_grid,
+    )
 
     total: dict[str, Any] = {
-        "schema_version": "0.6.46.3", "message": "exact source-profile oracle applied",
+        "schema_version": "0.6.47.2", "message": "exact source-profile oracle applied",
         "contributions": 0, "calls": 0, "contributions_attempted": 0,
         "contributions_committed": 0, "emissivity_contributions": 0,
         "opacity_contributions": 0, "line_profiles": 0,
@@ -400,6 +410,8 @@ def apply_spectral_contributions_cpp(
         "opacity_seconds": 0.0, "commit_seconds": 0.0,
         "exact_profile_oracle_calls": 0, "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "exact_grid_oracle_calls": 0, "exact_grid_oracle_energy_values": 0,
+        "exact_grid_oracle_opacity_values": 0,
         "strict_source_rounding": True,
         "source_hunt_floor": float(np.float32(1.0e-34)),
     }
@@ -420,30 +432,33 @@ def apply_spectral_contributions_cpp(
 
     radius = int(exact_profile_radius)
     if radius != 10000:
-        raise ValueError("exact source-profile qualification requires radius=10000")
-    stride = 2 * radius + 1
+        raise ValueError("exact source-grid qualification requires radius=10000")
     for row in rows:
         if int(row.get("kind", 0)) != KIND_EMIS_LINE:
             pending.append(row)
             continue
         flush_pending()
-        profile = source_linopac_profile_samples(
+        exact = source_linopac_exact_grid(
+            optpp=float(row.get("opakab", 0.0)) * float(row.get("abundance_lower", 0.0)),
             line_energy_eV=float(row.get("line_energy_eV", 0.0)),
             vturb_km_s=float(row.get("turbulent_velocity_km_s", 0.0)),
             temperature_1e4K=float(row.get("temperature_1e4K", 0.0)),
             atomic_mass_amu=float(row.get("atomic_mass_amu", 0.0)),
             natural_width_eV=float(row.get("natural_width_eV", 0.0)),
-            epi=epi_eV, ncn2=np.asarray(epi_eV).size, radius=radius,
+            epi=epi_eV, ncn2=np.asarray(epi_eV).size,
         )
         item = _apply_spectral_batch(
-            [row], seed_profile_stride=stride, seed_overrides={0: profile},
+            [row], seed_profile_stride=EXACT_GRID_STRIDE, seed_overrides={0: exact.packed},
             rcem=rcem, oplin=oplin, cemab=cemab, cabab=cabab, opakab=opakab,
             rccemis=rccemis, opakc=opakc, opakcont=opakcont,
             fline=fline, flinel=flinel, epi_eV=epi_eV,
         )
         item["exact_profile_oracle_calls"] = 1
-        item["exact_profile_oracle_values"] = int(profile.size)
+        item["exact_profile_oracle_values"] = EXACT_GRID_POINTS
         item["exact_profile_oracle_line_profiles"] = int(item.get("line_profiles", 0) or 0)
+        item["exact_grid_oracle_calls"] = 1
+        item["exact_grid_oracle_energy_values"] = EXACT_GRID_POINTS
+        item["exact_grid_oracle_opacity_values"] = EXACT_GRID_POINTS
         _merge_metrics(total, item)
     flush_pending()
     return total

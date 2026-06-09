@@ -8,13 +8,14 @@
 extern "C" {
 #endif
 
-#define XSTAR_THERMAL_ENGINE_ABI_VERSION 60470u
+#define XSTAR_THERMAL_ENGINE_ABI_VERSION 60471u
 
 #define XSTAR_THERMAL_STATUS_NATIVE_HEATT 1u
 #define XSTAR_THERMAL_STATUS_NATIVE_DSEC 2u
 #define XSTAR_THERMAL_STATUS_NATIVE_STATE_PROPAGATION 4u
 #define XSTAR_THERMAL_STATUS_PERSISTENT_CONTEXT 8u
 #define XSTAR_THERMAL_STATUS_CALLBACK_EVALUATION 16u
+#define XSTAR_THERMAL_STATUS_CALLBACK_STATE_PROPAGATION 32u
 
 #define XSTAR_THERMAL_ACTION_FINISH 0u
 #define XSTAR_THERMAL_ACTION_EVALUATE 1u
@@ -140,6 +141,8 @@ typedef struct {
     uint32_t reserved0;
     double hmctot;
     double elcter;
+    double temperature_t4;
+    double electron_fraction_xee;
     double hydrogen_density_cm3;
     uint64_t state_generation;
 } xstar_thermal_evaluation_v1;
@@ -182,6 +185,9 @@ typedef struct {
     double final_hmctot;
     double final_elcter;
     double final_charge_residual;
+    double final_temperature_t4;
+    double final_electron_fraction_xee;
+    double final_temperature_stagnation_metric;
 } xstar_dsec_stats_v1;
 
 typedef int (*xstar_thermal_evaluator_fn_v1)(

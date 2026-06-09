@@ -1,4 +1,5 @@
 #include "xstar_backend_common.hpp"
+#include "xstar_spectral_engine.h"
 
 #include <algorithm>
 #include <cmath>
@@ -104,7 +105,7 @@ extern "C" {
 int xstar_opacity_abi_version() { return 60460; }
 
 const char* xstar_opacity_backend_name() {
-    return "xstar_opacity_strict_source_rounding_v06463";
+    return "xstar_opacity_exact_grid_qualification_v06472";
 }
 
 int xstar_opacity_feature_flags() {
@@ -120,6 +121,82 @@ int xstar_opacity_probe(int n_records, char* message, std::size_t message_size) 
     out << "libxstar_opacity.so native line-profile backend available; n_records=" << n_records;
     xstar_backend::write_message(message, message_size, out.str());
     return xstar_backend::XSTAR_BACKEND_OK;
+}
+
+int xstar_opacity_apply_exact_grid_v1(
+    const double* packed_grid,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    const auto started = std::chrono::steady_clock::now();
+    if (!packed_grid || !epi || !opakc || !rccemis || !updated_bins || !opacity_seconds) {
+        write_message(errbuf, errbuf_size, "null pointer passed to exact-grid opacity oracle");
+        return 3;
+    }
+    const int n = ncn2;
+    if (n < 3 || packed_grid[0] != XSTAR_SPECTRAL_EXACT_GRID_MAGIC) {
+        write_message(errbuf, errbuf_size, "invalid exact-grid opacity oracle");
+        return 4;
+    }
+    const int mlmin_header = static_cast<int>(std::llround(packed_grid[1]));
+    const int mlmax_header = static_cast<int>(std::llround(packed_grid[2]));
+    const int ml1min_header = static_cast<int>(std::llround(packed_grid[3]));
+    const int ml1max_header = static_cast<int>(std::llround(packed_grid[4]));
+    const long long valid_points = static_cast<long long>(std::llround(packed_grid[5]));
+    (void)ml1max_header;
+    *updated_bins = 0;
+    *opacity_seconds = 0.0;
+    if (valid_points <= 0 || mlmin_header > mlmax_header) {
+        write_message(errbuf, errbuf_size, "exact-grid opacity oracle no-op");
+        return 0;
+    }
+    if (mlmin_header < 1 || mlmax_header > static_cast<int>(XSTAR_SPECTRAL_EXACT_GRID_POINTS) ||
+        ml1min_header < 1 || ml1min_header > n) {
+        write_message(errbuf, errbuf_size, "exact-grid opacity oracle header out of range");
+        return 4;
+    }
+    const double* etpp = packed_grid + XSTAR_SPECTRAL_EXACT_GRID_HEADER_VALUES;
+    const double* optpp2 = etpp + XSTAR_SPECTRAL_EXACT_GRID_POINTS;
+    int mlmin = std::max(2, mlmin_header);
+    const int mlmax = std::min(static_cast<int>(XSTAR_SPECTRAL_EXACT_GRID_POINTS), mlmax_header);
+    int ml1m = ml1min_header;
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    for (int mlm = mlmin + 1; mlm <= mlmax; ++mlm) {
+        const double tmpopo = tmpop;
+        tmpop = optpp2[mlm - 1];
+        const double tmpe = std::abs(source_sub(etpp[mlm - 1], etpp[mlm - 2]));
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+        if (etpp[mlm - 1] > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                const double optp2 = source_div(opsum, sume);
+                while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    rccemis[ml1m - 1] += 0.0;
+                    rccemis[n + ml1m - 1] += 0.0;
+                    ++(*updated_bins);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+    }
+    const auto ended = std::chrono::steady_clock::now();
+    *opacity_seconds = std::chrono::duration<double>(ended - started).count();
+    write_message(errbuf, errbuf_size, "exact source temporary-grid opacity oracle applied");
+    return 0;
 }
 
 int xstar_opacity_apply_line_profile_v1(

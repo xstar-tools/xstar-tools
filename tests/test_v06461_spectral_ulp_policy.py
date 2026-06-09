@@ -23,7 +23,7 @@ def test_one_ulp_final_array_difference_is_rejected() -> None:
     assert status == "shadow_mismatch"
     assert detail["field"] == "opakc"
     assert detail["max_ulp"] == 1
-    assert detail["policy"] == "exact_profile_oracle"
+    assert detail["policy"] == "exact_temporary_grid_oracle"
 
 
 def test_shape_difference_is_rejected() -> None:

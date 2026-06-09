@@ -73,16 +73,19 @@ class _TraceSink(list):
 def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
     control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
     summary = control.setdefault("native_spectral_engine_summary", {
-        "schema_version": "0.6.46.3",
+        "schema_version": "0.6.47.2",
         "emisab_calls": 0, "emis_calls": 0,
         "contributions_attempted": 0, "contributions_committed": 0,
         "emissivity_contributions": 0, "opacity_contributions": 0,
         "line_profiles": 0, "source_order_violations": 0,
         "shadow_compared": 0, "shadow_mismatches": 0,
-        "shadow_policy": "exact_profile_oracle",
+        "shadow_policy": "exact_temporary_grid_oracle",
         "exact_profile_oracle_calls": 0,
         "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "exact_grid_oracle_calls": 0,
+        "exact_grid_oracle_energy_values": 0,
+        "exact_grid_oracle_opacity_values": 0,
         "strict_source_rounding": False,
         "source_hunt_floor": 0.0,
         "product_commits": 0, "fallbacks": 0,
@@ -108,7 +111,13 @@ def _record_spectral_shadow_result(
 
 def _add_spectral_metrics(summary: MutableMapping[str, Any], metrics: Mapping[str, Any], *, phase: str, status: str, mismatch: Optional[Mapping[str, Any]] = None) -> None:
     summary[f"{phase}_calls"] = int(summary.get(f"{phase}_calls", 0)) + 1
-    for key in ("contributions_attempted", "contributions_committed", "emissivity_contributions", "opacity_contributions", "line_profiles", "source_order_violations", "exact_profile_oracle_calls", "exact_profile_oracle_values", "exact_profile_oracle_line_profiles"):
+    for key in (
+        "contributions_attempted", "contributions_committed", "emissivity_contributions",
+        "opacity_contributions", "line_profiles", "source_order_violations",
+        "exact_profile_oracle_calls", "exact_profile_oracle_values",
+        "exact_profile_oracle_line_profiles", "exact_grid_oracle_calls",
+        "exact_grid_oracle_energy_values", "exact_grid_oracle_opacity_values",
+    ):
         summary[key] = int(summary.get(key, 0)) + int(metrics.get(key, 0) or 0)
     for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
         summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(key, 0.0) or 0.0)

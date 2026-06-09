@@ -299,6 +299,18 @@ int xstar_emissivity_build_binemis_profile(
 #include <cstdint>
 #include <new>
 
+extern "C" int xstar_opacity_apply_exact_grid_v1(
+    const double* packed_grid,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+);
+
 extern "C" int xstar_opacity_apply_line_profile_v1(
     double optpp,
     double line_energy_ev,
@@ -368,14 +380,15 @@ uint32_t xstar_spectral_engine_abi_version(void) {
 }
 
 const char* xstar_spectral_engine_backend_name(void) {
-    return "xstar_native_emissivity_opacity_contribution_engine_v0646";
+    return "xstar_native_emissivity_opacity_exact_grid_engine_v06472";
 }
 
 uint32_t xstar_spectral_engine_feature_flags(void) {
     return XSTAR_SPECTRAL_STATUS_SOURCE_ORDERED |
            XSTAR_SPECTRAL_STATUS_NATIVE_EMISSIVITY |
            XSTAR_SPECTRAL_STATUS_NATIVE_OPACITY |
-           XSTAR_SPECTRAL_STATUS_PERSISTENT_CONTEXT;
+           XSTAR_SPECTRAL_STATUS_PERSISTENT_CONTEXT |
+           XSTAR_SPECTRAL_STATUS_EXACT_GRID_ORACLE;
 }
 
 void xstar_spectral_workspace_init_v1(xstar_spectral_workspace_v1* workspace) {
@@ -531,23 +544,33 @@ int xstar_spectral_apply_contributions_v1(
             ++stats->opacity_contributions;
             const double* seed = nullptr;
             int seed_radius = 0;
-            if (seed_profiles && seed_profile_stride >= 21 && (seed_profile_stride % 2) == 1) {
+            const bool exact_grid_oracle =
+                seed_profiles && seed_profile_stride == XSTAR_SPECTRAL_EXACT_GRID_STRIDE;
+            if (seed_profiles && (exact_grid_oracle ||
+                (seed_profile_stride >= 21 && (seed_profile_stride % 2) == 1))) {
                 seed = seed_profiles + i * seed_profile_stride;
-                seed_radius = static_cast<int>((seed_profile_stride - 1) / 2);
+                if (!exact_grid_oracle) {
+                    seed_radius = static_cast<int>((seed_profile_stride - 1) / 2);
+                }
             }
-            if (!seed || seed_radius < 10) {
-                write_message(error, error_size, "native line contribution lacks valid seed profiles");
+            if (!seed || (!exact_grid_oracle && seed_radius < 10)) {
+                write_message(error, error_size, "native line contribution lacks valid seed or exact-grid oracle");
                 return 9;
             }
             long long updated = 0;
             double opacity_elapsed = 0.0;
             char opacity_error[512] = {0};
-            const int rc = xstar_opacity_apply_line_profile_v1(
-                opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
-                c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
-                seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
-                workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
-                opacity_error, sizeof(opacity_error));
+            const int rc = exact_grid_oracle
+                ? xstar_opacity_apply_exact_grid_v1(
+                    seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
+                    workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
+                    opacity_error, sizeof(opacity_error))
+                : xstar_opacity_apply_line_profile_v1(
+                    opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
+                    c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
+                    seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
+                    workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
+                    opacity_error, sizeof(opacity_error));
             stats->opacity_seconds += opacity_elapsed;
             if (rc != 0) {
                 write_message(error, error_size, opacity_error[0] ? opacity_error : "native opacity line profile failed");

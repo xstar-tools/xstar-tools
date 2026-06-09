@@ -937,11 +937,13 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     }
     if result.native_metrics:
         summary = state.control.setdefault("native_thermal_engine_summary", {
-            "schema_version": "0.6.47", "heatt_calls": 0, "continuum_bins": 0,
+            "schema_version": "0.6.47.2", "heatt_calls": 0, "continuum_bins": 0,
             "line_records": 0, "rrc_records": 0, "heatt_state_commits": 0,
             "heatt_ffi_seconds": 0.0, "heatt_native_seconds": 0.0,
             "dsec_calls": 0, "dsec_evaluations": 0, "dsec_state_commits": 0,
             "dsec_orchestration_seconds": 0.0, "dsec_callback_seconds": 0.0,
+            "dsec_trace_events": 0, "dsec_trace_truncated_calls": 0,
+            "dsec_terminal_statuses": [], "callback_state_propagation": True,
             "fallbacks": 0,
         })
         summary["heatt_calls"] += int(result.native_metrics.get("calls", 0))

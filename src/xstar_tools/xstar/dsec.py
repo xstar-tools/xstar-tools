@@ -875,6 +875,12 @@ def dsec(
             "dsec_lnerr": int(native["lnerr"]),
             "dsec_orchestration_seconds": float(native["orchestration_seconds"]),
             "dsec_callback_seconds": float(native["callback_seconds"]),
+            "dsec_callback_state_propagation": bool(native.get("callback_state_propagation", False)),
+            "dsec_trace_count": int(native.get("trace_count", 0)),
+            "dsec_trace_truncated": bool(native.get("trace_truncated", False)),
+            "dsec_final_temperature_t4": float(native.get("final_temperature_t4", state.temperature_t4)),
+            "dsec_final_electron_fraction_xee": float(native.get("final_electron_fraction_xee", state.electron_fraction_xee)),
+            "dsec_final_temperature_stagnation_metric": float(native.get("final_temperature_stagnation_metric", float("nan"))),
         })
         return DsecResult(
             state=state, trajectory=_native_trace_events(native.get("trace", ()), state, nlim=nlim, tinf_t4=tinf_t4),

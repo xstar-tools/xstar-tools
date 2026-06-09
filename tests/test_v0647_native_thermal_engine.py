@@ -11,7 +11,7 @@ from xstar_tools.xstar.cpp_backend_thermal import (
 def test_native_thermal_engine_status():
     status = thermal_engine_status()
     assert status["available"]
-    assert status["abi_version"] == 60470
+    assert status["abi_version"] == 60471
     assert status["feature_flags"] & 1
     assert status["feature_flags"] & 2
 
@@ -46,6 +46,37 @@ def test_native_dsec_orchestration_converges():
     assert state.temperature_t4 == 2.0
     assert state.electron_fraction_xee == 1.5
 
+
+
+def test_native_dsec_propagates_callback_committed_state():
+    state = SimpleNamespace(
+        temperature_t4=1.0,
+        electron_fraction_xee=1.0,
+        hydrogen_density_cm3=1.0e8,
+        calc_hmc_all_call_count=0,
+    )
+
+    def evaluator(runtime):
+        runtime.calc_hmc_all_call_count += 1
+        runtime.temperature_t4 = 1.25
+        runtime.electron_fraction_xee = 1.125
+        runtime.hydrogen_density_cm3 = 2.0e8
+        return SimpleNamespace(hmctot=0.0, elcter=0.0)
+
+    result = run_dsec_cpp(
+        state, evaluator, nlim=0, tinf_t4=0.099,
+        charge_tolerance=float(np.float32(1.0e-4)),
+        thermal_tolerance=float(np.float32(1.0e-4)),
+        temperature_stagnation_tolerance=float(np.float32(2.0e-9)),
+    )
+    assert result["callback_state_propagation"]
+    assert result["evaluations_completed"] == 1
+    assert result["trace_count"] >= 3
+    assert state.temperature_t4 == 1.25
+    assert state.electron_fraction_xee == 1.125
+    assert state.hydrogen_density_cm3 == 2.0e8
+    assert result["final_temperature_t4"] == 1.25
+    assert result["final_electron_fraction_xee"] == 1.125
 
 def test_native_heatt_matches_frozen_fortran_fixture():
     n, nl, nc = 4, 2, 2

@@ -162,7 +162,10 @@ def test_exact_profile_oracle_reproduces_python_opakc(monkeypatch) -> None:
         fline=fline, flinel=flinel, epi_eV=epi, exact_profile_oracle=True,
     )
     assert metrics["exact_profile_oracle_calls"] == 1
-    assert metrics["exact_profile_oracle_values"] == 20001
+    assert metrics["exact_profile_oracle_values"] == 20000
+    assert metrics["exact_grid_oracle_calls"] == 1
+    assert metrics["exact_grid_oracle_energy_values"] == 20000
+    assert metrics["exact_grid_oracle_opacity_values"] == 20000
     assert metrics["exact_profile_oracle_line_profiles"] == 1
     assert metrics["strict_source_rounding"] is True
     assert metrics["source_hunt_floor"] == float(np.float32(1.0e-34))
@@ -207,3 +210,80 @@ def test_exact_profile_oracle_uses_source_hunt_floor_and_strict_rounding(monkeyp
     assert metrics["strict_source_rounding"] is True
     assert metrics["source_hunt_floor"] == float(np.float32(1.0e-34))
     assert np.array_equal(opakc, expected_opakc)
+
+
+
+def test_exact_grid_oracle_preserves_multiline_accumulation_with_nonzero_base(monkeypatch) -> None:
+    """The v0.6.47.2 oracle removes all pre-integration cross-runtime geometry."""
+    _install_astropy_stub()
+    from xstar_tools.xstar.cpp_backend_spectral import apply_spectral_contributions_cpp
+    from xstar_tools.xstar.emergent_emissivity import _source_linopac_into_opakc
+
+    epi = np.geomspace(0.2, 8.0e4, 721, dtype=np.float64)
+    rows = []
+    specs = (
+        (13.7, 11.0, 6.499146221146252, 1.0, 0.0, 0.23, 0.87),
+        (400.0, 37.0, 6.499146221146252, 24.0, 1.0e-8, 0.51, 0.42),
+        (6543.2, 180.0, 6.499146221160469, 24.0, 2.0e-3, 0.17, 0.66),
+    )
+    expected = np.linspace(1.0e-30, 2.0e-30, epi.size, dtype=np.float64)
+    expected_rcc = np.zeros((2, epi.size), dtype=np.float64)
+    for index, (energy, vturb, temp, mass, width, opak, abundance) in enumerate(specs, start=1):
+        rows.append({
+            "source_position": index,
+            "record": 4700 + index,
+            "kind": 4,
+            "rate_type": 4,
+            "data_type": 50,
+            "output_index": index,
+            "bin_one_based": max(1, min(epi.size, int(np.searchsorted(epi, energy)))),
+            "ptmp1": 0.55,
+            "ptmp2": 0.45,
+            "abundance_lower": abundance,
+            "abundance_upper": 1.0 - abundance,
+            "ans1": 0.0,
+            "ans2": 0.0,
+            "opakab": opak,
+            "line_energy_eV": energy,
+            "bin_width_eV": 1.0,
+            "atomic_mass_amu": mass,
+            "natural_width_eV": width,
+            "turbulent_velocity_km_s": vturb,
+            "temperature_1e4K": temp,
+            "seed_profiles": np.ones(21, dtype=np.float64),
+        })
+        _source_linopac_into_opakc(
+            optpp=opak * abundance,
+            rcem1=0.0,
+            rcem2=0.0,
+            line_energy_eV=energy,
+            vturb_km_s=vturb,
+            temperature_1e4K=temp,
+            atomic_mass_amu=mass,
+            natural_width_eV=width,
+            epi=epi,
+            opakc=expected,
+            rccemis=expected_rcc,
+            ncn2=epi.size,
+        )
+
+    actual = np.linspace(1.0e-30, 2.0e-30, epi.size, dtype=np.float64)
+    metrics = apply_spectral_contributions_cpp(
+        rows,
+        rcem=np.zeros((2, 16), dtype=np.float64),
+        oplin=np.zeros(16, dtype=np.float64),
+        cemab=np.zeros((2, 16), dtype=np.float64),
+        cabab=np.zeros(16, dtype=np.float64),
+        opakab=np.zeros(16, dtype=np.float64),
+        rccemis=np.zeros((2, epi.size), dtype=np.float64),
+        opakc=actual,
+        opakcont=np.zeros(epi.size, dtype=np.float64),
+        fline=np.zeros((2, 16), dtype=np.float64),
+        flinel=np.zeros(epi.size, dtype=np.float64),
+        epi_eV=epi,
+        exact_profile_oracle=True,
+    )
+    assert metrics["exact_grid_oracle_calls"] == len(rows)
+    assert metrics["exact_grid_oracle_energy_values"] == 20000 * len(rows)
+    assert metrics["exact_grid_oracle_opacity_values"] == 20000 * len(rows)
+    assert np.array_equal(actual, expected)

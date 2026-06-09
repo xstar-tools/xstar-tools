@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.47.2 - 2026-06-09
+
+- Correct the release reference runner to resolve only v0.6.47.2, reject version-mismatch overrides, and capture DSEC terminal/trajectory provenance by default.
+- Record package and release-source versions in every run summary and require a current reference in the acceptance checker.
+- Replace profile-only spectral qualification with a complete Python source temporary-grid oracle containing 20,000 energies and 20,000 exact opacity samples per line.
+- Keep C++ ownership of trapezoid integration, continuum rebinning, source-ordered `opakc` commit, and the unchanged native product path.
+- Require zero spectral shadow mismatches and exact Python/native DSEC trajectory parity.
+- Keep public and thermal ABI 60471 and spectral ABI 60460.
+
 ## 0.6.47 - 2026-06-09
 
 - Added persistent native `heatt` continuum, line, and RRC transfer.

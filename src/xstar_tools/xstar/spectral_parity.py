@@ -1,8 +1,8 @@
 """Strict binary64 parity classification for native spectral shadows.
 
-v0.6.46.3 removes final-array ULP tolerance. Qualification supplies complete
-source-profile samples for Gaussian/Voigt lines, so every committed spectral
-array must compare exactly.
+v0.6.47.2 removes all cross-runtime pre-integration geometry from qualification.
+Python supplies the complete source temporary energy and opacity grids while C++
+still integrates, rebins, and commits; every final spectral array must match exactly.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def classify_spectral_shadow_arrays(
             "python": left[at].item(),
             "native": right[at].item(),
             "differing_values": int(where.size),
-            "policy": "exact_profile_oracle",
+            "policy": "exact_temporary_grid_oracle",
         }
         finite = np.isfinite(left[where]) & np.isfinite(right[where])
         if bool(np.all(finite)):

@@ -1733,11 +1733,13 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         )
         if bool(result.state.provenance.get("dsec_native_orchestration", False)):
             summary = runtime_state.control.setdefault("native_thermal_engine_summary", {
-                "schema_version": "0.6.47", "heatt_calls": 0, "continuum_bins": 0,
+                "schema_version": "0.6.47.2", "heatt_calls": 0, "continuum_bins": 0,
                 "line_records": 0, "rrc_records": 0, "heatt_state_commits": 0,
                 "heatt_ffi_seconds": 0.0, "heatt_native_seconds": 0.0,
                 "dsec_calls": 0, "dsec_evaluations": 0, "dsec_state_commits": 0,
                 "dsec_orchestration_seconds": 0.0, "dsec_callback_seconds": 0.0,
+                "dsec_trace_events": 0, "dsec_trace_truncated_calls": 0,
+                "dsec_terminal_statuses": [], "callback_state_propagation": True,
                 "fallbacks": 0,
             })
             summary["dsec_calls"] += 1
@@ -1748,6 +1750,21 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             summary["charge_converged"] = bool(result.charge_converged)
             summary["thermal_converged"] = bool(result.thermal_converged)
             summary["lnerr"] = int(result.lnerr)
+            summary["dsec_trace_events"] += int(result.state.provenance.get("dsec_trace_count", len(result.trajectory)))
+            summary["dsec_trace_truncated_calls"] += int(bool(result.state.provenance.get("dsec_trace_truncated", False)))
+            summary["callback_state_propagation"] = bool(result.state.provenance.get("dsec_callback_state_propagation", False))
+            summary["dsec_terminal_statuses"].append({
+                "call_index": int(summary["dsec_calls"]),
+                "lnerr": int(result.lnerr),
+                "ntotit": int(result.ntotit),
+                "charge_converged": bool(result.charge_converged),
+                "thermal_converged": bool(result.thermal_converged),
+                "final_temperature_t4": float(result.state.temperature_t4),
+                "final_electron_fraction_xee": float(result.state.electron_fraction_xee),
+                "final_hmctot": float(result.final_hmctot),
+                "final_elcter": float(result.final_elcter),
+                "final_event": str(result.trajectory[-1].event if result.trajectory else ""),
+            })
         if bool(runtime_state.control.get("zone1_dsec_capture_all_inputs", False)) and evaluator.input_snapshots:
             target_temperature_k = float(
                 runtime_state.control.get("zone1_dsec_target_temperature_k", 73198.4)
@@ -1839,21 +1856,51 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         runtime_state.control["legacy_pprint_hc1_percent"] = float(result.final_hmctot) * 100.0
         runtime_state.control["lnerrd"] = int(result.lnerr)
         try:
-            runtime_state.control["dsec_residual_trajectory_summary"] = [
+            terminal_rows = runtime_state.control.setdefault("dsec_terminal_summary", [])
+            call_index = len(terminal_rows) + 1
+            terminal_rows.append({
+                "call_index": int(call_index),
+                "native_orchestration": bool(result.state.provenance.get("dsec_native_orchestration", False)),
+                "callback_state_propagation": bool(result.state.provenance.get("dsec_callback_state_propagation", False)),
+                "lnerr": int(result.lnerr),
+                "ntotit": int(result.ntotit),
+                "temperature_iterations": int(result.temperature_iterations),
+                "temperature_attempts": int(result.temperature_attempts),
+                "charge_converged": bool(result.charge_converged),
+                "thermal_converged": bool(result.thermal_converged),
+                "source_returned": bool(result.source_returned),
+                "prefix_terminated": bool(result.prefix_terminated),
+                "final_temperature_t4": float(result.state.temperature_t4),
+                "final_electron_fraction_xee": float(result.state.electron_fraction_xee),
+                "final_hmctot": float(result.final_hmctot),
+                "final_elcter": float(result.final_elcter),
+                "final_event": str(result.trajectory[-1].event if result.trajectory else ""),
+            })
+            trajectory_rows = runtime_state.control.setdefault("dsec_residual_trajectory_summary", [])
+            trajectory_rows.extend([
                 {
+                    "call_index": int(call_index),
+                    "event_index": int(row.event_index),
                     "evaluation_index": int(row.evaluation_index),
                     "ntotit": int(row.ntotit),
+                    "nnt": int(row.nnt),
+                    "nntt": int(row.nntt),
+                    "nnx": int(row.nnx),
+                    "nnxx": int(row.nnxx),
                     "temperature_K": float(row.temperature_k),
-                    "electron_fraction": float(row.electron_fraction),
+                    "electron_fraction": float(row.electron_fraction_xee),
                     "hmctot": None if row.hmctot is None else float(row.hmctot),
                     "elcter": None if row.elcter is None else float(row.elcter),
+                    "normalized_charge_residual": None if row.normalized_charge_residual is None else float(row.normalized_charge_residual),
+                    "temperature_stagnation_metric": None if row.temperature_stagnation_metric is None else float(row.temperature_stagnation_metric),
+                    "lnerr": int(row.lnerr),
                     "event": str(row.event),
                 }
                 for row in result.trajectory
-                if str(row.event) in {"before_calc_hmc_all", "after_calc_hmc_all", "return"}
-            ][-128:]
-        except Exception:
-            runtime_state.control["dsec_residual_trajectory_summary"] = []
+            ])
+            runtime_state.control["dsec_residual_trajectory_summary"] = trajectory_rows[-1024:]
+        except Exception as exc:
+            runtime_state.control.setdefault("dsec_trace_capture_errors", []).append(str(exc))
         return result
 
     def calc_hmc_all_handler(runtime_state: XSTARPythonState) -> FixedStateCalcHMCAllResult:
@@ -2403,6 +2450,9 @@ def run_xstar_from_parameters(
             ,) if int(normalized.get("lprint")) > 0 else (),
             provenance={
                 "runner": "run_xstar_from_parameters",
+                "package_version": "0.6.47.2",
+                "release_source_version": "0.6.47.2",
+                "reference_trace_schema_version": "0.6.47.2",
                 "source_faithful_calculation_path": True,
                 "verbose_pprint_complete": int(normalized.get("lprint")) == 0,
                 "strict_ten_product_contract": True,
@@ -2415,7 +2465,7 @@ def run_xstar_from_parameters(
                 "profile_components_level": normalize_profile_level(profile_components),
                 "exclusive_profile_timing_enabled": normalize_profile_level(profile_components) != "none",
                 "element_solver_diagnostic_gating": {
-                    "schema_version": "0.6.47",
+                    "schema_version": "0.6.47.2",
                     "diagnostics_mode": diagnostics_mode,
                     "residual_arrays_enabled": diagnostics_mode in {"summary", "full"},
                     "dense_svd_enabled": diagnostics_mode == "full",
@@ -2432,12 +2482,14 @@ def run_xstar_from_parameters(
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "compact_record_contributions_with_native_element_construction_solve_commit_v06451"},
                 "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "native_source_ordered_spectral_contribution_engine_v0646"},
                 "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "native_line_profile_and_spectral_opacity_engine_v0646"},
-                "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "native_heatt_and_dsec_orchestration_v0647"},
+                "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "native_heatt_and_dsec_state_commit_v06471"},
                 "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "h_he_mg_native_construction_boundary_v06451"},
                 "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
                 "compact_active_atdb_export": compact_export_summary,
                 "performance_profile_summary": summarize_profile(state.control),
                 "dsec_residual_trajectory_summary": list(state.control.get("dsec_residual_trajectory_summary", [])),
+                "dsec_terminal_summary": list(state.control.get("dsec_terminal_summary", [])),
+                "dsec_trace_capture_errors": list(state.control.get("dsec_trace_capture_errors", [])),
                 "mg_matrix_ucalc_forensic_samples": list(state.control.get("mg_matrix_ucalc_forensic_samples", [])),
                 "mg_type49_shadow_parity_enabled": bool(state.control.get("mg_type49_shadow_parity_enabled", False)),
                 "mg_type49_shadow_parity_summary": dict(state.control.get("mg_type49_shadow_parity_summary", {})),
