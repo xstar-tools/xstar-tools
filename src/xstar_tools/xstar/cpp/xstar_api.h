@@ -19,8 +19,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_API_ABI_VERSION 60450u
-#define XSTAR_API_VERSION_STRING "0.6.45"
+#define XSTAR_API_ABI_VERSION 60451u
+#define XSTAR_API_VERSION_STRING "0.6.45.1"
 #define XSTAR_BACKEND_NAME_SIZE 32u
 #define XSTAR_PATH_SIZE 1024u
 #define XSTAR_MESSAGE_SIZE 1024u
@@ -194,10 +194,25 @@ XSTAR_API_EXPORT int xstar_context_run_batch_v1(
     size_t zone_count,
     xstar_zone_output_v1* outputs
 );
+XSTAR_API_EXPORT int xstar_context_run_element_construction_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    xstar_element_output_v1* output
+);
 XSTAR_API_EXPORT int xstar_context_run_element_v1(
     xstar_context* context,
     const xstar_element_input_v1* input,
     xstar_element_output_v1* output
+);
+XSTAR_API_EXPORT int xstar_context_run_construction_evaluation_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* inputs,
+    const xstar_element_contribution_v1* const* contribution_arrays,
+    const size_t* contribution_counts,
+    size_t element_count,
+    xstar_element_output_v1* outputs
 );
 XSTAR_API_EXPORT int xstar_context_run_evaluation_v1(
     xstar_context* context,

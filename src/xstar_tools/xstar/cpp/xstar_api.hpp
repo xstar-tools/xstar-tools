@@ -57,8 +57,41 @@ public:
         }
     }
 
+    void run_element_construction(
+        const xstar_element_input_v1& input,
+        const std::vector<xstar_element_contribution_v1>& contributions,
+        xstar_element_output_v1& output
+    ) {
+        const int status = xstar_context_run_element_construction_v1(
+            context_, &input, contributions.data(), contributions.size(), &output);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+    }
+
     void run_element(const xstar_element_input_v1& input, xstar_element_output_v1& output) {
         const int status = xstar_context_run_element_v1(context_, &input, &output);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+    }
+
+    void run_construction_evaluation(
+        const std::vector<xstar_element_input_v1>& inputs,
+        const std::vector<std::vector<xstar_element_contribution_v1>>& contributions,
+        std::vector<xstar_element_output_v1>& outputs
+    ) {
+        if (inputs.size() != outputs.size() || inputs.size() != contributions.size()) {
+            throw std::invalid_argument("construction input/contribution/output sizes differ");
+        }
+        std::vector<const xstar_element_contribution_v1*> arrays(inputs.size(), nullptr);
+        std::vector<std::size_t> counts(inputs.size(), 0);
+        for (std::size_t i = 0; i < inputs.size(); ++i) {
+            arrays[i] = contributions[i].empty() ? nullptr : contributions[i].data();
+            counts[i] = contributions[i].size();
+        }
+        const int status = xstar_context_run_construction_evaluation_v1(
+            context_, inputs.data(), arrays.data(), counts.data(), inputs.size(), outputs.data());
         if (status != XSTAR_STATUS_OK) {
             throw Error(status, xstar_context_last_error(context_));
         }

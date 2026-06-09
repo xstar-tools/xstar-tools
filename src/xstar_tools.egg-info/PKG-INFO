@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.45
+Version: 0.6.45.1
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,16 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.45.1 native H/He/Mg element construction engine
+
+v0.6.45.1 replaces the production Python `MatrixTerm` stream with one compact
+record contribution per evaluated atomic record. `libxstar_engine.so` expands
+those records in strict source order and owns term construction, matrix/heating
+assembly, normalization, Lucy/fixed-point solving, derived ion state, and state
+commit. The packed-term ABI remains for exact qualification. Python still owns
+atomic-data traversal and scalar rate evaluation in this release. See
+`V06451_NATIVE_ELEMENT_CONSTRUCTION_ENGINE.md`.
 
 ## v0.6.45 complete native H/He/Mg element engine
 

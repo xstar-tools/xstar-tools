@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#define XSTAR_ELEMENT_ENGINE_ABI_VERSION 60450u
+#define XSTAR_ELEMENT_ENGINE_ABI_VERSION 60451u
 #define XSTAR_ELEMENT_MESSAGE_SIZE 1024u
 
 typedef enum xstar_element_flags_v1 {
@@ -31,7 +31,8 @@ typedef enum xstar_element_status_flags_v1 {
     XSTAR_ELEMENT_STATUS_NATIVE_MATRIX_ASSEMBLY = 1u << 2,
     XSTAR_ELEMENT_STATUS_NATIVE_LUCY_SOLVE = 1u << 3,
     XSTAR_ELEMENT_STATUS_STATE_COMMITTED = 1u << 4,
-    XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED = 1u << 5
+    XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED = 1u << 5,
+    XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION = 1u << 6
 } xstar_element_status_flags_v1;
 
 typedef struct xstar_element_term_v1 {
@@ -51,6 +52,26 @@ typedef struct xstar_element_term_v1 {
     double cj;
     double cj2;
 } xstar_element_term_v1;
+
+typedef struct xstar_element_contribution_v1 {
+    int64_t source_position;
+    int64_t record;
+    int32_t data_type;
+    int32_t rate_type;
+    int32_t ion_index;
+    int32_t ion_stage;
+    int32_t lower_row;
+    int32_t upper_row;
+    int32_t reserved0;
+    int32_t reserved1;
+    double ans1;
+    double ans2;
+    double ans3;
+    double ans4;
+    double ans5;
+    double ans6;
+    double density_scale;
+} xstar_element_contribution_v1;
 
 typedef struct xstar_element_input_v1 {
     uint32_t struct_size;
@@ -98,6 +119,9 @@ typedef struct xstar_element_output_v1 {
     double matrix_assembly_seconds;
     double solver_seconds;
     double state_commit_seconds;
+    double construction_seconds;
+    uint64_t records_constructed;
+    uint64_t terms_constructed;
 
     double* populations;
     size_t populations_capacity;
@@ -166,6 +190,10 @@ typedef struct xstar_element_engine_stats_v1 {
     uint64_t terms_committed;
     uint64_t source_order_failures;
     uint64_t workspace_resizes;
+    uint64_t construction_calls;
+    uint64_t records_constructed;
+    uint64_t terms_constructed;
+    double construction_seconds;
     double matrix_assembly_seconds;
     double solver_seconds;
     double state_commit_seconds;
@@ -196,10 +224,29 @@ XSTAR_ELEMENT_EXPORT int xstar_element_engine_get_stats_v1(
     char* message,
     size_t message_size
 );
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_construction_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+);
 XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_element_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* input,
     xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_construction_evaluation_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* inputs,
+    const xstar_element_contribution_v1* const* contribution_arrays,
+    const size_t* contribution_counts,
+    size_t element_count,
+    xstar_element_output_v1* outputs,
     char* message,
     size_t message_size
 );

@@ -1,3 +1,13 @@
+## v0.6.45.1 native H/He/Mg element construction engine
+
+v0.6.45.1 replaces the production Python `MatrixTerm` stream with one compact
+record contribution per evaluated atomic record. `libxstar_engine.so` expands
+those records in strict source order and owns term construction, matrix/heating
+assembly, normalization, Lucy/fixed-point solving, derived ion state, and state
+commit. The packed-term ABI remains for exact qualification. Python still owns
+atomic-data traversal and scalar rate evaluation in this release. See
+`V06451_NATIVE_ELEMENT_CONSTRUCTION_ENGINE.md`.
+
 ## v0.6.45 complete native H/He/Mg element engine
 
 v0.6.45 adds a persistent source-order-preserving element engine to

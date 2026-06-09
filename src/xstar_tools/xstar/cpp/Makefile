@@ -98,11 +98,13 @@ test: all
 	./$(EXECUTABLE_TARGET) self-test --backend cpp --plugin-dir . --batch 4
 	./$(EXECUTABLE_TARGET) element-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) evaluation-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) construction-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) construction-evaluation-self-test --backend cpp --plugin-dir .
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.45 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.45.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

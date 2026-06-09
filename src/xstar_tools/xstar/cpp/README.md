@@ -21,6 +21,16 @@ src/xstar_tools/xstar/*.py
 
 Do not copy shared libraries into `src/xstar_tools/xstar/`.
 
+## v0.6.45.1 native element construction architecture
+
+v0.6.45.1 adds `xstar_element_contribution_v1` and construction entry points.
+The production adapter sends one compact source-ordered record contribution;
+C++ expands it to canonical terms and completes matrix assembly, normalization,
+Lucy solving, and state commit. Use `construction-self-test` and
+`construction-evaluation-self-test` for ABI validation. The packed-term calls
+remain supported for qualification and debugging. Atomic-data traversal and
+scalar rate evaluation are still Python-owned.
+
 ## v0.6.45 native element architecture
 
 v0.6.45 retains the v0.6.44.3 standalone/backend structure and adds:

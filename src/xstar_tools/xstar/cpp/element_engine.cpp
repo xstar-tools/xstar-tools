@@ -282,6 +282,54 @@ void copy_vector(const std::vector<T>& source, T* target, std::size_t capacity, 
     std::copy(source.begin(), source.end(), target);
 }
 
+std::vector<xstar_element_term_v1> construct_terms_from_contributions(
+    const xstar_element_input_v1& input,
+    const xstar_element_contribution_v1* contributions,
+    std::size_t contribution_count
+) {
+    if (contribution_count > 0) require(contributions != nullptr, "contributions pointer is null");
+    std::vector<xstar_element_term_v1> terms;
+    terms.reserve(contribution_count * 4u);
+    std::int64_t previous_position = std::numeric_limits<std::int64_t>::min();
+    for (std::size_t index = 0; index < contribution_count; ++index) {
+        const auto& c = contributions[index];
+        require(c.source_position >= previous_position, "contribution stream is not in source-position order");
+        previous_position = c.source_position;
+        require(c.lower_row >= 1 && c.lower_row <= input.n_rows, "contribution lower_row outside compact basis");
+        require(c.upper_row >= 1 && c.upper_row <= input.n_rows, "contribution upper_row outside compact basis");
+        require(std::isfinite(c.ans1) && std::isfinite(c.ans2) && std::isfinite(c.ans3) &&
+                std::isfinite(c.ans4) && std::isfinite(c.ans5) && std::isfinite(c.ans6) &&
+                std::isfinite(c.density_scale), "non-finite contribution scalar");
+        const double a1 = c.ans1;
+        const double a2 = c.ans2;
+        const double xpx = c.density_scale;
+        const int rows[4] = {c.upper_row, c.lower_row, c.lower_row, c.upper_row};
+        const int cols[4] = {c.lower_row, c.upper_row, c.lower_row, c.upper_row};
+        const double aj1[4] = {a1, a2, -a1, -a2};
+        const double aj2[4] = {a2, a1, -a1, -a2};
+        const double cj[4] = {0.0, 0.0, c.ans4 * xpx, -c.ans3 * xpx};
+        const double cj2[4] = {0.0, 0.0, c.ans6 * xpx, -c.ans5 * xpx};
+        for (int offset = 0; offset < 4; ++offset) {
+            xstar_element_term_v1 term{};
+            term.source_position = c.source_position + offset;
+            term.term_index = c.source_position + offset;
+            term.record = c.record;
+            term.data_type = c.data_type;
+            term.rate_type = c.rate_type;
+            term.ion_index = c.ion_index;
+            term.ion_stage = c.ion_stage;
+            term.row = rows[offset];
+            term.column = cols[offset];
+            term.aj1 = aj1[offset];
+            term.aj2 = aj2[offset];
+            term.cj = cj[offset];
+            term.cj2 = cj2[offset];
+            terms.push_back(term);
+        }
+    }
+    return terms;
+}
+
 int run_element_impl(
     xstar_element_engine_context_impl& context,
     const xstar_element_input_v1& input,
@@ -640,11 +688,11 @@ uint32_t xstar_element_engine_abi_version(void) {
 }
 
 const char* xstar_element_engine_backend_name(void) {
-    return "xstar_element_engine_h_he_mg_native_matrix_lucy_v0645";
+    return "xstar_element_engine_h_he_mg_native_construction_v06451";
 }
 
 int xstar_element_engine_feature_flags(void) {
-    return 0x1F;
+    return 0x3F;
 }
 
 int xstar_element_input_init_v1(xstar_element_input_v1* input) {
@@ -721,6 +769,53 @@ int xstar_element_engine_get_stats_v1(
     return 0;
 }
 
+int xstar_element_engine_run_construction_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !input || !output) return 1;
+    try {
+        const auto construction_t0 = clock_type::now();
+        std::vector<xstar_element_term_v1> terms =
+            construct_terms_from_contributions(*input, contributions, contribution_count);
+        const double construction_seconds = seconds_since(construction_t0);
+        xstar_element_input_v1 expanded = *input;
+        expanded.terms = terms.empty() ? nullptr : terms.data();
+        expanded.term_count = terms.size();
+        std::string status;
+        const int rc = run_element_impl(context->impl, expanded, *output, status);
+        if (rc == 0) {
+            output->status_flags |= XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION;
+            output->construction_seconds = construction_seconds;
+            output->records_constructed = contribution_count;
+            output->terms_constructed = terms.size();
+            context->impl.stats.construction_calls += 1;
+            context->impl.stats.records_constructed += contribution_count;
+            context->impl.stats.terms_constructed += terms.size();
+            context->impl.stats.construction_seconds += construction_seconds;
+            std::ostringstream text;
+            text << status << "; native_records=" << contribution_count
+                 << "; native_terms=" << terms.size();
+            status = text.str();
+            copy_text(output->message, sizeof(output->message), status);
+        }
+        copy_text(message, message_size, status);
+        return rc;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        copy_text(output->message, sizeof(output->message), exc.what());
+        return 2;
+    } catch (...) {
+        copy_text(message, message_size, "unknown native element-construction exception");
+        return 3;
+    }
+}
+
 int xstar_element_engine_run_element_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* input,
@@ -742,6 +837,37 @@ int xstar_element_engine_run_element_v1(
         copy_text(message, message_size, "unknown native element-engine exception");
         return 3;
     }
+}
+
+int xstar_element_engine_run_construction_evaluation_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* inputs,
+    const xstar_element_contribution_v1* const* contribution_arrays,
+    const size_t* contribution_counts,
+    size_t element_count,
+    xstar_element_output_v1* outputs,
+    char* message,
+    size_t message_size
+) {
+    if (!context || (element_count && (!inputs || !outputs || !contribution_arrays || !contribution_counts))) return 1;
+    context->impl.stats.evaluations_attempted += 1;
+    for (std::size_t i = 0; i < element_count; ++i) {
+        char local_message[XSTAR_ELEMENT_MESSAGE_SIZE] = {};
+        const int rc = xstar_element_engine_run_construction_v1(
+            context, &inputs[i], contribution_arrays[i], contribution_counts[i],
+            &outputs[i], local_message, sizeof(local_message));
+        if (rc != 0) {
+            std::ostringstream text;
+            text << "construction evaluation element " << i << " failed: " << local_message;
+            copy_text(message, message_size, text.str());
+            return rc;
+        }
+    }
+    context->impl.stats.evaluations_completed += 1;
+    std::ostringstream text;
+    text << "native construction evaluation completed; elements=" << element_count;
+    copy_text(message, message_size, text.str());
+    return 0;
 }
 
 int xstar_element_engine_run_evaluation_v1(

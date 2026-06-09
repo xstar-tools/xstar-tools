@@ -626,7 +626,7 @@ int xstar_engine_abi_version() {
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_h_he_mg_native_element_boundary_v0645";
+    return "xstar_engine_h_he_mg_native_construction_boundary_v06451";
 }
 
 int xstar_engine_feature_flags() {
@@ -647,7 +647,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.45 native H/He/Mg element matrix/Lucy ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.45.1 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());

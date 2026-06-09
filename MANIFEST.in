@@ -386,3 +386,11 @@ include run_v045_xstar_tools_python.sh
 include run_v045_xstar_tools_element_qualification.sh
 include run_v045_xstar_tools_element_candidate.sh
 include check_v045_native_element_engine.py
+
+include V06451_NATIVE_ELEMENT_CONSTRUCTION_ENGINE.md
+include xstar_tools_v0.6.45.1_handoff.md
+include run_v0451_xstar_standalone_element_construction.sh
+include run_v0451_xstar_tools_python.sh
+include run_v0451_xstar_tools_element_construction_qualification.sh
+include run_v0451_xstar_tools_element_construction_candidate.sh
+include check_v0451_native_element_construction.py

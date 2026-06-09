@@ -25,6 +25,8 @@ using element_destroy_fn = void (*)(xstar_element_engine_context*);
 using element_reset_fn = int (*)(xstar_element_engine_context*, char*, size_t);
 using element_run_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, xstar_element_output_v1*, char*, size_t);
 using element_eval_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, size_t, xstar_element_output_v1*, char*, size_t);
+using element_construct_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, const xstar_element_contribution_v1*, size_t, xstar_element_output_v1*, char*, size_t);
+using element_construct_eval_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, const xstar_element_contribution_v1* const*, const size_t*, size_t, xstar_element_output_v1*, char*, size_t);
 using element_stats_fn = int (*)(const xstar_element_engine_context*, xstar_element_engine_stats_v1*, char*, size_t);
 
 struct LoadedPlugin {
@@ -48,6 +50,8 @@ struct xstar_context_impl {
     element_reset_fn element_reset = nullptr;
     element_run_fn element_run = nullptr;
     element_eval_fn element_eval = nullptr;
+    element_construct_fn element_construct = nullptr;
+    element_construct_eval_fn element_construct_eval = nullptr;
     element_stats_fn element_stats = nullptr;
     std::string last_error;
     mutable std::mutex mutex;
@@ -150,8 +154,10 @@ int ensure_element_engine(xstar_context_impl& context) {
         auto reset = reinterpret_cast<element_reset_fn>(dlsym(handle, "xstar_element_engine_context_reset_v1"));
         auto run = reinterpret_cast<element_run_fn>(dlsym(handle, "xstar_element_engine_run_element_v1"));
         auto eval = reinterpret_cast<element_eval_fn>(dlsym(handle, "xstar_element_engine_run_evaluation_v1"));
+        auto construct = reinterpret_cast<element_construct_fn>(dlsym(handle, "xstar_element_engine_run_construction_v1"));
+        auto construct_eval = reinterpret_cast<element_construct_eval_fn>(dlsym(handle, "xstar_element_engine_run_construction_evaluation_v1"));
         auto stats = reinterpret_cast<element_stats_fn>(dlsym(handle, "xstar_element_engine_get_stats_v1"));
-        if (!abi || abi() != XSTAR_ELEMENT_ENGINE_ABI_VERSION || !create || !destroy || !reset || !run || !eval || !stats) {
+        if (!abi || abi() != XSTAR_ELEMENT_ENGINE_ABI_VERSION || !create || !destroy || !reset || !run || !eval || !construct || !construct_eval || !stats) {
             failures.push_back(candidate.string() + ": incompatible element-engine ABI");
             dlclose(handle);
             continue;
@@ -171,6 +177,8 @@ int ensure_element_engine(xstar_context_impl& context) {
         context.element_reset = reset;
         context.element_run = run;
         context.element_eval = eval;
+        context.element_construct = construct;
+        context.element_construct_eval = construct_eval;
         context.element_stats = stats;
         context.last_error = message.data();
         return XSTAR_STATUS_OK;
@@ -474,6 +482,24 @@ int xstar_context_run_batch_v1(
     return status;
 }
 
+int xstar_context_run_element_construction_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    xstar_element_output_v1* output
+) {
+    auto* value = impl(context);
+    if (!value || !input || !output || (contribution_count && !contributions)) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_element_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->element_construct(value->element_context, input, contributions, contribution_count, output, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
 int xstar_context_run_element_v1(
     xstar_context* context,
     const xstar_element_input_v1* input,
@@ -486,6 +512,25 @@ int xstar_context_run_element_v1(
     if (load_status != XSTAR_STATUS_OK) return load_status;
     std::array<char, XSTAR_MESSAGE_SIZE> message{};
     const int rc = value->element_run(value->element_context, input, output, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_run_construction_evaluation_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* inputs,
+    const xstar_element_contribution_v1* const* contribution_arrays,
+    const size_t* contribution_counts,
+    size_t element_count,
+    xstar_element_output_v1* outputs
+) {
+    auto* value = impl(context);
+    if (!value || (element_count && (!inputs || !outputs || !contribution_arrays || !contribution_counts))) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_element_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->element_construct_eval(value->element_context, inputs, contribution_arrays, contribution_counts, element_count, outputs, message.data(), message.size());
     value->last_error = message.data();
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }

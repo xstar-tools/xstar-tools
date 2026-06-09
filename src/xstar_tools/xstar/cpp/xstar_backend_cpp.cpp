@@ -165,7 +165,7 @@ int copy_scaffold_result(
     context.stats.zones_attempted += 1;
     if ((context.config.flags & XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL) == 0) {
         const std::string text =
-            "v0.6.45 standalone C++ zone boundary is architecture-only; "
+            "v0.6.45.1 standalone C++ zone boundary is architecture-only; "
             "full XSTAR physics remains on the accepted hybrid runner. "
             "Set XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL only for ABI tests.";
         copy_text(message, message_size, text);
@@ -262,7 +262,7 @@ int cpp_get_component_info(
     if (component_id == XSTAR_COMPONENT_IO) {
         info->status_flags = XSTAR_COMPONENT_SCAFFOLD_ONLY;
         copy_text(info->implementation, sizeof(info->implementation),
-                  "v0.6.45 standalone IO ABI scaffold");
+                  "v0.6.45.1 standalone IO ABI scaffold");
         copy_text(info->message, sizeof(info->message),
                   "native FITS/cache IO will be added after the engine boundary");
         copy_text(message, message_size, info->message);

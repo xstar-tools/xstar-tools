@@ -278,6 +278,202 @@ class MatrixTerm:
     source_ipmat_clamped: bool = False
 
 
+@dataclass(frozen=True)
+class NativeElementContribution:
+    source_position: int
+    record: int
+    data_type: int
+    rate_type: int
+    ion_index: int
+    ion_stage: int
+    lower_row: int
+    upper_row: int
+    ans1: float
+    ans2: float
+    ans3: float
+    ans4: float
+    ans5: float
+    ans6: float
+    density_scale: float
+
+
+class NativeRecordTermSequence:
+    """Lazy four-row source contribution used by the v0.6.45.1 product path."""
+
+    __slots__ = ("contribution", "_metadata")
+
+    def __init__(self, contribution: NativeElementContribution, metadata: Mapping[str, Any]):
+        self.contribution = contribution
+        self._metadata = dict(metadata)
+
+    def __len__(self) -> int:
+        return 4
+
+    @property
+    def source_ipmat_clamped(self) -> bool:
+        return bool(self._metadata.get("source_ipmat_clamped", False))
+
+    @property
+    def matrix_kind_counts(self) -> tuple[int, int, int]:
+        return (4, 0, 0)
+
+    def _materialize(self) -> List[MatrixTerm]:
+        c = self.contribution
+        m = self._metadata
+        specs = (
+            ("forward_offdiag", c.upper_row, c.lower_row, c.ans1, c.ans2, 0.0, 0.0),
+            ("reverse_offdiag", c.lower_row, c.upper_row, c.ans2, c.ans1, 0.0, 0.0),
+            ("forward_diag_loss", c.lower_row, c.lower_row, -c.ans1, -c.ans1, c.ans4 * c.density_scale, c.ans6 * c.density_scale),
+            ("reverse_diag_loss", c.upper_row, c.upper_row, -c.ans2, -c.ans2, -c.ans3 * c.density_scale, -c.ans5 * c.density_scale),
+        )
+        result: List[MatrixTerm] = []
+        for offset, (role, row, column, aj1, aj2, cj, cj2) in enumerate(specs):
+            result.append(MatrixTerm(
+                term_index=int(c.source_position + offset), record=int(c.record),
+                data_type=int(c.data_type), rate_type=int(c.rate_type),
+                ion_index=int(c.ion_index), ion_stage=int(c.ion_stage), role=role,
+                row=int(row), column=int(column), aj1=float(aj1), aj2=float(aj2),
+                cj=float(cj), cj2=float(cj2), idest1=int(m.get("idest1", 0)),
+                idest2=int(m.get("idest2", 0)), lower_endpoint=int(m.get("lower_endpoint", 0)),
+                upper_endpoint=int(m.get("upper_endpoint", 0)),
+                ucalc_status=str(m.get("ucalc_status", "evaluated")),
+                source_row_unclamped=int(m.get("source_rows", (row, column))[0] if role != "reverse_offdiag" else m.get("source_rows", (row, column))[1]),
+                source_column_unclamped=int(m.get("source_rows", (row, column))[1] if role != "reverse_offdiag" else m.get("source_rows", (row, column))[0]),
+                source_ipmat_clamped=bool(m.get("source_ipmat_clamped", False)),
+            ))
+        return result
+
+    def __iter__(self):
+        return iter(self._materialize())
+
+    def __getitem__(self, item):
+        return self._materialize()[item]
+
+
+class NativeConstructionCollector:
+    """Ordered contribution stream that avoids retaining Python MatrixTerm objects."""
+
+    def __init__(self, density_scale: float):
+        self.density_scale = float(density_scale)
+        self._entries: List[Any] = []
+        self._contributions: List[NativeElementContribution] = []
+        self._materialized: List[MatrixTerm] = []
+        self._virtual_term_count = 0
+
+    def __len__(self) -> int:
+        return int(self._virtual_term_count)
+
+    def __bool__(self) -> bool:
+        return self._virtual_term_count > 0
+
+    @property
+    def native_contributions(self) -> Optional[List[NativeElementContribution]]:
+        return self._contributions if not self._materialized else None
+
+    @property
+    def materialized_term_count(self) -> int:
+        return len(self._materialized)
+
+    @property
+    def contribution_count(self) -> int:
+        return len(self._contributions)
+
+    def _group_to_contribution(
+        self, group: Sequence[MatrixTerm], source_position: int
+    ) -> Optional[NativeElementContribution]:
+        if len(group) != 4:
+            return None
+        roles = {str(term.role): term for term in group}
+        required = {"forward_offdiag", "reverse_offdiag", "forward_diag_loss", "reverse_diag_loss"}
+        if set(roles) != required:
+            return None
+        forward = roles["forward_offdiag"]
+        lower_diag = roles["forward_diag_loss"]
+        upper_diag = roles["reverse_diag_loss"]
+        xpx = self.density_scale
+        if xpx == 0.0:
+            return None
+        return NativeElementContribution(
+            source_position=int(source_position), record=int(forward.record),
+            data_type=int(forward.data_type), rate_type=int(forward.rate_type),
+            ion_index=int(forward.ion_index), ion_stage=int(forward.ion_stage),
+            lower_row=int(forward.column), upper_row=int(forward.row),
+            ans1=float(forward.aj1), ans2=float(roles["reverse_offdiag"].aj1),
+            ans3=float(-upper_diag.cj / xpx), ans4=float(lower_diag.cj / xpx),
+            ans5=float(-upper_diag.cj2 / xpx), ans6=float(lower_diag.cj2 / xpx),
+            density_scale=xpx,
+        )
+
+    def extend(self, values: Any) -> None:
+        if isinstance(values, NativeRecordTermSequence):
+            contribution = values.contribution
+            if contribution.source_position != self._virtual_term_count + 1:
+                contribution = replace(contribution, source_position=self._virtual_term_count + 1)
+            self._entries.append(("contribution", contribution, values))
+            self._contributions.append(contribution)
+            self._virtual_term_count += 4
+            return
+        items = list(values)
+        if items and len(items) % 4 == 0:
+            converted: List[tuple[NativeElementContribution, Sequence[MatrixTerm]]] = []
+            cursor = 0
+            base_position = self._virtual_term_count + 1
+            while cursor < len(items):
+                group = items[cursor:cursor + 4]
+                contribution = self._group_to_contribution(group, base_position + cursor)
+                if contribution is None:
+                    converted = []
+                    break
+                converted.append((contribution, group))
+                cursor += 4
+            if converted:
+                for contribution, group in converted:
+                    self._entries.append(("contribution", contribution, group))
+                    self._contributions.append(contribution)
+                self._virtual_term_count += len(items)
+                return
+        self._entries.append(("terms", items))
+        self._materialized.extend(items)
+        self._virtual_term_count += len(items)
+
+    def __iter__(self):
+        for entry in self._entries:
+            if entry[0] == "contribution":
+                source = entry[2]
+                if isinstance(source, NativeRecordTermSequence):
+                    yield from source
+                else:
+                    yield from source
+            else:
+                yield from entry[1]
+
+    def __getitem__(self, item):
+        return list(self)[item]
+
+    def count_family_terms(self, families: set[tuple[int, int]]) -> int:
+        count = sum(4 for c in self._contributions if (int(c.rate_type), int(c.data_type)) in families)
+        count += sum(1 for term in self._materialized if (int(term.rate_type), int(term.data_type)) in families)
+        return count
+
+
+def _term_sequence_has_clamp(values: Any) -> bool:
+    marker = getattr(values, "source_ipmat_clamped", None)
+    if marker is not None:
+        return bool(marker)
+    return any(bool(getattr(term, "source_ipmat_clamped", False)) for term in values)
+
+
+def _term_sequence_kind_counts(values: Any) -> tuple[int, int, int]:
+    counts = getattr(values, "matrix_kind_counts", None)
+    if counts is not None:
+        return tuple(int(v) for v in counts)
+    return (
+        sum(1 for term in values if getattr(term, "kind", "matrix") == "matrix"),
+        sum(1 for term in values if getattr(term, "kind", "matrix") == "heat"),
+        sum(1 for term in values if getattr(term, "kind", "matrix") == "cool"),
+    )
+
+
 @dataclass
 class IonAssemblySummary:
     ion_index: int
@@ -1510,6 +1706,14 @@ def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[Matri
     return out
 
 
+def _native_element_construction_capture_enabled() -> bool:
+    return (
+        str(os.environ.get("XSTAR_ATOMIC_ELEMENT_CONSTRUCTION_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_ELEMENT_CONSTRUCTION_CPP_PRODUCT", "0")).strip().lower() in {"1", "true", "yes", "on"}
+        and str(os.environ.get("XSTAR_ATOMIC_ELEMENT_CONSTRUCTION_CPP_SHADOW", "0")).strip().lower() not in {"1", "true", "yes", "on"}
+    )
+
+
 def _matrix_terms_for_result(
     *,
     result: UCalcResult,
@@ -1545,6 +1749,23 @@ def _matrix_terms_for_result(
         ("forward_diag_loss", row_lower, row_lower, raw_row_lower, raw_row_lower, -a1, -a1, float(result.ans4) * xpx, float(result.ans6) * xpx),
         ("reverse_diag_loss", row_upper, row_upper, raw_row_upper, raw_row_upper, -a2, -a2, -float(result.ans3) * xpx, -float(result.ans5) * xpx),
     )
+    if _native_element_construction_capture_enabled():
+        contribution = NativeElementContribution(
+            source_position=int(term_start), record=int(result.record),
+            data_type=int(result.data_type), rate_type=int(result.rate_type),
+            ion_index=int(block.ion_index), ion_stage=int(block.ion_stage),
+            lower_row=int(row_lower), upper_row=int(row_upper),
+            ans1=float(result.ans1), ans2=float(result.ans2), ans3=float(result.ans3),
+            ans4=float(result.ans4), ans5=float(result.ans5), ans6=float(result.ans6),
+            density_scale=float(xpx),
+        )
+        return NativeRecordTermSequence(contribution, {
+            "idest1": int(result.idest1), "idest2": int(result.idest2),
+            "lower_endpoint": int(lower), "upper_endpoint": int(upper),
+            "ucalc_status": result.status.value,
+            "source_rows": (int(raw_row_lower), int(raw_row_upper)),
+            "source_ipmat_clamped": bool(raw_row_lower != row_lower or raw_row_upper != row_upper),
+        })
     out: List[MatrixTerm] = []
     for offset, (role, row, col, raw_row, raw_col, aj1, aj2, cj, cj2) in enumerate(specs):
         out.append(
@@ -3445,7 +3666,7 @@ def _run_rate_payload_four_family_product_candidate(
         return original_terms
 
 def _native_element_engine_env_enabled(element_z: int, *, product: bool = False, shadow: bool = False) -> bool:
-    """Return whether the v0.6.45 one-call native element boundary is requested."""
+    """Return whether the v0.6.45.1 compact native element-construction boundary is requested."""
     enabled = str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
     if not enabled:
         return False
@@ -3470,7 +3691,7 @@ def _record_native_element_engine_profile(
     mismatch: Optional[Mapping[str, Any]] = None,
 ) -> None:
     summary = profile_control.setdefault("native_element_engine_summary", {
-        "schema_version": "0.6.45",
+        "schema_version": "0.6.45.1",
         "elements_attempted": 0,
         "elements_committed": 0,
         "shadow_compared": 0,
@@ -3480,7 +3701,13 @@ def _record_native_element_engine_profile(
         "solver_seconds": 0.0,
         "state_commit_seconds": 0.0,
         "ffi_seconds": 0.0,
+        "construction_seconds": 0.0,
+        "packing_seconds": 0.0,
+        "records": 0,
         "terms": 0,
+        "native_terms_constructed": 0,
+        "python_matrix_terms_materialized": 0,
+        "construction_calls": 0,
         "rows": 0,
         "by_element": {},
         "first_mismatch": {},
@@ -3505,9 +3732,15 @@ def _record_native_element_engine_profile(
         ("solver_seconds", "native_solver_seconds"),
         ("state_commit_seconds", "native_state_commit_seconds"),
         ("ffi_seconds", "ffi_call_seconds"),
+        ("construction_seconds", "native_construction_seconds"),
+        ("packing_seconds", "packing_seconds"),
     ):
         summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(source, 0.0) or 0.0)
+    summary["records"] = int(summary.get("records", 0)) + int(metrics.get("records", 0) or 0)
     summary["terms"] = int(summary.get("terms", 0)) + int(metrics.get("terms", 0) or 0)
+    summary["native_terms_constructed"] = int(summary.get("native_terms_constructed", 0)) + int(metrics.get("native_terms_constructed", 0) or 0)
+    summary["python_matrix_terms_materialized"] = int(summary.get("python_matrix_terms_materialized", 0)) + int(metrics.get("python_matrix_terms_materialized", 0) or 0)
+    summary["construction_calls"] = int(summary.get("construction_calls", 0)) + int(bool(metrics.get("construction_mode", False)))
     summary["rows"] = int(summary.get("rows", 0)) + int(metrics.get("rows", 0) or 0)
     by_element = summary.setdefault("by_element", {})
     if isinstance(by_element, dict):
@@ -3865,7 +4098,11 @@ def _assemble_element_matrix_impl(
     )
     second_pass_write_sequence = len(leveltemp_write_trace)
 
-    terms: List[MatrixTerm] = []
+    terms: Any = (
+        NativeConstructionCollector(context.hydrogen_density_cm3)
+        if _native_element_construction_capture_enabled()
+        else []
+    )
     blocked_records: List[Dict[str, Any]] = []
     record_results: List[Dict[str, Any]] = []
     ion_summaries: List[IonAssemblySummary] = []
@@ -4748,7 +4985,7 @@ def _assemble_element_matrix_impl(
                                 n_blocked += 1
                                 summary.n_records_blocked += 1
                         else:
-                            if any(term.source_ipmat_clamped for term in fallback_terms):
+                            if _term_sequence_has_clamp(fallback_terms):
                                 n_source_clamps += 1
                                 record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                                 record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -4808,7 +5045,7 @@ def _assemble_element_matrix_impl(
                         record_results[record_row_index]["rates_backend"] = "cpp_matrix_mg_type51_rates_matrix_ucalc"
                         record_results[record_row_index]["rates_backend_message"] = cpp_message
                         group = by_record_terms.get(recno, [])
-                        if any(term.source_ipmat_clamped for term in group):
+                        if _term_sequence_has_clamp(group):
                             n_source_clamps += 1
                             record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                             record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -4916,7 +5153,7 @@ def _assemble_element_matrix_impl(
                         else:
                             record_results[record_row_index]["rates_backend"] = "python_fallback_after_mg_rates_matrix_cpp_error"
                             record_results[record_row_index]["rates_backend_error"] = str(exc)
-                            if any(term.source_ipmat_clamped for term in new_terms):
+                            if _term_sequence_has_clamp(new_terms):
                                 n_source_clamps += 1
                                 record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                                 record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -4968,7 +5205,7 @@ def _assemble_element_matrix_impl(
                                 _transition_family_cache_store[_family_key] = {"signature": _sig, "row_count": _row_count}
                         record_results[record_row_index]["rates_backend"] = "cpp_matrix_mg_rates_matrix_type51"
                         record_results[record_row_index]["rates_backend_message"] = cpp_message
-                        if any(term.source_ipmat_clamped for term in group):
+                        if _term_sequence_has_clamp(group):
                             n_source_clamps += 1
                             record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                             record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -6307,7 +6544,7 @@ def _assemble_element_matrix_impl(
                             summary.second_pass_pirt += float(_result.ans1)
                         if _result.idest2 >= block.nlev:
                             summary.second_pass_rrrt += float(_result.ans2)
-                    if any(_term.source_ipmat_clamped for _term in _new_terms):
+                    if _term_sequence_has_clamp(_new_terms):
                         n_source_clamps += 1
                         record_results[-1]["source_ipmat_endpoint_clamped"] = True
                         record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -6813,7 +7050,7 @@ def _assemble_element_matrix_impl(
                                 n_blocked += 1
                                 summary.n_records_blocked += 1
                         else:
-                            if any(term.source_ipmat_clamped for term in new_terms):
+                            if _term_sequence_has_clamp(new_terms):
                                 n_source_clamps += 1
                                 record_results[-1]["source_ipmat_endpoint_clamped"] = True
                                 record_results[-1]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -6821,15 +7058,14 @@ def _assemble_element_matrix_impl(
                                 _row_count = int(len(new_terms))
                                 _family_key = _transition_family_key(block, int(result.rate_type), int(result.data_type), int(result.idest1), int(result.idest2))
                                 _transition_family_record_key_event(_family_dtype, _family_key, "seen")
+                                _kind_matrix, _kind_heat, _kind_cool = _term_sequence_kind_counts(new_terms)
                                 _sig = (
                                     int(result.rate_type),
                                     int(result.data_type),
                                     int(result.idest1),
                                     int(result.idest2),
                                     int(_row_count),
-                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "matrix")),
-                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "heat")),
-                                    int(sum(1 for _t in new_terms if getattr(_t, "kind", "matrix") == "cool")),
+                                    int(_kind_matrix), int(_kind_heat), int(_kind_cool),
                                 )
                                 _bucket_key = _transition_family_topology_bucket_key(
                                     block,
@@ -6949,7 +7185,7 @@ def _assemble_element_matrix_impl(
                         else:
                             record_results[record_row_index]["rates_backend"] = "python_fallback_after_cpp_error"
                             record_results[record_row_index]["rates_backend_error"] = str(exc)
-                            if any(term.source_ipmat_clamped for term in new_terms):
+                            if _term_sequence_has_clamp(new_terms):
                                 n_source_clamps += 1
                                 record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                                 record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -6980,7 +7216,7 @@ def _assemble_element_matrix_impl(
                         group = new_terms[4 * offset : 4 * offset + 4]
                         record_results[record_row_index]["rates_backend"] = cpp_backend_label
                         record_results[record_row_index]["rates_backend_message"] = cpp_message
-                        if any(term.source_ipmat_clamped for term in group):
+                        if _term_sequence_has_clamp(group):
                             n_source_clamps += 1
                             record_results[record_row_index]["source_ipmat_endpoint_clamped"] = True
                             record_results[record_row_index]["source_ipmat_clamp_target_row"] = basis.n_rows
@@ -7156,19 +7392,23 @@ def _assemble_element_matrix_impl(
                     if not _backend.startswith("cpp_matrix_mg_type51"):
                         raise RuntimeError(f"Type-51 record {_row.get('record')} used non-C++ backend {_backend}")
                     _type51_records += 1
-            _supported_terms = [
-                _term for _term in terms
-                if (int(_term.rate_type), int(_term.data_type)) in _family_set
-            ]
+            _supported_term_count = (
+                terms.count_family_terms(_family_set)
+                if isinstance(terms, NativeConstructionCollector)
+                else len([
+                    _term for _term in terms
+                    if (int(_term.rate_type), int(_term.data_type)) in _family_set
+                ])
+            )
             _four_family_product_summary["existing_cpp_type51_records"] = int(_type51_records)
             _four_family_product_summary["records_expected"] = int(len(_record_keys))
             _four_family_product_summary["records_completed"] = int(len(_record_keys))
             _four_family_product_summary["terms_expected"] = int(4 * len(_record_keys))
-            _four_family_product_summary["terms_committed"] = int(len(_supported_terms))
+            _four_family_product_summary["terms_committed"] = int(_supported_term_count)
             if any(int(_four_family_product_summary["family_record_counts"].get(_name, 0)) <= 0 for _name in ("4:50", "3:51", "3:63", "42:88")):
                 raise RuntimeError(f"not all four promoted families present: {_four_family_product_summary['family_record_counts']}")
-            if len(_supported_terms) != 4 * len(_record_keys):
-                raise RuntimeError(f"promoted term coverage {len(_supported_terms)} != {4 * len(_record_keys)}")
+            if _supported_term_count != 4 * len(_record_keys):
+                raise RuntimeError(f"promoted term coverage {_supported_term_count} != {4 * len(_record_keys)}")
             _fast_record_total = int(sum(int(v or 0) for v in _four_family_product_summary["fast_path_record_counts"].values()))
             _barrier_count = int(_four_family_product_summary["type51_order_barrier_count"])
             _barrier_flushes = int(_four_family_product_summary["type51_order_barrier_flushes"])
@@ -7422,7 +7662,7 @@ def _assemble_element_matrix_impl(
             )
 
     _dense_t0 = time.perf_counter() if is_mg_profile else 0.0
-    if int(element_z) == 12:
+    if int(element_z) == 12 and not isinstance(terms, NativeConstructionCollector):
         _row_prep_total_t0 = time.perf_counter()
         _term_counts_by_ion: Dict[int, Dict[str, float]] = {}
         _term_total_by_ion: Dict[int, float] = {}

@@ -1,5 +1,204 @@
 # CHANGELOG
 
+# v0.6.45.1 - 2026-06-09
+
+### Added
+- Added ABI 60451 compact record-contribution structures and persistent native construction calls.
+- Added source-order-preserving C++ expansion of each contribution into canonical matrix terms.
+- Added one-call H/He/Mg construction evaluation APIs and standalone self-tests.
+- Added product provenance for construction time, records, native terms, and Python term materialization.
+
+### Changed
+- Product element execution no longer retains Python `MatrixTerm` objects.
+- Kept the packed-term ABI as a qualification and diagnostic path.
+
+### Notes
+- Python still owns atomic record traversal and scalar rate evaluation; this release moves term construction and all downstream element work into C++.
+
+# Changelog
+
+## 0.6.45
+
+- Added stable native element-engine ABI version 60450.
+- Added persistent H/He/Mg element contexts and one-call element/evaluation entry points.
+- Moved source-ordered dense/heating matrix accumulation, normalization, Lucy/fixed-point population solving, derived ion state, and state commit into `libxstar_engine.so`.
+- Added the Python ctypes adapter with exact shadow qualification and whole-element Python fallback.
+- Added standalone element and one-call H/He/Mg evaluation self-tests.
+- Added 183-call science qualification/product provenance and acceptance gates.
+- Retained atomic-data traversal and scalar source-ordered `MatrixTerm` construction in Python pending the next coarse rate-construction port.
+
+## 0.6.44.3
+
+- Added Python backend runtime rpath entries derived from `python3-config --embed --ldflags` so Conda/shared-libpython installs can load `libxstar_backend_python.so` via `dlopen`.
+- Removed the fragile parse-time GNU make filesystem-link probe.
+- Defaulted filesystem compatibility linkage to `-lstdc++fs`, with an explicit override supported.
+- Retained ABI 60440 and explicit plugin linkage to `libxstar_api.so`.
+
+## 0.6.44.1
+
+- Detect whether C++17 `std::filesystem` is provided by the main C++ standard library or requires `-lstdc++fs`.
+- Link `libxstar_api.so`, both backend plugins, and `xstar_cpp` with the detected filesystem compatibility library.
+- Add filesystem link mode to `make print-config`.
+- Add relocation checks that reject unresolved dynamic symbols in the standalone executable and plugin libraries.
+- Preserve ABI version 60440 and the v0.6.44 native/Python directory layout.
+
+## 0.6.44
+
+- Added the standalone `xstar_cpp` executable.
+- Added stable `libxstar_api.so` C ABI version 60440.
+- Added runtime backend registry with C++ and embedded-Python plugins.
+- Added persistent single-zone and batch-zone contexts.
+- Added per-component backend requests and component ownership reporting.
+- Added `libxstar_backend_python.so` JSON bridge for adapted Python routines.
+- Kept every native header, source, shared object, executable, and Makefile in
+  `src/xstar_tools/xstar/cpp/`; Python XSTAR code remains in
+  `src/xstar_tools/xstar/`.
+- Kept the v0.6.44 typed zone boundary explicitly scaffold-only pending the
+  complete native physics port.
+
+## 0.6.43.1
+
+- Exclude the non-bit-exact preliminary Type-53 C++ kernel from the coarse Mg pre-matrix product.
+- Retain exact Type-49 C++ acceleration and literal source-position commit.
+- Add per-type selected/supported coverage and explicit Type-53 fallback provenance.
+- Add qualification and production runners plus a parity-first acceptance checker.
+
+## 0.6.43
+
+- Add a coarse Mg preliminary-rate product candidate using the existing source-faithful Type-49 and Type-53 C++ kernels.
+- Cache immutable per-ion candidate topology across evaluations.
+- Map C++ scalar results by stable source record and commit them inside the literal selected-record stream.
+- Remove the retired family-grouped preliminary pre-sum that could alter binary64 accumulation order.
+- Retain Python fallback for unsupported records, C++ errors, and full contribution-diagnostic mode.
+- Add exact per-record shadow qualification, coarse-product provenance, performance gates, runners, and acceptance checker.
+- Preserve the accepted v0.6.41 four-family product, Type-51 order barriers, returned state, and whole-evaluation fallback.
+
+## 0.6.42
+
+- Add nested inclusive/exclusive profiling with parent, child, depth, and exclusive-time aggregation.
+- Split the pre-matrix path into metadata, per-ion setup, context construction, record dispatch, accumulation, contribution materialization, vector allocation, ion-fraction solve, and stage-limit selection.
+- Record NumPy workspace copy/allocation counts, bytes, normalized-matrix construction, residual diagnostics, and dense-SVD time inside the element solver.
+- Gate residual arrays, condensed-rank calculations, dense rank/condition diagnostics, and the normalized-matrix copy by diagnostics mode.
+- Use one singular-value decomposition for full-mode dense rank and condition number instead of separate `matrix_rank` and `cond` decompositions.
+- Preserve all v0.6.41 science paths, source-order barriers, returned state, and whole-evaluation fallback.
+
+## 0.6.41
+
+- Promote the v0.6.40.3 position-safe four-family product after 61/61 exact candidate evaluations and exact science-product acceptance.
+- Disable full reverse-oracle verification in normal production execution while retaining whole-evaluation fallback.
+- Retain native Type-50 `opakab`, exact Type-88 thresholds, and conditional Type-51 ordering boundaries.
+- Make the accelerated Type-4 `linopac` Voigt far-wing denominator follow the accepted `v2**3` operation with `std::pow(v2, 3.0)`, and seed its center/near-center scan with 21 accepted NumPy/Voigt samples, removing binary64 profile drift behind the eight one-ULP `xo01_detal4.fits` differences.
+- Tighten the live Type-4 parity probe from tolerance-based comparison to binary64 array equality.
+- Re-enable the exact upstream Type-4 C++ product and require zero fallback, exact science payloads, and a 450-second production runtime ceiling.
+
+## 0.6.40.3
+
+- Replace the reverse oracle's globally keyed `term_index` map with stable final term-list positions, preventing accepted Type-50/63/88 terms from overwriting unrelated deferred Type-7/Type-51 terms that reuse the same index.
+- Record position coverage, duplicate term-index count, and the number of term-index aliases safely avoided in every 61-evaluation candidate run.
+- Retain the conditional Type-51 ordering boundary, exact Type-88 threshold construction, native Type-50 `opakab`, full reverse verification, and whole-evaluation fallback.
+- Disable only the separate upstream Type-4 C++ line-opacity product in the candidate runner; retain final C++ `binemis` packing and all accepted matrix products.
+- Require exact matrix and solver checkpoints plus exact FITS science payloads, including `xo01_detal4.fits`, before promotion.
+
+## 0.6.40.2
+
+- Restore the Type-51 ordering boundary proven necessary by all 61 v0.6.40.1 reverse-oracle evaluations.
+- Flush the deferred Type-51 batch before a later Type-50/63/88 fast commit only when Type-51 work is pending.
+- Record complete boundary, flush, pending-record, emitted-term, and first ordered-stream divergence provenance.
+- Retain the corrected Type-88 threshold, native Type-50 `opakab`, full reverse oracle, and whole-evaluation fallback.
+- Continue to require 61/61 candidate activation and exact science products, including `xo01_detal4.fits`.
+
+## 0.6.40.1
+
+- Construct each live Type-88 fast-packet threshold with the exact source `_level_threshold` semantics, including subtraction of the bound-level energy.
+- Leave the Type-88 C++ kernel and engine ABI unchanged.
+- Record scalar-mismatch family, accepted value, candidate value, and packet threshold in whole-evaluation fallback provenance.
+- Retain native Type-50 `opakab`, full reverse verification, zero Type-51 per-record barriers, and whole-evaluation fallback.
+- Require all 61 evaluations, all 146,286 Type-50 `opakab` comparisons, exact matrix and solver checkpoints, and exact FITS science payloads before acceptance.
+
+## 0.6.40
+
+- Add native, source-faithful Type-50 line-center `opakab` to the engine fast result (ABI 9, feature flags 1023).
+- Run the Type-50/63/88 seed-free path live in product-candidate mode and populate `UCalcResult.opakab` from the native packet.
+- Leave Type-63 and Type-88 scalar/state formulas unchanged.
+- Remove the ineffective per-record Type-51 flush barrier while retaining the accepted Type-51 ion batch.
+- Retain whole-evaluation fallback and enable complete reverse verification for the initial candidate.
+- Require exact Type-50 `opakab`, native scalars, rows, result state, matrices, solver inputs, and FITS science payloads before promotion.
+
+## 0.6.39
+
+- Add an accepted-live four-family seed-elision differential diagnostic for Mg Type-50, Type-63, and Type-88.
+- Compare exact native scalars, C++ rows, ordered term streams, per-cell contribution sequences, dense/heating matrices, normalized solver inputs, and second-pass totals.
+- Add seven family-ablation variants and first-divergence provenance.
+- Compare accepted and seed-elided `UCalcResult` state, including `opakab`, while keeping accepted terms live.
+- Disable the promoted fast path whenever the differential diagnostic is active.
+- Keep the engine ABI at version 8 and feature flags at 511.
+
+## 0.6.38
+
+- Promote the four-family Mg rate-payload product with the Python scalar seed/oracle removed from normal execution.
+- Preserve accepted source accumulation order by flushing pending Type-51 batches before every Type-50/63/88 fast commit.
+- Add structural order-barrier provenance and whole-evaluation fallback invariants.
+- Route `XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=1` through the complete v0.6.37 reverse-verification candidate.
+- Keep the engine ABI at version 8 because scalar formulas and row construction are unchanged.
+
+## 0.6.37
+
+- Add a diagnostic four-family order-preserving C++ commit candidate.
+- Add full-record native Type-50, Type-63, and Type-88 scalar reverse verification.
+- Preserve accepted composite row identity, term index, and global term-stream order.
+- Require exact ordered-stream, dense/heating, normalized-matrix, and RHS checkpoints before commit.
+- Keep product promotion disabled and preserve accepted fallback behavior.
+- Extend the engine ABI to version 8 with native Type-50 scalar support and order-verification capability flags.
+
+## v0.6.35 - 2026-07-15
+
+- Promoted the exact four-family Mg rate-payload product for 4:50, 3:51, 3:63, and 42:88.
+- Elided the Python scalar seed/oracle from normal 4:50, 3:63, and 42:88 execution.
+- Retained the accepted ion-level C++ Type-51 rate-and-matrix batch for 3:51.
+- Added whole-element accepted-path retry on any promoted-product failure.
+- Kept reverse verification opt-in and disabled it in the production wrapper.
+- Added promoted-product provenance and strict acceptance checks.
+
+
+## v0.6.34 - 2026-07-15
+
+### Added
+- Added the guarded four-family Mg rate-payload live product candidate for 4:50, 3:51, 3:63, and 42:88.
+- Added bit-exact native scalar use for 3:63 and 42:88, exact C++ row verification, composite-key live replacement, whole-evaluation fallback, and aggregate product provenance.
+- Retained the accepted seed path as the verification oracle in this candidate; Python per-record elision remains a later promotion step.
+
+## 0.6.33
+
+- Refined the shadow-only Mg rate/data 3/63 native scalar implementation to reproduce Python binary64 operation order.
+- Added exact CPython `math.lgamma(n + 1.0)` hexadecimal constants for integer arguments 0 through 256.
+- Added per-evaluation Type-63 range coverage, maximum quantum/factorial arguments, and exact-validation provenance.
+- Reject exact qualification when the required log-factorial argument exceeds the static reference table.
+- Preserve v0.6.32 Type-88 mixed-grid semantics, exact orchestration rows/checkpoints, and all accepted live science paths.
+
+## 0.6.32
+
+- Hotfix the native Mg rate/data 42/88 scalar shadow to use the full high-resolution `epi_eV` / `bremsa` radiation grid.
+- Prohibit reduced `epim_eV` / `bremsam` fallback from qualifying Type-88 parity.
+- Report full/reduced grid point counts, grid source, validation failures, and reduced-grid fallback count.
+- Keep all accepted scalar rates, matrix terms, solver inputs, populations, and science products unchanged and live on the accepted path.
+- Preserve the v0.6.30 composite checkpoint hotfix and v0.6.31 native Type-63 scalar shadow.
+
+## 0.6.31
+
+- Added a shadow-only native C++ scalar evaluator for Mg rate/data families 3/63 and 42/88.
+- Ported the type-63 same-n l-mixing and n-changing record-order formulas, including heating/cooling energy channels.
+- Ported type-88 photoionization scalar evaluation from raw cross-section pairs and the shared live radiation grid.
+- Kept accepted scalar rates and all live matrix terms unchanged; native results are compared only.
+- Preserved the v0.6.30 composite checkpoint substitution hotfix and exact row-orchestration gate.
+
+
+## 0.6.30
+
+- Hotfix the v0.6.29 orchestration-shadow complete-matrix checkpoint replacement to use a stable composite matrix-term identity rather than non-unique `term_index`.
+- Report duplicate term-index and replacement-key counts plus expected/applied replacement totals.
+- Keep the orchestration path shadow-only; accepted rows remain the sole live matrix source.
+- Prefer the active source-tree `xstar_tools.__version__` over stale installed distribution metadata in progress banners and wrappers.
+
 ## 0.6.45 - 2026-06-08
 
 - Added stable native element-engine ABI version 60450.

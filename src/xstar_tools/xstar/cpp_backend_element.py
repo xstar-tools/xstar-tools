@@ -1,9 +1,9 @@
-"""Persistent one-call native element matrix/Lucy engine for v0.6.45.
+"""Persistent one-call native element matrix/Lucy engine for v0.6.45.1.
 
 The public C ABI lives in ``cpp/xstar_element_engine.h`` and the implementation
 is compiled into ``libxstar_engine.so``.  Python remains responsible for the
 source-faithful atomic-data traversal and scalar UCalc dispatch in this release;
-once a source-ordered MatrixTerm stream exists, matrix construction,
+once compact source-ordered record contributions exist, term construction, matrix construction,
 normalization, Lucy iteration, derived-rate totals, and state commit are owned
 by one native call per element.
 """
@@ -15,10 +15,11 @@ from pathlib import Path
 import threading
 import time
 from typing import Any
+from types import SimpleNamespace
 
 import numpy as np
 
-_ABI = 60450
+_ABI = 60451
 _LIB: ctypes.CDLL | None = None
 _LOAD_ERROR: str | None = None
 _TLS = threading.local()
@@ -41,6 +42,28 @@ class _Term(ctypes.Structure):
         ("aj2", ctypes.c_double),
         ("cj", ctypes.c_double),
         ("cj2", ctypes.c_double),
+    ]
+
+
+class _Contribution(ctypes.Structure):
+    _fields_ = [
+        ("source_position", ctypes.c_int64),
+        ("record", ctypes.c_int64),
+        ("data_type", ctypes.c_int32),
+        ("rate_type", ctypes.c_int32),
+        ("ion_index", ctypes.c_int32),
+        ("ion_stage", ctypes.c_int32),
+        ("lower_row", ctypes.c_int32),
+        ("upper_row", ctypes.c_int32),
+        ("reserved0", ctypes.c_int32),
+        ("reserved1", ctypes.c_int32),
+        ("ans1", ctypes.c_double),
+        ("ans2", ctypes.c_double),
+        ("ans3", ctypes.c_double),
+        ("ans4", ctypes.c_double),
+        ("ans5", ctypes.c_double),
+        ("ans6", ctypes.c_double),
+        ("density_scale", ctypes.c_double),
     ]
 
 
@@ -93,6 +116,9 @@ class _Output(ctypes.Structure):
         ("matrix_assembly_seconds", ctypes.c_double),
         ("solver_seconds", ctypes.c_double),
         ("state_commit_seconds", ctypes.c_double),
+        ("construction_seconds", ctypes.c_double),
+        ("records_constructed", ctypes.c_uint64),
+        ("terms_constructed", ctypes.c_uint64),
         ("populations", ctypes.POINTER(ctypes.c_double)),
         ("populations_capacity", ctypes.c_size_t),
         ("populations_count", ctypes.c_size_t),
@@ -185,6 +211,11 @@ def _load() -> ctypes.CDLL:
                 ctypes.c_char_p, ctypes.c_size_t
             ]
             lib.xstar_element_engine_run_element_v1.restype = ctypes.c_int
+            lib.xstar_element_engine_run_construction_v1.argtypes = [
+                ctypes.c_void_p, ctypes.POINTER(_Input), ctypes.POINTER(_Contribution), ctypes.c_size_t,
+                ctypes.POINTER(_Output), ctypes.c_char_p, ctypes.c_size_t
+            ]
+            lib.xstar_element_engine_run_construction_v1.restype = ctypes.c_int
             _LIB = lib
             _LOAD_ERROR = None
             return lib
@@ -251,6 +282,38 @@ def element_engine_cpp_shadow_enabled(element_z: int) -> bool:
     return int(element_z) in selected and _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_SHADOW")
 
 
+def _contributions_from_terms(terms: Any, density_scale: float) -> list[Any]:
+    values = list(terms)
+    if len(values) % 4 != 0:
+        raise RuntimeError(f"term stream length {len(values)} is not divisible by four")
+    result: list[Any] = []
+    for offset in range(0, len(values), 4):
+        group = values[offset:offset + 4]
+        roles = {str(term.role): term for term in group}
+        required = {"forward_offdiag", "reverse_offdiag", "forward_diag_loss", "reverse_diag_loss"}
+        if set(roles) != required:
+            raise RuntimeError(f"term group at {offset} lacks canonical four-row roles")
+        forward = roles["forward_offdiag"]
+        reverse = roles["reverse_offdiag"]
+        lower_diag = roles["forward_diag_loss"]
+        upper_diag = roles["reverse_diag_loss"]
+        if density_scale == 0.0:
+            raise RuntimeError("density scale is zero")
+        result.append(SimpleNamespace(
+            source_position=offset + 1, record=int(forward.record),
+            data_type=int(forward.data_type), rate_type=int(forward.rate_type),
+            ion_index=int(forward.ion_index), ion_stage=int(forward.ion_stage),
+            lower_row=int(forward.column), upper_row=int(forward.row),
+            ans1=float(forward.aj1), ans2=float(reverse.aj1),
+            ans3=float(-upper_diag.cj / density_scale),
+            ans4=float(lower_diag.cj / density_scale),
+            ans5=float(-upper_diag.cj2 / density_scale),
+            ans6=float(lower_diag.cj2 / density_scale),
+            density_scale=float(density_scale),
+        ))
+    return result
+
+
 def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, Any]]:
     """Run native matrix construction, Lucy solve, and derived state commit."""
     from .element_equilibrium import LucySolveResult
@@ -267,14 +330,33 @@ def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, 
     ions = np.ascontiguousarray(np.asarray(basis.nion[1 : n + 1], dtype=np.int32))
     initial = np.ascontiguousarray(np.asarray(assembly.initial_populations[1 : n + 1], dtype=np.float64))
 
-    term_array = (_Term * len(assembly.terms))()
-    for index, term in enumerate(assembly.terms):
-        term_array[index] = _Term(
-            int(index + 1),
-            int(term.term_index), int(term.record), int(term.data_type), int(term.rate_type),
-            int(term.ion_index), int(term.ion_stage), int(term.row), int(term.column), 0, 0,
-            float(term.aj1), float(term.aj2), float(term.cj), float(term.cj2),
+    native_contributions = getattr(assembly.terms, "native_contributions", None)
+    construction_shadow = _env_true("XSTAR_ATOMIC_ELEMENT_CONSTRUCTION_CPP_SHADOW")
+    if native_contributions is None and construction_shadow:
+        native_contributions = _contributions_from_terms(
+            assembly.terms, float(getattr(context, "hydrogen_density_cm3", 1.0))
         )
+    construction_mode = native_contributions is not None
+    contribution_array = None
+    term_array = None
+    if construction_mode:
+        contribution_array = (_Contribution * len(native_contributions))()
+        for index, item in enumerate(native_contributions):
+            contribution_array[index] = _Contribution(
+                int(item.source_position), int(item.record), int(item.data_type), int(item.rate_type),
+                int(item.ion_index), int(item.ion_stage), int(item.lower_row), int(item.upper_row), 0, 0,
+                float(item.ans1), float(item.ans2), float(item.ans3), float(item.ans4),
+                float(item.ans5), float(item.ans6), float(item.density_scale),
+            )
+    else:
+        term_array = (_Term * len(assembly.terms))()
+        for index, term in enumerate(assembly.terms):
+            term_array[index] = _Term(
+                int(index + 1),
+                int(term.term_index), int(term.record), int(term.data_type), int(term.rate_type),
+                int(term.ion_index), int(term.ion_stage), int(term.row), int(term.column), 0, 0,
+                float(term.aj1), float(term.aj2), float(term.cj), float(term.cj2),
+            )
 
     populations = np.empty(n, dtype=np.float64)
     final_outer = np.empty(n, dtype=np.float64)
@@ -308,7 +390,8 @@ def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, 
         int(basis.normalization_row), int(context.max_lucy_iterations),
         int(context.max_fixed_point_iterations), 0, float(context.lucy_tolerance),
         float(context.fixed_point_tolerance), _pi32(superlevels), _pi32(ions), _p64(initial),
-        ctypes.cast(term_array, ctypes.POINTER(_Term)), len(assembly.terms),
+        (ctypes.cast(term_array, ctypes.POINTER(_Term)) if term_array is not None else None),
+        (len(assembly.terms) if not construction_mode else 0),
     )
     out = _Output()
     out.struct_size = ctypes.sizeof(_Output)
@@ -339,9 +422,16 @@ def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, 
     error = ctypes.create_string_buffer(1024)
     packing_seconds = time.perf_counter() - packing_t0
     call_t0 = time.perf_counter()
-    rc = lib.xstar_element_engine_run_element_v1(
-        _context(), ctypes.byref(inp), ctypes.byref(out), error, len(error)
-    )
+    if construction_mode:
+        rc = lib.xstar_element_engine_run_construction_v1(
+            _context(), ctypes.byref(inp),
+            ctypes.cast(contribution_array, ctypes.POINTER(_Contribution)), len(native_contributions),
+            ctypes.byref(out), error, len(error)
+        )
+    else:
+        rc = lib.xstar_element_engine_run_element_v1(
+            _context(), ctypes.byref(inp), ctypes.byref(out), error, len(error)
+        )
     call_seconds = time.perf_counter() - call_t0
     if rc != 0:
         raise RuntimeError(error.value.decode("utf-8", "replace") or f"native element engine failed: {rc}")
@@ -359,8 +449,8 @@ def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, 
 
     empty = np.asarray([], dtype=float)
     notes = [
-        "v0.6.45 native element engine owns dense matrix construction, normalization, Lucy solve, and state commit",
-        "source-ordered MatrixTerm stream was supplied by the Python atomic-data/rate traversal",
+        "v0.6.45.1 native element engine owns dense matrix construction, normalization, Lucy solve, and state commit",
+        "compact source-ordered record contributions were supplied by the Python atomic-data/rate traversal",
     ]
     solve = LucySolveResult(
         populations=populations,
@@ -403,11 +493,20 @@ def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, 
         "element_z": int(basis.element_z),
         "rows": n,
         "terms": len(assembly.terms),
+        "records": int(len(native_contributions) if construction_mode else 0),
+        "python_matrix_terms_materialized": int(
+            getattr(assembly.terms, "materialized_term_count", len(assembly.terms))
+            if not construction_shadow else len(assembly.terms)
+        ),
+        "construction_mode": bool(construction_mode),
         "packing_seconds": packing_seconds,
         "ffi_call_seconds": call_seconds,
         "native_matrix_assembly_seconds": float(out.matrix_assembly_seconds),
         "native_solver_seconds": float(out.solver_seconds),
         "native_state_commit_seconds": float(out.state_commit_seconds),
+        "native_construction_seconds": float(out.construction_seconds),
+        "native_records_constructed": int(out.records_constructed),
+        "native_terms_constructed": int(out.terms_constructed),
         "status_flags": int(out.status_flags),
         "implementation": element_engine_status().get("implementation"),
     }
