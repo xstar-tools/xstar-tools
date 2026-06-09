@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.3.2 - 2026-06-09
+
+- Stop active-ATDB rate traversal at the current ion parent boundary.
+- Prevent global `npnxt` chains from assigning downstream helium and magnesium records to hydrogen.
+- Retain the v0.6.48.3.1 `ElementBasisRow.compact_index` topology correction.
+- Add compact-basis and three-element cross-ion ownership regression tests.
+- Keep public and fixed-state ABI compatibility at `60483`.
+
 # 0.6.48.3.1 - 2026-06-09
 
 - Correct the active-ATDB lowerer to use `ElementBasisRow.compact_index` rather than the nonexistent `index` attribute.

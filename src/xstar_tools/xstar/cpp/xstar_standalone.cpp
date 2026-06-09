@@ -62,7 +62,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.3.1 adds a genuine raw-coefficient native fixed-state engine.\n"
+        "v0.6.48.3.2 adds a genuine raw-coefficient native fixed-state engine.\n"
         "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
         "and constructs continuum/spectral arrays without Python callbacks.\n";
 }
@@ -943,7 +943,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.3.1'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.3.2'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1042,7 +1042,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.3.1\n"
+                 << "xstar_tools native fixed-state v0.6.48.3.2\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1073,7 +1073,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.3.1\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.3.2\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"

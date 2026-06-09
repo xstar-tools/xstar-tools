@@ -1,7 +1,7 @@
 
-## v0.6.48.3.1 active-ATDB lowerer
+## v0.6.48.3.2 active-ATDB lowerer
 
-v0.6.48.3.1 lowers active H/He/Mg ATDB topology and raw coefficients for the genuine native fixed-state engine. It adds type-56 evaluation, dynamic program-capacity queries, visited-record reporting, and strict unsupported-family ledgers. This is a development milestone; full 61-evaluation production and historical FITS generation remain blocked. See `V06483_ACTIVE_ATDB_LOWERER.md`.
+v0.6.48.3.2 lowers active H/He/Mg ATDB topology and raw coefficients for the genuine native fixed-state engine. It adds type-56 evaluation, dynamic program-capacity queries, visited-record reporting, and strict unsupported-family ledgers. This is a development milestone; full 61-evaluation production and historical FITS generation remain blocked. See `V06483_ACTIVE_ATDB_LOWERER.md`.
 
 ## v0.6.48.1 callback-free compiled-case production runtime
 

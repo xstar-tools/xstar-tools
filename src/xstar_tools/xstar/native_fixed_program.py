@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.3.1 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.3.2 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.3.1 distinguishes three classes that older coverage reports conflated:
+v0.6.48.3.2 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -204,7 +204,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.3.1",
+        "schema_version": "0.6.48.3.2",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -283,7 +283,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.3.1",
+        "schema_version": "0.6.48.3.2",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
@@ -303,19 +303,29 @@ def _scan_active_records(master: Any, derived: Any, subset: Any) -> tuple[dict[t
 
     npfi = np.asarray(derived.npfi, dtype=np.int64)
     npnxt = np.asarray(derived.npnxt, dtype=np.int64).reshape(-1)
+    npar = np.asarray(derived.npar, dtype=np.int64).reshape(-1)
+    ion_records = np.asarray(derived.ion_records, dtype=np.int64).reshape(-1)
     counts: dict[tuple[int, int], int] = {}
     executable_by_z: dict[int, list[int]] = {int(z): [] for z in subset.active_element_z}
     unsupported_rows: list[dict[str, int]] = []
     seen: set[int] = set()
     for ion_index in np.asarray(subset.ion_indices, dtype=np.int64).tolist():
-        if ion_index <= 0 or ion_index >= npfi.shape[1]:
+        if ion_index <= 0 or ion_index >= npfi.shape[1] or ion_index >= ion_records.size:
+            continue
+        ion_record = int(ion_records[ion_index])
+        if ion_record <= 0:
             continue
         z = int(derived.ion_element_z[ion_index])
         stage = int(derived.ion_stage[ion_index])
         for rate_type in range(1, npfi.shape[0]):
             rec = int(npfi[rate_type, ion_index])
             guard = 0
-            while 0 < rec < npnxt.size:
+            # ``npnxt`` is a global same-rate chain.  It continues from the
+            # current ion into later ions, so source-faithful traversal must
+            # stop when the parent record changes.  Without this ownership
+            # gate, the first active element consumes all downstream records
+            # and later elements appear to have no executable physics.
+            while 0 < rec < npnxt.size and rec < npar.size and int(npar[rec]) == ion_record:
                 if rec in seen:
                     break
                 seen.add(rec)
@@ -332,7 +342,10 @@ def _scan_active_records(master: Any, derived: Any, subset: Any) -> tuple[dict[t
                         "data_type": int(header.data_type),
                         "category": category,
                     })
-                rec = int(npnxt[rec])
+                nxt = int(npnxt[rec])
+                if nxt == rec:
+                    raise RuntimeError(f"ATDB linked-record self-cycle at record {rec}")
+                rec = nxt
                 guard += 1
                 if guard > npnxt.size:
                     raise RuntimeError("ATDB linked-record cycle")

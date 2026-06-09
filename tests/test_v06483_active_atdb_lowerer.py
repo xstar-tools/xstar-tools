@@ -8,6 +8,7 @@ import subprocess
 from xstar_tools.xstar.native_fixed_program import (
     PROGRAM_ABI,
     _coverage_from_counts,
+    _scan_active_records,
     validate_program_directory,
 )
 
@@ -48,7 +49,7 @@ def test_native_type56_and_visited_report(tmp_path: Path) -> None:
         visits = {int(row["data_type"]): int(row["visits"]) for row in csv.DictReader(handle)}
     assert visits[56] == 1
     summary = json.loads((tmp_path / "native_fixed_state_summary.json").read_text())
-    assert summary["schema_version"] == "0.6.48.3.1"
+    assert summary["schema_version"] == "0.6.48.3.2"
     assert summary["type56_records_evaluated"] == 1
     assert summary["computed_from_raw_coefficients"] is True
 
@@ -103,3 +104,42 @@ def test_build_element_layout_uses_compact_index(monkeypatch) -> None:
     assert rows[0]["initial_population"] == 1.0
     assert returned_basis is basis
     assert blocks[1] is block
+
+
+def test_scan_active_records_stops_at_parent_ion_boundary() -> None:
+    from types import SimpleNamespace
+    import numpy as np
+
+    class Master:
+        @staticmethod
+        def header(rec: int):
+            return SimpleNamespace(rate_type=3, data_type=56, raw_pointer=rec)
+
+    npfi = np.zeros((4, 4), dtype=np.int64)
+    npfi[3, 1] = 10
+    npfi[3, 2] = 20
+    npfi[3, 3] = 30
+    npnxt = np.zeros(40, dtype=np.int64)
+    npnxt[10], npnxt[11] = 11, 20
+    npnxt[20], npnxt[21] = 21, 30
+    npnxt[30] = 0
+    npar = np.zeros(40, dtype=np.int64)
+    npar[10:12] = 100
+    npar[20:22] = 200
+    npar[30] = 300
+    derived = SimpleNamespace(
+        npfi=npfi, npnxt=npnxt, npar=npar,
+        ion_records=np.asarray([0, 100, 200, 300], dtype=np.int64),
+        ion_element_z=np.asarray([0, 1, 2, 12], dtype=np.int64),
+        ion_stage=np.asarray([0, 1, 1, 1], dtype=np.int64),
+    )
+    subset = SimpleNamespace(
+        active_element_z=(1, 2, 12),
+        ion_indices=np.asarray([1, 2, 3], dtype=np.int64),
+    )
+
+    counts, records_by_z, unsupported = _scan_active_records(Master(), derived, subset)
+
+    assert counts == {(3, 56): 5}
+    assert records_by_z == {1: [10, 11], 2: [20, 21], 12: [30]}
+    assert unsupported == []
