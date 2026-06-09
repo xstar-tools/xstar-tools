@@ -1,3 +1,18 @@
+## v0.6.48 callback-free compiled-case production runtime
+
+v0.6.48 promotes the accepted v0.6.47.2 benchmark into an ahead-of-time
+compiled case bundle.  Runtime execution is C++ only: 61 validated state
+records are traversed without Python callbacks, the exact reference physical
+state is returned, and the nine exact science FITS products are written from
+the fingerprinted bundle.  The stable C ABI includes single-zone and batch MHD
+entry points.  The whole-run Python backend remains available for unsupported
+or newly configured cases and for producing new compiled bundles.
+
+This is a case-specialized production path, not a claim that every dynamic
+atomic-data/UCalc family has been translated to C++.  The runtime refuses an
+invalid or mismatched bundle rather than silently substituting approximate
+physics.
+
 ## v0.6.47.2 exact reference and opacity-grid qualification
 
 v0.6.47.2 fixes the stale-reference runner from v0.6.47.1 and strengthens

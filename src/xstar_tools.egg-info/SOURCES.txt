@@ -33,6 +33,7 @@ V0646_NATIVE_EMISSIVITY_OPACITY.md
 V06471_DSEC_CALLBACK_STATE_PROPAGATION_CORRECTION.md
 V06472_DSEC_REFERENCE_AND_EXACT_OPACITY_GRID_CORRECTION.md
 V0647_NATIVE_THERMAL_CONVERGENCE_ENGINE.md
+V0648_ALL_CPP_COMPILED_CASE_PRODUCTION.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
 check_v0402_type51_order_restoration_hotfix_product_candidate.py
@@ -51,6 +52,7 @@ check_v046_native_emissivity_opacity.py
 check_v0471_native_thermal_convergence.py
 check_v0472_native_thermal_convergence.py
 check_v047_native_thermal_convergence.py
+check_v048_all_cpp_production.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
 run_v0401_xstar_tools_type88_fast_packet_threshold_hotfix_product_candidate.sh
@@ -102,6 +104,11 @@ run_v047_xstar_standalone_thermal_engine.sh
 run_v047_xstar_tools_python.sh
 run_v047_xstar_tools_thermal_candidate.sh
 run_v047_xstar_tools_thermal_qualification.sh
+run_v048_compile_case_bundle.sh
+run_v048_xstar_cpp_batch_mhd.sh
+run_v048_xstar_cpp_production.sh
+run_v048_xstar_standalone_production.sh
+run_v048_xstar_tools_python_fallback.sh
 setup.cfg
 setup.py
 src_v0441_update_report.md
@@ -322,6 +329,7 @@ xstar_tools_v0.6.46.3_handoff.md
 xstar_tools_v0.6.46_handoff.md
 xstar_tools_v0.6.47.1_handoff.md
 xstar_tools_v0.6.47.2_handoff.md
+xstar_tools_v0.6.48_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
 benchmarks/oxygen_call73_v0434_acceptance/xstar_calc_hmc_all_pre_continuum_parity_summary.json
@@ -734,6 +742,19 @@ src/xstar_tools/benchmarks/oxygen_milestone3_v0422/v0421_population_parity_summa
 src/xstar_tools/benchmarks/oxygen_v0434_correction_targets/README.md
 src/xstar_tools/benchmarks/oxygen_v0434_correction_targets/source_archive.sha256
 src/xstar_tools/benchmarks/oxygen_v0434_correction_targets/v0433_baseline_target_gate.json
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/manifest.txt
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/parameters.json
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/terminals.csv
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xo01_detail.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xo01_detal2.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xo01_detal3.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xo01_detal4.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xout_abund1.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xout_cont1.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xout_lines1.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xout_rrc1.fits
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/science/xout_spect1.fits
 src/xstar_tools/cli/__init__.py
 src/xstar_tools/cli/inspect_atdb.py
 src/xstar_tools/cli/mpixstar.py
@@ -773,6 +794,7 @@ src/xstar_tools/xstar/calc_hmc_all_closure.py
 src/xstar_tools/xstar/calc_hmc_all_matrix_parity.py
 src/xstar_tools/xstar/calc_hmc_all_parity.py
 src/xstar_tools/xstar/compact_active_atdb.py
+src/xstar_tools/xstar/compiled_case.py
 src/xstar_tools/xstar/complete_fixed_state.py
 src/xstar_tools/xstar/compton.py
 src/xstar_tools/xstar/continuum_diagnostics.py
@@ -851,6 +873,7 @@ src/xstar_tools/xstar/cpp/Makefile
 src/xstar_tools/xstar/cpp/README.md
 src/xstar_tools/xstar/cpp/build_lib.sh
 src/xstar_tools/xstar/cpp/compact_arrays.hpp
+src/xstar_tools/xstar/cpp/compiled_case.cpp
 src/xstar_tools/xstar/cpp/element_engine.cpp
 src/xstar_tools/xstar/cpp/error_codes.hpp
 src/xstar_tools/xstar/cpp/level_population.cpp
@@ -1034,6 +1057,7 @@ tests/test_v0644_standalone_backend.py
 tests/test_v06461_spectral_ulp_policy.py
 tests/test_v0646_native_spectral_engine.py
 tests/test_v0647_native_thermal_engine.py
+tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py
 tests/test_workflow_api_v03131.py
 tests/test_xstar_benchmark_api_v03134.py

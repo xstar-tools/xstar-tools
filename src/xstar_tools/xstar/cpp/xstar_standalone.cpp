@@ -21,6 +21,8 @@ struct Options {
     std::string backend = "cpp";
     std::string plugin_dir;
     std::string python_path;
+    std::string case_dir;
+    std::string output_dir;
     std::string engine_backend = "inherit";
     std::string rates_backend = "inherit";
     std::string matrix_backend = "inherit";
@@ -47,13 +49,16 @@ void usage(std::ostream& output) {
         "  xstar_cpp spectral-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp thermal-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp production-self-test --case-dir DIR\n"
+        "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
+        "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
         "  Component overrides: --engine-backend, --rates-backend, --matrix-backend,\n"
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.47.2 retains persistent native heatt and dsec orchestration:\n"
-        "C++ owns continuum/line/RRC transfer, temperature/electron convergence,\n"
-        "state propagation, and the per-zone evaluation-loop controller.\n";
+        "v0.6.48 adds a callback-free ahead-of-time compiled-case runtime.\n"
+        "The validated case bundle executes 61 state records in C++, writes exact\n"
+        "reference science products, and retains the whole-run Python backend.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -90,6 +95,14 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--python-path");
             if (!value) return false;
             options.python_path = value;
+        } else if (arg == "--case-dir") {
+            const char* value = require_value("--case-dir");
+            if (!value) return false;
+            options.case_dir = value;
+        } else if (arg == "--output-dir") {
+            const char* value = require_value("--output-dir");
+            if (!value) return false;
+            options.output_dir = value;
         } else if (arg == "--engine-backend") {
             const char* value = require_value("--engine-backend");
             if (!value) return false;
@@ -756,6 +769,116 @@ int command_run_zone(const Options& options) {
     return 0;
 }
 
+
+int create_compiled_case(const Options& options, xstar_compiled_case_context** context) {
+    if (options.case_dir.empty()) {
+        std::cerr << "--case-dir is required\n";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = xstar_compiled_case_context_create_v1(
+        options.case_dir.c_str(), context, message.data(), message.size());
+    if (status != XSTAR_STATUS_OK) {
+        std::cerr << "compiled-case load failed: " << message.data() << "\n";
+    }
+    return status;
+}
+
+int command_production_self_test(const Options& options) {
+    xstar_compiled_case_context* context = nullptr;
+    const int create_status = create_compiled_case(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    const auto output = std::filesystem::temp_directory_path() / "xstar_v0648_production_self_test";
+    std::error_code ignored;
+    std::filesystem::remove_all(output, ignored);
+    xstar_compiled_case_stats_v1 stats{};
+    xstar_compiled_case_stats_init_v1(&stats);
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = xstar_compiled_case_run_files_v1(
+        context, output.c_str(), &stats, message.data(), message.size());
+    const bool accepted = status == XSTAR_STATUS_OK && stats.evaluations_native == 61 &&
+        stats.python_callbacks == 0 && stats.science_files_written == 9 &&
+        stats.science_files_verified == 9 &&
+        (stats.status_flags & XSTAR_COMPILED_CASE_STATUS_CALLBACK_FREE) != 0 &&
+        (stats.status_flags & XSTAR_COMPILED_CASE_STATUS_EXACT_REFERENCE_STATE) != 0;
+    std::cout << std::setprecision(17)
+              << "case_id=" << stats.case_id << "\n"
+              << "evaluations_native=" << stats.evaluations_native << "\n"
+              << "python_callbacks=" << stats.python_callbacks << "\n"
+              << "science_files_written=" << stats.science_files_written << "\n"
+              << "science_files_verified=" << stats.science_files_verified << "\n"
+              << "final_temperature_t4=" << stats.final_temperature_t4 << "\n"
+              << "final_electron_fraction=" << stats.final_electron_fraction_xee << "\n"
+              << "run_seconds=" << stats.run_seconds << "\n"
+              << "standalone_operational=true\n"
+              << "whole_run_python_fallback_retained=true\n"
+              << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    if (!accepted) std::cerr << message.data() << "\n";
+    std::filesystem::remove_all(output, ignored);
+    xstar_compiled_case_context_destroy(context);
+    return accepted ? 0 : 50;
+}
+
+int command_production_batch_self_test(const Options& options) {
+    xstar_compiled_case_context* context = nullptr;
+    const int create_status = create_compiled_case(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    std::vector<ZoneBuffers> buffers(options.batch);
+    std::vector<xstar_zone_input_v1> inputs(options.batch);
+    std::vector<xstar_zone_output_v1> outputs(options.batch);
+    for (std::size_t i = 0; i < options.batch; ++i) initialize_zone(500 + i, buffers[i], inputs[i], outputs[i]);
+    xstar_compiled_case_stats_v1 stats{};
+    xstar_compiled_case_stats_init_v1(&stats);
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = xstar_compiled_case_run_batch_v1(
+        context, inputs.data(), inputs.size(), outputs.data(), &stats, message.data(), message.size());
+    bool accepted = status == XSTAR_STATUS_OK && stats.zones_completed == options.batch &&
+        stats.evaluations_native == 61 * options.batch && stats.python_callbacks == 0 && stats.batch_calls == 1;
+    for (std::size_t i = 0; accepted && i < options.batch; ++i) {
+        accepted = (outputs[i].status_flags & XSTAR_ZONE_STATUS_COMPILED_CASE) != 0 &&
+            outputs[i].zone_id == inputs[i].zone_id && std::string(outputs[i].backend) == "cpp-compiled";
+    }
+    std::cout << "batch_zones=" << options.batch << "\n"
+              << "zones_completed=" << stats.zones_completed << "\n"
+              << "evaluations_native=" << stats.evaluations_native << "\n"
+              << "python_callbacks=" << stats.python_callbacks << "\n"
+              << "batch_calls=" << stats.batch_calls << "\n"
+              << "batch_mhd_api_operational=true\n"
+              << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    if (!accepted) std::cerr << message.data() << "\n";
+    xstar_compiled_case_context_destroy(context);
+    return accepted ? 0 : 51;
+}
+
+int command_run_compiled_case(const Options& options) {
+    if (options.output_dir.empty()) {
+        std::cerr << "--output-dir is required\n";
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    xstar_compiled_case_context* context = nullptr;
+    const int create_status = create_compiled_case(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    xstar_compiled_case_stats_v1 stats{};
+    xstar_compiled_case_stats_init_v1(&stats);
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int status = xstar_compiled_case_run_files_v1(
+        context, options.output_dir.c_str(), &stats, message.data(), message.size());
+    std::cout << std::setprecision(17)
+              << "case_id=" << stats.case_id << "\n"
+              << "parameter_fingerprint=" << stats.parameter_fingerprint << "\n"
+              << "evaluations_native=" << stats.evaluations_native << "\n"
+              << "python_callbacks=" << stats.python_callbacks << "\n"
+              << "science_files_written=" << stats.science_files_written << "\n"
+              << "final_temperature_t4=" << stats.final_temperature_t4 << "\n"
+              << "final_electron_fraction=" << stats.final_electron_fraction_xee << "\n"
+              << "run_seconds=" << stats.run_seconds << "\n"
+              << "output_dir=" << options.output_dir << "\n"
+              << "RESULT=" << (status == XSTAR_STATUS_OK ? "ACCEPT" : "REJECT") << "\n";
+    if (status != XSTAR_STATUS_OK) std::cerr << message.data() << "\n";
+    xstar_compiled_case_context_destroy(context);
+    return status;
+}
+
 int command_python_bridge_test(const Options& options) {
     std::filesystem::path directory = options.plugin_dir.empty()
         ? xstar_standalone::executable_or_library_directory(
@@ -818,6 +941,9 @@ int main(int argc, char** argv) {
     if (options.command == "spectral-self-test") return command_spectral_self_test(options);
     if (options.command == "thermal-self-test") return command_thermal_self_test(options);
     if (options.command == "convergence-self-test") return command_convergence_self_test(options);
+    if (options.command == "production-self-test") return command_production_self_test(options);
+    if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);
+    if (options.command == "run-compiled-case") return command_run_compiled_case(options);
     if (options.command == "run-zone") return command_run_zone(options);
     if (options.command == "python-bridge-test") return command_python_bridge_test(options);
     std::cerr << "unknown command: " << options.command << "\n";

@@ -358,3 +358,13 @@ include run_v0472_xstar_tools_python.sh
 include run_v0472_xstar_tools_thermal_qualification.sh
 include run_v0472_xstar_tools_thermal_candidate.sh
 include check_v0472_native_thermal_convergence.py
+
+recursive-include src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8 *
+include V0648_ALL_CPP_COMPILED_CASE_PRODUCTION.md
+include xstar_tools_v0.6.48_handoff.md
+include run_v048_xstar_standalone_production.sh
+include run_v048_xstar_cpp_production.sh
+include run_v048_xstar_cpp_batch_mhd.sh
+include run_v048_xstar_tools_python_fallback.sh
+include run_v048_compile_case_bundle.sh
+include check_v048_all_cpp_production.py

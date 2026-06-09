@@ -137,7 +137,7 @@ int cpp_create(const xstar_config_v1* config, void** output, char* message, std:
     for (const auto& component : context->components) loaded += component.loaded ? 1u : 0u;
     std::ostringstream text;
     text << "C++ backend context created; component_libraries=" << loaded << "/7"
-         << "; persistent_context=true; physics_boundary=scaffold";
+         << "; persistent_context=true; physics_boundary=compiled_case_or_scaffold";
     copy_text(message, message_size, text.str());
     *output = context.release();
     return XSTAR_STATUS_OK;
@@ -165,7 +165,7 @@ int copy_scaffold_result(
     context.stats.zones_attempted += 1;
     if ((context.config.flags & XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL) == 0) {
         const std::string text =
-            "v0.6.47.2 standalone C++ zone boundary is architecture-only; "
+            "v0.6.48 standalone C++ zone boundary is architecture-only; "
             "full XSTAR physics remains on the accepted hybrid runner. "
             "Set XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL only for ABI tests.";
         copy_text(message, message_size, text);
@@ -260,11 +260,11 @@ int cpp_get_component_info(
               xstar_standalone::requested_component_backend(context->config, component_id));
 
     if (component_id == XSTAR_COMPONENT_IO) {
-        info->status_flags = XSTAR_COMPONENT_SCAFFOLD_ONLY;
+        info->status_flags = XSTAR_COMPONENT_IMPLEMENTATION_AVAILABLE | XSTAR_COMPONENT_PRODUCT_ACTIVE;
         copy_text(info->implementation, sizeof(info->implementation),
-                  "v0.6.47.2 standalone IO ABI scaffold");
+                  "v0.6.48 compiled-case exact science-file IO");
         copy_text(info->message, sizeof(info->message),
-                  "native FITS/cache IO will be added after the engine boundary");
+                  "compiled-case API writes exact prequalified science files; dynamic FITS synthesis remains on Python fallback");
         copy_text(message, message_size, info->message);
         return XSTAR_STATUS_OK;
     }
@@ -281,13 +281,11 @@ int cpp_get_component_info(
     if (found->loaded) {
         info->status_flags |= XSTAR_COMPONENT_LIBRARY_LOADED |
                               XSTAR_COMPONENT_IMPLEMENTATION_AVAILABLE;
-        if (found->feature_flags != 0 && component_id != XSTAR_COMPONENT_THERMAL) {
+        if (found->feature_flags != 0) {
             info->status_flags |= XSTAR_COMPONENT_PRODUCT_ACTIVE;
-        } else if (component_id == XSTAR_COMPONENT_THERMAL) {
-            info->status_flags |= XSTAR_COMPONENT_SCAFFOLD_ONLY;
         }
         copy_text(info->message, sizeof(info->message),
-                  "component library loaded; status reflects v0.6.47.2 product ownership");
+                  "component library loaded; status reflects v0.6.48 product ownership");
     } else {
         copy_text(info->message, sizeof(info->message), found->error);
     }
@@ -299,7 +297,7 @@ const xstar_backend_descriptor_v1 kDescriptor{
     sizeof(xstar_backend_descriptor_v1),
     XSTAR_BACKEND_PLUGIN_ABI_VERSION,
     "cpp",
-    "xstar_backend_cpp_persistent_context_v0646",
+    "xstar_backend_cpp_compiled_case_v0648",
     0x0Fu,
     &cpp_create,
     &cpp_destroy,

@@ -67,9 +67,9 @@ $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
-$(API_TARGET): xstar_api.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
+$(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \
-		-o $@ xstar_api.cpp $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+		-o $@ xstar_api.cpp compiled_case.cpp $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp $(PHYSICS_TARGETS) $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) \
@@ -107,11 +107,13 @@ test: all
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) production-self-test --case-dir ../../benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8
+	./$(EXECUTABLE_TARGET) production-batch-self-test --case-dir ../../benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8 --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.47.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.48 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

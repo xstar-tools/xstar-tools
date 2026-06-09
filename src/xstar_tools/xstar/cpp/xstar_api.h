@@ -21,8 +21,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_API_ABI_VERSION 60471u
-#define XSTAR_API_VERSION_STRING "0.6.47.2"
+#define XSTAR_API_ABI_VERSION 60480u
+#define XSTAR_API_VERSION_STRING "0.6.48"
 #define XSTAR_BACKEND_NAME_SIZE 32u
 #define XSTAR_PATH_SIZE 1024u
 #define XSTAR_MESSAGE_SIZE 1024u
@@ -51,7 +51,8 @@ typedef enum xstar_zone_status_flags {
     XSTAR_ZONE_STATUS_SCAFFOLD_RESULT = 1u << 0,
     XSTAR_ZONE_STATUS_CPP_BACKEND = 1u << 1,
     XSTAR_ZONE_STATUS_PYTHON_BACKEND = 1u << 2,
-    XSTAR_ZONE_STATUS_FALLBACK_USED = 1u << 3
+    XSTAR_ZONE_STATUS_FALLBACK_USED = 1u << 3,
+    XSTAR_ZONE_STATUS_COMPILED_CASE = 1u << 4
 } xstar_zone_status_flags;
 
 typedef enum xstar_component_id {
@@ -254,6 +255,80 @@ XSTAR_API_EXPORT int xstar_context_run_thermal_evaluation_loop_v1(
     size_t trace_capacity,
     size_t* trace_count,
     xstar_dsec_stats_v1* stats
+);
+
+#define XSTAR_COMPILED_CASE_ABI_VERSION 60480u
+#define XSTAR_COMPILED_CASE_ID_SIZE 128u
+#define XSTAR_FINGERPRINT_SIZE 65u
+
+typedef enum xstar_compiled_case_status_flags {
+    XSTAR_COMPILED_CASE_STATUS_NONE = 0u,
+    XSTAR_COMPILED_CASE_STATUS_LOADED = 1u << 0,
+    XSTAR_COMPILED_CASE_STATUS_CALLBACK_FREE = 1u << 1,
+    XSTAR_COMPILED_CASE_STATUS_EXACT_REFERENCE_STATE = 1u << 2,
+    XSTAR_COMPILED_CASE_STATUS_SCIENCE_FILES_VERIFIED = 1u << 3
+} xstar_compiled_case_status_flags;
+
+typedef struct xstar_compiled_case_stats_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_flags;
+    uint32_t reserved0;
+    uint64_t evaluations_native;
+    uint64_t python_callbacks;
+    uint64_t science_files_written;
+    uint64_t science_files_verified;
+    uint64_t zones_attempted;
+    uint64_t zones_completed;
+    uint64_t batch_calls;
+    uint64_t reserved1;
+    double run_seconds;
+    double final_temperature_t4;
+    double final_electron_fraction_xee;
+    double final_hmctot;
+    double final_elcter;
+    char case_id[XSTAR_COMPILED_CASE_ID_SIZE];
+    char parameter_fingerprint[XSTAR_FINGERPRINT_SIZE];
+    char message[XSTAR_MESSAGE_SIZE];
+} xstar_compiled_case_stats_v1;
+
+typedef struct xstar_compiled_case_context xstar_compiled_case_context;
+
+XSTAR_API_EXPORT int xstar_compiled_case_stats_init_v1(
+    xstar_compiled_case_stats_v1* stats
+);
+XSTAR_API_EXPORT int xstar_compiled_case_context_create_v1(
+    const char* case_directory,
+    xstar_compiled_case_context** context,
+    char* message,
+    size_t message_size
+);
+XSTAR_API_EXPORT void xstar_compiled_case_context_destroy(
+    xstar_compiled_case_context* context
+);
+XSTAR_API_EXPORT int xstar_compiled_case_run_files_v1(
+    xstar_compiled_case_context* context,
+    const char* output_directory,
+    xstar_compiled_case_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_API_EXPORT int xstar_compiled_case_run_zone_v1(
+    xstar_compiled_case_context* context,
+    const xstar_zone_input_v1* input,
+    xstar_zone_output_v1* output,
+    xstar_compiled_case_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_API_EXPORT int xstar_compiled_case_run_batch_v1(
+    xstar_compiled_case_context* context,
+    const xstar_zone_input_v1* inputs,
+    size_t zone_count,
+    xstar_zone_output_v1* outputs,
+    xstar_compiled_case_stats_v1* stats,
+    char* message,
+    size_t message_size
 );
 
 #ifdef __cplusplus

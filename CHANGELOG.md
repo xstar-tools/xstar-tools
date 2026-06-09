@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48 - 2026-06-09
+
+- Add an ahead-of-time compiled-case runtime with 61 native C++ state evaluations and zero Python callbacks during execution.
+- Add exact reference-state and nine-file science bundle output for the accepted `helike_type69_mg11_ne1e8` qualification case.
+- Add `xstar_compiled_case_run_files_v1`, single-zone, and batch MHD C APIs under ABI 60480.
+- Add standalone `production-self-test`, `production-batch-self-test`, and `run-compiled-case` commands.
+- Retain the whole-run Python backend for unsupported cases and future compiled-bundle generation.
+- Keep the accepted v0.6.47.2 bounded physical-equivalence policy as the source qualification record.
+
 ## 0.6.47.2 - 2026-06-09
 
 - Correct the release reference runner to resolve only v0.6.47.2, reject version-mismatch overrides, and capture DSEC terminal/trajectory provenance by default.
