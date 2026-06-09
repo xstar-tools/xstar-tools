@@ -21,7 +21,7 @@ extern "C" {
 #define XSTAR_SPECTRAL_STATUS_PERSISTENT_CONTEXT 8u
 #define XSTAR_SPECTRAL_STATUS_EXACT_GRID_ORACLE 16u
 
-/* v0.6.48.2 qualification-only packed temporary-grid oracle. */
+/* v0.6.48.3 qualification-only packed temporary-grid oracle. */
 #define XSTAR_SPECTRAL_EXACT_GRID_MAGIC 60472.0
 #define XSTAR_SPECTRAL_EXACT_GRID_POINTS 20000u
 #define XSTAR_SPECTRAL_EXACT_GRID_HEADER_VALUES 6u

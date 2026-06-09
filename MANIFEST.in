@@ -377,3 +377,14 @@ include run_v0482_atdb_coverage.sh
 include run_v0482_xstar_tools_python_fallback.sh
 include check_v0482_genuine_native_fixed_state.py
 include tests/test_v06482_native_fixed_state.py
+
+recursive-include src/xstar_tools/benchmarks/v06483_active_atdb_lowerer_fixture *
+include src/xstar_tools/benchmarks/specs/v06483_active_atdb_lowerer_fixture.json
+include V06483_ACTIVE_ATDB_LOWERER.md
+include xstar_tools_v0.6.48.3_handoff.md
+include run_v0483_xstar_native_fixed_state.sh
+include run_v0483_atdb_coverage.sh
+include run_v0483_active_atdb_lower.sh
+include run_v0483_xstar_tools_python_fallback.sh
+include check_v0483_active_atdb_lowerer.py
+include tests/test_v06483_active_atdb_lowerer.py

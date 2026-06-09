@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -140,6 +141,9 @@ struct ProgramRecord {
 
 struct Program {
     std::string id;
+    bool active_atdb_lowered = false;
+    std::uint64_t topology_record_count = 0;
+    std::uint64_t unsupported_record_count = 0;
     std::vector<ElementProgram> elements;
     std::vector<ProgramRecord> records;
     std::vector<double> reals;
@@ -187,6 +191,7 @@ struct xstar_fixed_state_context_impl {
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
+    std::map<int, std::uint64_t> visited_data_types;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -306,6 +311,12 @@ Program load_program(const std::string& directory) {
     }
     if (id_it == manifest.end() || id_it->second.empty()) throw std::runtime_error("program_id missing");
     p.id = id_it->second;
+    const auto active_it = manifest.find("active_atdb_lowered");
+    p.active_atdb_lowered = active_it != manifest.end() && active_it->second == "true";
+    const auto topology_it = manifest.find("topology_record_count");
+    if (topology_it != manifest.end()) p.topology_record_count = parse_number<std::uint64_t>(topology_it->second, "topology_record_count");
+    const auto unsupported_it = manifest.find("unsupported_record_count");
+    if (unsupported_it != manifest.end()) p.unsupported_record_count = parse_number<std::uint64_t>(unsupported_it->second, "unsupported_record_count");
     load_elements(join_path(directory, "elements.csv"), p);
     load_rows(join_path(directory, "rows.csv"), p);
     p.reals = load_scalar_file<double>(join_path(directory, "reals.txt"), "reals.txt");
@@ -447,6 +458,37 @@ double type51_upsilon(const double* r, std::size_t n, const std::int64_t* ints, 
     }
 }
 
+double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
+    if (!r || n < 4 || (n % 2) != 0 || !(temperature_k > 0.0)) return -1.0;
+    const std::size_t points = n / 2;
+    if (points < 2) return -1.0;
+    const double x = std::log10(temperature_k);
+    const bool ascending = r[points - 1] > r[0];
+    std::size_t i = 0;
+    if (ascending) {
+        if (x <= r[0]) i = 0;
+        else if (x >= r[points - 1]) i = points - 2;
+        else {
+            for (std::size_t k = 0; k + 1 < points; ++k) {
+                if (r[k] <= x && x <= r[k + 1]) { i = k; break; }
+            }
+        }
+    } else {
+        if (x >= r[0]) i = 0;
+        else if (x <= r[points - 1]) i = points - 2;
+        else {
+            for (std::size_t k = 0; k + 1 < points; ++k) {
+                if (r[k] >= x && x >= r[k + 1]) { i = k; break; }
+            }
+        }
+    }
+    const double y0 = std::max(1.0e-48, r[points + i]);
+    const double y1 = std::max(1.0e-48, r[points + i + 1]);
+    const double dx = r[i + 1] - r[i];
+    const double value = (y1 - y0) * (x - r[i]) / (dx + 1.0e-24) + y0;
+    return std::max(0.0, value);
+}
+
 const ElementRow& row_at(const ElementProgram& element, int one_based) {
     if (one_based < 1 || one_based > element.n_rows) throw std::runtime_error("row index outside element");
     return element.rows[static_cast<std::size_t>(one_based - 1)];
@@ -513,19 +555,35 @@ EvaluatedRecord evaluate_record(
             }
             break;
         }
-        case XSTAR_FIXED_OPCODE_TYPE49_AUTOIONIZATION: {
-            if (!r || record.real_count < 2) throw std::runtime_error("type49 payload requires autoionization rate and resonance energy");
-            const double auto_rate = std::max(0.0, r[0]);
-            const double resonance_ev = std::max(0.0, r[1]);
-            c.ans1 = auto_rate;
+        case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE:
+        case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE:
+        case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
+            if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
+            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
+            const std::size_t n = record.real_count / 2;
+            const double threshold = std::max(delta_ev, 1.0e-12);
+            double photo = 0.0;
+            double heat = 0.0;
+            for (std::size_t k = 0; k < n; ++k) {
+                const double e = threshold + r[2 * k] * kRydEv;
+                const double sigma = std::max(0.0, r[2 * k + 1]);
+                const double flux = interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e);
+                photo += flux * sigma;
+                heat += flux * sigma * std::max(0.0, e - threshold) * kErgPerEv;
+            }
+            photo /= static_cast<double>(n);
+            heat /= static_cast<double>(n);
             const double ratio = lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300);
-            c.ans2 = auto_rate * 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(resonance_ev / std::max(kt_ev, 1.0e-300));
-            c.ans5 = c.ans2 * resonance_ev * kErgPerEv;
-            c.ans6 = c.ans1 * resonance_ev * kErgPerEv;
+            const double recomb = 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(threshold / std::max(kt_ev, 1.0e-300)) * std::max(photo, 1.0e-60);
+            c.ans1 = photo;
+            c.ans2 = recomb;
+            c.ans3 = -recomb * threshold * kErgPerEv;
+            c.ans4 = -heat;
+            c.ans5 = recomb * threshold * kErgPerEv;
+            c.ans6 = heat;
             break;
         }
-        case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:
-        case XSTAR_FIXED_OPCODE_TYPE88_RADIATIVE_LINE: {
+        case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE: {
             if (!r || record.real_count < 2) throw std::runtime_error("radiative line payload requires A and oscillator strength");
             const double a = std::max(0.0, r[0]);
             const double oscillator = std::max(0.0, r[1]);
@@ -556,31 +614,30 @@ EvaluatedRecord evaluate_record(
             c.ans6 = c.ans1 * delta_ev * kErgPerEv;
             break;
         }
-        case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE:
-        case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
-            if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
-            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
+        case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
+            const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
+            if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
+            const double qde = 8.626e-8 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
+            const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
+            c.ans1 = qex * ne;
+            c.ans2 = qde * ne;
+            c.ans5 = c.ans2 * delta_ev * kErgPerEv;
+            c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE: {
+            if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("type88 payload requires energy/sigma pairs");
+            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("type88 requires live radiation grid");
             const std::size_t n = record.real_count / 2;
             const double threshold = std::max(delta_ev, 1.0e-12);
             double photo = 0.0;
-            double heat = 0.0;
             for (std::size_t k = 0; k < n; ++k) {
                 const double e = threshold + r[2 * k] * kRydEv;
                 const double sigma = std::max(0.0, r[2 * k + 1]);
-                const double flux = interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e);
-                photo += flux * sigma;
-                heat += flux * sigma * std::max(0.0, e - threshold) * kErgPerEv;
+                photo += interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e) * sigma;
             }
-            photo /= static_cast<double>(n);
-            heat /= static_cast<double>(n);
-            const double ratio = lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300);
-            const double recomb = 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(threshold / std::max(kt_ev, 1.0e-300)) * std::max(photo, 1.0e-60);
-            c.ans1 = photo;
-            c.ans2 = recomb;
-            c.ans3 = -recomb * threshold * kErgPerEv;
-            c.ans4 = -heat;
-            c.ans5 = recomb * threshold * kErgPerEv;
-            c.ans6 = heat;
+            c.ans1 = photo / static_cast<double>(n);
+            c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
@@ -705,8 +762,11 @@ int run_impl(
         XSTAR_FIXED_STATE_STATUS_NATIVE_CONTINUUM |
         XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL |
         XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT |
-        XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS;
+        XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS |
+        (ctx.program.active_atdb_lowered ? static_cast<uint32_t>(XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED) : 0u);
     stats.python_callbacks = 0;
+    stats.topology_rows_loaded = ctx.program.topology_record_count;
+    stats.active_program_records = ctx.program.records.size();
     copy_text(stats.program_id, sizeof(stats.program_id), ctx.program.id);
 
     std::fill(output.spectrum, output.spectrum + input.radiation_bin_count, 0.0);
@@ -735,6 +795,9 @@ int run_impl(
             if (record.element_index != element.element_index) throw std::runtime_error("linked traversal crossed element boundary");
             ++stats.records_seen;
             ++stats.linked_hops;
+            ++ctx.visited_data_types[record.data_type];
+            stats.visited_data_types = ctx.visited_data_types.size();
+            if (record.data_type == 56) ++stats.type56_records_evaluated;
             const auto rate_start = clock_type::now();
             try {
                 evaluated.push_back(evaluate_record(ctx.program, element, record, input));
@@ -894,7 +957,7 @@ struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 extern "C" {
 
 uint32_t xstar_fixed_state_engine_abi_version(void) { return XSTAR_FIXED_STATE_ENGINE_ABI_VERSION; }
-const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_raw_program_development_v06482"; }
+const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_atdb_lowerer_v06483"; }
 uint32_t xstar_fixed_state_engine_feature_flags(void) {
     return XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
         XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL |
@@ -903,7 +966,8 @@ uint32_t xstar_fixed_state_engine_feature_flags(void) {
         XSTAR_FIXED_STATE_STATUS_NATIVE_CONTINUUM |
         XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL |
         XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT |
-        XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS;
+        XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS |
+        XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED;
 }
 
 int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input) {
@@ -932,6 +996,14 @@ int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats) {
     std::memset(stats, 0, sizeof(*stats));
     stats->struct_size = sizeof(*stats);
     stats->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
+    return 0;
+}
+
+int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* info) {
+    if (!info) return 1;
+    std::memset(info, 0, sizeof(*info));
+    info->struct_size = sizeof(*info);
+    info->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
     return 0;
 }
 
@@ -965,6 +1037,34 @@ void xstar_fixed_state_context_destroy(xstar_fixed_state_context* context) {
     delete context;
 }
 
+int xstar_fixed_state_context_get_program_info_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_program_info_v1* info,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !info) {
+        copy_text(message, message_size, "context and info are required");
+        return 1;
+    }
+    if (info->struct_size < sizeof(*info) || info->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+        copy_text(message, message_size, "fixed-state program-info ABI mismatch");
+        return 2;
+    }
+    info->status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
+        (context->program.active_atdb_lowered ? static_cast<uint32_t>(XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED) : 0u);
+    info->element_count = context->program.elements.size();
+    info->population_rows = 0;
+    for (const auto& element : context->program.elements) info->population_rows += static_cast<uint64_t>(element.n_rows);
+    info->record_count = context->program.records.size();
+    info->topology_record_count = context->program.topology_record_count;
+    info->unsupported_record_count = context->program.unsupported_record_count;
+    copy_text(info->program_id, sizeof(info->program_id), context->program.id);
+    copy_text(info->message, sizeof(info->message), "native fixed-state program info available");
+    copy_text(message, message_size, info->message);
+    return 0;
+}
+
 int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char* message, size_t message_size) {
     if (!context) return 1;
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
@@ -977,6 +1077,7 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
         return 5;
     }
     context->state_generation = 0;
+    context->visited_data_types.clear();
     copy_text(message, message_size, "native fixed-state context reset");
     return 0;
 }
@@ -993,6 +1094,24 @@ int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fix
         copy_text(stats->message, sizeof(stats->message), exc.what());
         copy_text(message, message_size, exc.what());
         return 7;
+    }
+}
+
+int xstar_fixed_state_write_visited_report_v1(const xstar_fixed_state_context* context, const char* output_path, char* message, size_t message_size) {
+    if (!context || !output_path || !*output_path) {
+        copy_text(message, message_size, "context and output_path are required");
+        return 1;
+    }
+    try {
+        std::ofstream out(output_path);
+        if (!out) throw std::runtime_error("cannot create visited-record report");
+        out << "data_type,visits\n";
+        for (const auto& item : context->visited_data_types) out << item.first << ',' << item.second << '\n';
+        copy_text(message, message_size, "visited-record report written");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 8;
     }
 }
 

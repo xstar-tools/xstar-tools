@@ -1,5 +1,42 @@
 # CHANGELOG
 
+# 0.6.48.3 - 2026-06-09
+
+- Added the active H/He/Mg ATDB lowerer with rate-aware metadata/native/unsupported classification.
+- Added compact type-6 level topology lowering and raw record output with ATDB fingerprints.
+- Added native type-56 tabulated collision-strength interpolation.
+- Added dynamic fixed-state program-capacity introspection and visited-data-type reports.
+- Added strict fail-closed lowering plus explicit promotion-blocked partial mode.
+- Production remains blocked pending all visited families, 61 native evaluations, and historical science-product generation.
+
+# Changelog
+
+## 0.6.48.1
+
+- Include `xout_step.log` in the compiled-case bundle as a separately classified auxiliary output artifact.
+- Write the log alongside the nine FITS science products during callback-free C++ execution.
+- Require `science_file_count=9`, `auxiliary_file_count=1`, and `output_artifact_count=10` in the manifest.
+- Reject bundles with a missing, renamed, or wrong-size step log.
+- Add byte-identical `xout_step.log` validation to the production checker and run summary.
+- Keep public and compiled-case ABI `60480`.
+
+## 0.6.47.2
+
+- Correct the release reference runner to resolve only v0.6.47.2, reject version-mismatch overrides, and capture DSEC terminal/trajectory provenance by default.
+- Record package and release-source versions in every run summary and require a current reference in the acceptance checker.
+- Replace profile-only spectral qualification with a complete Python source temporary-grid oracle containing 20,000 energies and 20,000 exact opacity samples per line.
+- Keep C++ ownership of trapezoid integration, continuum rebinning, source-ordered `opakc` commit, and the unchanged native product path.
+- Require zero spectral shadow mismatches and exact Python/native DSEC trajectory parity.
+- Keep public and thermal ABI 60471 and spectral ABI 60460.
+
+## 0.6.47.1
+
+- Correct the native DSEC callback ABI so `calc_hmc_all`-committed temperature, electron fraction, density, and state generation are propagated before convergence decisions.
+- Add complete per-zone DSEC terminal and trajectory provenance for both Python and C++ controllers.
+- Replace the unconditional `lnerr == 0` promotion rule with branch-for-branch parity against the same-session Python reference.
+- Add an ABI regression test that mutates callback-owned state and verifies native writeback.
+- Bump the public and thermal ABIs to 60471.
+
 ## 0.6.48.2 - 2026-06-09
 
 - Adds `libxstar_fixed_state.so`, a genuine state-dependent raw-coefficient

@@ -1,4 +1,4 @@
-"""Callback-free v0.6.48.2 deprecated compiled-case runtime.
+"""Callback-free v0.6.48.3 deprecated compiled-case runtime.
 
 The compiled case is an ahead-of-time specialization of an accepted whole-run
 Python reference.  Runtime execution traverses all 61 state records in C++ and
@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-_ABI = 60482
+_ABI = 60483
 _LIB: ctypes.CDLL | None = None
 
 
@@ -83,7 +83,7 @@ def _load() -> ctypes.CDLL:
 
 
 def bundled_case_path() -> Path:
-    """Return the installed v0.6.48.2 deprecated compiled benchmark case directory."""
+    """Return the installed v0.6.48.3 deprecated compiled benchmark case directory."""
     item = resources.files("xstar_tools.benchmarks").joinpath(
         "v0648_compiled_case_helike_type69_mg11_ne1e8"
     )
@@ -142,7 +142,7 @@ def run_compiled_case(
         if rc != 0:
             raise RuntimeError(error.value.decode("utf-8", "replace"))
         return {
-            "schema_version": "0.6.48.2-cache",
+            "schema_version": "0.6.48.3-cache",
             "case_id": bytes(stats.case_id).split(b"\0", 1)[0].decode(),
             "parameter_fingerprint": bytes(stats.parameter_fingerprint)
             .split(b"\0", 1)[0]

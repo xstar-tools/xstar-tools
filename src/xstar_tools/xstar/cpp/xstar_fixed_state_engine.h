@@ -14,21 +14,22 @@
 extern "C" {
 #endif
 
-#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60482u
+#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60483u
 #define XSTAR_FIXED_STATE_MESSAGE_SIZE 1024u
 #define XSTAR_FIXED_STATE_ID_SIZE 128u
 
 /* Raw-program opcodes. These encode formulas and coefficients, never evaluated answers. */
 typedef enum xstar_fixed_opcode_v1 {
     XSTAR_FIXED_OPCODE_SIMPLE_UCALC = 1,
-    XSTAR_FIXED_OPCODE_TYPE49_AUTOIONIZATION = 49,
+    XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE = 49,
     XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE = 50,
     XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION = 51,
     XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE = 53,
+    XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION = 56,
     XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION = 63,
     XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION = 69,
     XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE = 74,
-    XSTAR_FIXED_OPCODE_TYPE88_RADIATIVE_LINE = 88,
+    XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE = 88,
     XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE = 99
 } xstar_fixed_opcode_v1;
 
@@ -41,7 +42,8 @@ typedef enum xstar_fixed_state_status_flags_v1 {
     XSTAR_FIXED_STATE_STATUS_NATIVE_CONTINUUM = 1u << 4,
     XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL = 1u << 5,
     XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT = 1u << 6,
-    XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS = 1u << 7
+    XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS = 1u << 7,
+    XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED = 1u << 8
 } xstar_fixed_state_status_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -103,6 +105,10 @@ typedef struct xstar_fixed_state_stats_v1 {
     uint64_t continuum_bins;
     uint64_t python_callbacks;
     uint64_t state_generation;
+    uint64_t topology_rows_loaded;
+    uint64_t active_program_records;
+    uint64_t type56_records_evaluated;
+    uint64_t visited_data_types;
     double traversal_seconds;
     double rate_seconds;
     double element_seconds;
@@ -113,6 +119,20 @@ typedef struct xstar_fixed_state_stats_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_stats_v1;
 
+typedef struct xstar_fixed_state_program_info_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_flags;
+    uint32_t reserved0;
+    uint64_t element_count;
+    uint64_t population_rows;
+    uint64_t record_count;
+    uint64_t topology_record_count;
+    uint64_t unsupported_record_count;
+    char program_id[XSTAR_FIXED_STATE_ID_SIZE];
+    char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
+} xstar_fixed_state_program_info_v1;
+
 typedef struct xstar_fixed_state_context xstar_fixed_state_context;
 
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
@@ -121,6 +141,7 @@ XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_feature_flags(void);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* info);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_v1(
     const char* program_directory,
     xstar_fixed_state_context** context,
@@ -128,6 +149,12 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_v1(
     size_t message_size
 );
 XSTAR_FIXED_STATE_EXPORT void xstar_fixed_state_context_destroy(xstar_fixed_state_context* context);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_get_program_info_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_program_info_v1* info,
+    char* message,
+    size_t message_size
+);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
     xstar_fixed_state_context* context,
     char* message,
@@ -138,6 +165,12 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_v1(
     const xstar_fixed_state_input_v1* input,
     xstar_fixed_state_output_v1* output,
     xstar_fixed_state_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_visited_report_v1(
+    const xstar_fixed_state_context* context,
+    const char* output_path,
     char* message,
     size_t message_size
 );
