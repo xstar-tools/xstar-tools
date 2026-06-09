@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.6.48.3.1 - 2026-06-09
+
+- Correct the active-ATDB lowerer to use `ElementBasisRow.compact_index` rather than the nonexistent `index` attribute.
+- Add an integration regression test over a real `ElementCompactBasis` row object.
+- Keep public and fixed-state ABI compatibility at `60483`.
+
 # 0.6.48.3 - 2026-06-09
 
 - Added the active H/He/Mg ATDB lowerer with rate-aware metadata/native/unsupported classification.

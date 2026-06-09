@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.3 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.3.1 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.3 distinguishes three classes that older coverage reports conflated:
+v0.6.48.3.1 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -204,7 +204,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.3",
+        "schema_version": "0.6.48.3.1",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -283,7 +283,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.3",
+        "schema_version": "0.6.48.3.1",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
@@ -409,7 +409,7 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
     rows: list[dict[str, Any]] = []
     for row in basis.rows:
         if not row.roles:
-            raise ValueError(f"compact row {row.index} has no source role")
+            raise ValueError(f"compact row {row.compact_index} has no source role")
         role = row.roles[-1]
         ion_index = int(role["ion_index"])
         local_level = int(role["local_level"])
@@ -417,11 +417,11 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
         stage = int(derived.ion_stage[ion_index])
         rows.append({
             "element_index": element_index,
-            "row": int(row.index),
+            "row": int(row.compact_index),
             "superlevel": int(row.superlevel),
             "ion": int(row.ion_counter),
             "ion_charge": max(0, stage - 1),
-            "initial_population": 1.0 if int(row.index) == 1 else 0.0,
+            "initial_population": 1.0 if int(row.compact_index) == 1 else 0.0,
             "energy_ev": energy,
             "statistical_weight": weight,
         })

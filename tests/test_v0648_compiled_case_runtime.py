@@ -17,10 +17,10 @@ def _sha256(path: Path) -> str:
 
 
 def test_v0648_bundle_metadata() -> None:
-    assert xstar_tools.__version__ == "0.6.48.3"
+    assert xstar_tools.__version__ == "0.6.48.3.1"
     status = compiled_case_status()
     assert status["available"] is True
-    assert status["package_version"] == "0.6.48.3"
+    assert status["package_version"] == "0.6.48.3.1"
     assert status["evaluation_count"] == 61
     assert status["python_callback_count"] == 0
     assert status["science_file_count"] == 9

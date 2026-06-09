@@ -48,7 +48,7 @@ def test_native_type56_and_visited_report(tmp_path: Path) -> None:
         visits = {int(row["data_type"]): int(row["visits"]) for row in csv.DictReader(handle)}
     assert visits[56] == 1
     summary = json.loads((tmp_path / "native_fixed_state_summary.json").read_text())
-    assert summary["schema_version"] == "0.6.48.3"
+    assert summary["schema_version"] == "0.6.48.3.1"
     assert summary["type56_records_evaluated"] == 1
     assert summary["computed_from_raw_coefficients"] is True
 
@@ -69,3 +69,37 @@ def test_unknown_opcode_fails_closed(tmp_path: Path) -> None:
     )
     assert completed.returncode != 0
     assert "unsupported fixed-state opcode 777" in (completed.stdout + completed.stderr)
+
+
+def test_build_element_layout_uses_compact_index(monkeypatch) -> None:
+    from xstar_tools.xstar import element_equilibrium as equilibrium
+    from xstar_tools.xstar import native_fixed_program as program
+
+    block = equilibrium.ElementIonBlock(
+        ion_index=1, ion_record=10, element_z=1, ion_stage=1, nlev=1,
+        compact_start=1, compact_stop=1, first_level_record=20, ion_counter=1,
+    )
+    basis = equilibrium.ElementCompactBasis(
+        element_z=1, min_ion_stage=1, max_ion_stage=1, blocks=[block],
+        rows=[equilibrium.ElementBasisRow(
+            compact_index=1, superlevel=1, ion_counter=1,
+            roles=[{"ion_index": 1, "local_level": 1}],
+        )],
+        n_rows=1, n_superlevels=1, n_ions=1, normalization_row=1,
+        role_to_row={(1, 1): 1}, ion_stage_by_counter={1: 1},
+    )
+
+    class Derived:
+        n_ions = 1
+        ion_element_z = [0, 1]
+        ion_stage = [0, 1]
+
+    monkeypatch.setattr(equilibrium, "build_element_compact_basis", lambda *args, **kwargs: basis)
+    monkeypatch.setattr(program, "_level_payload", lambda *args, **kwargs: (20, 0.0, 2.0, "H I"))
+
+    element, rows, returned_basis, blocks = program._build_element_layout(object(), Derived(), 1, 1)
+    assert element["n_rows"] == 1
+    assert rows[0]["row"] == 1
+    assert rows[0]["initial_population"] == 1.0
+    assert returned_basis is basis
+    assert blocks[1] is block
