@@ -51,6 +51,8 @@ from .emissivity import (
     _overwrite_leveltemp,
     _ucalc_context,
     resolve_calc_emisab_density,
+    _env_true, _native_spectral_requested, _spectral_summary_bucket, _add_spectral_metrics,
+    _classify_spectral_shadow_arrays, _record_spectral_shadow_result,
 )
 from .free_free import FreeFreeResult, freef
 from .performance import profile_component, profile_level_at_least, record_profile_event
@@ -979,9 +981,12 @@ def calc_emis_ion(
         int(getattr(ion, "element_z", 0)) == 12
         and _emissivity_upstream_type4_product_enabled()
     )
+    native_spectral_product = _native_spectral_requested(product=True)
+    native_spectral_shadow = _native_spectral_requested(shadow=True)
     use_cpp_mg_type4_line = (
         int(getattr(ion, "element_z", 0)) == 12
         and (_emissivity_cpp_active_for_mg_type4(context) or upstream_type4_product_enabled)
+        and not (native_spectral_product or native_spectral_shadow)
     )
     cpp_mg_type4_stats: dict[str, float] = {
         "records_batched": 0.0,
@@ -1028,6 +1033,50 @@ def calc_emis_ion(
     retained_kkkl = 0
     diagnostics_enabled = bool(getattr(context, "retain_traces", True))
     profile_control = getattr(context, "profile_control", None) or {}
+
+    pending_native_spectral_rows: list[dict[str, Any]] = []
+    native_spectral_source_position = 0
+
+    def _apply_native_spectral_row(row: Mapping[str, Any], target: CalcEmisWorkspace, *, status: str = "") -> None:
+        # Queue one compact row and cross the FFI boundary once per ion.
+        # ``target`` and ``status`` are retained at call sites for clarity;
+        # the actual target is selected after the source-ordered ion loop.
+        nonlocal native_spectral_source_position
+        del target, status
+        native_spectral_source_position += 1
+        packed = dict(row)
+        packed["source_position"] = native_spectral_source_position
+        pending_native_spectral_rows.append(packed)
+
+    def _replay_native_spectral_rows_python(rows: Sequence[Mapping[str, Any]], target: CalcEmisWorkspace) -> None:
+        for row in rows:
+            kind = int(row.get("kind", 0))
+            idx = int(row.get("output_index", 0))
+            if kind == 3 and idx > 0:
+                target.base.opakab[idx] = float(row.get("opakab", 0.0))
+            elif kind == 4 and idx > 0:
+                p1 = float(row.get("ptmp1", 0.0)); p2 = float(row.get("ptmp2", 0.0))
+                a1 = float(row.get("abundance_lower", 0.0)); a2 = float(row.get("abundance_upper", 0.0))
+                ans1 = float(row.get("ans1", 0.0)); ans2 = float(row.get("ans2", 0.0))
+                energy = float(row.get("line_energy_eV", 0.0)); width = float(row.get("bin_width_eV", 0.0))
+                opakb1 = float(row.get("opakab", 0.0)) * a1
+                net = ans2 * a2 - ans1 * a1
+                rcem1 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * p1, 0.0)
+                rcem2 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * p2, 0.0)
+                target.base.oplin[idx] = opakb1
+                target.fline[0, idx] = rcem1
+                target.fline[1, idx] = rcem2
+                target.flinel[int(row.get("bin_one_based", 0)) - 1] += (rcem1 + rcem2) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
+                _source_linopac_into_opakc(
+                    optpp=opakb1, rcem1=rcem1, rcem2=rcem2, line_energy_eV=energy,
+                    vturb_km_s=float(row.get("turbulent_velocity_km_s", 0.0)),
+                    temperature_1e4K=float(row.get("temperature_1e4K", 0.0)),
+                    atomic_mass_amu=float(row.get("atomic_mass_amu", 0.0)),
+                    natural_width_eV=float(row.get("natural_width_eV", 0.0)),
+                    epi=epi, opakc=target.base.opakc, rccemis=target.base.rccemis,
+                    ncn2=len(epi), diagnostic_bins_one_based=(),
+                )
+
     upstream_type4_shadow_enabled = (
         int(getattr(ion, "element_z", 0)) == 12
         and _emissivity_upstream_type4_shadow_enabled()
@@ -1101,6 +1150,9 @@ def calc_emis_ion(
         )
         if result.ready:
             _accumulate_ucalc_continuum(context.workspace.base, result)
+            shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
+            if shadow_workspace is not None:
+                _accumulate_ucalc_continuum(shadow_workspace.base, result)
         return result
 
     def _linopac_cpp_parity_limit() -> int:
@@ -1761,8 +1813,19 @@ def calc_emis_ion(
                         ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
                         ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
                         result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                        context.workspace.base.opakab[retained_kkkl] = result.opakab
-                        _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                        _opacity_row = {
+                            "source_position": 1, "record": int(rec), "kind": 3,
+                            "rate_type": int(rate_type), "data_type": int(header.data_type),
+                            "output_index": int(retained_kkkl), "opakab": float(result.opakab),
+                        }
+                        if native_spectral_product:
+                            _apply_native_spectral_row(_opacity_row, context.workspace, status="product")
+                        else:
+                            context.workspace.base.opakab[retained_kkkl] = result.opakab
+                            _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                            _shadow_target = getattr(context, "_native_spectral_shadow_workspace", None)
+                            if native_spectral_shadow and _shadow_target is not None:
+                                _apply_native_spectral_row(_opacity_row, _shadow_target)
                         record_traces.append(CalcEmisRecordTrace(
                             rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                             compact_offset, idest1, idest2, lower, upper, retained_kkkl,
@@ -1786,8 +1849,19 @@ def calc_emis_ion(
                 ptmp1 = (1.0 - context.covering_fraction) / 2.0
                 ptmp2 = (1.0 + context.covering_fraction) / 2.0
                 result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                context.workspace.base.opakab[retained_kkkl] = result.opakab
-                _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                _opacity_row = {
+                    "source_position": 1, "record": int(rec), "kind": 3,
+                    "rate_type": int(rate_type), "data_type": int(header.data_type),
+                    "output_index": int(retained_kkkl), "opakab": float(result.opakab),
+                }
+                if native_spectral_product:
+                    _apply_native_spectral_row(_opacity_row, context.workspace, status="product")
+                else:
+                    context.workspace.base.opakab[retained_kkkl] = result.opakab
+                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                    _shadow_target = getattr(context, "_native_spectral_shadow_workspace", None)
+                    if native_spectral_shadow and _shadow_target is not None:
+                        _apply_native_spectral_row(_opacity_row, _shadow_target)
                 record_traces.append(CalcEmisRecordTrace(
                     rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                     compact_offset, idest1, idest2, lower, upper, retained_kkkl,
@@ -1808,8 +1882,19 @@ def calc_emis_ion(
                 ptmp1 = pescl(0.0) * (1.0 - context.covering_fraction)
                 ptmp2 = pescl(0.0) * (1.0 - context.covering_fraction) + 2.0 * pescl(0.0) * context.covering_fraction
                 result = evaluate(rec, ptmp1, ptmp2, abund1, abund2)
-                context.workspace.base.opakab[retained_kkkl] = result.opakab
-                _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                _opacity_row = {
+                    "source_position": 1, "record": int(rec), "kind": 3,
+                    "rate_type": int(rate_type), "data_type": int(header.data_type),
+                    "output_index": int(retained_kkkl), "opakab": float(result.opakab),
+                }
+                if native_spectral_product:
+                    _apply_native_spectral_row(_opacity_row, context.workspace, status="product")
+                else:
+                    context.workspace.base.opakab[retained_kkkl] = result.opakab
+                    _bin_continuum_opacity_for_step(context, retained_kkkl, result.opakab, epi)
+                    _shadow_target = getattr(context, "_native_spectral_shadow_workspace", None)
+                    if native_spectral_shadow and _shadow_target is not None:
+                        _apply_native_spectral_row(_opacity_row, _shadow_target)
                 record_traces.append(CalcEmisRecordTrace(
                     rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
                     compact_offset, idest1, idest2, lower, upper, retained_kkkl,
@@ -1973,7 +2058,7 @@ def calc_emis_ion(
                         rcem1 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp1, 0.0)
                         rcem2 = max(net * energy * XSTAR_CALC_EMISAB_ERG_PER_EV * ptmp2, 0.0)
                         flinel_delta = (rcem1 + rcem2) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
-                    if line_index > 0 and line_index < context.workspace.base.oplin.size:
+                    if (not native_spectral_product) and line_index > 0 and line_index < context.workspace.base.oplin.size:
                         context.workspace.base.oplin[line_index] = opakb1
                     atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
                     natural_width = 0.0
@@ -1983,6 +2068,47 @@ def calc_emis_ion(
                             natural_width = float(reals_for_line[2]) * 4.136e-15
                     except Exception:
                         natural_width = 0.0
+                    if native_spectral_product or native_spectral_shadow:
+                        _spectral_line_row = {
+                            "source_position": 1, "record": int(rec), "kind": 4,
+                            "rate_type": int(rate_type), "data_type": int(header.data_type),
+                            "output_index": int(line_index), "bin_one_based": int(nb1),
+                            "ptmp1": float(ptmp1), "ptmp2": float(ptmp2),
+                            "abundance_lower": float(abund1), "abundance_upper": float(abund2),
+                            "ans1": float(result.ans1), "ans2": float(result.ans2),
+                            "ans3": float(result.ans3), "ans4": float(result.ans4),
+                            "opakab": float(result.opakab),
+                            "line_energy_eV": float(energy), "bin_width_eV": float(width),
+                            "atomic_mass_amu": float(atomic_mass),
+                            "natural_width_eV": float(natural_width),
+                            "turbulent_velocity_km_s": float(context.turbulent_velocity_km_s),
+                            "temperature_1e4K": float(context.temperature_1e4K),
+                            "seed_profiles": _source_linopac_seed_profiles(
+                                line_energy_eV=float(energy),
+                                vturb_km_s=float(context.turbulent_velocity_km_s),
+                                temperature_1e4K=float(context.temperature_1e4K),
+                                atomic_mass_amu=float(atomic_mass),
+                                natural_width_eV=float(natural_width),
+                                epi=epi, ncn2=len(epi),
+                            ),
+                        }
+                        if native_spectral_product:
+                            _apply_native_spectral_row(_spectral_line_row, context.workspace, status="product")
+                            record_traces.append(CalcEmisRecordTrace(
+                                rec, rate_type, header.data_type, ion.ion_index, ion.ion_stage,
+                                compact_offset, idest1, idest2, lower, upper, line_index,
+                                retained_kkkl, abund1, abund2, ptmp1, ptmp2,
+                                result.ans1, result.ans2, result.ans3, result.ans4, opakb1,
+                                result.status.value, f"native_strong_line_rate_type_{rate_type}",
+                            ))
+                            if is_mg_profile:
+                                _elapsed = time.perf_counter() - _record_t0
+                                _record_type_elapsed["line"] = _record_type_elapsed.get("line", 0.0) + _elapsed
+                                _rate_type_elapsed[int(rate_type)] = _rate_type_elapsed.get(int(rate_type), 0.0) + _elapsed
+                            continue
+                        _shadow_target = getattr(context, "_native_spectral_shadow_workspace", None)
+                        if _shadow_target is not None:
+                            _apply_native_spectral_row(_spectral_line_row, _shadow_target)
                     _upstream_type4_shadow_before = None
                     if upstream_type4_shadow_enabled and int(rate_type) == 4:
                         _upstream_type4_shadow_before = {
@@ -2158,6 +2284,32 @@ def calc_emis_ion(
     _flush_cpp_mg_type50_coarse_batch()
     _flush_cpp_mg_type4_batch()
 
+    if pending_native_spectral_rows:
+        from .cpp_backend_spectral import apply_spectral_contributions_cpp
+        target = context.workspace if native_spectral_product else getattr(context, "_native_spectral_shadow_workspace", None)
+        if target is not None:
+            try:
+                metrics = apply_spectral_contributions_cpp(
+                    pending_native_spectral_rows,
+                    rcem=target.base.rcem, oplin=target.base.oplin,
+                    cemab=target.base.cemab, cabab=target.base.cabab, opakab=target.base.opakab,
+                    rccemis=target.base.rccemis, opakc=target.base.opakc, opakcont=target.base.opakcont,
+                    fline=target.fline, flinel=target.flinel, epi_eV=epi,
+                )
+                _add_spectral_metrics(
+                    _spectral_summary_bucket(context), metrics, phase="emis",
+                    status=("product" if native_spectral_product else ""),
+                )
+            except Exception as exc:
+                if native_spectral_product:
+                    _replay_native_spectral_rows_python(pending_native_spectral_rows, context.workspace)
+                _add_spectral_metrics(
+                    _spectral_summary_bucket(context), {}, phase="emis", status="fallback",
+                    mismatch={"phase": "emis", "error": str(exc)},
+                )
+                if _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP_STRICT"):
+                    raise
+
     if any(float(v) != 0.0 for v in cpp_mg_type4_stats.values()):
         record_profile_event(
             profile_control,
@@ -2324,6 +2476,25 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     context.workspace.base.rccemis[:, :n] = 0.0
     context.workspace.base.opakc[:n] = thomson
     context.workspace.base.opakcont[:n] = thomson
+    native_spectral_product = _native_spectral_requested(product=True)
+    native_spectral_shadow = _native_spectral_requested(shadow=True)
+    if native_spectral_shadow and not native_spectral_product:
+        shadow_base = CalcEmisabWorkspace(
+            rcem=context.workspace.base.rcem.copy(),
+            oplin=context.workspace.base.oplin.copy(),
+            brcems=context.workspace.base.brcems.copy(),
+            rccemis=context.workspace.base.rccemis.copy(),
+            opakc=context.workspace.base.opakc.copy(),
+            opakcont=context.workspace.base.opakcont.copy(),
+            cemab=context.workspace.base.cemab.copy(),
+            cabab=context.workspace.base.cabab.copy(),
+            opakab=context.workspace.base.opakab.copy(),
+        )
+        setattr(context, "_native_spectral_shadow_workspace", CalcEmisWorkspace(
+            base=shadow_base, fline=context.workspace.fline.copy(), flinel=context.workspace.flinel.copy()
+        ))
+    else:
+        setattr(context, "_native_spectral_shadow_workspace", None)
 
     h_abundance = context.abundance(1)
     h_ground = _one_based_array_value(context.xilevg, 1, "xilevg")
@@ -2373,6 +2544,20 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
                     abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
                 ))
         element_record = int(context.derived.npnxt[element_record])
+
+    shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
+    if shadow_workspace is not None:
+        summary = _spectral_summary_bucket(context)
+        shadow_status, shadow_detail = _classify_spectral_shadow_arrays((
+            ("oplin", context.workspace.base.oplin, shadow_workspace.base.oplin),
+            ("opakab", context.workspace.base.opakab, shadow_workspace.base.opakab),
+            ("opakc", context.workspace.base.opakc, shadow_workspace.base.opakc),
+            ("rccemis", context.workspace.base.rccemis, shadow_workspace.base.rccemis),
+            ("fline", context.workspace.fline, shadow_workspace.fline),
+            ("flinel", context.workspace.flinel, shadow_workspace.flinel),
+        ), phase="emis")
+        _record_spectral_shadow_result(summary, shadow_status, shadow_detail)
+        setattr(context, "_native_spectral_shadow_workspace", None)
 
     ff = freef(
         epi, bremsa, context.workspace.base.opakc,
@@ -2639,11 +2824,15 @@ def run_calc_emis_source_order_validation(*, rtol: float = 2.0e-14, atol: float 
         and any(t.feature_index == 3 and t.reason == "source_rank_limit" for t in result.rank_traces if t.feature_kind == "continuum")
     )
     roles = [t.output_role for t in result.record_traces]
-    order_ready = roles == [
+    order_ready = roles in ([
         "strong_line_rate_type_4", "strong_rrc_rate_type_7",
         "rate_type_9_prepass", "strong_line_rate_type_9",
         "rate_type_42_retained_continuum_pointer",
-    ]
+    ], [
+        "native_strong_line_rate_type_4", "strong_rrc_rate_type_7",
+        "rate_type_9_prepass", "native_strong_line_rate_type_9",
+        "rate_type_42_retained_continuum_pointer",
+    ])
     type9_double_ready = bool(sum(t.record == 11 for t in result.record_traces) == 2 and elem.ion_traces[0].n_ucalc_calls == 5)
     type42_ready = bool(result.record_traces[-1].retained_continuum_index == 1 and math.isclose(workspace.base.opakab[1], 0.375, rel_tol=0.0, abs_tol=0.0))
 

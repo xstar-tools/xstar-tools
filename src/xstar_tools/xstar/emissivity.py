@@ -20,11 +20,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import math
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence
 
 import numpy as np
+
+from .spectral_parity import classify_spectral_shadow_arrays as _classify_spectral_shadow_arrays
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .driver import XSTARPythonDriver, XSTARSourceRoutine
@@ -46,6 +49,82 @@ XSTAR_CALC_EMISAB_ERG_PER_EV = 1.602176634e-12
 XSTAR_CALC_EMISAB_FOUR_PI = float(np.float32(12.56))
 XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR = 1.0e-24
 XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR = float(np.float32(1.0e-34))
+
+
+def _env_true(name: str) -> bool:
+    return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _native_spectral_requested(*, product: bool = False, shadow: bool = False) -> bool:
+    if not _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP"):
+        return False
+    if product and not _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP_PRODUCT"):
+        return False
+    if shadow and not _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP_SHADOW"):
+        return False
+    return True
+
+
+class _TraceSink(list):
+    def append(self, value: Any) -> None:  # type: ignore[override]
+        return None
+
+
+def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
+    control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
+    summary = control.setdefault("native_spectral_engine_summary", {
+        "schema_version": "0.6.46.1",
+        "emisab_calls": 0, "emis_calls": 0,
+        "contributions_attempted": 0, "contributions_committed": 0,
+        "emissivity_contributions": 0, "opacity_contributions": 0,
+        "line_profiles": 0, "source_order_violations": 0,
+        "shadow_compared": 0, "shadow_mismatches": 0,
+        "shadow_ulp_tolerated_calls": 0, "shadow_ulp_tolerated_values": 0,
+        "shadow_max_ulp": 0, "shadow_ulp_policy": "emis_opakc_only_max_1_ulp",
+        "first_ulp_tolerated": {},
+        "product_commits": 0, "fallbacks": 0,
+        "packing_seconds": 0.0, "ffi_seconds": 0.0,
+        "construction_seconds": 0.0, "opacity_seconds": 0.0, "commit_seconds": 0.0,
+        "python_record_traces_materialized": 0,
+        "first_mismatch": {},
+    })
+    if not isinstance(summary, MutableMapping):
+        summary = {}
+    return summary
+
+
+def _record_spectral_shadow_result(
+    summary: MutableMapping[str, Any], status: str, detail: Optional[Mapping[str, Any]] = None
+) -> None:
+    summary["shadow_compared"] = int(summary.get("shadow_compared", 0)) + 1
+    if status == "shadow_mismatch":
+        summary["shadow_mismatches"] = int(summary.get("shadow_mismatches", 0)) + 1
+        if detail and not summary.get("first_mismatch"):
+            summary["first_mismatch"] = dict(detail)
+    elif status == "shadow_ulp_tolerated":
+        summary["shadow_ulp_tolerated_calls"] = int(summary.get("shadow_ulp_tolerated_calls", 0)) + 1
+        summary["shadow_ulp_tolerated_values"] = int(summary.get("shadow_ulp_tolerated_values", 0)) + int((detail or {}).get("differing_values", 0) or 0)
+        summary["shadow_max_ulp"] = max(
+            int(summary.get("shadow_max_ulp", 0) or 0),
+            int((detail or {}).get("max_ulp", 0) or 0),
+        )
+        summary["shadow_ulp_policy"] = "emis_opakc_only_max_1_ulp"
+        if detail and not summary.get("first_ulp_tolerated"):
+            summary["first_ulp_tolerated"] = dict(detail)
+
+
+def _add_spectral_metrics(summary: MutableMapping[str, Any], metrics: Mapping[str, Any], *, phase: str, status: str, mismatch: Optional[Mapping[str, Any]] = None) -> None:
+    summary[f"{phase}_calls"] = int(summary.get(f"{phase}_calls", 0)) + 1
+    for key in ("contributions_attempted", "contributions_committed", "emissivity_contributions", "opacity_contributions", "line_profiles", "source_order_violations"):
+        summary[key] = int(summary.get(key, 0)) + int(metrics.get(key, 0) or 0)
+    for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
+        summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(key, 0.0) or 0.0)
+    if status == "product":
+        summary["product_commits"] = int(summary.get("product_commits", 0)) + 1
+    elif status in {"shadow_match", "shadow_mismatch", "shadow_ulp_tolerated"}:
+        _record_spectral_shadow_result(summary, status, mismatch)
+    elif status == "fallback":
+        summary["fallbacks"] = int(summary.get("fallbacks", 0)) + 1
 
 
 class CalcEmisabPortError(RuntimeError):
@@ -154,6 +233,8 @@ class CalcEmisabContext:
     ucalc_engine: Optional[SourceFaithfulUCalc] = None
     ucalc_evaluator: Optional[Callable[[int, UCalcContext], UCalcResult]] = None
     initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
+    retain_traces: bool = True
+    profile_control: Optional[MutableMapping[str, Any]] = None
 
     @property
     def temperature_k(self) -> float:
@@ -419,6 +500,7 @@ def calc_emisab_ion(
     xh1: float,
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisabRecordTrace],
+    native_contributions: Optional[list[dict[str, Any]]] = None,
 ) -> CalcEmisabIonTrace:
     """Translate one call to ``calc_emisab_ion.f90``."""
     current_levels = build_level_table(context.master, context.derived, ion.ion_index)
@@ -466,10 +548,24 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
-                    context.workspace.opakab[continuum_index] = result.opakab
-                    context.workspace.cabab[continuum_index] = abs(result.ans4) * abund1 * xpx
-                    context.workspace.cemab[0, continuum_index] = ptmp1 * abs(result.ans3) / denom * abund2 * xpx
-                    context.workspace.cemab[1, continuum_index] = ptmp2 * abs(result.ans3) / denom * abund2 * xpx
+                    if native_contributions is not None:
+                        native_contributions.append({
+                            "source_position": len(native_contributions) + 1,
+                            "record": int(rec), "kind": 1,
+                            "rate_type": int(rate_type), "data_type": int(header.data_type),
+                            "output_index": int(continuum_index),
+                            "ptmp1": float(ptmp1), "ptmp2": float(ptmp2),
+                            "abundance_lower": float(abund1), "abundance_upper": float(abund2),
+                            "hydrogen_density": float(xpx),
+                            "ans1": float(result.ans1), "ans2": float(result.ans2),
+                            "ans3": float(result.ans3), "ans4": float(result.ans4),
+                            "opakab": float(result.opakab),
+                        })
+                    if not _native_spectral_requested(product=True):
+                        context.workspace.opakab[continuum_index] = result.opakab
+                        context.workspace.cabab[continuum_index] = abs(result.ans4) * abund1 * xpx
+                        context.workspace.cemab[0, continuum_index] = ptmp1 * abs(result.ans3) / denom * abund2 * xpx
+                        context.workspace.cemab[1, continuum_index] = ptmp2 * abs(result.ans3) / denom * abund2 * xpx
                     record_traces.append(CalcEmisabRecordTrace(
                         rec, header.data_type, rate_type, ion.element_z, ion.ion_index, ion.ion_stage,
                         compact_offset, idest1, idest2, lower, upper, continuum_index,
@@ -524,9 +620,23 @@ def calc_emisab_ion(
                         context.workspace.rccemis[1, 2] += rcemm / (float(epi[3]) - float(epi[2]) + float(np.float32(1.0e-24))) / XSTAR_CALC_EMISAB_ERG_PER_EV / XSTAR_CALC_EMISAB_FOUR_PI
                         role = "radiative_superlevel_continuum_bin_3"
                     elif rate_type == 4 and line_index != 0:
-                        context.workspace.rcem[0, line_index] = -abund2 * result.ans3 * ptmp1 / denom
-                        context.workspace.rcem[1, line_index] = -abund2 * result.ans3 * ptmp2 / denom
-                        context.workspace.oplin[line_index] = result.opakab * abund1
+                        if native_contributions is not None:
+                            native_contributions.append({
+                                "source_position": len(native_contributions) + 1,
+                                "record": int(rec), "kind": 2,
+                                "rate_type": int(rate_type), "data_type": int(header.data_type),
+                                "output_index": int(line_index),
+                                "ptmp1": float(ptmp1), "ptmp2": float(ptmp2),
+                                "abundance_lower": float(abund1), "abundance_upper": float(abund2),
+                                "hydrogen_density": float(xpx),
+                                "ans1": float(result.ans1), "ans2": float(result.ans2),
+                                "ans3": float(result.ans3), "ans4": float(result.ans4),
+                                "opakab": float(result.opakab),
+                            })
+                        if not _native_spectral_requested(product=True):
+                            context.workspace.rcem[0, line_index] = -abund2 * result.ans3 * ptmp1 / denom
+                            context.workspace.rcem[1, line_index] = -abund2 * result.ans3 * ptmp2 / denom
+                            context.workspace.oplin[line_index] = result.opakab * abund1
                         role = "bound_bound_rate_type_4"
                     record_traces.append(CalcEmisabRecordTrace(
                         rec, header.data_type, rate_type, ion.element_z, ion.ion_index, ion.ion_stage,
@@ -562,6 +672,7 @@ def calc_emisab_element(
     xh1: float,
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisabRecordTrace],
+    native_contributions: Optional[list[dict[str, Any]]] = None,
 ) -> CalcEmisabElementTrace:
     """Translate ``calc_emisab_element.f90`` in ion source order."""
     ipmat = 0
@@ -580,6 +691,7 @@ def calc_emisab_element(
                 xh1=xh1,
                 leveltemp_workspace=leveltemp_workspace,
                 record_traces=record_traces,
+                native_contributions=native_contributions,
             )
         else:
             trace = CalcEmisabIonTrace(
@@ -610,6 +722,9 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         n_energy=len(epi),
     )
     context.workspace.clear_source_outputs()
+    native_product = _native_spectral_requested(product=True)
+    native_shadow = _native_spectral_requested(shadow=True)
+    native_contributions: Optional[list[dict[str, Any]]] = [] if (native_product or native_shadow) else None
     xpx = resolve_calc_emisab_density(
         xpx=context.hydrogen_density_cm3,
         pressure=context.pressure_dyn_cm2,
@@ -623,8 +738,9 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     xh0 = xpx * h_ground * h_abundance
     xh1 = xpx * (1.0 - h_ground) * h_abundance
     leveltemp = _copy_or_initialize_leveltemp(context.initial_leveltemp_workspace)
+    retain_traces = bool(getattr(context, "retain_traces", True))
     element_traces: list[CalcEmisabElementTrace] = []
-    record_traces: list[CalcEmisabRecordTrace] = []
+    record_traces: list[CalcEmisabRecordTrace] | _TraceSink = [] if retain_traces else _TraceSink()
 
     element_record = int(context.derived.npfirst[11])
     while element_record:
@@ -648,6 +764,7 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
                 xh1=xh1,
                 leveltemp_workspace=leveltemp,
                 record_traces=record_traces,
+                native_contributions=native_contributions,
             ))
         else:
             element_traces.append(CalcEmisabElementTrace(
@@ -655,6 +772,88 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
                 abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
             ))
         element_record = int(context.derived.npnxt[element_record])
+
+    if native_contributions is not None:
+        from .cpp_backend_spectral import apply_spectral_contributions_cpp
+        summary = _spectral_summary_bucket(context)
+        summary["python_record_traces_materialized"] = int(summary.get("python_record_traces_materialized", 0)) + (len(record_traces) if retain_traces else 0)
+
+        def _apply_python_fallback(rows: Sequence[Mapping[str, Any]]) -> None:
+            rcem_stride = context.workspace.rcem.shape[1]
+            cemab_stride = context.workspace.cemab.shape[1]
+            del rcem_stride, cemab_stride
+            for row in rows:
+                kind = int(row.get("kind", 0))
+                idx = int(row.get("output_index", 0))
+                p1 = float(row.get("ptmp1", 0.0)); p2 = float(row.get("ptmp2", 0.0))
+                a1 = float(row.get("abundance_lower", 0.0)); a2 = float(row.get("abundance_upper", 0.0))
+                ans3 = float(row.get("ans3", 0.0)); ans4 = float(row.get("ans4", 0.0))
+                opak = float(row.get("opakab", 0.0)); den = p1 + p2
+                if kind == 1 and idx > 0 and den != 0.0:
+                    context.workspace.opakab[idx] = opak
+                    context.workspace.cabab[idx] = abs(ans4) * a1 * xpx
+                    context.workspace.cemab[0, idx] = p1 * abs(ans3) / den * a2 * xpx
+                    context.workspace.cemab[1, idx] = p2 * abs(ans3) / den * a2 * xpx
+                elif kind == 2 and int(row.get("rate_type", 0)) == 4 and idx > 0 and den != 0.0:
+                    context.workspace.rcem[0, idx] = -a2 * ans3 * p1 / den
+                    context.workspace.rcem[1, idx] = -a2 * ans3 * p2 / den
+                    context.workspace.oplin[idx] = opak * a1
+
+        try:
+            if native_shadow and not native_product:
+                # Preserve Python-only branches (for example rate type 14),
+                # then clear only cells owned by native contributions before
+                # replaying those contributions through C++.
+                candidate_rcem = context.workspace.rcem.copy()
+                candidate_oplin = context.workspace.oplin.copy()
+                candidate_cemab = context.workspace.cemab.copy()
+                candidate_cabab = context.workspace.cabab.copy()
+                candidate_opakab = context.workspace.opakab.copy()
+                for row in native_contributions:
+                    idx = int(row.get("output_index", 0))
+                    kind = int(row.get("kind", 0))
+                    if kind == 1 and idx > 0:
+                        candidate_opakab[idx] = 0.0
+                        candidate_cabab[idx] = 0.0
+                        candidate_cemab[:, idx] = 0.0
+                    elif kind == 2 and idx > 0:
+                        candidate_oplin[idx] = 0.0
+                        candidate_rcem[:, idx] = 0.0
+                metrics = apply_spectral_contributions_cpp(
+                    native_contributions,
+                    rcem=candidate_rcem, oplin=candidate_oplin,
+                    cemab=candidate_cemab, cabab=candidate_cabab, opakab=candidate_opakab,
+                    rccemis=context.workspace.rccemis.copy(), opakc=context.workspace.opakc.copy(),
+                    opakcont=context.workspace.opakcont.copy(),
+                    fline=np.zeros_like(context.workspace.rcem), flinel=np.zeros_like(context.workspace.opakc),
+                    epi_eV=epi,
+                )
+                shadow_status, shadow_detail = _classify_spectral_shadow_arrays((
+                    ("rcem", context.workspace.rcem, candidate_rcem),
+                    ("oplin", context.workspace.oplin, candidate_oplin),
+                    ("cemab", context.workspace.cemab, candidate_cemab),
+                    ("cabab", context.workspace.cabab, candidate_cabab),
+                    ("opakab", context.workspace.opakab, candidate_opakab),
+                ), phase="emisab")
+                _add_spectral_metrics(
+                    summary, metrics, phase="emisab", status=shadow_status, mismatch=shadow_detail
+                )
+            elif native_product:
+                metrics = apply_spectral_contributions_cpp(
+                    native_contributions,
+                    rcem=context.workspace.rcem, oplin=context.workspace.oplin,
+                    cemab=context.workspace.cemab, cabab=context.workspace.cabab, opakab=context.workspace.opakab,
+                    rccemis=context.workspace.rccemis, opakc=context.workspace.opakc, opakcont=context.workspace.opakcont,
+                    fline=np.zeros_like(context.workspace.rcem), flinel=np.zeros_like(context.workspace.opakc),
+                    epi_eV=epi,
+                )
+                _add_spectral_metrics(summary, metrics, phase="emisab", status="product")
+        except Exception as exc:
+            if native_product:
+                _apply_python_fallback(native_contributions)
+            _add_spectral_metrics(summary, {}, phase="emisab", status="fallback", mismatch={"phase": "emisab", "error": str(exc)})
+            if _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP_STRICT"):
+                raise
 
     return CalcEmisabResult(
         hydrogen_density_cm3=xpx,

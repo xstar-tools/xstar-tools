@@ -35,5 +35,5 @@ def test_json_bridge_target() -> None:
     assert result == {
         "backend": "python",
         "request": {"value": 44},
-        "version": "0.6.44.1",
+        "version": "0.6.46",
     }

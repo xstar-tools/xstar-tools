@@ -1,3 +1,11 @@
+## v0.6.46 native emissivity and opacity
+
+v0.6.46 adds a persistent source-ordered spectral contribution engine to
+`libxstar_emissivity.so` and a real line-profile opacity implementation to
+`libxstar_opacity.so`. The public ABI 60460 and `xstar_cpp` standalone driver
+expose the same native path. Python remains selectable for reference and
+fallback. See `V0646_NATIVE_EMISSIVITY_OPACITY.md`.
+
 ## v0.6.45.1 native H/He/Mg element construction engine
 
 v0.6.45.1 replaces the production Python `MatrixTerm` stream with one compact

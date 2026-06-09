@@ -1483,6 +1483,8 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
     state.control["calc_emisab_context"] = CalcEmisabContext(
         **emisab_common,
         workspace=workspace.emissivity.base,
+        retain_traces=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
+        profile_control=state.control,
     )
     state.control["calc_emis_context"] = CalcEmisContext(
         **common,
@@ -2396,7 +2398,7 @@ def run_xstar_from_parameters(
                 "profile_components_level": normalize_profile_level(profile_components),
                 "exclusive_profile_timing_enabled": normalize_profile_level(profile_components) != "none",
                 "element_solver_diagnostic_gating": {
-                    "schema_version": "0.6.43.1",
+                    "schema_version": "0.6.46.1",
                     "diagnostics_mode": diagnostics_mode,
                     "residual_arrays_enabled": diagnostics_mode in {"summary", "full"},
                     "dense_svd_enabled": diagnostics_mode == "full",
@@ -2411,8 +2413,8 @@ def run_xstar_from_parameters(
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "compact_record_contributions_with_native_element_construction_solve_commit_v06451"},
-                "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "binemis_cpp_opt_in_via_libxstar_emissivity"},
-                "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "skeleton_only_no_product_active_opacity_physics"},
+                "emissivity_backend": {**emissivity_backend_status(backend_selection.emissivity_backend).as_dict(), "status": "native_source_ordered_spectral_contribution_engine_v0646"},
+                "opacity_backend": {**opacity_backend_status(backend_selection.opacity_backend).as_dict(), "status": "native_line_profile_and_spectral_opacity_engine_v0646"},
                 "thermal_backend": {**thermal_backend_status(backend_selection.thermal_backend).as_dict(), "status": "skeleton_only_no_product_active_thermal_physics"},
                 "engine_backend": {**engine_backend_status(backend_selection.engine_backend).as_dict(), "status": "h_he_mg_native_construction_boundary_v06451"},
                 "mg_ion_accumulator": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {}).get("kernel_status", {}).get("mg_ion_accumulator", {})) or eval_mg_ion_accumulator_cpp(enabled=False).as_dict(),
@@ -2433,6 +2435,7 @@ def run_xstar_from_parameters(
                 "mg_rate7_applied_cpp_speed_summary": dict(state.control.get("mg_rate7_applied_cpp_speed_summary", {})),
                 "mg_pre_matrix_coarse_cpp_summary": dict(state.control.get("mg_pre_matrix_coarse_cpp_summary", {})),
                 "native_element_engine_summary": dict(state.control.get("native_element_engine_summary", {})),
+                "native_spectral_engine_summary": dict(state.control.get("native_spectral_engine_summary", {})),
                 "mg_type4_type50_coarse_rejection_samples": list(state.control.get("mg_type4_type50_coarse_rejection_samples", [])),
                 "mg_type4_upstream_shadow_probe_summary": dict(state.control.get("mg_type4_upstream_shadow_probe_summary", {})),
                 "mg_type4_upstream_shadow_probe_samples": list(state.control.get("mg_type4_upstream_shadow_probe_samples", [])),

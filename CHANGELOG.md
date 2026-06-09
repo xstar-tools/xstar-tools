@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.46.1 - 2026-06-09
+
+- Preserve the v0.6.46 native emissivity/opacity product implementation and ABI 60460.
+- Classify NumPy scalar-exp versus C++ libm Gaussian-tail differences of at most one binary64 ULP in `calc_emis_all` `opakc` as explicitly bounded qualification events.
+- Keep all other spectral arrays bit-exact; two ULPs, a non-`opakc` difference, source-order drift, fallbacks, or science-file drift remain hard failures.
+- Add `shadow_ulp_tolerated_calls`, `shadow_ulp_tolerated_values`, `shadow_max_ulp`, and `first_ulp_tolerated` provenance.
+- Add isolated ULP-policy tests and a v0.6.46.1 acceptance checker.
+
 # v0.6.45.1 - 2026-06-09
 
 ### Added

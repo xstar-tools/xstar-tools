@@ -28,6 +28,10 @@ using element_eval_fn = int (*)(xstar_element_engine_context*, const xstar_eleme
 using element_construct_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, const xstar_element_contribution_v1*, size_t, xstar_element_output_v1*, char*, size_t);
 using element_construct_eval_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, const xstar_element_contribution_v1* const*, const size_t*, size_t, xstar_element_output_v1*, char*, size_t);
 using element_stats_fn = int (*)(const xstar_element_engine_context*, xstar_element_engine_stats_v1*, char*, size_t);
+using spectral_create_fn = int (*)(xstar_spectral_context**, char*, size_t);
+using spectral_destroy_fn = void (*)(xstar_spectral_context*);
+using spectral_reset_fn = int (*)(xstar_spectral_context*, char*, size_t);
+using spectral_apply_fn = int (*)(xstar_spectral_context*, const xstar_spectral_contribution_v1*, size_t, const double*, size_t, xstar_spectral_workspace_v1*, xstar_spectral_stats_v1*, char*, size_t);
 
 struct LoadedPlugin {
     void* handle = nullptr;
@@ -53,6 +57,12 @@ struct xstar_context_impl {
     element_construct_fn element_construct = nullptr;
     element_construct_eval_fn element_construct_eval = nullptr;
     element_stats_fn element_stats = nullptr;
+    void* spectral_handle = nullptr;
+    xstar_spectral_context* spectral_context = nullptr;
+    spectral_create_fn spectral_create = nullptr;
+    spectral_destroy_fn spectral_destroy = nullptr;
+    spectral_reset_fn spectral_reset = nullptr;
+    spectral_apply_fn spectral_apply = nullptr;
     std::string last_error;
     mutable std::mutex mutex;
 };
@@ -185,6 +195,61 @@ int ensure_element_engine(xstar_context_impl& context) {
     }
     std::ostringstream text;
     text << "could not load native element engine";
+    for (const auto& failure : failures) text << "\n  " << failure;
+    context.last_error = text.str();
+    return XSTAR_STATUS_BACKEND_LOAD_FAILED;
+}
+
+int ensure_spectral_engine(xstar_context_impl& context) {
+    if (context.spectral_context != nullptr) return XSTAR_STATUS_OK;
+    const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
+    const std::string emissivity_backend = field_text(context.config.emissivity_backend, XSTAR_BACKEND_NAME_SIZE);
+    const std::string opacity_backend = field_text(context.config.opacity_backend, XSTAR_BACKEND_NAME_SIZE);
+    const auto compatible = [](const std::string& value) {
+        return value.empty() || value == "inherit" || value == "cpp";
+    };
+    if (backend != "cpp" || !compatible(emissivity_backend) || !compatible(opacity_backend)) {
+        context.last_error = "typed native spectral API requires backend=cpp and emissivity/opacity backend=cpp/inherit";
+        return XSTAR_STATUS_NOT_IMPLEMENTED;
+    }
+    std::vector<std::string> failures;
+    for (const auto& directory : plugin_directories(context.config)) {
+        const auto candidate = directory / "libxstar_emissivity.so";
+        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            const char* error = dlerror();
+            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            continue;
+        }
+        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_spectral_engine_abi_version"));
+        auto create = reinterpret_cast<spectral_create_fn>(dlsym(handle, "xstar_spectral_context_create_v1"));
+        auto destroy = reinterpret_cast<spectral_destroy_fn>(dlsym(handle, "xstar_spectral_context_destroy"));
+        auto reset = reinterpret_cast<spectral_reset_fn>(dlsym(handle, "xstar_spectral_context_reset_v1"));
+        auto apply = reinterpret_cast<spectral_apply_fn>(dlsym(handle, "xstar_spectral_apply_contributions_v1"));
+        if (!abi || abi() != XSTAR_SPECTRAL_ENGINE_ABI_VERSION || !create || !destroy || !reset || !apply) {
+            failures.push_back(candidate.string() + ": incompatible spectral-engine ABI");
+            dlclose(handle);
+            continue;
+        }
+        std::array<char, XSTAR_MESSAGE_SIZE> message{};
+        xstar_spectral_context* spectral_context = nullptr;
+        const int rc = create(&spectral_context, message.data(), message.size());
+        if (rc != 0 || !spectral_context) {
+            failures.push_back(candidate.string() + ": " + std::string(message.data()));
+            dlclose(handle);
+            continue;
+        }
+        context.spectral_handle = handle;
+        context.spectral_context = spectral_context;
+        context.spectral_create = create;
+        context.spectral_destroy = destroy;
+        context.spectral_reset = reset;
+        context.spectral_apply = apply;
+        context.last_error = message.data();
+        return XSTAR_STATUS_OK;
+    }
+    std::ostringstream text;
+    text << "could not load native spectral engine";
     for (const auto& failure : failures) text << "\n  " << failure;
     context.last_error = text.str();
     return XSTAR_STATUS_BACKEND_LOAD_FAILED;
@@ -354,6 +419,14 @@ int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** conte
 void xstar_context_destroy(xstar_context* context) {
     auto* value = impl(context);
     if (value == nullptr) return;
+    if (value->spectral_context && value->spectral_destroy) {
+        value->spectral_destroy(value->spectral_context);
+        value->spectral_context = nullptr;
+    }
+    if (value->spectral_handle) {
+        dlclose(value->spectral_handle);
+        value->spectral_handle = nullptr;
+    }
     if (value->element_context && value->element_destroy) {
         value->element_destroy(value->element_context);
         value->element_context = nullptr;
@@ -377,6 +450,15 @@ int xstar_context_reset(xstar_context* context) {
     const int status = value->plugin->descriptor->reset(
         value->backend_context, message.data(), message.size());
     value->last_error = message.data();
+    if (status == XSTAR_STATUS_OK && value->spectral_context && value->spectral_reset) {
+        std::array<char, XSTAR_MESSAGE_SIZE> spectral_message{};
+        const int spectral_status = value->spectral_reset(
+            value->spectral_context, spectral_message.data(), spectral_message.size());
+        if (spectral_status != 0) {
+            value->last_error = spectral_message.data();
+            return XSTAR_STATUS_BACKEND_ERROR;
+        }
+    }
     if (status == XSTAR_STATUS_OK && value->element_context && value->element_reset) {
         std::array<char, XSTAR_MESSAGE_SIZE> element_message{};
         const int element_status = value->element_reset(
@@ -563,6 +645,31 @@ int xstar_context_get_element_stats_v1(
     if (load_status != XSTAR_STATUS_OK) return load_status;
     std::array<char, XSTAR_MESSAGE_SIZE> message{};
     const int rc = value->element_stats(value->element_context, stats, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_apply_spectral_contributions_v1(
+    xstar_context* context,
+    const xstar_spectral_contribution_v1* contributions,
+    size_t contribution_count,
+    const double* seed_profiles,
+    size_t seed_profile_stride,
+    xstar_spectral_workspace_v1* workspace,
+    xstar_spectral_stats_v1* stats
+) {
+    auto* value = impl(context);
+    if (!value || !workspace || !stats || (contribution_count && !contributions)) {
+        return XSTAR_STATUS_INVALID_ARGUMENT;
+    }
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_spectral_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->spectral_apply(
+        value->spectral_context, contributions, contribution_count,
+        seed_profiles, seed_profile_stride, workspace, stats,
+        message.data(), message.size());
     value->last_error = message.data();
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }

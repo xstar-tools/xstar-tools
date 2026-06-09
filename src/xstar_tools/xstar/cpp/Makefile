@@ -35,7 +35,7 @@ PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
-PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h
+PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h
 INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 
 .PHONY: all physics standalone test clean install print-config
@@ -53,8 +53,8 @@ $(RATES_TARGET): rate_kernels.cpp
 $(MATRIX_TARGET): matrix_kernels.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ $<
 
-$(EMISSIVITY_TARGET): line_emissivity.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ $<
+$(EMISSIVITY_TARGET): line_emissivity.cpp xstar_spectral_engine.h $(OPACITY_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ line_emissivity.cpp -L. -lxstar_opacity $(RPATH_ORIGIN)
 
 $(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp
@@ -100,11 +100,12 @@ test: all
 	./$(EXECUTABLE_TARGET) evaluation-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) construction-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) construction-evaluation-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.45.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.46.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

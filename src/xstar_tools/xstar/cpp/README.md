@@ -1,3 +1,11 @@
+## v0.6.46.1 native spectral architecture
+
+`xstar_spectral_engine.h` defines the persistent source-ordered emissivity and
+opacity ABI. `libxstar_emissivity.so` owns scalar spectral contributions and
+links `libxstar_opacity.so` for native line-profile accumulation. The stable
+`libxstar_api.so` wrapper and `xstar_cpp spectral-self-test` expose the same
+boundary.
+
 # XSTAR standalone C++ and shared-library tree
 
 This directory is the retained flat native tree for `xstar_tools`.

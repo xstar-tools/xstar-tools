@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "xstar_element_engine.h"
+#include "xstar_spectral_engine.h"
 
 #ifdef _WIN32
 #  ifdef XSTAR_API_BUILD
@@ -19,8 +20,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_API_ABI_VERSION 60451u
-#define XSTAR_API_VERSION_STRING "0.6.45.1"
+#define XSTAR_API_ABI_VERSION 60460u
+#define XSTAR_API_VERSION_STRING "0.6.46.1"
 #define XSTAR_BACKEND_NAME_SIZE 32u
 #define XSTAR_PATH_SIZE 1024u
 #define XSTAR_MESSAGE_SIZE 1024u
@@ -223,6 +224,15 @@ XSTAR_API_EXPORT int xstar_context_run_evaluation_v1(
 XSTAR_API_EXPORT int xstar_context_get_element_stats_v1(
     const xstar_context* context,
     xstar_element_engine_stats_v1* stats
+);
+XSTAR_API_EXPORT int xstar_context_apply_spectral_contributions_v1(
+    xstar_context* context,
+    const xstar_spectral_contribution_v1* contributions,
+    size_t contribution_count,
+    const double* seed_profiles,
+    size_t seed_profile_stride,
+    xstar_spectral_workspace_v1* workspace,
+    xstar_spectral_stats_v1* stats
 );
 
 #ifdef __cplusplus

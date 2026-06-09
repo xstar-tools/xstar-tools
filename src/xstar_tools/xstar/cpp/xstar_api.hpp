@@ -109,6 +109,24 @@ public:
         }
     }
 
+    xstar_spectral_stats_v1 apply_spectral(
+        const std::vector<xstar_spectral_contribution_v1>& contributions,
+        const std::vector<double>& seed_profiles,
+        std::size_t seed_profile_stride,
+        xstar_spectral_workspace_v1& workspace
+    ) {
+        xstar_spectral_stats_v1 stats{};
+        xstar_spectral_stats_init_v1(&stats);
+        const int status = xstar_context_apply_spectral_contributions_v1(
+            context_, contributions.empty() ? nullptr : contributions.data(), contributions.size(),
+            seed_profiles.empty() ? nullptr : seed_profiles.data(), seed_profile_stride,
+            &workspace, &stats);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+        return stats;
+    }
+
     xstar_element_engine_stats_v1 element_stats() const {
         xstar_element_engine_stats_v1 stats{};
         xstar_element_engine_stats_init_v1(&stats);

@@ -44,13 +44,14 @@ void usage(std::ostream& output) {
         "  xstar_cpp evaluation-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp construction-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp construction-evaluation-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp spectral-self-test --backend cpp [--plugin-dir DIR]\n"
         "  Component overrides: --engine-backend, --rates-backend, --matrix-backend,\n"
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.45.1 adds compact source-ordered record contributions for H, He, and Mg:\n"
-        "C++ expands contributions into matrix rows, normalizes, solves, and commits\n"
-        "state in libxstar_engine.so with one call per element/evaluation.\n";
+        "v0.6.46.1 adds persistent source-ordered emissivity and opacity contributions:\n"
+        "C++ commits line, RRC, continuum, and line-profile opacity arrays in\n"
+        "libxstar_emissivity.so and libxstar_opacity.so.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -415,6 +416,136 @@ bool validate_element(const ElementBuffers& b, const xstar_element_output_v1& ou
            b.dense[2] == 2.0 && b.dense[3] == -1.0;
 }
 
+int command_spectral_self_test(const Options& options) {
+    xstar_context* context = nullptr;
+    const int create_status = create_context(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+
+    constexpr std::size_t n_lines = 8;
+    constexpr std::size_t n_continua = 8;
+    constexpr std::size_t n_energy = 64;
+    std::array<double, 2 * n_lines> rcem{};
+    std::array<double, n_lines> oplin{};
+    std::array<double, 2 * n_continua> cemab{};
+    std::array<double, n_continua> cabab{};
+    std::array<double, n_continua> opakab{};
+    std::array<double, 2 * n_energy> rccemis{};
+    std::array<double, n_energy> opakc{};
+    std::array<double, n_energy> opakcont{};
+    std::array<double, 2 * n_lines> fline{};
+    std::array<double, n_energy> flinel{};
+    std::array<double, n_energy> energy{};
+    for (std::size_t i = 0; i < n_energy; ++i) energy[i] = 100.0 + 10.0 * static_cast<double>(i);
+
+    std::array<xstar_spectral_contribution_v1, 4> rows{};
+    rows[0].source_position = 1;
+    rows[0].record = 101;
+    rows[0].kind = XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE;
+    rows[0].output_index = 1;
+    rows[0].ptmp1 = 0.75;
+    rows[0].ptmp2 = 0.25;
+    rows[0].abundance_lower = 0.4;
+    rows[0].abundance_upper = 0.6;
+    rows[0].hydrogen_density = 2.0;
+    rows[0].ans3 = -3.0;
+    rows[0].ans4 = -5.0;
+    rows[0].opakab = 7.0;
+
+    rows[1].source_position = 2;
+    rows[1].record = 102;
+    rows[1].kind = XSTAR_SPECTRAL_KIND_EMISAB_LINE;
+    rows[1].rate_type = 4;
+    rows[1].output_index = 2;
+    rows[1].ptmp1 = 0.6;
+    rows[1].ptmp2 = 0.4;
+    rows[1].abundance_lower = 0.3;
+    rows[1].abundance_upper = 0.7;
+    rows[1].ans3 = -2.0;
+    rows[1].opakab = 11.0;
+
+    rows[2].source_position = 3;
+    rows[2].record = 103;
+    rows[2].kind = XSTAR_SPECTRAL_KIND_EMIS_OPACITY_ONLY;
+    rows[2].output_index = 3;
+    rows[2].opakab = 13.0;
+
+    rows[3].source_position = 4;
+    rows[3].record = 104;
+    rows[3].kind = XSTAR_SPECTRAL_KIND_EMIS_LINE;
+    rows[3].output_index = 4;
+    rows[3].bin_one_based = 31;
+    rows[3].ptmp1 = 0.55;
+    rows[3].ptmp2 = 0.45;
+    rows[3].abundance_lower = 0.2;
+    rows[3].abundance_upper = 0.8;
+    rows[3].ans1 = 1.0;
+    rows[3].ans2 = 2.0;
+    rows[3].opakab = 0.5;
+    rows[3].line_energy_eV = 400.0;
+    rows[3].bin_width_eV = 10.0;
+    rows[3].atomic_mass_amu = 24.0;
+    rows[3].natural_width_eV = 1.0e-3;
+    rows[3].turbulent_velocity_km_s = 100.0;
+    rows[3].temperature_1e4K = 6.5;
+
+    constexpr std::size_t seed_stride = 21;
+    std::array<double, rows.size() * seed_stride> seeds{};
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        for (std::size_t j = 0; j < seed_stride; ++j) {
+            const double x = static_cast<double>(j) - 10.0;
+            seeds[i * seed_stride + j] = std::exp(-0.25 * x * x);
+        }
+    }
+
+    xstar_spectral_workspace_v1 workspace{};
+    workspace.struct_size = sizeof(workspace);
+    workspace.abi_version = XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
+#define XSTAR_SET_SPECTRAL(field, count_field, buffer) \
+    workspace.field = buffer.data(); workspace.count_field = buffer.size()
+    XSTAR_SET_SPECTRAL(rcem, rcem_count, rcem);
+    XSTAR_SET_SPECTRAL(oplin, oplin_count, oplin);
+    XSTAR_SET_SPECTRAL(cemab, cemab_count, cemab);
+    XSTAR_SET_SPECTRAL(cabab, cabab_count, cabab);
+    XSTAR_SET_SPECTRAL(opakab, opakab_count, opakab);
+    XSTAR_SET_SPECTRAL(rccemis, rccemis_count, rccemis);
+    XSTAR_SET_SPECTRAL(opakc, opakc_count, opakc);
+    XSTAR_SET_SPECTRAL(opakcont, opakcont_count, opakcont);
+    XSTAR_SET_SPECTRAL(fline, fline_count, fline);
+    XSTAR_SET_SPECTRAL(flinel, flinel_count, flinel);
+#undef XSTAR_SET_SPECTRAL
+    workspace.epi_eV = energy.data();
+    workspace.energy_count = energy.size();
+
+    xstar_spectral_stats_v1 stats{};
+    stats.struct_size = sizeof(stats);
+    stats.abi_version = XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
+    const int status = xstar_context_apply_spectral_contributions_v1(
+        context, rows.data(), rows.size(), seeds.data(), seed_stride, &workspace, &stats);
+    if (status != XSTAR_STATUS_OK) {
+        std::cerr << "spectral self-test failed: " << xstar_context_last_error(context) << "\n";
+        xstar_context_destroy(context);
+        return status;
+    }
+    const bool accepted = stats.calls == 1 && stats.contributions_attempted == 4 &&
+        stats.contributions_committed == 4 && stats.emissivity_contributions == 3 &&
+        stats.opacity_contributions == 4 && stats.line_profiles == 1 &&
+        stats.source_order_violations == 0 && opakab[1] == 7.0 &&
+        oplin[2] == 3.3 && opakab[3] == 13.0 && oplin[4] == 0.1 &&
+        fline[4] > 0.0 && flinel[30] > 0.0;
+    std::cout << "backend=" << xstar_context_backend_name(context) << "\n"
+              << "spectral_contributions=" << stats.contributions_committed << "\n"
+              << "emissivity_contributions=" << stats.emissivity_contributions << "\n"
+              << "opacity_contributions=" << stats.opacity_contributions << "\n"
+              << "line_profiles=" << stats.line_profiles << "\n"
+              << "source_order_violations=" << stats.source_order_violations << "\n"
+              << "persistent_context=true\n"
+              << "native_emissivity=true\n"
+              << "native_opacity=true\n"
+              << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    xstar_context_destroy(context);
+    return accepted ? 0 : 9;
+}
+
 int command_element_self_test(const Options& options, bool evaluation, bool construction) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -575,6 +706,7 @@ int main(int argc, char** argv) {
     if (options.command == "evaluation-self-test") return command_element_self_test(options, true, false);
     if (options.command == "construction-self-test") return command_element_self_test(options, false, true);
     if (options.command == "construction-evaluation-self-test") return command_element_self_test(options, true, true);
+    if (options.command == "spectral-self-test") return command_spectral_self_test(options);
     if (options.command == "run-zone") return command_run_zone(options);
     if (options.command == "python-bridge-test") return command_python_bridge_test(options);
     std::cerr << "unknown command: " << options.command << "\n";

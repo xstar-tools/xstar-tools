@@ -165,7 +165,7 @@ int copy_scaffold_result(
     context.stats.zones_attempted += 1;
     if ((context.config.flags & XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL) == 0) {
         const std::string text =
-            "v0.6.45.1 standalone C++ zone boundary is architecture-only; "
+            "v0.6.46.1 standalone C++ zone boundary is architecture-only; "
             "full XSTAR physics remains on the accepted hybrid runner. "
             "Set XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL only for ABI tests.";
         copy_text(message, message_size, text);
@@ -262,7 +262,7 @@ int cpp_get_component_info(
     if (component_id == XSTAR_COMPONENT_IO) {
         info->status_flags = XSTAR_COMPONENT_SCAFFOLD_ONLY;
         copy_text(info->implementation, sizeof(info->implementation),
-                  "v0.6.45.1 standalone IO ABI scaffold");
+                  "v0.6.46.1 standalone IO ABI scaffold");
         copy_text(info->message, sizeof(info->message),
                   "native FITS/cache IO will be added after the engine boundary");
         copy_text(message, message_size, info->message);
@@ -281,15 +281,13 @@ int cpp_get_component_info(
     if (found->loaded) {
         info->status_flags |= XSTAR_COMPONENT_LIBRARY_LOADED |
                               XSTAR_COMPONENT_IMPLEMENTATION_AVAILABLE;
-        if (found->feature_flags != 0 && component_id != XSTAR_COMPONENT_OPACITY &&
-            component_id != XSTAR_COMPONENT_THERMAL) {
+        if (found->feature_flags != 0 && component_id != XSTAR_COMPONENT_THERMAL) {
             info->status_flags |= XSTAR_COMPONENT_PRODUCT_ACTIVE;
-        } else if (component_id == XSTAR_COMPONENT_OPACITY ||
-                   component_id == XSTAR_COMPONENT_THERMAL) {
+        } else if (component_id == XSTAR_COMPONENT_THERMAL) {
             info->status_flags |= XSTAR_COMPONENT_SCAFFOLD_ONLY;
         }
         copy_text(info->message, sizeof(info->message),
-                  "component library loaded; status reflects v0.6.43.1 product ownership");
+                  "component library loaded; status reflects v0.6.46.1 product ownership");
     } else {
         copy_text(info->message, sizeof(info->message), found->error);
     }
@@ -301,7 +299,7 @@ const xstar_backend_descriptor_v1 kDescriptor{
     sizeof(xstar_backend_descriptor_v1),
     XSTAR_BACKEND_PLUGIN_ABI_VERSION,
     "cpp",
-    "xstar_backend_cpp_persistent_context_v0644",
+    "xstar_backend_cpp_persistent_context_v0646",
     0x0Fu,
     &cpp_create,
     &cpp_destroy,
