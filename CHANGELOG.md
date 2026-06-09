@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.44.3 - 2026-06-08
+
+- Added Python backend runtime rpath entries derived from `python3-config --embed --ldflags` so Conda/shared-libpython installs can load `libxstar_backend_python.so` via `dlopen`.
+- Removed the fragile parse-time GNU make filesystem-link probe.
+- Defaulted filesystem compatibility linkage to `-lstdc++fs`, with an explicit override supported.
+- Retained ABI 60440 and explicit plugin linkage to `libxstar_api.so`.
+
 ## 0.6.44.2 - 2026-06-08
 
 - Removed the fragile parse-time GNU make filesystem-link probe.

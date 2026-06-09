@@ -373,3 +373,8 @@ include xstar_tools_v0.6.44.2_handoff.md
 include run_v0442_xstar_standalone_abi.sh
 
 include check_v0442_standalone_abi.py
+
+include V06443_PYTHON_LIBPYTHON_RPATH_HOTFIX.md
+include xstar_tools_v0.6.44.3_handoff.md
+include run_v0443_xstar_standalone_abi.sh
+include check_v0443_standalone_abi.py

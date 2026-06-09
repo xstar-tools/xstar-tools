@@ -1,4 +1,4 @@
-## v0.6.44.2 filesystem linker compatibility hotfix
+## v0.6.44.3 filesystem linker compatibility hotfix
 
 This hotfix preserves ABI version 60440 and the v0.6.44 architecture while
 automatically linking `-lstdc++fs` on older GCC/libstdc++ toolchains that need

@@ -21,9 +21,9 @@ src/xstar_tools/xstar/*.py
 
 Do not copy shared libraries into `src/xstar_tools/xstar/`.
 
-## v0.6.44.2 standalone architecture
+## v0.6.44.3 standalone architecture
 
-v0.6.44.2 adds:
+v0.6.44.3 adds:
 
 - `libxstar_api.so`: stable versioned C ABI, backend registry, context lifecycle,
   single-zone API, batch API, component status, and counters;
@@ -35,7 +35,7 @@ v0.6.44.2 adds:
 - public headers `xstar_api.h`, `xstar_backend_plugin.h`,
   `xstar_python_bridge.h`, and the C++ RAII wrapper `xstar_api.hpp`.
 
-The typed zone/batch boundary is deliberately **scaffold-only in v0.6.44.2**.
+The typed zone/batch boundary is deliberately **scaffold-only in v0.6.44.3**.
 Without `XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL`, `run_zone` returns
 `XSTAR_STATUS_NOT_IMPLEMENTED`. Production science remains on the accepted
 v0.6.43.1 Python/hybrid runner while complete engine, emissivity, opacity, and
@@ -88,7 +88,7 @@ Component requests can be selected independently:
   --plugin-dir .
 ```
 
-In v0.6.44.2 these overrides are recorded and exposed by the ABI. Mixed physics
+In v0.6.44.3 these overrides are recorded and exposed by the ABI. Mixed physics
 dispatch will be activated as each complete component becomes product-ready.
 
 ## Public ABI
@@ -138,7 +138,7 @@ The retained libraries are:
 The C++ backend plugin loads these dynamically and reports their ABI,
 implementation name, feature flags, and product/scaffold status.
 
-`libxstar_opacity.so` and `libxstar_thermal.so` remain scaffolds in v0.6.44.2;
+`libxstar_opacity.so` and `libxstar_thermal.so` remain scaffolds in v0.6.44.3;
 loading them does not mean those physics paths are active.
 
 ## Development rules

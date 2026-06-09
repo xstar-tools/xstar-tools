@@ -6,6 +6,8 @@ SO_LDFLAGS ?= -shared
 COMMON_LIBS ?= -ldl -pthread
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
+PYTHON_LIBDIRS := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LIBS)))
+PYTHON_RPATHS := $(foreach d,$(PYTHON_LIBDIRS),-Wl,-rpath,$(d))
 RPATH_ORIGIN := -Wl,-rpath,'$$ORIGIN'
 
 # C++17 filesystem compatibility.  GCC 8 and some vendor toolchains require
@@ -73,7 +75,7 @@ $(CPP_BACKEND_TARGET): xstar_backend_cpp.cpp xstar_api.h xstar_backend_plugin.h 
 
 $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_standalone_internal.hpp $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
-		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
 $(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_api.h xstar_api.hpp xstar_python_bridge.h $(API_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp \
@@ -84,6 +86,8 @@ print-config:
 	@echo PYTHON_CONFIG=$(PYTHON_CONFIG)
 	@echo PYTHON_INCLUDES=$(PYTHON_INCLUDES)
 	@echo PYTHON_LIBS=$(PYTHON_LIBS)
+	@echo PYTHON_LIBDIRS=$(PYTHON_LIBDIRS)
+	@echo PYTHON_RPATHS=$(PYTHON_RPATHS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 
@@ -96,7 +100,7 @@ test: all
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.44.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.44.3 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:
