@@ -1,6 +1,6 @@
 """Strict binary64 parity classification for native spectral shadows.
 
-v0.6.46.2 removes final-array ULP tolerance. Qualification supplies complete
+v0.6.46.3 removes final-array ULP tolerance. Qualification supplies complete
 source-profile samples for Gaussian/Voigt lines, so every committed spectral
 array must compare exactly.
 """

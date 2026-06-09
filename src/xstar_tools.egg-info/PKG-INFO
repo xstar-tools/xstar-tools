@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.46.2
+Version: 0.6.46.3
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,10 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.46.3 strict opacity source rounding
+
+v0.6.46.3 fixes the remaining exact-profile qualification boundary without changing the ABI. `libxstar_opacity.so` now uses the source `huntf` floor (`float32(1e-34)` promoted to binary64), disables floating-point contraction, and forces an explicit rounding boundary at every translated grid, integration, rebin, and commit operation. Product execution remains fully native; qualification still supplies complete Gaussian/Voigt profile samples and requires exact final arrays.
 
 ## v0.6.46 native emissivity and opacity
 

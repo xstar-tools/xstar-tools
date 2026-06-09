@@ -409,3 +409,11 @@ include run_v0462_xstar_tools_python.sh
 include run_v0462_xstar_tools_spectral_qualification.sh
 include run_v0462_xstar_tools_spectral_candidate.sh
 include check_v0462_native_emissivity_opacity.py
+
+include V06463_STRICT_OPACITY_SOURCE_ROUNDING.md
+include xstar_tools_v0.6.46.3_handoff.md
+include run_v0463_xstar_standalone_spectral_engine.sh
+include run_v0463_xstar_tools_python.sh
+include run_v0463_xstar_tools_spectral_qualification.sh
+include run_v0463_xstar_tools_spectral_candidate.sh
+include check_v0463_native_emissivity_opacity.py

@@ -73,7 +73,7 @@ class _TraceSink(list):
 def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
     control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
     summary = control.setdefault("native_spectral_engine_summary", {
-        "schema_version": "0.6.46.2",
+        "schema_version": "0.6.46.3",
         "emisab_calls": 0, "emis_calls": 0,
         "contributions_attempted": 0, "contributions_committed": 0,
         "emissivity_contributions": 0, "opacity_contributions": 0,
@@ -83,6 +83,8 @@ def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, 
         "exact_profile_oracle_calls": 0,
         "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "strict_source_rounding": False,
+        "source_hunt_floor": 0.0,
         "product_commits": 0, "fallbacks": 0,
         "packing_seconds": 0.0, "ffi_seconds": 0.0,
         "construction_seconds": 0.0, "opacity_seconds": 0.0, "commit_seconds": 0.0,
@@ -110,6 +112,10 @@ def _add_spectral_metrics(summary: MutableMapping[str, Any], metrics: Mapping[st
         summary[key] = int(summary.get(key, 0)) + int(metrics.get(key, 0) or 0)
     for key in ("packing_seconds", "ffi_seconds", "construction_seconds", "opacity_seconds", "commit_seconds"):
         summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(key, 0.0) or 0.0)
+    if "strict_source_rounding" in metrics:
+        summary["strict_source_rounding"] = bool(metrics.get("strict_source_rounding"))
+    if "source_hunt_floor" in metrics:
+        summary["source_hunt_floor"] = float(metrics.get("source_hunt_floor", 0.0) or 0.0)
     if status == "product":
         summary["product_commits"] = int(summary.get("product_commits", 0)) + 1
     elif status in {"shadow_match", "shadow_mismatch"}:

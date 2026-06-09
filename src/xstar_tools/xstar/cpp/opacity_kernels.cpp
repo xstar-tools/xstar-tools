@@ -10,6 +10,16 @@
 
 namespace {
 
+// Preserve Python/Fortran source-order binary64 rounding even when GCC is
+// allowed to contract floating-point expressions at -O3.  Each helper forces
+// a store/load boundary and therefore prevents FMA contraction or reassociation
+// across translated source operations.
+static inline double source_add(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x + y; return z; }
+static inline double source_sub(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x - y; return z; }
+static inline double source_mul(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x * y; return z; }
+static inline double source_div(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x / y; return z; }
+static inline double source_real_literal(double value) { return static_cast<double>(static_cast<float>(value)); }
+
 static void write_message(char* message, std::size_t message_size, const char* text) {
     if (!message || message_size == 0) return;
     std::strncpy(message, text ? text : "", message_size - 1);
@@ -66,7 +76,7 @@ static double voigte(double vs, double a) {
 
 static int huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
-    const double floor = 1.0e-24;
+    const double floor = source_real_literal(1.0e-34);
     const double xx1 = xx[0];
     const double xx2 = xx[1];
     const double xxn = xx[n - 1];
@@ -94,7 +104,7 @@ extern "C" {
 int xstar_opacity_abi_version() { return 60460; }
 
 const char* xstar_opacity_backend_name() {
-    return "xstar_opacity_native_line_profile_v0646";
+    return "xstar_opacity_strict_source_rounding_v06463";
 }
 
 int xstar_opacity_feature_flags() {
@@ -153,27 +163,27 @@ int xstar_opacity_apply_line_profile_v1(
     int ml1 = nbinc(line_energy_ev, epi, n);
     ml1 = std::max(2, std::min(n - 1, ml1));
     const double mass = std::max(atomic_mass_amu, 1.0e-30);
-    const double vth = 12.9 * std::sqrt(temperature_1e4k / mass);
-    const double deleturb = line_energy_ev * (vturb_km_s / 3.0e5);
-    const double deleth = line_energy_ev * (vth / 3.0e5);
-    const double dele = std::sqrt(deleth * deleth + deleturb * deleturb);
+    const double vth = source_mul(12.9, std::sqrt(source_div(temperature_1e4k, mass)));
+    const double deleturb = source_div(source_mul(line_energy_ev, vturb_km_s), 3.0e5);
+    const double deleth = source_div(source_mul(line_energy_ev, vth), 3.0e5);
+    const double dele = std::sqrt(source_add(source_mul(deleth, deleth), source_mul(deleturb, deleturb)));
     if (dele <= 0.0) {
         write_message(errbuf, errbuf_size, "native opacity profile zero-width no-op");
         return 0;
     }
-    const double aasmall = natural_width_ev / (1.0e-24 + dele) / 12.56;
+    const double aasmall = source_div(source_div(natural_width_ev, source_add(1.0e-24, dele)), 12.56);
     const bool use_voigt = aasmall > 1.0e-9;
     const double e00 = epi[ml1 - 1];
-    const double deleepi = epi[ml1] - epi[ml1 - 1];
+    const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
     int ncut = static_cast<int>(deleepi / dele);
     ncut = std::max(1, std::min(nbtpp / 10, ncut));
-    const double deleused = deleepi / static_cast<double>(ncut);
+    const double deleused = source_div(deleepi, static_cast<double>(ncut));
     int mlc = 0, ldir = 1, ldon0 = 0, ldon1 = 0;
     int mlmin = nbtpp, mlmax = 1, ml1min = n + 1, ml1max = 0;
     const int ml2 = nbtpp / 2;
     std::vector<double> etpp(static_cast<std::size_t>(nbtpp), 0.0);
     std::vector<double> optpp2(static_cast<std::size_t>(nbtpp), 0.0);
-    double delet = (e00 - line_energy_ev) / dele;
+    double delet = source_div(source_sub(e00, line_energy_ev), dele);
     double profile = seed_profiles[0];
     etpp[ml2 - 1] = e00;
     optpp2[ml2 - 1] = optpp * profile;
@@ -185,12 +195,12 @@ int xstar_opacity_apply_line_profile_v1(
             int& ldon = (ij == 0) ? ldon0 : ldon1;
             if (ldon == 1) continue;
             const int mlm = ml2 + ldir * mlc;
-            const double etptst = e00 + static_cast<double>(ldir * mlc) * deleused;
+            const double etptst = source_add(e00, source_mul(static_cast<double>(ldir * mlc), deleused));
             if (mlm <= nbtpp && mlm >= 1 && etptst > 0.0 && etptst < epi[n - 1]) {
                 mlmin = std::min(mlmin, mlm);
                 mlmax = std::max(mlmax, mlm);
                 etpp[mlm - 1] = etptst;
-                delet = (etptst - line_energy_ev) / dele;
+                delet = source_div(source_sub(etptst, line_energy_ev), dele);
                 if (mlc <= seed_radius) {
                     const int seed_index = 2 * mlc - ((ldir < 0) ? 1 : 0);
                     profile = seed_profiles[seed_index];
@@ -201,7 +211,7 @@ int xstar_opacity_apply_line_profile_v1(
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;
             }
-            const double delet_now = (etptst - line_energy_ev) / dele;
+            const double delet_now = source_div(source_sub(etptst, line_energy_ev), dele);
             if ((tst < dpcrit || mlm <= 1 || mlm >= nbtpp || etptst <= 0.0 ||
                  etptst >= epi[n - 1] || std::abs(delet_now) > std::max(50.0, 200.0 * aasmall)) &&
                 ml1min < ml1 - 2 && ml1max > ml1 + 2 && ml1min >= 1 && ml1max <= n) {
@@ -219,14 +229,17 @@ int xstar_opacity_apply_line_profile_v1(
         for (int mlm = mlmin + 1; mlm <= mlmax; ++mlm) {
             const double tmpopo = tmpop;
             tmpop = optpp2[mlm - 1];
-            const double tmpe = std::abs(etpp[mlm - 1] - etpp[mlm - 2]);
-            sume += tmpe;
-            opsum += (tmpop + tmpopo) * tmpe / 2.0;
+            const double tmpe = std::abs(source_sub(etpp[mlm - 1], etpp[mlm - 2]));
+            sume = source_add(sume, tmpe);
+            const double pair = source_add(tmpop, tmpopo);
+            const double weighted = source_mul(pair, tmpe);
+            const double interval = source_div(weighted, 2.0);
+            opsum = source_add(opsum, interval);
             if (etpp[mlm - 1] > epi[ml1m - 1]) {
                 if (sume > 1.0e-34) {
-                    const double optp2 = opsum / sume;
+                    const double optp2 = source_div(opsum, sume);
                     while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
-                        opakc[ml1m - 1] += optp2;
+                        opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
                         rccemis[ml1m - 1] += 0.0;
                         rccemis[n + ml1m - 1] += 0.0;
                         ++(*updated_bins);

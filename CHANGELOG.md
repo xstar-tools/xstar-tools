@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.46.3 - 2026-06-09
+
+- Correct the native opacity `huntf` floor from `1e-24` to XSTAR's float32-promoted `1e-34`.
+- Force source-order binary64 rounding for profile-grid construction, trapezoid accumulation, rebinning, and `opakc` commit.
+- Compile `libxstar_opacity.so` with `-ffp-contract=off` to prevent GCC FMA contraction at `-O3`.
+- Keep the complete 20,001-sample qualification oracle and strict final-array equality.
+- Record `strict_source_rounding` and `source_hunt_floor` provenance.
+- Keep the stable shared-library ABI at 60460 and use a 285-second host-variation ceiling plus optional same-session ratio gate.
+
 # v0.6.46.2 - 2026-06-09
 
 - Replace the rejected final-array one-ULP opacity policy with a qualification-only complete Gaussian/Voigt source-profile oracle.

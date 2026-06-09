@@ -1,3 +1,7 @@
+## v0.6.46.3 strict opacity source rounding
+
+v0.6.46.3 fixes the remaining exact-profile qualification boundary without changing the ABI. `libxstar_opacity.so` now uses the source `huntf` floor (`float32(1e-34)` promoted to binary64), disables floating-point contraction, and forces an explicit rounding boundary at every translated grid, integration, rebin, and commit operation. Product execution remains fully native; qualification still supplies complete Gaussian/Voigt profile samples and requires exact final arrays.
+
 ## v0.6.46 native emissivity and opacity
 
 v0.6.46 adds a persistent source-ordered spectral contribution engine to

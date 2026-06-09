@@ -164,4 +164,46 @@ def test_exact_profile_oracle_reproduces_python_opakc(monkeypatch) -> None:
     assert metrics["exact_profile_oracle_calls"] == 1
     assert metrics["exact_profile_oracle_values"] == 20001
     assert metrics["exact_profile_oracle_line_profiles"] == 1
+    assert metrics["strict_source_rounding"] is True
+    assert metrics["source_hunt_floor"] == float(np.float32(1.0e-34))
+    assert np.array_equal(opakc, expected_opakc)
+
+
+def test_exact_profile_oracle_uses_source_hunt_floor_and_strict_rounding(monkeypatch) -> None:
+    """Exercise the 1e-34 source floor that v0.6.46.3 translated as 1e-24."""
+    _install_astropy_stub()
+    from xstar_tools.xstar.cpp_backend_spectral import apply_spectral_contributions_cpp
+    from xstar_tools.xstar.emergent_emissivity import _source_linopac_into_opakc
+
+    epi = np.geomspace(1.0e-35, 1.0e-27, 320, dtype=np.float64)
+    row = {
+        "source_position": 1, "record": 463, "kind": 4, "rate_type": 4,
+        "output_index": 2, "bin_one_based": 160,
+        "ptmp1": 0.55, "ptmp2": 0.45,
+        "abundance_lower": 0.25, "abundance_upper": 0.75,
+        "ans1": 1.0, "ans2": 2.0, "opakab": 0.4,
+        "line_energy_eV": 2.5e-31, "bin_width_eV": float(epi[160] - epi[159]),
+        "atomic_mass_amu": 24.0, "natural_width_eV": 0.0,
+        "turbulent_velocity_km_s": 300.0, "temperature_1e4K": 8.0,
+        "seed_profiles": np.ones(21, dtype=np.float64),
+    }
+    expected_opakc = np.zeros(epi.size, dtype=np.float64)
+    expected_rccemis = np.zeros((2, epi.size), dtype=np.float64)
+    _source_linopac_into_opakc(
+        optpp=row["opakab"] * row["abundance_lower"], rcem1=0.0, rcem2=0.0,
+        line_energy_eV=row["line_energy_eV"], vturb_km_s=row["turbulent_velocity_km_s"],
+        temperature_1e4K=row["temperature_1e4K"], atomic_mass_amu=row["atomic_mass_amu"],
+        natural_width_eV=row["natural_width_eV"], epi=epi, opakc=expected_opakc,
+        rccemis=expected_rccemis, ncn2=epi.size,
+    )
+
+    metrics = apply_spectral_contributions_cpp(
+        [row], rcem=np.zeros((2, 8)), oplin=np.zeros(8),
+        cemab=np.zeros((2, 8)), cabab=np.zeros(8), opakab=np.zeros(8),
+        rccemis=np.zeros((2, epi.size)), opakc=(opakc := np.zeros(epi.size)),
+        opakcont=np.zeros(epi.size), fline=np.zeros((2, 8)),
+        flinel=np.zeros(epi.size), epi_eV=epi, exact_profile_oracle=True,
+    )
+    assert metrics["strict_source_rounding"] is True
+    assert metrics["source_hunt_floor"] == float(np.float32(1.0e-34))
     assert np.array_equal(opakc, expected_opakc)

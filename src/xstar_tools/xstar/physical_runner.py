@@ -2398,7 +2398,7 @@ def run_xstar_from_parameters(
                 "profile_components_level": normalize_profile_level(profile_components),
                 "exclusive_profile_timing_enabled": normalize_profile_level(profile_components) != "none",
                 "element_solver_diagnostic_gating": {
-                    "schema_version": "0.6.46.2",
+                    "schema_version": "0.6.46.3",
                     "diagnostics_mode": diagnostics_mode,
                     "residual_arrays_enabled": diagnostics_mode in {"summary", "full"},
                     "dense_svd_enabled": diagnostics_mode == "full",

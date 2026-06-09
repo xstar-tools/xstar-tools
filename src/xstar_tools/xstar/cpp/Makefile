@@ -3,6 +3,7 @@ PYTHON_CONFIG ?= python3-config
 CXXFLAGS ?= -O3 -std=c++17 -fPIC -Wall -Wextra -Wpedantic
 CPPFLAGS ?=
 SO_LDFLAGS ?= -shared
+OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 COMMON_LIBS ?= -ldl -pthread
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
@@ -57,7 +58,7 @@ $(EMISSIVITY_TARGET): line_emissivity.cpp xstar_spectral_engine.h $(OPACITY_TARG
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ line_emissivity.cpp -L. -lxstar_opacity $(RPATH_ORIGIN)
 
 $(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp
 
 $(THERMAL_TARGET): thermal_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ thermal_kernels.cpp
@@ -88,6 +89,7 @@ print-config:
 	@echo PYTHON_LIBS=$(PYTHON_LIBS)
 	@echo PYTHON_LIBDIRS=$(PYTHON_LIBDIRS)
 	@echo PYTHON_RPATHS=$(PYTHON_RPATHS)
+	@echo OPACITY_STRICT_FP_FLAGS=$(OPACITY_STRICT_FP_FLAGS)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 
@@ -105,7 +107,7 @@ test: all
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.46.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.46.3 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

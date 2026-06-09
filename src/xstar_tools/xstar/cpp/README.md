@@ -1,4 +1,4 @@
-## v0.6.46.2 exact-profile native spectral architecture
+## v0.6.46.3 exact-profile native spectral architecture
 
 `xstar_spectral_engine.h` defines the persistent source-ordered emissivity and
 opacity ABI. `libxstar_emissivity.so` owns scalar spectral contributions and

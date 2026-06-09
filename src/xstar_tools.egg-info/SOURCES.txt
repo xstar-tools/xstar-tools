@@ -28,6 +28,7 @@ V0644_STANDALONE_SHARED_LIBRARY_ABI.md
 V06451_NATIVE_ELEMENT_CONSTRUCTION_ENGINE.md
 V0645_COMPLETE_NATIVE_ELEMENT_ENGINE.md
 V06462_EXACT_GAUSSIAN_VOIGT_PROFILE_QUALIFICATION.md
+V06463_STRICT_OPACITY_SOURCE_ROUNDING.md
 V0646_NATIVE_EMISSIVITY_OPACITY.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -42,6 +43,7 @@ check_v044_standalone_abi.py
 check_v0451_native_element_construction.py
 check_v045_native_element_engine.py
 check_v0462_native_emissivity_opacity.py
+check_v0463_native_emissivity_opacity.py
 check_v046_native_emissivity_opacity.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -74,6 +76,10 @@ run_v0462_xstar_standalone_spectral_engine.sh
 run_v0462_xstar_tools_python.sh
 run_v0462_xstar_tools_spectral_candidate.sh
 run_v0462_xstar_tools_spectral_qualification.sh
+run_v0463_xstar_standalone_spectral_engine.sh
+run_v0463_xstar_tools_python.sh
+run_v0463_xstar_tools_spectral_candidate.sh
+run_v0463_xstar_tools_spectral_qualification.sh
 run_v046_xstar_standalone_spectral_engine.sh
 run_v046_xstar_tools_python.sh
 run_v046_xstar_tools_spectral_candidate.sh
@@ -294,6 +300,7 @@ xstar_tools_v0.6.44.3_handoff.md
 xstar_tools_v0.6.45.1_handoff.md
 xstar_tools_v0.6.45_handoff.md
 xstar_tools_v0.6.46.2_handoff.md
+xstar_tools_v0.6.46.3_handoff.md
 xstar_tools_v0.6.46_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256

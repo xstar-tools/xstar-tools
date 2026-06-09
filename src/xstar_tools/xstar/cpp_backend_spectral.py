@@ -1,4 +1,4 @@
-"""Persistent native emissivity/opacity contribution engine for v0.6.46.2.
+"""Persistent native emissivity/opacity contribution engine for v0.6.46.3.
 
 Python retains atomic-data traversal and scalar UCalc evaluation in this
 candidate.  Source-ordered line/RRC/continuum contribution construction,
@@ -307,7 +307,7 @@ def _apply_spectral_batch(
         if target_array.ctypes.data != native_array.ctypes.data:
             np.copyto(target_array, native_array.reshape(target_array.shape))
     return {
-        "schema_version": "0.6.46.2",
+        "schema_version": "0.6.46.3",
         "contributions": len(rows),
         "calls": int(stats.calls),
         "contributions_attempted": int(stats.contributions_attempted),
@@ -324,6 +324,8 @@ def _apply_spectral_batch(
         "exact_profile_oracle_calls": 0,
         "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "strict_source_rounding": True,
+        "source_hunt_floor": float(np.float32(1.0e-34)),
         "message": error.value.decode("utf-8", "replace"),
     }
 
@@ -340,6 +342,10 @@ def _merge_metrics(total: dict[str, Any], item: Mapping[str, Any]) -> None:
         total[key] = float(total.get(key, 0.0) or 0.0) + float(item.get(key, 0.0) or 0.0)
     if item.get("message"):
         total["message"] = str(item["message"])
+    if "strict_source_rounding" in item:
+        total["strict_source_rounding"] = bool(item.get("strict_source_rounding"))
+    if "source_hunt_floor" in item:
+        total["source_hunt_floor"] = float(item.get("source_hunt_floor", 0.0) or 0.0)
 
 
 def apply_spectral_contributions_cpp(
@@ -385,7 +391,7 @@ def apply_spectral_contributions_cpp(
     from .spectral_profile_oracle import source_linopac_profile_samples
 
     total: dict[str, Any] = {
-        "schema_version": "0.6.46.2", "message": "exact source-profile oracle applied",
+        "schema_version": "0.6.46.3", "message": "exact source-profile oracle applied",
         "contributions": 0, "calls": 0, "contributions_attempted": 0,
         "contributions_committed": 0, "emissivity_contributions": 0,
         "opacity_contributions": 0, "line_profiles": 0,
@@ -394,6 +400,8 @@ def apply_spectral_contributions_cpp(
         "opacity_seconds": 0.0, "commit_seconds": 0.0,
         "exact_profile_oracle_calls": 0, "exact_profile_oracle_values": 0,
         "exact_profile_oracle_line_profiles": 0,
+        "strict_source_rounding": True,
+        "source_hunt_floor": float(np.float32(1.0e-34)),
     }
     pending: list[Mapping[str, Any]] = []
 
