@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.45 - 2026-06-08
+
+- Added stable native element-engine ABI version 60450.
+- Added persistent H/He/Mg element contexts and one-call element/evaluation entry points.
+- Moved source-ordered dense/heating matrix accumulation, normalization, Lucy/fixed-point population solving, derived ion state, and state commit into `libxstar_engine.so`.
+- Added the Python ctypes adapter with exact shadow qualification and whole-element Python fallback.
+- Added standalone element and one-call H/He/Mg evaluation self-tests.
+- Added 183-call science qualification/product provenance and acceptance gates.
+- Retained atomic-data traversal and scalar source-ordered `MatrixTerm` construction in Python pending the next coarse rate-construction port.
+
 ## 0.6.44.3 - 2026-06-08
 
 - Added Python backend runtime rpath entries derived from `python3-config --embed --ldflags` so Conda/shared-libpython installs can load `libxstar_backend_python.so` via `dlopen`.

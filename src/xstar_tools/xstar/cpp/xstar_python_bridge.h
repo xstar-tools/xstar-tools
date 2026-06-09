@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define XSTAR_PYTHON_BRIDGE_ABI_VERSION 60440u
+#define XSTAR_PYTHON_BRIDGE_ABI_VERSION 60450u
 
 XSTAR_API_EXPORT uint32_t xstar_python_bridge_abi_version(void);
 

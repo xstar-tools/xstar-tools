@@ -1,0 +1,219 @@
+#ifndef XSTAR_ELEMENT_ENGINE_H
+#define XSTAR_ELEMENT_ENGINE_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef _WIN32
+#  define XSTAR_ELEMENT_EXPORT __declspec(dllexport)
+#else
+#  define XSTAR_ELEMENT_EXPORT __attribute__((visibility("default")))
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define XSTAR_ELEMENT_ENGINE_ABI_VERSION 60450u
+#define XSTAR_ELEMENT_MESSAGE_SIZE 1024u
+
+typedef enum xstar_element_flags_v1 {
+    XSTAR_ELEMENT_STRICT_SOURCE_ORDER = 1u << 0,
+    XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY = 1u << 1,
+    XSTAR_ELEMENT_RETURN_MATRICES = 1u << 2,
+    XSTAR_ELEMENT_ALLOW_DENSE_RESCUE = 1u << 3
+} xstar_element_flags_v1;
+
+typedef enum xstar_element_status_flags_v1 {
+    XSTAR_ELEMENT_STATUS_NONE = 0u,
+    XSTAR_ELEMENT_STATUS_CONVERGED = 1u << 0,
+    XSTAR_ELEMENT_STATUS_SOURCE_ORDER_VERIFIED = 1u << 1,
+    XSTAR_ELEMENT_STATUS_NATIVE_MATRIX_ASSEMBLY = 1u << 2,
+    XSTAR_ELEMENT_STATUS_NATIVE_LUCY_SOLVE = 1u << 3,
+    XSTAR_ELEMENT_STATUS_STATE_COMMITTED = 1u << 4,
+    XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED = 1u << 5
+} xstar_element_status_flags_v1;
+
+typedef struct xstar_element_term_v1 {
+    int64_t source_position;
+    int64_t term_index;
+    int64_t record;
+    int32_t data_type;
+    int32_t rate_type;
+    int32_t ion_index;
+    int32_t ion_stage;
+    int32_t row;
+    int32_t column;
+    int32_t reserved0;
+    int32_t reserved1;
+    double aj1;
+    double aj2;
+    double cj;
+    double cj2;
+} xstar_element_term_v1;
+
+typedef struct xstar_element_input_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t flags;
+    int32_t element_z;
+    int32_t n_rows;
+    int32_t n_superlevels;
+    int32_t n_ions;
+    int32_t normalization_row;
+    int32_t max_lucy_iterations;
+    int32_t max_fixed_point_iterations;
+    int32_t reserved0;
+    double lucy_tolerance;
+    double fixed_point_tolerance;
+    const int32_t* superlevel_by_row;
+    const int32_t* ion_by_row;
+    const double* initial_populations;
+    const xstar_element_term_v1* terms;
+    size_t term_count;
+} xstar_element_input_v1;
+
+typedef struct xstar_element_output_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_flags;
+    int32_t element_z;
+    int32_t outer_iterations;
+    int32_t fixed_point_iterations;
+    int32_t n_negative_populations;
+    int32_t condensed_dimension;
+    int32_t reserved0;
+    double final_outer_difference;
+    double final_fixed_point_difference;
+    double normalization;
+    double normalization_error;
+    double heating;
+    double cooling;
+    double heating2;
+    double cooling2;
+    double max_relative_row_residual;
+    double max_active_relative_row_residual;
+    double l1_row_residual;
+    double l1_relative_row_residual;
+    double matrix_assembly_seconds;
+    double solver_seconds;
+    double state_commit_seconds;
+
+    double* populations;
+    size_t populations_capacity;
+    size_t populations_count;
+    double* final_outer_start_populations;
+    size_t final_outer_start_capacity;
+    size_t final_outer_start_count;
+
+    double* dense_matrix;
+    size_t dense_matrix_capacity;
+    size_t dense_matrix_count;
+    double* heating_matrix;
+    size_t heating_matrix_capacity;
+    size_t heating_matrix_count;
+    double* heating_matrix2;
+    size_t heating_matrix2_capacity;
+    size_t heating_matrix2_count;
+    double* rhs;
+    size_t rhs_capacity;
+    size_t rhs_count;
+
+    double* gamma;
+    size_t gamma_capacity;
+    double* alpha;
+    size_t alpha_capacity;
+    double* fgamma;
+    size_t fgamma_capacity;
+    double* falpha;
+    size_t falpha_capacity;
+    int64_t* igammamax_record;
+    size_t igammamax_capacity;
+    int64_t* ialphamax_record;
+    size_t ialphamax_capacity;
+
+    double* ion_population_totals;
+    size_t ion_population_totals_capacity;
+    double* ion_population_totals_final_vector;
+    size_t ion_population_totals_final_capacity;
+    double* ionization_totals;
+    size_t ionization_totals_capacity;
+    double* recombination_totals;
+    size_t recombination_totals_capacity;
+    double* ionization_components;
+    size_t ionization_components_capacity;
+    double* recombination_components;
+    size_t recombination_components_capacity;
+
+    double* row_residual;
+    size_t row_residual_capacity;
+    double* row_scale;
+    size_t row_scale_capacity;
+    double* relative_row_residual;
+    size_t relative_row_residual_capacity;
+
+    char solver_method[128];
+    char message[XSTAR_ELEMENT_MESSAGE_SIZE];
+} xstar_element_output_v1;
+
+typedef struct xstar_element_engine_stats_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint64_t elements_attempted;
+    uint64_t elements_completed;
+    uint64_t evaluations_attempted;
+    uint64_t evaluations_completed;
+    uint64_t terms_committed;
+    uint64_t source_order_failures;
+    uint64_t workspace_resizes;
+    double matrix_assembly_seconds;
+    double solver_seconds;
+    double state_commit_seconds;
+} xstar_element_engine_stats_v1;
+
+typedef struct xstar_element_engine_context xstar_element_engine_context;
+
+XSTAR_ELEMENT_EXPORT uint32_t xstar_element_engine_abi_version(void);
+XSTAR_ELEMENT_EXPORT const char* xstar_element_engine_backend_name(void);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_feature_flags(void);
+XSTAR_ELEMENT_EXPORT int xstar_element_input_init_v1(xstar_element_input_v1* input);
+XSTAR_ELEMENT_EXPORT int xstar_element_output_init_v1(xstar_element_output_v1* output);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_stats_init_v1(xstar_element_engine_stats_v1* stats);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_context_create_v1(
+    xstar_element_engine_context** context,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT void xstar_element_engine_context_destroy(xstar_element_engine_context* context);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_context_reset_v1(
+    xstar_element_engine_context* context,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_get_stats_v1(
+    const xstar_element_engine_context* context,
+    xstar_element_engine_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_element_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_evaluation_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* inputs,
+    size_t element_count,
+    xstar_element_output_v1* outputs,
+    char* message,
+    size_t message_size
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

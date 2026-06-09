@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define XSTAR_BACKEND_PLUGIN_ABI_VERSION 60440u
+#define XSTAR_BACKEND_PLUGIN_ABI_VERSION 60450u
 
 typedef struct xstar_backend_descriptor_v1 {
     uint32_t struct_size;

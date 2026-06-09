@@ -622,11 +622,11 @@ bool native_type50_scalars(
 extern "C" {
 
 int xstar_engine_abi_version() {
-    return 9;
+    return 10;
 }
 
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_type50_opakab_state_restoration_candidate_v040";
+    return "xstar_engine_h_he_mg_native_element_boundary_v0645";
 }
 
 int xstar_engine_feature_flags() {
@@ -638,7 +638,7 @@ int xstar_engine_feature_flags() {
     // bit 5: Type-88 mixed-grid full-integration semantics.
     // bit 6: Type-63 Python-operation-order exactness refinement.
     // bit 9: native Type-50 line-center opakab result channel.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512;
+    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096;
 }
 
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
@@ -647,7 +647,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.33 Type-63 bit-exact native scalar shadow ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.45 native H/He/Mg element matrix/Lucy ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());

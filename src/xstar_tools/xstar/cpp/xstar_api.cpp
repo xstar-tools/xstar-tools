@@ -20,6 +20,13 @@ using xstar_standalone::field_text;
 constexpr std::array<const char*, 2> kBackends{{"cpp", "python"}};
 thread_local std::string g_api_last_error;
 
+using element_create_fn = int (*)(xstar_element_engine_context**, char*, size_t);
+using element_destroy_fn = void (*)(xstar_element_engine_context*);
+using element_reset_fn = int (*)(xstar_element_engine_context*, char*, size_t);
+using element_run_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, xstar_element_output_v1*, char*, size_t);
+using element_eval_fn = int (*)(xstar_element_engine_context*, const xstar_element_input_v1*, size_t, xstar_element_output_v1*, char*, size_t);
+using element_stats_fn = int (*)(const xstar_element_engine_context*, xstar_element_engine_stats_v1*, char*, size_t);
+
 struct LoadedPlugin {
     void* handle = nullptr;
     const xstar_backend_descriptor_v1* descriptor = nullptr;
@@ -34,6 +41,14 @@ struct xstar_context_impl {
     xstar_config_v1 config{};
     std::unique_ptr<LoadedPlugin> plugin;
     void* backend_context = nullptr;
+    void* element_handle = nullptr;
+    xstar_element_engine_context* element_context = nullptr;
+    element_create_fn element_create = nullptr;
+    element_destroy_fn element_destroy = nullptr;
+    element_reset_fn element_reset = nullptr;
+    element_run_fn element_run = nullptr;
+    element_eval_fn element_eval = nullptr;
+    element_stats_fn element_stats = nullptr;
     std::string last_error;
     mutable std::mutex mutex;
 };
@@ -110,6 +125,61 @@ std::unique_ptr<LoadedPlugin> load_plugin(
     for (const auto& failure : failures) output << "\n  " << failure;
     error_message = output.str();
     return nullptr;
+}
+
+int ensure_element_engine(xstar_context_impl& context) {
+    if (context.element_context != nullptr) return XSTAR_STATUS_OK;
+    const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
+    const std::string engine_backend = field_text(context.config.engine_backend, XSTAR_BACKEND_NAME_SIZE);
+    if (backend != "cpp" || (!engine_backend.empty() && engine_backend != "inherit" && engine_backend != "cpp")) {
+        context.last_error = "typed native element API requires backend=cpp and engine_backend=cpp/inherit";
+        return XSTAR_STATUS_NOT_IMPLEMENTED;
+    }
+    std::vector<std::string> failures;
+    for (const auto& directory : plugin_directories(context.config)) {
+        const auto candidate = directory / "libxstar_engine.so";
+        void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            const char* error = dlerror();
+            failures.push_back(candidate.string() + ": " + (error ? error : "dlopen failed"));
+            continue;
+        }
+        auto abi = reinterpret_cast<uint32_t (*)()>(dlsym(handle, "xstar_element_engine_abi_version"));
+        auto create = reinterpret_cast<element_create_fn>(dlsym(handle, "xstar_element_engine_context_create_v1"));
+        auto destroy = reinterpret_cast<element_destroy_fn>(dlsym(handle, "xstar_element_engine_context_destroy"));
+        auto reset = reinterpret_cast<element_reset_fn>(dlsym(handle, "xstar_element_engine_context_reset_v1"));
+        auto run = reinterpret_cast<element_run_fn>(dlsym(handle, "xstar_element_engine_run_element_v1"));
+        auto eval = reinterpret_cast<element_eval_fn>(dlsym(handle, "xstar_element_engine_run_evaluation_v1"));
+        auto stats = reinterpret_cast<element_stats_fn>(dlsym(handle, "xstar_element_engine_get_stats_v1"));
+        if (!abi || abi() != XSTAR_ELEMENT_ENGINE_ABI_VERSION || !create || !destroy || !reset || !run || !eval || !stats) {
+            failures.push_back(candidate.string() + ": incompatible element-engine ABI");
+            dlclose(handle);
+            continue;
+        }
+        std::array<char, XSTAR_MESSAGE_SIZE> message{};
+        xstar_element_engine_context* element_context = nullptr;
+        const int rc = create(&element_context, message.data(), message.size());
+        if (rc != 0 || !element_context) {
+            failures.push_back(candidate.string() + ": " + std::string(message.data()));
+            dlclose(handle);
+            continue;
+        }
+        context.element_handle = handle;
+        context.element_context = element_context;
+        context.element_create = create;
+        context.element_destroy = destroy;
+        context.element_reset = reset;
+        context.element_run = run;
+        context.element_eval = eval;
+        context.element_stats = stats;
+        context.last_error = message.data();
+        return XSTAR_STATUS_OK;
+    }
+    std::ostringstream text;
+    text << "could not load native element engine";
+    for (const auto& failure : failures) text << "\n  " << failure;
+    context.last_error = text.str();
+    return XSTAR_STATUS_BACKEND_LOAD_FAILED;
 }
 
 int validate_config(const xstar_config_v1* config, std::string& error) {
@@ -276,6 +346,14 @@ int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** conte
 void xstar_context_destroy(xstar_context* context) {
     auto* value = impl(context);
     if (value == nullptr) return;
+    if (value->element_context && value->element_destroy) {
+        value->element_destroy(value->element_context);
+        value->element_context = nullptr;
+    }
+    if (value->element_handle) {
+        dlclose(value->element_handle);
+        value->element_handle = nullptr;
+    }
     if (value->plugin && value->plugin->descriptor && value->plugin->descriptor->destroy) {
         value->plugin->descriptor->destroy(value->backend_context);
     }
@@ -291,6 +369,15 @@ int xstar_context_reset(xstar_context* context) {
     const int status = value->plugin->descriptor->reset(
         value->backend_context, message.data(), message.size());
     value->last_error = message.data();
+    if (status == XSTAR_STATUS_OK && value->element_context && value->element_reset) {
+        std::array<char, XSTAR_MESSAGE_SIZE> element_message{};
+        const int element_status = value->element_reset(
+            value->element_context, element_message.data(), element_message.size());
+        if (element_status != 0) {
+            value->last_error = element_message.data();
+            return XSTAR_STATUS_BACKEND_ERROR;
+        }
+    }
     return status;
 }
 
@@ -385,6 +472,54 @@ int xstar_context_run_batch_v1(
         value->backend_context, inputs, zone_count, outputs, message.data(), message.size());
     value->last_error = message.data();
     return status;
+}
+
+int xstar_context_run_element_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* input,
+    xstar_element_output_v1* output
+) {
+    auto* value = impl(context);
+    if (!value || !input || !output) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_element_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->element_run(value->element_context, input, output, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_run_evaluation_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* inputs,
+    size_t element_count,
+    xstar_element_output_v1* outputs
+) {
+    auto* value = impl(context);
+    if (!value || (element_count && (!inputs || !outputs))) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_element_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->element_eval(value->element_context, inputs, element_count, outputs, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
+}
+
+int xstar_context_get_element_stats_v1(
+    const xstar_context* context,
+    xstar_element_engine_stats_v1* stats
+) {
+    auto* value = const_cast<xstar_context_impl*>(impl(context));
+    if (!value || !stats || stats->struct_size < sizeof(*stats)) return XSTAR_STATUS_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(value->mutex);
+    const int load_status = ensure_element_engine(*value);
+    if (load_status != XSTAR_STATUS_OK) return load_status;
+    std::array<char, XSTAR_MESSAGE_SIZE> message{};
+    const int rc = value->element_stats(value->element_context, stats, message.data(), message.size());
+    value->last_error = message.data();
+    return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
 } // extern "C"

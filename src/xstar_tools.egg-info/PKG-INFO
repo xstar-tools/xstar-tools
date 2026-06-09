@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.44.3
+Version: 0.6.45
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,16 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.45 complete native H/He/Mg element engine
+
+v0.6.45 adds a persistent source-order-preserving element engine to
+`libxstar_engine.so`. H, He, and Mg ordered matrix accumulation, normalization,
+Lucy/fixed-point population solving, derived ion state, and state commit can
+run through one native call per element, with a public one-call evaluation ABI.
+Python remains available for exact shadow qualification and fallback. Atomic
+data traversal and scalar `MatrixTerm` construction remain Python-owned in this
+release. See `V0645_COMPLETE_NATIVE_ELEMENT_ENGINE.md`.
 
 ## v0.6.44.3 filesystem linker compatibility hotfix
 

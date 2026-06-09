@@ -46,7 +46,7 @@ std::string python_error_text() {
 bool ensure_python(const xstar_config_v1* config, std::string& error) {
     if (!Py_IsInitialized()) {
         if (config && config->python_home[0] != '\0') {
-            error = "python_home is reserved in v0.6.44.3; use PYTHONHOME before process start";
+            error = "python_home is reserved in v0.6.45; use PYTHONHOME before process start";
             return false;
         }
         Py_Initialize();
@@ -326,7 +326,7 @@ int python_run_batch(void* opaque, const xstar_zone_input_v1* inputs, std::size_
                      xstar_zone_output_v1* outputs, char* message, std::size_t message_size) {
     auto* context = static_cast<PythonBackendContext*>(opaque);
     if (!context || (count && (!inputs || !outputs))) return XSTAR_STATUS_INVALID_ARGUMENT;
-    /* Keep ABI behavior simple and deterministic in v0.6.44.3. The persistent
+    /* Keep ABI behavior simple and deterministic in v0.6.45. The persistent
        Python context is reused; later releases can vectorize this call. */
     for (std::size_t i = 0; i < count; ++i) {
         const int status = python_run_zone(context, inputs + i, outputs + i, message, message_size);

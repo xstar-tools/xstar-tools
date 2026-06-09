@@ -21,25 +21,23 @@ src/xstar_tools/xstar/*.py
 
 Do not copy shared libraries into `src/xstar_tools/xstar/`.
 
-## v0.6.44.3 standalone architecture
+## v0.6.45 native element architecture
 
-v0.6.44.3 adds:
+v0.6.45 retains the v0.6.44.3 standalone/backend structure and adds:
 
-- `libxstar_api.so`: stable versioned C ABI, backend registry, context lifecycle,
-  single-zone API, batch API, component status, and counters;
-- `libxstar_backend_cpp.so`: persistent C++ backend plugin that discovers the
-  existing physics libraries in this directory;
-- `libxstar_backend_python.so`: optional embedded-CPython backend plugin plus a
-  generic JSON bridge for adapted Python routines;
-- `xstar_cpp`: standalone executable linked only to `libxstar_api.so`;
-- public headers `xstar_api.h`, `xstar_backend_plugin.h`,
-  `xstar_python_bridge.h`, and the C++ RAII wrapper `xstar_api.hpp`.
+- `xstar_element_engine.h`: stable C ABI for persistent element/evaluation calls;
+- `element_engine.cpp`: H/He/Mg source-ordered matrix assembly, normalization,
+  Lucy/fixed-point solve, derived ion state, and state commit;
+- `xstar_context_run_element_v1` and `xstar_context_run_evaluation_v1`;
+- standalone `element-self-test` and `evaluation-self-test` commands.
 
-The typed zone/batch boundary is deliberately **scaffold-only in v0.6.44.3**.
-Without `XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL`, `run_zone` returns
-`XSTAR_STATUS_NOT_IMPLEMENTED`. Production science remains on the accepted
-v0.6.43.1 Python/hybrid runner while complete engine, emissivity, opacity, and
-thermal ownership are moved behind this ABI.
+The production Python adapter calls the native engine once per H, He, or Mg
+element. The public evaluation ABI accepts several element inputs in one call.
+Atomic-data traversal and scalar `MatrixTerm` generation remain in Python in
+this release; the native engine starts at the ordered term stream.
+
+The original typed zone/batch boundary remains scaffold-only. The new element
+boundary is real numerical code and does not require the scaffold-model flag.
 
 ## Build
 
@@ -104,6 +102,9 @@ xstar_context_run_zone_v1(...);
 xstar_context_run_batch_v1(...);
 xstar_context_get_component_info_v1(...);
 xstar_context_get_stats_v1(...);
+xstar_context_run_element_v1(...);
+xstar_context_run_evaluation_v1(...);
+xstar_context_get_element_stats_v1(...);
 xstar_context_destroy(...);
 ```
 

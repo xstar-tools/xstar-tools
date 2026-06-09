@@ -1,3 +1,13 @@
+## v0.6.45 complete native H/He/Mg element engine
+
+v0.6.45 adds a persistent source-order-preserving element engine to
+`libxstar_engine.so`. H, He, and Mg ordered matrix accumulation, normalization,
+Lucy/fixed-point population solving, derived ion state, and state commit can
+run through one native call per element, with a public one-call evaluation ABI.
+Python remains available for exact shadow qualification and fallback. Atomic
+data traversal and scalar `MatrixTerm` construction remain Python-owned in this
+release. See `V0645_COMPLETE_NATIVE_ELEMENT_ENGINE.md`.
+
 ## v0.6.44.3 filesystem linker compatibility hotfix
 
 This hotfix preserves ABI version 60440 and the v0.6.44 architecture while

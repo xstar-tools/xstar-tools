@@ -57,6 +57,35 @@ public:
         }
     }
 
+    void run_element(const xstar_element_input_v1& input, xstar_element_output_v1& output) {
+        const int status = xstar_context_run_element_v1(context_, &input, &output);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+    }
+
+    void run_evaluation(const std::vector<xstar_element_input_v1>& inputs,
+                        std::vector<xstar_element_output_v1>& outputs) {
+        if (inputs.size() != outputs.size()) {
+            throw std::invalid_argument("element input/output sizes differ");
+        }
+        const int status = xstar_context_run_evaluation_v1(
+            context_, inputs.data(), inputs.size(), outputs.data());
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+    }
+
+    xstar_element_engine_stats_v1 element_stats() const {
+        xstar_element_engine_stats_v1 stats{};
+        xstar_element_engine_stats_init_v1(&stats);
+        const int status = xstar_context_get_element_stats_v1(context_, &stats);
+        if (status != XSTAR_STATUS_OK) {
+            throw Error(status, xstar_context_last_error(context_));
+        }
+        return stats;
+    }
+
     xstar_context* get() noexcept { return context_; }
     const xstar_context* get() const noexcept { return context_; }
 

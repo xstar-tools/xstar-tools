@@ -378,3 +378,11 @@ include V06443_PYTHON_LIBPYTHON_RPATH_HOTFIX.md
 include xstar_tools_v0.6.44.3_handoff.md
 include run_v0443_xstar_standalone_abi.sh
 include check_v0443_standalone_abi.py
+
+include V0645_COMPLETE_NATIVE_ELEMENT_ENGINE.md
+include xstar_tools_v0.6.45_handoff.md
+include run_v045_xstar_standalone_element_engine.sh
+include run_v045_xstar_tools_python.sh
+include run_v045_xstar_tools_element_qualification.sh
+include run_v045_xstar_tools_element_candidate.sh
+include check_v045_native_element_engine.py

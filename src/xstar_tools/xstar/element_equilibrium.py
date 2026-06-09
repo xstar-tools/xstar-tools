@@ -3444,6 +3444,115 @@ def _run_rate_payload_four_family_product_candidate(
         summary["live_matrix_commit"] = False
         return original_terms
 
+def _native_element_engine_env_enabled(element_z: int, *, product: bool = False, shadow: bool = False) -> bool:
+    """Return whether the v0.6.45 one-call native element boundary is requested."""
+    enabled = str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        return False
+    try:
+        elements = {int(item.strip()) for item in str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ELEMENTS", "1,2,12")).split(",") if item.strip()}
+    except ValueError:
+        elements = {1, 2, 12}
+    if int(element_z) not in elements:
+        return False
+    if product and str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_PRODUCT", "0")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return False
+    if shadow and str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_SHADOW", "0")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return False
+    return True
+
+
+def _record_native_element_engine_profile(
+    profile_control: MutableMapping[str, Any],
+    metrics: Mapping[str, Any],
+    *,
+    status: str,
+    mismatch: Optional[Mapping[str, Any]] = None,
+) -> None:
+    summary = profile_control.setdefault("native_element_engine_summary", {
+        "schema_version": "0.6.45",
+        "elements_attempted": 0,
+        "elements_committed": 0,
+        "shadow_compared": 0,
+        "shadow_mismatches": 0,
+        "fallbacks": 0,
+        "matrix_assembly_seconds": 0.0,
+        "solver_seconds": 0.0,
+        "state_commit_seconds": 0.0,
+        "ffi_seconds": 0.0,
+        "terms": 0,
+        "rows": 0,
+        "by_element": {},
+        "first_mismatch": {},
+    })
+    if not isinstance(summary, dict):
+        return
+    z = int(metrics.get("element_z", 0) or 0)
+    summary["elements_attempted"] = int(summary.get("elements_attempted", 0)) + 1
+    if status == "committed":
+        summary["elements_committed"] = int(summary.get("elements_committed", 0)) + 1
+    elif status == "shadow_match":
+        summary["shadow_compared"] = int(summary.get("shadow_compared", 0)) + 1
+    elif status == "shadow_mismatch":
+        summary["shadow_compared"] = int(summary.get("shadow_compared", 0)) + 1
+        summary["shadow_mismatches"] = int(summary.get("shadow_mismatches", 0)) + 1
+        if mismatch and not summary.get("first_mismatch"):
+            summary["first_mismatch"] = dict(mismatch)
+    elif status == "fallback":
+        summary["fallbacks"] = int(summary.get("fallbacks", 0)) + 1
+    for key, source in (
+        ("matrix_assembly_seconds", "native_matrix_assembly_seconds"),
+        ("solver_seconds", "native_solver_seconds"),
+        ("state_commit_seconds", "native_state_commit_seconds"),
+        ("ffi_seconds", "ffi_call_seconds"),
+    ):
+        summary[key] = float(summary.get(key, 0.0)) + float(metrics.get(source, 0.0) or 0.0)
+    summary["terms"] = int(summary.get("terms", 0)) + int(metrics.get("terms", 0) or 0)
+    summary["rows"] = int(summary.get("rows", 0)) + int(metrics.get("rows", 0) or 0)
+    by_element = summary.setdefault("by_element", {})
+    if isinstance(by_element, dict):
+        bucket = by_element.setdefault(str(z), {"attempted": 0, "committed": 0, "shadow_compared": 0, "shadow_mismatches": 0, "fallbacks": 0})
+        bucket["attempted"] = int(bucket.get("attempted", 0)) + 1
+        if status == "committed": bucket["committed"] = int(bucket.get("committed", 0)) + 1
+        if status.startswith("shadow_"): bucket["shadow_compared"] = int(bucket.get("shadow_compared", 0)) + 1
+        if status == "shadow_mismatch": bucket["shadow_mismatches"] = int(bucket.get("shadow_mismatches", 0)) + 1
+        if status == "fallback": bucket["fallbacks"] = int(bucket.get("fallbacks", 0)) + 1
+
+
+def _native_element_solve_mismatch(python_solve: Any, native_solve: Any) -> Dict[str, Any]:
+    """Return the first exact mismatch between Python and native element results."""
+    array_fields = (
+        "populations", "gamma", "alpha", "fgamma", "falpha",
+        "igammamax_record", "ialphamax_record", "ion_population_totals",
+        "ion_population_totals_final_vector", "ionization_totals",
+        "recombination_totals", "ionization_components", "recombination_components",
+    )
+    for name in array_fields:
+        left = np.asarray(getattr(python_solve, name))
+        right = np.asarray(getattr(native_solve, name))
+        if left.shape != right.shape or not np.array_equal(left, right, equal_nan=True):
+            if left.shape == right.shape and left.size:
+                diff = np.flatnonzero(~np.isclose(left, right, rtol=0.0, atol=0.0, equal_nan=True))
+                index = int(diff[0]) if diff.size else -1
+                return {"field": name, "flat_index": index, "python": None if index < 0 else left.reshape(-1)[index].item(), "native": None if index < 0 else right.reshape(-1)[index].item()}
+            return {"field": name, "python_shape": list(left.shape), "native_shape": list(right.shape)}
+    scalar_fields = (
+        "converged", "outer_iterations", "fixed_point_iterations",
+        "final_outer_difference", "final_fixed_point_difference",
+        "n_negative_populations", "heating", "cooling", "heating2", "cooling2",
+    )
+    for name in scalar_fields:
+        left = getattr(python_solve, name)
+        right = getattr(native_solve, name)
+        if isinstance(left, float) or isinstance(right, float):
+            equal = (math.isnan(float(left)) and math.isnan(float(right))) or float(left) == float(right)
+        else:
+            equal = left == right
+        if not equal:
+            return {"field": name, "python": left, "native": right}
+    return {}
+
+
 def _assemble_element_matrix_impl(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -7409,8 +7518,22 @@ def _assemble_element_matrix_impl(
             )
     dense = heat = heat2 = None
     dense_fill_cpp_used = False
+    _native_element_product = _native_element_engine_env_enabled(int(element_z), product=True)
+    _native_element_shadow = _native_element_engine_env_enabled(int(element_z), shadow=True)
+    _native_element_owns_dense = bool(
+        _native_element_product
+        and not _native_element_shadow
+        and str(profile_control.get("diagnostics_mode", "full")).strip().lower() == "none"
+        and not context.capture_lucy_trace
+        and not _matrix_dataflow_probe
+        and not _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS")
+    )
+    if _native_element_owns_dense:
+        dense = np.empty((0, 0), dtype=float)
+        heat = np.empty((0, 0), dtype=float)
+        heat2 = np.empty((0, 0), dtype=float)
     dense_fill_cpp_enabled = str(os.environ.get("XSTAR_ATOMIC_MATRIX_DENSE_FILL_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
-    if int(element_z) == 12 and _matrix_cpp_active_for_mg() and dense_fill_cpp_enabled and terms:
+    if (not _native_element_owns_dense) and int(element_z) == 12 and _matrix_cpp_active_for_mg() and dense_fill_cpp_enabled and terms:
         try:
             dense, heat, heat2, dense_msg, dense_stats = dense_fill_terms_matrix_cpp(
                 [
@@ -7509,8 +7632,12 @@ def _assemble_element_matrix_impl(
         or _env_true("XSTAR_ATOMIC_MATRIX_MG_SIMPLE_PAYLOAD_CHECKPOINTS")
     )
     _norm_t0 = time.perf_counter()
-    normalized = dense.copy() if _retain_normalized_matrix else np.empty((0, 0), dtype=float)
-    rhs = np.zeros(basis.n_rows, dtype=float)
+    if _native_element_owns_dense:
+        normalized = np.empty((0, 0), dtype=float)
+        rhs = np.zeros(basis.n_rows, dtype=float)
+    else:
+        normalized = dense.copy() if _retain_normalized_matrix else np.empty((0, 0), dtype=float)
+        rhs = np.zeros(basis.n_rows, dtype=float)
     _norm_construct_seconds = time.perf_counter() - _norm_t0
     if _matrix_dataflow_probe:
         _matrix_dataflow_add(
@@ -7524,7 +7651,7 @@ def _assemble_element_matrix_impl(
             allocation_count=2.0,
         )
     _norm_commit_t0 = time.perf_counter()
-    if _retain_normalized_matrix:
+    if _retain_normalized_matrix and not _native_element_owns_dense:
         normalized[basis.normalization_row - 1, :] = 1.0
     rhs[basis.normalization_row - 1] = 1.0
     _norm_commit_seconds = time.perf_counter() - _norm_commit_t0
@@ -8304,7 +8431,71 @@ def solve_element_statistical_equilibrium(
     solve: Optional[LucySolveResult] = None
     if assembly.strict_assembly_ready or not context.strict_context:
         if assembly.terms:
-            if int(element_z) == 12:
+            _native_product = _native_element_engine_env_enabled(int(element_z), product=True)
+            _native_shadow = _native_element_engine_env_enabled(int(element_z), shadow=True)
+            if _native_product or _native_shadow:
+                try:
+                    from .cpp_backend_element import run_element_engine_cpp
+                    _python_dense = np.asarray(assembly.dense_matrix).copy() if _native_shadow else None
+                    _python_heat = np.asarray(assembly.heating_matrix).copy() if _native_shadow else None
+                    _python_heat2 = np.asarray(assembly.heating_matrix2).copy() if _native_shadow else None
+                    _python_rhs = np.asarray(assembly.rhs).copy() if _native_shadow else None
+                    native_solve, native_metrics = run_element_engine_cpp(assembly, context)
+                    if _native_shadow:
+                        matrix_mismatch: Dict[str, Any] = {}
+                        for _name, _accepted, _candidate in (
+                            ("dense_matrix", _python_dense, assembly.dense_matrix),
+                            ("heating_matrix", _python_heat, assembly.heating_matrix),
+                            ("heating_matrix2", _python_heat2, assembly.heating_matrix2),
+                            ("rhs", _python_rhs, assembly.rhs),
+                        ):
+                            if _accepted is not None and not np.array_equal(np.asarray(_accepted), np.asarray(_candidate), equal_nan=True):
+                                _left = np.asarray(_accepted).reshape(-1)
+                                _right = np.asarray(_candidate).reshape(-1)
+                                _diff = np.flatnonzero(~np.isclose(_left, _right, rtol=0.0, atol=0.0, equal_nan=True))
+                                _idx = int(_diff[0]) if _diff.size else -1
+                                matrix_mismatch = {
+                                    "field": _name, "flat_index": _idx,
+                                    "python": None if _idx < 0 else _left[_idx].item(),
+                                    "native": None if _idx < 0 else _right[_idx].item(),
+                                }
+                                break
+                        assembly.dense_matrix = _python_dense
+                        assembly.heating_matrix = _python_heat
+                        assembly.heating_matrix2 = _python_heat2
+                        assembly.rhs = _python_rhs
+                        python_solve = msolvelucy(assembly, context)
+                        mismatch = matrix_mismatch or _native_element_solve_mismatch(python_solve, native_solve)
+                        if mismatch:
+                            _record_native_element_engine_profile(
+                                profile_control, native_metrics, status="shadow_mismatch", mismatch=mismatch
+                            )
+                            if _native_product and not _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_ALLOW_MISMATCH"):
+                                solve = python_solve
+                                _record_native_element_engine_profile(
+                                    profile_control, native_metrics, status="fallback"
+                                )
+                            else:
+                                solve = native_solve if _native_product else python_solve
+                        else:
+                            _record_native_element_engine_profile(
+                                profile_control, native_metrics, status="shadow_match"
+                            )
+                            solve = native_solve if _native_product else python_solve
+                    else:
+                        solve = native_solve
+                        _record_native_element_engine_profile(
+                            profile_control, native_metrics, status="committed"
+                        )
+                except Exception as exc:
+                    native_metrics = {"element_z": int(element_z), "rows": int(assembly.basis.n_rows), "terms": len(assembly.terms)}
+                    _record_native_element_engine_profile(
+                        profile_control, native_metrics, status="fallback", mismatch={"error": str(exc)}
+                    )
+                    if not bool(context.profile_control is not None and context.profile_control.get("element_engine_fallback_enabled", True)):
+                        raise
+                    solve = msolvelucy(assembly, context)
+            elif int(element_z) == 12:
                 with profile_component(
                     profile_control,
                     "calc_hmc_all.element_solver.solver_call",

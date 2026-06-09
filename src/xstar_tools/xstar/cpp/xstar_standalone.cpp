@@ -3,6 +3,7 @@
 #include "xstar_standalone_internal.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
@@ -39,13 +40,15 @@ void usage(std::ostream& output) {
         "  xstar_cpp list-backends\n"
         "  xstar_cpp backend-info --backend cpp|python [--plugin-dir DIR]\n"
         "  xstar_cpp self-test --backend cpp|python [--batch N] [--plugin-dir DIR]\n"
+        "  xstar_cpp element-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp evaluation-self-test --backend cpp [--plugin-dir DIR]\n"
         "  Component overrides: --engine-backend, --rates-backend, --matrix-backend,\n"
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.44.3 freezes the standalone ABI and persistent context. The typed\n"
-        "zone boundary is scaffold-only; production science remains on the\n"
-        "accepted Python/hybrid runners until the complete engine is ported.\n";
+        "v0.6.45 adds a product-capable native element boundary for H, He, and Mg:\n"
+        "source-ordered matrix construction, normalization, Lucy solve, and state\n"
+        "commit execute in libxstar_engine.so with one call per element/evaluation.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -291,6 +294,163 @@ int command_self_test(Options options) {
     return 0;
 }
 
+struct ElementBuffers {
+    std::array<std::int32_t, 2> superlevels{{1, 2}};
+    std::array<std::int32_t, 2> ions{{1, 2}};
+    std::array<double, 2> initial{{0.5, 0.5}};
+    std::array<xstar_element_term_v1, 4> terms{};
+    std::array<double, 2> populations{};
+    std::array<double, 2> final_outer{};
+    std::array<double, 4> dense{};
+    std::array<double, 4> heat{};
+    std::array<double, 4> heat2{};
+    std::array<double, 2> rhs{};
+    std::array<double, 2> gamma{};
+    std::array<double, 2> alpha{};
+    std::array<double, 10> fgamma{};
+    std::array<double, 10> falpha{};
+    std::array<std::int64_t, 2> igamma{};
+    std::array<std::int64_t, 2> ialpha{};
+    std::array<double, 2> ion_totals{};
+    std::array<double, 2> ion_totals_final{};
+    std::array<double, 2> ionization{};
+    std::array<double, 2> recombination{};
+    std::array<double, 6> ionization_components{};
+    std::array<double, 6> recombination_components{};
+    std::array<double, 2> residual{};
+    std::array<double, 2> scale{};
+    std::array<double, 2> relative{};
+};
+
+void initialize_element(int element_z, ElementBuffers& b,
+                        xstar_element_input_v1& input, xstar_element_output_v1& output) {
+    auto set = [&](int q, int row, int col, double aj1, double aj2) {
+        b.terms[static_cast<std::size_t>(q)] = {};
+        b.terms[static_cast<std::size_t>(q)].source_position = q + 1;
+        b.terms[static_cast<std::size_t>(q)].term_index = q + 1;
+        b.terms[static_cast<std::size_t>(q)].record = 100 + element_z;
+        b.terms[static_cast<std::size_t>(q)].rate_type = 7;
+        b.terms[static_cast<std::size_t>(q)].ion_index = 1;
+        b.terms[static_cast<std::size_t>(q)].ion_stage = 1;
+        b.terms[static_cast<std::size_t>(q)].row = row;
+        b.terms[static_cast<std::size_t>(q)].column = col;
+        b.terms[static_cast<std::size_t>(q)].aj1 = aj1;
+        b.terms[static_cast<std::size_t>(q)].aj2 = aj2;
+    };
+    set(0, 2, 1, 2.0, 1.0);
+    set(1, 1, 2, 1.0, 2.0);
+    set(2, 1, 1, -2.0, -2.0);
+    set(3, 2, 2, -1.0, -1.0);
+    input = {};
+    input.struct_size = sizeof(input);
+    input.abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
+    input.max_lucy_iterations = 100;
+    input.max_fixed_point_iterations = 200;
+    input.lucy_tolerance = 1.0e-2;
+    input.fixed_point_tolerance = 1.0e-2;
+    input.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER |
+                  XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY |
+                  XSTAR_ELEMENT_RETURN_MATRICES;
+    input.element_z = element_z;
+    input.n_rows = 2;
+    input.n_superlevels = 2;
+    input.n_ions = 2;
+    input.normalization_row = 2;
+    input.superlevel_by_row = b.superlevels.data();
+    input.ion_by_row = b.ions.data();
+    input.initial_populations = b.initial.data();
+    input.terms = b.terms.data();
+    input.term_count = b.terms.size();
+    output = {};
+    output.struct_size = sizeof(output);
+    output.abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
+#define XSTAR_SET_ELEMENT_BUFFER(field, capacity_field, buffer) \
+    output.field = b.buffer.data(); output.capacity_field = b.buffer.size()
+    XSTAR_SET_ELEMENT_BUFFER(populations, populations_capacity, populations);
+    XSTAR_SET_ELEMENT_BUFFER(final_outer_start_populations, final_outer_start_capacity, final_outer);
+    XSTAR_SET_ELEMENT_BUFFER(dense_matrix, dense_matrix_capacity, dense);
+    XSTAR_SET_ELEMENT_BUFFER(heating_matrix, heating_matrix_capacity, heat);
+    XSTAR_SET_ELEMENT_BUFFER(heating_matrix2, heating_matrix2_capacity, heat2);
+    XSTAR_SET_ELEMENT_BUFFER(rhs, rhs_capacity, rhs);
+    XSTAR_SET_ELEMENT_BUFFER(gamma, gamma_capacity, gamma);
+    XSTAR_SET_ELEMENT_BUFFER(alpha, alpha_capacity, alpha);
+    XSTAR_SET_ELEMENT_BUFFER(fgamma, fgamma_capacity, fgamma);
+    XSTAR_SET_ELEMENT_BUFFER(falpha, falpha_capacity, falpha);
+    XSTAR_SET_ELEMENT_BUFFER(igammamax_record, igammamax_capacity, igamma);
+    XSTAR_SET_ELEMENT_BUFFER(ialphamax_record, ialphamax_capacity, ialpha);
+    XSTAR_SET_ELEMENT_BUFFER(ion_population_totals, ion_population_totals_capacity, ion_totals);
+    XSTAR_SET_ELEMENT_BUFFER(ion_population_totals_final_vector, ion_population_totals_final_capacity, ion_totals_final);
+    XSTAR_SET_ELEMENT_BUFFER(ionization_totals, ionization_totals_capacity, ionization);
+    XSTAR_SET_ELEMENT_BUFFER(recombination_totals, recombination_totals_capacity, recombination);
+    XSTAR_SET_ELEMENT_BUFFER(ionization_components, ionization_components_capacity, ionization_components);
+    XSTAR_SET_ELEMENT_BUFFER(recombination_components, recombination_components_capacity, recombination_components);
+    XSTAR_SET_ELEMENT_BUFFER(row_residual, row_residual_capacity, residual);
+    XSTAR_SET_ELEMENT_BUFFER(row_scale, row_scale_capacity, scale);
+    XSTAR_SET_ELEMENT_BUFFER(relative_row_residual, relative_row_residual_capacity, relative);
+#undef XSTAR_SET_ELEMENT_BUFFER
+}
+
+bool validate_element(const ElementBuffers& b, const xstar_element_output_v1& output) {
+    return std::fabs(b.populations[0] - 1.0 / 3.0) < 1.0e-12 &&
+           std::fabs(b.populations[1] - 2.0 / 3.0) < 1.0e-12 &&
+           (output.status_flags & XSTAR_ELEMENT_STATUS_CONVERGED) != 0 &&
+           (output.status_flags & XSTAR_ELEMENT_STATUS_NATIVE_MATRIX_ASSEMBLY) != 0 &&
+           (output.status_flags & XSTAR_ELEMENT_STATUS_NATIVE_LUCY_SOLVE) != 0 &&
+           (output.status_flags & XSTAR_ELEMENT_STATUS_STATE_COMMITTED) != 0 &&
+           b.dense[0] == -2.0 && b.dense[1] == 1.0 &&
+           b.dense[2] == 2.0 && b.dense[3] == -1.0;
+}
+
+int command_element_self_test(const Options& options, bool evaluation) {
+    xstar_context* context = nullptr;
+    const int create_status = create_context(options, &context);
+    if (create_status != XSTAR_STATUS_OK) return create_status;
+    const std::size_t count = evaluation ? 3u : 1u;
+    std::vector<ElementBuffers> buffers(count);
+    std::vector<xstar_element_input_v1> inputs(count);
+    std::vector<xstar_element_output_v1> outputs(count);
+    const int elements[3] = {1, 2, 12};
+    for (std::size_t i = 0; i < count; ++i) initialize_element(elements[i], buffers[i], inputs[i], outputs[i]);
+    const int status = evaluation
+        ? xstar_context_run_evaluation_v1(context, inputs.data(), count, outputs.data())
+        : xstar_context_run_element_v1(context, inputs.data(), outputs.data());
+    if (status != XSTAR_STATUS_OK) {
+        std::cerr << "native element test failed: " << xstar_context_last_error(context) << "\n";
+        xstar_context_destroy(context);
+        return status;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!validate_element(buffers[i], outputs[i])) {
+            std::cerr << "native element validation failed at index " << i << "\n";
+            xstar_context_destroy(context);
+            return 30;
+        }
+    }
+    xstar_element_engine_stats_v1 stats{};
+    stats.struct_size = sizeof(stats);
+    stats.abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
+    const int stats_status = xstar_context_get_element_stats_v1(context, &stats);
+    if (stats_status != XSTAR_STATUS_OK) {
+        std::cerr << "native element stats failed\n";
+        xstar_context_destroy(context);
+        return stats_status;
+    }
+    std::cout << "backend=" << options.backend << "\n"
+              << "elements=" << count << "\n"
+              << "one_call_per_evaluation=" << (evaluation ? "true" : "false") << "\n"
+              << "elements_attempted=" << stats.elements_attempted << "\n"
+              << "elements_completed=" << stats.elements_completed << "\n"
+              << "evaluations_completed=" << stats.evaluations_completed << "\n"
+              << "terms_committed=" << stats.terms_committed << "\n"
+              << "persistent_context=true\n"
+              << "native_matrix=true\n"
+              << "native_lucy=true\n"
+              << "native_state_commit=true\n"
+              << "RESULT=ACCEPT\n";
+    xstar_context_destroy(context);
+    return 0;
+}
+
 int command_run_zone(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -372,6 +532,8 @@ int main(int argc, char** argv) {
     if (options.command == "list-backends") return command_list_backends();
     if (options.command == "backend-info") return command_backend_info(options);
     if (options.command == "self-test") return command_self_test(options);
+    if (options.command == "element-self-test") return command_element_self_test(options, false);
+    if (options.command == "evaluation-self-test") return command_element_self_test(options, true);
     if (options.command == "run-zone") return command_run_zone(options);
     if (options.command == "python-bridge-test") return command_python_bridge_test(options);
     std::cerr << "unknown command: " << options.command << "\n";

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "xstar_element_engine.h"
 
 #ifdef _WIN32
 #  ifdef XSTAR_API_BUILD
@@ -18,8 +19,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_API_ABI_VERSION 60440u
-#define XSTAR_API_VERSION_STRING "0.6.44.3"
+#define XSTAR_API_ABI_VERSION 60450u
+#define XSTAR_API_VERSION_STRING "0.6.45"
 #define XSTAR_BACKEND_NAME_SIZE 32u
 #define XSTAR_PATH_SIZE 1024u
 #define XSTAR_MESSAGE_SIZE 1024u
@@ -192,6 +193,21 @@ XSTAR_API_EXPORT int xstar_context_run_batch_v1(
     const xstar_zone_input_v1* inputs,
     size_t zone_count,
     xstar_zone_output_v1* outputs
+);
+XSTAR_API_EXPORT int xstar_context_run_element_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* input,
+    xstar_element_output_v1* output
+);
+XSTAR_API_EXPORT int xstar_context_run_evaluation_v1(
+    xstar_context* context,
+    const xstar_element_input_v1* inputs,
+    size_t element_count,
+    xstar_element_output_v1* outputs
+);
+XSTAR_API_EXPORT int xstar_context_get_element_stats_v1(
+    const xstar_context* context,
+    xstar_element_engine_stats_v1* stats
 );
 
 #ifdef __cplusplus
