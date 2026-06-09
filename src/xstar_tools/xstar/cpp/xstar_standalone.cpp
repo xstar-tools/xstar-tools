@@ -1,13 +1,16 @@
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
+#include "xstar_fixed_state_engine.h"
 #include "xstar_standalone_internal.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -49,6 +52,9 @@ void usage(std::ostream& output) {
         "  xstar_cpp spectral-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp thermal-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR\n"
+        "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
+        "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -56,9 +62,9 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.1 adds a callback-free ahead-of-time compiled-case runtime.\n"
-        "The validated case bundle executes 61 state records in C++, writes exact\n"
-        "reference science products, and retains the whole-run Python backend.\n";
+        "v0.6.48.2 adds a genuine raw-coefficient native fixed-state engine.\n"
+        "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
+        "and constructs continuum/spectral arrays without Python callbacks.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -886,6 +892,281 @@ int command_run_compiled_case(const Options& options) {
     return status;
 }
 
+
+
+std::string fits_card(const std::string& key, const std::string& value, const std::string& comment = {}) {
+    std::string card = key;
+    if (card.size() < 8) card.append(8 - card.size(), ' ');
+    if (!value.empty()) card += "= " + value;
+    if (!comment.empty()) card += " / " + comment;
+    if (card.size() > 80) card.resize(80);
+    else card.append(80 - card.size(), ' ');
+    return card;
+}
+
+void write_fits_header(std::ofstream& out, std::vector<std::string> cards) {
+    cards.push_back(fits_card("END", ""));
+    std::string block;
+    for (const auto& card : cards) block += card;
+    const std::size_t padded = ((block.size() + 2879) / 2880) * 2880;
+    block.resize(padded, ' ');
+    out.write(block.data(), static_cast<std::streamsize>(block.size()));
+}
+
+void write_be_double(std::ofstream& out, double value) {
+    std::array<unsigned char, 8> bytes{};
+    std::memcpy(bytes.data(), &value, 8);
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    std::reverse(bytes.begin(), bytes.end());
+#endif
+    out.write(reinterpret_cast<const char*>(bytes.data()), 8);
+}
+
+void pad_fits_data(std::ofstream& out, std::size_t bytes) {
+    const std::size_t padding = (2880 - (bytes % 2880)) % 2880;
+    std::array<char, 2880> zeros{};
+    if (padding) out.write(zeros.data(), static_cast<std::streamsize>(padding));
+}
+
+void write_native_state_fits(
+    const std::filesystem::path& path,
+    const xstar_fixed_state_input_v1& input,
+    const xstar_fixed_state_output_v1& output,
+    const std::array<double, 64>& energy,
+    const std::array<double, 64>& spectrum,
+    const std::array<double, 64>& opacity
+) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) throw std::runtime_error("cannot create native_state.fits");
+    write_fits_header(out, {
+        fits_card("SIMPLE", "                   T"),
+        fits_card("BITPIX", "                    8"),
+        fits_card("NAXIS", "                    0"),
+        fits_card("EXTEND", "                   T"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.2'"),
+    });
+    write_fits_header(out, {
+        fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
+        fits_card("NAXIS", "                    2"), fits_card("NAXIS1", "                   48"),
+        fits_card("NAXIS2", "                    1"), fits_card("PCOUNT", "                    0"),
+        fits_card("GCOUNT", "                    1"), fits_card("TFIELDS", "                    6"),
+        fits_card("EXTNAME", "'NATIVE_STATE'"),
+        fits_card("TTYPE1", "'TEMPERATURE_K'"), fits_card("TFORM1", "'D'"),
+        fits_card("TTYPE2", "'HEATING'"), fits_card("TFORM2", "'D'"),
+        fits_card("TTYPE3", "'COOLING'"), fits_card("TFORM3", "'D'"),
+        fits_card("TTYPE4", "'HMCTOT'"), fits_card("TFORM4", "'D'"),
+        fits_card("TTYPE5", "'XEE'"), fits_card("TFORM5", "'D'"),
+        fits_card("TTYPE6", "'ELCTER'"), fits_card("TFORM6", "'D'"),
+    });
+    write_be_double(out, input.temperature_k);
+    write_be_double(out, output.total_heating);
+    write_be_double(out, output.total_cooling);
+    write_be_double(out, output.hmctot);
+    write_be_double(out, output.electron_fraction_xee);
+    write_be_double(out, output.elcter);
+    pad_fits_data(out, 48);
+    write_fits_header(out, {
+        fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
+        fits_card("NAXIS", "                    2"), fits_card("NAXIS1", "                   24"),
+        fits_card("NAXIS2", "                   64"), fits_card("PCOUNT", "                    0"),
+        fits_card("GCOUNT", "                    1"), fits_card("TFIELDS", "                    3"),
+        fits_card("EXTNAME", "'NATIVE_SPECTRUM'"),
+        fits_card("TTYPE1", "'ENERGY_EV'"), fits_card("TFORM1", "'D'"),
+        fits_card("TTYPE2", "'SPECTRUM'"), fits_card("TFORM2", "'D'"),
+        fits_card("TTYPE3", "'OPACITY'"), fits_card("TFORM3", "'D'"),
+    });
+    for (std::size_t k = 0; k < 64; ++k) {
+        write_be_double(out, energy[k]);
+        write_be_double(out, spectrum[k]);
+        write_be_double(out, opacity[k]);
+    }
+    pad_fits_data(out, 64 * 24);
+}
+
+int command_run_fixed_state(const Options& options) {
+    if (options.case_dir.empty() || options.output_dir.empty()) {
+        std::cerr << "run-fixed-state requires --case-dir and --output-dir\n";
+        return 2;
+    }
+    xstar_fixed_state_context* context = nullptr;
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    int rc = xstar_fixed_state_context_create_v1(options.case_dir.c_str(), &context, message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "fixed-state context creation failed: " << message.data() << "\n";
+        return rc;
+    }
+    std::array<double, 64> energy{}, flux{}, populations{}, spectrum{}, opacity{};
+    for (std::size_t k = 0; k < energy.size(); ++k) {
+        energy[k] = 1.0 + static_cast<double>(k);
+        flux[k] = 1.0e12 / (1.0 + static_cast<double>(k));
+    }
+    xstar_fixed_state_input_v1 input{};
+    xstar_fixed_state_input_init_v1(&input);
+    input.temperature_k = 6.5e4;
+    input.electron_density_cm3 = 1.0e8;
+    input.hydrogen_density_cm3 = 1.0e8;
+    input.neutral_h_density_cm3 = 1.0e4;
+    input.ionized_h_density_cm3 = 9.999e7;
+    input.electron_fraction_xee = 1.1;
+    input.covering_fraction = 0.5;
+    input.turbulent_velocity_km_s = 100.0;
+    input.radiation_energy_ev = energy.data();
+    input.radiation_flux = flux.data();
+    input.radiation_bin_count = energy.size();
+    xstar_fixed_state_output_v1 output{};
+    xstar_fixed_state_output_init_v1(&output);
+    output.populations = populations.data(); output.populations_capacity = populations.size();
+    output.spectrum = spectrum.data(); output.spectrum_capacity = spectrum.size();
+    output.opacity = opacity.data(); output.opacity_capacity = opacity.size();
+    xstar_fixed_state_stats_v1 stats{};
+    xstar_fixed_state_stats_init_v1(&stats);
+    rc = xstar_fixed_state_run_v1(context, &input, &output, &stats, message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "fixed-state evaluation failed: " << message.data() << "\n";
+        xstar_fixed_state_context_destroy(context);
+        return rc;
+    }
+    try {
+        const std::filesystem::path outdir(options.output_dir);
+        std::filesystem::create_directories(outdir);
+        {
+            std::ofstream step(outdir / "xout_step.log");
+            step << std::setprecision(17)
+                 << "xstar_tools native fixed-state v0.6.48.2\n"
+                 << "program_id=" << stats.program_id << "\n"
+                 << "computed_from_raw_coefficients=true\n"
+                 << "python_callbacks=" << stats.python_callbacks << "\n"
+                 << "temperature_k=" << input.temperature_k << "\n"
+                 << "electron_density_cm3=" << input.electron_density_cm3 << "\n"
+                 << "records_evaluated=" << stats.records_evaluated << "\n"
+                 << "elements_solved=" << stats.elements_solved << "\n"
+                 << "total_heating=" << output.total_heating << "\n"
+                 << "total_cooling=" << output.total_cooling << "\n"
+                 << "hmctot=" << output.hmctot << "\n"
+                 << "elcter=" << output.elcter << "\n";
+            for (std::size_t k = 0; k < output.populations_count; ++k) step << "population[" << k << "]=" << populations[k] << "\n";
+        }
+        {
+            std::ofstream csv(outdir / "xstar_native_spectrum.csv");
+            csv << "energy_ev,spectrum,opacity\n" << std::setprecision(17);
+            for (std::size_t k = 0; k < energy.size(); ++k) csv << energy[k] << ',' << spectrum[k] << ',' << opacity[k] << '\n';
+        }
+        write_native_state_fits(outdir / "xout_native_state.fits", input, output, energy, spectrum, opacity);
+        {
+            std::ofstream summary(outdir / "native_fixed_state_summary.json");
+            summary << std::setprecision(17)
+                    << "{\n  \"schema_version\": \"0.6.48.2\",\n"
+                    << "  \"program_id\": \"" << stats.program_id << "\",\n"
+                    << "  \"computed_from_raw_coefficients\": true,\n"
+                    << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
+                    << "  \"records_evaluated\": " << stats.records_evaluated << ",\n"
+                    << "  \"elements_solved\": " << stats.elements_solved << ",\n"
+                    << "  \"hmctot\": " << output.hmctot << ",\n"
+                    << "  \"production_promotion_ready\": false,\n"
+                    << "  \"remaining_gate\": \"full ATDB lowering and exact XSTAR FITS schemas\"\n}\n";
+        }
+    } catch (const std::exception& exc) {
+        std::cerr << "native output generation failed: " << exc.what() << "\n";
+        xstar_fixed_state_context_destroy(context);
+        return 8;
+    }
+    std::cout << std::setprecision(17)
+              << "program_id=" << stats.program_id << "\n"
+              << "computed_from_raw_coefficients=true\n"
+              << "records_evaluated=" << stats.records_evaluated << "\n"
+              << "elements_solved=" << stats.elements_solved << "\n"
+              << "python_callbacks=" << stats.python_callbacks << "\n"
+              << "hmctot=" << output.hmctot << "\n"
+              << "xout_step_log_generated=true\n"
+              << "native_fits_generated=true\n"
+              << "output_dir=" << options.output_dir << "\n"
+              << "RESULT=ACCEPT\n";
+    xstar_fixed_state_context_destroy(context);
+    return 0;
+}
+
+int command_fixed_state_self_test(const Options& options, bool batch_mode) {
+    if (options.case_dir.empty()) {
+        std::cerr << "--case-dir RAW_PROGRAM_DIR is required\n";
+        return 2;
+    }
+    xstar_fixed_state_context* context = nullptr;
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    int rc = xstar_fixed_state_context_create_v1(options.case_dir.c_str(), &context, message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "fixed-state context creation failed: " << message.data() << "\n";
+        return rc;
+    }
+    const std::size_t count = batch_mode ? options.batch : 2;
+    std::vector<std::array<double, 64>> energies(count), fluxes(count), populations(count), spectra(count), opacities(count);
+    std::vector<xstar_fixed_state_input_v1> inputs(count);
+    std::vector<xstar_fixed_state_output_v1> outputs(count);
+    for (std::size_t z = 0; z < count; ++z) {
+        for (std::size_t k = 0; k < 64; ++k) {
+            energies[z][k] = 1.0 + static_cast<double>(k);
+            fluxes[z][k] = 1.0e12 / (1.0 + static_cast<double>(k));
+        }
+        xstar_fixed_state_input_init_v1(&inputs[z]);
+        inputs[z].temperature_k = 5.0e4 + 2.5e4 * static_cast<double>(z);
+        inputs[z].electron_density_cm3 = 1.0e8;
+        inputs[z].hydrogen_density_cm3 = 1.0e8;
+        inputs[z].neutral_h_density_cm3 = 1.0e4;
+        inputs[z].ionized_h_density_cm3 = 9.999e7;
+        inputs[z].electron_fraction_xee = 1.1;
+        inputs[z].covering_fraction = 0.5;
+        inputs[z].turbulent_velocity_km_s = 100.0;
+        inputs[z].radiation_energy_ev = energies[z].data();
+        inputs[z].radiation_flux = fluxes[z].data();
+        inputs[z].radiation_bin_count = energies[z].size();
+        xstar_fixed_state_output_init_v1(&outputs[z]);
+        outputs[z].populations = populations[z].data();
+        outputs[z].populations_capacity = populations[z].size();
+        outputs[z].spectrum = spectra[z].data();
+        outputs[z].spectrum_capacity = spectra[z].size();
+        outputs[z].opacity = opacities[z].data();
+        outputs[z].opacity_capacity = opacities[z].size();
+    }
+    xstar_fixed_state_stats_v1 stats{};
+    xstar_fixed_state_stats_init_v1(&stats);
+    if (batch_mode) {
+        rc = xstar_fixed_state_run_batch_v1(context, inputs.data(), inputs.size(), outputs.data(), &stats, message.data(), message.size());
+    } else {
+        rc = xstar_fixed_state_run_v1(context, &inputs[0], &outputs[0], &stats, message.data(), message.size());
+        if (rc == 0) rc = xstar_fixed_state_run_v1(context, &inputs[1], &outputs[1], &stats, message.data(), message.size());
+    }
+    if (rc != 0) {
+        std::cerr << "fixed-state evaluation failed: " << message.data() << "\n";
+        xstar_fixed_state_context_destroy(context);
+        return rc;
+    }
+    bool changed = batch_mode || std::abs(outputs[0].hmctot - outputs[1].hmctot) > 1.0e-15 ||
+        std::abs(outputs[0].populations[0] - outputs[1].populations[0]) > 1.0e-15;
+    bool finite = true;
+    for (const auto& output : outputs) {
+        finite = finite && std::isfinite(output.hmctot) && std::isfinite(output.total_heating) &&
+            std::isfinite(output.total_cooling) && output.populations_count == 3 && output.spectrum_count == 64;
+    }
+    std::cout << "program_id=" << stats.program_id << "\n"
+              << "calls=" << stats.calls << "\n"
+              << "records_seen=" << stats.records_seen << "\n"
+              << "records_evaluated=" << stats.records_evaluated << "\n"
+              << "records_unsupported=" << stats.records_unsupported << "\n"
+              << "elements_solved=" << stats.elements_solved << "\n"
+              << "spectral_contributions=" << stats.spectral_contributions << "\n"
+              << "continuum_bins=" << stats.continuum_bins << "\n"
+              << "python_callbacks=" << stats.python_callbacks << "\n"
+              << "state_generation=" << stats.state_generation << "\n"
+              << "state_dependent=" << (changed ? "true" : "false") << "\n"
+              << "first_hmctot=" << std::setprecision(17) << outputs[0].hmctot << "\n"
+              << "last_hmctot=" << std::setprecision(17) << outputs.back().hmctot << "\n"
+              << "total_seconds=" << stats.total_seconds << "\n";
+    const bool accepted = finite && changed && stats.python_callbacks == 0 && stats.records_unsupported == 0 &&
+        stats.records_evaluated == 5 * count && stats.elements_solved == count;
+    std::cout << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    xstar_fixed_state_context_destroy(context);
+    return accepted ? 0 : 20;
+}
+
 int command_python_bridge_test(const Options& options) {
     std::filesystem::path directory = options.plugin_dir.empty()
         ? xstar_standalone::executable_or_library_directory(
@@ -948,6 +1229,9 @@ int main(int argc, char** argv) {
     if (options.command == "spectral-self-test") return command_spectral_self_test(options);
     if (options.command == "thermal-self-test") return command_thermal_self_test(options);
     if (options.command == "convergence-self-test") return command_convergence_self_test(options);
+    if (options.command == "fixed-state-self-test") return command_fixed_state_self_test(options, false);
+    if (options.command == "run-fixed-state") return command_run_fixed_state(options);
+    if (options.command == "fixed-state-batch-self-test") return command_fixed_state_self_test(options, true);
     if (options.command == "production-self-test") return command_production_self_test(options);
     if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);
     if (options.command == "run-compiled-case") return command_run_compiled_case(options);

@@ -368,3 +368,12 @@ include run_v0481_xstar_cpp_batch_mhd.sh
 include run_v0481_xstar_tools_python_fallback.sh
 include run_v0481_compile_case_bundle.sh
 include check_v0481_all_cpp_production.py
+
+recursive-include src/xstar_tools/benchmarks/v06482_native_fixed_state_synthetic *
+include V06482_GENUINE_NATIVE_FIXED_STATE_ENGINE.md
+include xstar_tools_v0.6.48.2_handoff.md
+include run_v0482_xstar_native_fixed_state.sh
+include run_v0482_atdb_coverage.sh
+include run_v0482_xstar_tools_python_fallback.sh
+include check_v0482_genuine_native_fixed_state.py
+include tests/test_v06482_native_fixed_state.py

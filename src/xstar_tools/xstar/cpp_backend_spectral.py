@@ -1,4 +1,4 @@
-"""Persistent native emissivity/opacity contribution engine for v0.6.48.1.
+"""Persistent native emissivity/opacity contribution engine for v0.6.48.2.
 
 Python retains atomic-data traversal and scalar UCalc evaluation in this
 candidate.  Source-ordered line/RRC/continuum contribution construction,
@@ -310,7 +310,7 @@ def _apply_spectral_batch(
         if target_array.ctypes.data != native_array.ctypes.data:
             np.copyto(target_array, native_array.reshape(target_array.shape))
     return {
-        "schema_version": "0.6.48.1",
+        "schema_version": "0.6.48.2",
         "contributions": len(rows),
         "calls": int(stats.calls),
         "contributions_attempted": int(stats.contributions_attempted),
@@ -376,7 +376,7 @@ def apply_spectral_contributions_cpp(
     """Apply source-ordered compact spectral contributions in-place.
 
     Product execution uses 21 source seeds and native C++ Gaussian/Voigt
-    evaluation. Qualification may set ``exact_profile_oracle``; v0.6.48.1 then
+    evaluation. Qualification may set ``exact_profile_oracle``; v0.6.48.2 then
     supplies the complete Python temporary energy grid and exact ``optpp2``
     samples. C++ still performs trapezoid integration, continuum rebinning, and
     source-ordered array commit.
@@ -401,7 +401,7 @@ def apply_spectral_contributions_cpp(
     )
 
     total: dict[str, Any] = {
-        "schema_version": "0.6.48.1", "message": "exact source-profile oracle applied",
+        "schema_version": "0.6.48.2", "message": "exact source-profile oracle applied",
         "contributions": 0, "calls": 0, "contributions_attempted": 0,
         "contributions_committed": 0, "emissivity_contributions": 0,
         "opacity_contributions": 0, "line_profiles": 0,

@@ -1,6 +1,6 @@
 """Strict binary64 parity classification for native spectral shadows.
 
-v0.6.48.1 removes all cross-runtime pre-integration geometry from qualification.
+v0.6.48.2 removes all cross-runtime pre-integration geometry from qualification.
 Python supplies the complete source temporary energy and opacity grids while C++
 still integrates, rebins, and commits; every final spectral array must match exactly.
 """

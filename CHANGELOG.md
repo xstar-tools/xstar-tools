@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.48.2 - 2026-06-09
+
+- Adds `libxstar_fixed_state.so`, a genuine state-dependent raw-coefficient
+  fixed-state engine with linked atomic-record traversal and zero Python
+  callbacks.
+- Connects evaluated contributions to the native element solver and native
+  spectral engine, and computes continuum heating/cooling and output arrays.
+- Adds a replay-resistant raw-program compiler/validator and host ATDB coverage
+  scanner.
+- Adds native-generated diagnostic FITS and `xout_step.log` outputs.
+- Reclassifies the compiled-case bundle as compatibility cache/replay only.
+- Does not claim all-C++ production promotion; full ATDB lowering, exact
+  continuum translation, and nine-product FITS parity remain blocked.
+
 ## 0.6.48.1 - 2026-06-09
 
 - Include `xout_step.log` in the compiled-case bundle as a separately classified auxiliary output artifact.

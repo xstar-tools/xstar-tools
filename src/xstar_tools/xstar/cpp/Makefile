@@ -26,6 +26,7 @@ MATRIX_TARGET := libxstar_matrix.so
 EMISSIVITY_TARGET := libxstar_emissivity.so
 OPACITY_TARGET := libxstar_opacity.so
 THERMAL_TARGET := libxstar_thermal.so
+FIXED_STATE_TARGET := libxstar_fixed_state.so
 ENGINE_TARGET := libxstar_engine.so
 API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
@@ -33,11 +34,11 @@ PYTHON_BACKEND_TARGET := libxstar_backend_python.so
 EXECUTABLE_TARGET := xstar_cpp
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
-	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET)
+	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(FIXED_STATE_TARGET)
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
-PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h
+PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_fixed_state_engine.h
 INTERNAL_HEADERS := xstar_standalone_internal.hpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
 
 .PHONY: all physics standalone test clean install print-config
@@ -67,6 +68,9 @@ $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
+$(FIXED_STATE_TARGET): fixed_state_engine.cpp xstar_fixed_state_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ fixed_state_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
+
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \
 		-o $@ xstar_api.cpp compiled_case.cpp $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
@@ -79,9 +83,9 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
-$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_api.h xstar_api.hpp xstar_python_bridge.h $(API_TARGET)
+$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h $(API_TARGET) $(FIXED_STATE_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp \
-		-L. -lxstar_api $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+		-L. -lxstar_api -lxstar_fixed_state $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:
 	@echo CXX=$(CXX)
@@ -107,13 +111,18 @@ test: all
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
-	./$(EXECUTABLE_TARGET) production-self-test --case-dir ../../benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8
-	./$(EXECUTABLE_TARGET) production-batch-self-test --case-dir ../../benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8 --batch 4
+	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06482_native_fixed_state_synthetic
+	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06482_native_fixed_state_synthetic --batch 4
+	rm -rf .v06482_native_output
+	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../benchmarks/v06482_native_fixed_state_synthetic --output-dir .v06482_native_output
+	test -s .v06482_native_output/xout_step.log
+	test -s .v06482_native_output/xout_native_state.fits
+	rm -rf .v06482_native_output
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.48.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.48.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

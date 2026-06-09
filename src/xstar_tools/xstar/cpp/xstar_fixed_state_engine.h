@@ -1,0 +1,158 @@
+#ifndef XSTAR_FIXED_STATE_ENGINE_H
+#define XSTAR_FIXED_STATE_ENGINE_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef _WIN32
+#  define XSTAR_FIXED_STATE_EXPORT __declspec(dllexport)
+#else
+#  define XSTAR_FIXED_STATE_EXPORT __attribute__((visibility("default")))
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60482u
+#define XSTAR_FIXED_STATE_MESSAGE_SIZE 1024u
+#define XSTAR_FIXED_STATE_ID_SIZE 128u
+
+/* Raw-program opcodes. These encode formulas and coefficients, never evaluated answers. */
+typedef enum xstar_fixed_opcode_v1 {
+    XSTAR_FIXED_OPCODE_SIMPLE_UCALC = 1,
+    XSTAR_FIXED_OPCODE_TYPE49_AUTOIONIZATION = 49,
+    XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE = 50,
+    XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION = 51,
+    XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE = 53,
+    XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION = 63,
+    XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION = 69,
+    XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE = 74,
+    XSTAR_FIXED_OPCODE_TYPE88_RADIATIVE_LINE = 88,
+    XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE = 99
+} xstar_fixed_opcode_v1;
+
+typedef enum xstar_fixed_state_status_flags_v1 {
+    XSTAR_FIXED_STATE_STATUS_NONE = 0u,
+    XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED = 1u << 0,
+    XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL = 1u << 1,
+    XSTAR_FIXED_STATE_STATUS_NATIVE_UCALC = 1u << 2,
+    XSTAR_FIXED_STATE_STATUS_NATIVE_ELEMENT_SOLVE = 1u << 3,
+    XSTAR_FIXED_STATE_STATUS_NATIVE_CONTINUUM = 1u << 4,
+    XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL = 1u << 5,
+    XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT = 1u << 6,
+    XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS = 1u << 7
+} xstar_fixed_state_status_flags_v1;
+
+typedef struct xstar_fixed_state_input_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    double temperature_k;
+    double electron_density_cm3;
+    double hydrogen_density_cm3;
+    double neutral_h_density_cm3;
+    double ionized_h_density_cm3;
+    double electron_fraction_xee;
+    double covering_fraction;
+    double turbulent_velocity_km_s;
+    const double* radiation_energy_ev;
+    const double* radiation_flux;
+    size_t radiation_bin_count;
+} xstar_fixed_state_input_v1;
+
+typedef struct xstar_fixed_state_output_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_flags;
+    uint32_t reserved0;
+    double element_heating;
+    double element_cooling;
+    double continuum_heating;
+    double continuum_cooling;
+    double total_heating;
+    double total_cooling;
+    double hmctot;
+    double electron_fraction_xee;
+    double elcter;
+    double* populations;
+    size_t populations_capacity;
+    size_t populations_count;
+    double* spectrum;
+    size_t spectrum_capacity;
+    size_t spectrum_count;
+    double* opacity;
+    size_t opacity_capacity;
+    size_t opacity_count;
+    char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
+} xstar_fixed_state_output_v1;
+
+typedef struct xstar_fixed_state_stats_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t status_flags;
+    uint32_t reserved0;
+    uint64_t calls;
+    uint64_t records_seen;
+    uint64_t records_evaluated;
+    uint64_t records_unsupported;
+    uint64_t linked_hops;
+    uint64_t elements_attempted;
+    uint64_t elements_solved;
+    uint64_t contributions_constructed;
+    uint64_t spectral_contributions;
+    uint64_t continuum_bins;
+    uint64_t python_callbacks;
+    uint64_t state_generation;
+    double traversal_seconds;
+    double rate_seconds;
+    double element_seconds;
+    double continuum_seconds;
+    double spectral_seconds;
+    double total_seconds;
+    char program_id[XSTAR_FIXED_STATE_ID_SIZE];
+    char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
+} xstar_fixed_state_stats_v1;
+
+typedef struct xstar_fixed_state_context xstar_fixed_state_context;
+
+XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
+XSTAR_FIXED_STATE_EXPORT const char* xstar_fixed_state_engine_backend_name(void);
+XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_feature_flags(void);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_v1(
+    const char* program_directory,
+    xstar_fixed_state_context** context,
+    char* message,
+    size_t message_size
+);
+XSTAR_FIXED_STATE_EXPORT void xstar_fixed_state_context_destroy(xstar_fixed_state_context* context);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
+    xstar_fixed_state_context* context,
+    char* message,
+    size_t message_size
+);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_v1(
+    xstar_fixed_state_context* context,
+    const xstar_fixed_state_input_v1* input,
+    xstar_fixed_state_output_v1* output,
+    xstar_fixed_state_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_batch_v1(
+    xstar_fixed_state_context* context,
+    const xstar_fixed_state_input_v1* inputs,
+    size_t input_count,
+    xstar_fixed_state_output_v1* outputs,
+    xstar_fixed_state_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

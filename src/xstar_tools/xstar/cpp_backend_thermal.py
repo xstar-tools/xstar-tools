@@ -1,4 +1,4 @@
-"""Persistent native thermal-transfer and convergence engine for v0.6.48.1.
+"""Persistent native thermal-transfer and convergence engine for v0.6.48.2.
 
 The native library owns the translated ``heatt`` arithmetic and the complete
 ``dsec`` temperature/electron iteration state machine.  The fixed-state
@@ -260,7 +260,7 @@ def apply_heatt_cpp(*, lines: Iterable[Mapping[str, Any]], rrcs: Iterable[Mappin
     for name in ("zrems", "elum", "elumab"):
         np.copyto(np.asarray(values[name]), arrays[name].reshape(np.asarray(values[name]).shape))
     return {
-        "schema_version": "0.6.48.1", "calls": int(stats.calls),
+        "schema_version": "0.6.48.2", "calls": int(stats.calls),
         "continuum_bins": int(stats.continuum_bins), "line_records": int(stats.line_records),
         "rrc_records": int(stats.rrc_records), "state_commits": int(stats.state_commits),
         "continuum_seconds": float(stats.continuum_seconds), "line_seconds": float(stats.line_seconds),
@@ -337,7 +337,7 @@ def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf
         row = trace[i]
         rows.append({name: getattr(row, name) for name, _ctype in _Trace._fields_})
     return {
-        "schema_version": "0.6.48.1", "lnerr": int(stats.lnerr), "ntotit": int(stats.ntotit),
+        "schema_version": "0.6.48.2", "lnerr": int(stats.lnerr), "ntotit": int(stats.ntotit),
         "temperature_iterations": int(stats.temperature_iterations),
         "temperature_attempts": int(stats.temperature_attempts),
         "charge_converged": bool(stats.charge_converged),
