@@ -641,13 +641,33 @@ int xstar_engine_feature_flags() {
     return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096;
 }
 
+int xstar_engine_type63_rates_v1(
+    int ni, int li, int nf, int lf, int iq,
+    double temperature_k, double electron_density_cm3,
+    double initial_energy_ev, double final_energy_ev,
+    double initial_g, double final_g,
+    double* out6
+) {
+    if (!out6) return 1;
+    return native_type63_scalars(
+        ni, li, nf, lf, iq, temperature_k, electron_density_cm3,
+        initial_energy_ev, final_energy_ev, initial_g, final_g, out6
+    ) ? 0 : 2;
+}
+
+int xstar_engine_anl1_v1(int ni, int nf, int lf, int iq, double* alm, double* alp) {
+    if (!alm || !alp) return 1;
+    native_anl1(ni, nf, lf, iq, *alm, *alp);
+    return (std::isfinite(*alm) && std::isfinite(*alp)) ? 0 : 2;
+}
+
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
     if (!xstar_backend::valid_count(n_records)) {
         xstar_backend::write_message(message, message_size, "invalid negative n_records");
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.48.3.2 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.48.4 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());

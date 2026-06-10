@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.3.2 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.4 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.3.2 distinguishes three classes that older coverage reports conflated:
+v0.6.48.4 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -20,14 +20,12 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
-PROGRAM_ABI = 60483
+PROGRAM_ABI = 60484
 SIMPLE_DATA_TYPES = {1, 2, 3, 7, 8, 20}
-ENGINE_RECOGNIZED_OPCODES = {1, 49, 50, 51, 53, 56, 63, 69, 74, 88, 99}
-# Families whose raw ATDB representation is lowered by this release.  The
-# engine still recognizes 63/99 for synthetic/development programs, but the
-# active lowerer refuses them until their exact host payload transforms are
-# qualified.
-ACTIVE_LOWERER_DATA_TYPES = {49, 50, 51, 53, 56, 69, 74, 88}
+ENGINE_RECOGNIZED_OPCODES = {1, 49, 50, 51, 53, 54, 56, 57, 63, 69, 71, 74, 77, 86, 88, 99}
+# Families whose raw ATDB representation is lowered by this release.  Phase 1 activates the already-native 63/99 paths and adds the largest
+# remaining H/He/Mg families 54, 57, 71/77, and 86.
+ACTIVE_LOWERER_DATA_TYPES = {49, 50, 51, 53, 54, 56, 57, 63, 69, 71, 74, 77, 86, 88, 99}
 TOPOLOGY_RATE_TYPES = {11, 12, 13}
 FORBIDDEN_KEYS = {
     "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
@@ -152,6 +150,8 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
                 "initial_population": _as_float(row.get("initial_population", 0.0), "initial_population"),
                 "energy_ev": _as_float(row.get("energy_ev", 0.0), "energy_ev"),
                 "statistical_weight": _as_float(row.get("statistical_weight", 1.0), "statistical_weight"),
+                "principal_n": _as_int(row.get("principal_n", 0), "principal_n"),
+                "orbital_l": _as_int(row.get("orbital_l", 0), "orbital_l"),
             })
 
     record_table: list[dict[str, Any]] = []
@@ -204,7 +204,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.3.2",
+        "schema_version": "0.6.48.4",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -283,7 +283,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.3.2",
+        "schema_version": "0.6.48.4",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
@@ -386,7 +386,7 @@ def _atdb_fingerprint(master: Any, active_elements: Sequence[int]) -> tuple[str,
     return digest, payload
 
 
-def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) -> tuple[int, float, float, str]:
+def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) -> tuple[int, float, float, str, int, int]:
     import numpy as np
 
     npilev = np.asarray(derived.npilev, dtype=np.int64)
@@ -399,8 +399,11 @@ def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) 
     reals = list(master.record_reals(rec))
     energy = float(reals[0]) if reals else 0.0
     weight = float(reals[1]) if len(reals) > 1 and float(reals[1]) > 0.0 else 1.0
+    ints = list(master.record_integers(rec))
+    principal_n = int(ints[0]) if len(ints) > 0 else 0
+    orbital_l = int(ints[2]) if len(ints) > 2 else 0
     label = master.record_chars(rec).decode("latin-1", errors="replace").strip(" \x00")
-    return rec, energy, weight, label
+    return rec, energy, weight, label, principal_n, orbital_l
 
 
 def _build_element_layout(master: Any, derived: Any, element_z: int, element_index: int) -> tuple[dict[str, Any], list[dict[str, Any]], Any, dict[int, Any]]:
@@ -426,7 +429,7 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
         role = row.roles[-1]
         ion_index = int(role["ion_index"])
         local_level = int(role["local_level"])
-        _, energy, weight, _ = _level_payload(master, derived, ion_index, local_level)
+        _, energy, weight, _, principal_n, orbital_l = _level_payload(master, derived, ion_index, local_level)
         stage = int(derived.ion_stage[ion_index])
         rows.append({
             "element_index": element_index,
@@ -437,6 +440,8 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
             "initial_population": 1.0 if int(row.compact_index) == 1 else 0.0,
             "energy_ev": energy,
             "statistical_weight": weight,
+            "principal_n": principal_n,
+            "orbital_l": orbital_l,
         })
     element = {
         "element_index": element_index,
@@ -471,6 +476,14 @@ def _row_energy(rows: Sequence[Mapping[str, Any]], one_based: int) -> float:
 
 def _row_weight(rows: Sequence[Mapping[str, Any]], one_based: int) -> float:
     return max(float(rows[int(one_based) - 1]["statistical_weight"]), 1.0e-300)
+
+
+def _row_n(rows: Sequence[Mapping[str, Any]], one_based: int) -> int:
+    return int(rows[int(one_based) - 1].get("principal_n", 0))
+
+
+def _row_l(rows: Sequence[Mapping[str, Any]], one_based: int) -> int:
+    return int(rows[int(one_based) - 1].get("orbital_l", 0))
 
 
 def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows: Sequence[Mapping[str, Any]], basis: Any, blocks: Mapping[int, Any], subset: Any) -> dict[str, Any]:
@@ -524,6 +537,44 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             payload_ints = []
         lower_row, upper_row = local_pair(a, b)
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 54:
+        if len(raw_ints) < 4:
+            raise ValueError(f"type54 record {rec} has short integer payload")
+        a, b, iq = int(raw_ints[-4]), int(raw_ints[-3]), int(raw_ints[-2])
+        lower_row, upper_row = local_pair(a, b)
+        ni, nf = _row_n(rows, upper_row), _row_n(rows, lower_row)
+        li, lf = _row_l(rows, upper_row), _row_l(rows, lower_row)
+        if not all(v >= 0 for v in (ni, nf, li, lf)) or ni <= 0 or nf <= 0 or iq <= 0:
+            raise ValueError(f"type54 record {rec} missing quantum numbers")
+        if ni < nf:
+            ni, nf = nf, ni
+        payload_reals = []
+        payload_ints = [ni, nf, li, lf, iq]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 57:
+        if len(raw_ints) < 2:
+            raise ValueError(f"type57 record {rec} has short integer payload")
+        i57 = int(raw_ints[0])
+        local = int(raw_ints[-2])
+        lower_row = _compact_row_for_local(basis, ion_index, local)
+        upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        principal_n = _row_n(rows, lower_row) or i57
+        payload_reals = []
+        payload_ints = [i57, principal_n]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 63:
+        if len(raw_ints) < 4:
+            raise ValueError(f"type63 record {rec} has short integer payload")
+        a, b, iq = int(raw_ints[-4]), int(raw_ints[-3]), int(raw_ints[-2])
+        lower_row = _compact_row_for_local(basis, ion_index, a)
+        upper_row = _compact_row_for_local(basis, ion_index, b)
+        ni, li = _row_n(rows, lower_row), _row_l(rows, lower_row)
+        nf, lf = _row_n(rows, upper_row), _row_l(rows, upper_row)
+        if ni <= 0 or nf <= 0 or li < 0 or lf < 0 or iq <= 0:
+            raise ValueError(f"type63 record {rec} missing quantum numbers")
+        payload_reals = []
+        payload_ints = [ni, li, nf, lf, iq]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt in {49, 53}:
         if len(raw_ints) < 4 or len(raw_reals) < 4:
             raise ValueError(f"type{dt} record {rec} has short payload")
@@ -535,11 +586,30 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt in {71, 77}:
+        if len(raw_ints) < 4:
+            raise ValueError(f"type{dt} record {rec} has short integer payload")
+        a, b = int(raw_ints[-4]), int(raw_ints[-3])
+        lower_row = _compact_row_for_local(basis, ion_index, a)
+        upper_row = _compact_row_for_local(basis, ion_index, b)
+        payload_reals = list(raw_reals)
+        payload_ints = list(raw_ints)
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 74:
         if len(raw_ints) < 2:
             raise ValueError(f"type74 record {rec} has short integer payload")
         lower_row = _compact_row_for_local(basis, ion_index, int(raw_ints[-2]))
         upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 86:
+        if len(raw_ints) < 5 or len(raw_reals) < 2:
+            raise ValueError(f"type86 record {rec} has short payload")
+        id1 = int(raw_ints[-4])
+        id2 = int(block.nlev) + int(raw_ints[-5]) - 1
+        lower_row = _compact_row_for_local(basis, ion_index, id1)
+        upper_row = _compact_row_for_idest(basis, block, id2)
+        payload_reals = [float(raw_reals[1])]
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 88:
@@ -549,6 +619,16 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
         payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 99:
+        if len(raw_ints) < 4 or len(raw_reals) < 8:
+            raise ValueError(f"type99 record {rec} has short payload")
+        id1 = min(int(raw_ints[-2]), max(int(block.nlev) - 1, 1))
+        id2 = int(block.nlev) + int(raw_ints[-4]) - 1
+        lower_row = _compact_row_for_local(basis, ion_index, id1)
+        upper_row = _compact_row_for_idest(basis, block, id2)
+        payload_reals = list(raw_reals)
+        payload_ints = list(raw_ints)
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unhandled active-lowerer type {dt}")
@@ -674,7 +754,7 @@ def lower_active_atdb(
                     int_offset += len(payload_ints)
                     global_index += 1
 
-        program_id = f"v06483_active_atdb_{fingerprint[:16]}"
+        program_id = f"v06484_active_atdb_{fingerprint[:16]}"
         promotion_ready = not unsupported_rows
         manifest_lines = [
             f"program_abi={PROGRAM_ABI}", f"program_id={program_id}",

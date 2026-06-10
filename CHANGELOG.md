@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.4 - 2026-06-10
+
+- Promote active-ATDB lowering and native execution for data types 54, 57, 63, 71, 77, 86, and 99.
+- Preserve type-6 principal/orbital quantum metadata in compact rows for the type-54, type-57, and type-63 evaluators.
+- Add native wrappers for the validated type-63 and `anl1` scalar kernels.
+- Add source-shaped native calt57, calt71, calt77, Auger, and type-99 density/temperature/radiation evaluators.
+- Add a 14-record phase-1 fixture, 64-zone callback-free batch test, visited-family gate, and unknown-opcode rejection.
+- Project the supplied H/He/Mg host workload from 6,699 to 8,570 native executable records, leaving 152 records outside phase 1.
+- Bump the public and fixed-state ABIs to `60484`.
+- Keep production promotion blocked pending host lowering/execution, per-record source parity for provisional families, 61 native DSEC evaluations, and the nine historical FITS products.
+
 # 0.6.48.3.2 - 2026-06-09
 
 - Stop active-ATDB rate traversal at the current ion parent boundary.

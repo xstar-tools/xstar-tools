@@ -387,4 +387,15 @@ include run_v0483_atdb_coverage.sh
 include run_v0483_active_atdb_lower.sh
 include run_v0483_xstar_tools_python_fallback.sh
 include check_v0483_active_atdb_lowerer.py
-include tests/test_v06483_active_atdb_lowerer.py
+
+recursive-include src/xstar_tools/benchmarks/v06484_active_family_phase1_fixture *
+include src/xstar_tools/benchmarks/specs/v06484_active_family_phase1_fixture.json
+include V06484_ACTIVE_FAMILY_COMPLETION_PHASE1.md
+include xstar_tools_v0.6.48.4_handoff.md
+include run_v0484_xstar_native_fixed_state.sh
+include run_v0484_atdb_coverage.sh
+include run_v0484_active_atdb_lower.sh
+include run_v0484_xstar_tools_python_fallback.sh
+include check_v0484_active_family_completion.py
+include tests/test_v06484_active_family_completion.py
+include v0484_host_coverage_projection.json

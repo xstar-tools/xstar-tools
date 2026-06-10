@@ -28,6 +28,15 @@ constexpr double kErgPerEv = 1.602176634e-12;
 constexpr double kRydEv = 13.60569253;
 constexpr double kSigmaT = 6.6524587321e-25;
 
+extern "C" int xstar_engine_type63_rates_v1(
+    int ni, int li, int nf, int lf, int iq,
+    double temperature_k, double electron_density_cm3,
+    double initial_energy_ev, double final_energy_ev,
+    double initial_g, double final_g,
+    double* out6
+);
+extern "C" int xstar_engine_anl1_v1(int ni, int nf, int lf, int iq, double* alm, double* alp);
+
 void copy_text(char* target, std::size_t cap, const std::string& value) {
     if (!target || cap == 0) return;
     const std::size_t n = std::min(cap - 1, value.size());
@@ -103,6 +112,8 @@ struct ElementRow {
     double initial_population = 0.0;
     double energy_ev = 0.0;
     double statistical_weight = 1.0;
+    int principal_n = 0;
+    int orbital_l = 0;
 };
 
 struct ElementProgram {
@@ -232,7 +243,7 @@ void load_rows(const std::string& path, Program& program) {
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 8) throw std::runtime_error("rows.csv requires 8 columns");
+        if (c.size() != 8 && c.size() != 10) throw std::runtime_error("rows.csv requires 8 or 10 columns");
         ElementRow r;
         r.element_index = parse_number<int>(c[0], "element_index");
         r.row = parse_number<int>(c[1], "row");
@@ -242,6 +253,10 @@ void load_rows(const std::string& path, Program& program) {
         r.initial_population = parse_number<double>(c[5], "initial_population");
         r.energy_ev = parse_number<double>(c[6], "energy_ev");
         r.statistical_weight = parse_number<double>(c[7], "statistical_weight");
+        if (c.size() == 10) {
+            r.principal_n = parse_number<int>(c[8], "principal_n");
+            r.orbital_l = parse_number<int>(c[9], "orbital_l");
+        }
         if (r.element_index < 0 || r.element_index >= static_cast<int>(program.elements.size())) throw std::runtime_error("row element_index out of range");
         program.elements[static_cast<std::size_t>(r.element_index)].rows.push_back(r);
     }
@@ -489,6 +504,152 @@ double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
     return std::max(0.0, value);
 }
 
+
+void eint_values(double t, double& e1, double& e2, double& e3) {
+    if (!(t > 0.0)) { e1 = e2 = e3 = 0.0; return; }
+    const double scaled = expint_scaled(t);
+    e1 = scaled / std::max(1.0e-34, t * limited_exp(t));
+    e2 = std::exp(-t) - t * e1;
+    e3 = 0.5 * (limited_exp(-t) - t * e2);
+}
+
+double type57_szirc(int n, double temperature, double rz, double rno) {
+    static const double abethe[11] = {1.134,0.603,0.412,0.313,0.252,0.211,0.181,0.159,0.142,0.128,1.307};
+    static const double hbethe[11] = {1.48,3.64,5.93,8.32,10.75,12.90,15.05,17.20,19.35,21.50,2.15};
+    static const double rbethe[11] = {2.20,1.90,1.73,1.65,1.60,1.56,1.54,1.52,1.52,1.52,1.52};
+    if (n <= 0 || temperature <= 0.0 || rz <= 0.0 || rno <= 1.0) return 0.0;
+    const double boltz = 1.38066e-16, eion = 2.179874e-11, con = 4.6513e-3;
+    const double rc = static_cast<double>(static_cast<int>(rno));
+    if (rc <= 1.0) return 0.0;
+    double an, hn, rrn;
+    if (n < 11) { an=abethe[n-1]; hn=hbethe[n-1]; rrn=rbethe[n-1]; }
+    else { an=abethe[10]/n; hn=hbethe[10]*n; rrn=rbethe[10]; }
+    const double tt = temperature * boltz, rn = static_cast<double>(n);
+    const double yy = rz*rz*eion/tt*(1.0/(rn*rn)-1.0/(rc*rc)-0.25*(1.0/((rc-1.0)*(rc-1.0))-1.0/(rc*rc)));
+    if (!(yy > 0.0)) return 0.0;
+    double e1=0,e2=0,e3=0; eint_values(yy,e1,e2,e3);
+    const double cii = con*std::sqrt(tt)*std::pow(rn,5.0)/std::pow(rz,4.0)*an*yy*(
+        e1/rn - (std::exp(-yy)-yy*e3)/(3.0*rn) +
+        (yy*e2-2.0*yy*e1+std::exp(-yy))*3.0*hn/rn/(3.0-rrn) +
+        (e1-e2)*3.36*yy);
+    return std::isfinite(cii) ? std::max(0.0, cii) : 0.0;
+}
+
+double type57_irc(int n, double temperature, double rc, double rno) {
+    if (n <= 0 || temperature <= 0.0 || rc <= 0.0 || rno <= n) return 0.0;
+    if (std::abs(rc-1.0) > 0.0) return type57_szirc(n, temperature, rc, rno);
+    const double rn = static_cast<double>(n);
+    const double xo = 1.0-rn*rn/(rno*rno);
+    if (!(xo > 0.0)) return 0.0;
+    const double yn = xo*157803.0/(temperature*rn*rn);
+    if (!(yn > 0.0)) return 0.0;
+    double an,bn,rp;
+    if (n < 2) {
+        an=1.9603*rn*(1.133/(3.0*std::pow(xo,3.0))-0.4059/(4.0*std::pow(xo,4.0))+0.07014/(5.0*std::pow(xo,5.0)));
+        bn=2.0/3.0*rn*rn/xo*(3.0+2.0/xo-0.603/(xo*xo)); rp=0.45;
+    } else if (n == 2) {
+        an=1.9603*rn*(1.0785/(3.0*std::pow(xo,3.0))-0.2319/(4.0*std::pow(xo,4.0))+0.02947/(5.0*std::pow(xo,5.0)));
+        bn=(4.0-18.63/rn+36.24/(rn*rn)-28.09/(rn*rn*rn))/rn;
+        bn=2.0/3.0*rn*rn/xo*(3.0+2.0/xo+bn/(xo*xo)); rp=0.653;
+    } else {
+        const double g0=(0.9935+0.2328/rn-0.1296/(rn*rn))/(3.0*std::pow(xo,3.0));
+        const double g1=-(0.6282-0.5598/rn+0.5299/(rn*rn))/(rn*4.0*std::pow(xo,4.0));
+        const double g2=(0.3887-1.181/rn+1.470/(rn*rn))/(rn*rn*5.0*std::pow(xo,5.0));
+        an=1.9603*rn*(g0+g1+g2);
+        bn=(4.0-18.63/rn+36.24/(rn*rn)-28.09/(rn*rn*rn))/rn;
+        bn=(3.0+2.0/xo+bn/(xo*xo))*2.0*rn*rn/(3.0*xo); rp=1.94*std::pow(rn,-1.57);
+    }
+    rp *= xo; const double zn=rp+yn;
+    const double ey=expint_scaled(yn), ez=expint_scaled(zn);
+    if (!(zn > 0.0)) return 0.0;
+    double se=an*(ey/(yn*yn)-std::exp(-rp)*ez/(zn*zn));
+    const double ey2=1.0+1.0/yn-ey*(2.0/yn+1.0);
+    const double ez2=std::exp(-rp)*(1.0+1.0/zn-ez*(1.0/zn+1.0));
+    se += (bn-an*std::log(2.0*rn*rn/xo))*(ey2-ez2);
+    se *= std::sqrt(temperature)*yn*yn*rn*rn*1.095e-10/xo;
+    return std::isfinite(se) ? std::max(0.0,se) : 0.0;
+}
+
+bool type57_coefficients(int n, double temperature, double density, double e1, double eth, double& cion, double& crec) {
+    cion=crec=0.0;
+    if (n<=0 || temperature<=0.0 || density<=0.0 || eth<e1) return true;
+    const double rio=(eth-e1)/13.6;
+    if (!(rio>0.0)) return true;
+    const double rc=std::sqrt(rio)*n, den=std::min(density,1.0e18);
+    const double tmin=3.8e4*rc*std::sqrt(rc), temp=std::max(temperature,tmin);
+    double rno=std::sqrt(1.8887e8*rc/std::pow(den,0.3333));
+    const double rno2=std::pow(1.814e26*std::pow(rc,6.0)/(2.0*den),0.13333);
+    rno=std::min(rno,rno2);
+    if (static_cast<int>(rno)<=n) return true;
+    const double ciono=type57_irc(n,temp,rc,rno);
+    if (!(ciono>0.0)) return true;
+    if (temperature<tmin) {
+        const double cb=13.605692*1.6021e-19/1.3805e-23;
+        const double beta=0.25*(std::sqrt((100.0*rc+91.0)/(4.0*rc+3.0))-5.0);
+        const double wte=std::pow(std::log(1.0+temperature/cb/rio),beta/(1.0+temperature/cb*rio));
+        const double wtm=std::pow(std::log(1.0+tmin/cb/rio),beta/(1.0+tmin/cb*rio));
+        double ete=0,e2=0,e3=0,etm=0; eint_values(rio/temperature*cb,ete,e2,e3); eint_values(rio/tmin*cb,etm,e2,e3);
+        if (ete<1.0e-20) return true;
+        cion=ciono*std::sqrt(tmin/temperature)*ete/(etm+1.0e-30)*wte/(wtm+1.0e-30);
+    } else cion=ciono;
+    if (cion<=1.0e-24) { cion=0.0; return true; }
+    cion/=static_cast<double>(n*n);
+    crec=cion*2.0779e-16*limited_exp(std::min((eth-e1)*1.16058e4/temperature,60.0))/std::pow(temperature,1.5);
+    return std::isfinite(cion)&&std::isfinite(crec);
+}
+
+std::size_t bracket_index(const double* grid, std::size_t n, double x) {
+    if (n < 2 || x <= grid[0]) return 0;
+    for (std::size_t i=0;i+1<n;++i) if (x < grid[i+1]) return i;
+    return n-2;
+}
+
+double bilinear_log_table(const double* dens, std::size_t nd, const double* temp, std::size_t nt, const double* table, double logn, double logt) {
+    const std::size_t ni=bracket_index(dens,nd,logn), ti=bracket_index(temp,nt,logt);
+    const double n0=dens[ni],n1=dens[ni+1],t0=temp[ti],t1=temp[ti+1];
+    if (n1==n0||t1==t0) throw std::runtime_error("degenerate density/temperature grid");
+    const auto at=[&](std::size_t i,std::size_t j){return table[i*nt+j];};
+    const double r0=at(ni,ti)+(at(ni,ti+1)-at(ni,ti))*(logt-t0)/(t1-t0);
+    const double r1=at(ni+1,ti)+(at(ni+1,ti+1)-at(ni+1,ti))*(logt-t0)/(t1-t0);
+    return r0+(r1-r0)*(logn-n0)/(n1-n0);
+}
+
+bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double& aij, double& wavelength) {
+    aij=wavelength=0.0;
+    if (!r||!ints||ni<2||nr<4) return false;
+    const int nd=static_cast<int>(ints[0]), nt=static_cast<int>(ints[1]);
+    if (nd<=0||nt<=0) return false;
+    if (nd==1&&nt==1) { const double dtmp=r[2]>30.0?std::log10(r[2]):r[2]; aij=std::pow(10.0,dtmp); wavelength=r[3]; return true; }
+    const std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+1);
+    if (nd<2||nt<2||nr<need||temperature<=0.0||density<=0.0) return false;
+    double logn=std::log10(density), logt=std::log10(temperature);
+    const double* dg=r; const double* tg=r+nd; const double* table=r+nd+nt;
+    logn=std::min(logn,dg[nd-1]); logt=std::min(tg[nt-1]+1.0,std::max(tg[0]-1.0,logt));
+    const double rec=bilinear_log_table(dg,nd,tg,nt,table,logn,logt);
+    aij=std::pow(10.0,rec); wavelength=r[nd+nt+nd*nt]; return std::isfinite(aij)&&std::isfinite(wavelength);
+}
+
+bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double endpoint_delta_ev, double& upward, double& downward) {
+    upward=downward=0.0;
+    if (!r||!ints||ni<3) return false;
+    const int nd=static_cast<int>(ints[0]), nt=static_cast<int>(ints[1]), nll=static_cast<int>(ints[2]);
+    const std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+1);
+    if (nd<2||nt<2||nr<need||temperature<=0.0||density<=0.0) return false;
+    const double* dg=r; const double* tg=r+nd; const double* table=r+nd+nt; const double wav=r[nd+nt+nd*nt];
+    if (!(wav>0.0)) return false;
+    const double floor_wav=endpoint_delta_ev>0.0?12398.4016/endpoint_delta_ev:wav;
+    const double tused=std::max(temperature,2.8777e6/floor_wav);
+    double logn=std::min(std::log10(density),dg[nd-1]);
+    double logt=std::min(tg[nt-1]+1.0,std::max(tg[0]-1.0,std::log10(tused)));
+    const double rec=bilinear_log_table(dg,nd,tg,nt,table,logn,logt);
+    downward=std::pow(10.0,rec);
+    int k=1; while (nll >= (k+1)*k/2+1 && k<10000) ++k;
+    const int nl1=k*(k-1)/2+1, il=nll-nl1; const double gg=2.0*(2.0*il+1.0);
+    const double xt=1.43817e8/(wav*tused);
+    upward=(xt<100.0&&gg>0.0)?downward*std::exp(-xt)/gg:0.0;
+    return std::isfinite(upward)&&std::isfinite(downward);
+}
+
 const ElementRow& row_at(const ElementProgram& element, int one_based) {
     if (one_based < 1 || one_based > element.n_rows) throw std::runtime_error("row index outside element");
     return element.rows[static_cast<std::size_t>(one_based - 1)];
@@ -556,8 +717,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE:
-        case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE:
-        case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
+        case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
             if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
             const std::size_t n = record.real_count / 2;
@@ -614,6 +774,34 @@ EvaluatedRecord evaluate_record(
             c.ans6 = c.ans1 * delta_ev * kErgPerEv;
             break;
         }
+        case XSTAR_FIXED_OPCODE_TYPE54_ANGULAR_REDIS: {
+            if (!ints || record.int_count < 5) throw std::runtime_error("type54 payload requires ni,nf,li,lf,iq");
+            const int ni0=static_cast<int>(ints[0]), nf0=static_cast<int>(ints[1]);
+            const int li=static_cast<int>(ints[2]), lf=static_cast<int>(ints[3]), iq=static_cast<int>(ints[4]);
+            if (ni0 == nf0) break;
+            double alm=0.0, alp=0.0;
+            if (xstar_engine_anl1_v1(ni0,nf0,lf,iq,&alm,&alp)!=0) throw std::runtime_error("type54 anl1 evaluation failed");
+            const double rate = li < lf ? alm : alp;
+            c.ans2 = rate;
+            const double delt = delta_ev / std::max(kt_ev,1.0e-300);
+            c.ans3 = -rate*delt*kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE57_COLLISIONAL_IONIZATION: {
+            if (!ints || record.int_count < 2) throw std::runtime_error("type57 payload requires i57,principal_n");
+            const int i57=static_cast<int>(ints[0]);
+            const int n=static_cast<int>(ints[1]);
+            if (i57<=0 || record.lower_row<=1) break;
+            const double e1=lower.energy_ev;
+            const double eth=std::max(upper.energy_ev-e1,0.0);
+            double cion=0.0,crec=0.0;
+            if (!type57_coefficients(n,input.temperature_k,ne,e1,eth,cion,crec)) throw std::runtime_error("type57 coefficient evaluation failed");
+            c.ans1=cion*ne;
+            c.ans2=crec*(lower.statistical_weight/std::max(upper.statistical_weight,1.0e-300))*ne*ne;
+            c.ans5=-c.ans2*eth*kErgPerEv;
+            c.ans6=-c.ans1*eth*kErgPerEv;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
             const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
@@ -623,6 +811,11 @@ EvaluatedRecord evaluate_record(
             c.ans2 = qde * ne;
             c.ans5 = c.ans2 * delta_ev * kErgPerEv;
             c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE86_AUGER: {
+            if (!r || record.real_count < 1) throw std::runtime_error("type86 payload requires Auger rate");
+            c.ans1=std::max(0.0,r[0]);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE: {
@@ -640,14 +833,56 @@ EvaluatedRecord evaluate_record(
             c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
             break;
         }
+        case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
+            if (!r || !ints || record.int_count < 3) throw std::runtime_error("type99 payload requires nden,ntem,nxs");
+            const int nd=static_cast<int>(ints[0]), nt=static_cast<int>(ints[1]), nx=static_cast<int>(ints[2]);
+            const std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+2*nx);
+            if (nd<=0||nt<2||nx<2||record.real_count<need) throw std::runtime_error("invalid type99 grid dimensions");
+            if (!input.radiation_energy_ev||!input.radiation_flux||input.radiation_bin_count<2) throw std::runtime_error("type99 requires live radiation grid");
+            const double* dg=r; const double* tg=r+nd; const double* table=r+nd+nt; const double* xs=r+nd+nt+nd*nt;
+            double logn=std::log10(std::max(input.hydrogen_density_cm3,1.0e-300));
+            double logt=std::log10(input.temperature_k);
+            logt=std::min(0.999*tg[nt-1],std::max(1.001*tg[0],logt));
+            std::size_t ni=bracket_index(dg,nd,logn), ti=bracket_index(tg,nt,logt);
+            const auto rcoef=[&](std::size_t jt,std::size_t jn){const double v=table[jt*nd+jn];return v>-1.0e-31?std::log10(v+1.0e-30):v;};
+            const double t0=tg[ti],t1=tg[ti+1];
+            double rec1=rcoef(ti,ni)+(rcoef(ti+1,ni)-rcoef(ti,ni))*(logt-t0)/(t1-t0);
+            double logrec=rec1;
+            if (ni>0 && ni+1<static_cast<std::size_t>(nd)) {
+                const double rec2=rcoef(ti,ni+1)+(rcoef(ti+1,ni+1)-rcoef(ti,ni+1))*(logt-t0)/(t1-t0);
+                logrec=rec1+(rec2-rec1)*(logn-dg[ni])/(dg[ni+1]-dg[ni]);
+            }
+            const double rec=std::pow(10.0,logrec);
+            double alpha=0.0;
+            for (int k=0;k+1<nx;++k) {
+                const double e0=std::max(0.0,xs[2*k]), e1=std::max(0.0,xs[2*(k+1)]);
+                const double s0=std::max(0.0,xs[2*k+1]), s1=std::max(0.0,xs[2*(k+1)+1]);
+                const double em=0.5*(e0+e1)*kRydEv;
+                alpha += 0.5*(s0+s1)*std::abs(e1-e0)*limited_exp(-em/std::max(kt_ev,1.0e-300));
+            }
+            alpha=std::max(alpha*1.0e-18,1.0e-300);
+            const double scale=rec/alpha;
+            double photo=0.0,heat=0.0;
+            for (int k=0;k<nx;++k) {
+                const double e=delta_ev+std::max(0.0,xs[2*k])*kRydEv;
+                const double sigma=std::max(0.0,xs[2*k+1])*1.0e-18*scale;
+                const double flux=interp_linear(input.radiation_energy_ev,input.radiation_flux,input.radiation_bin_count,e);
+                photo+=flux*sigma; heat+=flux*sigma*std::max(0.0,e-delta_ev)*kErgPerEv;
+            }
+            photo/=nx; heat/=nx;
+            c.ans1=photo; c.ans2=rec*ne;
+            c.ans3=-c.ans2*delta_ev*kErgPerEv; c.ans4=-heat;
+            c.ans5=c.ans2*delta_ev*kErgPerEv; c.ans6=heat;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
-            if (!r || record.real_count < 3) throw std::runtime_error("type63 lowered payload requires coefficient,power,activation_eV");
-            const double qforward = std::max(0.0, r[0] * std::pow(std::max(t4, 1.0e-300), r[1]) * limited_exp(-r[2] / std::max(kt_ev, 1.0e-300)));
-            const double qreverse = qforward * lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300) * limited_exp(delta_ev / std::max(kt_ev, 1.0e-300));
-            c.ans1 = qforward * ne;
-            c.ans2 = qreverse * ne;
-            c.ans5 = c.ans2 * delta_ev * kErgPerEv;
-            c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            if (!ints || record.int_count < 5) throw std::runtime_error("type63 payload requires ni,li,nf,lf,iq");
+            double values[6]{};
+            const int rc=xstar_engine_type63_rates_v1(
+                static_cast<int>(ints[0]),static_cast<int>(ints[1]),static_cast<int>(ints[2]),static_cast<int>(ints[3]),static_cast<int>(ints[4]),
+                input.temperature_k,ne,lower.energy_ev,upper.energy_ev,lower.statistical_weight,upper.statistical_weight,values);
+            if (rc!=0) throw std::runtime_error("type63 native scalar evaluation failed");
+            c.ans1=values[0]; c.ans2=values[1]; c.ans3=values[2]; c.ans4=values[3]; c.ans5=values[4]; c.ans6=values[5];
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION: {
@@ -659,6 +894,25 @@ EvaluatedRecord evaluate_record(
             c.ans2 = qde * ne;
             c.ans5 = c.ans2 * delta_ev * kErgPerEv;
             c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE71_SUPERLEVEL_CASCADE: {
+            double aij=0.0,wavelength=0.0;
+            if (!type71_rate(r,record.real_count,ints,record.int_count,input.temperature_k,input.hydrogen_density_cm3,aij,wavelength)) throw std::runtime_error("invalid type71 payload");
+            if (record.int_count>=6 && (ints[5]==96 || ints[5]==97)) aij=std::min(aij,1.0e10);
+            c.ans2=aij;
+            const double photon=(wavelength>0.1)?12398.4016/wavelength:delta_ev;
+            const double erg=(wavelength>0.1)?1.602197e-12:kErgPerEv;
+            c.ans3=-aij*photon*erg;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE77_SUPERLEVEL_COLLISION: {
+            if (record.lower_row==record.upper_row || delta_ev<1.0) break;
+            double upward=0.0,downward=0.0;
+            if (!type77_rates(r,record.real_count,ints,record.int_count,input.temperature_k,input.hydrogen_density_cm3,delta_ev,upward,downward)) throw std::runtime_error("invalid type77 payload");
+            c.ans1=upward; c.ans2=downward;
+            c.ans5=downward*delta_ev*kErgPerEv;
+            c.ans6=upward*delta_ev*kErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE: {
@@ -957,7 +1211,7 @@ struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 extern "C" {
 
 uint32_t xstar_fixed_state_engine_abi_version(void) { return XSTAR_FIXED_STATE_ENGINE_ABI_VERSION; }
-const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_atdb_lowerer_v06483"; }
+const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_family_phase1_v06484"; }
 uint32_t xstar_fixed_state_engine_feature_flags(void) {
     return XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
         XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL |

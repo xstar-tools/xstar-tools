@@ -111,19 +111,19 @@ test: all
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
-	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06483_active_atdb_lowerer_fixture
-	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06483_active_atdb_lowerer_fixture --batch 4
-	rm -rf .v06483_native_output
-	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../benchmarks/v06483_active_atdb_lowerer_fixture --output-dir .v06483_native_output
-	test -s .v06483_native_output/xout_step.log
-	test -s .v06483_native_output/xout_native_state.fits
-	test -s .v06483_native_output/visited_records.csv
-	rm -rf .v06483_native_output
+	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06484_active_family_phase1_fixture
+	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06484_active_family_phase1_fixture --batch 4
+	rm -rf .v06484_native_output
+	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../benchmarks/v06484_active_family_phase1_fixture --output-dir .v06484_native_output
+	test -s .v06484_native_output/xout_step.log
+	test -s .v06484_native_output/xout_native_state.fits
+	test -s .v06484_native_output/visited_records.csv
+	rm -rf .v06484_native_output
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.48.3.2 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.48.4 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:
