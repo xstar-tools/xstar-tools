@@ -54,7 +54,7 @@ def test_native_phase1_families_and_visited_report(tmp_path: Path) -> None:
     for data_type in PHASE1_TYPES:
         assert visits[data_type] == 1
     summary = json.loads((tmp_path / "native_fixed_state_summary.json").read_text())
-    assert summary["schema_version"] == "0.6.48.4"
+    assert summary["schema_version"] == "0.6.48.4.1"
     assert summary["computed_from_raw_coefficients"] is True
     assert summary["python_callbacks"] == 0
 
@@ -203,3 +203,120 @@ def test_phase1_lowerer_serializes_host_payload_shapes() -> None:
     type99 = lower(99, [4.0, 10.0, 4.0, 7.0, 1e-12, 2e-12, 3e-12, 4e-12], [1, 2, 1, 0])
     assert type99["lower_row"] == 1 and type99["upper_row"] == 4
     assert type99["ints"] == [1, 2, 1, 0]
+
+
+def test_active_lowerer_serializes_term_safe_source_positions(tmp_path: Path, monkeypatch) -> None:
+    from types import SimpleNamespace
+    from xstar_tools.xstar import active_subsets, atomic_database
+    from xstar_tools.xstar import native_fixed_program as program
+
+    class FakeMaster:
+        def close(self) -> None:
+            pass
+
+    built = SimpleNamespace(master=FakeMaster(), derived=object())
+    monkeypatch.setattr(atomic_database, "load_atomic_database_state", lambda *args, **kwargs: built)
+    monkeypatch.setattr(active_subsets, "build_active_atdb_subset", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        program,
+        "_scan_active_records",
+        lambda *args, **kwargs: ({(4, 50): 4}, {1: [10, 11], 2: [20], 12: [30]}, []),
+    )
+    monkeypatch.setattr(
+        program,
+        "_atdb_fingerprint",
+        lambda *args, **kwargs: ("a" * 64, {"sha256": "a" * 64}),
+    )
+
+    def fake_layout(master, derived, z, element_index):
+        rows = [
+            {
+                "element_index": element_index, "row": 1, "superlevel": 1,
+                "ion": 1, "ion_charge": 0, "initial_population": 1.0,
+                "energy_ev": 0.0, "statistical_weight": 2.0,
+                "principal_n": 1, "orbital_l": 0,
+            },
+            {
+                "element_index": element_index, "row": 2, "superlevel": 2,
+                "ion": 1, "ion_charge": 0, "initial_population": 0.0,
+                "energy_ev": 10.0, "statistical_weight": 4.0,
+                "principal_n": 2, "orbital_l": 1,
+            },
+        ]
+        element = {
+            "element_index": element_index, "element_z": z, "n_rows": 2,
+            "n_superlevels": 2, "n_ions": 1, "normalization_row": 1,
+        }
+        return element, rows, object(), {1: object()}
+
+    monkeypatch.setattr(program, "_build_element_layout", fake_layout)
+    monkeypatch.setattr(
+        program,
+        "_lower_record",
+        lambda master, derived, rec, element_index, rows, basis, blocks, subset: {
+            "source_position": 0, "record": rec, "element_index": element_index,
+            "opcode": 50, "data_type": 50, "rate_type": 4,
+            "ion_index": 1, "ion_stage": 1, "lower_row": 1, "upper_row": 2,
+            "density_scale": 1.0, "line_energy_ev": 10.0,
+            "atomic_mass_amu": 1.0, "reals": [1.0, 0.1], "ints": [],
+        },
+    )
+    result = program.lower_active_atdb(tmp_path / "fake.fits", tmp_path / "lowered", allow_partial=True)
+    assert result.executable_records == 4
+    with (tmp_path / "lowered" / "records.csv").open() as handle:
+        positions = [int(row["source_position"]) for row in csv.DictReader(handle)]
+    assert positions == [4, 8, 12, 16]
+
+
+def test_program_validation_rejects_nonmonotonic_source_positions(tmp_path: Path) -> None:
+    bad = tmp_path / "bad-order"
+    shutil.copytree(PROGRAM, bad)
+    with (bad / "records.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    rows[1]["source_position"] = rows[0]["source_position"]
+    with (bad / "records.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader(); writer.writerows(rows)
+    import pytest
+    with pytest.raises(ValueError, match="source_position"):
+        validate_program_directory(bad)
+
+
+def test_more_than_64_lines_use_separate_line_capacity(tmp_path: Path) -> None:
+    many = tmp_path / "many-lines"
+    shutil.copytree(PROGRAM, many)
+    with (many / "records.csv").open(newline="") as handle:
+        records = list(csv.DictReader(handle))
+    fields = list(records[0])
+    line = next(row for row in records if int(row["data_type"]) == 50)
+    for extra in range(79):
+        copy = dict(line)
+        copy["record"] = str(9000 + extra)
+        records.append(copy)
+    for index, row in enumerate(records):
+        row["source_position"] = str(4 * (index + 1))
+        row["next_index"] = str(index + 1 if index + 1 < len(records) else -1)
+    with (many / "records.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
+        writer.writeheader(); writer.writerows(records)
+    with (many / "elements.csv").open(newline="") as handle:
+        elements = list(csv.DictReader(handle))
+    elements[0]["record_count"] = str(len(records))
+    with (many / "elements.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(elements[0]), lineterminator="\n")
+        writer.writeheader(); writer.writerows(elements)
+    manifest = {}
+    for line_text in (many / "manifest.txt").read_text().splitlines():
+        if "=" in line_text:
+            key, value = line_text.split("=", 1); manifest[key] = value
+    manifest["program_id"] = "v064841_many_line_regression"
+    manifest["record_count"] = str(len(records))
+    (many / "manifest.txt").write_text("\n".join(f"{key}={value}" for key, value in manifest.items()) + "\n")
+    completed = subprocess.run(
+        [str(CPP / "xstar_cpp"), "fixed-state-self-test", "--case-dir", str(many)],
+        cwd=CPP, text=True, capture_output=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "program_record_count=93" in completed.stdout
+    assert "spectral_contributions=160" in completed.stdout
+    assert "RESULT=ACCEPT" in completed.stdout

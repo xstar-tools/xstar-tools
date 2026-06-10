@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.4 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.4.1 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.4 distinguishes three classes that older coverage reports conflated:
+v0.6.48.4.1 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -204,7 +204,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.4",
+        "schema_version": "0.6.48.4.1",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -236,10 +236,17 @@ def validate_program_directory(directory: str | Path) -> ProgramValidation:
     rows = sum(1 for _ in csv.DictReader((root / "rows.csv").open()))
     record_count = 0
     opcodes: set[int] = set()
+    previous_source_position = 0
     with (root / "records.csv").open() as handle:
         for record in csv.DictReader(handle):
+            source_position = _as_int(record["source_position"], "source_position")
+            if source_position <= 0 or source_position <= previous_source_position:
+                raise ValueError("source_position must be positive and strictly increasing")
+            previous_source_position = source_position
             record_count += 1
             opcodes.add(_as_int(record["opcode"], "opcode"))
+    if "record_count" in manifest and int(manifest["record_count"]) != record_count:
+        raise ValueError("manifest record_count does not match records.csv")
     bad = opcodes - ENGINE_RECOGNIZED_OPCODES
     if bad:
         raise ValueError(f"unsupported opcodes: {sorted(bad)}")
@@ -283,7 +290,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.4",
+        "schema_version": "0.6.48.4.1",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
@@ -740,6 +747,11 @@ def lower_active_atdb(
                     payload_reals = lowered.pop("reals")
                     payload_ints = lowered.pop("ints")
                     native_types.add(int(lowered["data_type"]))
+                    # Each contribution expands to up to four matrix terms.  The
+                    # ATDB raw pointer is not a source-order position (it is zero
+                    # for the qualified host database), so serialize a global,
+                    # strictly increasing base position with four slots per record.
+                    lowered["source_position"] = 4 * (global_index + 1)
                     lowered["next_index"] = global_index + 1 if local_index + 1 < len(source_records) else -1
                     lowered["real_offset"] = real_offset
                     lowered["real_count"] = len(payload_reals)
@@ -754,7 +766,7 @@ def lower_active_atdb(
                     int_offset += len(payload_ints)
                     global_index += 1
 
-        program_id = f"v06484_active_atdb_{fingerprint[:16]}"
+        program_id = f"v064841_active_atdb_{fingerprint[:16]}"
         promotion_ready = not unsupported_rows
         manifest_lines = [
             f"program_abi={PROGRAM_ABI}", f"program_id={program_id}",

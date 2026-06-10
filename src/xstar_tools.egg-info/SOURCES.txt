@@ -36,6 +36,7 @@ V0647_NATIVE_THERMAL_CONVERGENCE_ENGINE.md
 V06481_XOUT_STEP_LOG_ARTIFACT_CORRECTION.md
 V06482_GENUINE_NATIVE_FIXED_STATE_ENGINE.md
 V06483_ACTIVE_ATDB_LOWERER.md
+V064841_ACTIVE_PROGRAM_EXECUTION_CORRECTIONS.md
 V06484_ACTIVE_FAMILY_COMPLETION_PHASE1.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -58,6 +59,7 @@ check_v047_native_thermal_convergence.py
 check_v0481_all_cpp_production.py
 check_v0482_genuine_native_fixed_state.py
 check_v0483_active_atdb_lowerer.py
+check_v04841_active_family_corrections.py
 check_v0484_active_family_completion.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -122,6 +124,10 @@ run_v0483_active_atdb_lower.sh
 run_v0483_atdb_coverage.sh
 run_v0483_xstar_native_fixed_state.sh
 run_v0483_xstar_tools_python_fallback.sh
+run_v04841_active_atdb_lower.sh
+run_v04841_atdb_coverage.sh
+run_v04841_xstar_native_fixed_state.sh
+run_v04841_xstar_tools_python_fallback.sh
 run_v0484_active_atdb_lower.sh
 run_v0484_atdb_coverage.sh
 run_v0484_xstar_native_fixed_state.sh
@@ -350,6 +356,7 @@ xstar_tools_v0.6.47.2_handoff.md
 xstar_tools_v0.6.48.1_handoff.md
 xstar_tools_v0.6.48.2_handoff.md
 xstar_tools_v0.6.48.3_handoff.md
+xstar_tools_v0.6.48.4.1_handoff.md
 xstar_tools_v0.6.48.4_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256

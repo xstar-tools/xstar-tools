@@ -399,3 +399,10 @@ include run_v0484_xstar_tools_python_fallback.sh
 include check_v0484_active_family_completion.py
 include tests/test_v06484_active_family_completion.py
 include v0484_host_coverage_projection.json
+include V064841_ACTIVE_PROGRAM_EXECUTION_CORRECTIONS.md
+include xstar_tools_v0.6.48.4.1_handoff.md
+include check_v04841_active_family_corrections.py
+include run_v04841_atdb_coverage.sh
+include run_v04841_active_atdb_lower.sh
+include run_v04841_xstar_native_fixed_state.sh
+include run_v04841_xstar_tools_python_fallback.sh

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.4.1 - 2026-06-10
+
+- Correct active-ATDB source-position serialization using globally increasing four-slot positions.
+- Reject zero, duplicate, and decreasing source positions in Python and C++.
+- Separate line-record storage capacity from continuum energy-bin capacity.
+- Project committed line emissivity and opacity explicitly into the radiation grid.
+- Correct multi-element native self-test accounting.
+- Strengthen the milestone checker to execute a supplied host-lowered program.
+- Add regressions for host-style source ordering and 80 lines on a 64-bin grid.
+
 # 0.6.48.4 - 2026-06-10
 
 - Promote active-ATDB lowering and native execution for data types 54, 57, 63, 71, 77, 86, and 99.

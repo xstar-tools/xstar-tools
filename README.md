@@ -1,3 +1,7 @@
+## v0.6.48.4.1 active-program execution corrections
+
+v0.6.48.4.1 makes the 8,570-record active H/He/Mg program runnable by correcting term-source ordering, decoupling line-record storage from the continuum grid, projecting lines explicitly into energy bins, and fixing multi-element self-test accounting. ABI 60484 is unchanged. Production remains blocked by 152 omitted records, native 61-evaluation DSEC integration, and the nine historical XSTAR FITS schemas.
+
 
 ## v0.6.48.4 active-family completion, phase 1
 

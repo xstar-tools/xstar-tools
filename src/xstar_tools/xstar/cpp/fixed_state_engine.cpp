@@ -337,8 +337,13 @@ Program load_program(const std::string& directory) {
     p.reals = load_scalar_file<double>(join_path(directory, "reals.txt"), "reals.txt");
     p.ints = load_scalar_file<std::int64_t>(join_path(directory, "ints.txt"), "ints.txt");
     load_records(join_path(directory, "records.csv"), p);
+    std::int64_t previous_source_position = 0;
     for (std::size_t k = 0; k < p.records.size(); ++k) {
         const auto& r = p.records[k];
+        if (r.source_position <= 0 || r.source_position <= previous_source_position) {
+            throw std::runtime_error("record source_position must be positive and strictly increasing");
+        }
+        previous_source_position = r.source_position;
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
@@ -1166,7 +1171,21 @@ int run_impl(
 
     const auto spectral_start = clock_type::now();
     if (!spectral.empty() && input.radiation_bin_count > 0) {
-        std::vector<double> rcem(2 * input.radiation_bin_count, 0.0), oplin(input.radiation_bin_count, 0.0), cemab(2 * input.radiation_bin_count, 0.0), cabab(input.radiation_bin_count, 0.0), opakab(input.radiation_bin_count, 0.0), rccemis(2 * input.radiation_bin_count, 0.0), opakcont(input.radiation_bin_count, 0.0), fline(2 * (spectral.size() + 1), 0.0), flinel(input.radiation_bin_count, 0.0);
+        // Line records and continuum bins are different index spaces.  Keep the
+        // spectral engine's per-line arrays sized by the number of line records,
+        // then explicitly project committed line emissivity/opacity into the
+        // radiation grid using bin_one_based.
+        const std::size_t line_capacity = spectral.size() + 1;
+        const std::size_t continuum_capacity = input.radiation_bin_count;
+        std::vector<double> rcem(2 * line_capacity, 0.0);
+        std::vector<double> oplin(line_capacity, 0.0);
+        std::vector<double> cemab(2 * continuum_capacity, 0.0);
+        std::vector<double> cabab(continuum_capacity, 0.0);
+        std::vector<double> opakab(continuum_capacity, 0.0);
+        std::vector<double> rccemis(2 * continuum_capacity, 0.0);
+        std::vector<double> opakcont(continuum_capacity, 0.0);
+        std::vector<double> fline(2 * line_capacity, 0.0);
+        std::vector<double> flinel(continuum_capacity, 0.0);
         xstar_spectral_workspace_v1 sw{};
         xstar_spectral_workspace_init_v1(&sw);
         sw.rcem = rcem.data(); sw.rcem_count = rcem.size();
@@ -1175,17 +1194,31 @@ int run_impl(
         sw.cabab = cabab.data(); sw.cabab_count = cabab.size();
         sw.opakab = opakab.data(); sw.opakab_count = opakab.size();
         sw.rccemis = rccemis.data(); sw.rccemis_count = rccemis.size();
-        sw.opakc = output.opacity; sw.opakc_count = input.radiation_bin_count;
+        sw.opakc = output.opacity; sw.opakc_count = continuum_capacity;
         sw.opakcont = opakcont.data(); sw.opakcont_count = opakcont.size();
         sw.fline = fline.data(); sw.fline_count = fline.size();
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();
-        sw.epi_eV = input.radiation_energy_ev; sw.energy_count = input.radiation_bin_count;
+        sw.epi_eV = input.radiation_energy_ev; sw.energy_count = continuum_capacity;
         xstar_spectral_stats_v1 ss{};
         xstar_spectral_stats_init_v1(&ss);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), nullptr, 0, &sw, &ss, error.data(), error.size());
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
-        for (std::size_t k = 0; k < input.radiation_bin_count; ++k) output.spectrum[k] += rcem[k] + cemab[k] + rccemis[k];
+        for (const auto& contribution : spectral) {
+            if (contribution.output_index <= 0 || contribution.bin_one_based <= 0) continue;
+            const auto line_index = static_cast<std::size_t>(contribution.output_index);
+            const auto bin_index = static_cast<std::size_t>(contribution.bin_one_based - 1);
+            if (line_index >= line_capacity || bin_index >= continuum_capacity) {
+                throw std::runtime_error("line-to-grid projection index out of range");
+            }
+            output.spectrum[bin_index] += rcem[line_index] + rcem[line_capacity + line_index];
+            output.opacity[bin_index] += oplin[line_index];
+        }
+        for (std::size_t k = 0; k < continuum_capacity; ++k) {
+            output.spectrum[k] += cemab[k] + cemab[continuum_capacity + k]
+                + rccemis[k] + rccemis[continuum_capacity + k] + flinel[k];
+            output.opacity[k] += opakcont[k];
+        }
         stats.spectral_contributions += ss.contributions_committed;
     }
     stats.spectral_seconds += elapsed(spectral_start);

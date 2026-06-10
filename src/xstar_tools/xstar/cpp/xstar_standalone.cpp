@@ -62,7 +62,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.4 adds a genuine raw-coefficient native fixed-state engine.\n"
+        "v0.6.48.4.1 adds a genuine raw-coefficient native fixed-state engine.\n"
         "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
         "and constructs continuum/spectral arrays without Python callbacks.\n";
 }
@@ -943,7 +943,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.4'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.4.1'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1042,10 +1042,12 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.4\n"
+                 << "xstar_tools native fixed-state v0.6.48.4.1\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
+                 << "unsupported_record_count=" << program_info.unsupported_record_count << "\n"
+                 << "partial_program=" << (program_info.unsupported_record_count > 0 ? "true" : "false") << "\n"
                  << "python_callbacks=" << stats.python_callbacks << "\n"
                  << "temperature_k=" << input.temperature_k << "\n"
                  << "electron_density_cm3=" << input.electron_density_cm3 << "\n"
@@ -1073,7 +1075,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.4\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.4.1\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1083,6 +1085,8 @@ int command_run_fixed_state(const Options& options) {
                     << "  \"type56_records_evaluated\": " << stats.type56_records_evaluated << ",\n"
                     << "  \"visited_data_types\": " << stats.visited_data_types << ",\n"
                     << "  \"active_atdb_lowered\": " << (active_atdb_lowered ? "true" : "false") << ",\n"
+                    << "  \"unsupported_record_count\": " << program_info.unsupported_record_count << ",\n"
+                    << "  \"partial_program\": " << (program_info.unsupported_record_count > 0 ? "true" : "false") << ",\n"
                     << "  \"elements_solved\": " << stats.elements_solved << ",\n"
                     << "  \"hmctot\": " << output.hmctot << ",\n"
                     << "  \"production_promotion_ready\": false,\n"
@@ -1098,6 +1102,8 @@ int command_run_fixed_state(const Options& options) {
               << "program_elements=" << program_info.element_count << "\n"
               << "program_population_rows=" << program_info.population_rows << "\n"
               << "program_record_count=" << program_info.record_count << "\n"
+              << "program_unsupported_records=" << program_info.unsupported_record_count << "\n"
+              << "partial_program=" << (program_info.unsupported_record_count > 0 ? "true" : "false") << "\n"
               << "computed_from_raw_coefficients=true\n"
               << "records_evaluated=" << stats.records_evaluated << "\n"
               << "active_program_records=" << stats.active_program_records << "\n"
@@ -1191,6 +1197,9 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
               << "program_elements=" << program_info.element_count << "\n"
               << "program_population_rows=" << program_info.population_rows << "\n"
               << "program_record_count=" << program_info.record_count << "\n"
+              << "program_unsupported_records=" << program_info.unsupported_record_count << "\n"
+              << "partial_program=" << (program_info.unsupported_record_count > 0 ? "true" : "false") << "\n"
+              << "active_atdb_lowered=" << ((program_info.status_flags & XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED) != 0u ? "true" : "false") << "\n"
               << "calls=" << stats.calls << "\n"
               << "records_seen=" << stats.records_seen << "\n"
               << "records_evaluated=" << stats.records_evaluated << "\n"
@@ -1210,7 +1219,7 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
               << "total_seconds=" << stats.total_seconds << "\n";
     const bool accepted = finite && changed && stats.python_callbacks == 0 && stats.records_unsupported == 0 &&
         stats.active_program_records > 0 && stats.records_evaluated == stats.active_program_records * count &&
-        stats.elements_solved == count;
+        stats.elements_solved == program_info.element_count * count;
     std::cout << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     xstar_fixed_state_context_destroy(context);
     return accepted ? 0 : 20;
