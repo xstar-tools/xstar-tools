@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.4 - 2026-06-11
+
+- Made the 31 evaluation-61 He II type-53 records IEEE-exact to the frozen v0.6.47.2 runtime oracle.
+- Pinned the historical `13.605692` Rydberg constant and the `expo.f90` +/-60 clamp.
+- Applied source-signed `ans1`-`ans6` to the qualified He II matrix scope.
+- Added path-hardened qualification and checker workflows with radiation SHA-256 validation.
+- Preserved ABI 60485; full fixed-state and production promotion remain blocked.
+
 # 0.6.48.7.3 - 2026-06-11
 
 - Add an isolated exact v0.6.47.2 type-53 evaluator replay tied to the source archive, lowered-program, state and radiation hashes.

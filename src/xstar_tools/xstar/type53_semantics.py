@@ -1,4 +1,4 @@
-"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.3.
+"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.4.
 
 The tool joins the applied native values and the translated source-style shadow
 values for the 31 He II type-53 records at one evaluation.  It expands each
@@ -22,9 +22,9 @@ from typing import Any, Iterable, Mapping
 
 from .he_bound_free_audit import _resolve_records_csv
 
-SCHEMA = "xstar-tools-v064872-type53-semantics-v1"
+SCHEMA = "xstar-tools-v064874-type53-ieee-application-v1"
 ORACLE_SCHEMA = "xstar-tools-v064872-type53-runtime-oracle-v1"
-RELEASE = "0.6.48.7.3"
+RELEASE = "0.6.48.7.4"
 ELEMENT_Z = 2
 ION_STAGE = 2
 DATA_TYPE = 53
@@ -92,7 +92,7 @@ def _load_selected(records_source: Path, evaluation: int) -> tuple[Path, list[di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV lacks v0.6.48.7.3 type-53 fields: " + ", ".join(missing))
+            raise ValueError("records CSV lacks v0.6.48.7.4 type-53 fields: " + ", ".join(missing))
         rows = [
             dict(row) for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation
@@ -351,7 +351,21 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
         "shadow_closer_to_reference_records": shadow_closer_records,
         "applied_closer_to_reference_records": applied_closer_records,
         "equal_distance_to_reference_records": equal_distance_records,
-        "type53_physics_replacement_ready": bool(oracle_complete and reference_exact_shadow),
+        "qualified_applied_scope": "He II type-53 records (element_z=2, ion_stage=2)",
+        "qualified_records": len(selected),
+        "type53_ieee_kernel_contract": {
+            "rydberg_ev": 13.605692,
+            "exponential_clamp": [-60.0, 60.0],
+            "floating_point_contract": "binary64, source operation order, compiler ffp-contract=off",
+        },
+        "type53_physics_replacement_ready": bool(
+            oracle_complete and reference_exact_applied and reference_exact_shadow and applied_sign_ok
+        ),
+        "full_type53_family_promotion_ready": False,
+        "remaining_scope_blockers": [
+            "type-53 ions outside the qualified He II scope do not yet have independent runtime oracles",
+            "whole fixed-state electron/charge/thermal parity remains blocked by other rate families",
+        ],
         "fixed_state_parity": False,
         "production_promotion_ready": False,
         "blockers": blockers,

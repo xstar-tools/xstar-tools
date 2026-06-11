@@ -28,6 +28,10 @@ using clock_type = std::chrono::steady_clock;
 constexpr double kBoltzmannEvK = 8.617333262145e-5;
 constexpr double kErgPerEv = 1.602176634e-12;
 constexpr double kRydEv = 13.60569253;
+// The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
+// constant.  Keep it separate from the newer global constant: changing this
+// value moves the cross-section grid and breaks IEEE parity.
+constexpr double kType53RydEv = 13.605692;
 constexpr double kSigmaT = 6.6524587321e-25;
 
 extern "C" int xstar_engine_type63_rates_v1(
@@ -478,6 +482,11 @@ double limited_exp(double x) {
     return std::exp(std::max(-700.0, std::min(700.0, x)));
 }
 
+// Exact XSTAR expo.f90 contract used by the v0.6.47.2 type-53 evaluator.
+double type53_expo(double x) {
+    return std::exp(std::max(-60.0, std::min(60.0, x)));
+}
+
 /* XSTAR-style scaled x*exp(x)*E1(x), copied from the validated collision translation. */
 double expint_scaled(double x) {
     if (!(x > 0.0) || !std::isfinite(x)) return 0.0;
@@ -882,7 +891,7 @@ bool evaluate_type53_source_integral(
     std::vector<double> xs(static_cast<std::size_t>(pair_count), 0.0);
     std::vector<double> ys(static_cast<std::size_t>(pair_count), 0.0);
     for (int j = 0; j < pair_count; ++j) {
-        xs[static_cast<std::size_t>(j)] = threshold_ev + payload[2 * j] * kRydEv;
+        xs[static_cast<std::size_t>(j)] = threshold_ev + payload[2 * j] * kType53RydEv;
         ys[static_cast<std::size_t>(j)] = std::max(0.0, payload[2 * j + 1]);
     }
 
@@ -978,8 +987,8 @@ bool evaluate_type53_source_integral(
     const double rnissel = lower.statistical_weight * q2 / continuum_g;
     const double continuum_energy = upper.energy_ev;
     const double ethtmp = std::max(0.0, threshold_ev - continuum_energy);
-    const double exponent_energy = std::max(0.0, ethtmp + kRydEv * payload[0]);
-    const double rnist = rnissel * limited_exp(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
+    const double exponent_energy = std::max(0.0, ethtmp + kType53RydEv * payload[0]);
+    const double rnist = rnissel * type53_expo(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
     const double bktm = kBoltzmannErgK * input.temperature_k / kErgPerEv;
     if (!(bktm > 0.0)) return false;
 
@@ -996,7 +1005,7 @@ bool evaluate_type53_source_integral(
     double temphp = temprp * epiip;
     double temphp2 = temprp * (epiip - threshold_ev);
     double exptst = (epiip - threshold_ev) / bktm;
-    double exptmpp = limited_exp(-exptst);
+    double exptmpp = type53_expo(-exptst);
     double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
     double tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp / epiip : 0.0;
     double tempcp = tempip * epiip;
@@ -1020,7 +1029,7 @@ bool evaluate_type53_source_integral(
         const double previous_exptst = exptst;
         exptst = (epiip - threshold_ev) / bktm;
         if (previous_exptst < 200.0) {
-            exptmpp = limited_exp(-exptst);
+            exptmpp = type53_expo(-exptst);
             bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
             const double tempi = tempip;
             tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip : 0.0;
@@ -1203,8 +1212,19 @@ EvaluatedRecord evaluate_record(
             c.ans5 = recomb * threshold * kErgPerEv;
             c.ans6 = heat;
             xstar_element_contribution_v1 source_shadow{};
-            (void)evaluate_type53_source_integral(
+            const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
+            // v0.6.48.7.4 applies the source-exact result only to the 31
+            // evaluation-61-qualified He II records.  Other type-53 ions stay
+            // on the prior path until they have independent runtime oracles.
+            if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
+                c.ans1 = source_shadow.ans1;
+                c.ans2 = source_shadow.ans2;
+                c.ans3 = source_shadow.ans3;
+                c.ans4 = source_shadow.ans4;
+                c.ans5 = source_shadow.ans5;
+                c.ans6 = source_shadow.ans6;
+            }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
@@ -2378,7 +2398,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.3\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.4\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

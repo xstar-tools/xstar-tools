@@ -480,3 +480,10 @@ include check_v04873_type53_runtime_capture.py
 include run_v04873_type53_runtime_capture.sh
 include run_v04873_type53_semantics.sh
 include tests/test_v064873_v0472_type53_runtime_capture.py
+
+# v0.6.48.7.4 He II type-53 IEEE-exact application
+include V064874_HEII_TYPE53_IEEE_APPLICATION.md
+include xstar_tools_v0.6.48.7.4_handoff.md
+include check_v04874_type53_ieee_application.py
+include run_v04874_type53_ieee_application.sh
+include tests/test_v064874_type53_ieee_application.py

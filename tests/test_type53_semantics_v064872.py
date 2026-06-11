@@ -80,7 +80,7 @@ def test_freeze_verify_and_exact_shadow_control(tmp_path: Path) -> None:
     assert report["reference_runtime_oracle_complete"] is True
     assert report["shadow_exact_to_reference"] is True
     assert report["applied_exact_to_reference"] is False
-    assert report["type53_physics_replacement_ready"] is True
+    assert report["type53_physics_replacement_ready"] is False
     assert report["matrix_terms_written"] == 31 * 3 * 4
 
 
@@ -105,3 +105,37 @@ def test_reference_template_cannot_be_frozen(tmp_path: Path) -> None:
         assert "finite" in str(exc)
     else:
         raise AssertionError("blank runtime template was incorrectly accepted as an oracle")
+
+
+def test_exact_applied_and_shadow_enable_qualified_replacement(tmp_path: Path) -> None:
+    records = tmp_path / "diagnostics/evaluation_0061_records.csv"
+    _write_records(records)
+    rows = list(csv.DictReader(records.open()))
+    for row in rows:
+        for i in range(1, 7):
+            row[f"ans{i}"] = row[f"type53_shadow_ans{i}"]
+    with records.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader(); writer.writerows(rows)
+    oracle_csv = tmp_path / "oracle.csv"
+    fields = [
+        "evaluation_ordinal", "source_position", "record", "element_z", "ion_stage", "data_type",
+        "lower_row", "upper_row", "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
+    ]
+    with oracle_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields); writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                "evaluation_ordinal": 61, "source_position": row["source_position"], "record": row["record"],
+                "element_z": 2, "ion_stage": 2, "data_type": 53, "lower_row": 4, "upper_row": 8,
+                **{f"ans{i}": row[f"type53_shadow_ans{i}"] for i in range(1, 7)},
+            })
+    bundle = tmp_path / "bundle"
+    freeze_reference(oracle_csv, bundle)
+    report = analyze(tmp_path, tmp_path / "out", reference_oracle=bundle)
+    assert report["applied_exact_to_reference"] is True
+    assert report["shadow_exact_to_reference"] is True
+    assert report["applied_source_sign_semantics_consistent"] is True
+    assert report["first_reference_divergence"] is None
+    assert report["type53_physics_replacement_ready"] is True
+    assert report["full_type53_family_promotion_ready"] is False
