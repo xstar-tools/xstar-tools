@@ -40,7 +40,7 @@ Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
     const std::vector<Snapshot>& radial_snapshots,
-    const std::array<double,64>& native_energy_ev);
+    const std::vector<double>& native_energy_ev);
 
 } // namespace xstar_science_fits
 

@@ -1,3 +1,7 @@
+## v0.6.48.5.3 preliminary ion balance and reference-radiation qualification
+
+v0.6.48.5.3 connects scalar recombination families 1/30/38/39 to the source-style preliminary ion-stage selection and adds external radiation CSV inputs for scientifically meaningful fixed-state comparison. The qualified full-grid state still fails He/Mg population parity, so thermal and FITS promotion remain blocked. See `V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md`.
+
 ## v0.6.48.5.2 elements.csv header-order hotfix
 
 v0.6.48.5.2 fixes native loading of strict host programs emitted by the v0.6.48.5.1 lowerer. See `V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md`. Scientific behavior and promotion status are unchanged.

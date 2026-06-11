@@ -39,6 +39,8 @@ V06483_ACTIVE_ATDB_LOWERER.md
 V064841_ACTIVE_PROGRAM_EXECUTION_CORRECTIONS.md
 V06484_ACTIVE_FAMILY_COMPLETION_PHASE1.md
 V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md
+V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
+V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
 V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -64,6 +66,7 @@ check_v0483_active_atdb_lowerer.py
 check_v04841_active_family_corrections.py
 check_v0484_active_family_completion.py
 check_v04851_elcter_controller_fits.py
+check_v04853_preliminary_ion_balance.py
 check_v0485_active_family_phase2.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -139,6 +142,8 @@ run_v0484_xstar_tools_python_fallback.sh
 run_v04851_active_atdb_lower.sh
 run_v04851_host_trajectory.sh
 run_v04851_reference_trajectory.sh
+run_v04853_host_trajectory.sh
+run_v04853_reference_trajectory.sh
 run_v0485_active_atdb_lower.sh
 run_v0485_atdb_coverage.sh
 run_v0485_host_trajectory.sh
@@ -196,6 +201,7 @@ src_v0487_update_report.md
 src_v0488_update_report.md
 v0484_host_coverage_projection.json
 v04851_elcter_controller_fits_acceptance.log
+v04853_fixed_state_population_comparison.csv
 xstar_all_calc_hmc_all_v0436_diagnosis_v0437.md
 xstar_all_calc_hmc_all_v0437_diagnosis_v0438.md
 xstar_atomic_conversation_summary_v0426.md
@@ -372,6 +378,8 @@ xstar_tools_v0.6.48.3_handoff.md
 xstar_tools_v0.6.48.4.1_handoff.md
 xstar_tools_v0.6.48.4_handoff.md
 xstar_tools_v0.6.48.5.1_handoff.md
+xstar_tools_v0.6.48.5.2_handoff.md
+xstar_tools_v0.6.48.5.3_handoff.md
 xstar_tools_v0.6.48.5_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -817,6 +825,10 @@ src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/records.csv
 src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/rows.csv
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/manifest.txt
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/parameters.json
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_64bin.csv
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_full.csv
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_stride100.csv
+src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_stride20.csv
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/terminals.csv
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/auxiliary/xout_step.log
@@ -1140,6 +1152,8 @@ tests/test_v0647_native_thermal_engine.py
 tests/test_v06482_native_fixed_state.py
 tests/test_v06484_active_family_completion.py
 tests/test_v064851_elcter_abundance.py
+tests/test_v064852_elements_header_order.py
+tests/test_v064853_preliminary_ion_balance.py
 tests/test_v06485_active_family_phase2.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py

@@ -55,7 +55,7 @@ def test_native_phase1_families_and_visited_report(tmp_path: Path) -> None:
     for data_type in PHASE1_TYPES:
         assert visits[data_type] == 1
     summary = json.loads((tmp_path / "native_fixed_state_summary.json").read_text())
-    assert summary["schema_version"] == "0.6.48.5.2"
+    assert summary["schema_version"] == "0.6.48.5.3"
     assert summary["computed_from_raw_coefficients"] is True
     assert summary["python_callbacks"] == 0
 

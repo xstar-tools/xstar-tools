@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.5.3 - 2026-06-11
+
+- Connect types 1/30/38/39 to source-faithful preliminary recombination totals and active ion-stage selection.
+- Add external reference-radiation CSV support to native trajectory and DSEC commands.
+- Include full and reduced v0.6.47.2 incident-radiation grids.
+- Record the failed He/Mg fixed-state population comparison explicitly; thermal and FITS promotion remain blocked.
+
 # 0.6.48.5.2 - 2026-06-11
 
 - Resolve `elements.csv` fields by header name, fixing strict host programs whose abundance column is last.

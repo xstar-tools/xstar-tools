@@ -31,6 +31,7 @@ struct Options {
     std::string case_dir;
     std::string output_dir;
     std::string trajectory_csv;
+    std::string radiation_csv;
     std::string engine_backend = "inherit";
     std::string rates_backend = "inherit";
     std::string matrix_backend = "inherit";
@@ -60,8 +61,8 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
-        "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --output-dir DIR\n"
+        "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -69,7 +70,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.5.2 adds a genuine raw-coefficient native fixed-state engine.\n"
+        "v0.6.48.5.3 adds a genuine raw-coefficient native fixed-state engine.\n"
         "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
         "and constructs continuum/spectral arrays without Python callbacks.\n";
 }
@@ -120,6 +121,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--trajectory-csv");
             if (!value) return false;
             options.trajectory_csv = value;
+        } else if (arg == "--radiation-csv") {
+            const char* value = require_value("--radiation-csv");
+            if (!value) return false;
+            options.radiation_csv = value;
         } else if (arg == "--engine-backend") {
             const char* value = require_value("--engine-backend");
             if (!value) return false;
@@ -954,7 +959,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.5.2'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.5.3'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1053,7 +1058,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.5.2\n"
+                 << "xstar_tools native fixed-state v0.6.48.5.3\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1086,7 +1091,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.5.2\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.5.3\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1263,6 +1268,61 @@ std::vector<std::string> split_simple_csv(const std::string& line) {
     return fields;
 }
 
+
+struct RadiationField {
+    std::vector<double> energy_ev;
+    std::vector<double> incident;
+    std::string mode = "synthetic_64_bin_development";
+};
+
+RadiationField read_radiation_field(const std::string& path) {
+    RadiationField field;
+    if (path.empty()) {
+        field.energy_ev.resize(64);
+        field.incident.resize(64);
+        for (std::size_t k=0;k<64;++k) {
+            field.energy_ev[k]=1.0+static_cast<double>(k);
+            field.incident[k]=1.0e12/(1.0+static_cast<double>(k));
+        }
+        return field;
+    }
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open radiation CSV: "+path);
+    std::string header;
+    if (!std::getline(input,header)) throw std::runtime_error("empty radiation CSV");
+    const auto names=split_simple_csv(header);
+    auto find_any=[&](std::initializer_list<const char*> choices)->std::size_t {
+        for (const char* choice : choices) {
+            const auto it=std::find(names.begin(),names.end(),choice);
+            if (it!=names.end()) return static_cast<std::size_t>(it-names.begin());
+        }
+        std::string expected;
+        for (const char* choice : choices) { if (!expected.empty()) expected += "/"; expected += choice; }
+        throw std::runtime_error("radiation CSV missing column "+expected);
+    };
+    const auto cenergy=find_any({"energy","energy_ev"});
+    const auto cflux=find_any({"incident","flux","radiation_flux"});
+    std::string line;
+    double previous=-1.0;
+    while (std::getline(input,line)) {
+        if (line.empty()) continue;
+        const auto f=split_simple_csv(line);
+        if (f.size()!=names.size()) throw std::runtime_error("radiation CSV row has wrong column count");
+        const double energy=std::stod(f[cenergy]);
+        const double flux=std::stod(f[cflux]);
+        if (!std::isfinite(energy) || !(energy>0.0) || energy<=previous)
+            throw std::runtime_error("radiation energies must be finite, positive, and strictly increasing");
+        if (!std::isfinite(flux) || flux<0.0)
+            throw std::runtime_error("radiation flux must be finite and nonnegative");
+        field.energy_ev.push_back(energy);
+        field.incident.push_back(flux);
+        previous=energy;
+    }
+    if (field.energy_ev.size()<3) throw std::runtime_error("radiation CSV requires at least three bins");
+    field.mode="external_reference_csv";
+    return field;
+}
+
 std::vector<TrajectoryRow> read_trajectory_rows(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open trajectory CSV: "+path);
@@ -1319,13 +1379,18 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.5.2\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.5.3\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
-    constexpr std::size_t bins=64;
-    std::array<double,bins> energy{},flux{},spectrum{},opacity{};
-    for (std::size_t k=0;k<bins;++k) { energy[k]=1.0+static_cast<double>(k); flux[k]=1.0e12/(1.0+static_cast<double>(k)); }
+    RadiationField radiation;
+    try { radiation=read_radiation_field(options.radiation_csv); }
+    catch (const std::exception& exc) { std::cerr << exc.what() << "\n"; xstar_fixed_state_context_destroy(context); return 5; }
+    const std::size_t bins=radiation.energy_ev.size();
+    std::vector<double> spectrum(bins,0.0),opacity(bins,0.0);
+    const auto& energy=radiation.energy_ev;
+    const auto& flux=radiation.incident;
+    step << "radiation_input=" << radiation.mode << "\n" << "radiation_bins=" << bins << "\n";
     std::vector<double> populations(static_cast<std::size_t>(info.population_rows),0.0);
     double max_hmc_delta=0.0,max_charge_residual_delta=0.0;
     for (std::size_t j=0;j<trajectory.size();++j) {
@@ -1362,8 +1427,9 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.5.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.5.3\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
+            << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
             << "  \"records_evaluated\": " << cumulative.records_evaluated << ",\n  \"elements_solved\": " << cumulative.elements_solved << ",\n"
             << "  \"max_abs_hmctot_delta_to_reference\": " << max_hmc_delta << ",\n  \"max_abs_charge_residual_delta_to_reference\": " << max_charge_residual_delta << "\n}\n";
@@ -1372,6 +1438,7 @@ int command_run_fixed_trajectory(const Options& options) {
               << "\nelements_solved=" << cumulative.elements_solved << "\npython_callbacks=" << cumulative.python_callbacks
               << "\nmax_abs_hmctot_delta_to_reference=" << std::setprecision(17) << max_hmc_delta
               << "\nmax_abs_charge_residual_delta_to_reference=" << max_charge_residual_delta
+              << "\nradiation_input=" << radiation.mode << "\nradiation_bins=" << bins
               << "\ntrajectory_mode=reference_input_state_qualification\nRESULT=" << (accepted?"ACCEPT":"REJECT") << "\n";
     xstar_fixed_state_context_destroy(context);
     return accepted?0:20;
@@ -1406,8 +1473,9 @@ struct FixedDsecEvaluatorData {
     std::vector<FixedDsecSnapshot>* snapshots = nullptr;
     std::size_t call_index = 0;
     std::size_t evaluation_index = 0;
-    std::array<double,64> energy{};
-    std::array<double,64> flux{};
+    std::vector<double> energy;
+    std::vector<double> flux;
+    std::string radiation_mode = "synthetic_64_bin_development";
 };
 
 void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
@@ -1592,10 +1660,17 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.program_info = info;
     evaluator_data.cumulative_stats = &cumulative;
     evaluator_data.snapshots = &snapshots;
-    for (std::size_t k = 0; k < evaluator_data.energy.size(); ++k) {
-        evaluator_data.energy[k] = 1.0 + static_cast<double>(k);
-        evaluator_data.flux[k] = 1.0e12 / (1.0 + static_cast<double>(k));
+    RadiationField radiation;
+    try { radiation=read_radiation_field(options.radiation_csv); }
+    catch (const std::exception& exc) {
+        std::cerr << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 6;
     }
+    evaluator_data.energy=std::move(radiation.energy_ev);
+    evaluator_data.flux=std::move(radiation.incident);
+    evaluator_data.radiation_mode=radiation.mode;
 
     xstar_thermal_state_v1 state{};
     xstar_thermal_state_init_v1(&state);
@@ -1651,7 +1726,7 @@ int command_run_fixed_dsec(const Options& options) {
     pops << "sequence,kind,call_index,evaluation_index,row,population\n";
     spectra_file << "sequence,kind,call_index,evaluation_index,bin,energy_ev,spectrum,opacity\n";
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.5.2\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.5.3\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -1741,8 +1816,9 @@ int command_run_fixed_dsec(const Options& options) {
     }
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.5.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
-            << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"dsec_calls\": 4,\n"
+            << "{\n  \"schema_version\": \"0.6.48.5.3\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
+            << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
             << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"computed_from_raw_coefficients\": true,\n"
             << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
@@ -1777,6 +1853,7 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nhistorical_fits_computed_from_native_state=" << (science_result.computed_from_native_state ? "true" : "false")
               << "\ncontinuum_and_spectrum_paths_separate=" << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false")
               << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
+              << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
               << "\ntrajectory_mode=native_dsec_controller\nreference_state_identity=false\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     xstar_thermal_context_destroy(thermal_context);
     xstar_fixed_state_context_destroy(fixed_context);

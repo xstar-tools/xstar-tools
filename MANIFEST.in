@@ -429,3 +429,9 @@ include v04851_elcter_controller_fits_acceptance.log
 
 include V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
 include xstar_tools_v0.6.48.5.2_handoff.md
+include V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
+include xstar_tools_v0.6.48.5.3_handoff.md
+include check_v04853_preliminary_ion_balance.py
+include run_v04853_reference_trajectory.sh
+include run_v04853_host_trajectory.sh
+include v04853_fixed_state_population_comparison.csv

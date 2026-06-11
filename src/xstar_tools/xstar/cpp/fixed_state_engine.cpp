@@ -182,6 +182,23 @@ struct EvaluatedRecord {
     double opakab = 0.0;
 };
 
+
+struct PreliminaryIonBalance {
+    std::vector<double> ionization;
+    std::vector<double> recombination;
+    std::vector<double> fractions;  // stages 1..Z+1 stored at indices 0..Z
+    int min_stage = 1;
+    int max_stage = 1;
+};
+
+struct ActiveElementView {
+    ElementProgram element;
+    int full_row_start = 1;
+    int full_row_end = 1;
+    int min_stage = 1;
+    int max_stage = 1;
+};
+
 struct ElementBuffers {
     std::vector<int32_t> superlevels;
     std::vector<int32_t> ions;
@@ -1193,6 +1210,175 @@ EvaluatedRecord evaluate_record(
     return out;
 }
 
+
+
+int ground_row_for_stage(const ElementProgram& element, int stage) {
+    const int charge = stage - 1;
+    int found = 0;
+    for (const auto& row : element.rows) {
+        if (row.row >= element.normalization_row) continue;
+        if (row.ion_charge != charge) continue;
+        if (found == 0 || row.row < found) found = row.row;
+    }
+    return found;
+}
+
+PreliminaryIonBalance build_preliminary_ion_balance(
+    const ElementProgram& element,
+    const std::vector<EvaluatedRecord>& evaluated) {
+    PreliminaryIonBalance result;
+    const int z = element.element_z;
+    result.ionization.assign(static_cast<std::size_t>(z), 0.0);
+    result.recombination.assign(static_cast<std::size_t>(z), 0.0);
+    result.fractions.assign(static_cast<std::size_t>(z + 1), 0.0);
+    std::vector<int> ground(static_cast<std::size_t>(z + 1), 0);
+    for (int stage = 1; stage <= z; ++stage) ground[static_cast<std::size_t>(stage)] = ground_row_for_stage(element, stage);
+
+    for (const auto& item : evaluated) {
+        const auto& c = item.contribution;
+        const int stage = c.ion_stage;
+        if (stage < 1 || stage > z) continue;
+        const double rate = std::max(0.0, c.ans1);
+        bool add_ionization = false;
+        if (c.rate_type == 1 || c.rate_type == 15) add_ionization = true;
+        if (c.rate_type == 7 && c.lower_row == ground[static_cast<std::size_t>(stage)]) add_ionization = true;
+        if (add_ionization) result.ionization[static_cast<std::size_t>(stage - 1)] += rate;
+        if (c.rate_type == 8 || c.rate_type == 6) result.recombination[static_cast<std::size_t>(stage - 1)] += rate;
+    }
+
+    constexpr double delta = 1.0e-28;
+    constexpr double eps = 1.0e-6;
+    std::vector<double> q(static_cast<std::size_t>(z), 0.0);
+    for (int i = 0; i < z; ++i) q[static_cast<std::size_t>(i)] = result.recombination[static_cast<std::size_t>(i)] /
+        (result.ionization[static_cast<std::size_t>(i)] + delta);
+
+    int jmax = 1;
+    while (true) {
+        ++jmax;
+        if (jmax < z + 1 && q[static_cast<std::size_t>(jmax - 2)] < 1.0) continue;
+        break;
+    }
+    double sum_low = 0.0;
+    int max_index = jmax - 1;
+    if (jmax != z + 1) {
+        double product = 1.0;
+        while (true) {
+            ++max_index;
+            product /= q[static_cast<std::size_t>(max_index - 1)] + delta;
+            sum_low += product;
+            const double test = product / (sum_low + delta);
+            if (!(test > eps && max_index < z)) break;
+        }
+    }
+    double sum_high = 0.0;
+    int min_index = jmax;
+    if (jmax != 1) {
+        double product = 1.0;
+        while (true) {
+            --min_index;
+            product *= q[static_cast<std::size_t>(min_index - 1)];
+            sum_high += product;
+            const double test = product / (sum_high + delta);
+            if (!(test > eps && min_index > 1)) break;
+        }
+    }
+    result.fractions[static_cast<std::size_t>(jmax - 1)] = 1.0 / (1.0 + sum_low + sum_high);
+    if (jmax != z + 1) {
+        for (int j = jmax; j <= max_index; ++j) {
+            result.fractions[static_cast<std::size_t>(j)] = result.fractions[static_cast<std::size_t>(j - 1)] /
+                (q[static_cast<std::size_t>(j - 1)] + delta);
+        }
+    }
+    if (jmax != 1) {
+        for (int i = 1; i <= jmax - min_index; ++i) {
+            const int j = jmax - i;
+            result.fractions[static_cast<std::size_t>(j - 1)] = result.fractions[static_cast<std::size_t>(j)] *
+                q[static_cast<std::size_t>(j - 1)];
+        }
+    }
+    double sum = 0.0;
+    for (double value : result.fractions) sum += value;
+    if (sum > 0.0) for (double& value : result.fractions) value /= sum;
+
+    constexpr double critf = 1.0e-8;
+    int lower = 0, upper = 0;
+    for (int stage = 1; stage <= z + 1; ++stage) {
+        if (result.fractions[static_cast<std::size_t>(stage - 1)] >= critf) {
+            if (lower == 0) lower = stage;
+            upper = stage;
+        }
+    }
+    if (lower == 0) { lower = 1; upper = z + 1; }
+    result.min_stage = std::max(1, lower - 1);
+    result.max_stage = std::min(z, upper + 1);
+    if (result.min_stage > result.max_stage) { result.min_stage = 1; result.max_stage = z; }
+    return result;
+}
+
+ActiveElementView make_full_element_view(const ElementProgram& full) {
+    ActiveElementView view;
+    view.element = full;
+    view.full_row_start = 1;
+    view.full_row_end = full.normalization_row;
+    view.min_stage = 1;
+    view.max_stage = full.element_z;
+    return view;
+}
+
+ActiveElementView make_active_element_view(
+    const ElementProgram& full,
+    const PreliminaryIonBalance& balance) {
+    ActiveElementView view;
+    view.min_stage = balance.min_stage;
+    view.max_stage = balance.max_stage;
+    const int start = ground_row_for_stage(full, view.min_stage);
+    int end = full.normalization_row;
+    if (view.max_stage < full.element_z) {
+        const int next_ground = ground_row_for_stage(full, view.max_stage + 1);
+        if (next_ground > 0) end = next_ground;
+    }
+    if (start <= 0 || end < start || end > full.normalization_row) throw std::runtime_error("invalid preliminary ion-stage compact window");
+    view.full_row_start = start;
+    view.full_row_end = end;
+    view.element = full;
+    view.element.rows.clear();
+    view.element.n_rows = end - start + 1;
+    view.element.n_ions = view.max_stage - view.min_stage + 1;
+    view.element.normalization_row = view.element.n_rows;
+    std::map<int,int> superlevel_map;
+    int next_superlevel = 0;
+    for (const auto& source : full.rows) {
+        if (source.row < start || source.row > end) continue;
+        ElementRow row = source;
+        row.row = source.row - start + 1;
+        row.ion = std::max(1, source.ion - (view.min_stage - 1));
+        auto it = superlevel_map.find(source.superlevel);
+        if (it == superlevel_map.end()) it = superlevel_map.emplace(source.superlevel, ++next_superlevel).first;
+        row.superlevel = it->second;
+        row.initial_population = 0.0;
+        view.element.rows.push_back(row);
+    }
+    view.element.n_superlevels = next_superlevel;
+    // The element engine requires every row ion counter, including the
+    // normalization row, to remain within 1..n_ions.  A truncated window uses
+    // the next-stage ground row as its continuum normalization row, so remap
+    // that final row onto the highest represented compact ion counter.
+    view.element.rows.back().ion = view.element.n_ions;
+    for (int stage = view.min_stage; stage <= view.max_stage; ++stage) {
+        const int old_ground = ground_row_for_stage(full, stage);
+        if (old_ground >= start && old_ground <= end) {
+            view.element.rows[static_cast<std::size_t>(old_ground - start)].initial_population =
+                balance.fractions[static_cast<std::size_t>(stage - 1)];
+        }
+    }
+    view.element.rows.back().initial_population = balance.fractions[static_cast<std::size_t>(view.max_stage)];
+    double total = 0.0;
+    for (const auto& row : view.element.rows) total += row.initial_population;
+    if (!(total > 0.0)) view.element.rows.back().initial_population = 1.0;
+    else for (auto& row : view.element.rows) row.initial_population /= total;
+    return view;
+}
+
 ElementBuffers make_buffers(const ElementProgram& e) {
     ElementBuffers b;
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
@@ -1313,19 +1499,36 @@ int run_impl(
         }
         if (hops != element.record_count) throw std::runtime_error("linked traversal count differs from declared record_count");
 
+        const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(element, evaluated);
+        // Compact development fixtures may represent only a subset of an
+        // element while assigning a larger atomic number.  Source-style
+        // stage-window selection requires a complete one-ground-row-per-stage
+        // topology, so preserve the legacy full compact basis for such inputs.
+        const ActiveElementView active = element.n_ions == element.element_z
+            ? make_active_element_view(element, preliminary)
+            : make_full_element_view(element);
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
-        for (const auto& e : evaluated) if (e.matrix_enabled) contributions.push_back(e.contribution);
+        for (const auto& item : evaluated) {
+            if (!item.matrix_enabled) continue;
+            auto contribution = item.contribution;
+            if (contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) continue;
+            if (contribution.lower_row < active.full_row_start || contribution.lower_row > active.full_row_end ||
+                contribution.upper_row < active.full_row_start || contribution.upper_row > active.full_row_end) continue;
+            contribution.lower_row -= active.full_row_start - 1;
+            contribution.upper_row -= active.full_row_start - 1;
+            contributions.push_back(contribution);
+        }
         stats.contributions_constructed += contributions.size();
-        ElementBuffers buffers = make_buffers(element);
+        ElementBuffers buffers = make_buffers(active.element);
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
-        ein.element_z = element.element_z;
-        ein.n_rows = element.n_rows;
-        ein.n_superlevels = element.n_superlevels;
-        ein.n_ions = element.n_ions;
-        ein.normalization_row = element.normalization_row;
+        ein.element_z = active.element.element_z;
+        ein.n_rows = active.element.n_rows;
+        ein.n_superlevels = active.element.n_superlevels;
+        ein.n_ions = active.element.n_ions;
+        ein.normalization_row = active.element.normalization_row;
         ein.max_lucy_iterations = 100;
         ein.max_fixed_point_iterations = 40;
         ein.lucy_tolerance = 1.0e-12;
@@ -1334,7 +1537,7 @@ int run_impl(
         ein.ion_by_row = buffers.ions.data();
         ein.initial_populations = buffers.initial.data();
         xstar_element_output_v1 eout{};
-        bind_output(eout, buffers, element.element_z);
+        bind_output(eout, buffers, active.element.element_z);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const auto element_start = clock_type::now();
         const int rc = xstar_element_engine_run_construction_v1(
@@ -1344,31 +1547,27 @@ int run_impl(
         ++stats.elements_solved;
         output.element_heating += eout.heating + eout.heating2;
         output.element_cooling += eout.cooling + eout.cooling2;
-        for (double population : buffers.populations) all_populations.push_back(population);
 
-        // Source calc_hmc_all electron accounting is abundance weighted and
-        // treats the compact normalization row as the fully stripped stage.
-        // The element engine's final ion totals deliberately exclude that last
-        // row, so the missing fraction is the bare-ion population.
-        double represented_fraction = 0.0;
+        std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
+        for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
+            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = buffers.populations[row];
+        }
+        all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
+
+        // The selected compact normalization row is the continuum of the
+        // highest active ion stage.  It therefore carries charge max_stage;
+        // only a full-Z window makes it the fully stripped stage.
         double charge_per_element = 0.0;
-        for (int ion_slot = 0; ion_slot < element.n_ions; ++ion_slot) {
+        for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
             const double fraction = buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
-            represented_fraction += fraction;
-            int ion_charge = 0;
-            bool found_charge = false;
-            for (const auto& row : element.rows) {
-                if (row.ion == ion_slot + 1) {
-                    ion_charge = row.ion_charge;
-                    found_charge = true;
-                    break;
-                }
+            int ion_charge = ion_slot;
+            for (const auto& row : active.element.rows) {
+                if (row.row == active.element.normalization_row) continue;
+                if (row.ion == ion_slot + 1) { ion_charge = row.ion_charge; break; }
             }
-            if (!found_charge) throw std::runtime_error("missing ion charge for compact ion counter");
             charge_per_element += fraction * static_cast<double>(ion_charge);
         }
-        const double fully_ionized_fraction = std::max(0.0, 1.0 - represented_fraction);
-        charge_per_element += fully_ionized_fraction * static_cast<double>(element.element_z);
+        charge_per_element += buffers.populations.back() * static_cast<double>(active.max_stage);
         output.elcter += element.abundance * charge_per_element;
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
