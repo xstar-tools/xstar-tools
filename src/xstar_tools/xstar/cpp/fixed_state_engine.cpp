@@ -174,6 +174,21 @@ struct Program {
     std::vector<std::int64_t> ints;
 };
 
+struct Type53SourceShadow {
+    bool valid = false;
+    std::array<double,6> ans{};
+    double threshold_ev = 0.0;
+    double rnist = 0.0;
+    double sumr = 0.0;
+    double sumi = 0.0;
+    double sumh = 0.0;
+    double sumh2 = 0.0;
+    double sumc = 0.0;
+    double sumc2 = 0.0;
+    int nb1_one_based = 0;
+    int klmax_one_based = 0;
+};
+
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
@@ -182,6 +197,7 @@ struct EvaluatedRecord {
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
     double opakab = 0.0;
+    Type53SourceShadow type53_shadow{};
 };
 
 struct NativeRecordDiagnostic {
@@ -267,6 +283,11 @@ struct xstar_fixed_state_context_impl {
     double last_hydrogen_density_cm3 = 0.0;
     double last_electron_fraction_input = 0.0;
     std::size_t last_radiation_bin_count = 0;
+    double last_computed_electron_fraction = 0.0;
+    double last_charge_residual = 0.0;
+    double last_total_heating = 0.0;
+    double last_total_cooling = 0.0;
+    double last_hmctot = 0.0;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -838,6 +859,214 @@ const ElementRow& row_at(const ElementProgram& element, int one_based) {
     return element.rows[static_cast<std::size_t>(one_based - 1)];
 }
 
+bool evaluate_type53_source_integral(
+    const double* payload,
+    std::size_t real_count,
+    const ElementRow& lower,
+    const ElementRow& upper,
+    const xstar_fixed_state_input_v1& input,
+    double threshold_ev,
+    xstar_element_contribution_v1& contribution,
+    Type53SourceShadow* shadow
+) {
+    if (!payload || real_count < 4 || real_count % 2 != 0) return false;
+    if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 3) return false;
+    if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) return false;
+
+    const int n_grid = static_cast<int>(input.radiation_bin_count);
+    const int pair_count = static_cast<int>(real_count / 2);
+    const int numcon2 = std::max(2, n_grid / 50);
+    const int usable_grid = n_grid - numcon2;
+    if (pair_count < 2 || usable_grid < 2) return false;
+
+    std::vector<double> xs(static_cast<std::size_t>(pair_count), 0.0);
+    std::vector<double> ys(static_cast<std::size_t>(pair_count), 0.0);
+    for (int j = 0; j < pair_count; ++j) {
+        xs[static_cast<std::size_t>(j)] = threshold_ev + payload[2 * j] * kRydEv;
+        ys[static_cast<std::size_t>(j)] = std::max(0.0, payload[2 * j + 1]);
+    }
+
+    const auto lower_bracket = [&](double energy) -> int {
+        if (energy <= input.radiation_energy_ev[0]) return 0;
+        int lo = 0;
+        int hi = usable_grid - 1;
+        while (lo + 1 < hi) {
+            const int mid = (lo + hi) / 2;
+            if (input.radiation_energy_ev[mid] <= energy) lo = mid;
+            else hi = mid;
+        }
+        return input.radiation_energy_ev[hi] <= energy ? hi : lo;
+    };
+
+    const int nb1 = lower_bracket(xs[0]);
+    if (nb1 + 1 >= usable_grid) return false;
+    std::vector<double> sgbar(static_cast<std::size_t>(n_grid), 0.0);
+    sgbar[static_cast<std::size_t>(std::max(0, nb1 - 1))] = 0.0;
+    sgbar[static_cast<std::size_t>(nb1)] = 0.0;
+
+    int k = nb1;
+    int j = 0;
+    double egrid = input.radiation_energy_ev[k];
+    double e2 = xs[0];
+    double s2 = ys[0];
+    if (egrid < e2 && k + 1 < n_grid) {
+        ++k;
+        egrid = input.radiation_energy_ev[k];
+    }
+    double e1o = e2;
+    double e2o = e2;
+    double s2o = s2;
+    double s2t = s2;
+    double e2t = egrid;
+    double integral = 0.0;
+    bool done = false;
+    int iterations = 0;
+    const int max_iterations = std::max(8, 4 * (n_grid + pair_count));
+    while (!done && iterations < max_iterations && k < n_grid) {
+        ++iterations;
+        bool advanced = false;
+        while (e2 < egrid && j < pair_count - 2) {
+            ++j;
+            e2o = e2;
+            s2o = s2;
+            e2 = xs[static_cast<std::size_t>(j)];
+            s2 = ys[static_cast<std::size_t>(j)];
+            integral += (s2 + s2o) * (e2 - e2o) / 2.0;
+            advanced = true;
+        }
+        if (!advanced && iterations == 1) {
+            e2o = e2;
+            s2o = s2;
+        }
+        integral -= (s2 + s2o) * (e2 - e2o) / 2.0;
+        e2t = egrid;
+        s2t = (e2 - e2o > 1.0e-8)
+            ? s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o + 1.0e-24)
+            : s2o;
+        integral += (s2t + s2o) * (e2t - e2o) / 2.0;
+        const double denom = egrid - e1o;
+        sgbar[static_cast<std::size_t>(k)] = std::abs(denom) > 1.0e-36 ? integral / denom : 0.0;
+        e1o = egrid;
+        ++k;
+        if (k >= n_grid) break;
+        egrid = input.radiation_energy_ev[k];
+        while (egrid < e2 && k < n_grid - 1) {
+            e2t = egrid;
+            s2t = (e2 - e2o > 1.0e-8)
+                ? s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o)
+                : s2o;
+            integral = s2t * (egrid - e1o);
+            const double local_denom = egrid - e1o;
+            sgbar[static_cast<std::size_t>(k)] = std::abs(local_denom) > 1.0e-36 ? integral / local_denom : 0.0;
+            e1o = egrid;
+            ++k;
+            if (k >= n_grid) break;
+            egrid = input.radiation_energy_ev[k];
+        }
+        integral = (s2 + s2t) * (e2 - e2t) / 2.0;
+        if (k >= usable_grid - 1 || j >= pair_count - 2) done = true;
+    }
+
+    const int klmax = std::max(nb1, k - 1);
+    if (iterations >= max_iterations || nb1 >= klmax || nb1 >= n_grid) return false;
+
+    constexpr double kBoltzmannErgK = 1.380649e-16;
+    constexpr double kKtEvPerT4 = 0.861707;
+    const double t4 = input.temperature_k / 1.0e4;
+    const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
+    const double continuum_g = std::max(upper.statistical_weight, 1.0e-300);
+    const double rnissel = lower.statistical_weight * q2 / continuum_g;
+    const double continuum_energy = upper.energy_ev;
+    const double ethtmp = std::max(0.0, threshold_ev - continuum_energy);
+    const double exponent_energy = std::max(0.0, ethtmp + kRydEv * payload[0]);
+    const double rnist = rnissel * limited_exp(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
+    const double bktm = kBoltzmannErgK * input.temperature_k / kErgPerEv;
+    if (!(bktm > 0.0)) return false;
+
+    double sumr = 0.0;
+    double sumh = 0.0;
+    double sumh2 = 0.0;
+    double sumi = 0.0;
+    double sumc = 0.0;
+    double sumc2 = 0.0;
+    double sgtpp = sgbar[static_cast<std::size_t>(nb1)];
+    double bremtmpp = input.radiation_flux[nb1] / 12.56;
+    double epiip = input.radiation_energy_ev[nb1];
+    double temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
+    double temphp = temprp * epiip;
+    double temphp2 = temprp * (epiip - threshold_ev);
+    double exptst = (epiip - threshold_ev) / bktm;
+    double exptmpp = limited_exp(-exptst);
+    double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+    double tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp / epiip : 0.0;
+    double tempcp = tempip * epiip;
+    double tempcp2 = tempip * (epiip - threshold_ev);
+    int kl = nb1;
+    while (kl < klmax && kl + 1 < n_grid) {
+        sgtpp = sgbar[static_cast<std::size_t>(kl + 1)];
+        bremtmpp = input.radiation_flux[kl + 1] / 12.56;
+        const double epii = input.radiation_energy_ev[kl];
+        epiip = input.radiation_energy_ev[kl + 1];
+        const double tempr = temprp;
+        temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
+        const double width = (epiip - epii) / 2.0;
+        sumr += tempr * width + temprp * width;
+        const double temph = temphp;
+        const double temph2 = temphp2;
+        temphp = temprp * epiip;
+        temphp2 = temprp * (epiip - threshold_ev);
+        sumh += temph * width + temphp * width;
+        sumh2 += temph2 * width + temphp2 * width;
+        const double previous_exptst = exptst;
+        exptst = (epiip - threshold_ev) / bktm;
+        if (previous_exptst < 200.0) {
+            exptmpp = limited_exp(-exptst);
+            bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+            const double tempi = tempip;
+            tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip : 0.0;
+            sumi += tempi * width + tempip * width;
+            const double tempc = tempcp;
+            const double tempc2 = tempcp2;
+            tempcp = tempip * epiip;
+            tempcp2 = tempip * (epiip - threshold_ev);
+            sumc += tempc * width + tempcp * width;
+            sumc2 += tempc2 * width + tempcp2 * width;
+        }
+        ++kl;
+    }
+
+    contribution.ans1 = sumr;
+    contribution.ans2 = sumi;
+    contribution.ans3 = -sumc * kErgPerEv;
+    contribution.ans4 = -sumh * kErgPerEv;
+    contribution.ans5 = -sumc2 * kErgPerEv;
+    contribution.ans6 = -sumh2 * kErgPerEv;
+    const double energy_difference = std::abs(upper.energy_ev - lower.energy_ev);
+    const double den6 = std::max(1.0e-43, std::abs(contribution.ans4) - threshold_ev * kErgPerEv * contribution.ans1);
+    const double den5 = std::max(1.0e-43, std::abs(contribution.ans3) - threshold_ev * kErgPerEv * contribution.ans2);
+    contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
+    contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
+    const bool valid = std::isfinite(contribution.ans1) && std::isfinite(contribution.ans2) &&
+        std::isfinite(contribution.ans3) && std::isfinite(contribution.ans4) &&
+        std::isfinite(contribution.ans5) && std::isfinite(contribution.ans6);
+    if (valid && shadow) {
+        shadow->valid = true;
+        shadow->ans = {contribution.ans1, contribution.ans2, contribution.ans3,
+                       contribution.ans4, contribution.ans5, contribution.ans6};
+        shadow->threshold_ev = threshold_ev;
+        shadow->rnist = rnist;
+        shadow->sumr = sumr;
+        shadow->sumi = sumi;
+        shadow->sumh = sumh;
+        shadow->sumh2 = sumh2;
+        shadow->sumc = sumc;
+        shadow->sumc2 = sumc2;
+        shadow->nb1_one_based = nb1 + 1;
+        shadow->klmax_one_based = klmax + 1;
+    }
+    return valid;
+}
+
 EvaluatedRecord evaluate_record(
     const Program& program,
     const ElementProgram& element,
@@ -949,8 +1178,36 @@ EvaluatedRecord evaluate_record(
             c.ans1=rate*1.0e-6*std::pow(t4,-1.5)*ne;
             break;
         }
-        case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE:
         case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
+            if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
+            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
+            const std::size_t n = record.real_count / 2;
+            const double threshold = std::max(delta_ev, 1.0e-12);
+            double photo = 0.0;
+            double heat = 0.0;
+            for (std::size_t k = 0; k < n; ++k) {
+                const double e = threshold + r[2 * k] * kRydEv;
+                const double sigma = std::max(0.0, r[2 * k + 1]);
+                const double flux = interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e);
+                photo += flux * sigma;
+                heat += flux * sigma * std::max(0.0, e - threshold) * kErgPerEv;
+            }
+            photo /= static_cast<double>(n);
+            heat /= static_cast<double>(n);
+            const double ratio = lower.statistical_weight / std::max(upper.statistical_weight, 1.0e-300);
+            const double recomb = 2.08e-22 * ratio * ne / std::max(t4 * sqrt_t4, 1.0e-300) * limited_exp(threshold / std::max(kt_ev, 1.0e-300)) * std::max(photo, 1.0e-60);
+            c.ans1 = photo;
+            c.ans2 = recomb;
+            c.ans3 = -recomb * threshold * kErgPerEv;
+            c.ans4 = -heat;
+            c.ans5 = recomb * threshold * kErgPerEv;
+            c.ans6 = heat;
+            xstar_element_contribution_v1 source_shadow{};
+            (void)evaluate_type53_source_integral(
+                r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
             if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
             const std::size_t n = record.real_count / 2;
@@ -1803,6 +2060,11 @@ int run_impl(
     const double denom = std::max(std::abs(output.total_heating) + std::abs(output.total_cooling), 1.0e-300);
     output.hmctot = (output.total_heating - output.total_cooling) / denom;
     output.electron_fraction_xee = output.elcter;
+    ctx.last_computed_electron_fraction = output.electron_fraction_xee;
+    ctx.last_charge_residual = input.electron_fraction_xee - output.electron_fraction_xee;
+    ctx.last_total_heating = output.total_heating;
+    ctx.last_total_cooling = output.total_cooling;
+    ctx.last_hmctot = output.hmctot;
     output.status_flags = stats.status_flags;
     copy_text(output.message, sizeof(output.message), "native fixed-state raw program evaluated");
     ++ctx.state_generation;
@@ -2006,7 +2268,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -2031,7 +2293,20 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << (diagnostic.matrix_committed ? 1 : 0) << ',' << (item.spectral ? 1 : 0) << ','
                         << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ',' << c.ans4 << ',' << c.ans5 << ',' << c.ans6 << ','
                         << c.density_scale << ',' << item.line_energy_ev << ',' << item.atomic_mass_amu << ','
-                        << item.natural_width_ev << ',' << item.opakab << '\n';
+                        << item.natural_width_ev << ',' << item.opakab << ','
+                        << (item.type53_shadow.valid ? 1 : 0);
+            for (std::size_t k = 0; k < item.type53_shadow.ans.size(); ++k) {
+                record_file << ',' << item.type53_shadow.ans[k];
+            }
+            const std::array<double,6> applied_values{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
+            for (std::size_t k = 0; k < item.type53_shadow.ans.size(); ++k) {
+                record_file << ',' << (item.type53_shadow.ans[k] - applied_values[k]);
+            }
+            record_file << ',' << item.type53_shadow.threshold_ev << ',' << item.type53_shadow.rnist
+                        << ',' << item.type53_shadow.sumr << ',' << item.type53_shadow.sumi
+                        << ',' << item.type53_shadow.sumh << ',' << item.type53_shadow.sumh2
+                        << ',' << item.type53_shadow.sumc << ',' << item.type53_shadow.sumc2
+                        << ',' << item.type53_shadow.nb1_one_based << ',' << item.type53_shadow.klmax_one_based << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
             summary.last_source_position = c.source_position;
@@ -2103,13 +2378,18 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.6.1\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.1\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
                    << "  \"electron_density_cm3\": " << context->last_electron_density_cm3 << ",\n"
                    << "  \"hydrogen_density_cm3\": " << context->last_hydrogen_density_cm3 << ",\n"
                    << "  \"electron_fraction_input\": " << context->last_electron_fraction_input << ",\n"
+                   << "  \"computed_electron_fraction\": " << context->last_computed_electron_fraction << ",\n"
+                   << "  \"charge_residual\": " << context->last_charge_residual << ",\n"
+                   << "  \"total_heating\": " << context->last_total_heating << ",\n"
+                   << "  \"total_cooling\": " << context->last_total_cooling << ",\n"
+                   << "  \"hmctot\": " << context->last_hmctot << ",\n"
                    << "  \"radiation_bin_count\": " << context->last_radiation_bin_count << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"

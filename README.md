@@ -1,3 +1,19 @@
+## v0.6.48.7.1 He II bound-free source-order audit
+
+v0.6.48.7.1 adds a qualification-only, single-state native runner and a
+source-ordered shadow audit for the 31 He II type-53 records at reference
+evaluation 61. The shadow evaluator uses the translated source-style grid and
+Milne integrations with the corrected lowered-program unit boundary: cross
+sections are already stored in cm^2. The shadow path is deliberately not
+applied to the physical solve because that isolated substitution worsens the
+final He II/He III population. ABI 60485 and zero Python callbacks are
+preserved; fixed-state parity remains blocked. See
+`V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md`.
+
+## v0.6.48.7 fixed-state parity qualification
+
+v0.6.48.7 freezes all available v0.6.47.2 fixed-state reference data, compares all 61 native electron-fraction states and final H/He/Mg ion/level populations, and extends native diagnostic state JSON. It reports the current physical mismatch and the missing all-61 population oracle honestly; it makes no production claim. See `V06487_FIXED_STATE_PARITY.md`.
+
 ## v0.6.48.6.1 qualification comparator hotfix
 
 v0.6.48.6.1 repairs real FITS comparison for non-contiguous Astropy table fields, removes stale JSON reports before comparison, records absolute candidate/report paths, and adds a one-cell numerical FITS negative control. It preserves the immutable v0.6.47.2 reference, ABI 60485, source-order maps, and native diagnostic infrastructure. It does not change the physics and makes no production claim. See `V064861_QUALIFICATION_COMPARATOR_HOTFIX.md`.

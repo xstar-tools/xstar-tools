@@ -450,3 +450,17 @@ include check_v04861_qualification_comparator_hotfix.py
 include run_v04861_reference_qualification.sh
 include run_v04861_compare_products.sh
 include tests/test_v064861_qualification_comparator_hotfix.py
+
+recursive-include src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472 *
+include V06487_FIXED_STATE_PARITY.md
+include check_v0487_fixed_state_parity.py
+include run_v0487_reference_qualification.sh
+include run_v0487_compare_fixed_state.sh
+include tests/test_v06487_fixed_state_parity.py
+include xstar_tools_v0.6.48.7_handoff.md
+
+# v0.6.48.7.1 He II bound-free source-order audit
+include V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
+include xstar_tools_v0.6.48.7.1_handoff.md
+include check_v04871_he_bound_free_audit.py
+include run_v04871_he_bound_free_audit.sh

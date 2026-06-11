@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.1 - 2026-06-11
+
+- Add a coarse single-reference-evaluation standalone command for fast fixed-state qualification.
+- Add source-ordered He II type-53 shadow diagnostics for all six bound-free contribution fields.
+- Correct the diagnostic unit boundary: lowered type-53 cross sections are already in cm^2, while the legacy translated kernel expected megabarns.
+- Add a machine-readable He II bound-free audit and regression checker covering all 31 evaluation-61 records.
+- Keep the source-style shadow out of the physical solve because applying it alone worsens the final He II/He III result.
+- Preserve ABI 60485, zero Python callbacks, and the v0.6.48.7 physical state. Fixed-state parity and production promotion remain blocked.
+
 ## 0.6.48.6.1 - 2026-06-11
 
 - Repair IEEE FITS comparison for strided/non-contiguous Astropy table fields by comparing contiguous per-scalar byte representations.

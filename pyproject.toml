@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.48.6.1"
+version = "0.6.48.7.1"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -79,6 +79,8 @@ xstar-tools-run-python = "xstar_tools.source_port_physical_runner_cli:main"
 xstar-tools-original-parity-gate = "xstar_tools.xstar.original_parity_gate:main"
 xstar-tools-cpp-parity-gate = "xstar_tools.xstar.cpp_parity_gate:main"
 xstar-tools-qualification = "xstar_tools.xstar.qualification:main"
+xstar-tools-fixed-state-parity = "xstar_tools.xstar.fixed_state_parity:main"
+xstar-tools-he-bound-free-audit = "xstar_tools.xstar.he_bound_free_audit:main"
 xstar-tools-port-complete-fixed-state = "xstar_tools.source_port_complete_fixed_state_cli:main"
 xstar-tools-port-dsec = "xstar_tools.source_port_dsec_cli:main"
 xstar-tools-validate-dsec-physical = "xstar_tools.source_port_dsec_physical_cli:main"
@@ -102,5 +104,5 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "specs/*"]
+"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "v06487_fixed_state_reference_v0472/*", "specs/*"]
 "xstar_tools.xstar" = ["data/coheat.dat", "cpp/*"]
