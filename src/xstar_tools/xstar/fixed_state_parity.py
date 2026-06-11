@@ -1,4 +1,4 @@
-"""Fixed-state parity qualification for XSTAR v0.6.48.7.2.
+"""Fixed-state parity qualification for XSTAR v0.6.48.7.3.
 
 The module freezes the exact information that is actually available from the
 v0.6.47.2 reference run and compares it with native source-order diagnostics.

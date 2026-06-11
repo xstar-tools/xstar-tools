@@ -471,3 +471,12 @@ include xstar_tools_v0.6.48.7.2_handoff.md
 include check_v04872_type53_semantics.py
 include run_v04872_type53_semantics.sh
 include tests/test_type53_semantics_v064872.py
+
+# v0.6.48.7.3 exact v0.6.47.2 type-53 runtime capture
+recursive-include src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472 *
+include V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
+include xstar_tools_v0.6.48.7.3_handoff.md
+include check_v04873_type53_runtime_capture.py
+include run_v04873_type53_runtime_capture.sh
+include run_v04873_type53_semantics.sh
+include tests/test_v064873_v0472_type53_runtime_capture.py

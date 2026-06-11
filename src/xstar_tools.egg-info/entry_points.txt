@@ -48,6 +48,7 @@ xstar-tools-run-xstar = xstar_tools.cli.run_xstar:main
 xstar-tools-solver = xstar_tools.solver:main
 xstar-tools-source-inventory = xstar_tools.source_port_cli:main
 xstar-tools-type53-semantics = xstar_tools.xstar.type53_semantics:main
+xstar-tools-v0472-type53-capture = xstar_tools.xstar.v0472_type53_runtime_capture:main
 xstar-tools-validate-collisions = xstar_tools.validation:main
 xstar-tools-validate-dsec-causality = xstar_tools.source_port_dsec_causality_cli:main
 xstar-tools-validate-dsec-eval2-internals = xstar_tools.source_port_dsec_eval2_internal_cli:main

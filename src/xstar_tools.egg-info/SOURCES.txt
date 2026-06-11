@@ -46,6 +46,7 @@ V064861_QUALIFICATION_COMPARATOR_HOTFIX.md
 V06486_QUALIFICATION_INFRASTRUCTURE.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
+V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V06487_FIXED_STATE_PARITY.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -77,6 +78,7 @@ check_v04861_qualification_comparator_hotfix.py
 check_v0486_qualification_infrastructure.py
 check_v04871_he_bound_free_audit.py
 check_v04872_type53_semantics.py
+check_v04873_type53_runtime_capture.py
 check_v0487_fixed_state_parity.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -165,6 +167,8 @@ run_v0486_compare_products.sh
 run_v0486_reference_qualification.sh
 run_v04871_he_bound_free_audit.sh
 run_v04872_type53_semantics.sh
+run_v04873_type53_runtime_capture.sh
+run_v04873_type53_semantics.sh
 run_v0487_compare_fixed_state.sh
 run_v0487_reference_qualification.sh
 setup.cfg
@@ -403,6 +407,7 @@ xstar_tools_v0.6.48.6.1_handoff.md
 xstar_tools_v0.6.48.6_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
+xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -865,6 +870,10 @@ src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_lines1.fits
 src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_rrc1.fits
 src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_spect1.fits
 src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_step.log
+src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/capture_provenance.json
+src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/reference_manifest.json
+src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_capture_full.csv
+src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_oracle.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/accepted_ion_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/final_level_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/oracle_manifest.json
@@ -1003,6 +1012,7 @@ src/xstar_tools/xstar/v0439_regression.py
 src/xstar_tools/xstar/v0440_regression.py
 src/xstar_tools/xstar/v0441_regression.py
 src/xstar_tools/xstar/v0442_regression.py
+src/xstar_tools/xstar/v0472_type53_runtime_capture.py
 src/xstar_tools/xstar/xstarcalc.py
 src/xstar_tools/xstar/zone1_dsec_diagnostic.py
 src/xstar_tools/xstar/zone1_dsec_probe_analysis.py
@@ -1209,6 +1219,7 @@ tests/test_v064853_preliminary_ion_balance.py
 tests/test_v06485_active_family_phase2.py
 tests/test_v064861_qualification_comparator_hotfix.py
 tests/test_v06486_qualification_infrastructure.py
+tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v06487_fixed_state_parity.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py

@@ -1,5 +1,46 @@
 # CHANGELOG
 
+# 0.6.48.7.3 - 2026-06-11
+
+- Add an isolated exact v0.6.47.2 type-53 evaluator replay tied to the source archive, lowered-program, state and radiation hashes.
+- Freeze and package the complete 31-record evaluation-61 He II type-53 runtime oracle.
+- Expand the three-way gate with per-answer exact counts and maximum source-relative differences.
+- Confirm the translated shadow is closer for all 31 records but IEEE-exact for none; keep physics replacement and production promotion blocked.
+
+
+- Add a three-way He II type-53 comparison across applied native, translated source-style shadow, and optional exact v0.6.47.2 runtime oracle values.
+- Freeze and verify immutable 31-record runtime-oracle bundles with SHA-256 manifests.
+- Encode the v0.6.47.2 signed `ans1`-`ans6` contract and expand every record into the four exact element-matrix insertion terms.
+- Record exact v0.6.47.2 source archive and relevant source-file fingerprints without treating source reconstruction as a runtime oracle.
+- Keep the shadow branch diagnostic-only; fixed-state and production promotion remain blocked.
+
+## 0.6.48.7.1
+
+- Add a coarse single-reference-evaluation standalone command for fast fixed-state qualification.
+- Add source-ordered He II type-53 shadow diagnostics for all six bound-free contribution fields.
+- Correct the diagnostic unit boundary: lowered type-53 cross sections are already in cm^2, while the legacy translated kernel expected megabarns.
+- Add a machine-readable He II bound-free audit and regression checker covering all 31 evaluation-61 records.
+- Keep the source-style shadow out of the physical solve because applying it alone worsens the final He II/He III result.
+- Preserve ABI 60485, zero Python callbacks, and the v0.6.48.7 physical state. Fixed-state parity and production promotion remain blocked.
+
+## 0.6.48.7
+
+- Added immutable fixed-state oracle for all 61 scalar states, four accepted ion vectors, and the final detailed level vector.
+- Added strict native fixed-state comparison and machine-readable mismatch reports.
+- Added computed electron fraction, charge residual, heating, cooling, and hmctot to native diagnostic state JSON.
+- Preserved ABI 60485, zero Python callbacks, and qualification-only status.
+- Fixed-state parity and production promotion remain blocked.
+
+## 0.6.48.6.1
+
+- Repair IEEE FITS comparison for strided/non-contiguous Astropy table fields by comparing contiguous per-scalar byte representations.
+- Resolve reference, candidate, map-output, and JSON-report paths to absolute paths before qualification work begins.
+- Remove any pre-existing JSON report before execution and write completed reports atomically, preventing stale comparison results after exceptions.
+- Harden the comparison wrapper so it reports `comparison_json=not_written` when a run fails before a report is produced.
+- Add a negative FITS control that changes exactly one floating-point cell in `xout_cont1.fits` and requires a `fits_value` rejection.
+- Preserve the v0.6.47.2 immutable reference bundle, ABI 60485, native diagnostics, and source-order maps without changing physics.
+- Make no physical-equivalence or production-promotion claim; production remains blocked.
+
 # 0.6.48.7.2 - 2026-06-11
 
 - Add a three-way He II type-53 comparison across applied native, translated source-style shadow, and optional exact v0.6.47.2 runtime oracle values.

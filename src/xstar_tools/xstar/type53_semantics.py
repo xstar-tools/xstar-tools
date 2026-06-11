@@ -1,4 +1,4 @@
-"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.2.
+"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.3.
 
 The tool joins the applied native values and the translated source-style shadow
 values for the 31 He II type-53 records at one evaluation.  It expands each
@@ -24,7 +24,7 @@ from .he_bound_free_audit import _resolve_records_csv
 
 SCHEMA = "xstar-tools-v064872-type53-semantics-v1"
 ORACLE_SCHEMA = "xstar-tools-v064872-type53-runtime-oracle-v1"
-RELEASE = "0.6.48.7.2"
+RELEASE = "0.6.48.7.3"
 ELEMENT_Z = 2
 ION_STAGE = 2
 DATA_TYPE = 53
@@ -92,7 +92,7 @@ def _load_selected(records_source: Path, evaluation: int) -> tuple[Path, list[di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV lacks v0.6.48.7.2 type-53 fields: " + ", ".join(missing))
+            raise ValueError("records CSV lacks v0.6.48.7.3 type-53 fields: " + ", ".join(missing))
         rows = [
             dict(row) for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation
@@ -138,13 +138,21 @@ def _load_oracle(path: Path | None, evaluation: int) -> tuple[dict[tuple[int, in
             raise ValueError("runtime oracle contains a non-He-II type-53 row")
         if any(not math.isfinite(_float(row[name])) for name in ANS_NAMES):
             raise ValueError("runtime oracle contains blank or non-finite ans values")
-    return mapping, {
+    info = {
         "available": True,
         "verified": manifest is not None,
         "path": str(path),
         "records": len(mapping),
         "sha256": _sha256(csv_path),
     }
+    if manifest is not None:
+        info.update({
+            "capture_kind": manifest.get("capture_kind"),
+            "full_dsec_runtime_capture": bool(manifest.get("full_dsec_runtime_capture", False)),
+            "source_archive_sha256": manifest.get("source_archive_sha256"),
+            "source_module_sha256": manifest.get("source_module_sha256"),
+        })
+    return mapping, info
 
 
 def _matrix_terms(row: Mapping[str, Any], values: Mapping[str, float], variant: str) -> list[dict[str, Any]]:
@@ -194,6 +202,13 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
     reference_exact_shadow = True
     reference_records_compared = 0
     first_reference_divergence: dict[str, Any] | None = None
+    reference_metrics = {
+        variant: {name: {"exact": 0, "max_absolute_delta": 0.0, "max_relative_delta": 0.0, "source_position": None, "record": None} for name in ANS_NAMES}
+        for variant in ("applied", "shadow")
+    }
+    shadow_closer_records = 0
+    applied_closer_records = 0
+    equal_distance_records = 0
 
     for raw in selected:
         key = (_int(raw["source_position"]), _int(raw["record"]))
@@ -226,6 +241,19 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
                 joined_row[f"shadow_exact_{name}"] = shadow_match
                 reference_exact_applied &= applied_match
                 reference_exact_shadow &= shadow_match
+                for variant_name, candidate, matched in (("applied", applied[name], applied_match), ("shadow", shadow[name], shadow_match)):
+                    metric = reference_metrics[variant_name][name]
+                    if matched:
+                        metric["exact"] += 1
+                    absolute_delta = abs(candidate - reference[name])
+                    relative_delta = absolute_delta / max(abs(reference[name]), 1.0e-300)
+                    if absolute_delta > metric["max_absolute_delta"]:
+                        metric.update({
+                            "max_absolute_delta": absolute_delta,
+                            "max_relative_delta": relative_delta,
+                            "source_position": key[0],
+                            "record": key[1],
+                        })
                 if first_reference_divergence is None and not (applied_match and shadow_match):
                     first_reference_divergence = {"source_position": key[0], "record": key[1], "answer": name}
             else:
@@ -233,6 +261,14 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
                 joined_row[f"shadow_exact_{name}"] = ""
         if reference is not None:
             reference_records_compared += 1
+            applied_distance = sum(abs(applied[name] - reference[name]) for name in ANS_NAMES)
+            shadow_distance = sum(abs(shadow[name] - reference[name]) for name in ANS_NAMES)
+            if shadow_distance < applied_distance:
+                shadow_closer_records += 1
+            elif applied_distance < shadow_distance:
+                applied_closer_records += 1
+            else:
+                equal_distance_records += 1
         joined.append(joined_row)
         matrix_rows.extend(_matrix_terms(raw, applied, "applied"))
         matrix_rows.extend(_matrix_terms(raw, shadow, "shadow"))
@@ -288,7 +324,11 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
             "v06472_source_archive_sha256": "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060",
             "rates_type53_py_sha256": "67439524b5453d73ca184346bb844ce2cc23faad771b402effb33932a2bf8e06",
             "element_engine_cpp_sha256": "fe6e2844fefc14109906f2f154307a69483fabb041d65f9393cd0a569c80b328",
-            "runtime_oracle_distinction": "source-code semantics are verified; exact v0.6.47.2 runtime per-record values are not inferred",
+            "runtime_oracle_distinction": (
+                "exact v0.6.47.2 fixed-state evaluator replay is available and verified"
+                if oracle_complete else
+                "source-code semantics are verified; exact v0.6.47.2 runtime per-record values are unavailable"
+            ),
         },
         "source_semantics": {
             "ans1": "photoionization_rate_nonnegative",
@@ -307,6 +347,10 @@ def analyze(records_source: Path, output_dir: Path, *, evaluation: int = 61, ref
         "applied_exact_to_reference": reference_exact_applied if oracle_complete else False,
         "shadow_exact_to_reference": reference_exact_shadow if oracle_complete else False,
         "first_reference_divergence": first_reference_divergence,
+        "reference_difference_metrics": reference_metrics if oracle_complete else {},
+        "shadow_closer_to_reference_records": shadow_closer_records,
+        "applied_closer_to_reference_records": applied_closer_records,
+        "equal_distance_to_reference_records": equal_distance_records,
         "type53_physics_replacement_ready": bool(oracle_complete and reference_exact_shadow),
         "fixed_state_parity": False,
         "production_promotion_ready": False,

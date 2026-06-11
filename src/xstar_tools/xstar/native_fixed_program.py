@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.7.2 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.7.3 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.7.2 distinguishes three classes that older coverage reports conflated:
+v0.6.48.7.3 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -43,7 +43,7 @@ def _parse_abundance_spec(text: str) -> dict[int, float]:
     return result
 SIMPLE_DATA_TYPES = {1, 2, 3, 7, 8, 20}
 ENGINE_RECOGNIZED_OPCODES = {1, 2, 9, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99}
-# v0.6.48.7.2 completes every executable data type reached by the qualified
+# v0.6.48.7.3 completes every executable data type reached by the qualified
 # H/He/Mg parent-owned traversal.  Types 1/30/38/39 are executable scalar
 # ion-rate families and are serialized with matrix_enabled=0 rather than being
 # mislabeled as topology metadata.
@@ -229,7 +229,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.7.2",
+        "schema_version": "0.6.48.7.3",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -320,7 +320,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.7.2",
+        "schema_version": "0.6.48.7.3",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
