@@ -1,3 +1,11 @@
+## v0.6.48.5.1 electron accounting, controller semantics, and spectral-product separation
+
+v0.6.48.5.1 adds explicit elemental abundances to lowered native programs and reproduces the source `elcter` accounting, including the fully stripped ion fraction. It also corrects the DSEC charge-residual sign, restores the source/default convergence tolerances, and separates the computed free-free continuum FITS path from the full continuum-plus-line/RRC/profile spectrum path. The strict 8,722-record H/He/Mg host program remains callback-free and structurally complete. Thermal/heating-cooling parity and external physical equivalence remain blocked. See `V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md`.
+
+## v0.6.48.5 active-family phase 2 and host trajectory integration
+
+v0.6.48.5 completes the active H/He/Mg executable-family inventory, adds a genuine native 57-evaluation DSEC controller plus four final evaluations, restores the native Gaussian/Voigt line-profile path, and generates all nine historical FITS schemas from computed arrays. The generated trajectory and FITS values are development outputs: reference-state identity and external physical equivalence have not passed, so production promotion remains blocked. See `V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md`.
+
 ## v0.6.48.4.1 active-program execution corrections
 
 v0.6.48.4.1 makes the 8,570-record active H/He/Mg program runnable by correcting term-source ordering, decoupling line-record storage from the continuum grid, projecting lines explicitly into energy bins, and fixing multi-element self-test accounting. ABI 60484 is unchanged. Production remains blocked by 152 omitted records, native 61-evaluation DSEC integration, and the nine historical XSTAR FITS schemas.

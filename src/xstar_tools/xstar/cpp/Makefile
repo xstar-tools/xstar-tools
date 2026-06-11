@@ -6,6 +6,7 @@ SO_LDFLAGS ?= -shared
 OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 COMMON_LIBS ?= -ldl -pthread
+CFITSIO_LIBS ?= -lcfitsio
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 PYTHON_LIBDIRS := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LIBS)))
@@ -83,9 +84,9 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
-$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h $(API_TARGET) $(FIXED_STATE_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp \
-		-L. -lxstar_api -lxstar_fixed_state $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_science_fits.cpp xstar_science_fits.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h $(API_TARGET) $(FIXED_STATE_TARGET) $(THERMAL_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp \
+		-L. -lxstar_api -lxstar_fixed_state -lxstar_thermal $(CFITSIO_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:
 	@echo CXX=$(CXX)
@@ -111,19 +112,19 @@ test: all
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
-	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06484_active_family_phase1_fixture
-	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06484_active_family_phase1_fixture --batch 4
-	rm -rf .v06484_native_output
-	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../benchmarks/v06484_active_family_phase1_fixture --output-dir .v06484_native_output
-	test -s .v06484_native_output/xout_step.log
-	test -s .v06484_native_output/xout_native_state.fits
-	test -s .v06484_native_output/visited_records.csv
-	rm -rf .v06484_native_output
+	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06485_active_family_phase2_fixture
+	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06485_active_family_phase2_fixture --batch 4
+	rm -rf .v06485_native_output
+	./$(EXECUTABLE_TARGET) run-fixed-state --case-dir ../../benchmarks/v06485_active_family_phase2_fixture --output-dir .v06485_native_output
+	test -s .v06485_native_output/xout_step.log
+	test -s .v06485_native_output/xout_native_state.fits
+	test -s .v06485_native_output/visited_records.csv
+	rm -rf .v06485_native_output
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) self-test --backend python --plugin-dir . --python-path ../../.. --batch 4
 	PYTHONPATH=../../.. ./$(EXECUTABLE_TARGET) python-bridge-test --plugin-dir . --python-path ../../..
 
 install: all
-	@echo "v0.6.48.4.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
+	@echo "v0.6.48.5.1 keeps headers, C++ sources, shared libraries, executable, and Makefile in:"
 	@pwd
 
 clean:

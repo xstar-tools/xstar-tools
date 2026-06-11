@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.5.1 - 2026-06-11
+
+- Serialize explicit per-element abundances in `elements.csv`; retain read compatibility with legacy eight-column programs using abundance 1.0.
+- Compute `elcter` as abundance-weighted represented ion charge plus the fully stripped missing fraction at charge Z.
+- Correct charge residual semantics to `trial electron fraction - computed electron fraction` in both reference-input and DSEC-controller paths.
+- Stop forcing denormal-minimum DSEC tolerances; use the source/default convergence policy so thermal iteration can run.
+- Persist the native free-free continuum independently from the full continuum-plus-line/RRC/profile spectrum.
+- Generate `xout_cont1.fits` and `xout_spect1.fits` through distinct writers with `PRODUCT` and `SPECMODE` headers.
+- Keep ABI 60485 and production promotion blocked: heating/cooling parity, reference-state identity, and external physical equivalence still fail.
+
 ## 0.6.48.4.1 - 2026-06-10
 
 - Correct active-ATDB source-position serialization using globally increasing four-slot positions.

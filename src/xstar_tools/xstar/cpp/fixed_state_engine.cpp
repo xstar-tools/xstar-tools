@@ -36,6 +36,15 @@ extern "C" int xstar_engine_type63_rates_v1(
     double* out6
 );
 extern "C" int xstar_engine_anl1_v1(int ni, int nf, int lf, int iq, double* alm, double* alp);
+extern "C" int xstar_emissivity_build_binemis_profile(
+    int ncn2, int nbtpp, int ncols, int n_line_slots, int n_lum_lines,
+    double xlum, double temperature_1e4k, double turbulent_velocity_km_s,
+    const double* epi_ev, const double* dpthc_flat, const double* elum_flat,
+    const double* original_flat, const double* incident, const long long* slot_line_index,
+    const double* line_wavelength, const long long* line_data_type, const double* line_atomic_mass,
+    const double* line_natural_rate_s, const double* line_auger_width_ev,
+    const double* line_auger_rate_s, double* out_flat, double* stats,
+    char* errbuf, std::size_t errbuf_size);
 
 void copy_text(char* target, std::size_t cap, const std::string& value) {
     if (!target || cap == 0) return;
@@ -119,6 +128,7 @@ struct ElementRow {
 struct ElementProgram {
     int element_index = 0;
     int element_z = 0;
+    double abundance = 1.0;
     int n_rows = 0;
     int n_superlevels = 0;
     int n_ions = 0;
@@ -148,6 +158,7 @@ struct ProgramRecord {
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
+    bool matrix_enabled = true;
 };
 
 struct Program {
@@ -164,6 +175,7 @@ struct Program {
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
+    bool matrix_enabled = true;
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
@@ -219,16 +231,19 @@ void load_elements(const std::string& path, Program& program) {
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 8) throw std::runtime_error("elements.csv requires 8 columns");
+        if (c.size() != 8 && c.size() != 9) throw std::runtime_error("elements.csv requires 8 legacy columns or 9 columns with abundance");
         ElementProgram e;
         e.element_index = parse_number<int>(c[0], "element_index");
         e.element_z = parse_number<int>(c[1], "element_z");
-        e.n_rows = parse_number<int>(c[2], "n_rows");
-        e.n_superlevels = parse_number<int>(c[3], "n_superlevels");
-        e.n_ions = parse_number<int>(c[4], "n_ions");
-        e.normalization_row = parse_number<int>(c[5], "normalization_row");
-        e.record_head = parse_number<int>(c[6], "record_head");
-        e.record_count = parse_number<int>(c[7], "record_count");
+        const std::size_t offset = c.size() == 9 ? 1u : 0u;
+        if (c.size() == 9) e.abundance = parse_number<double>(c[2], "abundance");
+        e.n_rows = parse_number<int>(c[2 + offset], "n_rows");
+        e.n_superlevels = parse_number<int>(c[3 + offset], "n_superlevels");
+        e.n_ions = parse_number<int>(c[4 + offset], "n_ions");
+        e.normalization_row = parse_number<int>(c[5 + offset], "normalization_row");
+        e.record_head = parse_number<int>(c[6 + offset], "record_head");
+        e.record_count = parse_number<int>(c[7 + offset], "record_count");
+        if (!std::isfinite(e.abundance) || e.abundance < 0.0) throw std::runtime_error("element abundance must be finite and nonnegative");
         if (e.element_index != static_cast<int>(program.elements.size())) throw std::runtime_error("element_index must be dense and source ordered");
         if (e.n_rows <= 0 || e.n_superlevels <= 0 || e.n_ions <= 0) throw std::runtime_error("invalid element dimensions");
         program.elements.push_back(e);
@@ -277,7 +292,7 @@ void load_records(const std::string& path, Program& program) {
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 18) throw std::runtime_error("records.csv requires 18 columns");
+        if (c.size() != 18 && c.size() != 19) throw std::runtime_error("records.csv requires 18 or 19 columns");
         ProgramRecord r;
         r.source_position = parse_number<std::int64_t>(c[0], "source_position");
         r.record = parse_number<std::int64_t>(c[1], "record");
@@ -297,6 +312,7 @@ void load_records(const std::string& path, Program& program) {
         r.density_scale = parse_number<double>(c[15], "density_scale");
         r.line_energy_ev = parse_number<double>(c[16], "line_energy_ev");
         r.atomic_mass_amu = parse_number<double>(c[17], "atomic_mass_amu");
+        if (c.size() == 19) r.matrix_enabled = parse_number<int>(c[18], "matrix_enabled") != 0;
         if (r.element_index < 0 || r.element_index >= static_cast<int>(program.elements.size())) throw std::runtime_error("record element_index out of range");
         program.records.push_back(r);
     }
@@ -348,7 +364,11 @@ Program load_program(const std::string& directory) {
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
         const auto& e = p.elements[static_cast<std::size_t>(r.element_index)];
-        if (r.lower_row < 1 || r.lower_row > e.n_rows || r.upper_row < 1 || r.upper_row > e.n_rows) throw std::runtime_error("record endpoint out of compact element range");
+        if (r.matrix_enabled) {
+            if (r.lower_row < 1 || r.lower_row > e.n_rows || r.upper_row < 1 || r.upper_row > e.n_rows) throw std::runtime_error("record endpoint out of compact element range");
+        } else if (r.lower_row != 0 || r.upper_row != 0) {
+            throw std::runtime_error("scalar-only record endpoints must be zero");
+        }
     }
     return p;
 }
@@ -634,6 +654,84 @@ bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std:
     aij=std::pow(10.0,rec); wavelength=r[nd+nt+nd*nt]; return std::isfinite(aij)&&std::isfinite(wavelength);
 }
 
+
+double collision_pair_upward(double upsilon, double delta_ev, double temperature_k, double ne, double gl) {
+    const double t4=temperature_k/1.0e4;
+    return 8.626e-8*upsilon*limited_exp(-delta_ev/std::max(kBoltzmannEvK*temperature_k,1.0e-300))*ne/
+        (std::sqrt(std::max(t4,1.0e-300))*std::max(gl,1.0e-300));
+}
+
+double collision_pair_downward(double upsilon, double temperature_k, double ne, double gu) {
+    const double t4=temperature_k/1.0e4;
+    return 8.626e-8*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
+}
+
+double callaway_upsilon(int data_type, const double* r, std::size_t nr, double temperature_k, double delta_ev) {
+    const std::size_t min_count=data_type==60?3u:6u;
+    if (!r||nr<min_count||!(temperature_k>0.0)||!(delta_ev>0.0)) throw std::runtime_error("invalid type60/62 payload");
+    const double floor_k=0.02*delta_ev*1.0e4/0.8617333262145;
+    const double teff=std::max(temperature_k,floor_k);
+    const double t1=teff>1.0e9?6.33652e3:teff*6.33652e-6;
+    const double tt=std::min(t1,1.0);
+    double ups=0.0;
+    if (data_type==60) {
+        double power=1.0;
+        for (std::size_t k=2;k<nr;++k) { ups+=r[k]*power; power*=tt; }
+    } else {
+        double power=1.0;
+        for (std::size_t k=2;k+3<nr;++k) { ups+=r[k]*power; power*=tt; }
+        const double arg=r[nr-2]*tt;
+        if (!(arg>0.0)) throw std::runtime_error("type62 nonpositive log argument");
+        ups+=r[nr-3]*std::log(arg)*limited_exp(-r[nr-1]*tt);
+    }
+    if (t1>tt) { const double l=std::log(t1); ups*=1.0+l/(l+1.0); }
+    return ups;
+}
+
+double type68_upsilon(const double* r, std::size_t nr, int z, double temperature_k, double wavelength_a) {
+    if (!r||nr<3||z<=0||!(temperature_k>0.0)||!(wavelength_a>0.0)) throw std::runtime_error("invalid type68 payload");
+    const double floor_k=2.8777e6/wavelength_a;
+    const double tused=std::max(temperature_k,floor_k);
+    const double tt=std::log10(tused/std::pow(static_cast<double>(z),3.0));
+    return std::max(0.0,r[0]+r[1]*tt+r[2]*tt*tt);
+}
+
+double type73_rate(const double* r, std::size_t nr, int z, double temperature_k) {
+    if (!r||nr<7||z<=0||!(temperature_k>0.0)) throw std::runtime_error("invalid type73 payload");
+    const double wav=std::abs(r[0]);
+    if (!(wav>0.0)) return 0.0;
+    const double tused=std::max(temperature_k,2.8777e6/wav);
+    const double y=static_cast<double>(z*z)*r[0]*1.578876e5/tused;
+    if (y>40.0||!(y>0.0)) return 0.0;
+    const double z2s=r[1], aa=r[2], co=r[3], cr=r[4], cr1=r[5], rr=r[6];
+    const double gam=z2s>=0.1?-0.2:(z2s>0.01?0.0:0.2);
+    const double zeff=static_cast<double>(z)-gam;
+    const double em1=expint_scaled(y);
+    const double e1=em1/y*limited_exp(-y);
+    double ee1=0.0,ee2=0.0,ee3=0.0;
+    if (y*aa+y<=80.0) eint_values(y*aa+y,ee1,ee2,ee3);
+    double er=0.0,er1=0.0;
+    if (rr==1.0) { er=ee1; er1=ee2; }
+    else if (rr==2.0) { er=ee2; er1=ee3; }
+    double qij=co*limited_exp(-y)+1.55*z2s*e1;
+    if (y*aa+y<=40.0) qij+=y*limited_exp(y*aa)*(cr*er/std::pow(aa+1.0,rr-1.0)+cr1*er1/std::pow(aa+1.0,rr));
+    const double crate=qij*1.578876e5/tused*std::sqrt(tused)/std::max(zeff*zeff,1.0e-300)*5.46538e-11;
+    return std::max(0.0,crate);
+}
+
+double type95_spline_rho(const double* r, std::size_t nr, double xx) {
+    if (!r||nr<6) throw std::runtime_error("type95 payload too short");
+    const std::size_t ns=(nr-2)/2;
+    if (ns<2||2+2*ns>nr) throw std::runtime_error("type95 bad spline layout");
+    std::size_t mm=1;
+    while (mm<ns && xx>r[1+mm]) ++mm;
+    const std::size_t ly=ns+mm, ry=1+ns+mm, lx=mm, rx=1+mm;
+    if (ry>=nr||rx>=nr) throw std::runtime_error("type95 spline index out of range");
+    const double denom=r[rx]-r[lx];
+    if (denom==0.0) throw std::runtime_error("type95 zero spline interval");
+    return r[ly]+(xx-r[lx])*(r[ry]-r[ly])/denom;
+}
+
 bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double endpoint_delta_ev, double& upward, double& downward) {
     upward=downward=0.0;
     if (!r||!ints||ni<3) return false;
@@ -668,9 +766,10 @@ EvaluatedRecord evaluate_record(
 ) {
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
-    const ElementRow& lower = row_at(element, record.lower_row);
-    const ElementRow& upper = row_at(element, record.upper_row);
-    const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : std::abs(upper.energy_ev - lower.energy_ev);
+    const ElementRow scalar_dummy{};
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
     const double ne = input.electron_density_cm3;
     const double t4 = input.temperature_k / 1.0e4;
     const double sqrt_t4 = std::sqrt(std::max(t4, 1.0e-300));
@@ -686,6 +785,7 @@ EvaluatedRecord evaluate_record(
     c.lower_row = record.lower_row;
     c.upper_row = record.upper_row;
     c.density_scale = record.density_scale;
+    out.matrix_enabled = record.matrix_enabled;
 
     switch (record.opcode) {
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {
@@ -719,6 +819,54 @@ EvaluatedRecord evaluate_record(
             } else {
                 throw std::runtime_error("unsupported SIMPLE_UCALC data_type " + std::to_string(record.data_type));
             }
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE2_CHARGE_TRANSFER: {
+            if (!r||record.real_count<4) throw std::runtime_error("type2 payload too short");
+            if (t4<=5.0) {
+                const double rate=r[0]*std::pow(t4,r[1])*std::max(0.0,1.0+r[2]*limited_exp(r[3]*t4))*1.0e-9;
+                if (record.rate_type==5) c.ans2=rate*input.neutral_h_density_cm3;
+                else c.ans1=rate*input.neutral_h_density_cm3;
+            }
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE9_CHARGE_TRANSFER: {
+            if (!r||record.real_count<4||!ints||record.int_count<1) throw std::runtime_error("type9 payload too short");
+            const double rate=r[0]*std::pow(std::min(t4,1000.0),r[1])*(1.0+r[2]*limited_exp(r[3]*t4))*1.0e-9;
+            c.ans2=rate*input.neutral_h_density_cm3*0.1;
+            if (ints[0]!=0) c.ans2/=6.0;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE30_THREE_BODY_RECOMB: {
+            if (!ints||record.int_count<1) throw std::runtime_error("type30 payload too short");
+            const double t6=t4/100.0;
+            const double nmx=static_cast<double>(ints[0]);
+            const double yy=nmx*nmx/std::max(6.34*t6,1.0e-300);
+            const double vth=3.10782e7*std::sqrt(std::max(t4,0.0));
+            const double ypow=std::min(1.0,0.06376/std::max(yy*yy,1.0e-300));
+            const double fudge=0.9*(1.0-ypow)+(1.0/1.5)*ypow;
+            const double phi1=(1.735+std::log(yy)+1.0/(6.0*yy))*fudge/2.0;
+            const double phi2=yy*(-1.202*std::log(yy)-0.298);
+            c.ans1=2.0*2.105e-22*vth*yy*(yy<0.2525?phi2:phi1)*ne;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE38_RR_FIT: {
+            if (!r||record.real_count<4) throw std::runtime_error("type38 payload too short");
+            double b=r[1];
+            const double t0=r[2]/1.0e4, t1=r[3]/1.0e4;
+            if (record.real_count>5) b+=r[4]*limited_exp(-(r[5]/1.0e4)/t4);
+            const double s0=std::sqrt(t4/std::max(t0,1.0e-300));
+            const double s1=std::sqrt(t4/std::max(t1,1.0e-300));
+            const double rate=r[0]/(1.0e-48+s0*std::pow(1.0+s0,1.0-b)*std::pow(1.0+s1,1.0+b));
+            c.ans1=rate*ne;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE39_DR_FIT: {
+            if (!r||record.real_count<2||record.real_count%2!=0) throw std::runtime_error("type39 payload invalid");
+            const std::size_t n=record.real_count/2;
+            double rate=0.0;
+            for (std::size_t k=0;k<n;++k) rate+=r[k]*limited_exp(-(r[k+n]/1.0e4)/t4);
+            c.ans1=rate*1.0e-6*std::pow(t4,-1.5)*ne;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE:
@@ -880,6 +1028,25 @@ EvaluatedRecord evaluate_record(
             c.ans5=c.ans2*delta_ev*kErgPerEv; c.ans6=heat;
             break;
         }
+        case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
+        case XSTAR_FIXED_OPCODE_TYPE62_CALLAWAY_COLLISION: {
+            const double ups=callaway_upsilon(record.data_type,r,record.real_count,input.temperature_k,delta_ev);
+            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+            c.ans5=c.ans2*delta_ev*kErgPerEv;
+            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE68_HELIKE_COLLISION: {
+            if (!ints||record.int_count<1) throw std::runtime_error("type68 payload requires Z");
+            const double wav=delta_ev>0.0?12398.4016/delta_ev:0.0;
+            const double ups=type68_upsilon(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
+            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+            c.ans5=c.ans2*delta_ev*kErgPerEv;
+            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
             if (!ints || record.int_count < 5) throw std::runtime_error("type63 payload requires ni,li,nf,lf,iq");
             double values[6]{};
@@ -918,6 +1085,52 @@ EvaluatedRecord evaluate_record(
             c.ans1=upward; c.ans2=downward;
             c.ans5=downward*delta_ev*kErgPerEv;
             c.ans6=upward*delta_ev*kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
+            if (!r||record.real_count<2||!ints||record.int_count<2) throw std::runtime_error("type72 payload too short");
+            const double scale=3.3e-11*std::pow(13.6/std::max(0.8617333262145*t4,1.0e-300),1.5);
+            const double rtmp=record.real_count>=3?r[2]:1.0;
+            const double rate=scale*limited_exp(-r[1]/std::max(0.8617333262145*t4,1.0e-300))*(r[0]/1.0e13)*rtmp;
+            const auto& ground=row_at(element,static_cast<int>(ints[0]));
+            const auto& parent=row_at(element,static_cast<int>(ints[1]));
+            const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
+            c.ans2=rate*ne;
+            c.ans1=rate*ne*rinf*ne*limited_exp(r[1]/std::max(input.temperature_k,1.0e-300));
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE73_HELIKE_COLLISION: {
+            if (!ints||record.int_count<1) throw std::runtime_error("type73 payload requires Z");
+            const double crate=type73_rate(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
+            const double omega=crate/std::max(lower.statistical_weight,1.0e-300);
+            c.ans1=collision_pair_upward(omega,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+            c.ans2=collision_pair_downward(omega,input.temperature_k,ne,upper.statistical_weight);
+            c.ans5=c.ans2*delta_ev*kErgPerEv;
+            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE76_TWO_PHOTON: {
+            if (!r||record.real_count<1) throw std::runtime_error("type76 payload too short");
+            const double aij=std::max(0.0,r[0]);
+            c.ans2=aij;
+            c.ans3=-aij*delta_ev*kErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION: {
+            if (!r||record.real_count<6||!ints||record.int_count<1) throw std::runtime_error("type95 payload too short");
+            const double ee=r[0];
+            const double tt=kt_ev/std::max(ee,1.0e-300);
+            if (!(tt>0.0)) throw std::runtime_error("type95 invalid scaled temperature");
+            const double xx=1.0-0.693147/std::log(tt+2.0);
+            const double rho=type95_spline_rho(r,record.real_count,xx);
+            double e1=0.0,e2=0.0,e3=0.0; eint_values(1.0/tt,e1,e2,e3);
+            const double citmp1=1.0e-6*e1*rho/std::sqrt(tt*ee*ee*ee);
+            c.ans1=citmp1*ne;
+            const auto& parent=row_at(element,static_cast<int>(ints[record.int_count-1]));
+            const double rinf=2.08e-22*lower.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
+            c.ans2=c.ans1*rinf*ne/std::max(limited_exp(-1.0/tt),1.0e-300);
+            c.ans5=c.ans2*ee*kErgPerEv;
+            c.ans6=c.ans1*ee*kErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE: {
@@ -1074,7 +1287,7 @@ int run_impl(
 
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
-        for (const auto& e : evaluated) contributions.push_back(e.contribution);
+        for (const auto& e : evaluated) if (e.matrix_enabled) contributions.push_back(e.contribution);
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(element);
         xstar_element_input_v1 ein{};
@@ -1103,17 +1316,39 @@ int run_impl(
         ++stats.elements_solved;
         output.element_heating += eout.heating + eout.heating2;
         output.element_cooling += eout.cooling + eout.cooling2;
-        for (std::size_t k = 0; k < buffers.populations.size(); ++k) {
-            all_populations.push_back(buffers.populations[k]);
-            output.elcter += buffers.populations[k] * static_cast<double>(element.rows[k].ion_charge);
+        for (double population : buffers.populations) all_populations.push_back(population);
+
+        // Source calc_hmc_all electron accounting is abundance weighted and
+        // treats the compact normalization row as the fully stripped stage.
+        // The element engine's final ion totals deliberately exclude that last
+        // row, so the missing fraction is the bare-ion population.
+        double represented_fraction = 0.0;
+        double charge_per_element = 0.0;
+        for (int ion_slot = 0; ion_slot < element.n_ions; ++ion_slot) {
+            const double fraction = buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
+            represented_fraction += fraction;
+            int ion_charge = 0;
+            bool found_charge = false;
+            for (const auto& row : element.rows) {
+                if (row.ion == ion_slot + 1) {
+                    ion_charge = row.ion_charge;
+                    found_charge = true;
+                    break;
+                }
+            }
+            if (!found_charge) throw std::runtime_error("missing ion charge for compact ion counter");
+            charge_per_element += fraction * static_cast<double>(ion_charge);
         }
+        const double fully_ionized_fraction = std::max(0.0, 1.0 - represented_fraction);
+        charge_per_element += fully_ionized_fraction * static_cast<double>(element.element_z);
+        output.elcter += element.abundance * charge_per_element;
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
             const auto& rec = evaluated[k].contribution;
             xstar_spectral_contribution_v1 sc{};
             sc.source_position = static_cast<std::uint64_t>(rec.source_position);
             sc.record = rec.record;
-            sc.kind = XSTAR_SPECTRAL_KIND_EMISAB_LINE;
+            sc.kind = XSTAR_SPECTRAL_KIND_EMIS_LINE;
             sc.rate_type = rec.rate_type;
             sc.data_type = rec.data_type;
             sc.output_index = static_cast<int32_t>(spectral.size() + 1);
@@ -1171,10 +1406,10 @@ int run_impl(
 
     const auto spectral_start = clock_type::now();
     if (!spectral.empty() && input.radiation_bin_count > 0) {
-        // Line records and continuum bins are different index spaces.  Keep the
-        // spectral engine's per-line arrays sized by the number of line records,
-        // then explicitly project committed line emissivity/opacity into the
-        // radiation grid using bin_one_based.
+        // Line records and continuum bins are different index spaces.  The
+        // contribution engine owns per-line luminosity/opacity records; the
+        // exact native Gaussian/Voigt path then projects those luminosities to
+        // the radiation grid instead of using the former single-bin delta.
         const std::size_t line_capacity = spectral.size() + 1;
         const std::size_t continuum_capacity = input.radiation_bin_count;
         std::vector<double> rcem(2 * line_capacity, 0.0);
@@ -1199,24 +1434,52 @@ int run_impl(
         sw.fline = fline.data(); sw.fline_count = fline.size();
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();
         sw.epi_eV = input.radiation_energy_ev; sw.energy_count = continuum_capacity;
+        constexpr std::size_t seed_stride=21;
+        std::vector<double> seeds(spectral.size()*seed_stride,0.0);
+        for (std::size_t i=0;i<spectral.size();++i) {
+            seeds[i*seed_stride]=1.0/1.772;
+            for (std::size_t d=1;d<=10;++d) {
+                const double value=std::exp(-static_cast<double>(d*d))/1.772;
+                seeds[i*seed_stride+2*d-1]=value;
+                seeds[i*seed_stride+2*d]=value;
+            }
+        }
         xstar_spectral_stats_v1 ss{};
         xstar_spectral_stats_init_v1(&ss);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
-        const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), nullptr, 0, &sw, &ss, error.data(), error.size());
+        const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
-        for (const auto& contribution : spectral) {
-            if (contribution.output_index <= 0 || contribution.bin_one_based <= 0) continue;
-            const auto line_index = static_cast<std::size_t>(contribution.output_index);
-            const auto bin_index = static_cast<std::size_t>(contribution.bin_one_based - 1);
-            if (line_index >= line_capacity || bin_index >= continuum_capacity) {
-                throw std::runtime_error("line-to-grid projection index out of range");
-            }
-            output.spectrum[bin_index] += rcem[line_index] + rcem[line_capacity + line_index];
-            output.opacity[bin_index] += oplin[line_index];
+
+        const std::size_t nlines=spectral.size();
+        std::vector<double> dpthc(continuum_capacity,0.0), original(5*continuum_capacity,0.0), profiled(5*continuum_capacity,0.0);
+        std::vector<double> elum(2*nlines,0.0), wavelength(nlines,0.0), mass(nlines,1.0), natural_rate(nlines,0.0), auger_width(nlines,0.0), auger_rate(nlines,0.0);
+        std::vector<long long> slot(nlines,0), dtype(nlines,50);
+        for (std::size_t j=0;j<nlines;++j) {
+            const auto& c=spectral[j];
+            const auto li=static_cast<std::size_t>(c.output_index);
+            if (li>=line_capacity) throw std::runtime_error("line profile output index out of range");
+            slot[j]=static_cast<long long>(j+1);
+            dtype[j]=c.data_type;
+            wavelength[j]=c.line_energy_eV>0.0?12398.4016/c.line_energy_eV:1.0e30;
+            mass[j]=std::max(c.atomic_mass_amu,1.0e-30);
+            auger_width[j]=std::max(c.natural_width_eV,0.0);
+            elum[j]=fline[li];
+            elum[nlines+j]=fline[line_capacity+li];
         }
+        std::array<double,16> profile_stats{};
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> profile_error{};
+        const int prc=xstar_emissivity_build_binemis_profile(
+            static_cast<int>(continuum_capacity),20000,static_cast<int>(continuum_capacity),
+            static_cast<int>(nlines),static_cast<int>(nlines),1.0,input.temperature_k/1.0e4,
+            input.turbulent_velocity_km_s,input.radiation_energy_ev,dpthc.data(),elum.data(),
+            original.data(),input.radiation_flux,slot.data(),wavelength.data(),dtype.data(),mass.data(),
+            natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
+            profile_error.data(),profile_error.size());
+        if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
             output.spectrum[k] += cemab[k] + cemab[continuum_capacity + k]
-                + rccemis[k] + rccemis[continuum_capacity + k] + flinel[k];
+                + rccemis[k] + rccemis[continuum_capacity + k]
+                + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
             output.opacity[k] += opakcont[k];
         }
         stats.spectral_contributions += ss.contributions_committed;
@@ -1244,7 +1507,7 @@ struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 extern "C" {
 
 uint32_t xstar_fixed_state_engine_abi_version(void) { return XSTAR_FIXED_STATE_ENGINE_ABI_VERSION; }
-const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_family_phase1_v06484"; }
+const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_family_phase2_trajectory_v06485"; }
 uint32_t xstar_fixed_state_engine_feature_flags(void) {
     return XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
         XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL |

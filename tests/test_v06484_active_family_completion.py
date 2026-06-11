@@ -27,13 +27,14 @@ def test_coverage_promotes_phase1_families() -> None:
     assert result["active_lowerer_native_counts"] == {56: 20, 57: 5, 63: 2, 71: 3, 77: 4, 86: 6, 99: 1}
     assert result["recognized_but_not_active_lowered_counts"] == {}
     assert result["unsupported_physics_counts"] == {}
-    assert result["production_promotion_ready"] is True
+    assert result["active_record_completion_ready"] is True
+    assert result["production_promotion_ready"] is False
     assert PHASE1_TYPES <= ACTIVE_LOWERER_DATA_TYPES
 
 
 def test_phase1_fixture_uses_current_abi_and_all_new_opcodes() -> None:
     validation = validate_program_directory(PROGRAM)
-    assert PROGRAM_ABI == 60484
+    assert PROGRAM_ABI == 60485
     assert validation.program_id == "v06484_active_family_phase1_fixture"
     assert validation.records == 14
     assert PHASE1_TYPES <= set(validation.opcodes)
@@ -54,7 +55,7 @@ def test_native_phase1_families_and_visited_report(tmp_path: Path) -> None:
     for data_type in PHASE1_TYPES:
         assert visits[data_type] == 1
     summary = json.loads((tmp_path / "native_fixed_state_summary.json").read_text())
-    assert summary["schema_version"] == "0.6.48.4.1"
+    assert summary["schema_version"] == "0.6.48.5.1"
     assert summary["computed_from_raw_coefficients"] is True
     assert summary["python_callbacks"] == 0
 

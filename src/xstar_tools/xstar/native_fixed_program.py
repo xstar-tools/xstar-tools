@@ -1,10 +1,10 @@
-"""Active-ATDB compiler for the genuine v0.6.48.4.1 native fixed-state engine.
+"""Active-ATDB compiler for the genuine v0.6.48.5.1 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It
 never stores evaluated rates, populations, terminal states, trajectories, or
 science products, so the resulting program cannot act as a replay cache.
 
-v0.6.48.4.1 distinguishes three classes that older coverage reports conflated:
+v0.6.48.5.1 distinguishes three classes that older coverage reports conflated:
 
 * topology metadata (rate type 13; usually data type 6 or 83),
 * executable families accepted by the active lowerer,
@@ -20,12 +20,34 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
-PROGRAM_ABI = 60484
+PROGRAM_ABI = 60485
+QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {1: 1.0, 2: 0.1, 12: 3.5e-5}
+
+
+def _parse_abundance_spec(text: str) -> dict[int, float]:
+    result: dict[int, float] = {}
+    for item in str(text).split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise ValueError(f"invalid abundance entry {item!r}; expected Z:value")
+        z_text, value_text = item.split(":", 1)
+        z = _as_int(z_text.strip(), "abundance element Z")
+        value = _as_float(value_text.strip(), f"abundance Z={z}")
+        if z <= 0 or value < 0.0:
+            raise ValueError("element abundances require positive Z and nonnegative values")
+        result[z] = value
+    if not result:
+        raise ValueError("at least one element abundance is required")
+    return result
 SIMPLE_DATA_TYPES = {1, 2, 3, 7, 8, 20}
-ENGINE_RECOGNIZED_OPCODES = {1, 49, 50, 51, 53, 54, 56, 57, 63, 69, 71, 74, 77, 86, 88, 99}
-# Families whose raw ATDB representation is lowered by this release.  Phase 1 activates the already-native 63/99 paths and adds the largest
-# remaining H/He/Mg families 54, 57, 71/77, and 86.
-ACTIVE_LOWERER_DATA_TYPES = {49, 50, 51, 53, 54, 56, 57, 63, 69, 71, 74, 77, 86, 88, 99}
+ENGINE_RECOGNIZED_OPCODES = {1, 2, 9, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99}
+# v0.6.48.5.1 completes every executable data type reached by the qualified
+# H/He/Mg parent-owned traversal.  Types 1/30/38/39 are executable scalar
+# ion-rate families and are serialized with matrix_enabled=0 rather than being
+# mislabeled as topology metadata.
+ACTIVE_LOWERER_DATA_TYPES = {1, 2, 9, 30, 38, 39, 49, 50, 51, 53, 54, 56, 57, 60, 62, 63, 68, 69, 71, 72, 73, 74, 76, 77, 86, 88, 95, 99}
 TOPOLOGY_RATE_TYPES = {11, 12, 13}
 FORBIDDEN_KEYS = {
     "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
@@ -59,6 +81,7 @@ class ActiveLoweringResult:
     unsupported_records: int
     native_data_types: tuple[int, ...]
     unsupported_data_types: tuple[int, ...]
+    active_record_completion_ready: bool
     production_promotion_ready: bool
     atdb_fingerprint_sha256: str
 
@@ -133,6 +156,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
         element_table.append({
             "element_index": element_index,
             "element_z": _as_int(element["element_z"], "element_z"),
+            "abundance": _as_float(element.get("abundance", 1.0), "abundance"),
             "n_rows": len(rows),
             "n_superlevels": _as_int(element.get("n_superlevels", len(rows)), "n_superlevels"),
             "n_ions": _as_int(element["n_ions"], "n_ions"),
@@ -189,6 +213,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
             "density_scale": _as_float(record.get("density_scale", 1.0), "density_scale"),
             "line_energy_ev": _as_float(record.get("line_energy_ev", 0.0), "line_energy_ev"),
             "atomic_mass_amu": _as_float(record.get("atomic_mass_amu", 1.0), "atomic_mass_amu"),
+            "matrix_enabled": 1 if bool(record.get("matrix_enabled", True)) else 0,
         })
 
     (out / "manifest.txt").write_text(
@@ -204,7 +229,7 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     (out / "ints.txt").write_text("".join(f"{value}\n" for value in ints))
     validation = validate_program_directory(out)
     (out / "coverage.json").write_text(json.dumps({
-        "schema_version": "0.6.48.4.1",
+        "schema_version": "0.6.48.5.1",
         "program_id": validation.program_id,
         "native_opcodes": list(validation.opcodes),
         "unsupported_opcodes": [],
@@ -232,7 +257,12 @@ def validate_program_directory(directory: str | Path) -> ProgramValidation:
         raise ValueError("program ABI mismatch")
     if manifest.get("contains_evaluated_results") != "false":
         raise ValueError("program must explicitly exclude evaluated results")
-    elements = sum(1 for _ in csv.DictReader((root / "elements.csv").open()))
+    element_rows = list(csv.DictReader((root / "elements.csv").open()))
+    elements = len(element_rows)
+    for element in element_rows:
+        abundance = _as_float(element.get("abundance", 1.0), "abundance")
+        if abundance < 0.0:
+            raise ValueError("element abundance must be nonnegative")
     rows = sum(1 for _ in csv.DictReader((root / "rows.csv").open()))
     record_count = 0
     opcodes: set[int] = set()
@@ -290,7 +320,7 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     total = sum(data_type_counts.values())
     covered = category_counts.get("native_executable", 0) + category_counts.get("topology_metadata", 0)
     return {
-        "schema_version": "0.6.48.4.1",
+        "schema_version": "0.6.48.5.1",
         "active_element_z": list(active_elements),
         "records_scanned": total,
         "data_type_counts": dict(sorted(data_type_counts.items())),
@@ -301,7 +331,8 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
         "category_counts": dict(sorted(category_counts.items())),
         "nominal_record_coverage_fraction": (covered / total if total else 0.0),
         "nominal_record_coverage_percent": (100.0 * covered / total if total else 0.0),
-        "production_promotion_ready": not recognized and not unsupported,
+        "active_record_completion_ready": not recognized and not unsupported,
+        "production_promotion_ready": False,
     }
 
 
@@ -518,9 +549,51 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
     payload_ints = list(raw_ints)
     lower_row = upper_row = 0
     line_energy = 0.0
+    matrix_enabled = True
     mass = ATOMIC_MASS_AMU.get(int(derived.ion_element_z[ion_index]), float(max(1, int(derived.ion_element_z[ion_index]) * 2)))
 
-    if dt == 50:
+    if dt == 1:
+        if len(raw_reals) < 2:
+            raise ValueError(f"type1 record {rec} has short payload")
+        payload_reals = list(raw_reals[:2])
+        payload_ints = []
+        matrix_enabled = False
+    elif dt == 2:
+        if len(raw_reals) < 4:
+            raise ValueError(f"type2 record {rec} has short payload")
+        lower_row = _compact_row_for_local(basis, ion_index, 1)
+        upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        payload_reals = list(raw_reals[:4])
+        payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 9:
+        if len(raw_reals) < 4:
+            raise ValueError(f"type9 record {rec} has short payload")
+        if len(raw_ints) > 1:
+            id1 = int(raw_ints[0])
+            id2 = int(block.nlev) + int(raw_ints[1]) - 1
+            lower_row = _compact_row_for_local(basis, ion_index, id1)
+            upper_row = _compact_row_for_idest(basis, block, id2)
+            payload_ints = [1]
+        else:
+            lower_row = _compact_row_for_local(basis, ion_index, 1)
+            upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+            payload_ints = [0]
+        payload_reals = list(raw_reals[:4])
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 30:
+        if not raw_ints:
+            raise ValueError(f"type30 record {rec} has no nmax integer")
+        payload_reals = []
+        payload_ints = [int(raw_ints[0])]
+        matrix_enabled = False
+    elif dt in {38, 39}:
+        if (dt == 38 and len(raw_reals) < 4) or (dt == 39 and len(raw_reals) < 2):
+            raise ValueError(f"type{dt} record {rec} has short payload")
+        payload_reals = list(raw_reals)
+        payload_ints = []
+        matrix_enabled = False
+    elif dt == 50:
         if len(raw_ints) < 2 or len(raw_reals) < 3:
             raise ValueError(f"type50 record {rec} has short payload")
         lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
@@ -569,6 +642,21 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         payload_reals = []
         payload_ints = [i57, principal_n]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt in {60, 62}:
+        minimum_reals = 3 if dt == 60 else 6
+        if len(raw_ints) < 2 or len(raw_reals) < minimum_reals:
+            raise ValueError(f"type{dt} record {rec} has short payload")
+        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
+        payload_reals = list(raw_reals)
+        payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 68:
+        if len(raw_ints) < 3 or len(raw_reals) < 3:
+            raise ValueError(f"type68 record {rec} has short payload")
+        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
+        payload_reals = list(raw_reals[:3])
+        payload_ints = [int(raw_ints[2])]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 63:
         if len(raw_ints) < 4:
             raise ValueError(f"type63 record {rec} has short integer payload")
@@ -593,6 +681,13 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 76:
+        if len(raw_ints) < 2 or len(raw_reals) < 1:
+            raise ValueError(f"type76 record {rec} has short payload")
+        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
+        payload_reals = [max(float(raw_reals[0]), 0.0)]
+        payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt in {71, 77}:
         if len(raw_ints) < 4:
             raise ValueError(f"type{dt} record {rec} has short integer payload")
@@ -601,6 +696,22 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         upper_row = _compact_row_for_local(basis, ion_index, b)
         payload_reals = list(raw_reals)
         payload_ints = list(raw_ints)
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 72:
+        if len(raw_ints) < 4 or len(raw_reals) < 2:
+            raise ValueError(f"type72 record {rec} has short payload")
+        lower_row, upper_row = local_pair(int(raw_ints[-4]), int(raw_ints[-3]))
+        payload_reals = list(raw_reals)
+        ground_row = _compact_row_for_local(basis, ion_index, 1)
+        parent_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        payload_ints = [ground_row, parent_row]
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 73:
+        if len(raw_ints) < 3 or len(raw_reals) < 7:
+            raise ValueError(f"type73 record {rec} has short payload")
+        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
+        payload_reals = list(raw_reals[:7])
+        payload_ints = [int(raw_ints[2])]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 74:
         if len(raw_ints) < 2:
@@ -626,6 +737,20 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
         payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_ints = []
+        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 95:
+        if len(raw_reals) < 6 or len(raw_ints) < 2:
+            raise ValueError(f"type95 record {rec} has short payload")
+        if rt == 5:
+            id1 = int(raw_ints[0])
+            id2 = int(block.nlev) - 1 + int(raw_ints[1]) if len(raw_ints) >= 3 else int(block.nlev)
+            lower_row = _compact_row_for_local(basis, ion_index, id1)
+            upper_row = _compact_row_for_idest(basis, block, id2)
+        else:
+            lower_row = upper_row = _compact_row_for_local(basis, ion_index, 1)
+        payload_reals = list(raw_reals)
+        parent_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        payload_ints = list(raw_ints) + [parent_row]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt == 99:
         if len(raw_ints) < 4 or len(raw_reals) < 8:
@@ -654,6 +779,7 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         "density_scale": 1.0,
         "line_energy_ev": float(line_energy),
         "atomic_mass_amu": float(mass),
+        "matrix_enabled": 1 if matrix_enabled else 0,
         "reals": payload_reals,
         "ints": payload_ints,
     }
@@ -664,6 +790,7 @@ def lower_active_atdb(
     output_dir: str | Path,
     *,
     element_z: Sequence[int] = (1, 2, 12),
+    abundances_by_z: Mapping[int, float] | None = None,
     allow_partial: bool = False,
 ) -> ActiveLoweringResult:
     """Lower active H/He/Mg topology and supported raw records into a C++ program.
@@ -677,6 +804,15 @@ def lower_active_atdb(
     from .atomic_database import load_atomic_database_state
 
     active = tuple(sorted({int(z) for z in element_z if int(z) > 0}))
+    abundances = dict(QUALIFIED_XDEF_ABUNDANCES_BY_Z if abundances_by_z is None else abundances_by_z)
+    missing_abundances = [z for z in active if z not in abundances]
+    if missing_abundances:
+        raise ValueError(f"missing explicit elemental abundances for Z={missing_abundances}")
+    for z in active:
+        abundance = _as_float(abundances[z], f"abundance Z={z}")
+        if abundance < 0.0:
+            raise ValueError(f"element abundance must be nonnegative for Z={z}")
+        abundances[z] = abundance
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     built = load_atomic_database_state(atdb_path, validate=True)
@@ -710,6 +846,7 @@ def lower_active_atdb(
             count = len(records_by_z.get(z, []))
             if count <= 0:
                 raise RuntimeError(f"no lowerable executable records for active Z={z}")
+            element["abundance"] = abundances[z]
             element["record_head"] = record_head
             element["record_count"] = count
             record_head += count
@@ -732,7 +869,7 @@ def lower_active_atdb(
         record_fields = [
             "source_position", "record", "next_index", "element_index", "opcode", "data_type", "rate_type",
             "ion_index", "ion_stage", "lower_row", "upper_row", "real_offset", "real_count", "int_offset",
-            "int_count", "density_scale", "line_energy_ev", "atomic_mass_amu",
+            "int_count", "density_scale", "line_energy_ev", "atomic_mass_amu", "matrix_enabled",
         ]
         real_offset = int_offset = global_index = 0
         native_types: set[int] = set()
@@ -766,18 +903,22 @@ def lower_active_atdb(
                     int_offset += len(payload_ints)
                     global_index += 1
 
-        program_id = f"v064841_active_atdb_{fingerprint[:16]}"
-        promotion_ready = not unsupported_rows
+        program_id = f"v064851_active_atdb_{fingerprint[:16]}"
+        active_record_completion_ready = not unsupported_rows
+        promotion_ready = False
         manifest_lines = [
             f"program_abi={PROGRAM_ABI}", f"program_id={program_id}",
             "program_kind=active_atdb_raw_coefficients", "contains_evaluated_results=false",
             "active_atdb_lowered=true", f"active_element_z={','.join(str(z) for z in active)}",
+            "element_abundances=" + ",".join(f"{z}:{abundances[z]:.17g}" for z in active),
+            "electron_accounting=abundance_weighted_with_fully_ionized_stage",
             f"atdb_fingerprint_sha256={fingerprint}", f"element_count={len(element_table)}",
             f"topology_record_count={coverage['category_counts'].get('topology_metadata', 0)}",
             f"compact_row_count={len(row_table)}", f"record_count={global_index}",
             f"unsupported_record_count={len(unsupported_rows)}",
             f"partial_lowering={'true' if unsupported_rows else 'false'}",
-            f"production_promotion_ready={'true' if promotion_ready else 'false'}",
+            f"active_record_completion_ready={'true' if active_record_completion_ready else 'false'}",
+            "production_promotion_ready=false",
         ]
         (out / "manifest.txt").write_text("\n".join(manifest_lines) + "\n")
         validation = validate_program_directory(out)
@@ -790,6 +931,7 @@ def lower_active_atdb(
             executable_records=global_index, unsupported_records=len(unsupported_rows),
             native_data_types=tuple(sorted(native_types)),
             unsupported_data_types=tuple(sorted({int(row["data_type"]) for row in unsupported_rows})),
+            active_record_completion_ready=active_record_completion_ready,
             production_promotion_ready=promotion_ready,
             atdb_fingerprint_sha256=fingerprint,
         )
@@ -815,6 +957,7 @@ def main(argv: list[str] | None = None) -> int:
     lower_p.add_argument("atdb")
     lower_p.add_argument("output_dir")
     lower_p.add_argument("--elements", default="1,2,12")
+    lower_p.add_argument("--abundances", default="1:1.0,2:0.1,12:3.5e-5")
     lower_p.add_argument("--allow-partial", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "compile":
@@ -830,7 +973,11 @@ def main(argv: list[str] | None = None) -> int:
                 Path(args.output).write_text(text)
             print(text, end="")
             return 0
-        result = lower_active_atdb(args.atdb, args.output_dir, element_z=elements, allow_partial=bool(args.allow_partial))
+        result = lower_active_atdb(
+            args.atdb, args.output_dir, element_z=elements,
+            abundances_by_z=_parse_abundance_spec(args.abundances),
+            allow_partial=bool(args.allow_partial),
+        )
     print(json.dumps(result.__dict__ if hasattr(result, "__dict__") else result, indent=2, default=list, sort_keys=True))
     return 0
 

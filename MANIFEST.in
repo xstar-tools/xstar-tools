@@ -406,3 +406,23 @@ include run_v04841_atdb_coverage.sh
 include run_v04841_active_atdb_lower.sh
 include run_v04841_xstar_native_fixed_state.sh
 include run_v04841_xstar_tools_python_fallback.sh
+
+recursive-include src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture *
+include src/xstar_tools/benchmarks/specs/v06485_active_family_phase2_fixture.json
+include V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md
+include xstar_tools_v0.6.48.5_handoff.md
+include check_v0485_active_family_phase2.py
+include run_v0485_atdb_coverage.sh
+include run_v0485_active_atdb_lower.sh
+include run_v0485_xstar_native_fixed_state.sh
+include run_v0485_host_trajectory.sh
+include run_v0485_xstar_tools_python_fallback.sh
+include tests/test_v06485_active_family_phase2.py
+include V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md
+include xstar_tools_v0.6.48.5.1_handoff.md
+include check_v04851_elcter_controller_fits.py
+include run_v04851_active_atdb_lower.sh
+include run_v04851_reference_trajectory.sh
+include run_v04851_host_trajectory.sh
+include tests/test_v064851_elcter_abundance.py
+include v04851_elcter_controller_fits_acceptance.log

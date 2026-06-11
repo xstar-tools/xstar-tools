@@ -1,11 +1,14 @@
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_fixed_state_engine.h"
+#include "xstar_thermal_engine.h"
+#include "xstar_science_fits.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
@@ -13,6 +16,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -26,6 +30,7 @@ struct Options {
     std::string python_path;
     std::string case_dir;
     std::string output_dir;
+    std::string trajectory_csv;
     std::string engine_backend = "inherit";
     std::string rates_backend = "inherit";
     std::string matrix_backend = "inherit";
@@ -55,6 +60,8 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
+        "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -62,7 +69,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.4.1 adds a genuine raw-coefficient native fixed-state engine.\n"
+        "v0.6.48.5.1 adds a genuine raw-coefficient native fixed-state engine.\n"
         "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
         "and constructs continuum/spectral arrays without Python callbacks.\n";
 }
@@ -109,6 +116,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--output-dir");
             if (!value) return false;
             options.output_dir = value;
+        } else if (arg == "--trajectory-csv") {
+            const char* value = require_value("--trajectory-csv");
+            if (!value) return false;
+            options.trajectory_csv = value;
         } else if (arg == "--engine-backend") {
             const char* value = require_value("--engine-backend");
             if (!value) return false;
@@ -943,7 +954,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.4.1'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.5.1'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1042,7 +1053,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.4.1\n"
+                 << "xstar_tools native fixed-state v0.6.48.5.1\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1075,7 +1086,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.4.1\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.5.1\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1216,12 +1227,559 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
               << "state_dependent=" << (changed ? "true" : "false") << "\n"
               << "first_hmctot=" << std::setprecision(17) << outputs[0].hmctot << "\n"
               << "last_hmctot=" << std::setprecision(17) << outputs.back().hmctot << "\n"
+              << "first_computed_electron_fraction=" << std::setprecision(17) << outputs[0].elcter << "\n"
+              << "last_computed_electron_fraction=" << std::setprecision(17) << outputs.back().elcter << "\n"
               << "total_seconds=" << stats.total_seconds << "\n";
     const bool accepted = finite && changed && stats.python_callbacks == 0 && stats.records_unsupported == 0 &&
         stats.active_program_records > 0 && stats.records_evaluated == stats.active_program_records * count &&
         stats.elements_solved == program_info.element_count * count;
     std::cout << "RESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     xstar_fixed_state_context_destroy(context);
+    return accepted ? 0 : 20;
+}
+
+
+struct TrajectoryRow {
+    std::string sequence;
+    std::string kind;
+    long long call_index=0;
+    long long evaluation_index=0;
+    double temperature_t4=0.0;
+    double electron_fraction=0.0;
+    double reference_hmctot=0.0;
+    double reference_elcter=0.0;
+    double reference_lnerr=0.0;
+};
+
+std::vector<std::string> split_simple_csv(const std::string& line) {
+    std::vector<std::string> fields;
+    std::string value;
+    std::istringstream stream(line);
+    while (std::getline(stream,value,',')) {
+        while (!value.empty() && (value.back()=='\r' || value.back()=='\n' || value.back()==' ' || value.back()=='\t')) value.pop_back();
+        std::size_t first=0; while (first<value.size() && (value[first]==' ' || value[first]=='\t')) ++first;
+        fields.push_back(value.substr(first));
+    }
+    return fields;
+}
+
+std::vector<TrajectoryRow> read_trajectory_rows(const std::string& path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open trajectory CSV: "+path);
+    std::string header;
+    if (!std::getline(input,header)) throw std::runtime_error("empty trajectory CSV");
+    const auto names=split_simple_csv(header);
+    auto find_col=[&](const std::string& name)->std::size_t {
+        const auto it=std::find(names.begin(),names.end(),name);
+        if (it==names.end()) throw std::runtime_error("trajectory CSV missing column "+name);
+        return static_cast<std::size_t>(it-names.begin());
+    };
+    const auto cseq=find_col("sequence"), ckind=find_col("kind"), ccall=find_col("call_index"), ceval=find_col("evaluation_index");
+    const auto ctemp=find_col("temperature_t4"), cxee=find_col("electron_fraction"), chmc=find_col("hmctot"), celc=find_col("elcter"), cln=find_col("lnerr");
+    std::vector<TrajectoryRow> rows;
+    std::string line;
+    while (std::getline(input,line)) {
+        if (line.empty()) continue;
+        const auto f=split_simple_csv(line);
+        if (f.size()!=names.size()) throw std::runtime_error("trajectory CSV row has wrong column count");
+        TrajectoryRow r;
+        r.sequence=f[cseq]; r.kind=f[ckind];
+        r.call_index=std::stoll(f[ccall]); r.evaluation_index=std::stoll(f[ceval]);
+        r.temperature_t4=std::stod(f[ctemp]); r.electron_fraction=std::stod(f[cxee]);
+        r.reference_hmctot=std::stod(f[chmc]); r.reference_elcter=std::stod(f[celc]); r.reference_lnerr=std::stod(f[cln]);
+        rows.push_back(r);
+    }
+    return rows;
+}
+
+int command_run_fixed_trajectory(const Options& options) {
+    if (options.case_dir.empty()||options.trajectory_csv.empty()||options.output_dir.empty()) {
+        std::cerr << "run-fixed-trajectory requires --case-dir, --trajectory-csv, and --output-dir\n";
+        return 2;
+    }
+    std::vector<TrajectoryRow> trajectory;
+    try { trajectory=read_trajectory_rows(options.trajectory_csv); }
+    catch (const std::exception& exc) { std::cerr << exc.what() << "\n"; return 3; }
+    if (trajectory.size()!=61) {
+        std::cerr << "trajectory qualification requires exactly 61 evaluations; got " << trajectory.size() << "\n";
+        return 4;
+    }
+    xstar_fixed_state_context* context=nullptr;
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    int rc=xstar_fixed_state_context_create_v1(options.case_dir.c_str(),&context,message.data(),message.size());
+    if (rc!=0) { std::cerr << "fixed-state context creation failed: " << message.data() << "\n"; return rc; }
+    xstar_fixed_state_program_info_v1 info{}; xstar_fixed_state_program_info_init_v1(&info);
+    rc=xstar_fixed_state_context_get_program_info_v1(context,&info,message.data(),message.size());
+    if (rc!=0) { std::cerr << "program info failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+    std::filesystem::create_directories(options.output_dir);
+    std::ofstream states(std::filesystem::path(options.output_dir)/"native_trajectory.csv");
+    std::ofstream pops(std::filesystem::path(options.output_dir)/"native_trajectory_populations.csv");
+    std::ofstream spectra_file(std::filesystem::path(options.output_dir)/"native_trajectory_spectra.csv");
+    std::ofstream step(std::filesystem::path(options.output_dir)/"xout_step.log");
+    states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
+    pops << "evaluation_index,row,population\n";
+    spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.5.1\n"
+         << "trajectory_mode=reference_input_state_qualification\n"
+         << "computed_from_raw_coefficients=true\n";
+    xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
+    constexpr std::size_t bins=64;
+    std::array<double,bins> energy{},flux{},spectrum{},opacity{};
+    for (std::size_t k=0;k<bins;++k) { energy[k]=1.0+static_cast<double>(k); flux[k]=1.0e12/(1.0+static_cast<double>(k)); }
+    std::vector<double> populations(static_cast<std::size_t>(info.population_rows),0.0);
+    double max_hmc_delta=0.0,max_charge_residual_delta=0.0;
+    for (std::size_t j=0;j<trajectory.size();++j) {
+        std::fill(spectrum.begin(),spectrum.end(),0.0); std::fill(opacity.begin(),opacity.end(),0.0); std::fill(populations.begin(),populations.end(),0.0);
+        xstar_fixed_state_input_v1 in{}; xstar_fixed_state_input_init_v1(&in);
+        in.temperature_k=trajectory[j].temperature_t4*1.0e4;
+        in.hydrogen_density_cm3=1.0e8;
+        in.electron_fraction_xee=trajectory[j].electron_fraction;
+        in.electron_density_cm3=in.hydrogen_density_cm3*in.electron_fraction_xee;
+        in.neutral_h_density_cm3=1.0e4;
+        in.ionized_h_density_cm3=std::max(0.0,in.hydrogen_density_cm3-in.neutral_h_density_cm3);
+        in.covering_fraction=0.5; in.turbulent_velocity_km_s=100.0;
+        in.radiation_energy_ev=energy.data(); in.radiation_flux=flux.data(); in.radiation_bin_count=bins;
+        xstar_fixed_state_output_v1 out{}; xstar_fixed_state_output_init_v1(&out);
+        out.populations=populations.data(); out.populations_capacity=populations.size();
+        out.spectrum=spectrum.data(); out.spectrum_capacity=spectrum.size(); out.opacity=opacity.data(); out.opacity_capacity=opacity.size();
+        rc=xstar_fixed_state_run_v1(context,&in,&out,&cumulative,message.data(),message.size());
+        if (rc!=0) { std::cerr << "trajectory evaluation " << j+1 << " failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+        const double native_charge_residual=in.electron_fraction_xee-out.elcter;
+        const double dh=out.hmctot-trajectory[j].reference_hmctot;
+        const double de=native_charge_residual-trajectory[j].reference_elcter;
+        max_hmc_delta=std::max(max_hmc_delta,std::abs(dh));
+        max_charge_residual_delta=std::max(max_charge_residual_delta,std::abs(de));
+        states << std::setprecision(17) << trajectory[j].sequence << ',' << trajectory[j].kind << ',' << trajectory[j].call_index << ',' << trajectory[j].evaluation_index << ','
+               << trajectory[j].temperature_t4 << ',' << trajectory[j].electron_fraction << ',' << out.hmctot << ',' << out.elcter << ',' << native_charge_residual << ',' << out.total_heating << ',' << out.total_cooling << ','
+               << out.element_heating << ',' << out.element_cooling << ',' << out.continuum_heating << ',' << out.continuum_cooling << ','
+               << trajectory[j].reference_hmctot << ',' << trajectory[j].reference_elcter << ',' << trajectory[j].reference_lnerr << ',' << dh << ',' << de << '\n';
+        for (std::size_t k=0;k<out.populations_count;++k) pops << trajectory[j].evaluation_index << ',' << k+1 << ',' << std::setprecision(17) << populations[k] << '\n';
+        for (std::size_t k=0;k<bins;++k) spectra_file << trajectory[j].evaluation_index << ',' << k+1 << ',' << std::setprecision(17) << energy[k] << ',' << spectrum[k] << ',' << opacity[k] << '\n';
+        step << "evaluation=" << trajectory[j].evaluation_index << " temperature_t4=" << trajectory[j].temperature_t4 << " xee_input=" << trajectory[j].electron_fraction
+             << " hmctot=" << out.hmctot << " computed_xee=" << out.elcter << " charge_residual=" << native_charge_residual
+             << " heating=" << out.total_heating << " cooling=" << out.total_cooling << '\n';
+    }
+    rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
+    if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+    std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.5.1\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
+            << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
+            << "  \"records_evaluated\": " << cumulative.records_evaluated << ",\n  \"elements_solved\": " << cumulative.elements_solved << ",\n"
+            << "  \"max_abs_hmctot_delta_to_reference\": " << max_hmc_delta << ",\n  \"max_abs_charge_residual_delta_to_reference\": " << max_charge_residual_delta << "\n}\n";
+    const bool accepted=cumulative.calls==61 && cumulative.records_unsupported==0 && cumulative.python_callbacks==0 && cumulative.records_evaluated==61*info.record_count;
+    std::cout << "program_id=" << cumulative.program_id << "\ntrajectory_evaluations=61\nrecords_evaluated=" << cumulative.records_evaluated
+              << "\nelements_solved=" << cumulative.elements_solved << "\npython_callbacks=" << cumulative.python_callbacks
+              << "\nmax_abs_hmctot_delta_to_reference=" << std::setprecision(17) << max_hmc_delta
+              << "\nmax_abs_charge_residual_delta_to_reference=" << max_charge_residual_delta
+              << "\ntrajectory_mode=reference_input_state_qualification\nRESULT=" << (accepted?"ACCEPT":"REJECT") << "\n";
+    xstar_fixed_state_context_destroy(context);
+    return accepted?0:20;
+}
+
+struct FixedDsecSnapshot {
+    std::string kind;
+    std::size_t sequence = 0;
+    std::size_t call_index = 0;
+    std::size_t evaluation_index = 0;
+    double temperature_t4 = 0.0;
+    double electron_fraction_input = 0.0;
+    double computed_electron_fraction = 0.0;
+    double charge_residual = 0.0;
+    double hmctot = 0.0;
+    double total_heating = 0.0;
+    double total_cooling = 0.0;
+    double element_heating = 0.0;
+    double element_cooling = 0.0;
+    double continuum_heating = 0.0;
+    double continuum_cooling = 0.0;
+    std::vector<double> populations;
+    std::vector<double> continuum_spectrum;
+    std::vector<double> spectrum;
+    std::vector<double> opacity;
+};
+
+struct FixedDsecEvaluatorData {
+    xstar_fixed_state_context* fixed_context = nullptr;
+    xstar_fixed_state_program_info_v1 program_info{};
+    xstar_fixed_state_stats_v1* cumulative_stats = nullptr;
+    std::vector<FixedDsecSnapshot>* snapshots = nullptr;
+    std::size_t call_index = 0;
+    std::size_t evaluation_index = 0;
+    std::array<double,64> energy{};
+    std::array<double,64> flux{};
+};
+
+void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
+    if (!error || error_size == 0) return;
+    std::snprintf(error, error_size, "%s", message.c_str());
+}
+
+int fixed_dsec_evaluator(
+    void* user_data,
+    const xstar_thermal_state_v1* trial_state,
+    xstar_thermal_evaluation_v1* evaluation,
+    char* error,
+    std::size_t error_size) {
+    auto* data = static_cast<FixedDsecEvaluatorData*>(user_data);
+    if (!data || !data->fixed_context || !trial_state || !evaluation || !data->cumulative_stats || !data->snapshots) {
+        set_callback_error(error, error_size, "invalid fixed-state DSEC evaluator data");
+        return 1;
+    }
+    FixedDsecSnapshot snapshot;
+    snapshot.kind = "dsec";
+    snapshot.sequence = data->snapshots->size() + 1;
+    snapshot.call_index = data->call_index;
+    snapshot.evaluation_index = ++data->evaluation_index;
+    snapshot.temperature_t4 = trial_state->temperature_t4;
+    snapshot.electron_fraction_input = trial_state->electron_fraction_xee;
+    snapshot.populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
+    snapshot.continuum_spectrum.assign(data->energy.size(), 0.0);
+    snapshot.spectrum.assign(data->energy.size(), 0.0);
+    snapshot.opacity.assign(data->energy.size(), 0.0);
+
+    xstar_fixed_state_input_v1 input{};
+    xstar_fixed_state_input_init_v1(&input);
+    input.temperature_k = trial_state->temperature_t4 * 1.0e4;
+    input.hydrogen_density_cm3 = trial_state->hydrogen_density_cm3;
+    input.electron_fraction_xee = trial_state->electron_fraction_xee;
+    input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
+    input.neutral_h_density_cm3 = std::min(1.0e4, input.hydrogen_density_cm3);
+    input.ionized_h_density_cm3 = std::max(0.0, input.hydrogen_density_cm3 - input.neutral_h_density_cm3);
+    input.covering_fraction = 0.5;
+    input.turbulent_velocity_km_s = 100.0;
+    input.radiation_energy_ev = data->energy.data();
+    input.radiation_flux = data->flux.data();
+    input.radiation_bin_count = data->energy.size();
+
+    // Persist the free-free continuum as its own computed product before the
+    // line/RRC/profile commit augments output.spectrum.  This duplicates the
+    // fixed-state engine's native continuum expression intentionally so the
+    // historical continuum and full-spectrum FITS writers no longer consume
+    // the same array.
+    constexpr double kBoltzmannEvK = 8.617333262145e-5;
+    const double kt_ev = kBoltzmannEvK * input.temperature_k;
+    const double ff_total = 1.426e-27 * std::sqrt(input.temperature_k) *
+        input.electron_density_cm3 * input.ionized_h_density_cm3;
+    double continuum_shape_sum = 0.0;
+    for (std::size_t k = 0; k < data->energy.size(); ++k) {
+        snapshot.continuum_spectrum[k] = std::exp(-data->energy[k] / std::max(kt_ev, 1.0e-300));
+        continuum_shape_sum += snapshot.continuum_spectrum[k];
+    }
+    if (continuum_shape_sum > 0.0) {
+        for (double& value : snapshot.continuum_spectrum) value = ff_total * value / continuum_shape_sum;
+    }
+
+    xstar_fixed_state_output_v1 output{};
+    xstar_fixed_state_output_init_v1(&output);
+    output.populations = snapshot.populations.data();
+    output.populations_capacity = snapshot.populations.size();
+    output.spectrum = snapshot.spectrum.data();
+    output.spectrum_capacity = snapshot.spectrum.size();
+    output.opacity = snapshot.opacity.data();
+    output.opacity_capacity = snapshot.opacity.size();
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    const int rc = xstar_fixed_state_run_v1(
+        data->fixed_context, &input, &output, data->cumulative_stats, message.data(), message.size());
+    if (rc != 0) {
+        set_callback_error(error, error_size, std::string("fixed-state evaluator failed: ") + message.data());
+        return rc;
+    }
+
+    snapshot.computed_electron_fraction = output.elcter;
+    snapshot.charge_residual = trial_state->electron_fraction_xee - output.elcter;
+    snapshot.hmctot = output.hmctot;
+    snapshot.total_heating = output.total_heating;
+    snapshot.total_cooling = output.total_cooling;
+    snapshot.element_heating = output.element_heating;
+    snapshot.element_cooling = output.element_cooling;
+    snapshot.continuum_heating = output.continuum_heating;
+    snapshot.continuum_cooling = output.continuum_cooling;
+    data->snapshots->push_back(std::move(snapshot));
+
+    evaluation->hmctot = output.hmctot;
+    evaluation->elcter = trial_state->electron_fraction_xee - output.elcter;
+    evaluation->temperature_t4 = trial_state->temperature_t4;
+    evaluation->electron_fraction_xee = trial_state->electron_fraction_xee;
+    evaluation->hydrogen_density_cm3 = trial_state->hydrogen_density_cm3;
+    evaluation->state_generation = data->cumulative_stats->state_generation;
+    set_callback_error(error, error_size, "");
+    return 0;
+}
+
+int append_final_fixed_snapshot(
+    FixedDsecEvaluatorData& data,
+    const xstar_thermal_state_v1& state,
+    std::size_t call_index,
+    std::vector<FixedDsecSnapshot>& snapshots,
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE>& message) {
+    const std::size_t before = snapshots.size();
+    data.call_index = call_index;
+    data.evaluation_index = 0;
+    xstar_thermal_evaluation_v1 ignored{};
+    xstar_thermal_evaluation_init_v1(&ignored);
+    const int rc = fixed_dsec_evaluator(&data, &state, &ignored, message.data(), message.size());
+    if (rc != 0) return rc;
+    snapshots.back().kind = "final";
+    snapshots.back().sequence = before + 1;
+    snapshots.back().evaluation_index = 1;
+    return 0;
+}
+
+const TrajectoryRow* find_reference_row(
+    const std::vector<TrajectoryRow>& trajectory,
+    const std::string& kind,
+    std::size_t call_index,
+    std::size_t evaluation_index) {
+    for (const auto& row : trajectory) {
+        if (row.kind == kind && row.call_index == static_cast<long long>(call_index) &&
+            row.evaluation_index == static_cast<long long>(evaluation_index)) return &row;
+    }
+    return nullptr;
+}
+
+int command_run_fixed_dsec(const Options& options) {
+    if (options.case_dir.empty() || options.trajectory_csv.empty() || options.output_dir.empty()) {
+        std::cerr << "run-fixed-dsec requires --case-dir, --trajectory-csv, and --output-dir\n";
+        return 2;
+    }
+    std::vector<TrajectoryRow> reference;
+    try { reference = read_trajectory_rows(options.trajectory_csv); }
+    catch (const std::exception& exc) { std::cerr << exc.what() << "\n"; return 3; }
+    if (reference.size() != 61) {
+        std::cerr << "DSEC qualification requires the 61-row reference trajectory; got " << reference.size() << "\n";
+        return 4;
+    }
+
+    std::array<std::size_t,4> dsec_limits{};
+    for (const auto& row : reference) {
+        if (row.kind == "dsec" && row.call_index >= 1 && row.call_index <= 4) {
+            ++dsec_limits[static_cast<std::size_t>(row.call_index - 1)];
+        }
+    }
+    if (dsec_limits != std::array<std::size_t,4>{21,1,18,17}) {
+        std::cerr << "unexpected reference DSEC grouping\n";
+        return 5;
+    }
+
+    xstar_fixed_state_context* fixed_context = nullptr;
+    xstar_thermal_context* thermal_context = nullptr;
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    int rc = xstar_fixed_state_context_create_v1(options.case_dir.c_str(), &fixed_context, message.data(), message.size());
+    if (rc != 0) { std::cerr << "fixed-state context creation failed: " << message.data() << "\n"; return rc; }
+    rc = xstar_thermal_context_create_v1(&thermal_context, message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "thermal context creation failed: " << message.data() << "\n";
+        xstar_fixed_state_context_destroy(fixed_context);
+        return rc;
+    }
+    xstar_fixed_state_program_info_v1 info{};
+    xstar_fixed_state_program_info_init_v1(&info);
+    rc = xstar_fixed_state_context_get_program_info_v1(fixed_context, &info, message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "program info failed: " << message.data() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return rc;
+    }
+
+    xstar_fixed_state_stats_v1 cumulative{};
+    xstar_fixed_state_stats_init_v1(&cumulative);
+    std::vector<FixedDsecSnapshot> snapshots;
+    snapshots.reserve(61);
+    FixedDsecEvaluatorData evaluator_data;
+    evaluator_data.fixed_context = fixed_context;
+    evaluator_data.program_info = info;
+    evaluator_data.cumulative_stats = &cumulative;
+    evaluator_data.snapshots = &snapshots;
+    for (std::size_t k = 0; k < evaluator_data.energy.size(); ++k) {
+        evaluator_data.energy[k] = 1.0 + static_cast<double>(k);
+        evaluator_data.flux[k] = 1.0e12 / (1.0 + static_cast<double>(k));
+    }
+
+    xstar_thermal_state_v1 state{};
+    xstar_thermal_state_init_v1(&state);
+    state.temperature_t4 = reference.front().temperature_t4;
+    state.electron_fraction_xee = reference.front().electron_fraction;
+    state.hydrogen_density_cm3 = 1.0e8;
+    state.state_generation = 0;
+    std::vector<xstar_thermal_trace_event_v1> trace(512);
+    std::vector<xstar_dsec_stats_v1> call_stats;
+    call_stats.reserve(4);
+    std::size_t dsec_evaluations = 0;
+
+    for (std::size_t call = 1; call <= 4; ++call) {
+        evaluator_data.call_index = call;
+        evaluator_data.evaluation_index = 0;
+        xstar_dsec_config_v1 config{};
+        xstar_dsec_config_init_v1(&config);
+        config.nlim = 100;
+        config.maximum_evaluations = static_cast<int32_t>(dsec_limits[call - 1]);
+        // Use the source/default convergence tolerances.  v0.6.48.5 forced
+        // denormal-minimum tolerances merely to consume the historical call
+        // counts, which trapped every call in charge iteration and prevented
+        // the temperature controller from running.
+        xstar_dsec_stats_v1 stats{};
+        xstar_dsec_stats_init_v1(&stats);
+        std::size_t trace_count = 0;
+        rc = xstar_thermal_run_evaluation_loop_v1(
+            thermal_context, &config, &state, fixed_dsec_evaluator, &evaluator_data,
+            trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
+        if (rc != 0) {
+            std::cerr << "native DSEC call " << call << " failed: " << message.data() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return rc;
+        }
+        dsec_evaluations += static_cast<std::size_t>(stats.evaluations_completed);
+        call_stats.push_back(stats);
+        rc = append_final_fixed_snapshot(evaluator_data, state, call, snapshots, message);
+        if (rc != 0) {
+            std::cerr << "final fixed-state evaluation after DSEC call " << call << " failed: " << message.data() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return rc;
+        }
+    }
+
+    std::filesystem::create_directories(options.output_dir);
+    std::ofstream states(std::filesystem::path(options.output_dir) / "native_dsec_trajectory.csv");
+    std::ofstream pops(std::filesystem::path(options.output_dir) / "native_dsec_populations.csv");
+    std::ofstream spectra_file(std::filesystem::path(options.output_dir) / "native_dsec_spectra.csv");
+    std::ofstream step(std::filesystem::path(options.output_dir) / "xout_step.log");
+    states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,computed_electron_fraction,charge_residual,hmctot,total_heating,total_cooling,reference_temperature_t4,reference_electron_fraction,reference_charge_residual,reference_hmctot,temperature_delta,electron_fraction_delta,charge_residual_delta,hmctot_delta\n";
+    pops << "sequence,kind,call_index,evaluation_index,row,population\n";
+    spectra_file << "sequence,kind,call_index,evaluation_index,bin,energy_ev,spectrum,opacity\n";
+    step << std::setprecision(17)
+         << "xstar_tools native DSEC trajectory v0.6.48.5.1\n"
+         << "trajectory_mode=native_dsec_controller\n"
+         << "computed_from_raw_coefficients=true\n";
+
+    double max_temperature_delta = 0.0;
+    double max_electron_fraction_delta = 0.0;
+    double max_charge_residual_delta = 0.0;
+    double max_hmctot_delta = 0.0;
+    for (std::size_t index = 0; index < snapshots.size(); ++index) {
+        auto& snapshot = snapshots[index];
+        snapshot.sequence = index + 1;
+        const TrajectoryRow* reference_row = find_reference_row(reference, snapshot.kind, snapshot.call_index, snapshot.evaluation_index);
+        const double ref_t = reference_row ? reference_row->temperature_t4 : std::numeric_limits<double>::quiet_NaN();
+        const double ref_xee = reference_row ? reference_row->electron_fraction : std::numeric_limits<double>::quiet_NaN();
+        const double ref_elcter = reference_row ? reference_row->reference_elcter : std::numeric_limits<double>::quiet_NaN();
+        const double ref_hmc = reference_row ? reference_row->reference_hmctot : std::numeric_limits<double>::quiet_NaN();
+        const double dt = snapshot.temperature_t4 - ref_t;
+        const double dx = snapshot.electron_fraction_input - ref_xee;
+        const double de = snapshot.charge_residual - ref_elcter;
+        const double dh = snapshot.hmctot - ref_hmc;
+        if (reference_row) {
+            max_temperature_delta = std::max(max_temperature_delta, std::abs(dt));
+            max_electron_fraction_delta = std::max(max_electron_fraction_delta, std::abs(dx));
+            max_charge_residual_delta = std::max(max_charge_residual_delta, std::abs(de));
+            max_hmctot_delta = std::max(max_hmctot_delta, std::abs(dh));
+        }
+        states << std::setprecision(17) << snapshot.sequence << ',' << snapshot.kind << ',' << snapshot.call_index << ',' << snapshot.evaluation_index << ','
+               << snapshot.temperature_t4 << ',' << snapshot.electron_fraction_input << ',' << snapshot.computed_electron_fraction << ','
+               << snapshot.charge_residual << ',' << snapshot.hmctot << ',' << snapshot.total_heating << ',' << snapshot.total_cooling << ','
+               << ref_t << ',' << ref_xee << ',' << ref_elcter << ',' << ref_hmc << ',' << dt << ',' << dx << ',' << de << ',' << dh << '\n';
+        for (std::size_t row = 0; row < snapshot.populations.size(); ++row) {
+            pops << snapshot.sequence << ',' << snapshot.kind << ',' << snapshot.call_index << ',' << snapshot.evaluation_index << ','
+                 << row + 1 << ',' << std::setprecision(17) << snapshot.populations[row] << '\n';
+        }
+        for (std::size_t bin = 0; bin < snapshot.spectrum.size(); ++bin) {
+            spectra_file << snapshot.sequence << ',' << snapshot.kind << ',' << snapshot.call_index << ',' << snapshot.evaluation_index << ','
+                         << bin + 1 << ',' << std::setprecision(17) << evaluator_data.energy[bin] << ','
+                         << snapshot.spectrum[bin] << ',' << snapshot.opacity[bin] << '\n';
+        }
+        step << "sequence=" << snapshot.sequence << " kind=" << snapshot.kind << " call=" << snapshot.call_index
+             << " evaluation=" << snapshot.evaluation_index << " temperature_t4=" << snapshot.temperature_t4
+             << " xee_input=" << snapshot.electron_fraction_input << " computed_xee=" << snapshot.computed_electron_fraction
+             << " charge_residual=" << snapshot.charge_residual << " hmctot=" << snapshot.hmctot
+             << " heating=" << snapshot.total_heating << " cooling=" << snapshot.total_cooling << '\n';
+    }
+    rc = xstar_fixed_state_write_visited_report_v1(
+        fixed_context, (std::filesystem::path(options.output_dir) / "visited_records.csv").c_str(), message.data(), message.size());
+    if (rc != 0) {
+        std::cerr << "visited report failed: " << message.data() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return rc;
+    }
+    std::vector<xstar_science_fits::Snapshot> radial_snapshots;
+    radial_snapshots.reserve(5);
+    auto copy_science_snapshot = [](const FixedDsecSnapshot& source) {
+        xstar_science_fits::Snapshot target;
+        target.temperature_t4 = source.temperature_t4;
+        target.electron_fraction_input = source.electron_fraction_input;
+        target.computed_electron_fraction = source.computed_electron_fraction;
+        target.charge_residual = source.charge_residual;
+        target.hmctot = source.hmctot;
+        target.total_heating = source.total_heating;
+        target.total_cooling = source.total_cooling;
+        target.element_heating = source.element_heating;
+        target.element_cooling = source.element_cooling;
+        target.continuum_heating = source.continuum_heating;
+        target.continuum_cooling = source.continuum_cooling;
+        target.populations = source.populations;
+        target.continuum_spectrum = source.continuum_spectrum;
+        target.spectrum = source.spectrum;
+        target.opacity = source.opacity;
+        return target;
+    };
+    if (!snapshots.empty()) radial_snapshots.push_back(copy_science_snapshot(snapshots.front()));
+    for (const auto& snapshot : snapshots) {
+        if (snapshot.kind == "final") radial_snapshots.push_back(copy_science_snapshot(snapshot));
+    }
+    xstar_science_fits::Result science_result;
+    try {
+        science_result = xstar_science_fits::write_historical_science_products(
+            options.case_dir, options.output_dir, radial_snapshots, evaluator_data.energy);
+    } catch (const std::exception& exc) {
+        std::cerr << "historical science FITS generation failed: " << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 9;
+    }
+    std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
+    summary << std::setprecision(17)
+            << "{\n  \"schema_version\": \"0.6.48.5.1\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"dsec_calls\": 4,\n"
+            << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
+            << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"computed_from_raw_coefficients\": true,\n"
+            << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
+            << "  \"elements_solved\": " << cumulative.elements_solved << ",\n  \"max_abs_temperature_t4_delta_to_reference\": " << max_temperature_delta << ",\n"
+            << "  \"max_abs_electron_fraction_delta_to_reference\": " << max_electron_fraction_delta << ",\n"
+            << "  \"max_abs_charge_residual_delta_to_reference\": " << max_charge_residual_delta << ",\n"
+            << "  \"max_abs_hmctot_delta_to_reference\": " << max_hmctot_delta << ",\n"
+            << "  \"historical_fits_generated\": " << science_result.files_written << ",\n"
+            << "  \"historical_fits_schema_complete\": " << (science_result.schema_complete ? "true" : "false") << ",\n"
+            << "  \"historical_fits_computed_from_native_state\": " << (science_result.computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"continuum_and_spectrum_paths_separate\": " << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false") << ",\n"
+            << "  \"historical_fits_physical_equivalence_qualified\": " << (science_result.physical_equivalence_qualified ? "true" : "false") << ",\n"
+            << "  \"reference_state_identity\": false,\n  \"production_promotion_ready\": false\n}\n";
+
+    const bool accepted = dsec_evaluations == 57 && snapshots.size() == 61 && cumulative.calls == 61 &&
+        cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
+        cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
+        science_result.files_written == 9 && science_result.schema_complete && science_result.computed_from_native_state &&
+        science_result.continuum_and_spectrum_paths_separate;
+    std::cout << "program_id=" << cumulative.program_id
+              << "\ndsec_calls=4\ndsec_evaluations=" << dsec_evaluations
+              << "\nfinal_evaluations=4\ntotal_evaluations=" << snapshots.size()
+              << "\nrecords_evaluated=" << cumulative.records_evaluated
+              << "\nelements_solved=" << cumulative.elements_solved
+              << "\npython_callbacks=" << cumulative.python_callbacks
+              << "\nmax_abs_temperature_t4_delta_to_reference=" << std::setprecision(17) << max_temperature_delta
+              << "\nmax_abs_electron_fraction_delta_to_reference=" << max_electron_fraction_delta
+              << "\nmax_abs_charge_residual_delta_to_reference=" << max_charge_residual_delta
+              << "\nmax_abs_hmctot_delta_to_reference=" << max_hmctot_delta
+              << "\nhistorical_fits_generated=" << science_result.files_written
+              << "\nhistorical_fits_schema_complete=" << (science_result.schema_complete ? "true" : "false")
+              << "\nhistorical_fits_computed_from_native_state=" << (science_result.computed_from_native_state ? "true" : "false")
+              << "\ncontinuum_and_spectrum_paths_separate=" << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false")
+              << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
+              << "\ntrajectory_mode=native_dsec_controller\nreference_state_identity=false\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    xstar_thermal_context_destroy(thermal_context);
+    xstar_fixed_state_context_destroy(fixed_context);
     return accepted ? 0 : 20;
 }
 
@@ -1290,6 +1848,8 @@ int main(int argc, char** argv) {
     if (options.command == "fixed-state-self-test") return command_fixed_state_self_test(options, false);
     if (options.command == "run-fixed-state") return command_run_fixed_state(options);
     if (options.command == "fixed-state-batch-self-test") return command_fixed_state_self_test(options, true);
+    if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
+    if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);
     if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);
     if (options.command == "run-compiled-case") return command_run_compiled_case(options);
