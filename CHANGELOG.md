@@ -1,5 +1,10 @@
 # CHANGELOG
 
+# 0.6.48.5.2 - 2026-06-11
+
+- Resolve `elements.csv` fields by header name, fixing strict host programs whose abundance column is last.
+- Preserve legacy eight-column compatibility and ABI 60485.
+
 # 0.6.48.5.1 - 2026-06-11
 
 - Serialize explicit per-element abundances in `elements.csv`; retain read compatibility with legacy eight-column programs using abundance 1.0.

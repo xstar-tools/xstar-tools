@@ -228,21 +228,49 @@ void load_elements(const std::string& path, Program& program) {
     if (!input) throw std::runtime_error("cannot open elements.csv");
     std::string line;
     if (!std::getline(input, line)) throw std::runtime_error("elements.csv is empty");
+
+    const auto header = split_csv(line);
+    if (header.size() != 8 && header.size() != 9) {
+        throw std::runtime_error("elements.csv requires 8 legacy columns or 9 columns with abundance");
+    }
+    std::unordered_map<std::string, std::size_t> columns;
+    for (std::size_t i = 0; i < header.size(); ++i) {
+        if (!columns.emplace(header[i], i).second) {
+            throw std::runtime_error("duplicate elements.csv column: " + header[i]);
+        }
+    }
+    const auto column = [&](const char* name) -> std::size_t {
+        const auto it = columns.find(name);
+        if (it == columns.end()) throw std::runtime_error(std::string("missing elements.csv column: ") + name);
+        return it->second;
+    };
+    const std::size_t element_index_col = column("element_index");
+    const std::size_t element_z_col = column("element_z");
+    const std::size_t n_rows_col = column("n_rows");
+    const std::size_t n_superlevels_col = column("n_superlevels");
+    const std::size_t n_ions_col = column("n_ions");
+    const std::size_t normalization_row_col = column("normalization_row");
+    const std::size_t record_head_col = column("record_head");
+    const std::size_t record_count_col = column("record_count");
+    const auto abundance_it = columns.find("abundance");
+    if (header.size() == 9 && abundance_it == columns.end()) {
+        throw std::runtime_error("nine-column elements.csv is missing abundance");
+    }
+
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 8 && c.size() != 9) throw std::runtime_error("elements.csv requires 8 legacy columns or 9 columns with abundance");
+        if (c.size() != header.size()) throw std::runtime_error("elements.csv row width does not match header");
         ElementProgram e;
-        e.element_index = parse_number<int>(c[0], "element_index");
-        e.element_z = parse_number<int>(c[1], "element_z");
-        const std::size_t offset = c.size() == 9 ? 1u : 0u;
-        if (c.size() == 9) e.abundance = parse_number<double>(c[2], "abundance");
-        e.n_rows = parse_number<int>(c[2 + offset], "n_rows");
-        e.n_superlevels = parse_number<int>(c[3 + offset], "n_superlevels");
-        e.n_ions = parse_number<int>(c[4 + offset], "n_ions");
-        e.normalization_row = parse_number<int>(c[5 + offset], "normalization_row");
-        e.record_head = parse_number<int>(c[6 + offset], "record_head");
-        e.record_count = parse_number<int>(c[7 + offset], "record_count");
+        e.element_index = parse_number<int>(c[element_index_col], "element_index");
+        e.element_z = parse_number<int>(c[element_z_col], "element_z");
+        if (abundance_it != columns.end()) e.abundance = parse_number<double>(c[abundance_it->second], "abundance");
+        e.n_rows = parse_number<int>(c[n_rows_col], "n_rows");
+        e.n_superlevels = parse_number<int>(c[n_superlevels_col], "n_superlevels");
+        e.n_ions = parse_number<int>(c[n_ions_col], "n_ions");
+        e.normalization_row = parse_number<int>(c[normalization_row_col], "normalization_row");
+        e.record_head = parse_number<int>(c[record_head_col], "record_head");
+        e.record_count = parse_number<int>(c[record_count_col], "record_count");
         if (!std::isfinite(e.abundance) || e.abundance < 0.0) throw std::runtime_error("element abundance must be finite and nonnegative");
         if (e.element_index != static_cast<int>(program.elements.size())) throw std::runtime_error("element_index must be dense and source ordered");
         if (e.n_rows <= 0 || e.n_superlevels <= 0 || e.n_ions <= 0) throw std::runtime_error("invalid element dimensions");

@@ -1,3 +1,7 @@
+## v0.6.48.5.2 elements.csv header-order hotfix
+
+v0.6.48.5.2 fixes native loading of strict host programs emitted by the v0.6.48.5.1 lowerer. See `V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md`. Scientific behavior and promotion status are unchanged.
+
 ## v0.6.48.5.1 electron accounting, controller semantics, and spectral-product separation
 
 v0.6.48.5.1 adds explicit elemental abundances to lowered native programs and reproduces the source `elcter` accounting, including the fully stripped ion fraction. It also corrects the DSEC charge-residual sign, restores the source/default convergence tolerances, and separates the computed free-free continuum FITS path from the full continuum-plus-line/RRC/profile spectrum path. The strict 8,722-record H/He/Mg host program remains callback-free and structurally complete. Thermal/heating-cooling parity and external physical equivalence remain blocked. See `V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md`.

@@ -426,3 +426,6 @@ include run_v04851_reference_trajectory.sh
 include run_v04851_host_trajectory.sh
 include tests/test_v064851_elcter_abundance.py
 include v04851_elcter_controller_fits_acceptance.log
+
+include V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
+include xstar_tools_v0.6.48.5.2_handoff.md
