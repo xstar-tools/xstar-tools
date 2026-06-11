@@ -431,7 +431,15 @@ include V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
 include xstar_tools_v0.6.48.5.2_handoff.md
 include V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
 include xstar_tools_v0.6.48.5.3_handoff.md
+include xstar_tools_v0.6.48.6_handoff.md
 include check_v04853_preliminary_ion_balance.py
 include run_v04853_reference_trajectory.sh
 include run_v04853_host_trajectory.sh
 include v04853_fixed_state_population_comparison.csv
+
+recursive-include src/xstar_tools/benchmarks/v06486_qualification_reference_v0472 *
+include V06486_QUALIFICATION_INFRASTRUCTURE.md
+include check_v0486_qualification_infrastructure.py
+include run_v0486_reference_qualification.sh
+include run_v0486_compare_products.sh
+include tests/test_v06486_qualification_infrastructure.py

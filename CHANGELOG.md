@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.6 - 2026-06-11
+
+- Froze an immutable v0.6.47.2 reference bundle with SHA-256 verification.
+- Added native source-ordered per-record and per-family diagnostics for fixed-state evaluations.
+- Added source-order element, row, and record maps for lowered programs.
+- Added strict byte, IEEE, source-rounded, and diagnostic comparison policies for text, CSV, JSON, and FITS products.
+- Added a qualification checker and full 61-evaluation diagnostics workflow.
+- Made no physics or production-promotion claim; production remains blocked.
+
 # 0.6.48.5.3 - 2026-06-11
 
 - Connect types 1/30/38/39 to source-faithful preliminary recombination totals and active ion-stage selection.

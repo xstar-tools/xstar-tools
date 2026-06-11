@@ -32,6 +32,7 @@ struct Options {
     std::string output_dir;
     std::string trajectory_csv;
     std::string radiation_csv;
+    std::string diagnostics_dir;
     std::string engine_backend = "inherit";
     std::string rates_backend = "inherit";
     std::string matrix_backend = "inherit";
@@ -58,11 +59,11 @@ void usage(std::ostream& output) {
         "  xstar_cpp spectral-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp thermal-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
-        "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR\n"
+        "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
-        "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--diagnostics-dir DIR] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -70,9 +71,8 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.5.3 adds a genuine raw-coefficient native fixed-state engine.\n"
-        "The fixed-state self-test evaluates state-dependent rates, solves populations,\n"
-        "and constructs continuum/spectral arrays without Python callbacks.\n";
+        "v0.6.48.6 adds qualification-only reference, diagnostics, source-order, and comparator infrastructure.\n"
+        "The physics remains unpromoted; production promotion is explicitly blocked.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -125,6 +125,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--radiation-csv");
             if (!value) return false;
             options.radiation_csv = value;
+        } else if (arg == "--diagnostics-dir") {
+            const char* value = require_value("--diagnostics-dir");
+            if (!value) return false;
+            options.diagnostics_dir = value;
         } else if (arg == "--engine-backend") {
             const char* value = require_value("--engine-backend");
             if (!value) return false;
@@ -959,7 +963,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.5.3'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.6'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1058,7 +1062,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.5.3\n"
+                 << "xstar_tools native fixed-state v0.6.48.6\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1091,7 +1095,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.5.3\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.6\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1201,6 +1205,15 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
         std::cerr << "fixed-state evaluation failed: " << message.data() << "\n";
         xstar_fixed_state_context_destroy(context);
         return rc;
+    }
+    if (!options.diagnostics_dir.empty()) {
+        rc = xstar_fixed_state_write_last_diagnostics_v1(
+            context, options.diagnostics_dir.c_str(), static_cast<std::uint64_t>(count), message.data(), message.size());
+        if (rc != 0) {
+            std::cerr << "fixed-state diagnostics failed: " << message.data() << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return rc;
+        }
     }
     bool changed = batch_mode || std::abs(outputs[0].hmctot - outputs[1].hmctot) > 1.0e-15 ||
         std::abs(outputs[0].populations[0] - outputs[1].populations[0]) > 1.0e-15;
@@ -1379,7 +1392,7 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.5.3\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.6\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
@@ -1409,6 +1422,11 @@ int command_run_fixed_trajectory(const Options& options) {
         out.spectrum=spectrum.data(); out.spectrum_capacity=spectrum.size(); out.opacity=opacity.data(); out.opacity_capacity=opacity.size();
         rc=xstar_fixed_state_run_v1(context,&in,&out,&cumulative,message.data(),message.size());
         if (rc!=0) { std::cerr << "trajectory evaluation " << j+1 << " failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+        if (!options.diagnostics_dir.empty()) {
+            rc = xstar_fixed_state_write_last_diagnostics_v1(
+                context, options.diagnostics_dir.c_str(), static_cast<std::uint64_t>(j + 1), message.data(), message.size());
+            if (rc != 0) { std::cerr << "trajectory diagnostics " << j+1 << " failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+        }
         const double native_charge_residual=in.electron_fraction_xee-out.elcter;
         const double dh=out.hmctot-trajectory[j].reference_hmctot;
         const double de=native_charge_residual-trajectory[j].reference_elcter;
@@ -1427,7 +1445,7 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.5.3\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.6\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
             << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
@@ -1476,6 +1494,7 @@ struct FixedDsecEvaluatorData {
     std::vector<double> energy;
     std::vector<double> flux;
     std::string radiation_mode = "synthetic_64_bin_development";
+    std::string diagnostics_dir;
 };
 
 void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
@@ -1552,6 +1571,15 @@ int fixed_dsec_evaluator(
     if (rc != 0) {
         set_callback_error(error, error_size, std::string("fixed-state evaluator failed: ") + message.data());
         return rc;
+    }
+    if (!data->diagnostics_dir.empty()) {
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data->fixed_context, data->diagnostics_dir.c_str(), static_cast<std::uint64_t>(snapshot.sequence),
+            message.data(), message.size());
+        if (diagnostic_rc != 0) {
+            set_callback_error(error, error_size, std::string("fixed-state diagnostics failed: ") + message.data());
+            return diagnostic_rc;
+        }
     }
 
     snapshot.computed_electron_fraction = output.elcter;
@@ -1671,6 +1699,7 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.energy=std::move(radiation.energy_ev);
     evaluator_data.flux=std::move(radiation.incident);
     evaluator_data.radiation_mode=radiation.mode;
+    evaluator_data.diagnostics_dir=options.diagnostics_dir;
 
     xstar_thermal_state_v1 state{};
     xstar_thermal_state_init_v1(&state);
@@ -1726,7 +1755,7 @@ int command_run_fixed_dsec(const Options& options) {
     pops << "sequence,kind,call_index,evaluation_index,row,population\n";
     spectra_file << "sequence,kind,call_index,evaluation_index,bin,energy_ev,spectrum,opacity\n";
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.5.3\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.6\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -1816,7 +1845,7 @@ int command_run_fixed_dsec(const Options& options) {
     }
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.5.3\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.6\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"

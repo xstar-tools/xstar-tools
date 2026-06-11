@@ -42,6 +42,7 @@ V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md
 V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
 V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
 V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md
+V06486_QUALIFICATION_INFRASTRUCTURE.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
 check_v0402_type51_order_restoration_hotfix_product_candidate.py
@@ -68,6 +69,7 @@ check_v0484_active_family_completion.py
 check_v04851_elcter_controller_fits.py
 check_v04853_preliminary_ion_balance.py
 check_v0485_active_family_phase2.py
+check_v0486_qualification_infrastructure.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
 run_v0401_xstar_tools_type88_fast_packet_threshold_hotfix_product_candidate.sh
@@ -149,6 +151,8 @@ run_v0485_atdb_coverage.sh
 run_v0485_host_trajectory.sh
 run_v0485_xstar_native_fixed_state.sh
 run_v0485_xstar_tools_python_fallback.sh
+run_v0486_compare_products.sh
+run_v0486_reference_qualification.sh
 setup.cfg
 setup.py
 src_v0441_update_report.md
@@ -381,6 +385,7 @@ xstar_tools_v0.6.48.5.1_handoff.md
 xstar_tools_v0.6.48.5.2_handoff.md
 xstar_tools_v0.6.48.5.3_handoff.md
 xstar_tools_v0.6.48.5_handoff.md
+xstar_tools_v0.6.48.6_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
 benchmarks/oxygen_call73_v0434_acceptance/xstar_calc_hmc_all_pre_continuum_parity_summary.json
@@ -823,6 +828,25 @@ src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/manifest.txt
 src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/reals.txt
 src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/records.csv
 src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture/rows.csv
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/README.md
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/SHA256SUMS
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/benchmark_summary.json
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/parameters.json
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_manifest.json
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_64bin.csv
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/terminals.csv
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/trajectory.csv
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xo01_detail.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xo01_detal2.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xo01_detal3.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xo01_detal4.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_abund1.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_cont1.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_lines1.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_rrc1.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_spect1.fits
+src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/xout_step.log
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/manifest.txt
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/parameters.json
 src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_64bin.csv
@@ -927,6 +951,7 @@ src/xstar_tools/xstar/physical_output_parity.py
 src/xstar_tools/xstar/physical_runner.py
 src/xstar_tools/xstar/population_parity.py
 src/xstar_tools/xstar/pprint_legacy.py
+src/xstar_tools/xstar/qualification.py
 src/xstar_tools/xstar/radial_control.py
 src/xstar_tools/xstar/radial_spectrum_parity.py
 src/xstar_tools/xstar/radial_transfer.py
@@ -1155,6 +1180,7 @@ tests/test_v064851_elcter_abundance.py
 tests/test_v064852_elements_header_order.py
 tests/test_v064853_preliminary_ion_balance.py
 tests/test_v06485_active_family_phase2.py
+tests/test_v06486_qualification_infrastructure.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py
 tests/test_workflow_api_v03131.py

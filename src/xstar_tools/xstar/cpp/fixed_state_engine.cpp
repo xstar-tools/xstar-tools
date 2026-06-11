@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <map>
@@ -182,6 +184,13 @@ struct EvaluatedRecord {
     double opakab = 0.0;
 };
 
+struct NativeRecordDiagnostic {
+    int element_index = 0;
+    int element_z = 0;
+    EvaluatedRecord evaluated{};
+    bool active_stage = false;
+    bool matrix_committed = false;
+};
 
 struct PreliminaryIonBalance {
     std::vector<double> ionization;
@@ -197,6 +206,25 @@ struct ActiveElementView {
     int full_row_end = 1;
     int min_stage = 1;
     int max_stage = 1;
+};
+
+struct NativeElementDiagnostic {
+    int element_index = 0;
+    int element_z = 0;
+    double abundance = 0.0;
+    PreliminaryIonBalance preliminary;
+    ActiveElementView active;
+    std::vector<double> full_populations;
+    std::vector<double> final_stage_fractions;
+    double heating = 0.0;
+    double cooling = 0.0;
+    double heating2 = 0.0;
+    double cooling2 = 0.0;
+    double normalization = 0.0;
+    double normalization_error = 0.0;
+    double max_relative_row_residual = 0.0;
+    std::uint64_t records_constructed = 0;
+    std::uint64_t terms_constructed = 0;
 };
 
 struct ElementBuffers {
@@ -232,6 +260,13 @@ struct xstar_fixed_state_context_impl {
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
     std::map<int, std::uint64_t> visited_data_types;
+    std::vector<NativeRecordDiagnostic> last_record_diagnostics;
+    std::vector<NativeElementDiagnostic> last_element_diagnostics;
+    double last_temperature_k = 0.0;
+    double last_electron_density_cm3 = 0.0;
+    double last_hydrogen_density_cm3 = 0.0;
+    double last_electron_fraction_input = 0.0;
+    std::size_t last_radiation_bin_count = 0;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -1439,6 +1474,13 @@ int run_impl(
     xstar_fixed_state_stats_v1& stats
 ) {
     validate_io(input, output);
+    ctx.last_record_diagnostics.clear();
+    ctx.last_element_diagnostics.clear();
+    ctx.last_temperature_k = input.temperature_k;
+    ctx.last_electron_density_cm3 = input.electron_density_cm3;
+    ctx.last_hydrogen_density_cm3 = input.hydrogen_density_cm3;
+    ctx.last_electron_fraction_input = input.electron_fraction_xee;
+    ctx.last_radiation_bin_count = input.radiation_bin_count;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -1510,14 +1552,26 @@ int run_impl(
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
         for (const auto& item : evaluated) {
-            if (!item.matrix_enabled) continue;
-            auto contribution = item.contribution;
-            if (contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) continue;
-            if (contribution.lower_row < active.full_row_start || contribution.lower_row > active.full_row_end ||
-                contribution.upper_row < active.full_row_start || contribution.upper_row > active.full_row_end) continue;
-            contribution.lower_row -= active.full_row_start - 1;
-            contribution.upper_row -= active.full_row_start - 1;
-            contributions.push_back(contribution);
+            const auto& original = item.contribution;
+            const bool active_stage = original.ion_stage >= active.min_stage && original.ion_stage <= active.max_stage;
+            const bool endpoints_active = !item.matrix_enabled ||
+                (original.lower_row >= active.full_row_start && original.lower_row <= active.full_row_end &&
+                 original.upper_row >= active.full_row_start && original.upper_row <= active.full_row_end);
+            bool matrix_committed = false;
+            if (item.matrix_enabled && active_stage && endpoints_active) {
+                auto contribution = original;
+                contribution.lower_row -= active.full_row_start - 1;
+                contribution.upper_row -= active.full_row_start - 1;
+                contributions.push_back(contribution);
+                matrix_committed = true;
+            }
+            NativeRecordDiagnostic diagnostic;
+            diagnostic.element_index = element.element_index;
+            diagnostic.element_z = element.element_z;
+            diagnostic.evaluated = item;
+            diagnostic.active_stage = active_stage;
+            diagnostic.matrix_committed = matrix_committed;
+            ctx.last_record_diagnostics.push_back(std::move(diagnostic));
         }
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element);
@@ -1569,6 +1623,37 @@ int run_impl(
         }
         charge_per_element += buffers.populations.back() * static_cast<double>(active.max_stage);
         output.elcter += element.abundance * charge_per_element;
+
+        NativeElementDiagnostic element_diagnostic;
+        element_diagnostic.element_index = element.element_index;
+        element_diagnostic.element_z = element.element_z;
+        element_diagnostic.abundance = element.abundance;
+        element_diagnostic.preliminary = preliminary;
+        element_diagnostic.active = active;
+        element_diagnostic.full_populations = full_populations;
+        element_diagnostic.final_stage_fractions.assign(static_cast<std::size_t>(element.element_z + 1), 0.0);
+        for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
+            const int stage = active.min_stage + ion_slot;
+            if (stage >= 1 && stage <= element.element_z + 1) {
+                element_diagnostic.final_stage_fractions[static_cast<std::size_t>(stage - 1)] =
+                    buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
+            }
+        }
+        const int continuum_stage = std::min(element.element_z + 1, active.max_stage + 1);
+        if (!buffers.populations.empty() && continuum_stage >= 1) {
+            element_diagnostic.final_stage_fractions[static_cast<std::size_t>(continuum_stage - 1)] += buffers.populations.back();
+        }
+        element_diagnostic.heating = eout.heating;
+        element_diagnostic.cooling = eout.cooling;
+        element_diagnostic.heating2 = eout.heating2;
+        element_diagnostic.cooling2 = eout.cooling2;
+        element_diagnostic.normalization = eout.normalization;
+        element_diagnostic.normalization_error = eout.normalization_error;
+        element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
+        element_diagnostic.records_constructed = eout.records_constructed;
+        element_diagnostic.terms_constructed = eout.terms_constructed;
+        ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
+
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
             const auto& rec = evaluated[k].contribution;
@@ -1855,6 +1940,8 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     }
     context->state_generation = 0;
     context->visited_data_types.clear();
+    context->last_record_diagnostics.clear();
+    context->last_element_diagnostics.clear();
     copy_text(message, message_size, "native fixed-state context reset");
     return 0;
 }
@@ -1885,6 +1972,149 @@ int xstar_fixed_state_write_visited_report_v1(const xstar_fixed_state_context* c
         out << "data_type,visits\n";
         for (const auto& item : context->visited_data_types) out << item.first << ',' << item.second << '\n';
         copy_text(message, message_size, "visited-record report written");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 8;
+    }
+}
+
+int xstar_fixed_state_write_last_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    const char* output_directory,
+    uint64_t evaluation_ordinal,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !output_directory || !*output_directory || evaluation_ordinal == 0) {
+        copy_text(message, message_size, "context, output_directory, and positive evaluation_ordinal are required");
+        return 1;
+    }
+    try {
+        if (context->last_record_diagnostics.empty() || context->last_element_diagnostics.empty()) {
+            throw std::runtime_error("no completed fixed-state evaluation is available for diagnostics");
+        }
+        const std::filesystem::path root(output_directory);
+        std::filesystem::create_directories(root);
+        std::ostringstream stem_builder;
+        stem_builder << "evaluation_" << std::setw(4) << std::setfill('0') << evaluation_ordinal;
+        const std::string stem = stem_builder.str();
+
+        std::vector<NativeRecordDiagnostic> records = context->last_record_diagnostics;
+        std::stable_sort(records.begin(), records.end(), [](const NativeRecordDiagnostic& a, const NativeRecordDiagnostic& b) {
+            return a.evaluated.contribution.source_position < b.evaluated.contribution.source_position;
+        });
+        std::ofstream record_file(root / (stem + "_records.csv"));
+        if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab\n";
+        record_file << std::setprecision(17);
+
+        struct FamilySummary {
+            std::uint64_t records = 0;
+            std::uint64_t matrix_enabled = 0;
+            std::uint64_t active_stage = 0;
+            std::uint64_t matrix_committed = 0;
+            std::uint64_t spectral = 0;
+            std::int64_t first_source_position = 0;
+            std::int64_t last_source_position = 0;
+            std::array<double,6> sums{};
+            std::array<double,6> l1{};
+        };
+        std::map<int, FamilySummary> summaries;
+        for (const auto& diagnostic : records) {
+            const auto& item = diagnostic.evaluated;
+            const auto& c = item.contribution;
+            record_file << evaluation_ordinal << ',' << c.source_position << ',' << c.record << ','
+                        << diagnostic.element_index << ',' << diagnostic.element_z << ',' << c.data_type << ',' << c.rate_type << ','
+                        << c.ion_index << ',' << c.ion_stage << ',' << c.lower_row << ',' << c.upper_row << ','
+                        << (item.matrix_enabled ? 1 : 0) << ',' << (diagnostic.active_stage ? 1 : 0) << ','
+                        << (diagnostic.matrix_committed ? 1 : 0) << ',' << (item.spectral ? 1 : 0) << ','
+                        << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ',' << c.ans4 << ',' << c.ans5 << ',' << c.ans6 << ','
+                        << c.density_scale << ',' << item.line_energy_ev << ',' << item.atomic_mass_amu << ','
+                        << item.natural_width_ev << ',' << item.opakab << '\n';
+            auto& summary = summaries[c.data_type];
+            if (summary.records == 0) summary.first_source_position = c.source_position;
+            summary.last_source_position = c.source_position;
+            ++summary.records;
+            summary.matrix_enabled += item.matrix_enabled ? 1u : 0u;
+            summary.active_stage += diagnostic.active_stage ? 1u : 0u;
+            summary.matrix_committed += diagnostic.matrix_committed ? 1u : 0u;
+            summary.spectral += item.spectral ? 1u : 0u;
+            const std::array<double,6> values{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
+            for (std::size_t k=0;k<values.size();++k) {
+                summary.sums[k] += values[k];
+                summary.l1[k] += std::abs(values[k]);
+            }
+        }
+
+        std::ofstream family_file(root / (stem + "_family_summary.csv"));
+        if (!family_file) throw std::runtime_error("cannot create family summary CSV");
+        family_file << "evaluation_ordinal,data_type,records,matrix_enabled,active_stage,matrix_committed,spectral,first_source_position,last_source_position,sum_ans1,sum_ans2,sum_ans3,sum_ans4,sum_ans5,sum_ans6,l1_ans1,l1_ans2,l1_ans3,l1_ans4,l1_ans5,l1_ans6\n";
+        family_file << std::setprecision(17);
+        for (const auto& entry : summaries) {
+            const auto& value = entry.second;
+            family_file << evaluation_ordinal << ',' << entry.first << ',' << value.records << ',' << value.matrix_enabled << ','
+                        << value.active_stage << ',' << value.matrix_committed << ',' << value.spectral << ','
+                        << value.first_source_position << ',' << value.last_source_position;
+            for (double x : value.sums) family_file << ',' << x;
+            for (double x : value.l1) family_file << ',' << x;
+            family_file << '\n';
+        }
+
+        std::ofstream element_file(root / (stem + "_elements.csv"));
+        std::ofstream ion_file(root / (stem + "_ion_balance.csv"));
+        std::ofstream population_file(root / (stem + "_populations.csv"));
+        if (!element_file || !ion_file || !population_file) throw std::runtime_error("cannot create element diagnostics CSV files");
+        element_file << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,active_full_row_start,active_full_row_end,heating,cooling,heating2,cooling2,normalization,normalization_error,max_relative_row_residual,records_constructed,terms_constructed\n";
+        ion_file << "evaluation_ordinal,element_index,element_z,stage,ion_charge,preliminary_ionization,preliminary_recombination,preliminary_fraction,final_fraction,active_stage\n";
+        population_file << "evaluation_ordinal,global_population_row,element_index,element_z,element_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,initial_population,final_population,active_row\n";
+        element_file << std::setprecision(17);
+        ion_file << std::setprecision(17);
+        population_file << std::setprecision(17);
+        std::size_t global_offset = 0;
+        for (const auto& diagnostic : context->last_element_diagnostics) {
+            const auto& source = context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index));
+            element_file << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ',' << diagnostic.abundance << ','
+                         << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << diagnostic.active.full_row_start << ','
+                         << diagnostic.active.full_row_end << ',' << diagnostic.heating << ',' << diagnostic.cooling << ',' << diagnostic.heating2 << ','
+                         << diagnostic.cooling2 << ',' << diagnostic.normalization << ',' << diagnostic.normalization_error << ','
+                         << diagnostic.max_relative_row_residual << ',' << diagnostic.records_constructed << ',' << diagnostic.terms_constructed << '\n';
+            for (int stage=1; stage<=diagnostic.element_z+1; ++stage) {
+                const std::size_t index=static_cast<std::size_t>(stage-1);
+                const double ionization = index < diagnostic.preliminary.ionization.size() ? diagnostic.preliminary.ionization[index] : 0.0;
+                const double recombination = index < diagnostic.preliminary.recombination.size() ? diagnostic.preliminary.recombination[index] : 0.0;
+                const double preliminary_fraction = index < diagnostic.preliminary.fractions.size() ? diagnostic.preliminary.fractions[index] : 0.0;
+                const double final_fraction = index < diagnostic.final_stage_fractions.size() ? diagnostic.final_stage_fractions[index] : 0.0;
+                const bool active_stage = stage >= diagnostic.active.min_stage && stage <= diagnostic.active.max_stage + 1;
+                ion_file << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ',' << stage << ',' << stage-1 << ','
+                         << ionization << ',' << recombination << ',' << preliminary_fraction << ',' << final_fraction << ',' << (active_stage ? 1 : 0) << '\n';
+            }
+            for (std::size_t row_index=0; row_index<source.rows.size(); ++row_index) {
+                const auto& row = source.rows[row_index];
+                const double final_population = row_index < diagnostic.full_populations.size() ? diagnostic.full_populations[row_index] : 0.0;
+                const bool active_row = row.row >= diagnostic.active.full_row_start && row.row <= diagnostic.active.full_row_end;
+                population_file << evaluation_ordinal << ',' << global_offset + row_index + 1 << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                                << row.row << ',' << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ',' << row.energy_ev << ','
+                                << row.statistical_weight << ',' << row.initial_population << ',' << final_population << ',' << (active_row ? 1 : 0) << '\n';
+            }
+            global_offset += source.rows.size();
+        }
+
+        std::ofstream state_file(root / (stem + "_state.json"));
+        if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
+        state_file << std::setprecision(17)
+                   << "{\n  \"schema_version\": \"0.6.48.6\",\n  \"qualification_only\": true,\n"
+                   << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
+                   << "  \"program_id\": \"" << context->program.id << "\",\n"
+                   << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
+                   << "  \"electron_density_cm3\": " << context->last_electron_density_cm3 << ",\n"
+                   << "  \"hydrogen_density_cm3\": " << context->last_hydrogen_density_cm3 << ",\n"
+                   << "  \"electron_fraction_input\": " << context->last_electron_fraction_input << ",\n"
+                   << "  \"radiation_bin_count\": " << context->last_radiation_bin_count << ",\n"
+                   << "  \"record_diagnostic_count\": " << records.size() << ",\n"
+                   << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
+                   << "  \"production_promotion_ready\": false\n}\n";
+        copy_text(message, message_size, "source-ordered fixed-state diagnostics written");
         return 0;
     } catch (const std::exception& exc) {
         copy_text(message, message_size, exc.what());

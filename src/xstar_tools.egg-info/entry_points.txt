@@ -39,6 +39,7 @@ xstar-tools-prepare-calc-hmc-all-probe = xstar_tools.calc_hmc_all_probe_cli:main
 xstar-tools-prepare-dsec-matching-probe = xstar_tools.dsec_matching_probe_cli:main
 xstar-tools-prepare-dsec-probe = xstar_tools.dsec_probe_cli:main
 xstar-tools-prepare-zone1-dsec-probe = xstar_tools.zone1_dsec_probe_cli:main
+xstar-tools-qualification = xstar_tools.xstar.qualification:main
 xstar-tools-recombination = xstar_tools.recombination:main
 xstar-tools-run-python = xstar_tools.source_port_physical_runner_cli:main
 xstar-tools-run-xstar = xstar_tools.cli.run_xstar:main

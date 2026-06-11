@@ -191,6 +191,13 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_visited_report_v1(
     char* message,
     size_t message_size
 );
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    const char* output_directory,
+    uint64_t evaluation_ordinal,
+    char* message,
+    size_t message_size
+);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_batch_v1(
     xstar_fixed_state_context* context,
     const xstar_fixed_state_input_v1* inputs,

@@ -1,3 +1,7 @@
+## v0.6.48.6 qualification infrastructure
+
+v0.6.48.6 freezes the immutable v0.6.47.2 qualification reference, adds native source-ordered per-family diagnostics, source-order maps, and strict byte/IEEE/source-rounded comparators. It does not change the physics and makes no production claim. See `V06486_QUALIFICATION_INFRASTRUCTURE.md`.
+
 ## v0.6.48.5.3 preliminary ion balance and reference-radiation qualification
 
 v0.6.48.5.3 connects scalar recombination families 1/30/38/39 to the source-style preliminary ion-stage selection and adds external radiation CSV inputs for scientifically meaningful fixed-state comparison. The qualified full-grid state still fails He/Mg population parity, so thermal and FITS promotion remain blocked. See `V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md`.

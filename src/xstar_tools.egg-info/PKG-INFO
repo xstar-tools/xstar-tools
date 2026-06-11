@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.5.3
+Version: 0.6.48.6
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,10 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.48.6 qualification infrastructure
+
+v0.6.48.6 freezes the immutable v0.6.47.2 qualification reference, adds native source-ordered per-family diagnostics, source-order maps, and strict byte/IEEE/source-rounded comparators. It does not change the physics and makes no production claim. See `V06486_QUALIFICATION_INFRASTRUCTURE.md`.
 
 ## v0.6.48.5.3 preliminary ion balance and reference-radiation qualification
 

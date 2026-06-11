@@ -153,4 +153,4 @@ def test_python_bridge_reports_current_version() -> None:
         env={**__import__("os").environ, "PYTHONPATH": "../../.."},
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert '"version": "0.6.48.5.3"' in completed.stdout
+    assert '"version": "0.6.48.6"' in completed.stdout

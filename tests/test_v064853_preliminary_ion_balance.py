@@ -16,7 +16,8 @@ def test_preliminary_rates_feed_stage_selection_without_direct_matrix_injection(
     assert "build_preliminary_ion_balance" in source
     assert "c.rate_type == 8 || c.rate_type == 6" in source
     assert "make_active_element_view" in source
-    assert "contribution.ion_stage < active.min_stage" in source
+    assert "const bool active_stage = original.ion_stage >= active.min_stage" in source
+    assert "matrix_committed = true" in source
 
 
 def test_reference_trajectory_accepts_external_radiation_csv(tmp_path: Path) -> None:
