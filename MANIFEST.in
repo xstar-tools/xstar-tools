@@ -464,3 +464,10 @@ include V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 include xstar_tools_v0.6.48.7.1_handoff.md
 include check_v04871_he_bound_free_audit.py
 include run_v04871_he_bound_free_audit.sh
+
+# v0.6.48.7.2 type-53 answer semantics and matrix gate
+include V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
+include xstar_tools_v0.6.48.7.2_handoff.md
+include check_v04872_type53_semantics.py
+include run_v04872_type53_semantics.sh
+include tests/test_type53_semantics_v064872.py

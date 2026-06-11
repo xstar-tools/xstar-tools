@@ -1,4 +1,4 @@
-"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.1.
+"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.2.
 
 This module compares the type-53 contribution that is currently applied by the
 native fixed-state engine with a source-style shadow evaluation.  The shadow
@@ -105,7 +105,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV does not contain v0.6.48.7.1 type-53 shadow fields: " + ", ".join(missing))
+            raise ValueError("records CSV does not contain v0.6.48.7.2 type-53 shadow fields: " + ", ".join(missing))
         selected = [
             row for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation
@@ -202,7 +202,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
 
     report: dict[str, Any] = {
         "schema": SCHEMA,
-        "release": "0.6.48.7.1",
+        "release": "0.6.48.7.2",
         "result": "ACCEPT",
         "audit_complete": True,
         "evaluation_ordinal": evaluation,

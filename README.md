@@ -1,3 +1,7 @@
+## v0.6.48.7.2 type-53 answer-semantics and matrix gate
+
+v0.6.48.7.2 verifies the signed type-53 answer contract from the exact v0.6.47.2 source, expands all 31 He II evaluation-61 records into source-order matrix terms, and supports a hashed third-column runtime oracle. The translated shadow follows the source sign contract while the currently applied path does not. No physical substitution is enabled because the exact v0.6.47.2 per-record runtime oracle is not yet available. See `V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md`.
+
 ## v0.6.48.7.1 He II bound-free source-order audit
 
 v0.6.48.7.1 adds a qualification-only, single-state native runner and a
