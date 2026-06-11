@@ -42,6 +42,7 @@ V064851_ELCTER_CONTROLLER_AND_FITS_SEPARATION.md
 V064852_ELEMENTS_HEADER_ORDER_HOTFIX.md
 V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
 V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md
+V064861_QUALIFICATION_COMPARATOR_HOTFIX.md
 V06486_QUALIFICATION_INFRASTRUCTURE.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -69,6 +70,7 @@ check_v0484_active_family_completion.py
 check_v04851_elcter_controller_fits.py
 check_v04853_preliminary_ion_balance.py
 check_v0485_active_family_phase2.py
+check_v04861_qualification_comparator_hotfix.py
 check_v0486_qualification_infrastructure.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -151,6 +153,8 @@ run_v0485_atdb_coverage.sh
 run_v0485_host_trajectory.sh
 run_v0485_xstar_native_fixed_state.sh
 run_v0485_xstar_tools_python_fallback.sh
+run_v04861_compare_products.sh
+run_v04861_reference_qualification.sh
 run_v0486_compare_products.sh
 run_v0486_reference_qualification.sh
 setup.cfg
@@ -385,6 +389,7 @@ xstar_tools_v0.6.48.5.1_handoff.md
 xstar_tools_v0.6.48.5.2_handoff.md
 xstar_tools_v0.6.48.5.3_handoff.md
 xstar_tools_v0.6.48.5_handoff.md
+xstar_tools_v0.6.48.6.1_handoff.md
 xstar_tools_v0.6.48.6_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -1180,6 +1185,7 @@ tests/test_v064851_elcter_abundance.py
 tests/test_v064852_elements_header_order.py
 tests/test_v064853_preliminary_ion_balance.py
 tests/test_v06485_active_family_phase2.py
+tests/test_v064861_qualification_comparator_hotfix.py
 tests/test_v06486_qualification_infrastructure.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py

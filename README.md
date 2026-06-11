@@ -1,6 +1,6 @@
-## v0.6.48.6 qualification infrastructure
+## v0.6.48.6.1 qualification comparator hotfix
 
-v0.6.48.6 freezes the immutable v0.6.47.2 qualification reference, adds native source-ordered per-family diagnostics, source-order maps, and strict byte/IEEE/source-rounded comparators. It does not change the physics and makes no production claim. See `V06486_QUALIFICATION_INFRASTRUCTURE.md`.
+v0.6.48.6.1 repairs real FITS comparison for non-contiguous Astropy table fields, removes stale JSON reports before comparison, records absolute candidate/report paths, and adds a one-cell numerical FITS negative control. It preserves the immutable v0.6.47.2 reference, ABI 60485, source-order maps, and native diagnostic infrastructure. It does not change the physics and makes no production claim. See `V064861_QUALIFICATION_COMPARATOR_HOTFIX.md`.
 
 ## v0.6.48.5.3 preliminary ion balance and reference-radiation qualification
 

@@ -21,7 +21,7 @@ from typing import Any, Iterable, Iterator, Sequence
 
 REFERENCE_SCHEMA = "xstar-tools-v06486-reference-v1"
 MAP_SCHEMA = "xstar-tools-v06486-source-order-map-v1"
-COMPARISON_SCHEMA = "xstar-tools-v06486-comparison-v1"
+COMPARISON_SCHEMA = "xstar-tools-v064861-comparison-v1"
 VOLATILE_FITS_KEYS = {"CHECKSUM", "DATASUM", "DATE", "DATE-OBS"}
 SCIENCE_PRODUCT_FILES = {
     "xout_step.log", "xout_abund1.fits", "xout_cont1.fits", "xout_spect1.fits",
@@ -489,20 +489,58 @@ def _compare_fits(
             for name in names:
                 ra = np.asarray(rdata if name == "__array__" else rdata[name])
                 ca = np.asarray(cdata if name == "__array__" else cdata[name])
+                if ra.dtype != ca.dtype:
+                    differences.append(
+                        Difference(
+                            reference.name,
+                            "fits_field_dtype",
+                            f"HDU {hdu_index}, field {name}",
+                            str(ra.dtype),
+                            str(ca.dtype),
+                        )
+                    )
+                    if len(differences) >= max_differences:
+                        return differences
+                    continue
+
+                unequal_mask: Any
                 if ra.dtype.kind in "f":
                     if mode == "ieee":
-                        equal_mask = ra.view(np.uint8).reshape(ra.shape + (-1,)) == ca.view(np.uint8).reshape(ca.shape + (-1,))
-                        equal = bool(np.all(equal_mask))
+                        # FITS table fields are commonly strided views.  A dtype-size
+                        # view is only legal when the last axis is contiguous, so make
+                        # an explicit contiguous copy before comparing each scalar's
+                        # IEEE byte representation.
+                        ra_contiguous = np.ascontiguousarray(ra)
+                        ca_contiguous = np.ascontiguousarray(ca)
+                        ra_bytes = ra_contiguous.view(np.uint8).reshape(
+                            ra_contiguous.shape + (ra_contiguous.dtype.itemsize,)
+                        )
+                        ca_bytes = ca_contiguous.view(np.uint8).reshape(
+                            ca_contiguous.shape + (ca_contiguous.dtype.itemsize,)
+                        )
+                        unequal_mask = ~np.all(ra_bytes == ca_bytes, axis=-1)
                     elif mode == "source-rounded":
-                        equal = bool(np.all(np.vectorize(lambda x, y: format(float(x), ".7g") == format(float(y), ".7g"))(ra, ca)))
+                        rounded_equal = np.vectorize(
+                            lambda x, y: format(float(x), ".7g") == format(float(y), ".7g"),
+                            otypes=[bool],
+                        )(ra, ca)
+                        unequal_mask = ~rounded_equal
                     else:
-                        equal = bool(np.allclose(ra, ca, rtol=rtol, atol=atol, equal_nan=True))
+                        unequal_mask = ~np.isclose(ra, ca, rtol=rtol, atol=atol, equal_nan=True)
                 else:
-                    equal = bool(np.array_equal(ra, ca))
+                    unequal_mask = np.not_equal(ra, ca)
+
+                equal = not bool(np.any(unequal_mask))
                 if not equal:
-                    index = tuple(int(x) for x in np.argwhere(ra != ca)[0]) if ra.shape else ()
-                    rv = ra[index] if index else ra.item()
-                    cv = ca[index] if index else ca.item()
+                    if ra.shape:
+                        first = np.argwhere(unequal_mask)[0]
+                        index = tuple(int(x) for x in first)
+                        rv = ra[index]
+                        cv = ca[index]
+                    else:
+                        index = ()
+                        rv = ra.item()
+                        cv = ca.item()
                     delta = None
                     relative = None
                     try:
@@ -528,6 +566,12 @@ def compare_directories(
     max_differences: int = 100,
     profile: str = "all",
 ) -> dict[str, Any]:
+    reference_dir = reference_dir.expanduser().resolve()
+    candidate_dir = candidate_dir.expanduser().resolve()
+    if not reference_dir.is_dir():
+        raise FileNotFoundError(f"reference directory does not exist: {reference_dir}")
+    if not candidate_dir.is_dir():
+        raise FileNotFoundError(f"candidate directory does not exist: {candidate_dir}")
     reference_files = {p.relative_to(reference_dir).as_posix(): p for p in reference_dir.rglob("*") if p.is_file()}
     candidate_files = {p.relative_to(candidate_dir).as_posix(): p for p in candidate_dir.rglob("*") if p.is_file()}
     if profile == "science-products":
@@ -603,10 +647,24 @@ def compare_directories(
     return result
 
 
-def _write_json(data: dict[str, Any], path: str | None) -> None:
+def _resolve_output_json(path: str | None) -> Path | None:
+    if not path:
+        return None
+    return Path(path).expanduser().resolve()
+
+
+def _clear_output_json(path: Path | None) -> None:
+    if path is not None:
+        path.unlink(missing_ok=True)
+
+
+def _write_json(data: dict[str, Any], path: Path | None) -> None:
     text = json.dumps(data, indent=2, sort_keys=True) + "\n"
-    if path:
-        Path(path).write_text(text, encoding="utf-8")
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
     print(text, end="")
 
 
@@ -642,27 +700,40 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command == "freeze-reference":
-        result = write_reference_manifest(args.bundle_dir, args.source_archive_sha256)
-        result = {**result, "result": "ACCEPT"}
-    elif args.command == "verify-reference":
-        result = verify_reference_bundle(args.bundle_dir)
-    elif args.command == "build-source-order-maps":
-        result = build_source_order_maps(args.program_dir, args.output_dir)
-        result = {**result, "result": "ACCEPT"}
-    elif args.command == "compare":
-        result = compare_directories(
-            args.reference_dir,
-            args.candidate_dir,
-            mode=args.mode,
-            rtol=args.rtol,
-            atol=args.atol,
-            max_differences=args.max_differences,
-            profile=args.profile,
-        )
-    else:  # pragma: no cover
-        raise AssertionError(args.command)
-    _write_json(result, getattr(args, "output_json", None))
+    output_json = _resolve_output_json(getattr(args, "output_json", None))
+    # Remove any previous report before work begins.  If comparison raises, no
+    # stale success/rejection JSON remains for wrappers or users to consume.
+    _clear_output_json(output_json)
+    try:
+        if args.command == "freeze-reference":
+            result = write_reference_manifest(args.bundle_dir.expanduser().resolve(), args.source_archive_sha256)
+            result = {**result, "result": "ACCEPT"}
+        elif args.command == "verify-reference":
+            result = verify_reference_bundle(args.bundle_dir.expanduser().resolve())
+        elif args.command == "build-source-order-maps":
+            result = build_source_order_maps(
+                args.program_dir.expanduser().resolve(),
+                args.output_dir.expanduser().resolve(),
+            )
+            result = {**result, "result": "ACCEPT"}
+        elif args.command == "compare":
+            result = compare_directories(
+                args.reference_dir,
+                args.candidate_dir,
+                mode=args.mode,
+                rtol=args.rtol,
+                atol=args.atol,
+                max_differences=args.max_differences,
+                profile=args.profile,
+            )
+        else:  # pragma: no cover
+            raise AssertionError(args.command)
+        if output_json is not None:
+            result = {**result, "output_json": str(output_json)}
+        _write_json(result, output_json)
+    except Exception:
+        _clear_output_json(output_json)
+        raise
     return 0 if result.get("result") == "ACCEPT" else 1
 
 

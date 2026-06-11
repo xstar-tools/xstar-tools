@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.6.1 - 2026-06-11
+
+- Repair IEEE FITS comparison for strided/non-contiguous Astropy table fields by comparing contiguous per-scalar byte representations.
+- Resolve reference, candidate, map-output, and JSON-report paths to absolute paths before qualification work begins.
+- Remove any pre-existing JSON report before execution and write completed reports atomically, preventing stale comparison results after exceptions.
+- Harden the comparison wrapper so it reports `comparison_json=not_written` when a run fails before a report is produced.
+- Add a negative FITS control that changes exactly one floating-point cell in `xout_cont1.fits` and requires a `fits_value` rejection.
+- Preserve the v0.6.47.2 immutable reference bundle, ABI 60485, native diagnostics, and source-order maps without changing physics.
+- Make no physical-equivalence or production-promotion claim; production remains blocked.
+
 ## 0.6.48.6 - 2026-06-11
 
 - Froze an immutable v0.6.47.2 reference bundle with SHA-256 verification.
