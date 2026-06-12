@@ -510,9 +510,9 @@ include V064877_TYPE71_TYPE99_REPLACEMENT_AUDIT.md
 include xstar_tools_v0.6.48.7.7_handoff.md
 include tests/test_v064877_type71_type99_replacement_audit.py
 
-# v0.6.48.7.8 constrained helium matrix-residual decomposition
+# v0.6.48.7.9 constrained helium matrix-residual decomposition
 include run_v04878_helium_matrix_residual_decomposition.sh
 include check_v04878_helium_matrix_residual_decomposition.py
 include V064878_CONSTRAINED_HELIUM_MATRIX_RESIDUAL_DECOMPOSITION.md
-include xstar_tools_v0.6.48.7.8_handoff.md
+include xstar_tools_v0.6.48.7.9_handoff.md
 include tests/test_v064878_helium_matrix_residual_decomposition.py

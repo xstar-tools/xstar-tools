@@ -427,7 +427,7 @@ xstar_tools_v0.6.48.7.4_handoff.md
 xstar_tools_v0.6.48.7.5_handoff.md
 xstar_tools_v0.6.48.7.6_handoff.md
 xstar_tools_v0.6.48.7.7_handoff.md
-xstar_tools_v0.6.48.7.8_handoff.md
+xstar_tools_v0.6.48.7.9_handoff.md
 xstar_tools_v0.6.48.7_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -901,6 +901,9 @@ src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472/type99
 src/xstar_tools/benchmarks/v064877_type71_row77_runtime_oracle_v0472/capture_provenance.json
 src/xstar_tools/benchmarks/v064877_type71_row77_runtime_oracle_v0472/reference_manifest.json
 src/xstar_tools/benchmarks/v064877_type71_row77_runtime_oracle_v0472/type71_row77_runtime_oracle.csv
+src/xstar_tools/benchmarks/v064879_type50_heii_rows46_54_runtime_oracle_v0472/capture_provenance.json
+src/xstar_tools/benchmarks/v064879_type50_heii_rows46_54_runtime_oracle_v0472/reference_manifest.json
+src/xstar_tools/benchmarks/v064879_type50_heii_rows46_54_runtime_oracle_v0472/type50_heii_rows46_54_runtime_oracle.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/accepted_ion_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/final_level_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/oracle_manifest.json
@@ -1030,6 +1033,7 @@ src/xstar_tools/xstar/stepping.py
 src/xstar_tools/xstar/thermal.py
 src/xstar_tools/xstar/thermal_balance.py
 src/xstar_tools/xstar/transfer.py
+src/xstar_tools/xstar/type50_manifold_audit.py
 src/xstar_tools/xstar/type53_semantics.py
 src/xstar_tools/xstar/type71_type99_replacement_audit.py
 src/xstar_tools/xstar/type99_type71_coupled_audit.py
@@ -1043,6 +1047,7 @@ src/xstar_tools/xstar/v0439_regression.py
 src/xstar_tools/xstar/v0440_regression.py
 src/xstar_tools/xstar/v0441_regression.py
 src/xstar_tools/xstar/v0442_regression.py
+src/xstar_tools/xstar/v0472_type50_manifold_runtime_capture.py
 src/xstar_tools/xstar/v0472_type53_runtime_capture.py
 src/xstar_tools/xstar/v0472_type71_runtime_capture.py
 src/xstar_tools/xstar/v0472_type99_runtime_capture.py

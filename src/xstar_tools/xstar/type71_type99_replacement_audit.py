@@ -34,7 +34,7 @@ from .helium_family_isolation import (
 from .v0472_type71_runtime_capture import ORACLE_NAME as TYPE71_ORACLE_NAME, verify as verify_type71
 from .v0472_type99_runtime_capture import ORACLE_NAME as TYPE99_ORACLE_NAME, verify as verify_type99
 
-RELEASE = "0.6.48.7.8"
+RELEASE = "0.6.48.7.9"
 SCHEMA = "xstar-tools-v064877-type71-type99-replacement-audit-v1"
 TYPE71_ORACLE_SHA256 = "c8ab6ebc2dbb467208528dcfc43cfb316176a3b4bafde906e44a53b6676a38e9"
 TYPE99_ORACLE_SHA256 = "bab5297c01e068617a1e1fca4b6dab12cded24c0c139cb394ad2f4c2475ea37b"

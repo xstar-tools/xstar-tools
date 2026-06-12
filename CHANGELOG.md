@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.9 - 2026-06-12
+
+- Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
+- Added fail-closed qualification row-range and unqualified-subset ablation controls.
+- Identified type 50 as the strongest remaining compensating family.
+- Localized the dominant nonlinear response to the type-50 He II row block 46-54; no single row or source position explains the block.
+- Added portable link-free lowered-program snapshots and qualification-output safety checks.
+- Kept type-50 correction, fixed-state parity, and production promotion blocked.
+
 ## 0.6.48.7.8 - 2026-06-12
 
 - Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
