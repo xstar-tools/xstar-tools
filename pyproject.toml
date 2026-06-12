@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.48.7.5"
+version = "0.6.48.7.6"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -84,6 +84,8 @@ xstar-tools-he-bound-free-audit = "xstar_tools.xstar.he_bound_free_audit:main"
 xstar-tools-type53-semantics = "xstar_tools.xstar.type53_semantics:main"
 xstar-tools-v0472-type53-capture = "xstar_tools.xstar.v0472_type53_runtime_capture:main"
 xstar-tools-helium-family-isolation = "xstar_tools.xstar.helium_family_isolation:main"
+xstar-tools-v0472-type99-capture = "xstar_tools.xstar.v0472_type99_runtime_capture:main"
+xstar-tools-type99-type71-audit = "xstar_tools.xstar.type99_type71_coupled_audit:main"
 xstar-tools-port-complete-fixed-state = "xstar_tools.source_port_complete_fixed_state_cli:main"
 xstar-tools-port-dsec = "xstar_tools.source_port_dsec_cli:main"
 xstar-tools-validate-dsec-physical = "xstar_tools.source_port_dsec_physical_cli:main"
@@ -107,5 +109,5 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "v06487_fixed_state_reference_v0472/*", "v064873_type53_runtime_oracle_v0472/*", "specs/*"]
+"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "v06487_fixed_state_reference_v0472/*", "v064873_type53_runtime_oracle_v0472/*", "v064876_type99_record1695_runtime_oracle_v0472/*", "specs/*"]
 "xstar_tools.xstar" = ["data/coheat.dat", "cpp/*"]

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.7.6 - 2026-06-11
+
+- Add an isolated exact v0.6.47.2 fixed-state evaluator replay and immutable one-record oracle for type-99 source position 6312 / record 1695.
+- Reconstruct the exact type-99 source pipeline and signed answer contract.
+- Demonstrate that the current native record-1695 path is IEEE-exact only for ans2, overstates ans1 by about 285 times, and gives incorrect ans5/ans6 signs.
+- Add grouped type-71 ablations and isolate the 31 cascades terminating on He II row 77 as effectively the entire measurable family response.
+- Add combined type-99/type-71 ablations and confirm strong non-additivity with approximately 50% overlap relative to naive addition.
+- Preserve all 31 independently qualified He II type-53 records, unchanged H/Mg states, ABI 60485, and zero Python callbacks.
+- Keep type-99 correction, fixed-state parity, and production promotion blocked pending an independent type-71 row-77 runtime oracle and coupled requalification.
+
 # 0.6.48.7.5 - 2026-06-11
 
 - Preserve all 31 independently qualified He II type-53 records as IEEE-exact immutable invariants across every isolation scenario.

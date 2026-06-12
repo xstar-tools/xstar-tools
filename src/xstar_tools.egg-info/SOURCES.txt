@@ -49,6 +49,7 @@ V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V064874_HEII_TYPE53_IEEE_APPLICATION.md
 V064875_HELIUM_NON_TYPE53_MATRIX_ISOLATION.md
+V064876_TYPE99_RECORD1695_TYPE71_COUPLED_PATH_AUDIT.md
 V06487_FIXED_STATE_PARITY.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -83,6 +84,7 @@ check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
 check_v04874_type53_ieee_application.py
 check_v04875_helium_family_isolation.py
+check_v04876_type99_type71_coupled_audit.py
 check_v0487_fixed_state_parity.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -175,6 +177,7 @@ run_v04873_type53_runtime_capture.sh
 run_v04873_type53_semantics.sh
 run_v04874_type53_ieee_application.sh
 run_v04875_helium_family_isolation.sh
+run_v04876_type99_type71_coupled_audit.sh
 run_v0487_compare_fixed_state.sh
 run_v0487_reference_qualification.sh
 setup.cfg
@@ -416,6 +419,7 @@ xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7.4_handoff.md
 xstar_tools_v0.6.48.7.5_handoff.md
+xstar_tools_v0.6.48.7.6_handoff.md
 xstar_tools_v0.6.48.7_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -882,6 +886,10 @@ src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/capture_provenanc
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/reference_manifest.json
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_capture_full.csv
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_oracle.csv
+src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472/capture_provenance.json
+src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472/capture_report.json
+src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472/reference_manifest.json
+src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472/type99_record1695_runtime_oracle.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/accepted_ion_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/final_level_populations.csv
 src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472/oracle_manifest.json
@@ -1011,6 +1019,7 @@ src/xstar_tools/xstar/thermal.py
 src/xstar_tools/xstar/thermal_balance.py
 src/xstar_tools/xstar/transfer.py
 src/xstar_tools/xstar/type53_semantics.py
+src/xstar_tools/xstar/type99_type71_coupled_audit.py
 src/xstar_tools/xstar/ucalc.py
 src/xstar_tools/xstar/ucalc_dispatch.py
 src/xstar_tools/xstar/ucalc_inventory.py
@@ -1022,6 +1031,7 @@ src/xstar_tools/xstar/v0440_regression.py
 src/xstar_tools/xstar/v0441_regression.py
 src/xstar_tools/xstar/v0442_regression.py
 src/xstar_tools/xstar/v0472_type53_runtime_capture.py
+src/xstar_tools/xstar/v0472_type99_runtime_capture.py
 src/xstar_tools/xstar/xstarcalc.py
 src/xstar_tools/xstar/zone1_dsec_diagnostic.py
 src/xstar_tools/xstar/zone1_dsec_probe_analysis.py
@@ -1231,6 +1241,7 @@ tests/test_v06486_qualification_infrastructure.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py
+tests/test_v064876_type99_type71_coupled_audit.py
 tests/test_v06487_fixed_state_parity.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py

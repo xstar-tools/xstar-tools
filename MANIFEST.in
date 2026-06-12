@@ -494,3 +494,11 @@ include xstar_tools_v0.6.48.7.5_handoff.md
 include check_v04875_helium_family_isolation.py
 include run_v04875_helium_family_isolation.sh
 include tests/test_v064875_helium_family_isolation.py
+
+# v0.6.48.7.6 type-99 record 1695 / type-71 coupled-path audit
+recursive-include src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472 *
+include V064876_TYPE99_RECORD1695_TYPE71_COUPLED_PATH_AUDIT.md
+include xstar_tools_v0.6.48.7.6_handoff.md
+include check_v04876_type99_type71_coupled_audit.py
+include run_v04876_type99_type71_coupled_audit.sh
+include tests/test_v064876_type99_type71_coupled_audit.py

@@ -1,4 +1,4 @@
-"""Helium non-type-53 matrix contribution isolation for xstar_tools v0.6.48.7.5.
+"""Helium non-type-53 matrix contribution isolation for xstar_tools v0.6.48.7.6.
 
 The workflow preserves the 31 independently qualified He II type-53 records,
 constructs source-position and row-level matrix ledgers, runs one-family-at-a-
@@ -20,7 +20,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.5"
+RELEASE = "0.6.48.7.6"
 SCHEMA = "xstar-tools-v064875-helium-family-isolation-v1"
 MATRIX_FAMILIES = (50, 54, 56, 57, 63, 69, 71, 74, 76, 77, 95, 99)
 PRELIMINARY_FAMILY = 30
