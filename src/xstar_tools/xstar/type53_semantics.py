@@ -1,4 +1,4 @@
-"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.7.
+"""Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.8.
 
 The tool joins the applied native values and the translated source-style shadow
 values for the 31 He II type-53 records at one evaluation.  It expands each
@@ -24,7 +24,7 @@ from .he_bound_free_audit import _resolve_records_csv
 
 SCHEMA = "xstar-tools-v064874-type53-ieee-application-v1"
 ORACLE_SCHEMA = "xstar-tools-v064872-type53-runtime-oracle-v1"
-RELEASE = "0.6.48.7.7"
+RELEASE = "0.6.48.7.8"
 ELEMENT_Z = 2
 ION_STAGE = 2
 DATA_TYPE = 53
@@ -92,7 +92,7 @@ def _load_selected(records_source: Path, evaluation: int) -> tuple[Path, list[di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV lacks v0.6.48.7.7 type-53 fields: " + ", ".join(missing))
+            raise ValueError("records CSV lacks v0.6.48.7.8 type-53 fields: " + ", ".join(missing))
         rows = [
             dict(row) for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation

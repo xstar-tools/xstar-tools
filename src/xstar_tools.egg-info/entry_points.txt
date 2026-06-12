@@ -11,6 +11,7 @@ xstar-tools-export-superwind = xstar_tools.export:main
 xstar-tools-fixed-state-parity = xstar_tools.xstar.fixed_state_parity:main
 xstar-tools-he-bound-free-audit = xstar_tools.xstar.he_bound_free_audit:main
 xstar-tools-helium-family-isolation = xstar_tools.xstar.helium_family_isolation:main
+xstar-tools-helium-matrix-residual-decomposition = xstar_tools.xstar.helium_matrix_residual_decomposition:main
 xstar-tools-hierarchy = xstar_tools.hierarchy:main
 xstar-tools-inspect = xstar_tools.inspect:main
 xstar-tools-inspect-atdb = xstar_tools.cli.inspect_atdb:main

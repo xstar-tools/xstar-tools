@@ -315,6 +315,12 @@ struct xstar_fixed_state_context_impl {
     int last_helium_matrix_ablation_type = 0;
     int last_helium_preliminary_ablation_type = 0;
     int last_helium_source_position_ablation = 0;
+    int last_helium_matrix_ablation_row_type = 0;
+    int last_helium_matrix_ablation_row_min = 0;
+    int last_helium_matrix_ablation_row_max = 0;
+    bool last_helium_unqualified_type53_ablation = false;
+    bool last_helium_unqualified_type71_ablation = false;
+    bool last_helium_unqualified_type99_ablation = false;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -1237,7 +1243,7 @@ EvaluatedRecord evaluate_record(
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.7 applies the source-exact result only to the 31
+            // v0.6.48.7.8 applies the source-exact result only to the 31
             // evaluation-61-qualified He II records.  Other type-53 ions stay
             // on the prior path until they have independent runtime oracles.
             if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
@@ -1801,14 +1807,34 @@ int run_impl(
     const int helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
     const int helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
     const int helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
+    const int helium_matrix_ablation_row_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_TYPE");
+    const int helium_matrix_ablation_row_min = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MIN");
+    const int helium_matrix_ablation_row_max_raw = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_ROW_MAX");
+    const int helium_matrix_ablation_row_max = helium_matrix_ablation_row_max_raw != 0
+        ? helium_matrix_ablation_row_max_raw : helium_matrix_ablation_row_min;
+    const bool helium_unqualified_type53_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE53");
+    const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
+    const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
+    if ((helium_matrix_ablation_row_min == 0) != (helium_matrix_ablation_row_max == 0) ||
+        helium_matrix_ablation_row_max < helium_matrix_ablation_row_min) {
+        throw std::runtime_error("invalid helium matrix row-ablation range");
+    }
+    const bool any_helium_ablation = helium_matrix_ablation_type != 0 || helium_preliminary_ablation_type != 0 ||
+        helium_source_position_ablation != 0 || helium_matrix_ablation_row_min != 0 ||
+        helium_unqualified_type53_ablation || helium_unqualified_type71_ablation || helium_unqualified_type99_ablation;
     const char* qualification_ablation = std::getenv("XSTAR_QUALIFICATION_ABLATION");
-    if ((helium_matrix_ablation_type != 0 || helium_preliminary_ablation_type != 0 || helium_source_position_ablation != 0) &&
-        (!qualification_ablation || std::string(qualification_ablation) != "1")) {
+    if (any_helium_ablation && (!qualification_ablation || std::string(qualification_ablation) != "1")) {
         throw std::runtime_error("helium ablation requires XSTAR_QUALIFICATION_ABLATION=1");
     }
     ctx.last_helium_matrix_ablation_type = helium_matrix_ablation_type;
     ctx.last_helium_preliminary_ablation_type = helium_preliminary_ablation_type;
     ctx.last_helium_source_position_ablation = helium_source_position_ablation;
+    ctx.last_helium_matrix_ablation_row_type = helium_matrix_ablation_row_type;
+    ctx.last_helium_matrix_ablation_row_min = helium_matrix_ablation_row_min;
+    ctx.last_helium_matrix_ablation_row_max = helium_matrix_ablation_row_max;
+    ctx.last_helium_unqualified_type53_ablation = helium_unqualified_type53_ablation;
+    ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
+    ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -1890,8 +1916,20 @@ int run_impl(
                 original.data_type == helium_matrix_ablation_type;
             const bool matrix_source_ablated = element.element_z == 2 && helium_source_position_ablation != 0 &&
                 original.source_position == helium_source_position_ablation;
+            const bool matrix_row_ablated = element.element_z == 2 && helium_matrix_ablation_row_min != 0 &&
+                (helium_matrix_ablation_row_type == 0 || original.data_type == helium_matrix_ablation_row_type) &&
+                ((original.lower_row >= helium_matrix_ablation_row_min && original.lower_row <= helium_matrix_ablation_row_max) ||
+                 (original.upper_row >= helium_matrix_ablation_row_min && original.upper_row <= helium_matrix_ablation_row_max));
+            const bool unqualified_type53_ablated = element.element_z == 2 && helium_unqualified_type53_ablation &&
+                original.data_type == 53 && original.ion_stage != 2;
+            const bool unqualified_type71_ablated = element.element_z == 2 && helium_unqualified_type71_ablation &&
+                original.data_type == 71 && original.upper_row != 77;
+            const bool unqualified_type99_ablated = element.element_z == 2 && helium_unqualified_type99_ablation &&
+                original.data_type == 99 && original.source_position != 6312;
+            const bool qualification_ablated = matrix_family_ablated || matrix_source_ablated || matrix_row_ablated ||
+                unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
             bool matrix_committed = false;
-            if (item.matrix_enabled && active_stage && endpoints_active && !matrix_family_ablated && !matrix_source_ablated) {
+            if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated) {
                 auto contribution = original;
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;
@@ -2454,7 +2492,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.7\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.8\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
@@ -2470,6 +2508,12 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"helium_matrix_ablation_type\": " << context->last_helium_matrix_ablation_type << ",\n"
                    << "  \"helium_preliminary_ablation_type\": " << context->last_helium_preliminary_ablation_type << ",\n"
                    << "  \"helium_source_position_ablation\": " << context->last_helium_source_position_ablation << ",\n"
+                   << "  \"helium_matrix_ablation_row_type\": " << context->last_helium_matrix_ablation_row_type << ",\n"
+                   << "  \"helium_matrix_ablation_row_min\": " << context->last_helium_matrix_ablation_row_min << ",\n"
+                   << "  \"helium_matrix_ablation_row_max\": " << context->last_helium_matrix_ablation_row_max << ",\n"
+                   << "  \"helium_unqualified_type53_ablation\": " << (context->last_helium_unqualified_type53_ablation ? "true" : "false") << ",\n"
+                   << "  \"helium_unqualified_type71_ablation\": " << (context->last_helium_unqualified_type71_ablation ? "true" : "false") << ",\n"
+                   << "  \"helium_unqualified_type99_ablation\": " << (context->last_helium_unqualified_type99_ablation ? "true" : "false") << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";
