@@ -13,8 +13,8 @@ from xstar_tools.xstar.v0472_type99_runtime_capture import verify as verify99
 ROOT=Path(__file__).resolve().parents[1]
 
 def test_release_is_pinned():
-    assert xstar_tools.__version__ == "0.6.48.7.12"
-    assert RELEASE == "0.6.48.7.12"
+    assert xstar_tools.__version__ == "0.6.48.7.13"
+    assert RELEASE == "0.6.48.7.13"
 
 def test_type71_oracle_is_complete_and_exactly_pinned():
     bundle=ROOT/"src/xstar_tools/benchmarks/v064877_type71_row77_runtime_oracle_v0472"

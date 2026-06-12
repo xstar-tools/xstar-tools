@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.13 - 2026-06-12
+
+- Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.
+- Reproduces all 474 answers and 316 committed matrix terms IEEE-exactly, including the hydrogen-density thermal multiplier.
+- Reduces the evaluation-61 reference-population residual by 93.956%, restores helium matrix rank 78/78, and improves conditioning by about 5.64x.
+- Preserves exact type-53, type-71, and type-99 constraints, H/Mg bit identity, helium normalization, and zero Python callbacks.
+- Keeps general type-50 promotion, fixed-state parity, thermal parity, and production promotion blocked because the solved population state does not improve overall.
+
 ## 0.6.48.7.12 - 2026-06-12
 
 - Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.

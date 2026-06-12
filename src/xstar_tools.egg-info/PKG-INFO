@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.12
+Version: 0.6.48.7.13
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -28,7 +28,7 @@ Requires-Dist: scipy>=1.8; extra == "sparse"
 
 ## v0.6.48.7.9 type-99 record 1695/type-71 coupled-path audit
 
-## v0.6.48.7.12 DSEC type-50 runtime capture
+## v0.6.48.7.13 DSEC type-50 runtime capture
 
 This release adds a qualification-only observational probe for the untouched
 v0.6.47.2 physical DSEC run. It captures the live escape-probability and matrix

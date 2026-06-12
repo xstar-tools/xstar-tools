@@ -23,9 +23,9 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.12"
-SCHEMA = "xstar-tools-v0648712-v0472-dsec-type50-runtime-capture-v1"
-BUNDLE_SCHEMA = "xstar-tools-v0648712-type50-dsec-runtime-oracle-v1"
+RELEASE = "0.6.48.7.13"
+SCHEMA = "xstar-tools-v0648713-v0472-dsec-type50-runtime-capture-v1"
+BUNDLE_SCHEMA = "xstar-tools-v0648713-type50-dsec-runtime-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
 TARGET_EVALUATION = 61
 TARGET_RECORDS = 79
@@ -316,8 +316,8 @@ def finalize(run_summary=None):
         writer = csv.DictWriter(handle, fieldnames=TRACE_FIELDS, extrasaction="ignore")
         writer.writeheader(); writer.writerows(trace)
     report = {
-        "schema": "xstar-tools-v0648712-v0472-dsec-type50-runtime-probe-v1",
-        "release": "0.6.48.7.12",
+        "schema": "xstar-tools-v0648713-v0472-dsec-type50-runtime-probe-v1",
+        "release": "0.6.48.7.13",
         "result": "ACCEPT" if len(rows) == 79 and len(terms) == 316 else "REJECT",
         "capture_kind": "actual_v06472_dsec_type50_escape_probability_runtime_capture",
         "actual_dsec_runtime_capture": True,

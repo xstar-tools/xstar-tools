@@ -165,7 +165,7 @@ int copy_scaffold_result(
     context.stats.zones_attempted += 1;
     if ((context.config.flags & XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL) == 0) {
         const std::string text =
-            "v0.6.48.7.12 standalone C++ zone boundary is architecture-only; "
+            "v0.6.48.7.13 standalone C++ zone boundary is architecture-only; "
             "full XSTAR physics remains on the accepted hybrid runner. "
             "Set XSTAR_CONFIG_ALLOW_SCAFFOLD_MODEL only for ABI tests.";
         copy_text(message, message_size, text);
@@ -262,7 +262,7 @@ int cpp_get_component_info(
     if (component_id == XSTAR_COMPONENT_IO) {
         info->status_flags = XSTAR_COMPONENT_IMPLEMENTATION_AVAILABLE | XSTAR_COMPONENT_PRODUCT_ACTIVE;
         copy_text(info->implementation, sizeof(info->implementation),
-                  "v0.6.48.7.12 native computed-state FITS/log development IO");
+                  "v0.6.48.7.13 native computed-state FITS/log development IO");
         copy_text(info->message, sizeof(info->message),
                   "compiled-case API writes exact prequalified science files; dynamic FITS synthesis remains on Python fallback");
         copy_text(message, message_size, info->message);
@@ -285,7 +285,7 @@ int cpp_get_component_info(
             info->status_flags |= XSTAR_COMPONENT_PRODUCT_ACTIVE;
         }
         copy_text(info->message, sizeof(info->message),
-                  "component library loaded; status reflects v0.6.48.7.12 product ownership");
+                  "component library loaded; status reflects v0.6.48.7.13 product ownership");
     } else {
         copy_text(info->message, sizeof(info->message), found->error);
     }

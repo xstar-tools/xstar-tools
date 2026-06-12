@@ -49,6 +49,7 @@ xstar-tools-run-python = xstar_tools.source_port_physical_runner_cli:main
 xstar-tools-run-xstar = xstar_tools.cli.run_xstar:main
 xstar-tools-solver = xstar_tools.solver:main
 xstar-tools-source-inventory = xstar_tools.source_port_cli:main
+xstar-tools-type50-dsec-coupled-replacement-audit = xstar_tools.xstar.type50_dsec_coupled_replacement_audit:main
 xstar-tools-type50-manifold-audit = xstar_tools.xstar.type50_manifold_audit:main
 xstar-tools-type50-manifold-replacement-audit = xstar_tools.xstar.type50_manifold_replacement_audit:main
 xstar-tools-type53-semantics = xstar_tools.xstar.type53_semantics:main

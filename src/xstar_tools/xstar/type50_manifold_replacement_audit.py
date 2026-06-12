@@ -36,7 +36,7 @@ from .type71_type99_replacement_audit import (
 from .v0472_type71_runtime_capture import ORACLE_NAME as TYPE71_ORACLE_NAME, verify as verify_type71
 from .v0472_type99_runtime_capture import ORACLE_NAME as TYPE99_ORACLE_NAME, verify as verify_type99
 
-RELEASE = "0.6.48.7.12"
+RELEASE = "0.6.48.7.13"
 SCHEMA = "xstar-tools-v0648711-type50-manifold-replacement-audit-v1"
 TYPE50_BUNDLE = Path("src/xstar_tools/benchmarks/v064879_type50_heii_rows46_54_runtime_oracle_v0472")
 TYPE50_ORACLE_NAME = "type50_heii_rows46_54_runtime_oracle.csv"

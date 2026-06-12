@@ -1,6 +1,6 @@
 ## v0.6.48.7.9 type-99 record 1695/type-71 coupled-path audit
 
-## v0.6.48.7.12 DSEC type-50 runtime capture
+## v0.6.48.7.13 DSEC type-50 runtime capture
 
 This release adds a qualification-only observational probe for the untouched
 v0.6.47.2 physical DSEC run. It captures the live escape-probability and matrix
