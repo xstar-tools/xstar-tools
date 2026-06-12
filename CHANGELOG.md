@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.14 - 2026-06-12
+
+- Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.
+- Captures the exact 155-record inventory across types 50, 53, 56, 57, 71, 74, 76, 77, 95, and 99, plus all 620 committed matrix terms in global source order.
+- Captures line/continuum escape inputs, `ptmp1`, `ptmp2`, covering fraction, `ans1`-`ans6`, endpoint populations, and population-dependent diagnostics.
+- Captures the complete physical row-46 equation, the pre-normalization row, the normalized all-ones row, RHS, and all 78 solve rows.
+- Added an offline residual audit that substitutes the complete source row-46 term set into the exact type-53/type-71/type-99/actual-DSEC-type-50 qualification state and ranks the remaining residual by data type.
+- Explicitly blocks type-76, single-record, fixed-state, thermal, and production promotion pending the runtime result.
+
 ## 0.6.48.7.13 - 2026-06-12
 
 - Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.

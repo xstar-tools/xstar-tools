@@ -167,7 +167,7 @@ fitsfile* create_fits(const std::filesystem::path& path, const char* product = n
     fits_create_img(fptr, BYTE_IMG, 0, nullptr, &status);
     check_fits(status, "fits_create_img");
     int computed = 1, replay = 0;
-    fits_update_key(fptr, TSTRING, const_cast<char*>("ORIGIN"), const_cast<char*>("xstar_tools 0.6.48.7.13"), nullptr, &status);
+    fits_update_key(fptr, TSTRING, const_cast<char*>("ORIGIN"), const_cast<char*>("xstar_tools 0.6.48.7.14"), nullptr, &status);
     fits_update_key(fptr, TLOGICAL, const_cast<char*>("COMPUTED"), &computed, const_cast<char*>("generated from native computed arrays"), &status);
     fits_update_key(fptr, TLOGICAL, const_cast<char*>("REPLAY"), &replay, const_cast<char*>("no prerecorded science payload"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("QUALSTAT"), const_cast<char*>("DEVELOPMENT"), const_cast<char*>("schema generated; physical equivalence not qualified"), &status);
@@ -224,7 +224,7 @@ void write_parameters(fitsfile* fptr) {
         write_string(fptr, 2, row, parameter);
         write_float(fptr, 3, row, 0.0f);
         write_string(fptr, 4, row, "computed");
-        write_string(fptr, 5, row, "native v0.6.48.7.13 development");
+        write_string(fptr, 5, row, "native v0.6.48.7.14 development");
     }
 }
 

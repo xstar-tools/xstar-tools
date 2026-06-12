@@ -522,9 +522,16 @@ include run_v048710_type50_manifold_replacement_audit.sh
 include check_v048710_type50_manifold_replacement_audit.py
 include V0648710_TYPE50_MANIFOLD_COUPLED_REPLACEMENT_AUDIT.md
 include xstar_tools_v0.6.48.7.13_handoff.md
-include tests/test_v0648711_type50_manifold_replacement_audit.py
+include tests/test_v0648710_type50_manifold_replacement_audit.py
 
 recursive-include src/xstar_tools/benchmarks/v0648712_type50_dsec_runtime_oracle_v0472 *
 include V0648713_TYPE50_DSEC_COUPLED_REPLACEMENT_AUDIT.md
 include run_v048713_type50_dsec_coupled_replacement_audit.sh
 include check_v048713_type50_dsec_coupled_replacement_audit.py
+
+# v0.6.48.7.14 original-DSEC row-46 capture and residual audit
+include V0648714_DSEC_ROW46_SOURCE_ORDER_CAPTURE_AND_RESIDUAL_AUDIT.md
+include xstar_tools_v0.6.48.7.14_handoff.md
+include run_v048714_dsec_row46_capture_and_residual_audit.sh
+include check_v048714_dsec_row46_capture_and_residual_audit.py
+include tests/test_v0648714_dsec_row46_capture_and_audit.py

@@ -1,6 +1,17 @@
+## v0.6.48.7.14 original-DSEC row-46 source-order capture
+
+This release adds a qualification-only observational capture of every original
+v0.6.47.2 DSEC record contributing to He II row 46 at evaluation 61. It
+records all 155 contributing records and 620 committed terms in global source order, the live
+escape-probability and population-dependent state, the physical row-46 matrix
+row, and the exact normalization-row commit. A companion audit substitutes the
+complete captured row-46 term set offline and decomposes the remaining
+reference-population residual by data type. No type-76 or single-record
+correction is promoted.
+
 ## v0.6.48.7.9 type-99 record 1695/type-71 coupled-path audit
 
-## v0.6.48.7.13 DSEC type-50 runtime capture
+## v0.6.48.7.12 DSEC type-50 runtime capture
 
 This release adds a qualification-only observational probe for the untouched
 v0.6.47.2 physical DSEC run. It captures the live escape-probability and matrix
