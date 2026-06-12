@@ -1,6 +1,7 @@
 #include "xstar_fixed_state_engine.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
+#include "type50_manifold_oracle_v048710.h"
 
 #include <algorithm>
 #include <array>
@@ -81,6 +82,16 @@ bool environment_flag(const char* name) {
     if (std::string(value) == "1") return true;
     if (std::string(value) == "0") return false;
     throw std::runtime_error(std::string("invalid environment flag: ") + name);
+}
+
+const xstar_type50_manifold_oracle_v048710::Entry* find_type50_manifold_oracle_entry(
+    std::uint64_t source_position,
+    std::uint64_t record
+) {
+    for (const auto& entry : xstar_type50_manifold_oracle_v048710::kEntries) {
+        if (entry.source_position == source_position && entry.record == record) return &entry;
+    }
+    return nullptr;
 }
 
 std::string trim(std::string value) {
@@ -1243,7 +1254,7 @@ EvaluatedRecord evaluate_record(
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.9 applies the source-exact result only to the 31
+            // v0.6.48.7.10 applies the source-exact result only to the 31
             // evaluation-61-qualified He II records.  Other type-53 ions stay
             // on the prior path until they have independent runtime oracles.
             if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
@@ -1291,6 +1302,28 @@ EvaluatedRecord evaluate_record(
             c.ans2 = a;
             c.ans3 = c.ans2 * delta_ev * kErgPerEv;
             c.ans4 = c.ans1 * delta_ev * kErgPerEv;
+            if (environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE")) {
+                if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+                    throw std::runtime_error("type50 manifold oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+                }
+                const auto* oracle = find_type50_manifold_oracle_entry(record.source_position, record.record);
+                if (oracle) {
+                    if (input.temperature_k != xstar_type50_manifold_oracle_v048710::kTemperatureK ||
+                        input.hydrogen_density_cm3 != xstar_type50_manifold_oracle_v048710::kHydrogenDensityCm3) {
+                        throw std::runtime_error("type50 manifold oracle replacement is restricted to the evaluation-61 fixed state");
+                    }
+                    if (record.data_type != 50 || record.ion_stage != 2 ||
+                        record.lower_row != oracle->lower_row || record.upper_row != oracle->upper_row) {
+                        throw std::runtime_error("type50 manifold oracle identity mismatch");
+                    }
+                    c.ans1 = oracle->ans[0];
+                    c.ans2 = oracle->ans[1];
+                    c.ans3 = oracle->ans[2];
+                    c.ans4 = oracle->ans[3];
+                    c.ans5 = oracle->ans[4];
+                    c.ans6 = oracle->ans[5];
+                }
+            }
             const double wavelength_a = delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0;
             const double mass = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
             const double thermal_velocity = 1.29e6 / std::sqrt(std::max(mass / std::max(t4, 1.0e-300), 1.0e-300));
@@ -2492,7 +2525,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.9\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.10\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

@@ -48,7 +48,7 @@ def run_zone(
     context.zones_attempted += 1
     if not allow_scaffold:
         raise NotImplementedError(
-            "v0.6.48.7.9 Python standalone zone boundary is architecture-only; "
+            "v0.6.48.7.10 Python standalone zone boundary is architecture-only; "
             "use the existing xstar_tools Python runner for production physics"
         )
 
@@ -81,4 +81,4 @@ def run_batch(
 
 def echo_json(request: Any) -> Any:
     """Small JSON-bridge self-test callable."""
-    return {"backend": "python", "request": request, "version": "0.6.48.7.9"}
+    return {"backend": "python", "request": request, "version": "0.6.48.7.10"}

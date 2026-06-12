@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.10 - 2026-06-12
+
+- Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.
+- Embedded the immutable evaluation-61 type-50 oracle in the native engine and restricted its use to the captured fixed state.
+- Required the general replacement gate, the exact record-1695 type-99 gate, and a dedicated type-50 manifold gate.
+- Preserved all 31 exact type-53 records, all 31 exact type-71 row-77 records, and all six exact type-99 record-1695 answers.
+- Made all 474 type-50 answers and all 79 matrix commitments exact to the frozen oracle.
+- Verified bit-identical H/Mg state and exact helium normalization.
+- Accepted the qualification candidate because electron fraction, charge residual, He I/II/III, and hmctot all move toward the v0.6.47.2 reference.
+- Kept general type-50 physics replacement, fixed-state parity, thermal parity, and production promotion blocked because the candidate remains an evaluation-61 oracle substitution and the improvements are extremely small.
+
 ## 0.6.48.7.9 - 2026-06-12
 
 - Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.

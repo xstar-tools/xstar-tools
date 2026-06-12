@@ -44,6 +44,7 @@ V064853_PRELIMINARY_ION_BALANCE_AND_REFERENCE_RADIATION.md
 V06485_ACTIVE_FAMILY_COMPLETION_PHASE2_AND_TRAJECTORY.md
 V064861_QUALIFICATION_COMPARATOR_HOTFIX.md
 V06486_QUALIFICATION_INFRASTRUCTURE.md
+V0648710_TYPE50_MANIFOLD_COUPLED_REPLACEMENT_AUDIT.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
@@ -81,6 +82,7 @@ check_v04853_preliminary_ion_balance.py
 check_v0485_active_family_phase2.py
 check_v04861_qualification_comparator_hotfix.py
 check_v0486_qualification_infrastructure.py
+check_v048710_type50_manifold_replacement_audit.py
 check_v04871_he_bound_free_audit.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
@@ -175,6 +177,7 @@ run_v04861_compare_products.sh
 run_v04861_reference_qualification.sh
 run_v0486_compare_products.sh
 run_v0486_reference_qualification.sh
+run_v048710_type50_manifold_replacement_audit.sh
 run_v04871_he_bound_free_audit.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
@@ -420,6 +423,7 @@ xstar_tools_v0.6.48.5.3_handoff.md
 xstar_tools_v0.6.48.5_handoff.md
 xstar_tools_v0.6.48.6.1_handoff.md
 xstar_tools_v0.6.48.6_handoff.md
+xstar_tools_v0.6.48.7.10_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
@@ -1034,6 +1038,7 @@ src/xstar_tools/xstar/thermal.py
 src/xstar_tools/xstar/thermal_balance.py
 src/xstar_tools/xstar/transfer.py
 src/xstar_tools/xstar/type50_manifold_audit.py
+src/xstar_tools/xstar/type50_manifold_replacement_audit.py
 src/xstar_tools/xstar/type53_semantics.py
 src/xstar_tools/xstar/type71_type99_replacement_audit.py
 src/xstar_tools/xstar/type99_type71_coupled_audit.py
@@ -1079,6 +1084,7 @@ src/xstar_tools/xstar/cpp/matrix_kernels.cpp
 src/xstar_tools/xstar/cpp/opacity_kernels.cpp
 src/xstar_tools/xstar/cpp/rate_kernels.cpp
 src/xstar_tools/xstar/cpp/thermal_kernels.cpp
+src/xstar_tools/xstar/cpp/type50_manifold_oracle_v048710.h
 src/xstar_tools/xstar/cpp/xstar_api.cpp
 src/xstar_tools/xstar/cpp/xstar_api.h
 src/xstar_tools/xstar/cpp/xstar_api.hpp
@@ -1257,6 +1263,7 @@ tests/test_v064853_preliminary_ion_balance.py
 tests/test_v06485_active_family_phase2.py
 tests/test_v064861_qualification_comparator_hotfix.py
 tests/test_v06486_qualification_infrastructure.py
+tests/test_v0648710_type50_manifold_replacement_audit.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

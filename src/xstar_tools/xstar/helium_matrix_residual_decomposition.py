@@ -1,4 +1,4 @@
-"""Constrained helium matrix-residual decomposition for xstar_tools v0.6.48.7.9.
+"""Constrained helium matrix-residual decomposition for xstar_tools v0.6.48.7.10.
 
 All scenarios hold fixed three independently qualified contracts:
 
@@ -45,7 +45,7 @@ from .type71_type99_replacement_audit import (
 from .v0472_type71_runtime_capture import ORACLE_NAME as TYPE71_ORACLE_NAME, verify as verify_type71
 from .v0472_type99_runtime_capture import ORACLE_NAME as TYPE99_ORACLE_NAME, verify as verify_type99
 
-RELEASE = "0.6.48.7.9"
+RELEASE = "0.6.48.7.10"
 SCHEMA = "xstar-tools-v064878-helium-matrix-residual-decomposition-v1"
 TARGET_RECORD = 1695
 TARGET_SOURCE_POSITION = 6312

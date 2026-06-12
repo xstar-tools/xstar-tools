@@ -1,6 +1,6 @@
 """Type-99 record 1695 and type-71 coupled-path qualification audit.
 
-v0.6.48.7.9 reconstructs the exact v0.6.47.2 type-99 source semantics,
+v0.6.48.7.10 reconstructs the exact v0.6.47.2 type-99 source semantics,
 freezes a one-record fixed-state evaluator oracle when the exact source archive
 is available, performs grouped type-71 row-path ablations, and measures the
 non-additivity of type-99 and type-71 removal.  No physics replacement is
@@ -38,7 +38,7 @@ from .v0472_type99_runtime_capture import (
     verify as verify_type99,
 )
 
-RELEASE = "0.6.48.7.9"
+RELEASE = "0.6.48.7.10"
 SCHEMA = "xstar-tools-v064876-type99-type71-coupled-path-audit-v1"
 TYPE99_BUNDLE_RELATIVE = Path("src/xstar_tools/benchmarks/v064876_type99_record1695_runtime_oracle_v0472")
 TARGET_SOURCE_POSITION = 6312
@@ -261,7 +261,7 @@ def audit(package_dir: Path, lowered_program: Path, output_dir: Path, source_arc
         ("type99_all", "type71_upper77", "type99_plus_type71_upper77"),
         ("source6312", "type71_upper77", "source6312_plus_type71_upper77"),
     ]
-    # Source 6312 single result is available from the v0.6.48.7.9 family-isolation output only when supplied.
+    # Source 6312 single result is available from the v0.6.48.7.10 family-isolation output only when supplied.
     # Re-run it here as a strict grouped selector so coupling metrics are self-contained.
     selector6312 = lambda r: int(r["source_position"]) == TARGET_SOURCE_POSITION
     single6312 = run_scenario(root, executable, lowered, trajectory, radiation, output, evaluation, env, "source6312", selector6312,

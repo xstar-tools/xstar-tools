@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,csv,hashlib,json,os,subprocess,sys,tarfile,tempfile
 from pathlib import Path
 from typing import Any,Mapping
-RELEASE='0.6.48.7.9'; SCHEMA='xstar-tools-v064879-v0472-type50-manifold-runtime-capture-v1'; ORACLE_SCHEMA='xstar-tools-v064879-type50-manifold-runtime-oracle-v1'
+RELEASE='0.6.48.7.10'; SCHEMA='xstar-tools-v064879-v0472-type50-manifold-runtime-capture-v1'; ORACLE_SCHEMA='xstar-tools-v064879-type50-manifold-runtime-oracle-v1'
 SOURCE_ARCHIVE_SHA256='85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060'
 SOURCE_MODULE_RELATIVE=Path('src/xstar_tools/rates_type50.py'); SOURCE_MODULE_SHA256=''
 ORACLE_NAME='type50_heii_rows46_54_runtime_oracle.csv'; TARGET_COUNT=79

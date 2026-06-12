@@ -516,3 +516,10 @@ include check_v04878_helium_matrix_residual_decomposition.py
 include V064878_CONSTRAINED_HELIUM_MATRIX_RESIDUAL_DECOMPOSITION.md
 include xstar_tools_v0.6.48.7.9_handoff.md
 include tests/test_v064878_helium_matrix_residual_decomposition.py
+
+# v0.6.48.7.10 qualification-only coupled type-50 manifold replacement
+include run_v048710_type50_manifold_replacement_audit.sh
+include check_v048710_type50_manifold_replacement_audit.py
+include V0648710_TYPE50_MANIFOLD_COUPLED_REPLACEMENT_AUDIT.md
+include xstar_tools_v0.6.48.7.10_handoff.md
+include tests/test_v0648710_type50_manifold_replacement_audit.py
