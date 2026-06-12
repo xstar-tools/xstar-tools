@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.6.48.7.11 - 2026-06-12
+
+### Added
+- Added qualification-only source-ordered helium solve-response diagnostics.
+- Exported the complete 78x78 helium matrix, RHS, row state, and 5,240 committed source-order terms.
+- Added direct evaluation of the v0.6.47.2 reference population vector in the native helium system.
+- Added residual rankings by qualified scope, remaining family, row block, and source position.
+
+### Findings
+- Exact type-50 changes 106 matrix entries but changes the population solution by only about 4.68e-9 in L1.
+- The normalized helium system is extremely ill-conditioned, with condition number about 2.73e14.
+- Rows 46-54 contain 99.8175% of the reference-population residual.
+- The already exact type-50 scope dominates the residual; no unqualified family is material.
+- A complete DSEC escape-probability capture is required before further type-50 promotion.
+
+### Status
+- Fixed-state, thermal, controller, product, and production promotion remain blocked.
+
 ## 0.6.48.7.10 - 2026-06-12
 
 - Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.

@@ -11,7 +11,7 @@ from xstar_tools.xstar.helium_matrix_residual_decomposition import (
 
 
 def test_release_and_scope_constants():
-    assert RELEASE == "0.6.48.7.10"
+    assert RELEASE == "0.6.48.7.11"
     assert SCHEMA == "xstar-tools-v064878-helium-matrix-residual-decomposition-v1"
     assert 53 not in REGULAR_FAMILIES
     assert 71 not in REGULAR_FAMILIES

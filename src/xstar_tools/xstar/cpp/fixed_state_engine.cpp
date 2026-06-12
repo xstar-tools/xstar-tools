@@ -276,6 +276,21 @@ struct NativeElementDiagnostic {
     double max_relative_row_residual = 0.0;
     std::uint64_t records_constructed = 0;
     std::uint64_t terms_constructed = 0;
+    bool solve_response_captured = false;
+    std::vector<double> active_initial_populations;
+    std::vector<double> active_final_outer_start_populations;
+    std::vector<double> active_final_populations;
+    std::vector<double> dense_matrix;
+    std::vector<double> heating_matrix;
+    std::vector<double> heating_matrix2;
+    std::vector<double> rhs;
+    std::vector<double> row_residual;
+    std::vector<double> row_scale;
+    std::vector<double> relative_row_residual;
+    std::string solver_method;
+    std::uint32_t solver_status_flags = 0;
+    int outer_iterations = 0;
+    int fixed_point_iterations = 0;
 };
 
 struct ElementBuffers {
@@ -332,6 +347,7 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type53_ablation = false;
     bool last_helium_unqualified_type71_ablation = false;
     bool last_helium_unqualified_type99_ablation = false;
+    bool last_helium_solve_response = false;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -1254,7 +1270,7 @@ EvaluatedRecord evaluate_record(
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.10 applies the source-exact result only to the 31
+            // v0.6.48.7.11 applies the source-exact result only to the 31
             // evaluation-61-qualified He II records.  Other type-53 ions stay
             // on the prior path until they have independent runtime oracles.
             if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
@@ -1848,6 +1864,10 @@ int run_impl(
     const bool helium_unqualified_type53_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE53");
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
+    const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
     if ((helium_matrix_ablation_row_min == 0) != (helium_matrix_ablation_row_max == 0) ||
         helium_matrix_ablation_row_max < helium_matrix_ablation_row_min) {
         throw std::runtime_error("invalid helium matrix row-ablation range");
@@ -1868,6 +1888,7 @@ int run_impl(
     ctx.last_helium_unqualified_type53_ablation = helium_unqualified_type53_ablation;
     ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
+    ctx.last_helium_solve_response = helium_solve_response;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -1982,6 +2003,9 @@ int run_impl(
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
+        if (helium_solve_response && element.element_z == 2) {
+            ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY | XSTAR_ELEMENT_RETURN_MATRICES;
+        }
         ein.element_z = active.element.element_z;
         ein.n_rows = active.element.n_rows;
         ein.n_superlevels = active.element.n_superlevels;
@@ -2056,6 +2080,23 @@ int run_impl(
         element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
         element_diagnostic.records_constructed = eout.records_constructed;
         element_diagnostic.terms_constructed = eout.terms_constructed;
+        if (helium_solve_response && element.element_z == 2) {
+            element_diagnostic.solve_response_captured = true;
+            element_diagnostic.active_initial_populations = buffers.initial;
+            element_diagnostic.active_final_outer_start_populations = buffers.outer;
+            element_diagnostic.active_final_populations = buffers.populations;
+            element_diagnostic.dense_matrix = buffers.dense;
+            element_diagnostic.heating_matrix = buffers.heat;
+            element_diagnostic.heating_matrix2 = buffers.heat2;
+            element_diagnostic.rhs = buffers.rhs;
+            element_diagnostic.row_residual = buffers.row_residual;
+            element_diagnostic.row_scale = buffers.row_scale;
+            element_diagnostic.relative_row_residual = buffers.relative_residual;
+            element_diagnostic.solver_method = eout.solver_method;
+            element_diagnostic.solver_status_flags = eout.status_flags;
+            element_diagnostic.outer_iterations = eout.outer_iterations;
+            element_diagnostic.fixed_point_iterations = eout.fixed_point_iterations;
+        }
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
 
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
@@ -2522,10 +2563,115 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             global_offset += source.rows.size();
         }
 
+        if (context->last_helium_solve_response) {
+            const NativeElementDiagnostic* helium = nullptr;
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (diagnostic.element_z == 2 && diagnostic.solve_response_captured) {
+                    helium = &diagnostic;
+                    break;
+                }
+            }
+            if (!helium) throw std::runtime_error("helium solve-response diagnostics were requested but not captured");
+            const auto& source = context->program.elements.at(static_cast<std::size_t>(helium->element_index));
+            const int n = helium->active.element.n_rows;
+            if (helium->dense_matrix.size() != static_cast<std::size_t>(n * n) ||
+                helium->rhs.size() != static_cast<std::size_t>(n) ||
+                helium->active_final_populations.size() != static_cast<std::size_t>(n)) {
+                throw std::runtime_error("helium solve-response buffer dimensions are inconsistent");
+            }
+
+            std::ofstream solve_rows(root / (stem + "_helium_solve_rows.csv"));
+            std::ofstream solve_matrix(root / (stem + "_helium_solve_matrix.csv"));
+            std::ofstream solve_terms(root / (stem + "_helium_source_order_terms.csv"));
+            if (!solve_rows || !solve_matrix || !solve_terms) {
+                throw std::runtime_error("cannot create helium solve-response CSV files");
+            }
+            solve_rows << "evaluation_ordinal,compact_row,full_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,is_normalization_row,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
+            solve_rows << std::setprecision(17);
+            for (int compact_row = 1; compact_row <= n; ++compact_row) {
+                const int full_row = helium->active.full_row_start + compact_row - 1;
+                const auto& row = source.rows.at(static_cast<std::size_t>(full_row - 1));
+                const std::size_t index = static_cast<std::size_t>(compact_row - 1);
+                solve_rows << evaluation_ordinal << ',' << compact_row << ',' << full_row << ','
+                           << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ','
+                           << row.energy_ev << ',' << row.statistical_weight << ','
+                           << (compact_row == helium->active.element.normalization_row ? 1 : 0) << ','
+                           << helium->active_initial_populations.at(index) << ','
+                           << helium->active_final_outer_start_populations.at(index) << ','
+                           << helium->active_final_populations.at(index) << ','
+                           << helium->rhs.at(index) << ','
+                           << helium->row_residual.at(index) << ','
+                           << helium->row_scale.at(index) << ','
+                           << helium->relative_row_residual.at(index) << '\n';
+            }
+
+            solve_matrix << "evaluation_ordinal,compact_row,compact_column,full_row,full_column,dense_value,heating_value,heating2_value\n";
+            solve_matrix << std::setprecision(17);
+            for (int compact_row = 1; compact_row <= n; ++compact_row) {
+                for (int compact_column = 1; compact_column <= n; ++compact_column) {
+                    const std::size_t index = static_cast<std::size_t>((compact_row - 1) * n + compact_column - 1);
+                    solve_matrix << evaluation_ordinal << ',' << compact_row << ',' << compact_column << ','
+                                 << helium->active.full_row_start + compact_row - 1 << ','
+                                 << helium->active.full_row_start + compact_column - 1 << ','
+                                 << helium->dense_matrix.at(index) << ','
+                                 << helium->heating_matrix.at(index) << ','
+                                 << helium->heating_matrix2.at(index) << '\n';
+                }
+            }
+
+            solve_terms << "evaluation_ordinal,source_order_index,contribution_source_position,term_source_position,record,data_type,rate_type,ion_index,ion_stage,role,compact_row,compact_column,full_row,full_column,aj1,aj2,cj,cj2,density_scale\n";
+            solve_terms << std::setprecision(17);
+            std::uint64_t source_order_index = 0;
+            for (const auto& diagnostic : records) {
+                if (diagnostic.element_z != 2 || !diagnostic.matrix_committed) continue;
+                const auto& c = diagnostic.evaluated.contribution;
+                const int lower = c.lower_row - helium->active.full_row_start + 1;
+                const int upper = c.upper_row - helium->active.full_row_start + 1;
+                if (lower < 1 || lower > n || upper < 1 || upper > n) continue;
+                const int rows4[4] = {upper, lower, lower, upper};
+                const int cols4[4] = {lower, upper, lower, upper};
+                const char* roles[4] = {"forward_gain", "reverse_gain", "forward_diag_loss", "reverse_diag_loss"};
+                const double aj1[4] = {c.ans1, c.ans2, -c.ans1, -c.ans2};
+                const double aj2[4] = {c.ans2, c.ans1, -c.ans1, -c.ans2};
+                const double cj[4] = {0.0, 0.0, c.ans4 * c.density_scale, -c.ans3 * c.density_scale};
+                const double cj2[4] = {0.0, 0.0, c.ans6 * c.density_scale, -c.ans5 * c.density_scale};
+                for (int offset = 0; offset < 4; ++offset) {
+                    ++source_order_index;
+                    solve_terms << evaluation_ordinal << ',' << source_order_index << ',' << c.source_position << ','
+                                << c.source_position + offset << ',' << c.record << ',' << c.data_type << ','
+                                << c.rate_type << ',' << c.ion_index << ',' << c.ion_stage << ',' << roles[offset] << ','
+                                << rows4[offset] << ',' << cols4[offset] << ','
+                                << helium->active.full_row_start + rows4[offset] - 1 << ','
+                                << helium->active.full_row_start + cols4[offset] - 1 << ','
+                                << aj1[offset] << ',' << aj2[offset] << ',' << cj[offset] << ',' << cj2[offset] << ','
+                                << c.density_scale << '\n';
+                }
+            }
+
+            std::ofstream solve_state(root / (stem + "_helium_solve_state.json"));
+            if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
+            solve_state << std::setprecision(17)
+                        << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
+                        << "  \"release\": \"0.6.48.7.11\",\n"
+                        << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
+                        << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
+                        << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
+                        << "  \"compact_row_count\": " << n << ",\n"
+                        << "  \"normalization_compact_row\": " << helium->active.element.normalization_row << ",\n"
+                        << "  \"normalization_full_row\": " << helium->active.full_row_start + helium->active.element.normalization_row - 1 << ",\n"
+                        << "  \"solver_method\": \"" << helium->solver_method << "\",\n"
+                        << "  \"solver_status_flags\": " << helium->solver_status_flags << ",\n"
+                        << "  \"outer_iterations\": " << helium->outer_iterations << ",\n"
+                        << "  \"fixed_point_iterations\": " << helium->fixed_point_iterations << ",\n"
+                        << "  \"source_order_term_count\": " << source_order_index << ",\n"
+                        << "  \"qualification_only\": true,\n"
+                        << "  \"production_promotion_ready\": false\n}\n";
+        }
+
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.10\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.11\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
@@ -2547,6 +2693,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"helium_unqualified_type53_ablation\": " << (context->last_helium_unqualified_type53_ablation ? "true" : "false") << ",\n"
                    << "  \"helium_unqualified_type71_ablation\": " << (context->last_helium_unqualified_type71_ablation ? "true" : "false") << ",\n"
                    << "  \"helium_unqualified_type99_ablation\": " << (context->last_helium_unqualified_type99_ablation ? "true" : "false") << ",\n"
+                   << "  \"helium_solve_response\": " << (context->last_helium_solve_response ? "true" : "false") << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";

@@ -41,7 +41,7 @@ def test_replacement_is_qualification_only_and_fail_closed() -> None:
 
 
 def test_release_and_whole_state_gate() -> None:
-    assert RELEASE == "0.6.48.7.10"
+    assert RELEASE == "0.6.48.7.11"
     assert WHOLE_STATE_METRICS == (
         "electron_fraction",
         "charge_residual",
