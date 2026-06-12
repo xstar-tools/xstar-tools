@@ -542,3 +542,11 @@ include xstar_tools_v0.6.48.7.14.2_handoff.md
 include run_v0487142_dsec_row46_capture_and_residual_audit.sh
 
 include check_v0487142_dsec_row46_capture_and_residual_audit.py
+
+# v0.6.48.7.15 original-DSEC type-53 row-46 coupled runtime-contract audit
+recursive-include src/xstar_tools/benchmarks/v0648715_type53_row46_dsec_runtime_oracle_v0472 *
+include V0648715_TYPE53_ROW46_DSEC_RUNTIME_CONTRACT_AUDIT.md
+include xstar_tools_v0.6.48.7.15_handoff.md
+include run_v048715_type53_row46_dsec_runtime_contract_audit.sh
+include check_v048715_type53_row46_dsec_runtime_contract_audit.py
+include tests/test_v0648715_type53_row46_dsec_runtime_contract_audit.py

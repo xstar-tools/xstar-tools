@@ -53,6 +53,7 @@ xstar-tools-source-inventory = xstar_tools.source_port_cli:main
 xstar-tools-type50-dsec-coupled-replacement-audit = xstar_tools.xstar.type50_dsec_coupled_replacement_audit:main
 xstar-tools-type50-manifold-audit = xstar_tools.xstar.type50_manifold_audit:main
 xstar-tools-type50-manifold-replacement-audit = xstar_tools.xstar.type50_manifold_replacement_audit:main
+xstar-tools-type53-row46-dsec-audit = xstar_tools.xstar.type53_row46_dsec_runtime_contract_audit:main
 xstar-tools-type53-semantics = xstar_tools.xstar.type53_semantics:main
 xstar-tools-type71-type99-replacement-audit = xstar_tools.xstar.type71_type99_replacement_audit:main
 xstar-tools-type99-type71-audit = xstar_tools.xstar.type99_type71_coupled_audit:main

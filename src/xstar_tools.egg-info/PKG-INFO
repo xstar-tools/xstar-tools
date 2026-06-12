@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.14.2
+Version: 0.6.48.7.15
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,17 +26,16 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-## v0.6.48.7.14.2 original-DSEC row-46 actual-inventory audit
+## v0.6.48.7.15 original-DSEC type-53 row-46 runtime-contract audit
 
-This qualification-only hotfix accepts the actual untouched v0.6.47.2 DSEC
-row-46 runtime inventory: 154 records, 924 answers, and 616 committed terms.
-The prior 155/620 expectation included native-only type-95 record 1980, a
-compact 46-to-46 self-loop absent from the original DSEC assembly. The audit
-removes its four native terms, reconstructs the original row-46 equation
-exactly, verifies normalization independently, and decomposes the reference
-residual. The complete source row-46 contract reduces that residual by 97.94%;
-the 44-record type-53 manifold accounts for 97.93%. Single-record, type-76,
-fixed-state, thermal, and production promotion remain blocked.
+This qualification-only release embeds the 44-record, 176-term original DSEC
+type-53 manifold contributing to compact helium row 46 at evaluation 61. The
+current native path does not reproduce its answers or matrix terms. Applying
+the full manifold offline reduces the reference residual by 97.93% and changes
+the solved helium population vector toward the v0.6.47.2 reference. The result
+justifies a coupled source-faithful implementation, not a single-record or
+production correction. See
+`V0648715_TYPE53_ROW46_DSEC_RUNTIME_CONTRACT_AUDIT.md`.
 
 ## v0.6.48.7.9 type-99 record 1695/type-71 coupled-path audit
 
