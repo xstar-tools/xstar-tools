@@ -50,7 +50,7 @@ def test_target_inventory_matches_row46_fixture(tmp_path: Path) -> None:
     literal_types = {row["data_type"] for row in rows}
     assert literal_types == {50, 53, 56, 57, 71, 76, 77, 95}
     assert set(cap.TARGET_TYPE_COUNTS) == {50, 53, 56, 57, 71, 74, 76, 77, 95, 99}
-    assert sum(cap.TARGET_TYPE_COUNTS.values()) == cap.TARGET_RECORDS == 155
+    assert sum(cap.TARGET_TYPE_COUNTS.values()) == cap.TARGET_RECORDS == 154
 
 
 def _write_complete_bundle(root: Path) -> None:
@@ -228,8 +228,8 @@ def test_verify_accepts_complete_row46_capture(tmp_path: Path) -> None:
     _write_complete_bundle(tmp_path)
     result = cap.verify(tmp_path)
     assert result["result"] == "ACCEPT"
-    assert result["records"] == 155
-    assert result["matrix_terms"] == 620
+    assert result["records"] == 154
+    assert result["matrix_terms"] == 616
     assert result["normalization_row"] == 78
 
 
@@ -266,3 +266,28 @@ def test_probe_reconstructs_normalization_when_retained_copy_is_empty(tmp_path: 
     assert helper(assembly, 2, 3, 3) == dense[1, 2]
     assert helper(assembly, 3, 1, 3) == 1.0
     assert helper(assembly, 3, 3, 3) == 1.0
+
+
+def test_native_only_type95_self_loop_is_removed_from_original_dsec_substitution() -> None:
+    import numpy as np
+    candidate = [{
+        "contribution_source_position": "7452",
+        "record": "1980",
+        "role": "forward_gain",
+        "data_type": "95",
+        "compact_row": "46",
+        "compact_column": "46",
+        "aj1": "2.5",
+        "cj": "3.5",
+        "cj2": "4.5",
+    }]
+    dense = np.zeros((78, 78)); heat = np.zeros_like(dense); heat2 = np.zeros_like(dense)
+    dense[45,45] = 2.5; heat[45,45] = 3.5; heat2[45,45] = 4.5
+    out_dense, out_heat, out_heat2, replaced, removed = audit._substitute_terms(
+        dense, heat, heat2, candidate, {}
+    )
+    assert replaced == 0
+    assert removed == 1
+    assert out_dense[45,45] == 0.0
+    assert out_heat[45,45] == 0.0
+    assert out_heat2[45,45] == 0.0

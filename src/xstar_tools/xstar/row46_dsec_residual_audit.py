@@ -16,6 +16,7 @@ import json
 import math
 import os
 import struct
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -51,12 +52,15 @@ from .v0472_dsec_row46_runtime_capture import (
     TARGET_MATRIX_TERMS,
     TARGET_RECORDS,
     TARGET_TYPE_COUNTS,
+    NATIVE_ONLY_ROW46_RECORDS,
     TERMS_NAME,
     verify as verify_capture,
 )
 
-RELEASE = "0.6.48.7.14.1"
-SCHEMA = "xstar-tools-v0648714-row46-dsec-residual-audit-v1"
+csv.field_size_limit(sys.maxsize)
+
+RELEASE = "0.6.48.7.14.2"
+SCHEMA = "xstar-tools-v06487142-row46-dsec-residual-audit-v1"
 ROLE_MAP = {
     "forward_gain": "forward_offdiag",
     "reverse_gain": "reverse_offdiag",
@@ -167,16 +171,20 @@ def _term_comparison(
     actual = {_term_key_from_candidate(row): row for row in candidate_terms}
     rows: list[dict[str, Any]] = []
     exact_terms = 0
-    order_exact = 0
+    absolute_order_exact = 0
     exact_by_type: Counter[int] = Counter()
     captured_by_key: dict[tuple[int, int, str], dict[str, str]] = {}
-    for oracle in captured:
+    captured_sequence: list[tuple[int, int, str]] = []
+    for oracle in sorted(captured, key=lambda row: int(row["source_order_index"])):
         key = (int(oracle["source_position"]), int(oracle["record"]), str(oracle["role"]))
+        captured_sequence.append(key)
         captured_by_key[key] = oracle
         candidate = actual.get(key)
         if candidate is None:
             raise ValueError(f"native candidate missing row-46 term {key}")
         data_type = int(oracle["data_type"])
+        dsec_order = int(oracle["source_order_index"])
+        native_order = int(candidate["source_order_index"])
         row: dict[str, Any] = {
             "source_position": key[0],
             "record": key[1],
@@ -185,11 +193,12 @@ def _term_comparison(
             "role": key[2],
             "row": int(oracle["row"]),
             "column": int(oracle["column"]),
-            "dsec_source_order_index": int(oracle["source_order_index"]),
-            "native_source_order_index": int(candidate["source_order_index"]),
+            "dsec_source_order_index": dsec_order,
+            "native_source_order_index": native_order,
+            "source_order_index_delta": native_order - dsec_order,
         }
-        row["source_order_index_exact"] = row["dsec_source_order_index"] == row["native_source_order_index"]
-        order_exact += int(row["source_order_index_exact"])
+        row["absolute_source_order_index_exact"] = dsec_order == native_order
+        absolute_order_exact += int(row["absolute_source_order_index_exact"])
         all_exact = True
         for field in ("aj1", "aj2", "cj", "cj2"):
             exact = _bits(oracle[field]) == _bits(candidate[field])
@@ -201,15 +210,63 @@ def _term_comparison(
         exact_terms += int(all_exact)
         exact_by_type[data_type] += int(all_exact)
         rows.append(row)
-    rows.sort(key=lambda row: row["dsec_source_order_index"])
     write_csv(output / "row46_dsec_term_comparison.csv", rows, list(rows[0]))
+
+    candidate_sequence = [
+        _term_key_from_candidate(row)
+        for row in sorted(candidate_terms, key=lambda row: int(row["source_order_index"]))
+        if _term_key_from_candidate(row) in captured_by_key
+    ]
+    relative_order_exact = candidate_sequence == captured_sequence
+
+    candidate_row46 = {
+        _term_key_from_candidate(row): row
+        for row in candidate_terms
+        if int(row["full_row"]) == TARGET_FULL_ROW or int(row["full_column"]) == TARGET_FULL_ROW
+    }
+    captured_keys = set(captured_by_key)
+    extras = set(candidate_row46) - captured_keys
+    expected_native_only = {
+        key for key in extras if (key[0], key[1]) in NATIVE_ONLY_ROW46_RECORDS
+    }
+    unexpected_extras = extras - expected_native_only
+    native_only_rows = []
+    for key in sorted(expected_native_only, key=lambda value: int(candidate_row46[value]["source_order_index"])):
+        row = candidate_row46[key]
+        native_only_rows.append({
+            "source_position": key[0],
+            "record": key[1],
+            "data_type": int(row["data_type"]),
+            "rate_type": int(row["rate_type"]),
+            "role": key[2],
+            "native_source_order_index": int(row["source_order_index"]),
+            "full_row": int(row["full_row"]),
+            "full_column": int(row["full_column"]),
+            "aj1": float(row["aj1"]),
+            "aj2": float(row["aj2"]),
+            "cj": float(row["cj"]),
+            "cj2": float(row["cj2"]),
+            "original_dsec_action": "absent_remove_native_term",
+        })
+    if native_only_rows:
+        write_csv(output / "row46_native_only_terms.csv", native_only_rows, list(native_only_rows[0]))
+
     return (
         {
             "terms": len(rows),
             "exact_terms": exact_terms,
             "all_terms_ieee_exact": exact_terms == len(rows),
-            "source_order_indices_exact": order_exact,
-            "source_order_fully_exact": order_exact == len(rows),
+            "absolute_source_order_indices_exact": absolute_order_exact,
+            "absolute_source_order_fully_exact": absolute_order_exact == len(rows),
+            "relative_source_order_exact": relative_order_exact,
+            "source_order_index_delta_min": min((int(row["source_order_index_delta"]) for row in rows), default=0),
+            "source_order_index_delta_max": max((int(row["source_order_index_delta"]) for row in rows), default=0),
+            "native_only_terms": len(expected_native_only),
+            "native_only_records": [
+                {"source_position": source_position, "record": record}
+                for source_position, record in sorted(NATIVE_ONLY_ROW46_RECORDS)
+            ],
+            "unexpected_native_row46_terms": len(unexpected_extras),
             "exact_terms_by_data_type": {str(k): exact_by_type[k] for k in sorted(TARGET_TYPE_COUNTS)},
         },
         captured_by_key,
@@ -282,26 +339,31 @@ def _substitute_terms(
     candidate_terms: list[dict[str, str]],
     captured_by_key: dict[tuple[int, int, str], dict[str, str]],
     selected_types: set[int] | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
     out_dense = dense.copy()
     out_heat = heat.copy()
     out_heat2 = heat2.copy()
     replaced = 0
+    removed_native_only = 0
     for candidate in candidate_terms:
         key = _term_key_from_candidate(candidate)
-        oracle = captured_by_key.get(key)
-        if oracle is None:
-            continue
-        data_type = int(oracle["data_type"])
-        if selected_types is not None and data_type not in selected_types:
+        candidate_type = int(candidate["data_type"])
+        if selected_types is not None and candidate_type not in selected_types:
             continue
         row = int(candidate["compact_row"]) - 1
         column = int(candidate["compact_column"]) - 1
-        out_dense[row, column] += float(oracle["aj1"]) - float(candidate["aj1"])
-        out_heat[row, column] += float(oracle["cj"]) - float(candidate["cj"])
-        out_heat2[row, column] += float(oracle["cj2"]) - float(candidate["cj2"])
-        replaced += 1
-    return out_dense, out_heat, out_heat2, replaced
+        oracle = captured_by_key.get(key)
+        if oracle is not None:
+            out_dense[row, column] += float(oracle["aj1"]) - float(candidate["aj1"])
+            out_heat[row, column] += float(oracle["cj"]) - float(candidate["cj"])
+            out_heat2[row, column] += float(oracle["cj2"]) - float(candidate["cj2"])
+            replaced += 1
+        elif (key[0], key[1]) in NATIVE_ONLY_ROW46_RECORDS:
+            out_dense[row, column] -= float(candidate["aj1"])
+            out_heat[row, column] -= float(candidate["cj"])
+            out_heat2[row, column] -= float(candidate["cj2"])
+            removed_native_only += 1
+    return out_dense, out_heat, out_heat2, replaced, removed_native_only
 
 
 def _residual_metrics(dense: np.ndarray, vector: np.ndarray, normalization_index: int) -> tuple[float, float, np.ndarray]:
@@ -359,7 +421,7 @@ def audit(
     reconstruction = _source_row_reconstruction(captured_terms, captured_row46)
 
     candidate_l1, candidate_linf, candidate_residual = _residual_metrics(dense, reference, normalization_index)
-    substituted_dense, substituted_heat, substituted_heat2, replaced = _substitute_terms(
+    substituted_dense, substituted_heat, substituted_heat2, replaced, removed_native_only = _substitute_terms(
         dense, heat, heat2, candidate_terms, captured_by_key
     )
     complete_l1, complete_linf, complete_residual = _residual_metrics(substituted_dense, reference, normalization_index)
@@ -376,7 +438,7 @@ def audit(
 
     scope_rows: list[dict[str, Any]] = []
     for data_type in sorted(TARGET_TYPE_COUNTS):
-        scope_dense, _, _, scope_replaced = _substitute_terms(
+        scope_dense, _, _, scope_replaced, scope_removed_native_only = _substitute_terms(
             dense, heat, heat2, candidate_terms, captured_by_key, {data_type}
         )
         scope_l1, scope_linf, scope_residual = _residual_metrics(scope_dense, reference, normalization_index)
@@ -385,6 +447,7 @@ def audit(
                 "data_type": data_type,
                 "records": TARGET_TYPE_COUNTS[data_type],
                 "terms_replaced": scope_replaced,
+                "native_only_terms_removed": scope_removed_native_only,
                 "candidate_reference_residual_l1": candidate_l1,
                 "scope_reference_residual_l1": scope_l1,
                 "absolute_l1_reduction": candidate_l1 - scope_l1,
@@ -412,13 +475,18 @@ def audit(
     substituted_assembly_terms = []
     for row in source_terms:
         key = _term_key_from_candidate(row)
+        if (key[0], key[1]) in NATIVE_ONLY_ROW46_RECORDS:
+            continue
         oracle = captured_by_key.get(key)
-        if oracle is None:
-            substituted_assembly_terms.append(row)
-        else:
-            updated = dict(row)
+        updated = dict(row)
+        if oracle is not None:
             updated["aj1"] = float(oracle["aj1"])
-            substituted_assembly_terms.append(updated)
+        substituted_assembly_terms.append(updated)
+    # The native-only self-loop is the final four-term record today, but
+    # renumber explicitly so the reconstruction remains valid if ordering
+    # changes in a later diagnostic build.
+    for index, row in enumerate(substituted_assembly_terms, 1):
+        row["source_order_index"] = index
     substituted_assembly = _verify_source_order_assembly(substituted_assembly_terms, substituted_dense)
 
     leading = scope_rows[0]
@@ -426,15 +494,22 @@ def audit(
     complete_fraction = complete_reduction / max(candidate_l1, 1.0e-300)
     row46_before = float(candidate_residual[TARGET_FULL_ROW - 1])
     row46_after = float(complete_residual[TARGET_FULL_ROW - 1])
-    source_order_complete = reconstruction["all_ieee_exact"] and substituted_assembly["matrix_ieee_exact"]
+    source_row46_complete = reconstruction["all_ieee_exact"]
     normalization_captured = normalization["source_normalization_contract_exact"]
+    residual_decomposition_complete = (
+        math.isfinite(complete_l1)
+        and math.isfinite(complete_linf)
+        and replaced == TARGET_MATRIX_TERMS
+        and removed_native_only == 4 * len(NATIVE_ONLY_ROW46_RECORDS)
+    )
     audit_complete = (
         capture_verification["result"] == "ACCEPT"
         and len(captured_records) == TARGET_RECORDS
         and len(captured_terms) == TARGET_MATRIX_TERMS
-        and replaced == TARGET_MATRIX_TERMS
-        and source_order_complete
+        and term_comparison["unexpected_native_row46_terms"] == 0
+        and source_row46_complete
         and normalization_captured
+        and residual_decomposition_complete
     )
 
     summary: dict[str, Any] = {
@@ -452,6 +527,10 @@ def audit(
             "native_candidate": candidate_assembly,
             "offline_original_dsec_row46": substituted_assembly,
         },
+        "native_source_order_parity": term_comparison["relative_source_order_exact"],
+        "native_absolute_source_order_parity": term_comparison["absolute_source_order_fully_exact"],
+        "native_row46_record_inventory_parity": term_comparison["native_only_terms"] == 0,
+        "residual_decomposition_complete": residual_decomposition_complete,
         "reference_population_residual": {
             "candidate_l1": candidate_l1,
             "candidate_linf": candidate_linf,
@@ -463,6 +542,7 @@ def audit(
             "row46_after": row46_after,
             "row46_absolute_reduction": abs(row46_before) - abs(row46_after),
             "terms_replaced": replaced,
+            "native_only_terms_removed": removed_native_only,
         },
         "leading_row46_scope": leading,
         "data_type_scope_count": len(scope_rows),
@@ -473,8 +553,18 @@ def audit(
         "fixed_state_parity": False,
         "thermal_parity": False,
         "production_promotion_ready": False,
+        "native_only_row46_contract": {
+            "records": [
+                {"source_position": source_position, "record": record}
+                for source_position, record in sorted(NATIVE_ONLY_ROW46_RECORDS)
+            ],
+            "terms_removed": removed_native_only,
+            "interpretation": "native compact self-loop absent from original v0.6.47.2 DSEC assembly",
+        },
         "remaining_blockers": [
             "the runtime capture is restricted to evaluation 61",
+            "native global and relative source-order parity differ from the original DSEC stream",
+            "native type-95 record 1980 is a compact self-loop absent from the original DSEC assembly",
             "residual attribution does not by itself prove a source formula is wrong",
             "the complete arbitrary-state escape and population-dependent laws are not yet promoted",
             "fixed-state, thermal, controller, and product parity remain blocked",

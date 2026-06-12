@@ -536,5 +536,9 @@ include run_v048714_dsec_row46_capture_and_residual_audit.sh
 include check_v048714_dsec_row46_capture_and_residual_audit.py
 include tests/test_v0648714_dsec_row46_capture_and_audit.py
 
-include V06487141_DSEC_ROW46_NORMALIZED_MATRIX_HOTFIX.md
-include xstar_tools_v0.6.48.7.14.1_handoff.md
+include V06487142_DSEC_ROW46_ACTUAL_INVENTORY_HOTFIX.md
+include xstar_tools_v0.6.48.7.14.2_handoff.md
+
+include run_v0487142_dsec_row46_capture_and_residual_audit.sh
+
+include check_v0487142_dsec_row46_capture_and_residual_audit.py

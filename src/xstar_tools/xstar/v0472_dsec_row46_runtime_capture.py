@@ -25,15 +25,21 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.14.1"
+csv.field_size_limit(sys.maxsize)
+
+RELEASE = "0.6.48.7.14.2"
 SCHEMA = "xstar-tools-v0648714-v0472-dsec-row46-runtime-capture-v1"
 BUNDLE_SCHEMA = "xstar-tools-v0648714-row46-dsec-runtime-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
 TARGET_EVALUATION = 61
 TARGET_FULL_ROW = 46
-TARGET_RECORDS = 155
+TARGET_RECORDS = 154
 TARGET_MATRIX_TERMS = TARGET_RECORDS * 4
-TARGET_TYPE_COUNTS = {50: 9, 53: 44, 56: 8, 57: 44, 71: 1, 74: 42, 76: 1, 77: 1, 95: 3, 99: 2}
+TARGET_TYPE_COUNTS = {50: 9, 53: 44, 56: 8, 57: 44, 71: 1, 74: 42, 76: 1, 77: 1, 95: 2, 99: 2}
+# Native v0.6.48.7.13 commits this compact self-loop, but the original
+# v0.6.47.2 DSEC assembly does not.  It must be removed—not replaced—when
+# reconstructing the source row-46 system.
+NATIVE_ONLY_ROW46_RECORDS = {(7452, 1980)}
 
 RECORDS_NAME = "heii_row46_dsec_runtime_records.csv"
 TERMS_NAME = "heii_row46_dsec_runtime_matrix_terms.csv"
@@ -487,8 +493,8 @@ def finalize(run_summary=None):
     captured_records = {int(row["record"]) for row in rows}
     report = {
         "schema": "xstar-tools-v0648714-v0472-dsec-row46-runtime-probe-v1",
-        "release": "0.6.48.7.14.1",
-        "result": "ACCEPT" if len(rows) == 155 and len(terms) == 620 and captured_records == actual_records else "REJECT",
+        "release": "0.6.48.7.14.2",
+        "result": "ACCEPT" if len(rows) == TARGET_RECORDS and len(terms) == TARGET_MATRIX_TERMS and captured_records == actual_records else "REJECT",
         "capture_kind": "actual_v06472_dsec_heii_row46_complete_source_order_runtime_capture",
         "actual_dsec_runtime_capture": True,
         "target_evaluation_ordinal": _TARGET_EVAL,

@@ -1,13 +1,14 @@
-## v0.6.48.7.14.1 original-DSEC row-46 source-order capture
+## v0.6.48.7.14.2 original-DSEC row-46 actual-inventory audit
 
-This release adds a qualification-only observational capture of every original
-v0.6.47.2 DSEC record contributing to He II row 46 at evaluation 61. It
-records all 155 contributing records and 620 committed terms in global source order, the live
-escape-probability and population-dependent state, the physical row-46 matrix
-row, and the exact normalization-row commit. A companion audit substitutes the
-complete captured row-46 term set offline and decomposes the remaining
-reference-population residual by data type. No type-76 or single-record
-correction is promoted.
+This qualification-only hotfix accepts the actual untouched v0.6.47.2 DSEC
+row-46 runtime inventory: 154 records, 924 answers, and 616 committed terms.
+The prior 155/620 expectation included native-only type-95 record 1980, a
+compact 46-to-46 self-loop absent from the original DSEC assembly. The audit
+removes its four native terms, reconstructs the original row-46 equation
+exactly, verifies normalization independently, and decomposes the reference
+residual. The complete source row-46 contract reduces that residual by 97.94%;
+the 44-record type-53 manifold accounts for 97.93%. Single-record, type-76,
+fixed-state, thermal, and production promotion remain blocked.
 
 ## v0.6.48.7.9 type-99 record 1695/type-71 coupled-path audit
 

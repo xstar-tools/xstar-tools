@@ -46,7 +46,7 @@ V064861_QUALIFICATION_COMPARATOR_HOTFIX.md
 V06486_QUALIFICATION_INFRASTRUCTURE.md
 V0648710_TYPE50_MANIFOLD_COUPLED_REPLACEMENT_AUDIT.md
 V0648713_TYPE50_DSEC_COUPLED_REPLACEMENT_AUDIT.md
-V06487141_DSEC_ROW46_NORMALIZED_MATRIX_HOTFIX.md
+V06487142_DSEC_ROW46_ACTUAL_INVENTORY_HOTFIX.md
 V0648714_DSEC_ROW46_SOURCE_ORDER_CAPTURE_AND_RESIDUAL_AUDIT.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
@@ -87,6 +87,7 @@ check_v04861_qualification_comparator_hotfix.py
 check_v0486_qualification_infrastructure.py
 check_v048710_type50_manifold_replacement_audit.py
 check_v048713_type50_dsec_coupled_replacement_audit.py
+check_v0487142_dsec_row46_capture_and_residual_audit.py
 check_v048714_dsec_row46_capture_and_residual_audit.py
 check_v04871_he_bound_free_audit.py
 check_v04872_type53_semantics.py
@@ -184,6 +185,7 @@ run_v0486_compare_products.sh
 run_v0486_reference_qualification.sh
 run_v048710_type50_manifold_replacement_audit.sh
 run_v048713_type50_dsec_coupled_replacement_audit.sh
+run_v0487142_dsec_row46_capture_and_residual_audit.sh
 run_v048714_dsec_row46_capture_and_residual_audit.sh
 run_v04871_he_bound_free_audit.sh
 run_v04872_type53_semantics.sh
@@ -431,7 +433,7 @@ xstar_tools_v0.6.48.5_handoff.md
 xstar_tools_v0.6.48.6.1_handoff.md
 xstar_tools_v0.6.48.6_handoff.md
 xstar_tools_v0.6.48.7.13_handoff.md
-xstar_tools_v0.6.48.7.14.1_handoff.md
+xstar_tools_v0.6.48.7.14.2_handoff.md
 xstar_tools_v0.6.48.7.14_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md

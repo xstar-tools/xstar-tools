@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.48.7.14.1"
+version = "0.6.48.7.14.2"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -93,6 +93,8 @@ xstar-tools-v0472-type50-manifold-capture = "xstar_tools.xstar.v0472_type50_mani
 xstar-tools-type50-manifold-audit = "xstar_tools.xstar.type50_manifold_audit:main"
 xstar-tools-type50-manifold-replacement-audit = "xstar_tools.xstar.type50_manifold_replacement_audit:main"
 xstar-tools-type50-dsec-coupled-replacement-audit = "xstar_tools.xstar.type50_dsec_coupled_replacement_audit:main"
+xstar-tools-v0472-dsec-row46-capture = "xstar_tools.xstar.v0472_dsec_row46_runtime_capture:main"
+xstar-tools-row46-dsec-residual-audit = "xstar_tools.xstar.row46_dsec_residual_audit:main"
 xstar-tools-port-complete-fixed-state = "xstar_tools.source_port_complete_fixed_state_cli:main"
 xstar-tools-port-dsec = "xstar_tools.source_port_dsec_cli:main"
 xstar-tools-validate-dsec-physical = "xstar_tools.source_port_dsec_physical_cli:main"
