@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.12 - 2026-06-12
+
+- Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.
+- Captures the live type-50 escape-probability inputs, covering fraction, optical depths, `ans1`-`ans6`, and all committed matrix terms for the 79 He II rows-46-54 records at evaluation 61.
+- Added strict 79-record/316-term verification and source-archive hash gating.
+- Kept general-state type-50 replacement, fixed-state parity, thermal parity, and production promotion blocked.
+
 ## v0.6.48.7.11 - 2026-06-12
 
 ### Added

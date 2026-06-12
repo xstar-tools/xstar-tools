@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
-RELEASE = "0.6.48.7.11"
+RELEASE = "0.6.48.7.12"
 SCHEMA = "xstar-tools-v064876-v0472-type99-record1695-runtime-capture-v1"
 ORACLE_SCHEMA = "xstar-tools-v064876-type99-record1695-runtime-oracle-v1"
 SOURCE_VERSION = "0.6.47.2"

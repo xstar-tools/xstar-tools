@@ -1,4 +1,4 @@
-"""Source-ordered helium solve-response decomposition for xstar_tools v0.6.48.7.11.
+"""Source-ordered helium solve-response decomposition for xstar_tools v0.6.48.7.12.
 
 This qualification workflow holds the accepted evaluation-61 helium contracts
 fixed, exports the actual native helium matrix/RHS/solution in source order,
@@ -48,7 +48,7 @@ from .type71_type99_replacement_audit import (
 from .v0472_type71_runtime_capture import ORACLE_NAME as TYPE71_ORACLE_NAME, verify as verify_type71
 from .v0472_type99_runtime_capture import ORACLE_NAME as TYPE99_ORACLE_NAME, verify as verify_type99
 
-RELEASE = "0.6.48.7.11"
+RELEASE = "0.6.48.7.12"
 SCHEMA = "xstar-tools-v0648711-helium-solve-response-decomposition-v1"
 REFERENCE_LEVELS = REFERENCE_DIR / "final_level_populations.csv"
 KEY_FULL_ROWS = tuple(range(46, 79))

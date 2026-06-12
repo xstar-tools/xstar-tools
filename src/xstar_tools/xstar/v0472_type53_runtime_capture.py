@@ -1,4 +1,4 @@
-"""Exact v0.6.47.2 type-53 fixed-state evaluator replay for v0.6.48.7.11.
+"""Exact v0.6.47.2 type-53 fixed-state evaluator replay for v0.6.48.7.12.
 
 This module executes the untouched ``xstar_tools==0.6.47.2``
 ``evaluate_type53_ucalc_record`` implementation in an isolated subprocess.  It
@@ -27,7 +27,7 @@ from typing import Any, Mapping
 from .he_bound_free_audit import _resolve_records_csv
 from .type53_semantics import ANS_NAMES, ORACLE_FIELDS, freeze_reference, verify_reference
 
-RELEASE = "0.6.48.7.11"
+RELEASE = "0.6.48.7.12"
 SCHEMA = "xstar-tools-v064873-v0472-type53-runtime-capture-v1"
 SOURCE_VERSION = "0.6.47.2"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"

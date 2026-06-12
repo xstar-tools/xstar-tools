@@ -423,7 +423,7 @@ xstar_tools_v0.6.48.5.3_handoff.md
 xstar_tools_v0.6.48.5_handoff.md
 xstar_tools_v0.6.48.6.1_handoff.md
 xstar_tools_v0.6.48.6_handoff.md
-xstar_tools_v0.6.48.7.11_handoff.md
+xstar_tools_v0.6.48.7.12_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
@@ -1053,6 +1053,7 @@ src/xstar_tools/xstar/v0439_regression.py
 src/xstar_tools/xstar/v0440_regression.py
 src/xstar_tools/xstar/v0441_regression.py
 src/xstar_tools/xstar/v0442_regression.py
+src/xstar_tools/xstar/v0472_dsec_type50_runtime_capture.py
 src/xstar_tools/xstar/v0472_type50_manifold_runtime_capture.py
 src/xstar_tools/xstar/v0472_type53_runtime_capture.py
 src/xstar_tools/xstar/v0472_type71_runtime_capture.py
@@ -1245,6 +1246,7 @@ tests/test_type50_pumping_non_type50_v03145.py
 tests/test_type50_xstar_output_radiation_v03146.py
 tests/test_type51_98_api_with_atdb.py
 tests/test_type53_semantics_v064872.py
+tests/test_v048712_dsec_type50_runtime_capture.py
 tests/test_v06401_type88_threshold_hotfix.py
 tests/test_v06402_type51_order_restoration_hotfix.py
 tests/test_v06403_position_safe_oracle_hotfix.py

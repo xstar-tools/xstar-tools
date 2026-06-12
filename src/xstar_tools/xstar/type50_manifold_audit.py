@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,csv,json,math,struct
 from pathlib import Path
-RELEASE='0.6.48.7.11';SCHEMA='xstar-tools-v064879-type50-manifold-audit-v1';ORACLE_SHA='548cbc4f489a19cfabb199ad2f063b581af0a1b5de21b3ae4a444841a0da4d6f'
+RELEASE='0.6.48.7.12';SCHEMA='xstar-tools-v064879-type50-manifold-audit-v1';ORACLE_SHA='548cbc4f489a19cfabb199ad2f063b581af0a1b5de21b3ae4a444841a0da4d6f'
 def read(p):
  with p.open(newline='') as f:return list(csv.DictReader(f))
 def exact(a,b):return struct.pack('>d',float(a))==struct.pack('>d',float(b))
