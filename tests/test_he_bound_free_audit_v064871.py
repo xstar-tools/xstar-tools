@@ -73,3 +73,40 @@ def test_cli_removes_stale_json_on_failure(tmp_path: Path) -> None:
     status = main(["audit", str(tmp_path / "missing"), str(tmp_path / "out"), "--output-json", str(report)])
     assert status == 2
     assert not report.exists()
+
+
+def test_audit_reports_current_oracle_metadata_for_exact_31_record_scope(tmp_path: Path) -> None:
+    oracle = Path(__file__).resolve().parents[1] / "src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_oracle.csv"
+    diagnostics = tmp_path / "diagnostics"
+    diagnostics.mkdir()
+    records = diagnostics / "evaluation_0061_records.csv"
+    with oracle.open(newline="", encoding="utf-8") as source, records.open("w", newline="", encoding="utf-8") as target:
+        oracle_rows = list(csv.DictReader(source))
+        writer = csv.DictWriter(target, fieldnames=FIELDS)
+        writer.writeheader()
+        for item in oracle_rows:
+            row = {
+                "evaluation_ordinal": 61,
+                "source_position": item["source_position"],
+                "record": item["record"],
+                "element_z": 2,
+                "ion_stage": 2,
+                "data_type": 53,
+                "lower_row": item["lower_row"],
+                "upper_row": item["upper_row"],
+                "type53_shadow_valid": 1,
+                "type53_shadow_threshold_ev": 54.4,
+                "type53_shadow_rnist": 1.0,
+                "type53_shadow_nb1_one_based": 1,
+                "type53_shadow_klmax_one_based": 2,
+            }
+            for index in range(1, 7):
+                row[f"ans{index}"] = item[f"ans{index}"]
+                row[f"type53_shadow_ans{index}"] = item[f"ans{index}"]
+            writer.writerow(row)
+    report = audit(tmp_path, tmp_path / "audit", evaluation=61)
+    assert report["reference_record_oracle_available"] is True
+    assert report["reference_record_oracle_exact"] is True
+    assert report["source_shadow_applied_to_physics"] is True
+    assert report["qualified_applied_scope"].startswith("31 He II")
+    assert "non-type-53 helium" in report["next_blocker"]

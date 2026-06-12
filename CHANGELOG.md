@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.7.5 - 2026-06-11
+
+- Preserve all 31 independently qualified He II type-53 records as IEEE-exact immutable invariants across every isolation scenario.
+- Correct stale He II bound-free audit metadata so the verified runtime oracle and applied qualified scope are reported accurately.
+- Add helium-only per-source-position matrix ledgers and family/row residual aggregation for evaluation 61.
+- Add qualification-gated one-family-at-a-time matrix ablation for helium types 50, 54, 56, 57, 63, 69, 71, 74, 76, 77, 95, and 99.
+- Audit type 30 separately through the preliminary ion-rate path.
+- Add causal source-position ablations for the three type-99 records and isolate source position 6312 / record 1695 as the strongest candidate.
+- Keep all candidate corrections, full type-53 promotion, fixed-state parity, and production promotion blocked pending independent source/runtime verification.
+
 # 0.6.48.7.4 - 2026-06-11
 
 - Made the 31 evaluation-61 He II type-53 records IEEE-exact to the frozen v0.6.47.2 runtime oracle.

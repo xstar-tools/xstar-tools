@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
@@ -61,6 +62,17 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
 
 double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
+}
+
+int environment_data_type(const char* name) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return 0;
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (!end || *end != '\0' || parsed < 0 || parsed > 1000000) {
+        throw std::runtime_error(std::string("invalid ") + name + " data type");
+    }
+    return static_cast<int>(parsed);
 }
 
 std::string trim(std::string value) {
@@ -292,6 +304,9 @@ struct xstar_fixed_state_context_impl {
     double last_total_heating = 0.0;
     double last_total_cooling = 0.0;
     double last_hmctot = 0.0;
+    int last_helium_matrix_ablation_type = 0;
+    int last_helium_preliminary_ablation_type = 0;
+    int last_helium_source_position_ablation = 0;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -1214,7 +1229,7 @@ EvaluatedRecord evaluate_record(
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.4 applies the source-exact result only to the 31
+            // v0.6.48.7.5 applies the source-exact result only to the 31
             // evaluation-61-qualified He II records.  Other type-53 ions stay
             // on the prior path until they have independent runtime oracles.
             if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
@@ -1537,7 +1552,8 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
 
 PreliminaryIonBalance build_preliminary_ion_balance(
     const ElementProgram& element,
-    const std::vector<EvaluatedRecord>& evaluated) {
+    const std::vector<EvaluatedRecord>& evaluated,
+    int ablated_data_type = 0) {
     PreliminaryIonBalance result;
     const int z = element.element_z;
     result.ionization.assign(static_cast<std::size_t>(z), 0.0);
@@ -1548,6 +1564,7 @@ PreliminaryIonBalance build_preliminary_ion_balance(
 
     for (const auto& item : evaluated) {
         const auto& c = item.contribution;
+        if (element.element_z == 2 && ablated_data_type != 0 && c.data_type == ablated_data_type) continue;
         const int stage = c.ion_stage;
         if (stage < 1 || stage > z) continue;
         const double rate = std::max(0.0, c.ans1);
@@ -1758,6 +1775,17 @@ int run_impl(
     ctx.last_hydrogen_density_cm3 = input.hydrogen_density_cm3;
     ctx.last_electron_fraction_input = input.electron_fraction_xee;
     ctx.last_radiation_bin_count = input.radiation_bin_count;
+    const int helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
+    const int helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
+    const int helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
+    const char* qualification_ablation = std::getenv("XSTAR_QUALIFICATION_ABLATION");
+    if ((helium_matrix_ablation_type != 0 || helium_preliminary_ablation_type != 0 || helium_source_position_ablation != 0) &&
+        (!qualification_ablation || std::string(qualification_ablation) != "1")) {
+        throw std::runtime_error("helium ablation requires XSTAR_QUALIFICATION_ABLATION=1");
+    }
+    ctx.last_helium_matrix_ablation_type = helium_matrix_ablation_type;
+    ctx.last_helium_preliminary_ablation_type = helium_preliminary_ablation_type;
+    ctx.last_helium_source_position_ablation = helium_source_position_ablation;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -1818,7 +1846,8 @@ int run_impl(
         }
         if (hops != element.record_count) throw std::runtime_error("linked traversal count differs from declared record_count");
 
-        const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(element, evaluated);
+        const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
+            element, evaluated, helium_preliminary_ablation_type);
         // Compact development fixtures may represent only a subset of an
         // element while assigning a larger atomic number.  Source-style
         // stage-window selection requires a complete one-ground-row-per-stage
@@ -1834,8 +1863,12 @@ int run_impl(
             const bool endpoints_active = !item.matrix_enabled ||
                 (original.lower_row >= active.full_row_start && original.lower_row <= active.full_row_end &&
                  original.upper_row >= active.full_row_start && original.upper_row <= active.full_row_end);
+            const bool matrix_family_ablated = element.element_z == 2 && helium_matrix_ablation_type != 0 &&
+                original.data_type == helium_matrix_ablation_type;
+            const bool matrix_source_ablated = element.element_z == 2 && helium_source_position_ablation != 0 &&
+                original.source_position == helium_source_position_ablation;
             bool matrix_committed = false;
-            if (item.matrix_enabled && active_stage && endpoints_active) {
+            if (item.matrix_enabled && active_stage && endpoints_active && !matrix_family_ablated && !matrix_source_ablated) {
                 auto contribution = original;
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;
@@ -2398,7 +2431,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.4\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.5\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
@@ -2411,6 +2444,9 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"total_cooling\": " << context->last_total_cooling << ",\n"
                    << "  \"hmctot\": " << context->last_hmctot << ",\n"
                    << "  \"radiation_bin_count\": " << context->last_radiation_bin_count << ",\n"
+                   << "  \"helium_matrix_ablation_type\": " << context->last_helium_matrix_ablation_type << ",\n"
+                   << "  \"helium_preliminary_ablation_type\": " << context->last_helium_preliminary_ablation_type << ",\n"
+                   << "  \"helium_source_position_ablation\": " << context->last_helium_source_position_ablation << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";

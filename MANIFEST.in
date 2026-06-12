@@ -487,3 +487,10 @@ include xstar_tools_v0.6.48.7.4_handoff.md
 include check_v04874_type53_ieee_application.py
 include run_v04874_type53_ieee_application.sh
 include tests/test_v064874_type53_ieee_application.py
+
+# v0.6.48.7.5 helium non-type-53 matrix contribution isolation
+include V064875_HELIUM_NON_TYPE53_MATRIX_ISOLATION.md
+include xstar_tools_v0.6.48.7.5_handoff.md
+include check_v04875_helium_family_isolation.py
+include run_v04875_helium_family_isolation.sh
+include tests/test_v064875_helium_family_isolation.py

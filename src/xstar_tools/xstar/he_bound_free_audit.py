@@ -1,8 +1,8 @@
-"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.4.
+"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.5.
 
 This module compares the type-53 contribution that is currently applied by the
-native fixed-state engine with a source-style shadow evaluation.  The shadow
-path is diagnostic only: it is never substituted into the physical solve.
+native fixed-state engine with a source-style shadow evaluation.  For the independently qualified 31-record He II scope, the source-exact
+result is applied to the physical solve and verified against the frozen oracle.
 
 The lowered active program stores cross sections in cm^2.  The historical
 source-style kernel accepted megabarns and multiplied by 1e-18 internally, so
@@ -105,7 +105,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV does not contain v0.6.48.7.4 type-53 shadow fields: " + ", ".join(missing))
+            raise ValueError("records CSV does not contain v0.6.48.7.5 type-53 shadow fields: " + ", ".join(missing))
         selected = [
             row for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation
@@ -200,9 +200,26 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
             "shadow_to_applied_ratio": shadow / applied if applied != 0.0 else (math.inf if shadow != 0.0 else 1.0),
         }
 
+    oracle_path = Path(__file__).resolve().parents[1] / "benchmarks" / "v064873_type53_runtime_oracle_v0472" / "type53_runtime_oracle.csv"
+    oracle_available = oracle_path.is_file()
+    oracle_exact = False
+    if oracle_available:
+        with oracle_path.open(newline="", encoding="utf-8") as handle:
+            oracle_rows = {(int(row["source_position"]), int(row["record"])): tuple(float(row[f"ans{i}"]) for i in range(1, 7)) for row in csv.DictReader(handle)}
+        oracle_exact = len(oracle_rows) == len(audit_rows) == 31
+        if oracle_exact:
+            for row in audit_rows:
+                key = (int(row["source_position"]), int(row["record"]))
+                expected = oracle_rows.get(key)
+                applied = tuple(float(row[f"applied_ans{i}"]) for i in range(1, 7))
+                shadow = tuple(float(row[f"shadow_ans{i}"]) for i in range(1, 7))
+                if expected is None or applied != expected or shadow != expected:
+                    oracle_exact = False
+                    break
+
     report: dict[str, Any] = {
         "schema": SCHEMA,
-        "release": "0.6.48.7.4",
+        "release": "0.6.48.7.5",
         "result": "ACCEPT",
         "audit_complete": True,
         "evaluation_ordinal": evaluation,
@@ -221,11 +238,14 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
         "lowered_cross_section_units": "cm2",
         "legacy_source_kernel_input_units": "megabarn",
         "unit_boundary_correction_applied": True,
-        "source_shadow_reference_status": "translated_source_style_kernel_not_v06472_per_record_oracle",
-        "reference_record_oracle_available": False,
-        "source_shadow_applied_to_physics": False,
+        "source_shadow_reference_status": "verified_exact_v06472_fixed_state_evaluator_replay" if oracle_exact else "translated_source_style_kernel",
+        "reference_record_oracle_available": oracle_available,
+        "reference_record_oracle_exact": oracle_exact,
+        "reference_record_oracle_path": str(oracle_path) if oracle_available else None,
+        "source_shadow_applied_to_physics": oracle_exact,
+        "qualified_applied_scope": "31 He II type-53 records (element_z=2, ion_stage=2)" if oracle_exact else None,
         "native_state_unchanged_by_audit": True,
-        "next_blocker": "validate_type53_ans_semantics_and_detailed_matrix_against_a_v06472_per_record_oracle",
+        "next_blocker": "isolate non-type-53 helium matrix and preliminary-rate contributions while preserving the 31 exact type-53 records",
         "fixed_state_parity": False,
         "production_promotion_ready": False,
     }

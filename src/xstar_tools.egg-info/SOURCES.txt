@@ -48,6 +48,7 @@ V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V064874_HEII_TYPE53_IEEE_APPLICATION.md
+V064875_HELIUM_NON_TYPE53_MATRIX_ISOLATION.md
 V06487_FIXED_STATE_PARITY.md
 XSTAR_PYTHON_PORT.md
 check_v0401_type88_fast_packet_threshold_hotfix_product_candidate.py
@@ -81,6 +82,7 @@ check_v04871_he_bound_free_audit.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
 check_v04874_type53_ieee_application.py
+check_v04875_helium_family_isolation.py
 check_v0487_fixed_state_parity.py
 pyproject.toml
 run_v0401_xstar_tools_python.sh
@@ -172,6 +174,7 @@ run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
 run_v04873_type53_semantics.sh
 run_v04874_type53_ieee_application.sh
+run_v04875_helium_family_isolation.sh
 run_v0487_compare_fixed_state.sh
 run_v0487_reference_qualification.sh
 setup.cfg
@@ -412,6 +415,7 @@ xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7.4_handoff.md
+xstar_tools_v0.6.48.7.5_handoff.md
 xstar_tools_v0.6.48.7_handoff.md
 benchmarks/oxygen_call73_v0434_acceptance/README.md
 benchmarks/oxygen_call73_v0434_acceptance/source_summary.sha256
@@ -967,6 +971,7 @@ src/xstar_tools/xstar/full_element_matrix_parity.py
 src/xstar_tools/xstar/gsmooth.py
 src/xstar_tools/xstar/he_bound_free_audit.py
 src/xstar_tools/xstar/heatt.py
+src/xstar_tools/xstar/helium_family_isolation.py
 src/xstar_tools/xstar/inventory.py
 src/xstar_tools/xstar/ion_balance.py
 src/xstar_tools/xstar/ionization.py
@@ -1225,6 +1230,7 @@ tests/test_v064861_qualification_comparator_hotfix.py
 tests/test_v06486_qualification_infrastructure.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
+tests/test_v064875_helium_family_isolation.py
 tests/test_v06487_fixed_state_parity.py
 tests/test_v0648_compiled_case_runtime.py
 tests/test_validation_artifacts.py

@@ -1,18 +1,13 @@
-## v0.6.48.7.4 He II type-53 IEEE-exact application
+## v0.6.48.7.5 helium non-type-53 matrix contribution isolation
 
-The 31 evaluation-61 He II data-type 53 records now match the immutable v0.6.47.2 evaluator bit-for-bit in both shadow and applied native paths. The correction is intentionally limited to the oracle-qualified He II scope. Whole-state parity remains blocked because the corrected rates expose compensating errors in other helium contributions.
-
-Run the qualification with:
-
-```bash
-./run_v04874_type53_ieee_application.sh LOWERED_PROGRAM OUTPUT_DIR 61
-```
-
-Run the full checker with:
-
-```bash
-python check_v04874_type53_ieee_application.py --lowered-program LOWERED_PROGRAM --baseline-audit V04871_AUDIT --source-archive XSTAR_TOOLS_06472_TAR
-```
+v0.6.48.7.5 preserves the 31 IEEE-exact He II type-53 records while adding
+qualification-only helium matrix-family and source-position ablations. It
+produces per-record, per-family, and per-row ledgers for types 50, 54, 56, 57,
+63, 69, 71, 74, 76, 77, 95, and 99, and audits type 30 separately in the
+preliminary ion-rate path. Type 99 and type 71 are co-dominant; a causal
+source-position pass isolates type 99 source position 6312 / record 1695 as
+the strongest candidate. No new physics correction or production promotion is
+enabled. See `V064875_HELIUM_NON_TYPE53_MATRIX_ISOLATION.md`.
 
 ## v0.6.48.7.3 exact v0.6.47.2 type-53 runtime capture
 
