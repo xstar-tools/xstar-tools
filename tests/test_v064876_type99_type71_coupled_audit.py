@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_and_target_are_pinned() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.6"
-    assert RELEASE == "0.6.48.7.6"
+    assert xstar_tools.__version__ == "0.6.48.7.7"
+    assert RELEASE == "0.6.48.7.7"
     assert TARGET_RECORD == 1695
     assert TARGET_SOURCE_POSITION == 6312
 

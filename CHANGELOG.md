@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.7 - 2026-06-11
+
+- Added a reproducible 31-record evaluation-61 v0.6.47.2 type-71 row-77 runtime oracle.
+- Verified all current native type-71 ans1-ans6 values and matrix terms are IEEE-exact.
+- Added a qualification-only exact type-99 record-1695 oracle substitution and measured the coupled type-71/type-99 fixed-state result.
+- Rejected the coupled candidate because it increases charge residual and lowers He III.
+- Preserved all 31 exact He II type-53 records and kept H/Mg unchanged.
+- Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
+- Kept full type-53, fixed-state, and production promotion blocked.
+
 # 0.6.48.7.6 - 2026-06-11
 
 - Add an isolated exact v0.6.47.2 fixed-state evaluator replay and immutable one-record oracle for type-99 source position 6312 / record 1695.

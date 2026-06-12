@@ -75,6 +75,14 @@ int environment_data_type(const char* name) {
     return static_cast<int>(parsed);
 }
 
+bool environment_flag(const char* name) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return false;
+    if (std::string(value) == "1") return true;
+    if (std::string(value) == "0") return false;
+    throw std::runtime_error(std::string("invalid environment flag: ") + name);
+}
+
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -1229,7 +1237,7 @@ EvaluatedRecord evaluate_record(
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.6 applies the source-exact result only to the 31
+            // v0.6.48.7.7 applies the source-exact result only to the 31
             // evaluation-61-qualified He II records.  Other type-53 ions stay
             // on the prior path until they have independent runtime oracles.
             if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
@@ -1398,6 +1406,21 @@ EvaluatedRecord evaluate_record(
             c.ans1=photo; c.ans2=rec*ne;
             c.ans3=-c.ans2*delta_ev*kErgPerEv; c.ans4=-heat;
             c.ans5=c.ans2*delta_ev*kErgPerEv; c.ans6=heat;
+            if (record.record == 1695 && record.source_position == 6312 &&
+                environment_flag("XSTAR_QUALIFICATION_TYPE99_RECORD1695_ORACLE")) {
+                if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+                    throw std::runtime_error("type99 record-1695 oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+                }
+                // Qualification-only evaluation-61 substitution from the immutable
+                // v0.6.47.2 fixed-state evaluator oracle.  This is deliberately not
+                // a production/general-state implementation.
+                c.ans1=104.14911901939827;
+                c.ans2=9.817240995458149e-06;
+                c.ans3=-1.4727192074803814e-16;
+                c.ans4=-1.52553189799137e-10;
+                c.ans5=-1.486074981946877e-16;
+                c.ans6=-8.952867377875771e-11;
+            }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
@@ -2431,7 +2454,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.6\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.7\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

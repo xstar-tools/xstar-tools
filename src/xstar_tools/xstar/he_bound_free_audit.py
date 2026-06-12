@@ -1,4 +1,4 @@
-"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.6.
+"""He II bound-free source-order qualification audit for XSTAR v0.6.48.7.7.
 
 This module compares the type-53 contribution that is currently applied by the
 native fixed-state engine with a source-style shadow evaluation.  For the independently qualified 31-record He II scope, the source-exact
@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA = "xstar-tools-v064876-he-bound-free-audit-v2"
+SCHEMA = "xstar-tools-v064877-he-bound-free-audit-v3"
 AUDITED_ELEMENT_Z = 2
 AUDITED_ION_STAGE = 2
 AUDITED_DATA_TYPE = 53
@@ -105,7 +105,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
         }
         missing = sorted(required.difference(reader.fieldnames or []))
         if missing:
-            raise ValueError("records CSV does not contain v0.6.48.7.6 type-53 shadow fields: " + ", ".join(missing))
+            raise ValueError("records CSV does not contain v0.6.48.7.7 type-53 shadow fields: " + ", ".join(missing))
         selected = [
             row for row in reader
             if _int(row["evaluation_ordinal"]) == evaluation
@@ -219,7 +219,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
 
     report: dict[str, Any] = {
         "schema": SCHEMA,
-        "release": "0.6.48.7.6",
+        "release": "0.6.48.7.7",
         "result": "ACCEPT",
         "audit_complete": True,
         "evaluation_ordinal": evaluation,
@@ -245,7 +245,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
         "source_shadow_applied_to_physics": oracle_exact,
         "qualified_applied_scope": "31 He II type-53 records (element_z=2, ion_stage=2)" if oracle_exact else None,
         "native_state_unchanged_by_audit": True,
-        "next_blocker": "verify and reconcile type-99 record 1695 with the coupled type-71 row-77 cascade path while preserving the 31 exact type-53 records",
+        "next_blocker": "identify the remaining compensating helium matrix families after the exact type-71/type-99 evaluation-61 candidate was rejected",
         "fixed_state_parity": False,
         "production_promotion_ready": False,
     }

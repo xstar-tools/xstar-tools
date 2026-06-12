@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_and_family_scope_are_pinned() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.6"
-    assert RELEASE == "0.6.48.7.6"
+    assert xstar_tools.__version__ == "0.6.48.7.7"
+    assert RELEASE == "0.6.48.7.7"
     assert MATRIX_FAMILIES == (50, 54, 56, 57, 63, 69, 71, 74, 76, 77, 95, 99)
     assert PRELIMINARY_FAMILY == 30
 

@@ -502,3 +502,10 @@ include xstar_tools_v0.6.48.7.6_handoff.md
 include check_v04876_type99_type71_coupled_audit.py
 include run_v04876_type99_type71_coupled_audit.sh
 include tests/test_v064876_type99_type71_coupled_audit.py
+
+recursive-include src/xstar_tools/benchmarks/v064877_type71_row77_runtime_oracle_v0472 *
+include run_v04877_type71_type99_replacement_audit.sh
+include check_v04877_type71_type99_replacement_audit.py
+include V064877_TYPE71_TYPE99_REPLACEMENT_AUDIT.md
+include xstar_tools_v0.6.48.7.7_handoff.md
+include tests/test_v064877_type71_type99_replacement_audit.py
