@@ -1,5 +1,87 @@
 # CHANGELOG
 
+# xstar_tools 0.6.48.7.14.1 - 2026-06-12
+
+- Hotfix the original-DSEC row-46 runtime probe for `diagnostics_mode="none"`.
+- Reconstruct the source-effective normalized matrix from `dense_matrix` when v0.6.47.2 intentionally omits the retained `normalized_matrix` diagnostic copy.
+- Preserve the exact all-ones normalization row without enabling high-volume diagnostics or changing the physical calculation.
+- Make the standalone checker fail closed with a structured report and capture-log tail when capture artifacts are absent, instead of raising `FileNotFoundError`.
+- Retain the 155-record, 620-term complete aliased row-46 scope and all scientific promotion blocks.
+
+# Changelog
+
+## 0.6.48.7.14
+
+- Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.
+- Captures the exact 155-record inventory across types 50, 53, 56, 57, 71, 74, 76, 77, 95, and 99, plus all 620 committed matrix terms in global source order.
+- Captures line/continuum escape inputs, `ptmp1`, `ptmp2`, covering fraction, `ans1`-`ans6`, endpoint populations, and population-dependent diagnostics.
+- Captures the complete physical row-46 equation, the pre-normalization row, the normalized all-ones row, RHS, and all 78 solve rows.
+- Added an offline residual audit that substitutes the complete source row-46 term set into the exact type-53/type-71/type-99/actual-DSEC-type-50 qualification state and ranks the remaining residual by data type.
+- Explicitly blocks type-76, single-record, fixed-state, thermal, and production promotion pending the runtime result.
+
+## 0.6.48.7.13
+
+- Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.
+- Reproduces all 474 answers and 316 committed matrix terms IEEE-exactly, including the hydrogen-density thermal multiplier.
+- Reduces the evaluation-61 reference-population residual by 93.956%, restores helium matrix rank 78/78, and improves conditioning by about 5.64x.
+- Preserves exact type-53, type-71, and type-99 constraints, H/Mg bit identity, helium normalization, and zero Python callbacks.
+- Keeps general type-50 promotion, fixed-state parity, thermal parity, and production promotion blocked because the solved population state does not improve overall.
+
+## 0.6.48.7.12
+
+- Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.
+- Captures the live type-50 escape-probability inputs, covering fraction, optical depths, `ans1`-`ans6`, and all committed matrix terms for the 79 He II rows-46-54 records at evaluation 61.
+- Added strict 79-record/316-term verification and source-archive hash gating.
+- Kept general-state type-50 replacement, fixed-state parity, thermal parity, and production promotion blocked.
+
+## v0.6.48.7.11 - 2026-07-19
+
+### Added
+- Added qualification-only source-ordered helium solve-response diagnostics.
+- Exported the complete 78x78 helium matrix, RHS, row state, and 5,240 committed source-order terms.
+- Added direct evaluation of the v0.6.47.2 reference population vector in the native helium system.
+- Added residual rankings by qualified scope, remaining family, row block, and source position.
+
+### Findings
+- Exact type-50 changes 106 matrix entries but changes the population solution by only about 4.68e-9 in L1.
+- The normalized helium system is extremely ill-conditioned, with condition number about 2.73e14.
+- Rows 46-54 contain 99.8175% of the reference-population residual.
+- The already exact type-50 scope dominates the residual; no unqualified family is material.
+- A complete DSEC escape-probability capture is required before further type-50 promotion.
+
+### Status
+- Fixed-state, thermal, controller, product, and production promotion remain blocked.
+
+## 0.6.48.7.10
+
+- Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.
+- Embedded the immutable evaluation-61 type-50 oracle in the native engine and restricted its use to the captured fixed state.
+- Required the general replacement gate, the exact record-1695 type-99 gate, and a dedicated type-50 manifold gate.
+- Preserved all 31 exact type-53 records, all 31 exact type-71 row-77 records, and all six exact type-99 record-1695 answers.
+- Made all 474 type-50 answers and all 79 matrix commitments exact to the frozen oracle.
+- Verified bit-identical H/Mg state and exact helium normalization.
+- Accepted the qualification candidate because electron fraction, charge residual, He I/II/III, and hmctot all move toward the v0.6.47.2 reference.
+- Kept general type-50 physics replacement, fixed-state parity, thermal parity, and production promotion blocked because the candidate remains an evaluation-61 oracle substitution and the improvements are extremely small.
+
+## 0.6.48.7.9
+
+- Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
+- Added fail-closed qualification row-range and unqualified-subset ablation controls.
+- Identified type 50 as the strongest remaining compensating family.
+- Localized the dominant nonlinear response to the type-50 He II row block 46-54; no single row or source position explains the block.
+- Added portable link-free lowered-program snapshots and qualification-output safety checks.
+- Kept type-50 correction, fixed-state parity, and production promotion blocked.
+
+## 0.6.48.7.9
+
+- Added a reproducible 31-record evaluation-61 v0.6.47.2 type-71 row-77 runtime oracle.
+- Verified all current native type-71 ans1-ans6 values and matrix terms are IEEE-exact.
+- Added a qualification-only exact type-99 record-1695 oracle substitution and measured the coupled type-71/type-99 fixed-state result.
+- Rejected the coupled candidate because it increases charge residual and lowers He III.
+- Preserved all 31 exact He II type-53 records and kept H/Mg unchanged.
+- Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
+- Kept full type-53, fixed-state, and production promotion blocked.
+
 ## 0.6.48.7.14 - 2026-06-12
 
 - Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.

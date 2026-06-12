@@ -239,3 +239,30 @@ def test_source_row_reconstruction_exact_for_zero_fixture(tmp_path: Path) -> Non
     row = list(csv.DictReader((tmp_path / cap.ROW46_MATRIX_NAME).open()))
     result = audit._source_row_reconstruction(terms, row)
     assert result["all_ieee_exact"]
+
+
+def test_probe_reconstructs_normalization_when_retained_copy_is_empty(tmp_path: Path) -> None:
+    config = {
+        "output_dir": str(tmp_path / "out"),
+        "target_evaluation": 61,
+        "target_full_row": 46,
+        "target_inventory": [],
+    }
+    runtime = tmp_path / "v048714_probe_runtime.py"
+    runtime.write_text(cap._PROBE_RUNTIME)
+    (tmp_path / "probe_config.json").write_text(json.dumps(config))
+    namespace = {"__file__": str(runtime)}
+    exec(compile(cap._PROBE_RUNTIME, str(runtime), "exec"), namespace)
+
+    import numpy as np
+    from types import SimpleNamespace
+
+    dense = np.arange(9, dtype=float).reshape(3, 3)
+    assembly = SimpleNamespace(
+        dense_matrix=dense,
+        normalized_matrix=np.empty((0, 0), dtype=float),
+    )
+    helper = namespace["_normalized_after_commit"]
+    assert helper(assembly, 2, 3, 3) == dense[1, 2]
+    assert helper(assembly, 3, 1, 3) == 1.0
+    assert helper(assembly, 3, 3, 3) == 1.0

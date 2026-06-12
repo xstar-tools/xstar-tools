@@ -55,7 +55,7 @@ from .v0472_dsec_row46_runtime_capture import (
     verify as verify_capture,
 )
 
-RELEASE = "0.6.48.7.14"
+RELEASE = "0.6.48.7.14.1"
 SCHEMA = "xstar-tools-v0648714-row46-dsec-residual-audit-v1"
 ROLE_MAP = {
     "forward_gain": "forward_offdiag",

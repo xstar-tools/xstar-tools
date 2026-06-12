@@ -25,7 +25,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.14"
+RELEASE = "0.6.48.7.14.1"
 SCHEMA = "xstar-tools-v0648714-v0472-dsec-row46-runtime-capture-v1"
 BUNDLE_SCHEMA = "xstar-tools-v0648714-row46-dsec-runtime-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
@@ -199,6 +199,27 @@ def _safe_index(values, index):
         return _finite(values[index])
     except Exception:
         return None
+
+
+def _normalized_after_commit(assembly, compact_row, compact_column, normalization_row):
+    """Return the source-effective matrix value after normalization commit.
+
+    v0.6.47.2 deliberately omits the retained normalized-matrix copy when
+    diagnostics_mode="none".  The solver contract is still deterministic:
+    the normalization row is all ones and every other row is unchanged from
+    dense_matrix.  Reconstruct that contract instead of indexing an empty
+    diagnostic array.
+    """
+    normalized = getattr(assembly, "normalized_matrix", None)
+    dense = assembly.dense_matrix
+    try:
+        if normalized is not None and tuple(normalized.shape) == tuple(dense.shape):
+            return float(normalized[compact_row - 1, compact_column - 1])
+    except Exception:
+        pass
+    if int(compact_row) == int(normalization_row):
+        return 1.0
+    return float(dense[compact_row - 1, compact_column - 1])
 
 
 def _record_key(record):
@@ -420,7 +441,7 @@ def install():
                         "full_row": compact_row,
                         "compact_column": col,
                         "dense_before_normalization": float(assembly.dense_matrix[compact_row - 1, col - 1]),
-                        "normalized_after_commit": float(assembly.normalized_matrix[compact_row - 1, col - 1]),
+                        "normalized_after_commit": _normalized_after_commit(assembly, compact_row, col, norm),
                         "heating_value": float(assembly.heating_matrix[compact_row - 1, col - 1]),
                         "heating2_value": float(assembly.heating_matrix2[compact_row - 1, col - 1]),
                         "rhs": float(assembly.rhs[compact_row - 1]),
@@ -466,7 +487,7 @@ def finalize(run_summary=None):
     captured_records = {int(row["record"]) for row in rows}
     report = {
         "schema": "xstar-tools-v0648714-v0472-dsec-row46-runtime-probe-v1",
-        "release": "0.6.48.7.14",
+        "release": "0.6.48.7.14.1",
         "result": "ACCEPT" if len(rows) == 155 and len(terms) == 620 and captured_records == actual_records else "REJECT",
         "capture_kind": "actual_v06472_dsec_heii_row46_complete_source_order_runtime_capture",
         "actual_dsec_runtime_capture": True,

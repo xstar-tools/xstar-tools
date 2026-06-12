@@ -1,4 +1,4 @@
-## v0.6.48.7.14 original-DSEC row-46 source-order capture
+## v0.6.48.7.14.1 original-DSEC row-46 source-order capture
 
 This release adds a qualification-only observational capture of every original
 v0.6.47.2 DSEC record contributing to He II row 46 at evaluation 61. It
