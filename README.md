@@ -1,3 +1,14 @@
+## v0.6.48.7.16 source-faithful type-53 row-46 coupled replacement candidate
+
+This qualification-only release applies the complete 44-record, 176-term
+original-DSEC type-53 row-46 aliased manifold as one unit. At the captured
+evaluation-61 state it reproduces all answers, dense terms, thermal terms, and
+absolute source-order positions IEEE-exactly. A live non-anchor evaluator is
+also exercised, but arbitrary-state parity and production promotion remain
+blocked because the fixed-state ABI does not yet expose the complete original
+DSEC radiation and continuum optical-depth workspace. See
+`V0648716_TYPE53_ROW46_SOURCE_FAITHFUL_COUPLED_REPLACEMENT.md`.
+
 ## v0.6.48.7.15 original-DSEC type-53 row-46 runtime-contract audit
 
 This qualification-only release embeds the 44-record, 176-term original DSEC

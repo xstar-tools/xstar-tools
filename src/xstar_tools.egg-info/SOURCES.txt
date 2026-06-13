@@ -49,6 +49,7 @@ V0648713_TYPE50_DSEC_COUPLED_REPLACEMENT_AUDIT.md
 V06487142_DSEC_ROW46_ACTUAL_INVENTORY_HOTFIX.md
 V0648714_DSEC_ROW46_SOURCE_ORDER_CAPTURE_AND_RESIDUAL_AUDIT.md
 V0648715_TYPE53_ROW46_DSEC_RUNTIME_CONTRACT_AUDIT.md
+V0648716_TYPE53_ROW46_SOURCE_FAITHFUL_COUPLED_REPLACEMENT.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
@@ -91,6 +92,7 @@ check_v048713_type50_dsec_coupled_replacement_audit.py
 check_v0487142_dsec_row46_capture_and_residual_audit.py
 check_v048714_dsec_row46_capture_and_residual_audit.py
 check_v048715_type53_row46_dsec_runtime_contract_audit.py
+check_v048716_type53_row46_source_faithful_replacement_audit.py
 check_v04871_he_bound_free_audit.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
@@ -190,6 +192,7 @@ run_v048713_type50_dsec_coupled_replacement_audit.sh
 run_v0487142_dsec_row46_capture_and_residual_audit.sh
 run_v048714_dsec_row46_capture_and_residual_audit.sh
 run_v048715_type53_row46_dsec_runtime_contract_audit.sh
+run_v048716_type53_row46_source_faithful_replacement_audit.sh
 run_v04871_he_bound_free_audit.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
@@ -439,6 +442,7 @@ xstar_tools_v0.6.48.7.13_handoff.md
 xstar_tools_v0.6.48.7.14.2_handoff.md
 xstar_tools_v0.6.48.7.14_handoff.md
 xstar_tools_v0.6.48.7.15_handoff.md
+xstar_tools_v0.6.48.7.16_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
@@ -1068,6 +1072,7 @@ src/xstar_tools/xstar/type50_dsec_coupled_replacement_audit.py
 src/xstar_tools/xstar/type50_manifold_audit.py
 src/xstar_tools/xstar/type50_manifold_replacement_audit.py
 src/xstar_tools/xstar/type53_row46_dsec_runtime_contract_audit.py
+src/xstar_tools/xstar/type53_row46_source_faithful_replacement_audit.py
 src/xstar_tools/xstar/type53_semantics.py
 src/xstar_tools/xstar/type71_type99_replacement_audit.py
 src/xstar_tools/xstar/type99_type71_coupled_audit.py
@@ -1117,6 +1122,7 @@ src/xstar_tools/xstar/cpp/rate_kernels.cpp
 src/xstar_tools/xstar/cpp/thermal_kernels.cpp
 src/xstar_tools/xstar/cpp/type50_dsec_runtime_oracle_v048713.h
 src/xstar_tools/xstar/cpp/type50_manifold_oracle_v048710.h
+src/xstar_tools/xstar/cpp/type53_row46_dsec_runtime_oracle_v048716.h
 src/xstar_tools/xstar/cpp/xstar_api.cpp
 src/xstar_tools/xstar/cpp/xstar_api.h
 src/xstar_tools/xstar/cpp/xstar_api.hpp
@@ -1301,6 +1307,7 @@ tests/test_v0648711_helium_solve_response_decomposition.py
 tests/test_v0648713_type50_dsec_coupled_replacement.py
 tests/test_v0648714_dsec_row46_capture_and_audit.py
 tests/test_v0648715_type53_row46_dsec_runtime_contract_audit.py
+tests/test_v0648716_type53_row46_source_faithful_replacement.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

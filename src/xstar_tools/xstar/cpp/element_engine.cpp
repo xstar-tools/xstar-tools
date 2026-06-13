@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <limits>
 #include <set>
 #include <sstream>
@@ -209,6 +210,8 @@ void validate_output(const xstar_element_input_v1& input, xstar_element_output_v
 }
 
 bool verify_source_order(const xstar_element_input_v1& input) {
+    const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+    const bool allow_original_dsec_order = qualification_order && std::string(qualification_order) == "1";
     std::int64_t previous = std::numeric_limits<std::int64_t>::min();
     for (std::size_t i = 0; i < input.term_count; ++i) {
         const auto& term = input.terms[i];
@@ -216,7 +219,7 @@ bool verify_source_order(const xstar_element_input_v1& input) {
         require(term.column >= 1 && term.column <= input.n_rows, "term column outside compact basis");
         require(std::isfinite(term.aj1) && std::isfinite(term.aj2) &&
                 std::isfinite(term.cj) && std::isfinite(term.cj2), "non-finite matrix term");
-        if (term.source_position < previous) return false;
+        if (!allow_original_dsec_order && term.source_position < previous) return false;
         previous = term.source_position;
     }
     return true;
@@ -291,9 +294,13 @@ std::vector<xstar_element_term_v1> construct_terms_from_contributions(
     std::vector<xstar_element_term_v1> terms;
     terms.reserve(contribution_count * 4u);
     std::int64_t previous_position = std::numeric_limits<std::int64_t>::min();
+    const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+    const bool allow_original_dsec_order = qualification_order && std::string(qualification_order) == "1";
     for (std::size_t index = 0; index < contribution_count; ++index) {
         const auto& c = contributions[index];
-        require(c.source_position >= previous_position, "contribution stream is not in source-position order");
+        if (!allow_original_dsec_order) {
+            require(c.source_position >= previous_position, "contribution stream is not in source-position order");
+        }
         previous_position = c.source_position;
         require(c.lower_row >= 1 && c.lower_row <= input.n_rows, "contribution lower_row outside compact basis");
         require(c.upper_row >= 1 && c.upper_row <= input.n_rows, "contribution upper_row outside compact basis");

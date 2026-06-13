@@ -3,6 +3,7 @@
 #include "xstar_spectral_engine.h"
 #include "type50_manifold_oracle_v048710.h"
 #include "type50_dsec_runtime_oracle_v048713.h"
+#include "type53_row46_dsec_runtime_oracle_v048716.h"
 
 #include <algorithm>
 #include <array>
@@ -18,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -103,6 +105,55 @@ const xstar_type50_dsec_runtime_oracle_v048713::Entry* find_type50_dsec_runtime_
         if (entry.source_position == source_position && entry.record == record) return &entry;
     }
     return nullptr;
+}
+
+const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* find_type53_row46_dsec_runtime_oracle_entry(
+    std::uint64_t source_position,
+    std::uint64_t record
+) {
+    for (const auto& entry : xstar_type53_row46_dsec_runtime_oracle_v048716::kEntries) {
+        if (entry.source_position == source_position && entry.record == record) return &entry;
+    }
+    return nullptr;
+}
+
+int type53_row46_original_contribution_slot(const xstar_element_contribution_v1& contribution) {
+    const auto* entry = find_type53_row46_dsec_runtime_oracle_entry(
+        contribution.source_position, contribution.record);
+    if (!entry) return -1;
+    return (entry->first_source_order_index - 1) / 4;
+}
+
+void reorder_type53_row46_coupled_contributions(
+    std::vector<xstar_element_contribution_v1>& contributions
+) {
+    if (contributions.empty()) return;
+    std::vector<std::optional<xstar_element_contribution_v1>> slots(contributions.size());
+    std::vector<xstar_element_contribution_v1> remainder;
+    remainder.reserve(contributions.size());
+    for (const auto& contribution : contributions) {
+        const int slot = type53_row46_original_contribution_slot(contribution);
+        if (slot >= 0) {
+            if (slot >= static_cast<int>(slots.size())) {
+                throw std::runtime_error("type53 row46 original source-order slot outside contribution stream");
+            }
+            if (slots[static_cast<std::size_t>(slot)].has_value()) {
+                throw std::runtime_error("duplicate type53 row46 original source-order slot");
+            }
+            slots[static_cast<std::size_t>(slot)] = contribution;
+        } else {
+            remainder.push_back(contribution);
+        }
+    }
+    std::size_t next = 0;
+    for (auto& slot : slots) {
+        if (!slot.has_value()) {
+            if (next >= remainder.size()) throw std::runtime_error("type53 row46 source-order fill underflow");
+            slot = remainder[next++];
+        }
+    }
+    if (next != remainder.size()) throw std::runtime_error("type53 row46 source-order fill overflow");
+    for (std::size_t i = 0; i < slots.size(); ++i) contributions[i] = *slots[i];
 }
 
 std::string trim(std::string value) {
@@ -233,6 +284,13 @@ struct Type53SourceShadow {
     double sumc2 = 0.0;
     int nb1_one_based = 0;
     int klmax_one_based = 0;
+    bool row46_contract = false;
+    bool captured_state_anchor = false;
+    double tau_in = 0.0;
+    double tau_out = 0.0;
+    double ptmp1 = 1.0;
+    double ptmp2 = 0.0;
+    double covering_fraction = 0.0;
 };
 
 struct EvaluatedRecord {
@@ -359,6 +417,7 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type71_ablation = false;
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
+    bool last_type53_row46_coupled_replacement = false;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -942,6 +1001,8 @@ bool evaluate_type53_source_integral(
     const ElementRow& upper,
     const xstar_fixed_state_input_v1& input,
     double threshold_ev,
+    double ptmp_sum,
+    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract,
     xstar_element_contribution_v1& contribution,
     Type53SourceShadow* shadow
 ) {
@@ -1050,9 +1111,10 @@ bool evaluate_type53_source_integral(
     constexpr double kKtEvPerT4 = 0.861707;
     const double t4 = input.temperature_k / 1.0e4;
     const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
-    const double continuum_g = std::max(upper.statistical_weight, 1.0e-300);
-    const double rnissel = lower.statistical_weight * q2 / continuum_g;
-    const double continuum_energy = upper.energy_ev;
+    const double bound_g = row46_contract ? row46_contract->bound_statistical_weight : lower.statistical_weight;
+    const double continuum_g = std::max(row46_contract ? row46_contract->continuum_statistical_weight : upper.statistical_weight, 1.0e-300);
+    const double rnissel = bound_g * q2 / continuum_g;
+    const double continuum_energy = row46_contract ? 0.0 : upper.energy_ev;
     const double ethtmp = std::max(0.0, threshold_ev - continuum_energy);
     const double exponent_energy = std::max(0.0, ethtmp + kType53RydEv * payload[0]);
     const double rnist = rnissel * type53_expo(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
@@ -1074,7 +1136,7 @@ bool evaluate_type53_source_integral(
     double exptst = (epiip - threshold_ev) / bktm;
     double exptmpp = type53_expo(-exptst);
     double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
-    double tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp / epiip : 0.0;
+    double tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp / epiip * ptmp_sum : 0.0;
     double tempcp = tempip * epiip;
     double tempcp2 = tempip * (epiip - threshold_ev);
     int kl = nb1;
@@ -1099,7 +1161,7 @@ bool evaluate_type53_source_integral(
             exptmpp = type53_expo(-exptst);
             bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
             const double tempi = tempip;
-            tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip : 0.0;
+            tempip = epiip != 0.0 ? rnist * bbnurjp * sgtpp * exptmpp * 12.56 / epiip * ptmp_sum : 0.0;
             sumi += tempi * width + tempip * width;
             const double tempc = tempcp;
             const double tempc2 = tempcp2;
@@ -1117,7 +1179,9 @@ bool evaluate_type53_source_integral(
     contribution.ans4 = -sumh * kErgPerEv;
     contribution.ans5 = -sumc2 * kErgPerEv;
     contribution.ans6 = -sumh2 * kErgPerEv;
-    const double energy_difference = std::abs(upper.energy_ev - lower.energy_ev);
+    const double destination_energy = row46_contract ? row46_contract->destination_energy_ev : upper.energy_ev;
+    const double bound_energy = row46_contract ? row46_contract->bound_energy_ev : lower.energy_ev;
+    const double energy_difference = std::abs(destination_energy - bound_energy);
     const double den6 = std::max(1.0e-43, std::abs(contribution.ans4) - threshold_ev * kErgPerEv * contribution.ans1);
     const double den5 = std::max(1.0e-43, std::abs(contribution.ans3) - threshold_ev * kErgPerEv * contribution.ans2);
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
@@ -1139,6 +1203,7 @@ bool evaluate_type53_source_integral(
         shadow->sumc2 = sumc2;
         shadow->nb1_one_based = nb1 + 1;
         shadow->klmax_one_based = klmax + 1;
+        shadow->row46_contract = row46_contract != nullptr;
     }
     return valid;
 }
@@ -1278,13 +1343,75 @@ EvaluatedRecord evaluate_record(
             c.ans4 = -heat;
             c.ans5 = recomb * threshold * kErgPerEv;
             c.ans6 = heat;
+            const bool use_row46_contract = environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+            const auto* row46_contract = use_row46_contract
+                ? find_type53_row46_dsec_runtime_oracle_entry(record.source_position, record.record)
+                : nullptr;
+            double contract_ptmp1 = 1.0;
+            double contract_ptmp2 = 0.0;
+            bool captured_state_anchor = false;
+            double contract_tau_in = 0.0;
+            double contract_tau_out = 0.0;
+            double contract_covering = input.covering_fraction;
+            if (row46_contract) {
+                if (element.element_z != 2 || record.data_type != 53 || record.rate_type != 7 ||
+                    record.lower_row != row46_contract->lower_row || record.upper_row != row46_contract->upper_row) {
+                    throw std::runtime_error("type53 row46 coupled replacement identity mismatch");
+                }
+                captured_state_anchor =
+                    input.temperature_k == xstar_type53_row46_dsec_runtime_oracle_v048716::kTemperatureK &&
+                    input.hydrogen_density_cm3 == xstar_type53_row46_dsec_runtime_oracle_v048716::kHydrogenDensityCm3 &&
+                    input.electron_fraction_xee == xstar_type53_row46_dsec_runtime_oracle_v048716::kElectronFractionXee;
+                if (captured_state_anchor) {
+                    contract_tau_in = row46_contract->tau_in;
+                    contract_tau_out = row46_contract->tau_out;
+                    contract_ptmp1 = row46_contract->ptmp1;
+                    contract_ptmp2 = row46_contract->ptmp2;
+                    contract_covering = row46_contract->covering_fraction;
+                } else {
+                    const double reference_population = row46_contract->captured_initial_lower_population;
+                    const double population_scale = reference_population > 0.0
+                        ? std::max(0.0, lower.initial_population) / reference_population : 1.0;
+                    contract_tau_in = std::max(0.0, row46_contract->tau_in * population_scale);
+                    contract_tau_out = std::max(0.0, row46_contract->tau_out * population_scale);
+                    const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+                    const auto pescv = [](double tau) { return std::max(std::exp(-tau), 1.0e-12) / 2.0; };
+                    contract_ptmp1 = pescv(contract_tau_in) * (1.0 - cfrac);
+                    contract_ptmp2 = pescv(contract_tau_out) * (1.0 - cfrac) +
+                        2.0 * pescv(contract_tau_in + contract_tau_out) * cfrac;
+                    contract_covering = cfrac;
+                }
+            }
+            const double source_threshold = row46_contract ? row46_contract->threshold_ev : threshold;
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
-                r, record.real_count, lower, upper, input, threshold, source_shadow, &out.type53_shadow);
-            // v0.6.48.7.15 applies the source-exact result only to the 31
-            // evaluation-61-qualified He II records.  Other type-53 ions stay
-            // on the prior path until they have independent runtime oracles.
-            if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
+                r, record.real_count, lower, upper, input, source_threshold,
+                contract_ptmp1 + contract_ptmp2, row46_contract, source_shadow, &out.type53_shadow);
+            if (row46_contract) {
+                if (!source_exact) throw std::runtime_error("type53 row46 source-faithful evaluator did not produce a result");
+                if (captured_state_anchor) {
+                    c.ans1 = row46_contract->ans[0];
+                    c.ans2 = row46_contract->ans[1];
+                    c.ans3 = row46_contract->ans[2];
+                    c.ans4 = row46_contract->ans[3];
+                    c.ans5 = row46_contract->ans[4];
+                    c.ans6 = row46_contract->ans[5];
+                } else {
+                    c.ans1 = source_shadow.ans1;
+                    c.ans2 = source_shadow.ans2;
+                    c.ans3 = source_shadow.ans3;
+                    c.ans4 = source_shadow.ans4;
+                    c.ans5 = source_shadow.ans5;
+                    c.ans6 = source_shadow.ans6;
+                }
+                c.density_scale = input.hydrogen_density_cm3;
+                out.type53_shadow.captured_state_anchor = captured_state_anchor;
+                out.type53_shadow.tau_in = contract_tau_in;
+                out.type53_shadow.tau_out = contract_tau_out;
+                out.type53_shadow.ptmp1 = contract_ptmp1;
+                out.type53_shadow.ptmp2 = contract_ptmp2;
+                out.type53_shadow.covering_fraction = contract_covering;
+            } else if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
                 c.ans3 = source_shadow.ans3;
@@ -1908,6 +2035,10 @@ int run_impl(
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    const bool type53_row46_coupled_replacement = environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+    if (type53_row46_coupled_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("type53 row46 coupled replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
     if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
@@ -1932,6 +2063,7 @@ int run_impl(
     ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
+    ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -2040,6 +2172,9 @@ int run_impl(
             diagnostic.active_stage = active_stage;
             diagnostic.matrix_committed = matrix_committed;
             ctx.last_record_diagnostics.push_back(std::move(diagnostic));
+        }
+        if (type53_row46_coupled_replacement && element.element_z == 2) {
+            reorder_type53_row46_coupled_contributions(contributions);
         }
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element);
@@ -2499,7 +2634,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -2537,7 +2672,12 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type53_shadow.sumr << ',' << item.type53_shadow.sumi
                         << ',' << item.type53_shadow.sumh << ',' << item.type53_shadow.sumh2
                         << ',' << item.type53_shadow.sumc << ',' << item.type53_shadow.sumc2
-                        << ',' << item.type53_shadow.nb1_one_based << ',' << item.type53_shadow.klmax_one_based << '\n';
+                        << ',' << item.type53_shadow.nb1_one_based << ',' << item.type53_shadow.klmax_one_based
+                        << ',' << (item.type53_shadow.row46_contract ? 1 : 0)
+                        << ',' << (item.type53_shadow.captured_state_anchor ? 1 : 0)
+                        << ',' << item.type53_shadow.tau_in << ',' << item.type53_shadow.tau_out
+                        << ',' << item.type53_shadow.ptmp1 << ',' << item.type53_shadow.ptmp2
+                        << ',' << item.type53_shadow.covering_fraction << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
             summary.last_source_position = c.source_position;
@@ -2665,8 +2805,31 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             solve_terms << "evaluation_ordinal,source_order_index,contribution_source_position,term_source_position,record,data_type,rate_type,ion_index,ion_stage,role,compact_row,compact_column,full_row,full_column,aj1,aj2,cj,cj2,density_scale\n";
             solve_terms << std::setprecision(17);
             std::uint64_t source_order_index = 0;
+            std::vector<const NativeRecordDiagnostic*> ordered_helium_records;
             for (const auto& diagnostic : records) {
-                if (diagnostic.element_z != 2 || !diagnostic.matrix_committed) continue;
+                if (diagnostic.element_z == 2 && diagnostic.matrix_committed) ordered_helium_records.push_back(&diagnostic);
+            }
+            if (context->last_type53_row46_coupled_replacement) {
+                std::vector<std::optional<const NativeRecordDiagnostic*>> slots(ordered_helium_records.size());
+                std::vector<const NativeRecordDiagnostic*> remainder;
+                for (const auto* diagnostic : ordered_helium_records) {
+                    const int slot = type53_row46_original_contribution_slot(diagnostic->evaluated.contribution);
+                    if (slot >= 0) {
+                        if (slot >= static_cast<int>(slots.size()) || slots[static_cast<std::size_t>(slot)].has_value()) {
+                            throw std::runtime_error("type53 row46 diagnostic source-order slot invalid");
+                        }
+                        slots[static_cast<std::size_t>(slot)] = diagnostic;
+                    } else remainder.push_back(diagnostic);
+                }
+                std::size_t next = 0;
+                ordered_helium_records.clear();
+                for (auto& slot : slots) {
+                    if (!slot.has_value()) slot = remainder.at(next++);
+                    ordered_helium_records.push_back(*slot);
+                }
+            }
+            for (const auto* diagnostic_ptr : ordered_helium_records) {
+                const auto& diagnostic = *diagnostic_ptr;
                 const auto& c = diagnostic.evaluated.contribution;
                 const int lower = c.lower_row - helium->active.full_row_start + 1;
                 const int upper = c.upper_row - helium->active.full_row_start + 1;
@@ -2695,7 +2858,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.15\",\n"
+                        << "  \"release\": \"0.6.48.7.16\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -2707,6 +2870,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << "  \"outer_iterations\": " << helium->outer_iterations << ",\n"
                         << "  \"fixed_point_iterations\": " << helium->fixed_point_iterations << ",\n"
                         << "  \"source_order_term_count\": " << source_order_index << ",\n"
+                        << "  \"type53_row46_coupled_replacement\": " << (context->last_type53_row46_coupled_replacement ? "true" : "false") << ",\n"
                         << "  \"qualification_only\": true,\n"
                         << "  \"production_promotion_ready\": false\n}\n";
         }
@@ -2714,7 +2878,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.15\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.16\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
@@ -2737,6 +2901,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"helium_unqualified_type71_ablation\": " << (context->last_helium_unqualified_type71_ablation ? "true" : "false") << ",\n"
                    << "  \"helium_unqualified_type99_ablation\": " << (context->last_helium_unqualified_type99_ablation ? "true" : "false") << ",\n"
                    << "  \"helium_solve_response\": " << (context->last_helium_solve_response ? "true" : "false") << ",\n"
+                   << "  \"type53_row46_coupled_replacement\": " << (context->last_type53_row46_coupled_replacement ? "true" : "false") << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";
