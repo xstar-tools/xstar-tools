@@ -589,3 +589,10 @@ include run_v048721_call1_thermal_budget_state_refresh_audit.sh
 include check_v048721_call1_thermal_budget_state_refresh_audit.py
 include V0648721_CALL1_THERMAL_BUDGET_AND_STATE_REFRESH_AUDIT.md
 include xstar_tools_v0.6.48.7.21_handoff.md
+
+# v0.6.48.7.21.1 call-1 capture snapshot hotfix
+include run_v0487211_call1_thermal_budget_state_refresh_audit.sh
+include check_v0487211_call1_thermal_budget_state_refresh_audit.py
+include check_v0487211_capture_probe_hotfix.py
+include V06487211_CALL1_CAPTURE_SNAPSHOT_HOTFIX.md
+include xstar_tools_v0.6.48.7.21.1_handoff.md

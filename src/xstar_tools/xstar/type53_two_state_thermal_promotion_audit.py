@@ -40,7 +40,7 @@ from .type53_runtime_state_independent_capture import (
 
 csv.field_size_limit(1 << 31)
 
-RELEASE = "0.6.48.7.21"
+RELEASE = "0.6.48.7.21.1"
 SCHEMA = "xstar-tools-v06487191-type53-two-state-thermal-promotion-audit-v1"
 EVAL60 = 60
 EVAL61 = 61

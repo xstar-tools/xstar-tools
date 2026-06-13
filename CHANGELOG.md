@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.21.1 - 2026-06-13
+
+- Fix the v0.6.48.7.21 original-DSEC capture probe to record only the first input snapshot of each DSEC call.
+- Avoid reading `global_level_index_by_key` from the intentionally lightweight v0.6.47.2 prior-result namespace used by `diagnostics_mode=none`.
+- Preserve source physics, controller tolerances, and all promotion blockers; this is an observational instrumentation hotfix only.
+
 ## 0.6.48.7.21 - 2026-06-13
 
 - Added a qualification-only original-v0.6.47.2 call-1 thermal-budget capture.

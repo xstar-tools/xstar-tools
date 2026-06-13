@@ -68,7 +68,7 @@ from .type71_type99_replacement_audit import element_isolation
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21"
+RELEASE = "0.6.48.7.21.1"
 SCHEMA = "xstar-tools-v0648716-type53-row46-source-faithful-replacement-audit-v1"
 NONANCHOR_EVALUATION = 60
 

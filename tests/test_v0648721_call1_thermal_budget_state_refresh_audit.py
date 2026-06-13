@@ -37,3 +37,10 @@ def test_v0648721_probe_source_compiles() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
     compile(mod._PROBE, 'v048721_probe_runtime.py', 'exec')
     compile(mod._DRIVER, 'driver.py', 'exec')
+
+
+def test_v06487211_probe_captures_only_first_snapshot() -> None:
+    import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
+    assert 'self.capture_all_input_snapshots = False' in mod._PROBE
+    assert 'self.capture_input_snapshot_indices = (1,)' in mod._PROBE
+    assert 'self.capture_all_input_snapshots = True' not in mod._PROBE

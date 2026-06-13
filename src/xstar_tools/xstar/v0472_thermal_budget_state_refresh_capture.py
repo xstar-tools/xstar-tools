@@ -24,7 +24,7 @@ from typing import Any, Mapping
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21"
+RELEASE = "0.6.48.7.21.1"
 SCHEMA = "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648721-thermal-budget-state-refresh-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
@@ -151,7 +151,15 @@ def install():
             _STATE["global_eval"] += 1
             global_eval = int(_STATE["global_eval"])
         self.retain_fixed_state_results = True
-        self.capture_all_input_snapshots = True
+        # Only the first evaluation of each DSEC call is part of the
+        # between-call state-refresh contract.  Capturing every snapshot
+        # causes v0.6.47.2 diagnostics=none runs to inspect the intentionally
+        # lightweight prior-result namespace, which does not own the full
+        # global-level mapping.  First-snapshot-only capture is observational,
+        # avoids retaining source arrays, and leaves the physical state path
+        # unchanged.
+        self.capture_all_input_snapshots = False
+        self.capture_input_snapshot_indices = (1,)
         out = original(self, state)
         result = out.fixed_state_result
         snap = self.input_snapshots[-1] if self.input_snapshots else None
@@ -221,7 +229,7 @@ def finalize(run_summary=None):
         with (_OUT/name).open("w", newline="") as f:
             w=csv.DictWriter(f, fieldnames=fields, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
     report = {
-      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21",
+      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.1",
       "result": "ACCEPT" if len(_STATE["budgets"]) >= 7 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) >= 57 else "REJECT",
       "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]),
       "dsec_evaluations_observed": len(_STATE["trace"]), "run_summary": run_summary or {}, "qualification_only": True, "production_promotion_ready": False,
