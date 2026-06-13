@@ -422,6 +422,8 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
     bool last_type53_row46_coupled_replacement = false;
+    std::map<int, std::array<double,4>> last_element_thermal_budget;
+    std::array<double,4> last_helium_type53_budget{{0.0,0.0,0.0,0.0}};
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -2053,6 +2055,8 @@ int run_impl(
     validate_io(input, output);
     ctx.last_record_diagnostics.clear();
     ctx.last_element_diagnostics.clear();
+    ctx.last_element_thermal_budget.clear();
+    ctx.last_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
     ctx.last_temperature_k = input.temperature_k;
     ctx.last_electron_density_cm3 = input.electron_density_cm3;
     ctx.last_hydrogen_density_cm3 = input.hydrogen_density_cm3;
@@ -2245,6 +2249,29 @@ int run_impl(
         ++stats.elements_solved;
         output.element_heating += eout.heating + eout.heating2;
         output.element_cooling += eout.cooling + eout.cooling2;
+        ctx.last_element_thermal_budget[element.element_z] = {{eout.heating, eout.cooling, eout.heating2, eout.cooling2}};
+        if (element.element_z == 2) {
+            double h53 = 0.0, c53 = 0.0, h253 = 0.0, c253 = 0.0;
+            for (const auto& contribution : contributions) {
+                if (contribution.data_type != 53) continue;
+                const int lower = contribution.lower_row - 1;
+                const int upper = contribution.upper_row - 1;
+                if (lower < 0 || upper < 0 || lower >= static_cast<int>(buffers.populations.size()) || upper >= static_cast<int>(buffers.populations.size())) continue;
+                const double lower_pop = buffers.populations[static_cast<std::size_t>(lower)] * element.abundance;
+                const double upper_pop = buffers.populations[static_cast<std::size_t>(upper)] * element.abundance;
+                const double lower_cj = contribution.ans4 * contribution.density_scale;
+                const double upper_cj = -contribution.ans3 * contribution.density_scale;
+                const double lower_cj2 = contribution.ans6 * contribution.density_scale;
+                const double upper_cj2 = -contribution.ans5 * contribution.density_scale;
+                for (const auto& term : {std::pair<double,double>{lower_pop, lower_cj}, std::pair<double,double>{upper_pop, upper_cj}}) {
+                    if (term.second > 0.0) c53 += term.first * term.second; else h53 -= term.first * term.second;
+                }
+                for (const auto& term : {std::pair<double,double>{lower_pop, lower_cj2}, std::pair<double,double>{upper_pop, upper_cj2}}) {
+                    if (term.second > 0.0) c253 += term.first * term.second; else h253 -= term.first * term.second;
+                }
+            }
+            ctx.last_helium_type53_budget = {{h53, c53, h253, c253}};
+        }
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
         for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
@@ -2630,6 +2657,70 @@ int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fix
     }
 }
 
+int xstar_fixed_state_write_last_thermal_budget_v1(
+    const xstar_fixed_state_context* context,
+    const char* output_csv,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !output_csv || !*output_csv || sequence == 0 || call_index == 0 || evaluation_index == 0) {
+        copy_text(message, message_size, "context, output_csv, and positive indices are required");
+        return 1;
+    }
+    try {
+        const std::filesystem::path path(output_csv);
+        if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+        const bool write_header = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
+        std::ofstream out(path, std::ios::app);
+        if (!out) throw std::runtime_error("cannot create native thermal-budget ledger");
+        if (write_header) {
+            out << "sequence,kind,call_index,evaluation_index,temperature_k,electron_density_cm3,hydrogen_density_cm3,electron_fraction_input," 
+                   "h_heating,h_cooling,h_heating2,h_cooling2,he_heating,he_cooling,he_heating2,he_cooling2," 
+                   "he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2," 
+                   "he_non_type53_heating,he_non_type53_cooling,he_non_type53_heating2,he_non_type53_cooling2," 
+                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,continuum_heating,continuum_cooling,total_heating,total_cooling,hmctot\n";
+        }
+        const auto budget = [&](int z) {
+            const auto it = context->last_element_thermal_budget.find(z);
+            return it == context->last_element_thermal_budget.end() ? std::array<double,4>{{0.0,0.0,0.0,0.0}} : it->second;
+        };
+        const auto h = budget(1);
+        const auto he = budget(2);
+        const auto mg = budget(12);
+        const auto he53 = context->last_helium_type53_budget;
+        std::array<double,4> he_other{{
+            he[0]-he53[0], he[1]-he53[1], he[2]-he53[2], he[3]-he53[3]
+        }};
+        double element_heating = 0.0;
+        double element_cooling = 0.0;
+        for (const auto& item : context->last_element_thermal_budget) {
+            element_heating += item.second[0] + item.second[2];
+            element_cooling += item.second[1] + item.second[3];
+        }
+        const double continuum_heating = context->last_total_heating - element_heating;
+        const double continuum_cooling = context->last_total_cooling - element_cooling;
+        out << std::setprecision(17)
+            << sequence << ',' << (kind && *kind ? kind : "dsec") << ',' << call_index << ',' << evaluation_index << ','
+            << context->last_temperature_k << ',' << context->last_electron_density_cm3 << ',' << context->last_hydrogen_density_cm3 << ',' << context->last_electron_fraction_input << ','
+            << h[0] << ',' << h[1] << ',' << h[2] << ',' << h[3] << ','
+            << he[0] << ',' << he[1] << ',' << he[2] << ',' << he[3] << ','
+            << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
+            << he_other[0] << ',' << he_other[1] << ',' << he_other[2] << ',' << he_other[3] << ','
+            << mg[0] << ',' << mg[1] << ',' << mg[2] << ',' << mg[3] << ','
+            << element_heating << ',' << element_cooling << ',' << continuum_heating << ',' << continuum_cooling << ','
+            << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_hmctot << '\n';
+        copy_text(message, message_size, "native thermal-budget ledger written");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 8;
+    }
+}
+
 int xstar_fixed_state_write_visited_report_v1(const xstar_fixed_state_context* context, const char* output_path, char* message, size_t message_size) {
     if (!context || !output_path || !*output_path) {
         copy_text(message, message_size, "context and output_path are required");
@@ -2903,7 +2994,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.20\",\n"
+                        << "  \"release\": \"0.6.48.7.21\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -2923,7 +3014,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.20\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.21\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

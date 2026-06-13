@@ -572,16 +572,20 @@ include run_v048718_type53_rnist_covering_correction_audit.sh
 include check_v048718_type53_rnist_covering_correction_audit.py
 include tests/test_v0648718_type53_rnist_covering_correction.py
 
-# v0.6.48.7.20 two-state type-53 thermal-controller promotion and hmctot attribution
+# v0.6.48.7.21 two-state type-53 thermal-controller promotion and hmctot attribution
 recursive-include src/xstar_tools/benchmarks/v0648719_type53_two_state_promotion *
 include V0648719_TYPE53_TWO_STATE_THERMAL_PROMOTION_AND_HMCTOT_ATTRIBUTION.md
-include xstar_tools_v0.6.48.7.20_handoff.md
+include xstar_tools_v0.6.48.7.21_handoff.md
 include run_v048719_type53_two_state_thermal_promotion_audit.sh
 include check_v048719_type53_two_state_thermal_promotion_audit.py
 include tests/test_v0648719_type53_two_state_thermal_promotion.py
 include V06487191_TYPE53_THERMAL_AUDIT_RECOVERY_HOTFIX.md
-include xstar_tools_v0.6.48.7.20_handoff.md
+include xstar_tools_v0.6.48.7.21_handoff.md
 include run_v048720_thermal_controller_state_trajectory_audit.sh
 include check_v048720_thermal_controller_state_trajectory_audit.py
 include V0648720_THERMAL_CONTROLLER_STATE_SELECTION_AND_TRAJECTORY_AUDIT.md
-include xstar_tools_v0.6.48.7.20_handoff.md
+include xstar_tools_v0.6.48.7.21_handoff.md
+include run_v048721_call1_thermal_budget_state_refresh_audit.sh
+include check_v048721_call1_thermal_budget_state_refresh_audit.py
+include V0648721_CALL1_THERMAL_BUDGET_AND_STATE_REFRESH_AUDIT.md
+include xstar_tools_v0.6.48.7.21_handoff.md

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.21 - 2026-06-13
+
+- Added a qualification-only original-v0.6.47.2 call-1 thermal-budget capture.
+- Separates helium type-53 from helium non-type-53 thermal terms using the source-ordered diagonal ledger and solved populations.
+- Captures radiation, bremsa, continuum optical depths, opacity, emissivity, and global population fingerprints at the start of all four DSEC calls.
+- Adds lightweight `native_thermal_budget.csv` output with H, He, Mg, continuum, type-53, and helium non-type-53 budgets for every controller evaluation.
+- Extends native controller trajectory diagnostics with element and continuum heating/cooling columns.
+- Adds a constrained comparison that identifies the leading call-1 non-type-53 budget gap and the exact between-call state-refresh gap without changing controller tolerances.
+- Full thermal, controller, and production promotion remain blocked.
+
+# Changelog
+
 ## 0.6.48.7.20 - 2026-06-13
 
 - Added a qualification-only thermal-controller state-selection and trajectory audit.

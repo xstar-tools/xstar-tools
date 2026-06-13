@@ -1,4 +1,4 @@
-"""Constrained v0.6.48.7.20 thermal-controller state-selection audit.
+"""Constrained v0.6.48.7.21 thermal-controller state-selection audit.
 
 The audit consumes a completed v0.6.48.7.19/19.1 controller output and the
 immutable v0.6.47.2 61-row trajectory.  It does not change physics.  It
@@ -15,7 +15,7 @@ import math
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.20"
+RELEASE = "0.6.48.7.21"
 THERMAL_TOLERANCE = float.fromhex("0x1.a36e2e0000000p-14")  # float32(1e-4)
 FAR_FROM_EQUILIBRIUM = float.fromhex("0x1.cccccc0000000p-1")  # float32(0.9)
 TEMPERATURE_FACTOR = float.fromhex("0x1.3333340000000p+0")  # float32(1.2)

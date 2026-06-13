@@ -85,7 +85,7 @@ typedef struct xstar_fixed_state_input_v1 {
     const double* radiation_flux;
     size_t radiation_bin_count;
 
-    /* v0.6.48.7.20 source-faithful DSEC runtime-state extension.
+    /* v0.6.48.7.21 source-faithful DSEC runtime-state extension.
      * These arrays are observational input workspaces owned by the caller.
      * dsec_bremsa is the full source radiation field used by ucalc/phint53;
      * continuum_tau_* are indexed by the original one-based npconi2 index.
@@ -207,6 +207,17 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_v1(
     char* message,
     size_t message_size
 );
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_thermal_budget_v1(
+    const xstar_fixed_state_context* context,
+    const char* output_csv,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_visited_report_v1(
     const xstar_fixed_state_context* context,
     const char* output_path,
