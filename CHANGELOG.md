@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.21.3 - 2026-06-13
+
+- Remove the observational `calc_hmc_all` monkeypatch after the v0.6.48.7.21.2 fault was localized to cyclic GC at call 1/evaluation 5.
+- Capture compact current-result budgets through `CalcHMCAllDsecEvaluator.progress_callback` and call-start fingerprints through `pre_evaluation_callback`.
+- Disable DSEC input-snapshot retention and full fixed-state result history in the physical probe.
+- Disable cyclic GC only inside the isolated observational subprocess; reference counting and source numerical execution remain unchanged.
+- Preserve ABI 60487, controller tolerances, source physics, and all thermal/production blockers.
+
 ## 0.6.48.7.21.2 - 2026-06-13
 
 - Replace full fixed-state result retention in the v0.6.47.2 thermal-budget probe with a streaming current-result hook.

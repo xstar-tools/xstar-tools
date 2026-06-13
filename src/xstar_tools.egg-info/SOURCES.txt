@@ -57,7 +57,7 @@ V0648719_TYPE53_TWO_STATE_THERMAL_PROMOTION_AND_HMCTOT_ATTRIBUTION.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
 V0648720_THERMAL_CONTROLLER_STATE_SELECTION_AND_TRAJECTORY_AUDIT.md
 V06487211_CALL1_CAPTURE_SNAPSHOT_HOTFIX.md
-V06487212_CALL1_CAPTURE_STREAMING_HOTFIX.md
+V06487213_CALL1_CAPTURE_CALLBACK_GC_HOTFIX.md
 V0648721_CALL1_THERMAL_BUDGET_AND_STATE_REFRESH_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
@@ -108,8 +108,8 @@ check_v04871_he_bound_free_audit.py
 check_v048720_thermal_controller_state_trajectory_audit.py
 check_v0487211_call1_thermal_budget_state_refresh_audit.py
 check_v0487211_capture_probe_hotfix.py
-check_v0487212_call1_thermal_budget_state_refresh_audit.py
-check_v0487212_capture_streaming_hotfix.py
+check_v0487213_call1_thermal_budget_state_refresh_audit.py
+check_v0487213_capture_callback_hotfix.py
 check_v048721_call1_thermal_budget_state_refresh_audit.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
@@ -216,7 +216,7 @@ run_v048719_type53_two_state_thermal_promotion_audit.sh
 run_v04871_he_bound_free_audit.sh
 run_v048720_thermal_controller_state_trajectory_audit.sh
 run_v0487211_call1_thermal_budget_state_refresh_audit.sh
-run_v0487212_call1_thermal_budget_state_refresh_audit.sh
+run_v0487213_call1_thermal_budget_state_refresh_audit.sh
 run_v048721_call1_thermal_budget_state_refresh_audit.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
@@ -471,7 +471,7 @@ xstar_tools_v0.6.48.7.17_handoff.md
 xstar_tools_v0.6.48.7.18_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.21.1_handoff.md
-xstar_tools_v0.6.48.7.21.2_handoff.md
+xstar_tools_v0.6.48.7.21.3_handoff.md
 xstar_tools_v0.6.48.7.21_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md

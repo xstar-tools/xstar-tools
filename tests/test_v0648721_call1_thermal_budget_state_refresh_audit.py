@@ -39,24 +39,31 @@ def test_v0648721_probe_source_compiles() -> None:
     compile(mod._DRIVER, 'driver.py', 'exec')
 
 
-def test_v06487211_probe_captures_only_first_snapshot() -> None:
+def test_v06487213_probe_uses_callbacks_without_snapshot_retention() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
     assert 'self.capture_all_input_snapshots = False' in mod._PROBE
-    assert 'self.capture_input_snapshot_indices = (1,)' in mod._PROBE
-    assert 'self.capture_all_input_snapshots = True' not in mod._PROBE
+    assert 'self.capture_input_snapshot_indices = ()' in mod._PROBE
+    assert 'def capture_pre' in mod._PROBE
+    assert 'def capture_progress' in mod._PROBE
+    assert 'self.pre_evaluation_callback = capture_pre' in mod._PROBE
+    assert 'self.progress_callback = capture_progress' in mod._PROBE
+    assert 'def streaming_calc_hmc_all' not in mod._PROBE
+    assert 'dsec_mod.calc_hmc_all =' not in mod._PROBE
 
 
-def test_v06487212_probe_streams_current_result_without_history() -> None:
+def test_v06487213_probe_preserves_production_result_history_policy() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
-    assert 'def streaming_calc_hmc_all' in mod._PROBE
-    assert 'dsec_mod.calc_hmc_all = streaming_calc_hmc_all' in mod._PROBE
     assert 'self.retain_fixed_state_results = False' in mod._PROBE
     assert 'self.retain_fixed_state_results = True' not in mod._PROBE
-    assert '_STATE["active_result"] = None' in mod._PROBE
+    assert 'active_result' not in mod._PROBE
 
 
-def test_v06487212_probe_enables_crash_localization() -> None:
+def test_v06487213_probe_isolates_cyclic_gc_and_localizes_crashes() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
-    assert 'PYTHONFAULTHANDLER' in mod.__file__ or 'PYTHONFAULTHANDLER' in Path(mod.__file__).read_text()
-    assert 'v0487212_capture_begin' in mod._PROBE
-    assert 'v0487212_capture_end' in mod._PROBE
+    source = Path(mod.__file__).read_text()
+    assert 'gc.disable()' in mod._PROBE
+    assert 'cyclic_gc_disabled' in mod._PROBE
+    assert 'PYTHONFAULTHANDLER' in source
+    assert 'PYTHONUNBUFFERED' in source
+    assert 'v0487213_capture_begin' in mod._PROBE
+    assert 'v0487213_capture_end' in mod._PROBE

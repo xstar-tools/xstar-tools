@@ -24,7 +24,7 @@ from typing import Any, Mapping
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21.2"
+RELEASE = "0.6.48.7.21.3"
 SCHEMA = "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648721-thermal-budget-state-refresh-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
@@ -76,14 +76,14 @@ def _source_root(destination: Path) -> Path:
 
 _PROBE = r'''
 from __future__ import annotations
-import csv, hashlib, json, math, pathlib, struct, threading
+import csv, gc, hashlib, json, math, pathlib, struct, threading
 import numpy as np
 
 _CONFIG = json.loads(pathlib.Path(__file__).with_name("probe_config.json").read_text())
 _OUT = pathlib.Path(_CONFIG["output_dir"])
 _OUT.mkdir(parents=True, exist_ok=True)
 _LOCK = threading.RLock()
-_STATE = {"global_eval": 0, "call_counter": 0, "budgets": [], "states": [], "trace": [], "installed": False, "active_result": None}
+_STATE = {"global_eval": 0, "call_counter": 0, "budgets": [], "states": [], "trace": [], "installed": False, "cyclic_gc_disabled": False}
 
 BUDGET_FIELDS = [
  "global_evaluation_ordinal","dsec_call_id","dsec_local_evaluation_index","temperature_k","temperature_t4","electron_fraction_xee","hydrogen_density_cm3",
@@ -136,110 +136,160 @@ def _family_budget(result, z, data_type):
         return heating, cooling, heating2, cooling2
     return 0.0, 0.0, 0.0, 0.0
 
+def _workspace_before(factory, state, name):
+    template = getattr(factory, "template", None)
+    if template is None:
+        return np.zeros(0, dtype=np.float64)
+    n = int(getattr(template, "ncn2", 0) or 0)
+    if n <= 0:
+        return np.zeros(0, dtype=np.float64)
+    if bool(getattr(template, "carry_continuum_workspace", False)):
+        value = (getattr(state, "work_arrays", {}) or {}).get(name)
+        if value is not None:
+            arr = _array(value)
+            if arr.size >= n and np.all(np.isfinite(arr[:n])):
+                return arr[:n]
+    policy = str(getattr(template, "first_workspace_policy", "zero"))
+    if policy == "call73-probe":
+        value = getattr(template, "initial_opakc_cm_inv" if name == "opakc" else "initial_brcems", None)
+        arr = _array(value)
+        if arr.size >= n:
+            return arr[:n]
+    return np.zeros(n, dtype=np.float64)
+
+def _capture_start_state(self, state, call_id, global_eval):
+    requests = tuple(getattr(state, "element_requests", ()) or ())
+    request = requests[0] if requests else None
+    radiation = _field(request, "radiation")
+    escape = _field(request, "escape")
+    factory = getattr(self, "calc_kwargs_factory", None)
+    template = getattr(factory, "template", None)
+    radiation_energy = _field(radiation, "epi_eV", "epi")
+    bremsa = _field(radiation, "bremsa")
+    if radiation_energy is None and template is not None:
+        radiation_energy = getattr(template, "epi_eV", None)
+    if bremsa is None and template is not None:
+        bremsa = getattr(template, "bremsa", None)
+    values = {
+      "radiation_energy": radiation_energy,
+      "bremsa": bremsa,
+      "continuum_tau_in": _field(escape, "continuum_tau_in"),
+      "continuum_tau_out": _field(escape, "continuum_tau_out"),
+      "opakc_before": _workspace_before(factory, state, "opakc"),
+      "brcems_before": _workspace_before(factory, state, "brcems"),
+      "global_xilevg": getattr(state, "global_xilevg_by_index", None),
+      "global_bilevg": getattr(state, "global_bilevg_by_index", None),
+      "global_rnisg": getattr(state, "global_rnisg_by_index", None),
+    }
+    row = {
+      "dsec_call_id": call_id,
+      "global_evaluation_ordinal": global_eval,
+      "temperature_k": float(state.temperature_k),
+      "temperature_t4": float(state.temperature_t4),
+      "electron_fraction_xee": float(state.electron_fraction_xee),
+      "covering_fraction": float(_field(request, "covering_fraction") or 0.0),
+      "turbulent_velocity_km_s": float(_field(request, "turbulent_velocity_km_s") or 0.0),
+    }
+    for key, value in values.items():
+        count, digest, l1 = _fp(value)
+        row[key + "_count"] = count
+        row[key + "_sha256"] = digest
+        row[key + "_l1"] = l1
+    _STATE["states"].append(row)
+
+def _capture_result(call_id, local_eval, global_eval, state, result):
+    _STATE["trace"].append({
+      "global_evaluation_ordinal": global_eval,
+      "dsec_call_id": call_id,
+      "dsec_local_evaluation_index": local_eval,
+      "temperature_k": float(result.temperature_k),
+      "temperature_t4": float(result.temperature_k) / 1.0e4,
+      "electron_fraction_xee": float(result.electron_fraction_xee),
+      "hmctot": float(result.hmctot),
+      "elcter": float(result.elcter),
+    })
+    if call_id != 1:
+        return
+    h = _element(result, 1)
+    he = _element(result, 2)
+    mg = _element(result, 12)
+    he53 = _family_budget(result, 2, 53)
+    continuum = result.continuum
+    diag = dict(getattr(continuum, "diagnostics", {}) or {})
+    element_heating = sum(float(v) for v in result.htt.values())
+    element_cooling = sum(float(v) for v in result.cll.values())
+    element_heating2 = sum(float(v) for v in result.htt2.values())
+    element_cooling2 = sum(float(v) for v in result.cll2.values())
+    _STATE["budgets"].append({
+      "global_evaluation_ordinal": global_eval, "dsec_call_id": call_id, "dsec_local_evaluation_index": local_eval,
+      "temperature_k": float(result.temperature_k), "temperature_t4": float(result.temperature_k)/1e4,
+      "electron_fraction_xee": float(result.electron_fraction_xee), "hydrogen_density_cm3": float(result.hydrogen_density_cm3),
+      "h_heating": h[0], "h_cooling": h[1], "h_heating2": h[2], "h_cooling2": h[3],
+      "he_heating": he[0], "he_cooling": he[1], "he_heating2": he[2], "he_cooling2": he[3],
+      "he_type53_heating": he53[0], "he_type53_cooling": he53[1], "he_type53_heating2": he53[2], "he_type53_cooling2": he53[3],
+      "he_non_type53_heating": he[0]-he53[0], "he_non_type53_cooling": he[1]-he53[1], "he_non_type53_heating2": he[2]-he53[2], "he_non_type53_cooling2": he[3]-he53[3],
+      "mg_heating": mg[0], "mg_cooling": mg[1], "mg_heating2": mg[2], "mg_cooling2": mg[3],
+      "element_heating": element_heating, "element_cooling": element_cooling, "element_heating2": element_heating2, "element_cooling2": element_cooling2,
+      "httot_pre_continuum": float(result.httot_pre_continuum), "cltot_pre_continuum": float(result.cltot_pre_continuum),
+      "httot2_pre_continuum": float(result.httot2_pre_continuum), "cltot2_pre_continuum": float(result.cltot2_pre_continuum),
+      "continuum_heating": float(continuum.heating), "continuum_cooling": float(continuum.cooling),
+      "continuum_heating2": float(continuum.heating2), "continuum_cooling2": float(continuum.cooling2),
+      "htfreef": float(continuum.htfreef), "htcomp": float(continuum.htcomp), "clcomp": float(continuum.clcomp), "clbrems": float(continuum.clbrems),
+      "cmp1": float(diag.get("cmp1", float("nan"))), "cmp2": float(diag.get("cmp2", float("nan"))),
+      "httot": float(result.httot), "cltot": float(result.cltot), "httot2": float(result.httot2), "cltot2": float(result.cltot2),
+      "hmctot": float(result.hmctot), "elcter": float(result.elcter),
+      "non_type53_scope_note": "helium type53 and non-type53 budgets are reconstructed from source-ordered diagonal thermal terms and solved populations",
+    })
+
 def install():
-    if _STATE["installed"]: return
+    if _STATE["installed"]:
+        return
     from xstar_tools.xstar import dsec as dsec_mod
     original = dsec_mod.CalcHMCAllDsecEvaluator.__call__
-    original_calc_hmc_all = dsec_mod.calc_hmc_all
-
-    def streaming_calc_hmc_all(*args, **kwargs):
-        # Keep only the current full result long enough for the wrapper to
-        # reduce it to scalar/hashed audit rows.  Never append the large
-        # H/He/Mg result object to the DSEC evaluation history.
-        result = original_calc_hmc_all(*args, **kwargs)
-        _STATE["active_result"] = result
-        return result
-
-    dsec_mod.calc_hmc_all = streaming_calc_hmc_all
+    if gc.isenabled():
+        gc.disable()
+        _STATE["cyclic_gc_disabled"] = True
 
     def wrapped(self, state):
         with _LOCK:
-            call_id = getattr(self, "_v0487212_call_id", None)
+            call_id = getattr(self, "_v0487213_call_id", None)
             if call_id is None:
                 _STATE["call_counter"] += 1
                 call_id = int(_STATE["call_counter"])
-                setattr(self, "_v0487212_call_id", call_id)
+                setattr(self, "_v0487213_call_id", call_id)
             local_eval = len(getattr(self, "evaluations", ())) + 1
             _STATE["global_eval"] += 1
             global_eval = int(_STATE["global_eval"])
-        # The source workflow normally discards full fixed-state results when
-        # diagnostics_mode=none.  Preserve that memory discipline and stream
-        # the current result through the calc_hmc_all shim above.
         self.retain_fixed_state_results = False
-        # Only the first evaluation of each DSEC call is part of the
-        # between-call state-refresh contract.  Capturing every snapshot
-        # causes v0.6.47.2 diagnostics=none runs to inspect the intentionally
-        # lightweight prior-result namespace, which does not own the full
-        # global-level mapping.  First-snapshot-only capture is observational,
-        # avoids retaining source arrays, and leaves the physical state path
-        # unchanged.
         self.capture_all_input_snapshots = False
-        self.capture_input_snapshot_indices = (1,)
-        _STATE["active_result"] = None
-        print(f"v0487212_capture_begin call={call_id} local={local_eval} global={global_eval}", flush=True)
+        self.capture_input_snapshot_indices = ()
+        previous_pre = self.pre_evaluation_callback
+        previous_progress = self.progress_callback
+
+        def capture_pre(evaluation_index, current_state):
+            if previous_pre is not None:
+                previous_pre(evaluation_index, current_state)
+            if int(evaluation_index) == 1:
+                with _LOCK:
+                    _capture_start_state(self, current_state, call_id, global_eval)
+
+        def capture_progress(call_count, current_state, result):
+            if previous_progress is not None:
+                previous_progress(call_count, current_state, result)
+            with _LOCK:
+                _capture_result(call_id, local_eval, global_eval, current_state, result)
+
+        self.pre_evaluation_callback = capture_pre
+        self.progress_callback = capture_progress
+        print(f"v0487213_capture_begin call={call_id} local={local_eval} global={global_eval}", flush=True)
         try:
             out = original(self, state)
-        except BaseException:
-            _STATE["active_result"] = None
-            raise
-        result = _STATE.get("active_result")
-        snap = self.input_snapshots[-1] if (local_eval == 1 and self.input_snapshots) else None
-        with _LOCK:
-            _STATE["trace"].append({
-              "global_evaluation_ordinal": global_eval, "dsec_call_id": call_id, "dsec_local_evaluation_index": local_eval,
-              "temperature_k": float(state.temperature_k), "temperature_t4": float(state.temperature_t4), "electron_fraction_xee": float(state.electron_fraction_xee),
-              "hmctot": float(out.hmctot), "elcter": float(out.elcter),
-            })
-            if call_id == 1 and result is not None:
-                h = _element(result, 1); he = _element(result, 2); mg = _element(result, 12); he53 = _family_budget(result, 2, 53)
-                continuum = result.continuum
-                diag = dict(getattr(continuum, "diagnostics", {}) or {})
-                element_heating = sum(float(v) for v in result.htt.values())
-                element_cooling = sum(float(v) for v in result.cll.values())
-                element_heating2 = sum(float(v) for v in result.htt2.values())
-                element_cooling2 = sum(float(v) for v in result.cll2.values())
-                _STATE["budgets"].append({
-                  "global_evaluation_ordinal": global_eval, "dsec_call_id": call_id, "dsec_local_evaluation_index": local_eval,
-                  "temperature_k": float(result.temperature_k), "temperature_t4": float(result.temperature_k)/1e4,
-                  "electron_fraction_xee": float(result.electron_fraction_xee), "hydrogen_density_cm3": float(result.hydrogen_density_cm3),
-                  "h_heating": h[0], "h_cooling": h[1], "h_heating2": h[2], "h_cooling2": h[3],
-                  "he_heating": he[0], "he_cooling": he[1], "he_heating2": he[2], "he_cooling2": he[3],
-                  "he_type53_heating": he53[0], "he_type53_cooling": he53[1], "he_type53_heating2": he53[2], "he_type53_cooling2": he53[3],
-                  "he_non_type53_heating": he[0]-he53[0], "he_non_type53_cooling": he[1]-he53[1], "he_non_type53_heating2": he[2]-he53[2], "he_non_type53_cooling2": he[3]-he53[3],
-                  "mg_heating": mg[0], "mg_cooling": mg[1], "mg_heating2": mg[2], "mg_cooling2": mg[3],
-                  "element_heating": element_heating, "element_cooling": element_cooling, "element_heating2": element_heating2, "element_cooling2": element_cooling2,
-                  "httot_pre_continuum": float(result.httot_pre_continuum), "cltot_pre_continuum": float(result.cltot_pre_continuum),
-                  "httot2_pre_continuum": float(result.httot2_pre_continuum), "cltot2_pre_continuum": float(result.cltot2_pre_continuum),
-                  "continuum_heating": float(continuum.heating), "continuum_cooling": float(continuum.cooling),
-                  "continuum_heating2": float(continuum.heating2), "continuum_cooling2": float(continuum.cooling2),
-                  "htfreef": float(continuum.htfreef), "htcomp": float(continuum.htcomp), "clcomp": float(continuum.clcomp), "clbrems": float(continuum.clbrems),
-                  "cmp1": float(diag.get("cmp1", float("nan"))), "cmp2": float(diag.get("cmp2", float("nan"))),
-                  "httot": float(result.httot), "cltot": float(result.cltot), "httot2": float(result.httot2), "cltot2": float(result.cltot2),
-                  "hmctot": float(result.hmctot), "elcter": float(result.elcter),
-                  "non_type53_scope_note": "helium type53 and non-type53 budgets are reconstructed from source-ordered diagonal thermal terms and solved populations",
-                })
-            if local_eval == 1 and snap is not None:
-                radiation = snap.radiation
-                escape = snap.escape
-                free_context = (snap.calc_kwargs or {}).get("free_free_context")
-                brem_context = (snap.calc_kwargs or {}).get("bremem_context")
-                values = {
-                  "radiation_energy": _field(radiation, "epi_eV", "epi"), "bremsa": _field(radiation, "bremsa"),
-                  "continuum_tau_in": _field(escape, "continuum_tau_in"), "continuum_tau_out": _field(escape, "continuum_tau_out"),
-                  "opakc_before": _field(free_context, "opakc_before_cm_inv"), "brcems_before": _field(brem_context, "brcems_before"),
-                  "global_xilevg": snap.global_xilevg_by_index, "global_bilevg": snap.global_bilevg_by_index, "global_rnisg": snap.global_rnisg_by_index,
-                }
-                row = {
-                  "dsec_call_id": call_id, "global_evaluation_ordinal": global_eval, "temperature_k": float(snap.temperature_k), "temperature_t4": float(snap.temperature_t4),
-                  "electron_fraction_xee": float(snap.electron_fraction_xee), "covering_fraction": float(snap.covering_fraction), "turbulent_velocity_km_s": float(snap.turbulent_velocity_km_s),
-                }
-                for key, value in values.items():
-                    count, digest, l1 = _fp(value)
-                    row[key + "_count"] = count; row[key + "_sha256"] = digest; row[key + "_l1"] = l1
-                _STATE["states"].append(row)
-        _STATE["active_result"] = None
-        print(f"v0487212_capture_end call={call_id} local={local_eval} global={global_eval} hmctot={float(out.hmctot):.17g}", flush=True)
+        finally:
+            self.pre_evaluation_callback = previous_pre
+            self.progress_callback = previous_progress
+        print(f"v0487213_capture_end call={call_id} local={local_eval} global={global_eval} hmctot={float(out.hmctot):.17g}", flush=True)
         return out
+
     dsec_mod.CalcHMCAllDsecEvaluator.__call__ = wrapped
     _STATE["installed"] = True
 
@@ -252,9 +302,9 @@ def finalize(run_summary=None):
         with (_OUT/name).open("w", newline="") as f:
             w=csv.DictWriter(f, fieldnames=fields, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
     report = {
-      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.2",
+      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.3",
       "result": "ACCEPT" if len(_STATE["budgets"]) >= 7 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) >= 57 else "REJECT",
-      "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]),
+      "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]), "cyclic_gc_disabled": bool(_STATE["cyclic_gc_disabled"]),
       "dsec_evaluations_observed": len(_STATE["trace"]), "run_summary": run_summary or {}, "qualification_only": True, "production_promotion_ready": False,
     }
     (_OUT/"capture_report.json").write_text(json.dumps(report, indent=2, sort_keys=True)+"\n")
