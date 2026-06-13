@@ -17,12 +17,12 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
 def test_runtime_state_abi_header_is_appended() -> None:
     root = Path(__file__).resolve().parents[1]
     header = (root / 'src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h').read_text()
-    assert ABI_VERSION == 60486
+    assert ABI_VERSION == 60487
     assert PROGRAM_ABI_VERSION == 60485
     for field in (
         'dsec_radiation_energy_ev', 'dsec_bremsa', 'dsec_radiation_bin_count',
         'continuum_tau_in', 'continuum_tau_out', 'continuum_tau_count',
-        'runtime_state_flags',
+        'runtime_state_flags', 'dsec_covering_fraction',
     ):
         assert field in header
 

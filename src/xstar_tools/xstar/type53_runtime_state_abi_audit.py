@@ -1,4 +1,4 @@
-"""Audit the v0.6.48.7.17 type-53 DSEC runtime-state ABI extension.
+"""Audit the v0.6.48.7.18 type-53 DSEC runtime-state ABI extension.
 
 The audit verifies the appended ABI fields, then—when an independent original-
 DSEC evaluation-60 capture is available—runs the native coupled type-53 path
@@ -38,9 +38,9 @@ from .type53_runtime_state_independent_capture import (
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.17"
-SCHEMA = "xstar-tools-v0648717-type53-runtime-state-abi-audit-v1"
-ABI_VERSION = 60486
+RELEASE = "0.6.48.7.18"
+SCHEMA = "xstar-tools-v0648718-type53-rnist-covering-correction-audit-v1"
+ABI_VERSION = 60487
 PROGRAM_ABI_VERSION = 60485
 
 
@@ -73,12 +73,14 @@ def abi_readiness(root: Path) -> dict[str, Any]:
         "continuum_tau_out",
         "continuum_tau_count",
         "runtime_state_flags",
+        "dsec_covering_fraction",
     )
     missing = [field for field in required_fields if field not in header]
     help_text = subprocess.run(
         [str(executable)], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     ).stdout
-    cli_ready = "--dsec-radiation-csv" in help_text and "--continuum-tau-csv" in help_text
+    cli_ready = ("--dsec-radiation-csv" in help_text and "--continuum-tau-csv" in help_text
+                 and "--dsec-covering-fraction" in help_text)
     result = "ACCEPT" if abi == ABI_VERSION and not missing and cli_ready else "REJECT"
     return {
         "schema": SCHEMA,
@@ -113,6 +115,15 @@ def _run_native(
     env["XSTAR_QUALIFICATION_REPLACEMENT"] = "1"
     env["XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT"] = "1"
     env["XSTAR_QUALIFICATION_SOLVE_RESPONSE"] = "1"
+    captured_records = read_csv(capture_dir / RECORDS_NAME)
+    covering_values = {float(row["covering_fraction"]) for row in captured_records}
+    temperature_values = {float(row["temperature_k"]) for row in captured_records}
+    if len(covering_values) != 1:
+        raise ValueError(f"independent capture must have one DSEC covering fraction, got {sorted(covering_values)}")
+    if len(temperature_values) != 1:
+        raise ValueError(f"independent capture must have one DSEC temperature, got {sorted(temperature_values)}")
+    dsec_covering_fraction = next(iter(covering_values))
+    dsec_temperature_k = next(iter(temperature_values))
     run_command(
         [
             str(executable),
@@ -123,6 +134,8 @@ def _run_native(
             "--radiation-csv", str(radiation),
             "--dsec-radiation-csv", str((capture_dir / RADIATION_NAME).resolve()),
             "--continuum-tau-csv", str((capture_dir / TAU_NAME).resolve()),
+            "--dsec-covering-fraction", format(dsec_covering_fraction, ".17g"),
+            "--temperature-k", format(dsec_temperature_k, ".17g"),
             "--diagnostics-dir", str((output / "diagnostics").resolve()),
             "--output-dir", str(output.resolve()),
         ],
@@ -201,6 +214,14 @@ def audit(
         "abi_readiness": readiness,
         "capture_verification": capture,
         "evaluation_ordinal": evaluation,
+        "runtime_state_correction": {
+            "continuum_energy_semantics": "destination continuum energy, not zero",
+            "dsec_covering_fraction": next(iter({float(row["covering_fraction"]) for row in oracle_records})),
+            "dsec_temperature_k": next(iter({float(row["temperature_k"]) for row in oracle_records})),
+            "rounded_trajectory_temperature_not_reused": True,
+            "generic_covering_fraction_not_reused": True,
+            "rnist_exponent_correction": "remove spurious exp(-min(threshold, continuum_energy)/kT) suppression",
+        },
         "runtime_state_workspace": {
             "native_status_flag": status_abi,
             "records": len(selected_records),

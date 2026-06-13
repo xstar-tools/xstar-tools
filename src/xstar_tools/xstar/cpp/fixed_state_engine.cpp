@@ -1122,7 +1122,7 @@ bool evaluate_type53_source_integral(
     const double bound_g = row46_contract ? row46_contract->bound_statistical_weight : lower.statistical_weight;
     const double continuum_g = std::max(row46_contract ? row46_contract->continuum_statistical_weight : upper.statistical_weight, 1.0e-300);
     const double rnissel = bound_g * q2 / continuum_g;
-    const double continuum_energy = row46_contract ? 0.0 : upper.energy_ev;
+    const double continuum_energy = row46_contract ? row46_contract->destination_energy_ev : upper.energy_ev;
     const double ethtmp = std::max(0.0, threshold_ev - continuum_energy);
     const double exponent_energy = std::max(0.0, ethtmp + kType53RydEv * payload[0]);
     const double rnist = rnissel * type53_expo(-exponent_energy / kKtEvPerT4 / std::max(t4, 1.0e-300));
@@ -1391,7 +1391,10 @@ EvaluatedRecord evaluate_record(
                         contract_tau_in = std::max(0.0, row46_contract->tau_in * population_scale);
                         contract_tau_out = std::max(0.0, row46_contract->tau_out * population_scale);
                     }
-                    const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+                    const bool has_dsec_covering =
+                        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
+                    const double cfrac = std::clamp(
+                        has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction, 0.0, 1.0);
                     const auto pescv = [](double tau) { return std::max(std::exp(-tau), 1.0e-12) / 2.0; };
                     contract_ptmp1 = pescv(contract_tau_in) * (1.0 - cfrac);
                     contract_ptmp2 = pescv(contract_tau_out) * (1.0 - cfrac) +
@@ -2033,6 +2036,9 @@ void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_
     if (in.radiation_bin_count > 0 && (!in.radiation_energy_ev || !in.radiation_flux)) throw std::runtime_error("radiation arrays missing");
     if (in.dsec_radiation_bin_count > 0 && (!in.dsec_radiation_energy_ev || !in.dsec_bremsa)) throw std::runtime_error("DSEC radiation workspace arrays missing");
     if (in.continuum_tau_count > 0 && (!in.continuum_tau_in || !in.continuum_tau_out)) throw std::runtime_error("continuum optical-depth workspace arrays missing");
+    if ((in.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u &&
+        (!std::isfinite(in.dsec_covering_fraction) || in.dsec_covering_fraction < 0.0 || in.dsec_covering_fraction > 1.0))
+        throw std::runtime_error("DSEC covering fraction must be finite and in [0,1]");
     if (out.spectrum_capacity < in.radiation_bin_count || out.opacity_capacity < in.radiation_bin_count) throw std::runtime_error("spectrum or opacity output capacity too small");
 }
 
@@ -2892,7 +2898,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.17\",\n"
+                        << "  \"release\": \"0.6.48.7.18\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -2912,7 +2918,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.17\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.18\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

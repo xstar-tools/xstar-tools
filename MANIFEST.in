@@ -551,9 +551,23 @@ include run_v048715_type53_row46_dsec_runtime_contract_audit.sh
 include check_v048715_type53_row46_dsec_runtime_contract_audit.py
 include tests/test_v0648715_type53_row46_dsec_runtime_contract_audit.py
 
-# v0.6.48.7.17 source-faithful type-53 row-46 coupled replacement candidate
+# v0.6.48.7.16 source-faithful type-53 row-46 coupled replacement candidate
 include V0648716_TYPE53_ROW46_SOURCE_FAITHFUL_COUPLED_REPLACEMENT.md
-include xstar_tools_v0.6.48.7.17_handoff.md
+include xstar_tools_v0.6.48.7.16_handoff.md
 include run_v048716_type53_row46_source_faithful_replacement_audit.sh
 include check_v048716_type53_row46_source_faithful_replacement_audit.py
 include tests/test_v0648716_type53_row46_source_faithful_replacement.py
+
+# v0.6.48.7.17 type-53 runtime-state ABI and independent capture
+include V0648717_TYPE53_RUNTIME_STATE_ABI_AND_INDEPENDENT_CAPTURE.md
+include xstar_tools_v0.6.48.7.17_handoff.md
+include run_v048717_type53_runtime_state_capture_and_audit.sh
+include check_v048717_type53_runtime_state_capture_and_audit.py
+include tests/test_v0648717_type53_runtime_state_abi.py
+
+# v0.6.48.7.18 type-53 RNIST / DSEC covering-state correction
+include V0648718_TYPE53_RNIST_COVERING_CORRECTION.md
+include xstar_tools_v0.6.48.7.18_handoff.md
+include run_v048718_type53_rnist_covering_correction_audit.sh
+include check_v048718_type53_rnist_covering_correction_audit.py
+include tests/test_v0648718_type53_rnist_covering_correction.py

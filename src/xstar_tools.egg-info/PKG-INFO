@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.17
+Version: 0.6.48.7.18
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,16 +26,11 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-## v0.6.48.7.17 source-faithful type-53 row-46 coupled replacement candidate
+## v0.6.48.7.18 type-53 independent-state parity correction
 
-This qualification-only release applies the complete 44-record, 176-term
-original-DSEC type-53 row-46 aliased manifold as one unit. At the captured
-evaluation-61 state it reproduces all answers, dense terms, thermal terms, and
-absolute source-order positions IEEE-exactly. A live non-anchor evaluator is
-also exercised, but arbitrary-state parity and production promotion remain
-blocked because the fixed-state ABI does not yet expose the complete original
-DSEC radiation and continuum optical-depth workspace. See
-`V0648716_TYPE53_ROW46_SOURCE_FAITHFUL_COUPLED_REPLACEMENT.md`.
+This qualification release closes the evaluation-60 type-53 runtime-state gap discovered by v0.6.48.7.17. It corrects the Milne `rnist` continuum-energy semantics, adds a first-class DSEC covering-fraction field to runtime ABI `60487`, and allows the exact captured Kelvin temperature to be supplied without reconstructing it from rounded `T/10^4` trajectory text.
+
+With the independent original-DSEC evaluation-60 capture, all 44 type-53 records, 264 answers, 176 matrix/thermal terms, and 176 absolute source-order positions reproduce IEEE-exactly. The evaluation-61 anchor remains exact from v0.6.48.7.16. Type-53 arbitrary-state qualification promotion is accepted; whole fixed-state, thermal, controller, output-product, and production promotion remain blocked.
 
 ## v0.6.48.7.15 original-DSEC type-53 row-46 runtime-contract audit
 

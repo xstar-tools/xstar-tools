@@ -667,7 +667,7 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.48.7.17 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
+    out << "libxstar_engine.so v0.6.48.7.18 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
