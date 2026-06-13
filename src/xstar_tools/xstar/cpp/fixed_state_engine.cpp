@@ -291,6 +291,10 @@ struct Type53SourceShadow {
     double ptmp1 = 1.0;
     double ptmp2 = 0.0;
     double covering_fraction = 0.0;
+    bool runtime_state_abi_used = false;
+    int continuum_index_one_based = 0;
+    std::size_t dsec_radiation_bin_count = 0;
+    std::size_t continuum_tau_count = 0;
 };
 
 struct EvaluatedRecord {
@@ -568,7 +572,7 @@ Program load_program(const std::string& directory) {
     const auto manifest = read_manifest(join_path(directory, "manifest.txt"));
     const auto abi_it = manifest.find("program_abi");
     const auto id_it = manifest.find("program_id");
-    if (abi_it == manifest.end() || parse_number<unsigned>(abi_it->second, "program_abi") != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+    if (abi_it == manifest.end() || parse_number<unsigned>(abi_it->second, "program_abi") != XSTAR_FIXED_STATE_PROGRAM_ABI_VERSION) {
         throw std::runtime_error("fixed-state program ABI mismatch");
     }
     if (id_it == manifest.end() || id_it->second.empty()) throw std::runtime_error("program_id missing");
@@ -1007,10 +1011,14 @@ bool evaluate_type53_source_integral(
     Type53SourceShadow* shadow
 ) {
     if (!payload || real_count < 4 || real_count % 2 != 0) return false;
-    if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 3) return false;
+    const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
+    const double* source_energy_ev = has_dsec_radiation ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+    const double* source_bremsa = has_dsec_radiation ? input.dsec_bremsa : input.radiation_flux;
+    const std::size_t source_bin_count = has_dsec_radiation ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+    if (!source_energy_ev || !source_bremsa || source_bin_count < 3) return false;
     if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) return false;
 
-    const int n_grid = static_cast<int>(input.radiation_bin_count);
+    const int n_grid = static_cast<int>(source_bin_count);
     const int pair_count = static_cast<int>(real_count / 2);
     const int numcon2 = std::max(2, n_grid / 50);
     const int usable_grid = n_grid - numcon2;
@@ -1024,15 +1032,15 @@ bool evaluate_type53_source_integral(
     }
 
     const auto lower_bracket = [&](double energy) -> int {
-        if (energy <= input.radiation_energy_ev[0]) return 0;
+        if (energy <= source_energy_ev[0]) return 0;
         int lo = 0;
         int hi = usable_grid - 1;
         while (lo + 1 < hi) {
             const int mid = (lo + hi) / 2;
-            if (input.radiation_energy_ev[mid] <= energy) lo = mid;
+            if (source_energy_ev[mid] <= energy) lo = mid;
             else hi = mid;
         }
-        return input.radiation_energy_ev[hi] <= energy ? hi : lo;
+        return source_energy_ev[hi] <= energy ? hi : lo;
     };
 
     const int nb1 = lower_bracket(xs[0]);
@@ -1043,12 +1051,12 @@ bool evaluate_type53_source_integral(
 
     int k = nb1;
     int j = 0;
-    double egrid = input.radiation_energy_ev[k];
+    double egrid = source_energy_ev[k];
     double e2 = xs[0];
     double s2 = ys[0];
     if (egrid < e2 && k + 1 < n_grid) {
         ++k;
-        egrid = input.radiation_energy_ev[k];
+        egrid = source_energy_ev[k];
     }
     double e1o = e2;
     double e2o = e2;
@@ -1086,7 +1094,7 @@ bool evaluate_type53_source_integral(
         e1o = egrid;
         ++k;
         if (k >= n_grid) break;
-        egrid = input.radiation_energy_ev[k];
+        egrid = source_energy_ev[k];
         while (egrid < e2 && k < n_grid - 1) {
             e2t = egrid;
             s2t = (e2 - e2o > 1.0e-8)
@@ -1098,7 +1106,7 @@ bool evaluate_type53_source_integral(
             e1o = egrid;
             ++k;
             if (k >= n_grid) break;
-            egrid = input.radiation_energy_ev[k];
+            egrid = source_energy_ev[k];
         }
         integral = (s2 + s2t) * (e2 - e2t) / 2.0;
         if (k >= usable_grid - 1 || j >= pair_count - 2) done = true;
@@ -1128,8 +1136,8 @@ bool evaluate_type53_source_integral(
     double sumc = 0.0;
     double sumc2 = 0.0;
     double sgtpp = sgbar[static_cast<std::size_t>(nb1)];
-    double bremtmpp = input.radiation_flux[nb1] / 12.56;
-    double epiip = input.radiation_energy_ev[nb1];
+    double bremtmpp = source_bremsa[nb1] / 12.56;
+    double epiip = source_energy_ev[nb1];
     double temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
     double temphp = temprp * epiip;
     double temphp2 = temprp * (epiip - threshold_ev);
@@ -1142,9 +1150,9 @@ bool evaluate_type53_source_integral(
     int kl = nb1;
     while (kl < klmax && kl + 1 < n_grid) {
         sgtpp = sgbar[static_cast<std::size_t>(kl + 1)];
-        bremtmpp = input.radiation_flux[kl + 1] / 12.56;
-        const double epii = input.radiation_energy_ev[kl];
-        epiip = input.radiation_energy_ev[kl + 1];
+        bremtmpp = source_bremsa[kl + 1] / 12.56;
+        const double epii = source_energy_ev[kl];
+        epiip = source_energy_ev[kl + 1];
         const double tempr = temprp;
         temprp = epiip != 0.0 ? 12.56 * sgtpp * bremtmpp / epiip : 0.0;
         const double width = (epiip - epii) / 2.0;
@@ -1369,11 +1377,20 @@ EvaluatedRecord evaluate_record(
                     contract_ptmp2 = row46_contract->ptmp2;
                     contract_covering = row46_contract->covering_fraction;
                 } else {
-                    const double reference_population = row46_contract->captured_initial_lower_population;
-                    const double population_scale = reference_population > 0.0
-                        ? std::max(0.0, lower.initial_population) / reference_population : 1.0;
-                    contract_tau_in = std::max(0.0, row46_contract->tau_in * population_scale);
-                    contract_tau_out = std::max(0.0, row46_contract->tau_out * population_scale);
+                    const int continuum_index = row46_contract->continuum_index_one_based;
+                    const bool has_continuum_workspace = continuum_index > 0 &&
+                        input.continuum_tau_in && input.continuum_tau_out &&
+                        static_cast<std::size_t>(continuum_index) <= input.continuum_tau_count;
+                    if (has_continuum_workspace) {
+                        contract_tau_in = std::max(0.0, input.continuum_tau_in[continuum_index - 1]);
+                        contract_tau_out = std::max(0.0, input.continuum_tau_out[continuum_index - 1]);
+                    } else {
+                        const double reference_population = row46_contract->captured_initial_lower_population;
+                        const double population_scale = reference_population > 0.0
+                            ? std::max(0.0, lower.initial_population) / reference_population : 1.0;
+                        contract_tau_in = std::max(0.0, row46_contract->tau_in * population_scale);
+                        contract_tau_out = std::max(0.0, row46_contract->tau_out * population_scale);
+                    }
                     const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
                     const auto pescv = [](double tau) { return std::max(std::exp(-tau), 1.0e-12) / 2.0; };
                     contract_ptmp1 = pescv(contract_tau_in) * (1.0 - cfrac);
@@ -1411,6 +1428,14 @@ EvaluatedRecord evaluate_record(
                 out.type53_shadow.ptmp1 = contract_ptmp1;
                 out.type53_shadow.ptmp2 = contract_ptmp2;
                 out.type53_shadow.covering_fraction = contract_covering;
+                out.type53_shadow.runtime_state_abi_used =
+                    input.dsec_radiation_energy_ev && input.dsec_bremsa &&
+                    input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in &&
+                    input.continuum_tau_out && row46_contract->continuum_index_one_based > 0 &&
+                    static_cast<std::size_t>(row46_contract->continuum_index_one_based) <= input.continuum_tau_count;
+                out.type53_shadow.continuum_index_one_based = row46_contract->continuum_index_one_based;
+                out.type53_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
+                out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
             } else if (source_exact && element.element_z == 2 && record.ion_stage == 2) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
@@ -2006,6 +2031,8 @@ void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_
     if (!(in.temperature_k > 0.0) || !std::isfinite(in.temperature_k)) throw std::runtime_error("temperature must be finite and positive");
     if (!(in.electron_density_cm3 >= 0.0) || !std::isfinite(in.electron_density_cm3)) throw std::runtime_error("electron density invalid");
     if (in.radiation_bin_count > 0 && (!in.radiation_energy_ev || !in.radiation_flux)) throw std::runtime_error("radiation arrays missing");
+    if (in.dsec_radiation_bin_count > 0 && (!in.dsec_radiation_energy_ev || !in.dsec_bremsa)) throw std::runtime_error("DSEC radiation workspace arrays missing");
+    if (in.continuum_tau_count > 0 && (!in.continuum_tau_in || !in.continuum_tau_out)) throw std::runtime_error("continuum optical-depth workspace arrays missing");
     if (out.spectrum_capacity < in.radiation_bin_count || out.opacity_capacity < in.radiation_bin_count) throw std::runtime_error("spectrum or opacity output capacity too small");
 }
 
@@ -2432,6 +2459,8 @@ int run_impl(
     ctx.last_total_cooling = output.total_cooling;
     ctx.last_hmctot = output.hmctot;
     output.status_flags = stats.status_flags;
+    if (input.dsec_radiation_bin_count > 0 || input.continuum_tau_count > 0)
+        output.status_flags |= XSTAR_FIXED_STATE_STATUS_DSEC_RUNTIME_STATE_ABI;
     copy_text(output.message, sizeof(output.message), "native fixed-state raw program evaluated");
     ++ctx.state_generation;
     stats.state_generation = ctx.state_generation;
@@ -2457,7 +2486,8 @@ uint32_t xstar_fixed_state_engine_feature_flags(void) {
         XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL |
         XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT |
         XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS |
-        XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED;
+        XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED |
+        XSTAR_FIXED_STATE_STATUS_DSEC_RUNTIME_STATE_ABI;
 }
 
 int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input) {
@@ -2634,7 +2664,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -2677,7 +2707,11 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << (item.type53_shadow.captured_state_anchor ? 1 : 0)
                         << ',' << item.type53_shadow.tau_in << ',' << item.type53_shadow.tau_out
                         << ',' << item.type53_shadow.ptmp1 << ',' << item.type53_shadow.ptmp2
-                        << ',' << item.type53_shadow.covering_fraction << '\n';
+                        << ',' << item.type53_shadow.covering_fraction
+                        << ',' << (item.type53_shadow.runtime_state_abi_used ? 1 : 0)
+                        << ',' << item.type53_shadow.continuum_index_one_based
+                        << ',' << item.type53_shadow.dsec_radiation_bin_count
+                        << ',' << item.type53_shadow.continuum_tau_count << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
             summary.last_source_position = c.source_position;
@@ -2858,7 +2892,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.16\",\n"
+                        << "  \"release\": \"0.6.48.7.17\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -2878,7 +2912,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.16\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.17\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

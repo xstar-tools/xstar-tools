@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-_ABI = 60485
+_ABI = 60486
 _LIB: ctypes.CDLL | None = None
 
 

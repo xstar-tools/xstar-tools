@@ -442,7 +442,7 @@ xstar_tools_v0.6.48.7.13_handoff.md
 xstar_tools_v0.6.48.7.14.2_handoff.md
 xstar_tools_v0.6.48.7.14_handoff.md
 xstar_tools_v0.6.48.7.15_handoff.md
-xstar_tools_v0.6.48.7.16_handoff.md
+xstar_tools_v0.6.48.7.17_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
@@ -1073,6 +1073,8 @@ src/xstar_tools/xstar/type50_manifold_audit.py
 src/xstar_tools/xstar/type50_manifold_replacement_audit.py
 src/xstar_tools/xstar/type53_row46_dsec_runtime_contract_audit.py
 src/xstar_tools/xstar/type53_row46_source_faithful_replacement_audit.py
+src/xstar_tools/xstar/type53_runtime_state_abi_audit.py
+src/xstar_tools/xstar/type53_runtime_state_independent_capture.py
 src/xstar_tools/xstar/type53_semantics.py
 src/xstar_tools/xstar/type71_type99_replacement_audit.py
 src/xstar_tools/xstar/type99_type71_coupled_audit.py
@@ -1308,6 +1310,7 @@ tests/test_v0648713_type50_dsec_coupled_replacement.py
 tests/test_v0648714_dsec_row46_capture_and_audit.py
 tests/test_v0648715_type53_row46_dsec_runtime_contract_audit.py
 tests/test_v0648716_type53_row46_source_faithful_replacement.py
+tests/test_v0648717_type53_runtime_state_abi.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

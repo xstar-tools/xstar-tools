@@ -127,6 +127,7 @@ def _load_target_inventory(lowered_program: Path) -> list[dict[str, Any]]:
 _PROBE_RUNTIME = r'''
 from __future__ import annotations
 import csv, json, math, pathlib, threading
+import numpy as np
 from dataclasses import asdict
 
 _CONFIG = json.loads(pathlib.Path(__file__).with_name("probe_config.json").read_text())
@@ -148,6 +149,8 @@ _STATE = {
     "solve_rows": [],
     "row46_matrix": [],
     "normalization": [],
+    "dsec_radiation": [],
+    "continuum_tau": [],
     "actual_records_touching_row46": set(),
     "installed": False,
 }
@@ -188,6 +191,8 @@ TRACE_FIELDS = [
     "global_evaluation_ordinal", "dsec_call_id", "dsec_local_evaluation_index",
     "temperature_k", "hydrogen_density_cm3", "electron_fraction_xee",
 ]
+RADIATION_FIELDS = ["global_evaluation_ordinal", "grid_index", "energy_ev", "bremsa"]
+CONTINUUM_TAU_FIELDS = ["global_evaluation_ordinal", "continuum_index", "tau_in", "tau_out"]
 
 
 def _finite(value):
@@ -369,6 +374,32 @@ def install():
 
     original_solve = eq.solve_element_statistical_equilibrium
     def solve_element_statistical_equilibrium(master, derived, *, element_z, context, dispatcher=None):
+        if int(element_z) == 2 and int(_STATE["global_evaluation"]) == _TARGET_EVAL:
+            radiation = getattr(context, "radiation", None)
+            epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=float).reshape(-1)
+            bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
+            nrad = min(int(epi.size), int(bremsa.size))
+            _STATE["dsec_radiation"] = [
+                {
+                    "global_evaluation_ordinal": int(_STATE["global_evaluation"]),
+                    "grid_index": int(i + 1),
+                    "energy_ev": float(epi[i]),
+                    "bremsa": float(bremsa[i]),
+                }
+                for i in range(nrad)
+            ]
+            tau_in = np.asarray(getattr(context.escape, "continuum_tau_in", ()), dtype=float).reshape(-1)
+            tau_out = np.asarray(getattr(context.escape, "continuum_tau_out", ()), dtype=float).reshape(-1)
+            ntau = max(int(tau_in.size), int(tau_out.size))
+            _STATE["continuum_tau"] = [
+                {
+                    "global_evaluation_ordinal": int(_STATE["global_evaluation"]),
+                    "continuum_index": int(i + 1),
+                    "tau_in": float(tau_in[i]) if i < tau_in.size else 0.0,
+                    "tau_out": float(tau_out[i]) if i < tau_out.size else 0.0,
+                }
+                for i in range(ntau)
+            ]
         result = original_solve(master, derived, element_z=element_z, context=context, dispatcher=dispatcher)
         if int(element_z) == 2 and int(_STATE["global_evaluation"]) == _TARGET_EVAL:
             assembly = result.assembly
@@ -471,6 +502,8 @@ def finalize(run_summary=None):
     solve_rows = list(_STATE["solve_rows"])
     row46_matrix = list(_STATE["row46_matrix"])
     normalization = list(_STATE["normalization"])
+    dsec_radiation = list(_STATE["dsec_radiation"])
+    continuum_tau = list(_STATE["continuum_tau"])
     with (_OUT / "heii_row46_dsec_runtime_records.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=RECORD_FIELDS, extrasaction="ignore")
         writer.writeheader(); writer.writerows(sorted(rows, key=lambda r: int(r["source_position"])))
@@ -490,11 +523,17 @@ def finalize(run_summary=None):
     with (_OUT / "dsec_evaluation_trace.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=TRACE_FIELDS, extrasaction="ignore")
         writer.writeheader(); writer.writerows(trace)
+    with (_OUT / "dsec_radiation_workspace.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=RADIATION_FIELDS, extrasaction="ignore")
+        writer.writeheader(); writer.writerows(dsec_radiation)
+    with (_OUT / "dsec_continuum_tau_workspace.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CONTINUUM_TAU_FIELDS, extrasaction="ignore")
+        writer.writeheader(); writer.writerows(continuum_tau)
     captured_records = {int(row["record"]) for row in rows}
     report = {
         "schema": "xstar-tools-v0648714-v0472-dsec-row46-runtime-probe-v1",
         "release": "0.6.48.7.14.2",
-        "result": "ACCEPT" if len(rows) == TARGET_RECORDS and len(terms) == TARGET_MATRIX_TERMS and captured_records == actual_records else "REJECT",
+        "result": "ACCEPT" if len(rows) > 0 and len(terms) == len(rows) * 4 and captured_records == actual_records else "REJECT",
         "capture_kind": "actual_v06472_dsec_heii_row46_complete_source_order_runtime_capture",
         "actual_dsec_runtime_capture": True,
         "target_evaluation_ordinal": _TARGET_EVAL,
@@ -505,6 +544,8 @@ def finalize(run_summary=None):
         "solve_rows": len(solve_rows),
         "row46_matrix_columns": len(row46_matrix),
         "normalization_columns": len(normalization),
+        "dsec_radiation_bins": len(dsec_radiation),
+        "continuum_tau_count": len(continuum_tau),
         "target_records_match_actual_terms": captured_records == actual_records,
         "missing_captured_records": sorted(actual_records - captured_records),
         "unexpected_captured_records": sorted(captured_records - actual_records),

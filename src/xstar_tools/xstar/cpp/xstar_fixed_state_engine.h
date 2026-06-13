@@ -14,7 +14,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60485u
+#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60486u
+#define XSTAR_FIXED_STATE_PROGRAM_ABI_VERSION 60485u
 #define XSTAR_FIXED_STATE_MESSAGE_SIZE 1024u
 #define XSTAR_FIXED_STATE_ID_SIZE 128u
 
@@ -60,7 +61,8 @@ typedef enum xstar_fixed_state_status_flags_v1 {
     XSTAR_FIXED_STATE_STATUS_NATIVE_SPECTRAL = 1u << 5,
     XSTAR_FIXED_STATE_STATUS_STATE_DEPENDENT = 1u << 6,
     XSTAR_FIXED_STATE_STATUS_NO_CALLBACKS = 1u << 7,
-    XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED = 1u << 8
+    XSTAR_FIXED_STATE_STATUS_ACTIVE_ATDB_LOWERED = 1u << 8,
+    XSTAR_FIXED_STATE_STATUS_DSEC_RUNTIME_STATE_ABI = 1u << 9
 } xstar_fixed_state_status_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -77,6 +79,20 @@ typedef struct xstar_fixed_state_input_v1 {
     const double* radiation_energy_ev;
     const double* radiation_flux;
     size_t radiation_bin_count;
+
+    /* v0.6.48.7.17 source-faithful DSEC runtime-state extension.
+     * These arrays are observational input workspaces owned by the caller.
+     * dsec_bremsa is the full source radiation field used by ucalc/phint53;
+     * continuum_tau_* are indexed by the original one-based npconi2 index.
+     */
+    const double* dsec_radiation_energy_ev;
+    const double* dsec_bremsa;
+    size_t dsec_radiation_bin_count;
+    const double* continuum_tau_in;
+    const double* continuum_tau_out;
+    size_t continuum_tau_count;
+    uint32_t runtime_state_flags;
+    uint32_t reserved_runtime_state;
 } xstar_fixed_state_input_v1;
 
 typedef struct xstar_fixed_state_output_v1 {

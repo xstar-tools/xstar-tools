@@ -1,4 +1,4 @@
-## v0.6.48.7.16 source-faithful type-53 row-46 coupled replacement candidate
+## v0.6.48.7.17 source-faithful type-53 row-46 coupled replacement candidate
 
 This qualification-only release applies the complete 44-record, 176-term
 original-DSEC type-53 row-46 aliased manifold as one unit. At the captured
