@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.21.2 - 2026-06-13
+
+- Replace full fixed-state result retention in the v0.6.47.2 thermal-budget probe with a streaming current-result hook.
+- Keep `retain_fixed_state_results=False`, preserving the production `diagnostics_mode=none` memory discipline across the 57-evaluation DSEC trajectory.
+- Retain only four first-evaluation input snapshots and compact scalar/hash rows.
+- Add unbuffered progress markers, Python fault-handler output, and single-thread BLAS capture defaults so any future native crash identifies its last completed evaluation.
+- No rates, matrices, thermal coefficients, controller tolerances, ABI fields, or production gates are changed.
+
 ## 0.6.48.7.21.1 - 2026-06-13
 
 - Fix the v0.6.48.7.21 original-DSEC capture probe to record only the first input snapshot of each DSEC call.

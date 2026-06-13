@@ -24,7 +24,7 @@ from typing import Any, Mapping
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21.1"
+RELEASE = "0.6.48.7.21.2"
 SCHEMA = "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648721-thermal-budget-state-refresh-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
@@ -83,7 +83,7 @@ _CONFIG = json.loads(pathlib.Path(__file__).with_name("probe_config.json").read_
 _OUT = pathlib.Path(_CONFIG["output_dir"])
 _OUT.mkdir(parents=True, exist_ok=True)
 _LOCK = threading.RLock()
-_STATE = {"global_eval": 0, "call_counter": 0, "call_by_object": {}, "budgets": [], "states": [], "trace": [], "installed": False}
+_STATE = {"global_eval": 0, "call_counter": 0, "budgets": [], "states": [], "trace": [], "installed": False, "active_result": None}
 
 BUDGET_FIELDS = [
  "global_evaluation_ordinal","dsec_call_id","dsec_local_evaluation_index","temperature_k","temperature_t4","electron_fraction_xee","hydrogen_density_cm3",
@@ -140,17 +140,32 @@ def install():
     if _STATE["installed"]: return
     from xstar_tools.xstar import dsec as dsec_mod
     original = dsec_mod.CalcHMCAllDsecEvaluator.__call__
+    original_calc_hmc_all = dsec_mod.calc_hmc_all
+
+    def streaming_calc_hmc_all(*args, **kwargs):
+        # Keep only the current full result long enough for the wrapper to
+        # reduce it to scalar/hashed audit rows.  Never append the large
+        # H/He/Mg result object to the DSEC evaluation history.
+        result = original_calc_hmc_all(*args, **kwargs)
+        _STATE["active_result"] = result
+        return result
+
+    dsec_mod.calc_hmc_all = streaming_calc_hmc_all
+
     def wrapped(self, state):
         with _LOCK:
-            ident = id(self)
-            if ident not in _STATE["call_by_object"]:
+            call_id = getattr(self, "_v0487212_call_id", None)
+            if call_id is None:
                 _STATE["call_counter"] += 1
-                _STATE["call_by_object"][ident] = _STATE["call_counter"]
-            call_id = int(_STATE["call_by_object"][ident])
+                call_id = int(_STATE["call_counter"])
+                setattr(self, "_v0487212_call_id", call_id)
             local_eval = len(getattr(self, "evaluations", ())) + 1
             _STATE["global_eval"] += 1
             global_eval = int(_STATE["global_eval"])
-        self.retain_fixed_state_results = True
+        # The source workflow normally discards full fixed-state results when
+        # diagnostics_mode=none.  Preserve that memory discipline and stream
+        # the current result through the calc_hmc_all shim above.
+        self.retain_fixed_state_results = False
         # Only the first evaluation of each DSEC call is part of the
         # between-call state-refresh contract.  Capturing every snapshot
         # causes v0.6.47.2 diagnostics=none runs to inspect the intentionally
@@ -160,9 +175,15 @@ def install():
         # unchanged.
         self.capture_all_input_snapshots = False
         self.capture_input_snapshot_indices = (1,)
-        out = original(self, state)
-        result = out.fixed_state_result
-        snap = self.input_snapshots[-1] if self.input_snapshots else None
+        _STATE["active_result"] = None
+        print(f"v0487212_capture_begin call={call_id} local={local_eval} global={global_eval}", flush=True)
+        try:
+            out = original(self, state)
+        except BaseException:
+            _STATE["active_result"] = None
+            raise
+        result = _STATE.get("active_result")
+        snap = self.input_snapshots[-1] if (local_eval == 1 and self.input_snapshots) else None
         with _LOCK:
             _STATE["trace"].append({
               "global_evaluation_ordinal": global_eval, "dsec_call_id": call_id, "dsec_local_evaluation_index": local_eval,
@@ -216,6 +237,8 @@ def install():
                     count, digest, l1 = _fp(value)
                     row[key + "_count"] = count; row[key + "_sha256"] = digest; row[key + "_l1"] = l1
                 _STATE["states"].append(row)
+        _STATE["active_result"] = None
+        print(f"v0487212_capture_end call={call_id} local={local_eval} global={global_eval} hmctot={float(out.hmctot):.17g}", flush=True)
         return out
     dsec_mod.CalcHMCAllDsecEvaluator.__call__ = wrapped
     _STATE["installed"] = True
@@ -229,7 +252,7 @@ def finalize(run_summary=None):
         with (_OUT/name).open("w", newline="") as f:
             w=csv.DictWriter(f, fieldnames=fields, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
     report = {
-      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.1",
+      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.2",
       "result": "ACCEPT" if len(_STATE["budgets"]) >= 7 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) >= 57 else "REJECT",
       "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]),
       "dsec_evaluations_observed": len(_STATE["trace"]), "run_summary": run_summary or {}, "qualification_only": True, "production_promotion_ready": False,
@@ -240,7 +263,8 @@ def finalize(run_summary=None):
 
 _DRIVER = r'''
 from __future__ import annotations
-import argparse, json, pathlib
+import argparse, faulthandler, json, pathlib
+faulthandler.enable(all_threads=True)
 p=argparse.ArgumentParser(); p.add_argument("--parameters-json", required=True); p.add_argument("--atdb-path", required=True); p.add_argument("--output-dir", required=True); p.add_argument("--coheat-path")
 a=p.parse_args()
 import v048721_probe_runtime as probe
@@ -269,6 +293,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path, parameters_
         (probe_dir / "driver.py").write_text(_DRIVER)
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join([str(probe_dir), str(root / "src")])
+        env["PYTHONFAULTHANDLER"] = "1"
+        env["PYTHONUNBUFFERED"] = "1"
+        env["OMP_NUM_THREADS"] = "1"
+        env["OPENBLAS_NUM_THREADS"] = "1"
+        env["MKL_NUM_THREADS"] = "1"
+        env["NUMEXPR_NUM_THREADS"] = "1"
         cmd = [sys.executable, str(probe_dir / "driver.py"), "--parameters-json", str(parameters_json.resolve()), "--atdb-path", str(atdb_path.resolve()), "--output-dir", str(output_dir / "physical_run")]
         if coheat_path is not None: cmd += ["--coheat-path", str(coheat_path.resolve())]
         log = output_dir / "v0472_capture_run.log"

@@ -1,3 +1,7 @@
+## v0.6.48.7.21.2 streaming capture hotfix
+
+The original-v0.6.47.2 call-1 thermal-budget probe now streams each current fixed-state result into compact audit rows and immediately releases it. It no longer retains all large H/He/Mg fixed-state objects across the full DSEC trajectory. This is an instrumentation-only correction; ABI 60487, source physics, controller tolerances, and all promotion blockers are unchanged.
+
 ## v0.6.48.7.21.1 type-53 independent-state parity correction
 
 This qualification release closes the evaluation-60 type-53 runtime-state gap discovered by v0.6.48.7.17. It corrects the Milne `rnist` continuum-energy semantics, adds a first-class DSEC covering-fraction field to runtime ABI `60487`, and allows the exact captured Kelvin temperature to be supplied without reconstructing it from rounded `T/10^4` trajectory text.

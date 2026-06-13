@@ -44,3 +44,19 @@ def test_v06487211_probe_captures_only_first_snapshot() -> None:
     assert 'self.capture_all_input_snapshots = False' in mod._PROBE
     assert 'self.capture_input_snapshot_indices = (1,)' in mod._PROBE
     assert 'self.capture_all_input_snapshots = True' not in mod._PROBE
+
+
+def test_v06487212_probe_streams_current_result_without_history() -> None:
+    import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
+    assert 'def streaming_calc_hmc_all' in mod._PROBE
+    assert 'dsec_mod.calc_hmc_all = streaming_calc_hmc_all' in mod._PROBE
+    assert 'self.retain_fixed_state_results = False' in mod._PROBE
+    assert 'self.retain_fixed_state_results = True' not in mod._PROBE
+    assert '_STATE["active_result"] = None' in mod._PROBE
+
+
+def test_v06487212_probe_enables_crash_localization() -> None:
+    import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
+    assert 'PYTHONFAULTHANDLER' in mod.__file__ or 'PYTHONFAULTHANDLER' in Path(mod.__file__).read_text()
+    assert 'v0487212_capture_begin' in mod._PROBE
+    assert 'v0487212_capture_end' in mod._PROBE

@@ -85,7 +85,7 @@ typedef struct xstar_fixed_state_input_v1 {
     const double* radiation_flux;
     size_t radiation_bin_count;
 
-    /* v0.6.48.7.21.1 source-faithful DSEC runtime-state extension.
+    /* v0.6.48.7.21.2 source-faithful DSEC runtime-state extension.
      * These arrays are observational input workspaces owned by the caller.
      * dsec_bremsa is the full source radiation field used by ucalc/phint53;
      * continuum_tau_* are indexed by the original one-based npconi2 index.
