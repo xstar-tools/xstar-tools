@@ -211,7 +211,10 @@ void validate_output(const xstar_element_input_v1& input, xstar_element_output_v
 
 bool verify_source_order(const xstar_element_input_v1& input) {
     const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
-    const bool allow_original_dsec_order = qualification_order && std::string(qualification_order) == "1";
+    const char* promoted_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    const bool allow_original_dsec_order =
+        (qualification_order && std::string(qualification_order) == "1") ||
+        (promoted_order && std::string(promoted_order) == "1");
     std::int64_t previous = std::numeric_limits<std::int64_t>::min();
     for (std::size_t i = 0; i < input.term_count; ++i) {
         const auto& term = input.terms[i];
@@ -295,7 +298,10 @@ std::vector<xstar_element_term_v1> construct_terms_from_contributions(
     terms.reserve(contribution_count * 4u);
     std::int64_t previous_position = std::numeric_limits<std::int64_t>::min();
     const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
-    const bool allow_original_dsec_order = qualification_order && std::string(qualification_order) == "1";
+    const char* promoted_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    const bool allow_original_dsec_order =
+        (qualification_order && std::string(qualification_order) == "1") ||
+        (promoted_order && std::string(promoted_order) == "1");
     for (std::size_t index = 0; index < contribution_count; ++index) {
         const auto& c = contributions[index];
         if (!allow_original_dsec_order) {

@@ -1,4 +1,4 @@
-## v0.6.48.7.18 type-53 independent-state parity correction
+## v0.6.48.7.19 type-53 independent-state parity correction
 
 This qualification release closes the evaluation-60 type-53 runtime-state gap discovered by v0.6.48.7.17. It corrects the Milne `rnist` continuum-energy semantics, adds a first-class DSEC covering-fraction field to runtime ABI `60487`, and allows the exact captured Kelvin temperature to be supplied without reconstructing it from rounded `T/10^4` trajectory text.
 
@@ -40,3 +40,8 @@ fixed-state replay and freezes the resulting 31-record evaluation-61 oracle.
 The translated C++ shadow is closer to the exact source than the applied path
 for every record, but is not yet IEEE-exact. No production physics replacement
 is enabled. See `V064873_V0472_TYPE53_RUNTIME_CAPTURE.md`.
+
+## v0.6.48.7.19 qualification milestone
+
+The complete 44-record type-53 row-46 contract is now promoted at two independently captured states through both the fixed-state entry point and the thermal-controller callback. Evaluation 60 and 61 are IEEE-exact for all 264 answers, 176 matrix/thermal terms, and absolute source order. The remaining `hmctot` gap is not caused by type 53; the promoted manifold adds net helium heating while the original reference requires substantially more cooling.
+

@@ -23,7 +23,7 @@ from . import v0472_dsec_row46_runtime_capture as parent
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.18"
+RELEASE = "0.6.48.7.19"
 SCHEMA = "xstar-tools-v0648717-type53-independent-runtime-state-capture-v1"
 BUNDLE_SCHEMA = "xstar-tools-v0648717-type53-independent-runtime-state-oracle-v1"
 TARGET_EVALUATION = 60

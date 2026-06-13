@@ -1351,7 +1351,9 @@ EvaluatedRecord evaluate_record(
             c.ans4 = -heat;
             c.ans5 = recomb * threshold * kErgPerEv;
             c.ans6 = heat;
-            const bool use_row46_contract = environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
+            const bool use_row46_contract =
+                environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") ||
+                environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
             const auto* row46_contract = use_row46_contract
                 ? find_type53_row46_dsec_runtime_oracle_entry(record.source_position, record.record)
                 : nullptr;
@@ -2068,9 +2070,12 @@ int run_impl(
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
-    const bool type53_row46_coupled_replacement = environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
-    if (type53_row46_coupled_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
-        throw std::runtime_error("type53 row46 coupled replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    const bool type53_row46_coupled_replacement =
+        environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") || type53_two_state_promotion;
+    if (type53_row46_coupled_replacement &&
+        !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("type53 row46 replacement/promotion requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2898,7 +2903,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.18\",\n"
+                        << "  \"release\": \"0.6.48.7.19\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -2918,7 +2923,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.18\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.19\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

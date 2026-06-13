@@ -17,8 +17,8 @@ def root() -> Path:
 
 
 def test_release_version() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.18"
-    assert RELEASE == "0.6.48.7.18"
+    assert xstar_tools.__version__ == "0.6.48.7.19"
+    assert RELEASE == "0.6.48.7.19"
     assert SCHEMA.endswith("source-faithful-replacement-audit-v1")
 
 
