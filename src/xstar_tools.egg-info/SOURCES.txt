@@ -55,6 +55,7 @@ V0648718_TYPE53_RNIST_COVERING_CORRECTION.md
 V06487191_TYPE53_THERMAL_AUDIT_RECOVERY_HOTFIX.md
 V0648719_TYPE53_TWO_STATE_THERMAL_PROMOTION_AND_HMCTOT_ATTRIBUTION.md
 V064871_HE_BOUND_FREE_SOURCE_ORDER_AUDIT.md
+V0648720_THERMAL_CONTROLLER_STATE_SELECTION_AND_TRAJECTORY_AUDIT.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V064874_HEII_TYPE53_IEEE_APPLICATION.md
@@ -101,6 +102,7 @@ check_v048717_type53_runtime_state_capture_and_audit.py
 check_v048718_type53_rnist_covering_correction_audit.py
 check_v048719_type53_two_state_thermal_promotion_audit.py
 check_v04871_he_bound_free_audit.py
+check_v048720_thermal_controller_state_trajectory_audit.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
 check_v04874_type53_ieee_application.py
@@ -204,6 +206,7 @@ run_v048717_type53_runtime_state_capture_and_audit.sh
 run_v048718_type53_rnist_covering_correction_audit.sh
 run_v048719_type53_two_state_thermal_promotion_audit.sh
 run_v04871_he_bound_free_audit.sh
+run_v048720_thermal_controller_state_trajectory_audit.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
 run_v04873_type53_semantics.sh
@@ -455,8 +458,8 @@ xstar_tools_v0.6.48.7.15_handoff.md
 xstar_tools_v0.6.48.7.16_handoff.md
 xstar_tools_v0.6.48.7.17_handoff.md
 xstar_tools_v0.6.48.7.18_handoff.md
-xstar_tools_v0.6.48.7.19.1_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
+xstar_tools_v0.6.48.7.20_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7.4_handoff.md
@@ -1088,6 +1091,7 @@ src/xstar_tools/xstar/state.py
 src/xstar_tools/xstar/stepping.py
 src/xstar_tools/xstar/thermal.py
 src/xstar_tools/xstar/thermal_balance.py
+src/xstar_tools/xstar/thermal_controller_state_trajectory_audit.py
 src/xstar_tools/xstar/transfer.py
 src/xstar_tools/xstar/type50_dsec_coupled_replacement_audit.py
 src/xstar_tools/xstar/type50_manifold_audit.py
@@ -1335,6 +1339,7 @@ tests/test_v0648716_type53_row46_source_faithful_replacement.py
 tests/test_v0648717_type53_runtime_state_abi.py
 tests/test_v0648718_type53_rnist_covering_correction.py
 tests/test_v0648719_type53_two_state_thermal_promotion.py
+tests/test_v0648720_thermal_controller_state_trajectory_audit.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

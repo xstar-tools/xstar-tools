@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.20 - 2026-06-13
+
+- Added a qualification-only thermal-controller state-selection and trajectory audit.
+- Identified the first controller branch divergence at call 1, evaluation 4: native takes one temperature divide while the reference takes two because the native thermal residual is below the source far-from-equilibrium threshold.
+- Proved that native call 1 exits at evaluation 7 on the default thermal tolerance and therefore never reaches the evaluation-60 workspace anchor.
+- Proved that calls 2-4 repeat an unchanged native thermal source state while the reference has distinct between-call thermal residuals.
+- Added controller event/call-summary CSV emission to `run-fixed-dsec`.
+- Kept full thermal-controller, thermal-product, and production promotion blocked.
+
 ## 0.6.48.7.19.1 - 2026-06-13
 
 - Hotfixes the v0.6.48.7.19 two-state thermal-promotion audit so a completed `run-fixed-dsec` trajectory that returns status 20 is retained as a scientific `FULL_THERMAL_CONTROLLER=REJECT` result rather than being converted into an infrastructure exception and `NOT_RUN`.
