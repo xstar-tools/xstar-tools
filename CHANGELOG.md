@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.19.1 - 2026-06-13
+
+- Hotfixes the v0.6.48.7.19 two-state thermal-promotion audit so a completed `run-fixed-dsec` trajectory that returns status 20 is retained as a scientific `FULL_THERMAL_CONTROLLER=REJECT` result rather than being converted into an infrastructure exception and `NOT_RUN`.
+- Preserves already completed evaluation-60/evaluation-61 exactness, fixed-state workflow, controller-smoke integration, and `hmctot` attribution gates when the complete native controller fails reference identity.
+- Adds automatic recovery of existing v0.6.48.7.19 output directories; no expensive physics rerun is required.
+- Records the observed full-controller diagnostics: 14 total evaluations, 10 DSEC evaluations, zero Python callbacks, zero evaluation-60 runtime-workspace activations, reference-state identity false, and maximum absolute `hmctot` delta 1.335393908894136.
+- Leaves ABI 60487 and lowered-program ABI 60485 unchanged.
+
 # xstar_tools 0.6.48.7.19 - 2026-06-13
 
 ## v0.6.48.7.19 - 2026-07-20

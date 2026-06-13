@@ -14,6 +14,7 @@ import csv
 import json
 import math
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -39,8 +40,8 @@ from .type53_runtime_state_independent_capture import (
 
 csv.field_size_limit(1 << 31)
 
-RELEASE = "0.6.48.7.19"
-SCHEMA = "xstar-tools-v0648719-type53-two-state-thermal-promotion-audit-v1"
+RELEASE = "0.6.48.7.19.1"
+SCHEMA = "xstar-tools-v06487191-type53-two-state-thermal-promotion-audit-v1"
 EVAL60 = 60
 EVAL61 = 61
 TARGET_RECORDS = 44
@@ -142,13 +143,21 @@ def _run_full_controller(
     case_dir: Path,
     eval60_bundle: Path,
     output: Path,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any] | None, int]:
+    """Run the complete native controller without discarding partial evidence.
+
+    ``run-fixed-dsec`` returns status 20 when the completed native trajectory is
+    not reference-identical.  That is a scientific qualification result, not an
+    infrastructure exception.  Preserve its summary and return code so the
+    already completed fixed-state, callback, and attribution gates remain
+    reportable.
+    """
     trajectory = root / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/trajectory.csv"
     radiation = root / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv"
     oracle = read_csv(eval60_bundle / EVAL60_RECORDS_NAME)
     temperature = next(iter({float(r["temperature_k"]) for r in oracle}))
     covering = next(iter({float(r["covering_fraction"]) for r in oracle}))
-    run_command([
+    command = [
         str(executable), "run-fixed-dsec",
         "--case-dir", str(case_dir),
         "--trajectory-csv", str(trajectory),
@@ -159,8 +168,37 @@ def _run_full_controller(
         "--temperature-k", format(temperature, ".17g"),
         "--skip-fits",
         "--output-dir", str(output),
-    ], cwd=root, env=_promotion_env(root))
-    return _load_json(output / "native_dsec_summary.json")
+    ]
+    print("$ " + " ".join(command))
+    completed = subprocess.run(
+        command, cwd=root, env=_promotion_env(root), text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    print(completed.stdout, end="")
+    summary_path = output / "native_dsec_summary.json"
+    summary = _load_json(summary_path) if summary_path.is_file() else None
+    return summary, int(completed.returncode)
+
+
+def _full_controller_assessment(
+    summary: Mapping[str, Any] | None, returncode: int | None
+) -> dict[str, Any]:
+    completed = bool(summary and int(summary.get("total_evaluations", 0)) > 0)
+    reference_identity = bool(summary and summary.get("reference_state_identity"))
+    callbacks_exact = bool(summary and int(summary.get("python_callbacks", -1)) == 0)
+    workspace_evaluations = int((summary or {}).get("runtime_state_workspace_evaluations", 0))
+    accepted = bool(completed and returncode == 0 and reference_identity and callbacks_exact)
+    return {
+        "status": "ACCEPT" if accepted else ("REJECT" if completed else "NOT_RUN"),
+        "completed": completed,
+        "returncode": returncode,
+        "reference_state_identity": reference_identity,
+        "python_callbacks_exact": callbacks_exact,
+        "runtime_state_workspace_evaluations": workspace_evaluations,
+        "total_evaluations": int((summary or {}).get("total_evaluations", 0)),
+        "dsec_evaluations": int((summary or {}).get("dsec_evaluations", 0)),
+        "max_abs_hmctot_delta_to_reference": (summary or {}).get("max_abs_hmctot_delta_to_reference"),
+    }
 
 
 def _state(run: Path, evaluation: int) -> dict[str, Any]:
@@ -269,6 +307,112 @@ def _hmctot_attribution(
     return result
 
 
+def _bool_cell(value: Any) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def _recover_comparison(output: Path, evaluation: int) -> dict[str, Any]:
+    compare_dir = output / f"comparison_eval{evaluation}"
+    record_rows = read_csv(compare_dir / "type53_row46_dsec_record_comparison.csv")
+    term_rows = read_csv(compare_dir / "type53_row46_dsec_term_comparison.csv")
+    record_exact = len(record_rows) == TARGET_RECORDS and all(
+        _bool_cell(row.get("all_answers_ieee_exact")) for row in record_rows
+    )
+    term_exact = len(term_rows) == TARGET_TERMS and all(
+        _bool_cell(row.get("term_ieee_exact")) for row in term_rows
+    )
+    order_exact = len(term_rows) == TARGET_TERMS and all(
+        _bool_cell(row.get("absolute_source_order_index_exact")) for row in term_rows
+    )
+    return {
+        "record_comparison": {
+            "records": len(record_rows),
+            "answers": len(record_rows) * 6,
+            "records_all_answers_ieee_exact": sum(
+                _bool_cell(row.get("all_answers_ieee_exact")) for row in record_rows
+            ),
+            "all_records_ieee_exact": record_exact,
+            "recovered_from_existing_output": True,
+        },
+        "term_comparison": {
+            "terms": len(term_rows),
+            "exact_terms": sum(_bool_cell(row.get("term_ieee_exact")) for row in term_rows),
+            "all_terms_ieee_exact": term_exact,
+            "absolute_source_order_indices_exact": sum(
+                _bool_cell(row.get("absolute_source_order_index_exact")) for row in term_rows
+            ),
+            "absolute_source_order_fully_exact": order_exact,
+            "recovered_from_existing_output": True,
+        },
+    }
+
+
+def recover_existing_output(root: Path, output: Path) -> dict[str, Any]:
+    """Recover a complete audit summary after a nonzero full-controller result."""
+    root = root.resolve()
+    output = output.resolve()
+    comparisons = {str(e): _recover_comparison(output, e) for e in (EVAL60, EVAL61)}
+    two_state_exact = all(
+        item["record_comparison"]["all_records_ieee_exact"]
+        and item["term_comparison"]["all_terms_ieee_exact"]
+        and item["term_comparison"]["absolute_source_order_fully_exact"]
+        for item in comparisons.values()
+    )
+    smoke = _load_json(output / "controller_smoke/controller_smoke_summary.json")
+    smoke_ok = (
+        smoke.get("result") == "ACCEPT"
+        and int(smoke.get("evaluations_completed", 0)) == 2
+        and int(smoke.get("runtime_state_workspace_evaluations", 0)) >= 1
+        and int(smoke.get("python_callbacks", -1)) == 0
+    )
+    attribution_path = output / "hmctot_attribution_summary.json"
+    if attribution_path.is_file():
+        attribution = _load_json(attribution_path)
+    else:
+        attribution = _hmctot_attribution(
+            output,
+            {EVAL60: output / "baseline_eval60", EVAL61: output / "baseline_eval61"},
+            {EVAL60: output / "candidate_eval60", EVAL61: output / "candidate_eval61"},
+        )
+    full_path = output / "full_controller/native_dsec_summary.json"
+    full_summary = _load_json(full_path) if full_path.is_file() else None
+    # A persisted summary with reference_state_identity=false corresponds to
+    # run-fixed-dsec status 20 in this qualification lineage.
+    inferred_returncode = 0 if full_summary and full_summary.get("reference_state_identity") else (20 if full_summary else None)
+    full_assessment = _full_controller_assessment(full_summary, inferred_returncode)
+    full_status = full_assessment["status"] if full_summary else "RUN_REQUIRED"
+    result = {
+        "schema": SCHEMA,
+        "release": RELEASE,
+        "result": "ACCEPT" if two_state_exact and smoke_ok and attribution.get("complete") else "REJECT",
+        "qualification_only": True,
+        "recovered_from_existing_output": True,
+        "two_state_exactness": comparisons,
+        "two_state_type53_promotion": two_state_exact,
+        "fixed_state_workflow": two_state_exact,
+        "thermal_controller_integration": smoke_ok,
+        "controller_smoke": smoke,
+        "full_thermal_controller": full_status,
+        "full_controller_assessment": full_assessment,
+        "full_controller_summary": full_summary,
+        "hmctot_attribution": attribution,
+        "fixed_state_parity": False,
+        "thermal_parity": False,
+        "production_promotion_ready": False,
+        "remaining_blockers": [
+            "the complete native controller ran but did not reproduce the reference trajectory" if full_status == "REJECT" else None,
+            "the evaluation-60 runtime-state workspace was not activated inside the complete controller trajectory" if full_status == "REJECT" and full_assessment["runtime_state_workspace_evaluations"] == 0 else None,
+            "type-53 promotion improves charge and populations but worsens hmctot at both captured states",
+            "continuum and non-type53 thermal channels are not yet source-parity qualified",
+            "whole fixed-state, thermal-controller, output-product, and production parity remain blocked",
+        ],
+    }
+    result["remaining_blockers"] = [x for x in result["remaining_blockers"] if x]
+    write_json(output / "type53_two_state_thermal_promotion_summary.json", result)
+    write_json(output / "audit_summary.json", result)
+    return result
+
+
 def audit(
     root: Path,
     case_dir: Path,
@@ -326,15 +470,13 @@ def audit(
         and int(smoke.get("python_callbacks", -1)) == 0
     )
     full_summary = None
-    full_status = "RUN_REQUIRED"
+    full_returncode: int | None = None
     if run_full_controller:
-        full_summary = _run_full_controller(root, executable, case_dir, eval60_bundle, output / "full_controller")
-        full_ok = (
-            int(full_summary.get("dsec_evaluations", 0)) == 57
-            and int(full_summary.get("total_evaluations", 0)) == 61
-            and int(full_summary.get("python_callbacks", -1)) == 0
+        full_summary, full_returncode = _run_full_controller(
+            root, executable, case_dir, eval60_bundle, output / "full_controller"
         )
-        full_status = "ACCEPT" if full_ok else "REJECT"
+    full_assessment = _full_controller_assessment(full_summary, full_returncode)
+    full_status = full_assessment["status"] if run_full_controller else "RUN_REQUIRED"
     attribution = _hmctot_attribution(output, baseline_runs, candidate_runs)
 
     result = {
@@ -349,13 +491,16 @@ def audit(
         "thermal_controller_integration": smoke_ok,
         "controller_smoke": smoke,
         "full_thermal_controller": full_status,
+        "full_controller_assessment": full_assessment,
         "full_controller_summary": full_summary,
         "hmctot_attribution": attribution,
         "fixed_state_parity": False,
         "thermal_parity": False,
         "production_promotion_ready": False,
         "remaining_blockers": [
-            "the complete 61-evaluation thermal controller must be rerun externally" if full_status == "RUN_REQUIRED" else None,
+            "the complete native thermal controller must be rerun externally" if full_status == "RUN_REQUIRED" else None,
+            "the complete native controller ran but did not reproduce the reference trajectory" if full_status == "REJECT" else None,
+            "the evaluation-60 runtime-state workspace was not activated inside the complete controller trajectory" if full_status == "REJECT" and full_assessment["runtime_state_workspace_evaluations"] == 0 else None,
             "type-53 promotion improves charge and populations but worsens hmctot at both captured states",
             "continuum and non-type53 thermal channels are not yet source-parity qualified",
             "whole fixed-state, thermal-controller, output-product, and production parity remain blocked",
@@ -373,16 +518,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--eval60-bundle", type=Path)
     parser.add_argument("--run-full-controller", action="store_true")
+    parser.add_argument("--recover-existing", action="store_true")
     parser.add_argument("--output-json", type=Path)
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
-        result = audit(
-            args.package_dir,
-            args.case_dir,
-            args.output_dir,
-            eval60_bundle=args.eval60_bundle,
-            run_full_controller=args.run_full_controller,
-        )
+        if args.recover_existing:
+            result = recover_existing_output(args.package_dir, args.output_dir)
+        else:
+            result = audit(
+                args.package_dir,
+                args.case_dir,
+                args.output_dir,
+                eval60_bundle=args.eval60_bundle,
+                run_full_controller=args.run_full_controller,
+            )
     except Exception as exc:
         result = {
             "schema": SCHEMA,
