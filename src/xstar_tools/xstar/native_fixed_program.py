@@ -444,7 +444,7 @@ def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) 
     return rec, energy, weight, label, principal_n, orbital_l
 
 
-def _build_element_layout(master: Any, derived: Any, element_z: int, element_index: int) -> tuple[dict[str, Any], list[dict[str, Any]], Any, dict[int, Any]]:
+def _build_element_layout(master: Any, derived: Any, element_z: int, element_index: int, global_level_index_by_key: Mapping[tuple[int, int, int], int] | None = None) -> tuple[dict[str, Any], list[dict[str, Any]], Any, dict[int, Any]]:
     from .element_equilibrium import build_element_compact_basis
 
     ions = [
@@ -480,6 +480,7 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
             "statistical_weight": weight,
             "principal_n": principal_n,
             "orbital_l": orbital_l,
+            "global_level_index": int((global_level_index_by_key or {}).get((int(element_z), stage, local_level), 0)),
         })
     element = {
         "element_index": element_index,
@@ -842,7 +843,9 @@ def lower_active_atdb(
         layouts: dict[int, tuple[Any, dict[int, Any], list[dict[str, Any]]]] = {}
         record_head = 0
         for element_index, z in enumerate(active):
-            element, rows, basis, blocks = _build_element_layout(built.master, built.derived, z, element_index)
+            element, rows, basis, blocks = _build_element_layout(
+                built.master, built.derived, z, element_index, subset.global_level_index_by_key
+            )
             count = len(records_by_z.get(z, []))
             if count <= 0:
                 raise RuntimeError(f"no lowerable executable records for active Z={z}")

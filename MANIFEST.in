@@ -619,3 +619,12 @@ include run_v048722_continuum_mg_refresh_payload_audit.sh
 include check_v048722_continuum_mg_refresh_payload_audit.py
 include check_v048722_continuum_mg_refresh_payload_readiness.py
 include tests/test_v0648722_continuum_mg_refresh_payload_audit.py
+
+# v0.6.48.7.23 Mg-primary thermal correction and call-start workspace transport
+include V0648723_MG_PRIMARY_AND_CALL_START_WORKSPACE_TRANSPORT.md
+include xstar_tools_v0.6.48.7.23_handoff.md
+include run_v048723_mg_primary_workspace_transport_controller_audit.sh
+include check_v048723_mg_primary_workspace_transport_controller_audit.py
+include tests/test_v0648723_mg_primary_workspace_transport.py
+include check_v048723_mg_primary_workspace_transport_readiness.py
+include xstar_tools_conversation_summary_through_v0.6.48.7.23.md

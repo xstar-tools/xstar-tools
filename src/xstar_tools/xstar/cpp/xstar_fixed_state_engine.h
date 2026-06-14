@@ -67,7 +67,9 @@ typedef enum xstar_fixed_state_status_flags_v1 {
 
 typedef enum xstar_fixed_runtime_state_flags_v1 {
     XSTAR_FIXED_RUNTIME_STATE_NONE = 0u,
-    XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION = 1u << 0
+    XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION = 1u << 0,
+    XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES = 1u << 1,
+    XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE = 1u << 2
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -85,7 +87,7 @@ typedef struct xstar_fixed_state_input_v1 {
     const double* radiation_flux;
     size_t radiation_bin_count;
 
-    /* v0.6.48.7.22 source-faithful DSEC runtime-state extension.
+    /* v0.6.48.7.23 source-faithful DSEC runtime-state extension.
      * These arrays are observational input workspaces owned by the caller.
      * dsec_bremsa is the full source radiation field used by ucalc/phint53;
      * continuum_tau_* are indexed by the original one-based npconi2 index.
@@ -99,6 +101,16 @@ typedef struct xstar_fixed_state_input_v1 {
     uint32_t runtime_state_flags;
     uint32_t reserved_runtime_state;
     double dsec_covering_fraction;
+
+    /* v0.6.48.7.23 qualification-only call-start state transport. */
+    const double* global_xilevg;
+    const double* global_bilevg;
+    const double* global_rnisg;
+    size_t global_level_count;
+    double mg_primary_heating_override;
+    double mg_primary_cooling_override;
+    double mg_secondary_heating_override;
+    double mg_secondary_cooling_override;
 } xstar_fixed_state_input_v1;
 
 typedef struct xstar_fixed_state_output_v1 {

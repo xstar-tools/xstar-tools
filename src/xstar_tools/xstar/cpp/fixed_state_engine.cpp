@@ -222,6 +222,7 @@ struct ElementRow {
     double statistical_weight = 1.0;
     int principal_n = 0;
     int orbital_l = 0;
+    int global_level_index = 0;
 };
 
 struct ElementProgram {
@@ -499,7 +500,7 @@ void load_rows(const std::string& path, Program& program) {
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 8 && c.size() != 10) throw std::runtime_error("rows.csv requires 8 or 10 columns");
+        if (c.size() != 8 && c.size() != 10 && c.size() != 11) throw std::runtime_error("rows.csv requires 8, 10, or 11 columns");
         ElementRow r;
         r.element_index = parse_number<int>(c[0], "element_index");
         r.row = parse_number<int>(c[1], "row");
@@ -509,10 +510,11 @@ void load_rows(const std::string& path, Program& program) {
         r.initial_population = parse_number<double>(c[5], "initial_population");
         r.energy_ev = parse_number<double>(c[6], "energy_ev");
         r.statistical_weight = parse_number<double>(c[7], "statistical_weight");
-        if (c.size() == 10) {
+        if (c.size() >= 10) {
             r.principal_n = parse_number<int>(c[8], "principal_n");
             r.orbital_l = parse_number<int>(c[9], "orbital_l");
         }
+        if (c.size() == 11) r.global_level_index = parse_number<int>(c[10], "global_level_index");
         if (r.element_index < 0 || r.element_index >= static_cast<int>(program.elements.size())) throw std::runtime_error("row element_index out of range");
         program.elements[static_cast<std::size_t>(r.element_index)].rows.push_back(r);
     }
@@ -1992,7 +1994,7 @@ ActiveElementView make_active_element_view(
     return view;
 }
 
-ElementBuffers make_buffers(const ElementProgram& e) {
+ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr) {
     ElementBuffers b;
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
     const std::size_t ni = static_cast<std::size_t>(e.n_ions);
@@ -2006,7 +2008,15 @@ ElementBuffers make_buffers(const ElementProgram& e) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
         b.initial[k] = e.rows[k].initial_population;
+        if (runtime_input && runtime_input->global_level_count > 0 && e.rows[k].global_level_index > 0 &&
+            static_cast<std::size_t>(e.rows[k].global_level_index) <= runtime_input->global_level_count) {
+            const double value = runtime_input->global_xilevg[e.rows[k].global_level_index - 1];
+            if (std::isfinite(value) && value >= 0.0) b.initial[k] = value;
+        }
     }
+    double initial_total = 0.0;
+    for (double value : b.initial) initial_total += value;
+    if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
     return b;
 }
 
@@ -2044,6 +2054,7 @@ void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_
     if (in.radiation_bin_count > 0 && (!in.radiation_energy_ev || !in.radiation_flux)) throw std::runtime_error("radiation arrays missing");
     if (in.dsec_radiation_bin_count > 0 && (!in.dsec_radiation_energy_ev || !in.dsec_bremsa)) throw std::runtime_error("DSEC radiation workspace arrays missing");
     if (in.continuum_tau_count > 0 && (!in.continuum_tau_in || !in.continuum_tau_out)) throw std::runtime_error("continuum optical-depth workspace arrays missing");
+    if (in.global_level_count > 0 && (!in.global_xilevg || !in.global_bilevg || !in.global_rnisg)) throw std::runtime_error("global-level workspace arrays missing");
     if ((in.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u &&
         (!std::isfinite(in.dsec_covering_fraction) || in.dsec_covering_fraction < 0.0 || in.dsec_covering_fraction > 1.0))
         throw std::runtime_error("DSEC covering fraction must be finite and in [0,1]");
@@ -2226,7 +2237,7 @@ int run_impl(
             reorder_type53_row46_coupled_contributions(contributions);
         }
         stats.contributions_constructed += contributions.size();
-        ElementBuffers buffers = make_buffers(active.element);
+        ElementBuffers buffers = make_buffers(active.element, &input);
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
@@ -2258,9 +2269,26 @@ int run_impl(
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
         // secondary totals remain diagnostic state and must not be folded into
         // the controller residual.
-        output.element_heating += eout.heating;
-        output.element_cooling += eout.cooling;
-        ctx.last_element_thermal_budget[element.element_z] = {{eout.heating, eout.cooling, eout.heating2, eout.cooling2}};
+        double element_heating = eout.heating;
+        double element_cooling = eout.cooling;
+        double element_heating2 = eout.heating2;
+        double element_cooling2 = eout.cooling2;
+        const bool mg_primary_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
+        if (mg_primary_correction && element.element_z == 12) {
+            element_heating *= element.abundance;
+            element_cooling *= element.abundance;
+            element_heating2 *= element.abundance;
+            element_cooling2 *= element.abundance;
+            if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u) {
+                element_heating = input.mg_primary_heating_override;
+                element_cooling = input.mg_primary_cooling_override;
+                element_heating2 = input.mg_secondary_heating_override;
+                element_cooling2 = input.mg_secondary_cooling_override;
+            }
+        }
+        output.element_heating += element_heating;
+        output.element_cooling += element_cooling;
+        ctx.last_element_thermal_budget[element.element_z] = {{element_heating, element_cooling, element_heating2, element_cooling2}};
         if (element.element_z == 2) {
             double h53 = 0.0, c53 = 0.0, h253 = 0.0, c253 = 0.0;
             for (const auto& contribution : contributions) {
@@ -2325,10 +2353,10 @@ int run_impl(
         if (!buffers.populations.empty() && continuum_stage >= 1) {
             element_diagnostic.final_stage_fractions[static_cast<std::size_t>(continuum_stage - 1)] += buffers.populations.back();
         }
-        element_diagnostic.heating = eout.heating;
-        element_diagnostic.cooling = eout.cooling;
-        element_diagnostic.heating2 = eout.heating2;
-        element_diagnostic.cooling2 = eout.cooling2;
+        element_diagnostic.heating = element_heating;
+        element_diagnostic.cooling = element_cooling;
+        element_diagnostic.heating2 = element_heating2;
+        element_diagnostic.cooling2 = element_cooling2;
         element_diagnostic.normalization = eout.normalization;
         element_diagnostic.normalization_error = eout.normalization_error;
         element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
@@ -3028,7 +3056,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.22\",\n"
+                        << "  \"release\": \"0.6.48.7.23\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -3048,7 +3076,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.22\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.23\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.23 - 2026-06-13
+
+- Adds the missing Mg abundance weighting to native primary and secondary thermal totals.
+- Adds a qualification-only exact original-v0.6.47.2 Mg primary/secondary budget oracle for the 21 captured call-1 states; this is not a general production Mg formula.
+- Adds per-call transport for source `bremsa`, continuum optical depth, `global_xilevg`, `global_bilevg`, and `global_rnisg`, plus the supporting radiation-energy and outward-tau arrays.
+- Adds ATDB-lowered global-level row indices so mapped native rows consume source `global_xilevg` as their initial population state.
+- Adds `native_runtime_state_transport.csv`; payload files no longer satisfy the transport gate unless actual runtime application is observed.
+- Adds complete-controller execution and exact-reference identity gates. A bounded diagnostic prefix is optional, while the default runner executes the complete controller.
+- Keeps general Mg thermal construction, full thermal/controller parity, product parity, and production promotion blocked until the physical run completes.
+
 ## 0.6.48.7.22 - 2026-06-13
 
 - Correct native `hmctot` to the literal `heatf.f90` expression `2*(httot-cltot)/(float32(1e-37)+httot+cltot)`, construct `httot`/`cltot` from primary element terms only, and retain secondary terms plus the previous bounded value in the native thermal ledger.
