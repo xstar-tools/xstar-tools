@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.27 - 2026-06-14
+
+- Added checked call-2/evaluation-1 H/He/Mg/continuum field attribution.
+- Added controlled source-component substitution ladder and exact component gates.
+- Preserved accepted call-1 gates and kept calls 3–4 blocked until general call-2 construction is exact.
+- Continued deferral of global_bilevg/global_rnisg consumers pending causal family evidence.
+- Qualification-only; no thermal, product, or production promotion.
+
+# Changelog
+
 ## 0.6.48.7.26 - 2026-06-14
 
 - Adds a hash-verified source-v0.6.47.2 capture of per-element and continuum thermal budgets for all 57 DSEC evaluations, with the exact call inventory 21/1/18/17.
