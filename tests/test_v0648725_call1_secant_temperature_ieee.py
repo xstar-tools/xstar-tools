@@ -16,11 +16,16 @@ def test_source_temperature_commit_and_secant_order_present():
     standalone=(ROOT/'src/xstar_tools/xstar/cpp/xstar_standalone.cpp').read_text()
     makefile=(ROOT/'src/xstar_tools/xstar/cpp/Makefile').read_text()
     assert 'secant-ieee-self-test' in standalone and 'secant-ieee-self-test' in makefile
+    assert 'committed_temperature_t4' in standalone
+    assert 'post_evaluation_commit' in standalone
+    assert 'XSTAR_THERMAL_EVENT_AFTER_EVALUATION' in standalone
     for token in ('low_product = tl * hmctth','high_product = th * hmcttl','numerator = low_product - high_product','denominator = hmctth - hmcttl'):
         assert token in thermal
 
 
-def _fixture(tmp_path: Path, temperature_mismatch: bool=False):
+def _fixture(tmp_path: Path, temperature_mismatch: bool=False,
+             raw_temperature_mismatch: bool=False,
+             omit_committed_phase: bool=False):
     src=list(csv.DictReader(SOURCE.open()))[:21]
     pref=tmp_path/'prefix'; pref.mkdir()
     nf=['sequence','kind','call_index','evaluation_index','temperature_k','electron_fraction_input','h_heating','h_cooling','h_heating2','h_cooling2','he_heating','he_cooling','he_heating2','he_cooling2','mg_heating','mg_cooling','mg_heating2','mg_cooling2','computed_cmp1','computed_cmp2','computed_htcomp','computed_clcomp','cmp1','cmp2','htcomp','clcomp','htfreef','clbrems','hmctot']
@@ -29,13 +34,24 @@ def _fixture(tmp_path: Path, temperature_mismatch: bool=False):
         for i,r in enumerate(src,1):
             row={k:r.get(k,'0') for k in nf}; row.update(sequence=i,kind='dsec',call_index=1,evaluation_index=i,temperature_k=r['temperature_k'],electron_fraction_input=r['electron_fraction_xee'],computed_cmp1='1',computed_cmp2='1',computed_htcomp='1',computed_clcomp='1')
             w.writerow(row)
-    sf=['sequence','kind','call_index','evaluation_index','temperature_t4','electron_fraction_input','computed_electron_fraction','charge_residual','hmctot']
+    sf=['sequence','kind','call_index','evaluation_index','temperature_t4','committed_temperature_t4','electron_fraction_input','committed_electron_fraction','computed_electron_fraction','charge_residual','hmctot','state_phase']
     with (pref/'native_call1_state.csv').open('w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=sf); w.writeheader()
         for i,r in enumerate(src,1):
-            t=float(r['temperature_t4'])
-            if temperature_mismatch and i==14: t=math.nextafter(t,0.0)
-            w.writerow(dict(sequence=i,kind='dsec',call_index=1,evaluation_index=i,temperature_t4=repr(t),electron_fraction_input=r['electron_fraction_xee'],computed_electron_fraction=0,charge_residual=r['elcter'],hmctot=r['hmctot']))
+            committed_t=float(r['temperature_t4'])
+            raw_t=committed_t
+            if raw_temperature_mismatch and i==14:
+                raw_t=math.nextafter(raw_t,0.0)
+            if temperature_mismatch and i==14:
+                committed_t=math.nextafter(committed_t,0.0)
+            w.writerow(dict(
+                sequence=i,kind='dsec',call_index=1,evaluation_index=i,
+                temperature_t4=repr(raw_t),
+                committed_temperature_t4='' if omit_committed_phase else repr(committed_t),
+                electron_fraction_input=r['electron_fraction_xee'],
+                committed_electron_fraction='' if omit_committed_phase else r['electron_fraction_xee'],
+                computed_electron_fraction=0,charge_residual=r['elcter'],hmctot=r['hmctot'],
+                state_phase='' if omit_committed_phase else 'post_evaluation_commit'))
     return pref
 
 
@@ -43,15 +59,31 @@ def test_exact_21_state_temperature_gate_accepts(tmp_path):
     result=audit_call1(_fixture(tmp_path),SOURCE,tmp_path/'out')
     assert result['result']=='ACCEPT'
     assert result['call1_controller_trajectory']['temperature_rows_ieee_exact']==21
+    assert result['call1_controller_trajectory']['committed_state_rows']==21
+    assert result['gates']['CALL1_COMMITTED_STATE_PHASE']=='ACCEPT'
     assert result['gates']['CALL1_SECANT_TEMPERATURE_IEEE']=='ACCEPT'
 
 
-def test_one_ulp_temperature_mismatch_rejects(tmp_path):
-    result=audit_call1(_fixture(tmp_path,True),SOURCE,tmp_path/'out')
+def test_one_ulp_committed_temperature_mismatch_rejects(tmp_path):
+    result=audit_call1(_fixture(tmp_path,temperature_mismatch=True),SOURCE,tmp_path/'out')
     assert result['result']=='REJECT'
     assert result['call1_controller_trajectory']['temperature_rows_ieee_exact']==20
     rows=list(csv.DictReader((tmp_path/'out/call1_thermal_leaf_and_state_comparison.csv').open()))
     assert int(rows[13]['temperature_ulp_distance'])==1
+
+
+def test_raw_trial_ulp_difference_accepts_when_committed_state_is_exact(tmp_path):
+    result=audit_call1(_fixture(tmp_path,raw_temperature_mismatch=True),SOURCE,tmp_path/'out')
+    assert result['result']=='ACCEPT'
+    rows=list(csv.DictReader((tmp_path/'out/call1_thermal_leaf_and_state_comparison.csv').open()))
+    assert rows[13]['native_pre_evaluation_temperature_t4'] != rows[13]['native_committed_temperature_t4']
+    assert int(rows[13]['temperature_ulp_distance'])==0
+
+
+def test_missing_committed_phase_rejects(tmp_path):
+    result=audit_call1(_fixture(tmp_path,omit_committed_phase=True),SOURCE,tmp_path/'out')
+    assert result['result']=='REJECT'
+    assert result['gates']['CALL1_COMMITTED_STATE_PHASE']=='REJECT'
 
 
 def test_ulp_distance_adjacent():

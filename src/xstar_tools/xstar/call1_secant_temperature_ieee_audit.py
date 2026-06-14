@@ -1,11 +1,11 @@
-"""v0.6.48.7.25.1 call-1 secant temperature IEEE restoration audit."""
+"""v0.6.48.7.25.2 call-1 secant temperature IEEE restoration audit."""
 from __future__ import annotations
 import argparse, csv, json, shutil, math, struct
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.25.1"
-SCHEMA = "xstar-tools-v06487251-call1-secant-single-commit-v1"
+RELEASE = "0.6.48.7.25.2"
+SCHEMA = "xstar-tools-v06487252-call1-committed-state-phase-v1"
 LEAVES = ("cmp1","cmp2","htcomp","clcomp","clbrems","htfreef")
 HHE = ("h_heating","h_cooling","h_heating2","h_cooling2","he_heating","he_cooling","he_heating2","he_cooling2")
 MG = ("mg_heating","mg_cooling","mg_heating2","mg_cooling2")
@@ -75,26 +75,35 @@ def audit_call1(prefix: Path, source_budget: Path, output: Path) -> dict[str,Any
     state=[r for r in rows(state_path) if r.get("kind")=="dsec"] if state_path.is_file() else []
     n=min(len(src),len(nat),len(state))
     comparison=[]; leaf_exact=hhe_exact=mg_exact=state_exact=temperature_exact=0
+    committed_state_rows=0
     for i in range(n):
         s,nr,st=src[i],nat[i],state[i]
         leaf_ok=all(float(s[f])==float(nr[f]) for f in LEAVES)
         hhe_ok=all(float(s[f])==float(nr[f]) for f in HHE)
         mg_ok=all(float(s[f])==float(nr[f]) for f in MG)
-        state_ok=(float(s["temperature_t4"])==float(st["temperature_t4"]) and
-                  float(s["electron_fraction_xee"])==float(st["electron_fraction_input"]) and
+        committed_present=(st.get("state_phase")=="post_evaluation_commit" and
+                           st.get("committed_temperature_t4","")!="" and
+                           st.get("committed_electron_fraction","")!="")
+        committed_state_rows += int(committed_present)
+        native_committed_t4=float(st["committed_temperature_t4"]) if committed_present else float("nan")
+        native_committed_xee=float(st["committed_electron_fraction"]) if committed_present else float("nan")
+        state_ok=(committed_present and
+                  float(s["temperature_t4"])==native_committed_t4 and
+                  float(s["electron_fraction_xee"])==native_committed_xee and
                   float(s["elcter"])==float(st["charge_residual"]) and
                   float(s["hmctot"])==float(st["hmctot"]))
-        leaf_exact+=leaf_ok; hhe_exact+=hhe_ok; mg_exact+=mg_ok; state_exact+=state_ok; temperature_exact += float(s["temperature_t4"])==float(st["temperature_t4"])
-        comparison.append({"evaluation":i+1,"thermal_leaves_exact":leaf_ok,"h_he_primary_exact":hhe_ok,"mg_oracle_exact":mg_ok,"controller_state_exact":state_ok,
+        temperature_ok=committed_present and float(s["temperature_t4"])==native_committed_t4
+        leaf_exact+=leaf_ok; hhe_exact+=hhe_ok; mg_exact+=mg_ok; state_exact+=state_ok; temperature_exact += temperature_ok
+        comparison.append({"evaluation":i+1,"thermal_leaves_exact":leaf_ok,"h_he_primary_exact":hhe_ok,"mg_oracle_exact":mg_ok,"committed_state_phase_present":committed_present,"controller_state_exact":state_ok,
             **{f"source_{f}":float(s[f]) for f in LEAVES},**{f"native_{f}":float(nr[f]) for f in LEAVES},
-            "source_temperature_t4":float(s["temperature_t4"]),"native_temperature_t4":float(st["temperature_t4"]),"temperature_ulp_distance":ulp_distance(float(s["temperature_t4"]),float(st["temperature_t4"])),
-            "source_electron_fraction":float(s["electron_fraction_xee"]),"native_electron_fraction":float(st["electron_fraction_input"]),
+            "source_temperature_t4":float(s["temperature_t4"]),"native_pre_evaluation_temperature_t4":float(st["temperature_t4"]),"native_committed_temperature_t4":native_committed_t4,"native_temperature_t4":native_committed_t4,"temperature_ulp_distance":ulp_distance(float(s["temperature_t4"]),native_committed_t4) if committed_present else -1,
+            "source_electron_fraction":float(s["electron_fraction_xee"]),"native_pre_evaluation_electron_fraction":float(st["electron_fraction_input"]),"native_committed_electron_fraction":native_committed_xee,"native_electron_fraction":native_committed_xee,
             "source_charge_residual":float(s["elcter"]),"native_charge_residual":float(st["charge_residual"]),
             "source_hmctot":float(s["hmctot"]),"native_hmctot":float(st["hmctot"])})
     if comparison:
         with (output/"call1_thermal_leaf_and_state_comparison.csv").open("w",newline="") as f:
             w=csv.DictWriter(f,fieldnames=list(comparison[0])); w.writeheader(); w.writerows(comparison)
-    all21=n==21 and leaf_exact==21 and hhe_exact==21 and mg_exact==21 and state_exact==21
+    all21=n==21 and committed_state_rows==21 and leaf_exact==21 and hhe_exact==21 and mg_exact==21 and state_exact==21
     computed_present=bool(nat and all(k in nat[0] for k in ("computed_cmp1","computed_cmp2","computed_htcomp","computed_clcomp")))
     out={"schema":SCHEMA,"release":RELEASE,"result":"ACCEPT" if all21 else "REJECT",
          "call1_rows":{"source":len(src),"native":len(nat),"state":len(state),"compared":n},
@@ -102,8 +111,8 @@ def audit_call1(prefix: Path, source_budget: Path, output: Path) -> dict[str,Any
          "hydrogen_helium_primary_construction":{"mode":"captured_call1_qualification_oracle","rows_exact":hhe_exact,"general_all_state_formula_qualified":False,"status":"ACCEPT" if n==21 and hhe_exact==21 else "REJECT"},
          "magnesium_primary_construction":{"mode":"abundance_weighting_plus_captured_call1_source_budget_oracle","rows_exact":mg_exact,"general_all_state_formula_qualified":False,"status":"ACCEPT" if n==21 and mg_exact==21 else "REJECT"},
          "native_comp2_cmpfnc_heatf":{"literal_native_path_present":computed_present,"effective_call1_leaves_oracle_scoped":True,"status":"ACCEPT" if computed_present else "REJECT"},
-         "call1_controller_trajectory":{"temperature_rows_ieee_exact":temperature_exact,"temperature_electron_fraction_charge_hmctot_rows_exact":state_exact,"secant_temperature_ieee_restored":temperature_exact==21,"first_branch_restored":all21,"status":"ACCEPT" if all21 else "REJECT"},
-         "gates":{"CALL1_THERMAL_LEAF_PARITY":"ACCEPT" if n==21 and leaf_exact==21 else "REJECT","CALL1_H_HE_PRIMARY_THERMAL":"ACCEPT" if n==21 and hhe_exact==21 else "REJECT","CALL1_CONTROLLER_TRAJECTORY":"ACCEPT" if all21 else "REJECT","CALL1_SECANT_TEMPERATURE_IEEE":"ACCEPT" if temperature_exact==21 else "REJECT","FIRST_BRANCH_RESTORATION":"ACCEPT" if all21 else "REJECT","CALLS_2_TO_4":"RUN_ALLOWED" if all21 else "BLOCKED_BY_CALL1"},
+         "call1_controller_trajectory":{"comparison_phase":"post_evaluation_commit","committed_state_rows":committed_state_rows,"temperature_rows_ieee_exact":temperature_exact,"temperature_electron_fraction_charge_hmctot_rows_exact":state_exact,"secant_temperature_ieee_restored":temperature_exact==21 and committed_state_rows==21,"first_branch_restored":all21,"status":"ACCEPT" if all21 else "REJECT"},
+         "gates":{"CALL1_THERMAL_LEAF_PARITY":"ACCEPT" if n==21 and leaf_exact==21 else "REJECT","CALL1_H_HE_PRIMARY_THERMAL":"ACCEPT" if n==21 and hhe_exact==21 else "REJECT","CALL1_COMMITTED_STATE_PHASE":"ACCEPT" if committed_state_rows==21 else "REJECT","CALL1_CONTROLLER_TRAJECTORY":"ACCEPT" if all21 else "REJECT","CALL1_SECANT_TEMPERATURE_IEEE":"ACCEPT" if temperature_exact==21 and committed_state_rows==21 else "REJECT","FIRST_BRANCH_RESTORATION":"ACCEPT" if all21 else "REJECT","CALLS_2_TO_4":"RUN_ALLOWED" if all21 else "BLOCKED_BY_CALL1"},
          "qualification_only":True,"production_promotion_ready":False}
     dump(output/"call1_parity_summary.json",out); return out
 
@@ -118,7 +127,7 @@ def audit_full(full: Path, call1_summary: Path, output: Path) -> dict[str,Any]:
     parity=bool(summary.get("reference_state_identity",False))
     call1_ok=c1.get("result")=="ACCEPT"
     result={"schema":SCHEMA,"release":RELEASE,"result":"ACCEPT" if call1_ok else "REJECT","call1":c1,"native_controller":summary,
-      "gates":{"CALL1_THERMAL_LEAF_PARITY":"ACCEPT" if call1_ok else "REJECT","CALL1_CONTROLLER_TRAJECTORY":"ACCEPT" if call1_ok else "REJECT","CALL1_SECANT_TEMPERATURE_IEEE":"ACCEPT" if call1_ok else "REJECT",
+      "gates":{"CALL1_THERMAL_LEAF_PARITY":"ACCEPT" if call1_ok else "REJECT","CALL1_COMMITTED_STATE_PHASE":"ACCEPT" if call1_ok else "REJECT","CALL1_CONTROLLER_TRAJECTORY":"ACCEPT" if call1_ok else "REJECT","CALL1_SECANT_TEMPERATURE_IEEE":"ACCEPT" if call1_ok else "REJECT",
         "FOUR_CALL_WORKSPACE_RUNTIME_COVERAGE":coverage,"COMPLETE_CONTROLLER_EXECUTION":"ACCEPT" if executed else "NOT_RUN_CALL1_GATE",
         "COMPLETE_CONTROLLER_PARITY":"ACCEPT" if parity else ("REJECT" if executed else "NOT_RUN_CALL1_GATE"),
         "GLOBAL_BILEVG_RNISG_CONSUMER_CORRECTION":"DEFERRED_UNTIL_CALL1_EXACT" if not call1_ok else "DEFERRED_POST_CALL1",

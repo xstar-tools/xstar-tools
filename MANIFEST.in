@@ -651,3 +651,10 @@ include run_v0487251_call1_secant_temperature_ieee.sh
 include check_v0487251_call1_secant_temperature_ieee.py
 include check_v0487251_secant_single_commit_readiness.py
 include tests/test_v06487251_secant_single_commit_hotfix.py
+
+# v0.6.48.7.25.2 committed-state phase audit hotfix
+include V06487252_COMMITTED_STATE_PHASE_AUDIT_HOTFIX.md
+include xstar_tools_v0.6.48.7.25.2_handoff.md
+include run_v0487252_call1_secant_temperature_ieee.sh
+include check_v0487252_call1_secant_temperature_ieee.py
+include check_v0487252_committed_state_phase_readiness.py

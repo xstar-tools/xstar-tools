@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.25.2 - 2026-06-14
+
+- Corrects the call-1 state audit to compare source and native post-evaluation committed states rather than source committed state against a native pre-evaluation callback snapshot.
+- Extends `native_call1_state.csv` with `committed_temperature_t4`, `committed_electron_fraction`, and explicit `state_phase=post_evaluation_commit` values sourced from the native thermal trace.
+- Adds the strict `CALL1_COMMITTED_STATE_PHASE` gate; a legacy pre-evaluation-only ledger cannot pass.
+- Reanalysis of the uploaded v0.6.48.7.25.1 physical run gives 21/21 IEEE-exact committed temperatures; evaluations 14 and 16 differed only before the existing K-to-T4 commit.
+- Makes no physics, controller-arithmetic, ABI, rate, matrix, or tolerance change. Calls 2-4 remain gated on a physical phase-aligned rerun.
+
 ## 0.6.48.7.25.1 - 2026-06-14
 
 - Removes the duplicate physical evaluator K-to-T4 pre-commit; the thermal controller is now the sole owner of the source T4-to-kelvin-to-T4 state commit.
