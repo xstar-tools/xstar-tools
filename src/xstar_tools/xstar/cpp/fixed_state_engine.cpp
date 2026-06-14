@@ -3041,9 +3041,16 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 const auto& row = source.rows[row_index];
                 const double final_population = row_index < diagnostic.full_populations.size() ? diagnostic.full_populations[row_index] : 0.0;
                 const bool active_row = row.row >= diagnostic.active.full_row_start && row.row <= diagnostic.active.full_row_end;
+                double effective_initial_population = row.initial_population;
+                if (active_row && diagnostic.solve_response_captured) {
+                    const std::size_t active_index = static_cast<std::size_t>(row.row - diagnostic.active.full_row_start);
+                    if (active_index < diagnostic.active_initial_populations.size()) {
+                        effective_initial_population = diagnostic.active_initial_populations[active_index];
+                    }
+                }
                 population_file << evaluation_ordinal << ',' << global_offset + row_index + 1 << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
                                 << row.row << ',' << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ',' << row.energy_ev << ','
-                                << row.statistical_weight << ',' << row.initial_population << ',' << final_population << ',' << (active_row ? 1 : 0) << '\n';
+                                << row.statistical_weight << ',' << effective_initial_population << ',' << final_population << ',' << (active_row ? 1 : 0) << '\n';
             }
             global_offset += source.rows.size();
         }
