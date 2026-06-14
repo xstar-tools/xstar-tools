@@ -10,8 +10,8 @@ from typing import Any
 from . import v0472_full_dsec_thermal_budget_capture as base
 from . import v0472_thermal_budget_state_refresh_capture as low
 
-RELEASE='0.6.48.7.28'
-SCHEMA='xstar-tools-v0648728-v0472-call2-helium-source-family-capture-v1'
+RELEASE='0.6.48.7.28.1'
+SCHEMA='xstar-tools-v06487281-v0472-call2-helium-source-family-capture-v1'
 POP='v0472_call2_eval1_he_populations.csv'
 TERMS='v0472_call2_eval1_he_source_order_terms.csv'
 FAMILIES='v0472_call2_eval1_he_family_rows.csv'
@@ -20,10 +20,17 @@ REPORT='v0472_call2_eval1_he_capture_report.json'
 _INJECT=r'''
 _HE_POP=[]
 _HE_TERMS=[]
+_HE_INTERCEPTS=[]
+_HE_CAPTURE_ERRORS=[]
 
 def _v048728_he_capture(call_id, local_eval, global_eval, state, result):
     if int(call_id)!=2 or int(local_eval)!=1: return
-    for item in result.element_results:
+    element_results=tuple(getattr(result,'element_results',()) or ())
+    _HE_INTERCEPTS.append({'call_id':int(call_id),'local_eval':int(local_eval),'global_eval':int(global_eval),'element_results':len(element_results)})
+    if not element_results:
+        _HE_CAPTURE_ERRORS.append('target result has no retained element_results')
+        return
+    for item in element_results:
         if int(item.request.element_z)!=2: continue
         abundance=float(item.request.abundance)
         pops=np.asarray(item.equilibrium.solve.populations,dtype=float)
@@ -46,6 +53,25 @@ _PROBE=base._PROBE
 # Inject storage/functions before install and capture before the standard budget row.
 _PROBE=_PROBE.replace('\ndef install():', _INJECT+'\ndef install():')
 _PROBE=_PROBE.replace('def _capture_result(call_id, local_eval, global_eval, state, result):\n    _STATE["trace"].append({', 'def _capture_result(call_id, local_eval, global_eval, state, result):\n    _v048728_he_capture(call_id, local_eval, global_eval, state, result)\n    _STATE["trace"].append({')
+_PROBE=_PROBE.replace(
+    '        try:\n            out = original(self, state)\n        finally:\n            self.pre_evaluation_callback = previous_pre\n            self.progress_callback = previous_progress\n',
+    '''        previous_factory = self.calc_kwargs_factory
+        target_he_detail = int(call_id) == 2 and int(local_eval) == 1
+        if target_he_detail and previous_factory is not None:
+            def retained_factory(current_state):
+                payload = dict(previous_factory(current_state))
+                payload["retain_element_results"] = True
+                payload["retain_diagnostic_arrays"] = True
+                return payload
+            self.calc_kwargs_factory = retained_factory
+            print(f"v0487281_he_retention_enable call={call_id} local={local_eval} global={global_eval}", flush=True)
+        try:
+            out = original(self, state)
+        finally:
+            self.calc_kwargs_factory = previous_factory
+            self.pre_evaluation_callback = previous_pre
+            self.progress_callback = previous_progress
+''')
 # Add exact-order outputs during finalize.
 needle='def finalize(run_summary=None):\n'
 extra=r'''def _v048728_write_he_outputs():
@@ -88,7 +114,14 @@ def capture(source_archive:Path,atdb:Path,out:Path,params:Path,coheat:Path|None)
         path=out/name
         with path.open(newline='') as f: counts[name]=sum(1 for _ in csv.DictReader(f))
     ok=counts[POP]>0 and counts[TERMS]>0 and counts[FAMILIES]>0
-    r={'schema':SCHEMA,'release':RELEASE,'result':'ACCEPT' if ok else 'REJECT','counts':counts,'actual_v0472_runtime_capture':True,'qualification_only':True,'production_promotion_ready':False}
+    log_text=(out/'v0472_call2_he_capture.log').read_text(errors='replace') if (out/'v0472_call2_he_capture.log').is_file() else ''
+    intercept_seen='v0487281_he_retention_enable call=2 local=1' in log_text
+    r={'schema':SCHEMA,'release':RELEASE,'result':'ACCEPT' if ok and intercept_seen else 'REJECT','counts':counts,'actual_v0472_runtime_capture':True,
+       'call2_he_element_intercept':'ACCEPT' if intercept_seen else 'REJECT',
+       'call2_he_population_rows_gt_zero':'ACCEPT' if counts[POP]>0 else 'REJECT',
+       'call2_he_source_order_terms_gt_zero':'ACCEPT' if counts[TERMS]>0 else 'REJECT',
+       'call2_he_family_rows_gt_zero':'ACCEPT' if counts[FAMILIES]>0 else 'REJECT',
+       'qualification_only':True,'production_promotion_ready':False}
     _write_json(out/REPORT,r);return r
 
 def main():
