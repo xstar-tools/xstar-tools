@@ -22,7 +22,7 @@ from .v0472_thermal_budget_state_refresh_capture import (
     BUDGET_NAME, STATE_NAME, TRACE_NAME, verify as verify_capture,
 )
 
-RELEASE = "0.6.48.7.21.3"
+RELEASE = "0.6.48.7.21.4"
 SCHEMA = "xstar-tools-v0648721-call1-thermal-budget-state-refresh-audit-v1"
 
 

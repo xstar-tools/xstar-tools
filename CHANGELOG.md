@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.21.4 - 2026-06-13
+
+- Restrict the v0.6.47.2 observational wrapper to repeated DSEC controller evaluators that are already configured with `retain_fixed_state_results=False`.
+- Bypass one-shot final and target-state evaluators without changing callbacks, snapshots, result retention, or capture counters.
+- Remove all probe assignments to `retain_fixed_state_results`; the source runner remains the sole owner of that policy.
+- Diagnose the v0.6.48.7.21.3 exit-1 failure as a missing one-shot `fixed_state_result` after the complete 21-evaluation first DSEC call, not a physics or controller rejection.
+- Preserve ABI 60487 and all thermal/controller/production blockers.
+
 ## 0.6.48.7.21.3 - 2026-06-13
 
 - Remove the observational `calc_hmc_all` monkeypatch after the v0.6.48.7.21.2 fault was localized to cyclic GC at call 1/evaluation 5.

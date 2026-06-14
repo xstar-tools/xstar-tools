@@ -597,9 +597,16 @@ include check_v0487211_capture_probe_hotfix.py
 include V06487211_CALL1_CAPTURE_SNAPSHOT_HOTFIX.md
 include xstar_tools_v0.6.48.7.21.1_handoff.md
 
-# v0.6.48.7.21.3 callback capture and cyclic-GC isolation hotfix
+# v0.6.48.7.21.4 callback capture and cyclic-GC isolation hotfix
 include run_v0487213_call1_thermal_budget_state_refresh_audit.sh
 include check_v0487213_call1_thermal_budget_state_refresh_audit.py
 include check_v0487213_capture_callback_hotfix.py
 include V06487213_CALL1_CAPTURE_CALLBACK_GC_HOTFIX.md
-include xstar_tools_v0.6.48.7.21.3_handoff.md
+include xstar_tools_v0.6.48.7.21.4_handoff.md
+
+# v0.6.48.7.21.4 evaluator-scope capture hotfix
+include run_v0487214_call1_thermal_budget_state_refresh_audit.sh
+include check_v0487214_call1_thermal_budget_state_refresh_audit.py
+include check_v0487214_capture_scope_hotfix.py
+include V06487214_CALL1_CAPTURE_EVALUATOR_SCOPE_HOTFIX.md
+include xstar_tools_v0.6.48.7.21.4_handoff.md

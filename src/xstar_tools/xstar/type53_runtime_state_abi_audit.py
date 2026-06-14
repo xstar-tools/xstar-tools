@@ -1,4 +1,4 @@
-"""Audit the v0.6.48.7.21.3 type-53 DSEC runtime-state ABI extension.
+"""Audit the v0.6.48.7.21.4 type-53 DSEC runtime-state ABI extension.
 
 The audit verifies the appended ABI fields, then—when an independent original-
 DSEC evaluation-60 capture is available—runs the native coupled type-53 path
@@ -38,7 +38,7 @@ from .type53_runtime_state_independent_capture import (
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21.3"
+RELEASE = "0.6.48.7.21.4"
 SCHEMA = "xstar-tools-v0648719-type53-rnist-covering-correction-audit-v1"
 ABI_VERSION = 60487
 PROGRAM_ABI_VERSION = 60485

@@ -24,7 +24,7 @@ from typing import Any, Mapping
 
 csv.field_size_limit(sys.maxsize)
 
-RELEASE = "0.6.48.7.21.3"
+RELEASE = "0.6.48.7.21.4"
 SCHEMA = "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648721-thermal-budget-state-refresh-oracle-v1"
 SOURCE_ARCHIVE_SHA256 = "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060"
@@ -83,7 +83,7 @@ _CONFIG = json.loads(pathlib.Path(__file__).with_name("probe_config.json").read_
 _OUT = pathlib.Path(_CONFIG["output_dir"])
 _OUT.mkdir(parents=True, exist_ok=True)
 _LOCK = threading.RLock()
-_STATE = {"global_eval": 0, "call_counter": 0, "budgets": [], "states": [], "trace": [], "installed": False, "cyclic_gc_disabled": False}
+_STATE = {"global_eval": 0, "call_counter": 0, "budgets": [], "states": [], "trace": [], "installed": False, "cyclic_gc_disabled": False, "bypassed_retained_evaluators": 0}
 
 BUDGET_FIELDS = [
  "global_evaluation_ordinal","dsec_call_id","dsec_local_evaluation_index","temperature_k","temperature_t4","electron_fraction_xee","hydrogen_density_cm3",
@@ -251,16 +251,26 @@ def install():
         _STATE["cyclic_gc_disabled"] = True
 
     def wrapped(self, state):
+        # Only repeated DSEC controller evaluators are configured by the source
+        # runner with retain_fixed_state_results=False.  One-shot final and
+        # target-state evaluators require their FixedStateCalcHMCAllResult to be
+        # returned through DsecEvaluation.fixed_state_result; instrumenting or
+        # changing their retention policy makes the caller receive None.
+        if bool(getattr(self, "retain_fixed_state_results", True)):
+            with _LOCK:
+                _STATE["bypassed_retained_evaluators"] += 1
+            print("v0487214_capture_bypass retained_fixed_state_result=1", flush=True)
+            return original(self, state)
+
         with _LOCK:
-            call_id = getattr(self, "_v0487213_call_id", None)
+            call_id = getattr(self, "_v0487214_call_id", None)
             if call_id is None:
                 _STATE["call_counter"] += 1
                 call_id = int(_STATE["call_counter"])
-                setattr(self, "_v0487213_call_id", call_id)
+                setattr(self, "_v0487214_call_id", call_id)
             local_eval = len(getattr(self, "evaluations", ())) + 1
             _STATE["global_eval"] += 1
             global_eval = int(_STATE["global_eval"])
-        self.retain_fixed_state_results = False
         self.capture_all_input_snapshots = False
         self.capture_input_snapshot_indices = ()
         previous_pre = self.pre_evaluation_callback
@@ -281,13 +291,13 @@ def install():
 
         self.pre_evaluation_callback = capture_pre
         self.progress_callback = capture_progress
-        print(f"v0487213_capture_begin call={call_id} local={local_eval} global={global_eval}", flush=True)
+        print(f"v0487214_capture_begin call={call_id} local={local_eval} global={global_eval}", flush=True)
         try:
             out = original(self, state)
         finally:
             self.pre_evaluation_callback = previous_pre
             self.progress_callback = previous_progress
-        print(f"v0487213_capture_end call={call_id} local={local_eval} global={global_eval} hmctot={float(out.hmctot):.17g}", flush=True)
+        print(f"v0487214_capture_end call={call_id} local={local_eval} global={global_eval} hmctot={float(out.hmctot):.17g}", flush=True)
         return out
 
     dsec_mod.CalcHMCAllDsecEvaluator.__call__ = wrapped
@@ -302,9 +312,9 @@ def finalize(run_summary=None):
         with (_OUT/name).open("w", newline="") as f:
             w=csv.DictWriter(f, fieldnames=fields, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
     report = {
-      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.3",
+      "schema": "xstar-tools-v0648721-v0472-thermal-budget-state-refresh-probe-v1", "release": "0.6.48.7.21.4",
       "result": "ACCEPT" if len(_STATE["budgets"]) >= 7 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) >= 57 else "REJECT",
-      "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]), "cyclic_gc_disabled": bool(_STATE["cyclic_gc_disabled"]),
+      "actual_v0472_runtime_capture": True, "call1_budget_rows": len(_STATE["budgets"]), "dsec_call_start_states": len(_STATE["states"]), "cyclic_gc_disabled": bool(_STATE["cyclic_gc_disabled"]), "bypassed_retained_evaluators": int(_STATE["bypassed_retained_evaluators"]),
       "dsec_evaluations_observed": len(_STATE["trace"]), "run_summary": run_summary or {}, "qualification_only": True, "production_promotion_ready": False,
     }
     (_OUT/"capture_report.json").write_text(json.dumps(report, indent=2, sort_keys=True)+"\n")

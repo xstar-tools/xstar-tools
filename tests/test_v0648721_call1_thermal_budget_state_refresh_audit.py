@@ -39,7 +39,7 @@ def test_v0648721_probe_source_compiles() -> None:
     compile(mod._DRIVER, 'driver.py', 'exec')
 
 
-def test_v06487213_probe_uses_callbacks_without_snapshot_retention() -> None:
+def test_v06487214_probe_uses_callbacks_without_snapshot_retention() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
     assert 'self.capture_all_input_snapshots = False' in mod._PROBE
     assert 'self.capture_input_snapshot_indices = ()' in mod._PROBE
@@ -51,19 +51,68 @@ def test_v06487213_probe_uses_callbacks_without_snapshot_retention() -> None:
     assert 'dsec_mod.calc_hmc_all =' not in mod._PROBE
 
 
-def test_v06487213_probe_preserves_production_result_history_policy() -> None:
+def test_v06487214_probe_preserves_production_result_history_policy() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
-    assert 'self.retain_fixed_state_results = False' in mod._PROBE
+    assert 'self.retain_fixed_state_results = False' not in mod._PROBE
     assert 'self.retain_fixed_state_results = True' not in mod._PROBE
+    assert 'retain_fixed_state_results", True' in mod._PROBE
+    assert 'v0487214_capture_bypass' in mod._PROBE
     assert 'active_result' not in mod._PROBE
 
 
-def test_v06487213_probe_isolates_cyclic_gc_and_localizes_crashes() -> None:
+def test_v06487214_probe_isolates_cyclic_gc_and_localizes_crashes() -> None:
     import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as mod
     source = Path(mod.__file__).read_text()
     assert 'gc.disable()' in mod._PROBE
     assert 'cyclic_gc_disabled' in mod._PROBE
     assert 'PYTHONFAULTHANDLER' in source
     assert 'PYTHONUNBUFFERED' in source
-    assert 'v0487213_capture_begin' in mod._PROBE
-    assert 'v0487213_capture_end' in mod._PROBE
+    assert 'v0487214_capture_begin' in mod._PROBE
+    assert 'v0487214_capture_end' in mod._PROBE
+
+
+def test_v06487214_probe_bypasses_retained_evaluators(tmp_path: Path) -> None:
+    import sys
+    import types
+    import xstar_tools.xstar as xstar_pkg
+    import xstar_tools.xstar.v0472_thermal_budget_state_refresh_capture as capture_mod
+
+    config = tmp_path / "probe_config.json"
+    config.write_text(json.dumps({"output_dir": str(tmp_path / "out")}) + "\n")
+    runtime_path = tmp_path / "v048721_probe_runtime.py"
+    runtime_path.write_text(capture_mod._PROBE)
+
+    sentinel = object()
+
+    class FakeEvaluator:
+        retain_fixed_state_results = True
+
+        def __call__(self, state):
+            assert self.retain_fixed_state_results is True
+            return sentinel
+
+    fake_dsec = types.ModuleType("xstar_tools.xstar.dsec")
+    fake_dsec.CalcHMCAllDsecEvaluator = FakeEvaluator
+    previous_module = sys.modules.get("xstar_tools.xstar.dsec")
+    previous_attr = getattr(xstar_pkg, "dsec", None)
+    sys.modules["xstar_tools.xstar.dsec"] = fake_dsec
+    setattr(xstar_pkg, "dsec", fake_dsec)
+    try:
+        namespace = {"__file__": str(runtime_path), "__name__": "v048721_probe_runtime_test"}
+        exec(compile(capture_mod._PROBE, str(runtime_path), "exec"), namespace)
+        namespace["install"]()
+        evaluator = FakeEvaluator()
+        result = evaluator(object())
+        assert result is sentinel
+        assert namespace["_STATE"]["bypassed_retained_evaluators"] == 1
+        assert namespace["_STATE"]["global_eval"] == 0
+        assert namespace["_STATE"]["call_counter"] == 0
+    finally:
+        if previous_module is None:
+            sys.modules.pop("xstar_tools.xstar.dsec", None)
+        else:
+            sys.modules["xstar_tools.xstar.dsec"] = previous_module
+        if previous_attr is None:
+            delattr(xstar_pkg, "dsec")
+        else:
+            setattr(xstar_pkg, "dsec", previous_attr)
