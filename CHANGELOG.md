@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.28 - 2026-06-14
+
+- Added hash-verified source capture of call-2/evaluation-1 helium populations before/after solve.
+- Added exact source-order abundance-weighted primary/secondary helium term ledger.
+- Added per-record-family and destination-row type-53/non-type-53 decomposition.
+- Added strict causal gates for population initialization, rate evaluation, abundance, classification, matrix accumulation, and source-order summation.
+- Preserved accepted v0.6.48.7.27 gates and kept H, continuum, Mg, calls 3-4, and promotion blocked.
+
 ## 0.6.48.7.27 - 2026-06-14
 
 - Added checked call-2/evaluation-1 H/He/Mg/continuum field attribution.
