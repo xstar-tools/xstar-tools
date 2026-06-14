@@ -1,12 +1,18 @@
+# xstar_tools 0.6.48.7.22
+
+## v0.6.48.7.22 call-1 thermal causality and refresh-payload audit
+
+This qualification release corrects the native `heatf` residual normalization and primary/secondary thermal-total separation, adds a bounded real call-1 controller prefix, and proves that a continuum-only correction cannot restore the first controller branch because the native Mg heating/cooling scale is about `6.22e5` times the source scale. It also adds full four-call payload capture for the five source workspaces that change between DSEC calls. Full thermal, controller, product, and production parity remain blocked.
+
 ## v0.6.48.7.21.4 evaluator-scope capture hotfix
 
 The original-v0.6.47.2 thermal-budget probe now instruments only repeated DSEC controller evaluators. One-shot final and target-state evaluators retain and return their complete fixed-state result unchanged. ABI 60487 and all physical promotion gates are unchanged.
 
-## v0.6.48.7.21.4 callback capture hotfix
+## v0.6.48.7.21.3 callback capture hotfix
 
 The original-v0.6.47.2 thermal-budget probe now observes the current fixed-state result through native evaluator callbacks, retains no full result or input-snapshot history, and isolates cyclic GC in the capture subprocess. ABI 60487 and all physical/controller gates are unchanged.
 
-## v0.6.48.7.21.4 streaming capture hotfix
+## v0.6.48.7.21.2 streaming capture hotfix
 
 The original-v0.6.47.2 call-1 thermal-budget probe now streams each current fixed-state result into compact audit rows and immediately releases it. It no longer retains all large H/He/Mg fixed-state objects across the full DSEC trajectory. This is an instrumentation-only correction; ABI 60487, source physics, controller tolerances, and all promotion blockers are unchanged.
 

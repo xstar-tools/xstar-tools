@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.22 - 2026-06-13
+
+- Correct native `hmctot` to the literal `heatf.f90` expression `2*(httot-cltot)/(float32(1e-37)+httot+cltot)`, construct `httot`/`cltot` from primary element terms only, and retain secondary terms plus the previous bounded value in the native thermal ledger.
+- Add native Compton-heating, Compton-cooling, and free-free-cooling ledger columns.
+- Add a bounded real call-1 controller mode through `--controller-prefix-evaluations N`.
+- Freeze the accepted v0.6.48.7.21.4 physical call-1 budget and between-call fingerprint reference.
+- Add a causal counterfactual audit proving that source continuum alone does not restore the evaluation-4 branch, while source element totals do.
+- Localize the native Mg absolute thermal scale to approximately `6.22e5` times the source scale at the first branch divergence.
+- Add a physical four-call NPZ payload capture and exact hash verification for `bremsa`, `continuum_tau_in`, `global_xilevg`, `global_bilevg`, and `global_rnisg`.
+- Keep full thermal-controller, product, and production promotion blocked.
+
 ## 0.6.48.7.21.4 - 2026-06-13
 
 - Restrict the v0.6.47.2 observational wrapper to repeated DSEC controller evaluators that are already configured with `retain_fixed_state_results=False`.

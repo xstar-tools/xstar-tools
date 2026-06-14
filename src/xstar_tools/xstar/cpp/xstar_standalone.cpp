@@ -51,6 +51,7 @@ struct Options {
     bool allow_scaffold = false;
     bool skip_fits = false;
     std::size_t controller_smoke_evaluations = 0;
+    std::size_t controller_prefix_evaluations = 0;
 };
 
 void usage(std::ostream& output) {
@@ -73,7 +74,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -81,7 +82,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.7.21.4 extends the native fixed-state ABI with the complete DSEC radiation and continuum optical-depth workspaces required by type 53.\n"
+        "v0.6.48.7.22 extends the native fixed-state ABI with the complete DSEC radiation and continuum optical-depth workspaces required by type 53.\n"
         "It adds an independent evaluation-60 capture/parity workflow and keeps arbitrary-state and production promotion blocked until that physical oracle is accepted.\n";
 }
 
@@ -217,6 +218,12 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--controller-smoke-evaluations");
             if (!value || !parse_size(value, options.controller_smoke_evaluations)) {
                 error = "invalid --controller-smoke-evaluations value";
+                return false;
+            }
+        } else if (arg == "--controller-prefix-evaluations") {
+            const char* value = require_value("--controller-prefix-evaluations");
+            if (!value || !parse_size(value, options.controller_prefix_evaluations)) {
+                error = "invalid --controller-prefix-evaluations value";
                 return false;
             }
         } else {
@@ -1017,7 +1024,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.21.4'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.22'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1116,7 +1123,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.7.21.4\n"
+                 << "xstar_tools native fixed-state v0.6.48.7.22\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1149,7 +1156,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.7.22\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1517,7 +1524,7 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.21.4\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.22\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
@@ -1570,7 +1577,7 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.22\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
             << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
@@ -1685,7 +1692,7 @@ int command_run_fixed_evaluation(const Options& options) {
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(output_root / "native_evaluation_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.22\",\n"
             << "  \"trajectory_mode\": \"single_reference_input_state_qualification\",\n"
             << "  \"trajectory_row\": " << options.evaluation << ",\n"
             << "  \"evaluation_index\": " << row.evaluation_index << ",\n"
@@ -2033,19 +2040,27 @@ int command_run_fixed_dsec(const Options& options) {
 
     xstar_thermal_state_v1 state{};
     xstar_thermal_state_init_v1(&state);
+    if (options.controller_smoke_evaluations > 0 && options.controller_prefix_evaluations > 0) {
+        std::cerr << "controller smoke and prefix modes are mutually exclusive\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 2;
+    }
     const auto& initial_reference = options.controller_smoke_evaluations > 0 ? reference[59] : reference.front();
     state.temperature_t4 = initial_reference.temperature_t4;
     state.electron_fraction_xee = initial_reference.electron_fraction;
     state.hydrogen_density_cm3 = 1.0e8;
     state.state_generation = 0;
     std::vector<xstar_thermal_trace_event_v1> trace(512);
-    if (options.controller_smoke_evaluations > 0) {
+    if (options.controller_smoke_evaluations > 0 || options.controller_prefix_evaluations > 0) {
         evaluator_data.call_index = 1;
         evaluator_data.evaluation_index = 0;
         xstar_dsec_config_v1 config{};
         xstar_dsec_config_init_v1(&config);
         config.nlim = 100;
-        config.maximum_evaluations = static_cast<int32_t>(options.controller_smoke_evaluations);
+        const std::size_t bounded_evaluations = options.controller_smoke_evaluations > 0
+            ? options.controller_smoke_evaluations : options.controller_prefix_evaluations;
+        config.maximum_evaluations = static_cast<int32_t>(bounded_evaluations);
         xstar_dsec_stats_v1 stats{};
         xstar_dsec_stats_init_v1(&stats);
         std::size_t trace_count = 0;
@@ -2068,10 +2083,13 @@ int command_run_fixed_dsec(const Options& options) {
         std::filesystem::create_directories(options.output_dir);
         const std::size_t workspace_evaluations = static_cast<std::size_t>(std::count_if(
             snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
-        std::ofstream smoke(std::filesystem::path(options.output_dir) / "controller_smoke_summary.json");
+        const bool prefix_mode = options.controller_prefix_evaluations > 0;
+        const char* summary_name = prefix_mode ? "controller_prefix_summary.json" : "controller_smoke_summary.json";
+        const char* trajectory_mode = prefix_mode ? "call1_native_controller_prefix" : "two_state_type53_thermal_controller_smoke";
+        std::ofstream smoke(std::filesystem::path(options.output_dir) / summary_name);
         smoke << std::setprecision(17)
-              << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n"
-              << "  \"trajectory_mode\": \"two_state_type53_thermal_controller_smoke\",\n"
+              << "{\n  \"schema_version\": \"0.6.48.7.22\",\n"
+              << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n"
               << "  \"evaluations_completed\": " << stats.evaluations_completed << ",\n"
               << "  \"snapshots\": " << snapshots.size() << ",\n"
               << "  \"runtime_state_workspace_evaluations\": " << workspace_evaluations << ",\n"
@@ -2082,8 +2100,8 @@ int command_run_fixed_dsec(const Options& options) {
               << "  \"final_hmctot\": " << (snapshots.empty() ? 0.0 : snapshots.back().hmctot) << ",\n"
               << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
               << "  \"result\": \"ACCEPT\"\n}\n";
-        std::cout << "controller_smoke_evaluations=" << stats.evaluations_completed
-                  << "\ncontroller_smoke_snapshots=" << snapshots.size()
+        std::cout << (prefix_mode ? "controller_prefix_evaluations=" : "controller_smoke_evaluations=") << stats.evaluations_completed
+                  << (prefix_mode ? "\ncontroller_prefix_snapshots=" : "\ncontroller_smoke_snapshots=") << snapshots.size()
                   << "\nruntime_state_workspace_evaluations=" << workspace_evaluations
                   << "\npython_callbacks=" << cumulative.python_callbacks
                   << "\nRESULT=ACCEPT\n";
@@ -2187,7 +2205,7 @@ int command_run_fixed_dsec(const Options& options) {
         }
     }
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.7.21.4\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.7.22\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -2282,7 +2300,7 @@ int command_run_fixed_dsec(const Options& options) {
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.22\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"

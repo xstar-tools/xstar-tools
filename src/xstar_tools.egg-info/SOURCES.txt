@@ -60,6 +60,7 @@ V06487211_CALL1_CAPTURE_SNAPSHOT_HOTFIX.md
 V06487213_CALL1_CAPTURE_CALLBACK_GC_HOTFIX.md
 V06487214_CALL1_CAPTURE_EVALUATOR_SCOPE_HOTFIX.md
 V0648721_CALL1_THERMAL_BUDGET_AND_STATE_REFRESH_AUDIT.md
+V0648722_CONTINUUM_MG_CAUSALITY_AND_REFRESH_PAYLOAD.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V064874_HEII_TYPE53_IEEE_APPLICATION.md
@@ -114,6 +115,8 @@ check_v0487213_capture_callback_hotfix.py
 check_v0487214_call1_thermal_budget_state_refresh_audit.py
 check_v0487214_capture_scope_hotfix.py
 check_v048721_call1_thermal_budget_state_refresh_audit.py
+check_v048722_continuum_mg_refresh_payload_audit.py
+check_v048722_continuum_mg_refresh_payload_readiness.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
 check_v04874_type53_ieee_application.py
@@ -222,6 +225,7 @@ run_v0487211_call1_thermal_budget_state_refresh_audit.sh
 run_v0487213_call1_thermal_budget_state_refresh_audit.sh
 run_v0487214_call1_thermal_budget_state_refresh_audit.sh
 run_v048721_call1_thermal_budget_state_refresh_audit.sh
+run_v048722_continuum_mg_refresh_payload_audit.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
 run_v04873_type53_semantics.sh
@@ -475,9 +479,9 @@ xstar_tools_v0.6.48.7.17_handoff.md
 xstar_tools_v0.6.48.7.18_handoff.md
 xstar_tools_v0.6.48.7.1_handoff.md
 xstar_tools_v0.6.48.7.21.1_handoff.md
-xstar_tools_v0.6.48.7.21.3_handoff.md
 xstar_tools_v0.6.48.7.21.4_handoff.md
 xstar_tools_v0.6.48.7.21_handoff.md
+xstar_tools_v0.6.48.7.22_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7.4_handoff.md
@@ -965,6 +969,15 @@ src/xstar_tools/benchmarks/v0648719_type53_two_state_promotion/evaluation60/inde
 src/xstar_tools/benchmarks/v0648719_type53_two_state_promotion/evaluation60/independent_state_verification.json
 src/xstar_tools/benchmarks/v0648719_type53_two_state_promotion/evaluation60/type53_independent_state_runtime_matrix_terms.csv
 src/xstar_tools/benchmarks/v0648719_type53_two_state_promotion/evaluation60/type53_independent_state_runtime_records.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/capture_verification.json
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/native_dsec_summary_v06487214.json
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/native_prefix_summary_v0648722.json
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/native_thermal_budget_v06487214.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/native_thermal_budget_v0648722_prefix.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/v0472_between_call_state_fingerprints.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/v0472_call1_thermal_budget.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/v0472_dsec_thermal_trace.csv
+src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference/v06487214_audit_summary.json
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/capture_provenance.json
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/reference_manifest.json
 src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_capture_full.csv
@@ -1044,6 +1057,7 @@ src/xstar_tools/xstar/compiled_case.py
 src/xstar_tools/xstar/complete_fixed_state.py
 src/xstar_tools/xstar/compton.py
 src/xstar_tools/xstar/continuum_diagnostics.py
+src/xstar_tools/xstar/continuum_refresh_payload_audit.py
 src/xstar_tools/xstar/cpp_backend_element.py
 src/xstar_tools/xstar/cpp_backend_emissivity.py
 src/xstar_tools/xstar/cpp_backend_extra.py
@@ -1133,6 +1147,7 @@ src/xstar_tools/xstar/v0439_regression.py
 src/xstar_tools/xstar/v0440_regression.py
 src/xstar_tools/xstar/v0441_regression.py
 src/xstar_tools/xstar/v0442_regression.py
+src/xstar_tools/xstar/v0472_continuum_refresh_payload_capture.py
 src/xstar_tools/xstar/v0472_dsec_row46_runtime_capture.py
 src/xstar_tools/xstar/v0472_dsec_type50_runtime_capture.py
 src/xstar_tools/xstar/v0472_thermal_budget_state_refresh_capture.py
@@ -1361,6 +1376,7 @@ tests/test_v0648718_type53_rnist_covering_correction.py
 tests/test_v0648719_type53_two_state_thermal_promotion.py
 tests/test_v0648720_thermal_controller_state_trajectory_audit.py
 tests/test_v0648721_call1_thermal_budget_state_refresh_audit.py
+tests/test_v0648722_continuum_mg_refresh_payload_audit.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

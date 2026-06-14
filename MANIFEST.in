@@ -610,3 +610,12 @@ include check_v0487214_call1_thermal_budget_state_refresh_audit.py
 include check_v0487214_capture_scope_hotfix.py
 include V06487214_CALL1_CAPTURE_EVALUATOR_SCOPE_HOTFIX.md
 include xstar_tools_v0.6.48.7.21.4_handoff.md
+
+# v0.6.48.7.22 heatf residual, Mg/continuum causality, and refresh payload capture
+recursive-include src/xstar_tools/benchmarks/v0648722_call1_thermal_refresh_reference *
+include V0648722_CONTINUUM_MG_CAUSALITY_AND_REFRESH_PAYLOAD.md
+include xstar_tools_v0.6.48.7.22_handoff.md
+include run_v048722_continuum_mg_refresh_payload_audit.sh
+include check_v048722_continuum_mg_refresh_payload_audit.py
+include check_v048722_continuum_mg_refresh_payload_readiness.py
+include tests/test_v0648722_continuum_mg_refresh_payload_audit.py

@@ -411,6 +411,10 @@ struct xstar_fixed_state_context_impl {
     double last_total_heating = 0.0;
     double last_total_cooling = 0.0;
     double last_hmctot = 0.0;
+    double last_legacy_hmctot = 0.0;
+    double last_continuum_compton_heating = 0.0;
+    double last_continuum_compton_cooling = 0.0;
+    double last_continuum_free_free_cooling = 0.0;
     int last_helium_matrix_ablation_type = 0;
     int last_helium_preliminary_ablation_type = 0;
     int last_helium_source_position_ablation = 0;
@@ -2128,6 +2132,9 @@ int run_impl(
     output.opacity_count = input.radiation_bin_count;
     output.element_heating = output.element_cooling = 0.0;
     output.continuum_heating = output.continuum_cooling = 0.0;
+    ctx.last_continuum_compton_heating = 0.0;
+    ctx.last_continuum_compton_cooling = 0.0;
+    ctx.last_continuum_free_free_cooling = 0.0;
     output.elcter = 0.0;
     std::vector<double> all_populations;
     std::vector<xstar_spectral_contribution_v1> spectral;
@@ -2247,8 +2254,12 @@ int run_impl(
         stats.element_seconds += elapsed(element_start);
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed: ") + error.data());
         ++stats.elements_solved;
-        output.element_heating += eout.heating + eout.heating2;
-        output.element_cooling += eout.cooling + eout.cooling2;
+        // Source calc_hmc_all keeps primary and secondary thermal totals
+        // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
+        // secondary totals remain diagnostic state and must not be folded into
+        // the controller residual.
+        output.element_heating += eout.heating;
+        output.element_cooling += eout.cooling;
         ctx.last_element_thermal_budget[element.element_z] = {{eout.heating, eout.cooling, eout.heating2, eout.cooling2}};
         if (element.element_z == 2) {
             double h53 = 0.0, c53 = 0.0, h253 = 0.0, c253 = 0.0;
@@ -2390,13 +2401,19 @@ int run_impl(
             shape[k] = limited_exp(-e / std::max(kt_ev, 1.0e-300));
             shape_sum += shape[k];
             const double compton = input.radiation_flux[k] * kSigmaT * (e - 4.0 * kt_ev) * kErgPerEv * input.electron_density_cm3;
-            if (compton >= 0.0) output.continuum_heating += compton;
-            else output.continuum_cooling += -compton;
+            if (compton >= 0.0) {
+                output.continuum_heating += compton;
+                ctx.last_continuum_compton_heating += compton;
+            } else {
+                output.continuum_cooling += -compton;
+                ctx.last_continuum_compton_cooling += -compton;
+            }
             const double nu = e * 2.417989242e14;
             const double stim = 1.0 - limited_exp(-e / std::max(kt_ev, 1.0e-300));
             output.opacity[k] += 3.692e8 * input.electron_density_cm3 * input.ionized_h_density_cm3 * std::pow(input.temperature_k, -0.5) * std::pow(std::max(nu, 1.0), -3.0) * stim;
         }
         output.continuum_cooling += ff_total;
+        ctx.last_continuum_free_free_cooling = ff_total;
         if (shape_sum > 0.0) {
             for (std::size_t k = 0; k < input.radiation_bin_count; ++k) output.spectrum[k] += ff_total * shape[k] / shape_sum;
         }
@@ -2488,8 +2505,19 @@ int run_impl(
 
     output.total_heating = output.element_heating + output.continuum_heating;
     output.total_cooling = output.element_cooling + output.continuum_cooling;
-    const double denom = std::max(std::abs(output.total_heating) + std::abs(output.total_cooling), 1.0e-300);
-    output.hmctot = (output.total_heating - output.total_cooling) / denom;
+    // Literal heatf.f90 residual semantics use a REAL(4) factor of two and
+    // floor, with positive heating/cooling totals in the denominator.  The
+    // previous bounded residual omitted the factor of two and used abs(),
+    // which changed DSEC branch decisions even when the underlying totals
+    // were otherwise held fixed.
+    constexpr double kHeatfResidualFactor = static_cast<double>(static_cast<float>(2.0));
+    constexpr double kHeatfResidualFloor = static_cast<double>(static_cast<float>(1.0e-37));
+    const double legacy_denom = std::max(std::abs(output.total_heating) + std::abs(output.total_cooling), 1.0e-300);
+    ctx.last_legacy_hmctot = (output.total_heating - output.total_cooling) / legacy_denom;
+    const double source_denom = (kHeatfResidualFloor + output.total_heating) + output.total_cooling;
+    output.hmctot = source_denom != 0.0
+        ? kHeatfResidualFactor * (output.total_heating - output.total_cooling) / source_denom
+        : 0.0;
     output.electron_fraction_xee = output.elcter;
     ctx.last_computed_electron_fraction = output.electron_fraction_xee;
     ctx.last_charge_residual = input.electron_fraction_xee - output.electron_fraction_xee;
@@ -2682,7 +2710,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
                    "h_heating,h_cooling,h_heating2,h_cooling2,he_heating,he_cooling,he_heating2,he_cooling2," 
                    "he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2," 
                    "he_non_type53_heating,he_non_type53_cooling,he_non_type53_heating2,he_non_type53_cooling2," 
-                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,continuum_heating,continuum_cooling,total_heating,total_cooling,hmctot\n";
+                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,element_heating2,element_cooling2,continuum_heating,continuum_cooling,native_compton_heating,native_compton_cooling,native_free_free_cooling,total_heating,total_cooling,legacy_hmctot,hmctot\n";
         }
         const auto budget = [&](int z) {
             const auto it = context->last_element_thermal_budget.find(z);
@@ -2697,9 +2725,13 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
         }};
         double element_heating = 0.0;
         double element_cooling = 0.0;
+        double element_heating2 = 0.0;
+        double element_cooling2 = 0.0;
         for (const auto& item : context->last_element_thermal_budget) {
-            element_heating += item.second[0] + item.second[2];
-            element_cooling += item.second[1] + item.second[3];
+            element_heating += item.second[0];
+            element_cooling += item.second[1];
+            element_heating2 += item.second[2];
+            element_cooling2 += item.second[3];
         }
         const double continuum_heating = context->last_total_heating - element_heating;
         const double continuum_cooling = context->last_total_cooling - element_cooling;
@@ -2711,8 +2743,10 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
             << he_other[0] << ',' << he_other[1] << ',' << he_other[2] << ',' << he_other[3] << ','
             << mg[0] << ',' << mg[1] << ',' << mg[2] << ',' << mg[3] << ','
-            << element_heating << ',' << element_cooling << ',' << continuum_heating << ',' << continuum_cooling << ','
-            << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_hmctot << '\n';
+            << element_heating << ',' << element_cooling << ',' << element_heating2 << ',' << element_cooling2 << ','
+            << continuum_heating << ',' << continuum_cooling << ','
+            << context->last_continuum_compton_heating << ',' << context->last_continuum_compton_cooling << ',' << context->last_continuum_free_free_cooling << ','
+            << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_legacy_hmctot << ',' << context->last_hmctot << '\n';
         copy_text(message, message_size, "native thermal-budget ledger written");
         return 0;
     } catch (const std::exception& exc) {
@@ -2994,7 +3028,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.21.4\",\n"
+                        << "  \"release\": \"0.6.48.7.22\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -3014,7 +3048,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.21.4\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.22\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"
