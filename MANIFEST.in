@@ -626,5 +626,12 @@ include xstar_tools_v0.6.48.7.23_handoff.md
 include run_v048723_mg_primary_workspace_transport_controller_audit.sh
 include check_v048723_mg_primary_workspace_transport_controller_audit.py
 include tests/test_v0648723_mg_primary_workspace_transport.py
-include check_v048723_mg_primary_workspace_transport_readiness.py
-include xstar_tools_conversation_summary_through_v0.6.48.7.23.md
+
+# v0.6.48.7.24 call-1 thermal-leaf parity and first-branch restoration
+recursive-include src/xstar_tools/benchmarks/v0648724_call1_thermal_leaf_reference *
+include V0648724_CALL1_THERMAL_LEAF_PARITY_AND_FIRST_BRANCH.md
+include xstar_tools_v0.6.48.7.24_handoff.md
+include run_v048724_call1_thermal_leaf_parity.sh
+include check_v048724_call1_thermal_leaf_parity.py
+include check_v048724_call1_thermal_leaf_readiness.py
+include tests/test_v0648724_call1_thermal_leaf_parity.py

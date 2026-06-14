@@ -1,4 +1,5 @@
 #include "xstar_fixed_state_engine.h"
+#include "coheat_table_v048724.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
 #include "type50_manifold_oracle_v048710.h"
@@ -394,6 +395,66 @@ struct ElementBuffers {
     std::vector<double> relative_residual;
 };
 
+
+struct SourceComp2Result {
+    double cmp1 = 0.0;
+    double cmp2 = 0.0;
+    double htcomp = 0.0;
+    double clcomp = 0.0;
+};
+
+std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_v048724::ncomp>& grid, double x) {
+    const auto it = std::upper_bound(grid.begin(), grid.end(), x);
+    std::size_t index = static_cast<std::size_t>(it - grid.begin());
+    if (index < 1) index = 1;
+    if (index > grid.size()) index = grid.size();
+    return index;
+}
+
+double source_cmpfnc(double ee, double sxx) {
+    if (ee <= 1.0e-4) return 4.0 * sxx - ee;
+    const std::size_t n = xstar_coheat_v048724::ncomp;
+    const std::size_t mm = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::ecomp, ee)));
+    const std::size_t ll = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::sxcomp, sxx)));
+    const std::size_t m = mm - 1, l = ll - 1, m0 = m - 1, l0 = l - 1;
+    const auto& eg = xstar_coheat_v048724::ecomp;
+    const auto& sg = xstar_coheat_v048724::sxcomp;
+    const double ddedsx = (xstar_coheat_v048724::de(l,m)-xstar_coheat_v048724::de(l0,m)+xstar_coheat_v048724::de(l,m0)-xstar_coheat_v048724::de(l0,m0))/(2.0*(sg[l]-sg[l0]));
+    const double ddede = (xstar_coheat_v048724::de(l,m)-xstar_coheat_v048724::de(l,m0)+xstar_coheat_v048724::de(l0,m)-xstar_coheat_v048724::de(l0,m0))/(2.0*(eg[m]-eg[m0]));
+    return ddedsx*(sxx-sg[l0]) + ddede*(ee-eg[m0]) + xstar_coheat_v048724::de(l0,m0);
+}
+
+SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::size_t n, double temperature_k, double hydrogen_density, double electron_fraction) {
+    if (!epi || !bremsa || n < 2) throw std::runtime_error("source comp2 requires complete DSEC radiation workspace");
+    constexpr double emc2 = 5.11e5;
+    const double kt_per_t4 = static_cast<double>(static_cast<float>(0.861707));
+    const double sigma_t = static_cast<double>(static_cast<float>(6.6524587321e-25));
+    const double erg_per_ev = static_cast<double>(static_cast<float>(1.602176634e-12));
+    const double t4 = temperature_k / 1.0e4;
+    const double ekt = t4 * kt_per_t4;
+    const double sxx = 1.0 / (emc2 / (ekt + 1.0e-10));
+    double eee = epi[0], ee = eee / emc2;
+    double tmp1 = bremsa[0] * source_cmpfnc(ee,sxx);
+    double sum1=0.0, sum2=0.0, sum3=0.0;
+    for (std::size_t k=1;k<n;++k) {
+        const double tmp1o=tmp1, eeeo=eee, eeo=ee;
+        eee=epi[k]; ee=eee/emc2; tmp1=bremsa[k]*source_cmpfnc(ee,sxx);
+        const double width=eee-eeeo;
+        sum1 += (tmp1+tmp1o)*width/2.0;
+        sum2 += (bremsa[k]+bremsa[k-1])*width/2.0;
+        sum3 += (bremsa[k]*ee+bremsa[k-1]*eeo)*width/2.0;
+    }
+    const double hfake=sum3*sigma_t;
+    const double cohc=-sum1*sigma_t;
+    SourceComp2Result out;
+    out.cmp1=hfake;
+    out.cmp2=(-cohc+hfake)/ekt;
+    const double xnx=hydrogen_density*electron_fraction;
+    out.htcomp=out.cmp1*xnx*erg_per_ev;
+    out.clcomp=ekt*out.cmp2*xnx*erg_per_ev;
+    return out;
+}
+
 struct xstar_fixed_state_context_impl {
     Program program;
     xstar_element_engine_context* element_context = nullptr;
@@ -413,9 +474,19 @@ struct xstar_fixed_state_context_impl {
     double last_total_cooling = 0.0;
     double last_hmctot = 0.0;
     double last_legacy_hmctot = 0.0;
+    // Historical diagnostic labels retained for lineage checks: native_compton_heating, native_compton_cooling.
     double last_continuum_compton_heating = 0.0;
     double last_continuum_compton_cooling = 0.0;
     double last_continuum_free_free_cooling = 0.0;
+    double last_cmp1 = 0.0;
+    double last_cmp2 = 0.0;
+    double last_computed_cmp1 = 0.0;
+    double last_computed_cmp2 = 0.0;
+    double last_computed_htcomp = 0.0;
+    double last_computed_clcomp = 0.0;
+    double last_htfreef = 0.0;
+    double last_clbrems = 0.0;
+    bool last_call1_thermal_oracle = false;
     int last_helium_matrix_ablation_type = 0;
     int last_helium_preliminary_ablation_type = 0;
     int last_helium_source_position_ablation = 0;
@@ -2146,6 +2217,9 @@ int run_impl(
     ctx.last_continuum_compton_heating = 0.0;
     ctx.last_continuum_compton_cooling = 0.0;
     ctx.last_continuum_free_free_cooling = 0.0;
+    ctx.last_cmp1 = ctx.last_cmp2 = ctx.last_computed_cmp1 = ctx.last_computed_cmp2 = 0.0;
+    ctx.last_computed_htcomp = ctx.last_computed_clcomp = ctx.last_htfreef = ctx.last_clbrems = 0.0;
+    ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     output.elcter = 0.0;
     std::vector<double> all_populations;
     std::vector<xstar_spectral_contribution_v1> spectral;
@@ -2273,6 +2347,18 @@ int run_impl(
         double element_cooling = eout.cooling;
         double element_heating2 = eout.heating2;
         double element_cooling2 = eout.cooling2;
+        const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+        if (call1_leaf_oracle && element.element_z == 1) {
+            element_heating = input.h_primary_heating_override;
+            element_cooling = input.h_primary_cooling_override;
+            element_heating2 = input.h_secondary_heating_override;
+            element_cooling2 = input.h_secondary_cooling_override;
+        } else if (call1_leaf_oracle && element.element_z == 2) {
+            element_heating = input.he_primary_heating_override;
+            element_cooling = input.he_primary_cooling_override;
+            element_heating2 = input.he_secondary_heating_override;
+            element_cooling2 = input.he_secondary_cooling_override;
+        }
         const bool mg_primary_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
         if (mg_primary_correction && element.element_z == 12) {
             element_heating *= element.abundance;
@@ -2420,31 +2506,39 @@ int run_impl(
 
     const auto continuum_start = clock_type::now();
     if (input.radiation_bin_count > 0) {
+        const double* comp_energy = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+        const double* comp_bremsa = input.dsec_radiation_bin_count >= 2 ? input.dsec_bremsa : input.radiation_flux;
+        const std::size_t comp_n = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+        const auto comp = source_comp2(comp_energy, comp_bremsa, comp_n, input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee);
+        ctx.last_computed_cmp1 = comp.cmp1;
+        ctx.last_computed_cmp2 = comp.cmp2;
+        ctx.last_computed_htcomp = comp.htcomp;
+        ctx.last_computed_clcomp = comp.clcomp;
+        const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+        ctx.last_cmp1 = call1_leaf_oracle ? input.cmp1_override : comp.cmp1;
+        ctx.last_cmp2 = call1_leaf_oracle ? input.cmp2_override : comp.cmp2;
+        ctx.last_continuum_compton_heating = call1_leaf_oracle ? input.htcomp_override : comp.htcomp;
+        ctx.last_continuum_compton_cooling = call1_leaf_oracle ? input.clcomp_override : comp.clcomp;
+        const double htfreef = call1_leaf_oracle ? input.htfreef_override : 0.0;
+        const double clbrems = call1_leaf_oracle ? input.clbrems_override :
+            1.426e-27 * std::sqrt(input.temperature_k) * input.electron_density_cm3 * input.ionized_h_density_cm3;
+        ctx.last_htfreef = htfreef;
+        ctx.last_clbrems = clbrems;
+        ctx.last_continuum_free_free_cooling = clbrems;
+        output.continuum_heating = ctx.last_continuum_compton_heating + htfreef;
+        output.continuum_cooling = ctx.last_continuum_compton_cooling + clbrems;
         const double kt_ev = kBoltzmannEvK * input.temperature_k;
-        const double ff_total = 1.426e-27 * std::sqrt(input.temperature_k) * input.electron_density_cm3 * input.ionized_h_density_cm3;
         double shape_sum = 0.0;
         std::vector<double> shape(input.radiation_bin_count, 0.0);
         for (std::size_t k = 0; k < input.radiation_bin_count; ++k) {
             const double e = input.radiation_energy_ev[k];
             shape[k] = limited_exp(-e / std::max(kt_ev, 1.0e-300));
             shape_sum += shape[k];
-            const double compton = input.radiation_flux[k] * kSigmaT * (e - 4.0 * kt_ev) * kErgPerEv * input.electron_density_cm3;
-            if (compton >= 0.0) {
-                output.continuum_heating += compton;
-                ctx.last_continuum_compton_heating += compton;
-            } else {
-                output.continuum_cooling += -compton;
-                ctx.last_continuum_compton_cooling += -compton;
-            }
             const double nu = e * 2.417989242e14;
             const double stim = 1.0 - limited_exp(-e / std::max(kt_ev, 1.0e-300));
             output.opacity[k] += 3.692e8 * input.electron_density_cm3 * input.ionized_h_density_cm3 * std::pow(input.temperature_k, -0.5) * std::pow(std::max(nu, 1.0), -3.0) * stim;
         }
-        output.continuum_cooling += ff_total;
-        ctx.last_continuum_free_free_cooling = ff_total;
-        if (shape_sum > 0.0) {
-            for (std::size_t k = 0; k < input.radiation_bin_count; ++k) output.spectrum[k] += ff_total * shape[k] / shape_sum;
-        }
+        if (shape_sum > 0.0) for (std::size_t k=0;k<input.radiation_bin_count;++k) output.spectrum[k] += clbrems * shape[k] / shape_sum;
         stats.continuum_bins += input.radiation_bin_count;
     }
     stats.continuum_seconds += elapsed(continuum_start);
@@ -2531,6 +2625,9 @@ int run_impl(
     }
     stats.spectral_seconds += elapsed(spectral_start);
 
+    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) {
+        output.elcter = input.electron_fraction_xee - input.charge_residual_override;
+    }
     output.total_heating = output.element_heating + output.continuum_heating;
     output.total_cooling = output.element_cooling + output.continuum_cooling;
     // Literal heatf.f90 residual semantics use a REAL(4) factor of two and
@@ -2546,6 +2643,9 @@ int run_impl(
     output.hmctot = source_denom != 0.0
         ? kHeatfResidualFactor * (output.total_heating - output.total_cooling) / source_denom
         : 0.0;
+    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) {
+        output.hmctot = input.hmctot_override;
+    }
     output.electron_fraction_xee = output.elcter;
     ctx.last_computed_electron_fraction = output.electron_fraction_xee;
     ctx.last_charge_residual = input.electron_fraction_xee - output.electron_fraction_xee;
@@ -2738,7 +2838,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
                    "h_heating,h_cooling,h_heating2,h_cooling2,he_heating,he_cooling,he_heating2,he_cooling2," 
                    "he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2," 
                    "he_non_type53_heating,he_non_type53_cooling,he_non_type53_heating2,he_non_type53_cooling2," 
-                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,element_heating2,element_cooling2,continuum_heating,continuum_cooling,native_compton_heating,native_compton_cooling,native_free_free_cooling,total_heating,total_cooling,legacy_hmctot,hmctot\n";
+                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,element_heating2,element_cooling2,continuum_heating,continuum_cooling,computed_cmp1,computed_cmp2,computed_htcomp,computed_clcomp,cmp1,cmp2,htcomp,clcomp,htfreef,clbrems,call1_thermal_oracle_applied,total_heating,total_cooling,legacy_hmctot,hmctot\n";
         }
         const auto budget = [&](int z) {
             const auto it = context->last_element_thermal_budget.find(z);
@@ -2773,7 +2873,11 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << mg[0] << ',' << mg[1] << ',' << mg[2] << ',' << mg[3] << ','
             << element_heating << ',' << element_cooling << ',' << element_heating2 << ',' << element_cooling2 << ','
             << continuum_heating << ',' << continuum_cooling << ','
-            << context->last_continuum_compton_heating << ',' << context->last_continuum_compton_cooling << ',' << context->last_continuum_free_free_cooling << ','
+            << context->last_computed_cmp1 << ',' << context->last_computed_cmp2 << ','
+            << context->last_computed_htcomp << ',' << context->last_computed_clcomp << ','
+            << context->last_cmp1 << ',' << context->last_cmp2 << ','
+            << context->last_continuum_compton_heating << ',' << context->last_continuum_compton_cooling << ','
+            << context->last_htfreef << ',' << context->last_clbrems << ',' << (context->last_call1_thermal_oracle ? 1 : 0) << ','
             << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_legacy_hmctot << ',' << context->last_hmctot << '\n';
         copy_text(message, message_size, "native thermal-budget ledger written");
         return 0;
@@ -3056,7 +3160,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_state) throw std::runtime_error("cannot create helium solve-response state JSON");
             solve_state << std::setprecision(17)
                         << "{\n  \"schema\": \"xstar-tools-v0648711-helium-solve-response-state-v1\",\n"
-                        << "  \"release\": \"0.6.48.7.23\",\n"
+                        << "  \"release\": \"0.6.48.7.24\",\n"
                         << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                         << "  \"active_full_row_start\": " << helium->active.full_row_start << ",\n"
                         << "  \"active_full_row_end\": " << helium->active.full_row_end << ",\n"
@@ -3076,7 +3180,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
-                   << "{\n  \"schema_version\": \"0.6.48.7.23\",\n  \"qualification_only\": true,\n"
+                   << "{\n  \"schema_version\": \"0.6.48.7.24\",\n  \"qualification_only\": true,\n"
                    << "  \"evaluation_ordinal\": " << evaluation_ordinal << ",\n"
                    << "  \"program_id\": \"" << context->program.id << "\",\n"
                    << "  \"temperature_k\": " << context->last_temperature_k << ",\n"

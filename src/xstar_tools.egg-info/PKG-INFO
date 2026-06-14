@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.23
+Version: 0.6.48.7.24
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,9 +26,9 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-## v0.6.48.7.23 Mg-primary and call-start workspace transport
+## v0.6.48.7.24 call-1 thermal-leaf parity and first-branch restoration
 
-This qualification release applies the accepted v0.6.48.7.22 physical evidence in the required order. It adds the missing native Mg abundance weighting, supports an exact captured call-1 Mg thermal oracle, transports the four source call-start payloads through ABI 60487, and adds a complete controller identity gate. A fresh ATDB lowering maps source `global_xilevg` onto native compact rows. Runtime transport must be proven by `native_runtime_state_transport.csv`; payload existence alone is insufficient. The Mg oracle is not a general all-state formula, `global_bilevg`/`global_rnisg` remain only partially consumed, and thermal, product, and production promotion stay blocked. See `V0648723_MG_PRIMARY_AND_CALL_START_WORKSPACE_TRANSPORT.md`.
+This qualification release adds the literal native `coheat.dat -> cmpfnc -> comp2 -> heatf` path and a strict staged call-1 audit. All 21 call-1 states must reproduce `cmp1`, `cmp2`, `htcomp`, `clcomp`, `clbrems`, `htfreef`, H/He/Mg thermal budgets, temperature, electron-fraction input, charge residual, and `hmctot` before calls 2-4 may run. Effective call-1 H/He, Compton, free-free, bremsstrahlung, Mg, charge, and residual values remain explicitly qualification-oracle scoped; general all-state thermal parity is not claimed. The executed v0.6.48.7.23 30/57 four-call trajectory is classified as `PARTIAL`, and `global_bilevg`/`global_rnisg` consumers remain deferred. See `V0648724_CALL1_THERMAL_LEAF_PARITY_AND_FIRST_BRANCH.md`.
 
 ## v0.6.48.7.21.4 evaluator-scope capture hotfix
 

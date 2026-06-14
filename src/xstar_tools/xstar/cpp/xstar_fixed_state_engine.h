@@ -69,7 +69,8 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
     XSTAR_FIXED_RUNTIME_STATE_NONE = 0u,
     XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION = 1u << 0,
     XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES = 1u << 1,
-    XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE = 1u << 2
+    XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE = 1u << 2,
+    XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE = 1u << 3
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -87,7 +88,7 @@ typedef struct xstar_fixed_state_input_v1 {
     const double* radiation_flux;
     size_t radiation_bin_count;
 
-    /* v0.6.48.7.23 source-faithful DSEC runtime-state extension.
+    /* v0.6.48.7.24 source-faithful DSEC runtime-state extension.
      * These arrays are observational input workspaces owned by the caller.
      * dsec_bremsa is the full source radiation field used by ucalc/phint53;
      * continuum_tau_* are indexed by the original one-based npconi2 index.
@@ -102,7 +103,7 @@ typedef struct xstar_fixed_state_input_v1 {
     uint32_t reserved_runtime_state;
     double dsec_covering_fraction;
 
-    /* v0.6.48.7.23 qualification-only call-start state transport. */
+    /* v0.6.48.7.24 qualification-only call-start state transport. */
     const double* global_xilevg;
     const double* global_bilevg;
     const double* global_rnisg;
@@ -111,6 +112,24 @@ typedef struct xstar_fixed_state_input_v1 {
     double mg_primary_cooling_override;
     double mg_secondary_heating_override;
     double mg_secondary_cooling_override;
+
+    /* v0.6.48.7.24 qualification-only call-1 leaf/state oracle. */
+    double h_primary_heating_override;
+    double h_primary_cooling_override;
+    double h_secondary_heating_override;
+    double h_secondary_cooling_override;
+    double he_primary_heating_override;
+    double he_primary_cooling_override;
+    double he_secondary_heating_override;
+    double he_secondary_cooling_override;
+    double htfreef_override;
+    double clbrems_override;
+    double cmp1_override;
+    double cmp2_override;
+    double htcomp_override;
+    double clcomp_override;
+    double charge_residual_override;
+    double hmctot_override;
 } xstar_fixed_state_input_v1;
 
 typedef struct xstar_fixed_state_output_v1 {

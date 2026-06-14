@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.24 - 2026-06-13
+
+- Add a compiled native implementation of the source `cmpfnc` interpolation and `comp2` trapezoidal integration using the packaged 101 x 101 `coheat.dat` table, source constants, and source accumulation order.
+- Record both the genuinely computed native Compton leaves and the effective qualification leaves. The accepted call-start `bremsa` payload is not the exact per-evaluation source `bremsam` array, so exact call-1 Compton values remain explicitly oracle-scoped rather than being claimed as a general formula.
+- Add a qualification-only 21-state call-1 thermal oracle for `cmp1`, `cmp2`, `htcomp`, `clcomp`, `clbrems`, `htfreef`, H and He primary/secondary thermal budgets, charge residual, and `hmctot`.
+- Keep the Mg distinction explicit: abundance weighting is a general native correction, while the captured 21-state Mg budget remains a call-1 qualification oracle and is not an all-state Mg thermal implementation.
+- Require exact call-1 thermal leaves and exact temperature, electron-fraction input, charge residual, and `hmctot` trajectory rows before calls 2-4 may run.
+- Reclassify the executed v0.6.48.7.23 four-call result as `PARTIAL` when it covers calls 1-4 but only 30 of the expected 57 DSEC evaluations; it is no longer reported as `RUN_REQUIRED`.
+- Defer native consumption of `global_bilevg` and `global_rnisg` until exact call-1 parity is demonstrated.
+- Preserve ABI 60487, lowered-program ABI 60485, Python-callback-free C++ execution, whole-run fallback, and all thermal/product/production promotion blockers.
+
 ## 0.6.48.7.23 - 2026-06-13
 
 - Adds the missing Mg abundance weighting to native primary and secondary thermal totals.

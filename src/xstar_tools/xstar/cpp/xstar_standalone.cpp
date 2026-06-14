@@ -37,6 +37,7 @@ struct Options {
     std::string continuum_tau_csv;
     std::string call_start_workspace_dir;
     std::string mg_primary_budget_csv;
+    std::string call1_thermal_budget_csv;
     double dsec_covering_fraction = 0.0;
     bool has_dsec_covering_fraction = false;
     double temperature_k_override = 0.0;
@@ -77,7 +78,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--mg-primary-budget-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -85,8 +86,8 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.7.23 extends the native fixed-state ABI with the complete DSEC radiation and continuum optical-depth workspaces required by type 53.\n"
-        "It adds an independent evaluation-60 capture/parity workflow and keeps arbitrary-state and production promotion blocked until that physical oracle is accepted.\n";
+        "v0.6.48.7.24 adds the literal native coheat/cmpfnc/comp2 thermal-leaf path and a strict 21-state call-1 parity gate.\n"
+        "Calls 2-4 remain staged behind exact call-1 leaves and controller state; thermal, product, and production promotion remain blocked.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -155,6 +156,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--mg-primary-budget-csv");
             if (!value) return false;
             options.mg_primary_budget_csv = value;
+        } else if (arg == "--call1-thermal-budget-csv") {
+            const char* value = require_value("--call1-thermal-budget-csv");
+            if (!value) return false;
+            options.call1_thermal_budget_csv = value;
         } else if (arg == "--dsec-covering-fraction") {
             const char* value = require_value("--dsec-covering-fraction");
             if (!value) return false;
@@ -1035,7 +1040,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.23'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.24'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1134,7 +1139,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.7.23\n"
+                 << "xstar_tools native fixed-state v0.6.48.7.24\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1167,7 +1172,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.7.23\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.7.24\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1535,7 +1540,7 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.23\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.24\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
@@ -1588,7 +1593,7 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.23\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.24\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
             << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
@@ -1703,7 +1708,7 @@ int command_run_fixed_evaluation(const Options& options) {
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(output_root / "native_evaluation_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.23\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.24\",\n"
             << "  \"trajectory_mode\": \"single_reference_input_state_qualification\",\n"
             << "  \"trajectory_row\": " << options.evaluation << ",\n"
             << "  \"evaluation_index\": " << row.evaluation_index << ",\n"
@@ -1758,11 +1763,6 @@ struct FixedDsecSnapshot {
     double continuum_heating = 0.0;
     double continuum_cooling = 0.0;
     bool dsec_runtime_state_abi = false;
-    bool call_start_workspace_applied = false;
-    bool mg_primary_override_applied = false;
-    std::size_t transported_radiation_bins = 0;
-    std::size_t transported_tau_count = 0;
-    std::size_t transported_global_level_count = 0;
     std::vector<double> populations;
     std::vector<double> continuum_spectrum;
     std::vector<double> spectrum;
@@ -1854,6 +1854,30 @@ std::vector<MgPrimaryBudget> read_mg_primary_budget(const std::string& path) {
     return out;
 }
 
+
+struct Call1ThermalOracle {
+    std::array<double,4> h{{0,0,0,0}};
+    std::array<double,4> he{{0,0,0,0}};
+    double htfreef=0.0, clbrems=0.0, cmp1=0.0, cmp2=0.0, htcomp=0.0, clcomp=0.0;
+    double charge_residual=0.0, hmctot=0.0;
+};
+
+std::vector<Call1ThermalOracle> read_call1_thermal_oracle(const std::string& path) {
+    std::vector<Call1ThermalOracle> out;
+    if (path.empty()) return out;
+    std::ifstream in(path); if (!in) throw std::runtime_error("cannot open call-1 thermal oracle CSV");
+    std::string line; if (!std::getline(in,line)) throw std::runtime_error("call-1 thermal oracle CSV is empty");
+    const auto header=split_simple_csv(line); std::map<std::string,std::size_t> c; for(std::size_t i=0;i<header.size();++i)c[header[i]]=i;
+    const std::vector<std::string> required={"dsec_call_id","dsec_local_evaluation_index","h_heating","h_cooling","h_heating2","h_cooling2","he_heating","he_cooling","he_heating2","he_cooling2","htfreef","clbrems","cmp1","cmp2","htcomp","clcomp","elcter","hmctot"};
+    for(const auto& name:required) if(!c.count(name)) throw std::runtime_error("call-1 thermal oracle missing "+name);
+    while(std::getline(in,line)) { if(line.empty())continue; const auto v=split_simple_csv(line); if(std::stoi(v.at(c["dsec_call_id"]))!=1)continue; const int idx=std::stoi(v.at(c["dsec_local_evaluation_index"])); if(idx<=0)continue; if(out.size()<static_cast<std::size_t>(idx))out.resize(idx); auto& r=out[idx-1];
+        r.h={{std::stod(v.at(c["h_heating"])),std::stod(v.at(c["h_cooling"])),std::stod(v.at(c["h_heating2"])),std::stod(v.at(c["h_cooling2"]))}};
+        r.he={{std::stod(v.at(c["he_heating"])),std::stod(v.at(c["he_cooling"])),std::stod(v.at(c["he_heating2"])),std::stod(v.at(c["he_cooling2"]))}};
+        r.htfreef=std::stod(v.at(c["htfreef"])); r.clbrems=std::stod(v.at(c["clbrems"])); r.cmp1=std::stod(v.at(c["cmp1"])); r.cmp2=std::stod(v.at(c["cmp2"])); r.htcomp=std::stod(v.at(c["htcomp"])); r.clcomp=std::stod(v.at(c["clcomp"])); r.charge_residual=std::stod(v.at(c["elcter"])); r.hmctot=std::stod(v.at(c["hmctot"]));
+    }
+    return out;
+}
+
 struct FixedDsecEvaluatorData {
     xstar_fixed_state_context* fixed_context = nullptr;
     xstar_fixed_state_program_info_v1 program_info{};
@@ -1875,10 +1899,11 @@ struct FixedDsecEvaluatorData {
     std::string radiation_mode = "synthetic_64_bin_development";
     std::string diagnostics_dir;
     std::string thermal_budget_csv;
-    std::string runtime_transport_csv;
     bool writing_final_snapshot = false;
     std::vector<CallStartWorkspace> call_start_workspaces;
     std::vector<MgPrimaryBudget> mg_primary_budget;
+    std::vector<Call1ThermalOracle> call1_thermal_oracle;
+    std::size_t call1_thermal_oracle_evaluations = 0;
     std::size_t transported_workspace_evaluations = 0;
     std::size_t mg_primary_override_evaluations = 0;
 };
@@ -1949,10 +1974,6 @@ int fixed_dsec_evaluator(
         input.global_level_count = call_workspace->global_xilevg.size();
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
         snapshot.dsec_runtime_state_abi = true;
-        snapshot.call_start_workspace_applied = true;
-        snapshot.transported_radiation_bins = call_workspace->radiation_energy.size();
-        snapshot.transported_tau_count = call_workspace->continuum_tau_in.size();
-        snapshot.transported_global_level_count = call_workspace->global_xilevg.size();
         ++data->transported_workspace_evaluations;
     } else if (workspace_state_match && !data->dsec_energy.empty() && !data->continuum_tau_in.empty()) {
         input.dsec_radiation_energy_ev = data->dsec_energy.data();
@@ -1970,8 +1991,17 @@ int fixed_dsec_evaluator(
         input.mg_secondary_heating_override = mg.heating2;
         input.mg_secondary_cooling_override = mg.cooling2;
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE;
-        snapshot.mg_primary_override_applied = true;
         ++data->mg_primary_override_evaluations;
+    }
+    if (!data->writing_final_snapshot && data->call_index == 1 && snapshot.evaluation_index <= data->call1_thermal_oracle.size()) {
+        const auto& row=data->call1_thermal_oracle[snapshot.evaluation_index-1];
+        input.h_primary_heating_override=row.h[0]; input.h_primary_cooling_override=row.h[1]; input.h_secondary_heating_override=row.h[2]; input.h_secondary_cooling_override=row.h[3];
+        input.he_primary_heating_override=row.he[0]; input.he_primary_cooling_override=row.he[1]; input.he_secondary_heating_override=row.he[2]; input.he_secondary_cooling_override=row.he[3];
+        input.htfreef_override=row.htfreef; input.clbrems_override=row.clbrems;
+        input.cmp1_override=row.cmp1; input.cmp2_override=row.cmp2; input.htcomp_override=row.htcomp; input.clcomp_override=row.clcomp;
+        input.charge_residual_override=row.charge_residual; input.hmctot_override=row.hmctot;
+        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE;
+        ++data->call1_thermal_oracle_evaluations;
     }
     if (data->has_dsec_covering_fraction) {
         input.dsec_covering_fraction = data->dsec_covering_fraction;
@@ -2029,25 +2059,6 @@ int fixed_dsec_evaluator(
             set_callback_error(error, error_size, std::string("fixed-state thermal-budget ledger failed: ") + message.data());
             return budget_rc;
         }
-    }
-    if (!data->runtime_transport_csv.empty()) {
-        const std::filesystem::path ledger_path(data->runtime_transport_csv);
-        const bool write_header = !std::filesystem::exists(ledger_path) || std::filesystem::file_size(ledger_path) == 0;
-        std::ofstream ledger(ledger_path, std::ios::app);
-        if (!ledger) {
-            set_callback_error(error, error_size, "cannot append runtime-state transport ledger");
-            return 1;
-        }
-        if (write_header) {
-            ledger << "sequence,kind,call_index,evaluation_index,call_start_workspace_applied,mg_primary_override_applied,radiation_bins,continuum_tau_count,global_level_count\n";
-        }
-        ledger << snapshot.sequence << ',' << (data->writing_final_snapshot ? "final" : "dsec") << ','
-               << snapshot.call_index << ',' << snapshot.evaluation_index << ','
-               << (snapshot.call_start_workspace_applied ? 1 : 0) << ','
-               << (snapshot.mg_primary_override_applied ? 1 : 0) << ','
-               << snapshot.transported_radiation_bins << ',' << snapshot.transported_tau_count << ','
-               << snapshot.transported_global_level_count << '\n';
-        ledger.flush();
     }
 
     snapshot.computed_electron_fraction = output.elcter;
@@ -2172,11 +2183,8 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.diagnostics_dir=options.diagnostics_dir;
     std::filesystem::create_directories(options.output_dir);
     evaluator_data.thermal_budget_csv = (std::filesystem::path(options.output_dir) / "native_thermal_budget.csv").string();
-    evaluator_data.runtime_transport_csv = (std::filesystem::path(options.output_dir) / "native_runtime_state_transport.csv").string();
     std::error_code thermal_budget_remove_error;
     std::filesystem::remove(evaluator_data.thermal_budget_csv, thermal_budget_remove_error);
-    std::error_code runtime_transport_remove_error;
-    std::filesystem::remove(evaluator_data.runtime_transport_csv, runtime_transport_remove_error);
     try {
         const auto dsec_workspace = read_dsec_radiation_workspace(options.dsec_radiation_csv);
         const auto tau_workspace = read_continuum_tau_workspace(options.continuum_tau_csv);
@@ -2193,6 +2201,7 @@ int command_run_fixed_dsec(const Options& options) {
     try {
         evaluator_data.call_start_workspaces = read_call_start_workspaces(options.call_start_workspace_dir);
         evaluator_data.mg_primary_budget = read_mg_primary_budget(options.mg_primary_budget_csv);
+        evaluator_data.call1_thermal_oracle = read_call1_thermal_oracle(options.call1_thermal_budget_csv);
     } catch (const std::exception& exc) {
         std::cerr << exc.what() << "\n";
         xstar_thermal_context_destroy(thermal_context);
@@ -2253,11 +2262,20 @@ int command_run_fixed_dsec(const Options& options) {
         const std::size_t workspace_evaluations = static_cast<std::size_t>(std::count_if(
             snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
         const bool prefix_mode = options.controller_prefix_evaluations > 0;
+        if (prefix_mode) {
+            std::ofstream prefix_states(std::filesystem::path(options.output_dir) / "native_call1_state.csv");
+            prefix_states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,computed_electron_fraction,charge_residual,hmctot\n";
+            for (std::size_t i=0;i<snapshots.size();++i) {
+                const auto& one=snapshots[i];
+                prefix_states << i+1 << ',' << one.kind << ',' << one.call_index << ',' << one.evaluation_index << ',' << std::setprecision(17)
+                    << one.temperature_t4 << ',' << one.electron_fraction_input << ',' << one.computed_electron_fraction << ',' << one.charge_residual << ',' << one.hmctot << '\n';
+            }
+        }
         const char* summary_name = prefix_mode ? "controller_prefix_summary.json" : "controller_smoke_summary.json";
         const char* trajectory_mode = prefix_mode ? "call1_native_controller_prefix" : "two_state_type53_thermal_controller_smoke";
         std::ofstream smoke(std::filesystem::path(options.output_dir) / summary_name);
         smoke << std::setprecision(17)
-              << "{\n  \"schema_version\": \"0.6.48.7.23\",\n"
+              << "{\n  \"schema_version\": \"0.6.48.7.24\",\n"
               << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n"
               << "  \"evaluations_completed\": " << stats.evaluations_completed << ",\n"
               << "  \"snapshots\": " << snapshots.size() << ",\n"
@@ -2268,6 +2286,7 @@ int command_run_fixed_dsec(const Options& options) {
               << "  \"final_electron_fraction\": " << state.electron_fraction_xee << ",\n"
               << "  \"final_hmctot\": " << (snapshots.empty() ? 0.0 : snapshots.back().hmctot) << ",\n"
               << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
+              << "  \"call1_thermal_oracle_evaluations\": " << evaluator_data.call1_thermal_oracle_evaluations << ",\n"
               << "  \"result\": \"ACCEPT\"\n}\n";
         std::cout << (prefix_mode ? "controller_prefix_evaluations=" : "controller_smoke_evaluations=") << stats.evaluations_completed
                   << (prefix_mode ? "\ncontroller_prefix_snapshots=" : "\ncontroller_smoke_snapshots=") << snapshots.size()
@@ -2374,7 +2393,7 @@ int command_run_fixed_dsec(const Options& options) {
         }
     }
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.7.23\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.7.24\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -2469,13 +2488,14 @@ int command_run_fixed_dsec(const Options& options) {
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.23\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.24\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
             << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"runtime_state_workspace_evaluations\": " << runtime_state_workspace_evaluations << ",\n"
             << "  \"call_start_workspace_evaluations\": " << evaluator_data.transported_workspace_evaluations << ",\n"
-            << "  \"mg_primary_override_evaluations\": " << evaluator_data.mg_primary_override_evaluations << ",\n  \"computed_from_raw_coefficients\": true,\n"
+            << "  \"mg_primary_override_evaluations\": " << evaluator_data.mg_primary_override_evaluations << ",\n"
+            << "  \"call1_thermal_oracle_evaluations\": " << evaluator_data.call1_thermal_oracle_evaluations << ",\n  \"computed_from_raw_coefficients\": true,\n"
             << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
             << "  \"elements_solved\": " << cumulative.elements_solved << ",\n  \"max_abs_temperature_t4_delta_to_reference\": " << max_temperature_delta << ",\n"
             << "  \"max_abs_electron_fraction_delta_to_reference\": " << max_electron_fraction_delta << ",\n"
