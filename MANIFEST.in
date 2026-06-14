@@ -635,3 +635,11 @@ include run_v048724_call1_thermal_leaf_parity.sh
 include check_v048724_call1_thermal_leaf_parity.py
 include check_v048724_call1_thermal_leaf_readiness.py
 include tests/test_v0648724_call1_thermal_leaf_parity.py
+
+# v0.6.48.7.25 call-1 secant temperature IEEE restoration
+include V0648725_CALL1_SECANT_TEMPERATURE_IEEE_RESTORATION.md
+include xstar_tools_v0.6.48.7.25_handoff.md
+include run_v048725_call1_secant_temperature_ieee.sh
+include check_v048725_call1_secant_temperature_ieee.py
+include check_v048725_secant_temperature_readiness.py
+include tests/test_v0648725_call1_secant_temperature_ieee.py

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.25 - 2026-06-14
+
+- Restores the source DSEC post-evaluation temperature commit as explicit T4-to-kelvin and kelvin-to-T4 operations, preserving the source binary64 rounding point.
+- Rewrites the late temperature secant with separately rounded products, numerator, denominator, and quotient; thermal compilation retains `-ffp-contract=off`.
+- Adds a native 21-state `secant-ieee-self-test` that reproduces every call-1 temperature exactly, including the seven v0.6.48.7.24 ULP mismatches.
+- Adds a strict physical call-1 IEEE gate and keeps calls 2-4 blocked until all 21 thermal/state rows are exact.
+- Leaves H/He/Mg and effective leaf qualification-oracle boundaries unchanged.
+- Defers `global_bilevg` and `global_rnisg` consumer corrections until physical call-1 acceptance.
+- Keeps thermal, controller, product, and production promotion blocked.
+
 ## 0.6.48.7.24 - 2026-06-13
 
 - Add a compiled native implementation of the source `cmpfnc` interpolation and `comp2` trapezoidal integration using the packaged 101 x 101 `coheat.dat` table, source constants, and source accumulation order.

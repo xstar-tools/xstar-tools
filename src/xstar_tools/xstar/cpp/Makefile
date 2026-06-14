@@ -112,6 +112,7 @@ test: all
 	./$(EXECUTABLE_TARGET) spectral-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) thermal-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) convergence-self-test --backend cpp --plugin-dir .
+	./$(EXECUTABLE_TARGET) secant-ieee-self-test --backend cpp --plugin-dir .
 	./$(EXECUTABLE_TARGET) fixed-state-self-test --case-dir ../../benchmarks/v06485_active_family_phase2_fixture
 	./$(EXECUTABLE_TARGET) fixed-state-batch-self-test --case-dir ../../benchmarks/v06485_active_family_phase2_fixture --batch 4
 	rm -rf .v06485_native_output

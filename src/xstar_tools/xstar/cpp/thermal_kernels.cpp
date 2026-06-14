@@ -44,6 +44,30 @@ double fortran_divide(double numerator, double denominator) {
     return numerator / denominator;
 }
 
+// v0.6.48.7.25: source calc_hmc_all stores temperature in kelvin and the
+// mutable DSEC state commits it back to T4 after every evaluation.  Even when
+// the physical value is unchanged, the explicit K -> T4 round trip can move a
+// binary64 value by one ULP.  Preserve the two source operations and their
+// rounding points instead of algebraically cancelling the scale factors.
+double source_temperature_commit_t4(double temperature_t4) {
+    volatile double temperature_k = temperature_t4 * 1.0e4;
+    volatile double committed_t4 = temperature_k / 1.0e4;
+    return committed_t4;
+}
+
+// Preserve the source/Python evaluation order for the late temperature
+// secant.  Named volatile intermediates prohibit reassociation or accidental
+// fused multiply-subtract contraction under optimized builds.
+double source_temperature_secant(double tl, double hmctth,
+                                  double th, double hmcttl) {
+    volatile double low_product = tl * hmctth;
+    volatile double high_product = th * hmcttl;
+    volatile double numerator = low_product - high_product;
+    volatile double denominator = hmctth - hmcttl;
+    volatile double quotient = numerator / denominator;
+    return quotient;
+}
+
 bool finite_nonnegative(double value) {
     return std::isfinite(value) && value >= 0.0;
 }
@@ -420,7 +444,7 @@ int xstar_thermal_run_evaluation_loop_v1(
                 set_error(error, error_size, "thermal evaluator returned invalid committed state");
                 return XSTAR_THERMAL_ERROR_NONFINITE;
             }
-            state->temperature_t4 = result.temperature_t4;
+            state->temperature_t4 = source_temperature_commit_t4(result.temperature_t4);
             state->electron_fraction_xee = result.electron_fraction_xee;
             state->hydrogen_density_cm3 = result.hydrogen_density_cm3;
             if (result.state_generation > state->state_generation) state->state_generation = result.state_generation;
@@ -494,7 +518,7 @@ int xstar_thermal_run_evaluation_loop_v1(
                 break;
             }
             to = state->temperature_t4;
-            state->temperature_t4 = fortran_divide(tl * hmctth - th * hmcttl, hmctth - hmcttl);
+            state->temperature_t4 = source_temperature_secant(tl, hmctth, th, hmcttl);
             writer.add(XSTAR_THERMAL_EVENT_TEMPERATURE_SECANT, evaluation_index, ntotit, nnt, nntt, nnx, nnxx, lnerr,
                        *state, last_hmctot, last_elcter, last_tst, testt);
             continue;
