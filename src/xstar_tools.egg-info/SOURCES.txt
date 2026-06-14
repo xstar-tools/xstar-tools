@@ -66,6 +66,7 @@ V0648724_CALL1_THERMAL_LEAF_PARITY_AND_FIRST_BRANCH.md
 V06487251_PHYSICAL_SECANT_SINGLE_COMMIT_HOTFIX.md
 V06487252_COMMITTED_STATE_PHASE_AUDIT_HOTFIX.md
 V0648725_CALL1_SECANT_TEMPERATURE_IEEE_RESTORATION.md
+V0648726_POST_CALL1_THERMAL_GLOBAL_STATE_DECOMPOSITION.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
 V064874_HEII_TYPE53_IEEE_APPLICATION.md
@@ -131,6 +132,8 @@ check_v0487252_call1_secant_temperature_ieee.py
 check_v0487252_committed_state_phase_readiness.py
 check_v048725_call1_secant_temperature_ieee.py
 check_v048725_secant_temperature_readiness.py
+check_v048726_post_call1_decomposition_readiness.py
+check_v048726_post_call1_thermal_global_state_decomposition.py
 check_v04872_type53_semantics.py
 check_v04873_type53_runtime_capture.py
 check_v04874_type53_ieee_application.py
@@ -245,6 +248,7 @@ run_v048724_call1_thermal_leaf_parity.sh
 run_v0487251_call1_secant_temperature_ieee.sh
 run_v0487252_call1_secant_temperature_ieee.sh
 run_v048725_call1_secant_temperature_ieee.sh
+run_v048726_post_call1_thermal_global_state_decomposition.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
 run_v04873_type53_semantics.sh
@@ -468,6 +472,7 @@ xstar_o_element_equilibrium_v0419_diagnosis_v0420.md
 xstar_o_element_equilibrium_v0420_diagnosis_v0421.md
 xstar_o_element_equilibrium_v0421_diagnosis_v0422.md
 xstar_o_element_equilibrium_v0422_diagnosis_v0423.md
+xstar_tools_conversation_summary_through_v0.6.48.7.26.md
 xstar_tools_v0.6.44.1_handoff.md
 xstar_tools_v0.6.44.2_handoff.md
 xstar_tools_v0.6.44.3_handoff.md
@@ -506,6 +511,7 @@ xstar_tools_v0.6.48.7.24_handoff.md
 xstar_tools_v0.6.48.7.25.1_handoff.md
 xstar_tools_v0.6.48.7.25.2_handoff.md
 xstar_tools_v0.6.48.7.25_handoff.md
+xstar_tools_v0.6.48.7.26_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
 xstar_tools_v0.6.48.7.4_handoff.md
@@ -1134,6 +1140,7 @@ src/xstar_tools/xstar/physical_output_diagnostics.py
 src/xstar_tools/xstar/physical_output_parity.py
 src/xstar_tools/xstar/physical_runner.py
 src/xstar_tools/xstar/population_parity.py
+src/xstar_tools/xstar/post_call1_thermal_global_state_decomposition.py
 src/xstar_tools/xstar/pprint_legacy.py
 src/xstar_tools/xstar/qualification.py
 src/xstar_tools/xstar/radial_control.py
@@ -1179,6 +1186,7 @@ src/xstar_tools/xstar/v0442_regression.py
 src/xstar_tools/xstar/v0472_continuum_refresh_payload_capture.py
 src/xstar_tools/xstar/v0472_dsec_row46_runtime_capture.py
 src/xstar_tools/xstar/v0472_dsec_type50_runtime_capture.py
+src/xstar_tools/xstar/v0472_full_dsec_thermal_budget_capture.py
 src/xstar_tools/xstar/v0472_thermal_budget_state_refresh_capture.py
 src/xstar_tools/xstar/v0472_type50_manifold_runtime_capture.py
 src/xstar_tools/xstar/v0472_type53_runtime_capture.py
@@ -1411,6 +1419,7 @@ tests/test_v0648723_mg_primary_workspace_transport.py
 tests/test_v0648724_call1_thermal_leaf_parity.py
 tests/test_v06487251_secant_single_commit_hotfix.py
 tests/test_v0648725_call1_secant_temperature_ieee.py
+tests/test_v0648726_post_call1_decomposition.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py
 tests/test_v064875_helium_family_isolation.py

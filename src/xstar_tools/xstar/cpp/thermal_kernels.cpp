@@ -44,7 +44,7 @@ double fortran_divide(double numerator, double denominator) {
     return numerator / denominator;
 }
 
-// v0.6.48.7.25.2: source calc_hmc_all stores temperature in kelvin and the
+// v0.6.48.7.26: source calc_hmc_all stores temperature in kelvin and the
 // mutable DSEC state commits it back to T4 after every evaluation.  Even when
 // the physical value is unchanged, the explicit K -> T4 round trip can move a
 // binary64 value by one ULP.  Preserve the two source operations and their

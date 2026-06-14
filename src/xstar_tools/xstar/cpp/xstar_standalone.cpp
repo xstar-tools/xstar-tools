@@ -38,6 +38,7 @@ struct Options {
     std::string call_start_workspace_dir;
     std::string mg_primary_budget_csv;
     std::string call1_thermal_budget_csv;
+    std::string global_workspace_mode = "all";
     double dsec_covering_fraction = 0.0;
     bool has_dsec_covering_fraction = false;
     double temperature_k_override = 0.0;
@@ -78,7 +79,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--call-start-workspace-dir DIR] [--global-workspace-mode none|xilevg|xilevg-bilevg|xilevg-rnisg|all] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
@@ -87,8 +88,8 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.7.25.2 restores the source DSEC K-to-T4 commit and late secant IEEE operation order for exact call-1 temperatures.\n"
-        "Calls 2-4 remain staged behind exact call-1 leaves and controller state; thermal, product, and production promotion remain blocked.\n";
+        "v0.6.48.7.26 decomposes the first post-call-1 thermal mismatch with five controlled global-state replays.\n"
+        "Calls 3-4 remain staged behind exact call-2/evaluation-1 element, continuum, charge, and hmctot parity.\n";
 }
 
 bool parse_size(const char* text, std::size_t& output) {
@@ -153,6 +154,16 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--call-start-workspace-dir");
             if (!value) return false;
             options.call_start_workspace_dir = value;
+        } else if (arg == "--global-workspace-mode") {
+            const char* value = require_value("--global-workspace-mode");
+            if (!value) return false;
+            options.global_workspace_mode = value;
+            if (options.global_workspace_mode != "none" && options.global_workspace_mode != "xilevg" &&
+                options.global_workspace_mode != "xilevg-bilevg" && options.global_workspace_mode != "xilevg-rnisg" &&
+                options.global_workspace_mode != "all") {
+                error = "--global-workspace-mode must be none, xilevg, xilevg-bilevg, xilevg-rnisg, or all";
+                return false;
+            }
         } else if (arg == "--mg-primary-budget-csv") {
             const char* value = require_value("--mg-primary-budget-csv");
             if (!value) return false;
@@ -1109,7 +1120,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.25.2'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.26'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1208,7 +1219,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.7.25.2\n"
+                 << "xstar_tools native fixed-state v0.6.48.7.26\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1241,7 +1252,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.7.25.2\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.7.26\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1609,7 +1620,7 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.25.2\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.26\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
@@ -1662,7 +1673,7 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.25.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.26\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
             << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
@@ -1678,6 +1689,8 @@ int command_run_fixed_trajectory(const Options& options) {
     xstar_fixed_state_context_destroy(context);
     return accepted?0:20;
 }
+
+std::vector<double> read_binary_double_vector(const std::filesystem::path& path);
 
 int command_run_fixed_evaluation(const Options& options) {
     if (options.case_dir.empty() || options.trajectory_csv.empty() || options.output_dir.empty()) {
@@ -1740,6 +1753,45 @@ int command_run_fixed_evaluation(const Options& options) {
         input.continuum_tau_out = continuum_tau.tau_out.data();
         input.continuum_tau_count = continuum_tau.tau_in.size();
     }
+    std::vector<double> replay_radiation, replay_bremsa, replay_tau_in, replay_tau_out;
+    std::vector<double> replay_xilevg, replay_bilevg, replay_rnisg, replay_zero_b, replay_zero_r;
+    bool replay_workspace_applied = false;
+    if (!options.call_start_workspace_dir.empty()) {
+        try {
+            const std::filesystem::path root(options.call_start_workspace_dir);
+            const std::string prefix = "call_" + std::to_string(row.call_index) + "_";
+            replay_radiation = read_binary_double_vector(root / (prefix + "radiation_energy.bin"));
+            replay_bremsa = read_binary_double_vector(root / (prefix + "bremsa.bin"));
+            replay_tau_in = read_binary_double_vector(root / (prefix + "continuum_tau_in.bin"));
+            replay_tau_out = read_binary_double_vector(root / (prefix + "continuum_tau_out.bin"));
+            replay_xilevg = read_binary_double_vector(root / (prefix + "global_xilevg.bin"));
+            replay_bilevg = read_binary_double_vector(root / (prefix + "global_bilevg.bin"));
+            replay_rnisg = read_binary_double_vector(root / (prefix + "global_rnisg.bin"));
+            if (replay_radiation.size() != replay_bremsa.size()) throw std::runtime_error("replay radiation arrays differ in length");
+            if (replay_tau_in.size() != replay_tau_out.size()) throw std::runtime_error("replay continuum arrays differ in length");
+            if (!(replay_xilevg.size() == replay_bilevg.size() && replay_xilevg.size() == replay_rnisg.size())) throw std::runtime_error("replay global arrays differ in length");
+            input.dsec_radiation_energy_ev = replay_radiation.data();
+            input.dsec_bremsa = replay_bremsa.data();
+            input.dsec_radiation_bin_count = replay_radiation.size();
+            input.continuum_tau_in = replay_tau_in.data();
+            input.continuum_tau_out = replay_tau_out.data();
+            input.continuum_tau_count = replay_tau_in.size();
+            if (options.global_workspace_mode != "none" && !replay_xilevg.empty()) {
+                replay_zero_b.assign(replay_xilevg.size(), 0.0);
+                replay_zero_r.assign(replay_xilevg.size(), 0.0);
+                input.global_xilevg = replay_xilevg.data();
+                input.global_bilevg = (options.global_workspace_mode == "xilevg-bilevg" || options.global_workspace_mode == "all") ? replay_bilevg.data() : replay_zero_b.data();
+                input.global_rnisg = (options.global_workspace_mode == "xilevg-rnisg" || options.global_workspace_mode == "all") ? replay_rnisg.data() : replay_zero_r.data();
+                input.global_level_count = replay_xilevg.size();
+                input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
+            }
+            replay_workspace_applied = true;
+        } catch (const std::exception& exc) {
+            std::cerr << "workspace replay load failed: " << exc.what() << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return 7;
+        }
+    }
     if (options.has_dsec_covering_fraction) {
         input.dsec_covering_fraction = options.dsec_covering_fraction;
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION;
@@ -1756,13 +1808,15 @@ int command_run_fixed_evaluation(const Options& options) {
     std::filesystem::create_directories(options.output_dir);
     const std::filesystem::path output_root(options.output_dir);
     std::ofstream state(output_root / "native_evaluation.csv");
-    state << "trajectory_row,sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,reference_hmctot,reference_charge_residual,hmctot_delta,charge_residual_delta\n";
+    state << "trajectory_row,sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,global_workspace_mode,replay_workspace_applied,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,hmctot_delta,charge_residual_delta\n";
     const double charge_residual = input.electron_fraction_xee - output.elcter;
     const double hmctot_delta = output.hmctot - row.reference_hmctot;
     const double charge_delta = charge_residual - row.reference_elcter;
     state << std::setprecision(17) << options.evaluation << ',' << row.sequence << ',' << row.kind << ','
           << row.call_index << ',' << row.evaluation_index << ',' << row.temperature_t4 << ',' << row.electron_fraction << ','
+          << options.global_workspace_mode << ',' << (replay_workspace_applied ? 1 : 0) << ','
           << output.hmctot << ',' << output.elcter << ',' << charge_residual << ',' << output.total_heating << ',' << output.total_cooling << ','
+          << output.element_heating << ',' << output.element_cooling << ',' << output.continuum_heating << ',' << output.continuum_cooling << ','
           << row.reference_hmctot << ',' << row.reference_elcter << ',' << hmctot_delta << ',' << charge_delta << '\n';
     std::ofstream pop_file(output_root / "native_evaluation_populations.csv");
     pop_file << "row,population\n" << std::setprecision(17);
@@ -1770,6 +1824,11 @@ int command_run_fixed_evaluation(const Options& options) {
     std::ofstream spectrum_file(output_root / "native_evaluation_spectra.csv");
     spectrum_file << "bin,energy_ev,spectrum,opacity\n" << std::setprecision(17);
     for (std::size_t k = 0; k < bins; ++k) spectrum_file << k + 1 << ',' << radiation.energy_ev[k] << ',' << spectrum[k] << ',' << opacity[k] << '\n';
+    rc = xstar_fixed_state_write_last_thermal_budget_v1(
+        context, (output_root / "native_thermal_budget.csv").c_str(), 1,
+        static_cast<std::uint64_t>(row.call_index), static_cast<std::uint64_t>(row.evaluation_index),
+        "replay", message.data(), message.size());
+    if (rc != 0) { std::cerr << "evaluation thermal-budget ledger failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     const std::filesystem::path diagnostics_root = options.diagnostics_dir.empty()
         ? output_root / "diagnostics" : std::filesystem::path(options.diagnostics_dir);
     rc = xstar_fixed_state_write_last_diagnostics_v1(
@@ -1777,10 +1836,13 @@ int command_run_fixed_evaluation(const Options& options) {
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(output_root / "native_evaluation_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.25.2\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.26\",\n"
             << "  \"trajectory_mode\": \"single_reference_input_state_qualification\",\n"
             << "  \"trajectory_row\": " << options.evaluation << ",\n"
             << "  \"evaluation_index\": " << row.evaluation_index << ",\n"
+            << "  \"call_index\": " << row.call_index << ",\n"
+            << "  \"global_workspace_mode\": \"" << options.global_workspace_mode << "\",\n"
+            << "  \"replay_workspace_applied\": " << (replay_workspace_applied ? "true" : "false") << ",\n"
             << "  \"records_evaluated\": " << stats.records_evaluated << ",\n"
             << "  \"elements_solved\": " << stats.elements_solved << ",\n"
             << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1798,6 +1860,9 @@ int command_run_fixed_evaluation(const Options& options) {
     std::cout << std::setprecision(17)
               << "trajectory_row=" << options.evaluation << "\n"
               << "evaluation_index=" << row.evaluation_index << "\n"
+              << "call_index=" << row.call_index << "\n"
+              << "global_workspace_mode=" << options.global_workspace_mode << "\n"
+              << "replay_workspace_applied=" << (replay_workspace_applied ? "true" : "false") << "\n"
               << "records_evaluated=" << stats.records_evaluated << "\n"
               << "elements_solved=" << stats.elements_solved << "\n"
               << "python_callbacks=" << stats.python_callbacks << "\n"
@@ -2339,7 +2404,7 @@ int command_run_fixed_dsec(const Options& options) {
             snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
         const bool prefix_mode = options.controller_prefix_evaluations > 0;
         if (prefix_mode) {
-            // v0.6.48.7.25.2: FixedDsecSnapshot is captured inside the evaluator,
+            // v0.6.48.7.26: FixedDsecSnapshot is captured inside the evaluator,
             // before xstar_thermal_run_evaluation_loop_v1 commits the returned
             // Kelvin state back to T4.  The source v0.6.47.2 budget records the
             // post-evaluation committed state.  Preserve both phases and make
@@ -2378,7 +2443,7 @@ int command_run_fixed_dsec(const Options& options) {
         const char* trajectory_mode = prefix_mode ? "call1_native_controller_prefix" : "two_state_type53_thermal_controller_smoke";
         std::ofstream smoke(std::filesystem::path(options.output_dir) / summary_name);
         smoke << std::setprecision(17)
-              << "{\n  \"schema_version\": \"0.6.48.7.25.2\",\n"
+              << "{\n  \"schema_version\": \"0.6.48.7.26\",\n"
               << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n"
               << "  \"evaluations_completed\": " << stats.evaluations_completed << ",\n"
               << "  \"snapshots\": " << snapshots.size() << ",\n"
@@ -2496,7 +2561,7 @@ int command_run_fixed_dsec(const Options& options) {
         }
     }
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.7.25.2\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.7.26\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -2591,7 +2656,7 @@ int command_run_fixed_dsec(const Options& options) {
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.25.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.26\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"

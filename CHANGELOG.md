@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.26 - 2026-06-14
+
+- Adds a hash-verified source-v0.6.47.2 capture of per-element and continuum thermal budgets for all 57 DSEC evaluations, with the exact call inventory 21/1/18/17.
+- Adds five controlled native call-2/evaluation-1 workspace replays: no global state, `global_xilevg` only, `global_xilevg + global_bilevg`, `global_xilevg + global_rnisg`, and all three arrays.
+- Extends `run-fixed-evaluation` with `--call-start-workspace-dir` and `--global-workspace-mode`, and writes one-row native thermal-budget ledgers for each replay.
+- Separates marginal global-state effects from residual H/He/Mg/continuum construction gaps and requires exact call-2/evaluation-1 element, continuum, charge-residual, and `hmctot` parity before calls 3-4 may run.
+- Adds a native consumer inventory. `global_xilevg` is currently consumed as a mapped-row population seed; `global_bilevg` and `global_rnisg` remain ABI-transported but have no native rate-family consumer.
+- Preserves all accepted v0.6.48.7.25.2 call-1 thermal, committed-state, secant, and controller gates unchanged.
+- Keeps thermal, product, and production promotion blocked; this is a decomposition release, not a physics promotion.
+
 ## 0.6.48.7.25.2 - 2026-06-14
 
 - Corrects the call-1 state audit to compare source and native post-evaluation committed states rather than source committed state against a native pre-evaluation callback snapshot.
