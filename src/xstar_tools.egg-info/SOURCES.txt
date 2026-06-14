@@ -63,6 +63,7 @@ V0648721_CALL1_THERMAL_BUDGET_AND_STATE_REFRESH_AUDIT.md
 V0648722_CONTINUUM_MG_CAUSALITY_AND_REFRESH_PAYLOAD.md
 V0648723_MG_PRIMARY_AND_CALL_START_WORKSPACE_TRANSPORT.md
 V0648724_CALL1_THERMAL_LEAF_PARITY_AND_FIRST_BRANCH.md
+V06487251_PHYSICAL_SECANT_SINGLE_COMMIT_HOTFIX.md
 V0648725_CALL1_SECANT_TEMPERATURE_IEEE_RESTORATION.md
 V064872_TYPE53_ANSWER_SEMANTICS_AND_MATRIX_GATE.md
 V064873_V0472_TYPE53_RUNTIME_CAPTURE.md
@@ -123,6 +124,8 @@ check_v048722_continuum_mg_refresh_payload_readiness.py
 check_v048723_mg_primary_workspace_transport_controller_audit.py
 check_v048724_call1_thermal_leaf_parity.py
 check_v048724_call1_thermal_leaf_readiness.py
+check_v0487251_call1_secant_temperature_ieee.py
+check_v0487251_secant_single_commit_readiness.py
 check_v048725_call1_secant_temperature_ieee.py
 check_v048725_secant_temperature_readiness.py
 check_v04872_type53_semantics.py
@@ -236,6 +239,7 @@ run_v048721_call1_thermal_budget_state_refresh_audit.sh
 run_v048722_continuum_mg_refresh_payload_audit.sh
 run_v048723_mg_primary_workspace_transport_controller_audit.sh
 run_v048724_call1_thermal_leaf_parity.sh
+run_v0487251_call1_secant_temperature_ieee.sh
 run_v048725_call1_secant_temperature_ieee.sh
 run_v04872_type53_semantics.sh
 run_v04873_type53_runtime_capture.sh
@@ -495,6 +499,7 @@ xstar_tools_v0.6.48.7.21_handoff.md
 xstar_tools_v0.6.48.7.22_handoff.md
 xstar_tools_v0.6.48.7.23_handoff.md
 xstar_tools_v0.6.48.7.24_handoff.md
+xstar_tools_v0.6.48.7.25.1_handoff.md
 xstar_tools_v0.6.48.7.25_handoff.md
 xstar_tools_v0.6.48.7.2_handoff.md
 xstar_tools_v0.6.48.7.3_handoff.md
@@ -1399,6 +1404,7 @@ tests/test_v0648721_call1_thermal_budget_state_refresh_audit.py
 tests/test_v0648722_continuum_mg_refresh_payload_audit.py
 tests/test_v0648723_mg_primary_workspace_transport.py
 tests/test_v0648724_call1_thermal_leaf_parity.py
+tests/test_v06487251_secant_single_commit_hotfix.py
 tests/test_v0648725_call1_secant_temperature_ieee.py
 tests/test_v064873_v0472_type53_runtime_capture.py
 tests/test_v064874_type53_ieee_application.py

@@ -643,3 +643,11 @@ include run_v048725_call1_secant_temperature_ieee.sh
 include check_v048725_call1_secant_temperature_ieee.py
 include check_v048725_secant_temperature_readiness.py
 include tests/test_v0648725_call1_secant_temperature_ieee.py
+
+# v0.6.48.7.25.1 physical secant single-commit hotfix
+include V06487251_PHYSICAL_SECANT_SINGLE_COMMIT_HOTFIX.md
+include xstar_tools_v0.6.48.7.25.1_handoff.md
+include run_v0487251_call1_secant_temperature_ieee.sh
+include check_v0487251_call1_secant_temperature_ieee.py
+include check_v0487251_secant_single_commit_readiness.py
+include tests/test_v06487251_secant_single_commit_hotfix.py

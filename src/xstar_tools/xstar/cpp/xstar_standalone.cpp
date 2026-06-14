@@ -87,7 +87,7 @@ void usage(std::ostream& output) {
         "    --solver-backend, --emissivity-backend, --opacity-backend, --thermal-backend.\n"
         "  xstar_cpp run-zone --backend cpp|python --allow-scaffold [options]\n"
         "  xstar_cpp python-bridge-test [--plugin-dir DIR] [--python-path DIR]\n\n"
-        "v0.6.48.7.25 restores the source DSEC K-to-T4 commit and late secant IEEE operation order for exact call-1 temperatures.\n"
+        "v0.6.48.7.25.1 restores the source DSEC K-to-T4 commit and late secant IEEE operation order for exact call-1 temperatures.\n"
         "Calls 2-4 remain staged behind exact call-1 leaves and controller state; thermal, product, and production promotion remain blocked.\n";
 }
 
@@ -836,7 +836,7 @@ int command_secant_ieee_self_test(const Options& options) {
     const bool accepted=status==XSTAR_STATUS_OK && oracle.index==21 && committed_count==21 && exact==21;
     std::cout<<"evaluations="<<oracle.index<<"\n"<<"committed_rows="<<committed_count<<"\n"<<"temperature_rows_ieee_exact="<<exact<<"\n"
              <<"late_secant_temperature_t4="<<std::setprecision(17)<<committed[20]<<"\n"
-             <<"source_k_to_t4_commit=true\nsource_secant_operation_order=true\nRESULT="<<(accepted?"ACCEPT":"REJECT")<<"\n";
+             <<"source_k_to_t4_commit=true\nsource_secant_operation_order=true\nphysical_callback_precommit=false\nsingle_commit_owner=thermal_controller\nRESULT="<<(accepted?"ACCEPT":"REJECT")<<"\n";
     xstar_context_destroy(context); return accepted?0:12;
 }
 
@@ -1109,7 +1109,7 @@ void write_native_state_fits(
         fits_card("BITPIX", "                    8"),
         fits_card("NAXIS", "                    0"),
         fits_card("EXTEND", "                   T"),
-        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.25'"),
+        fits_card("ORIGIN", "'xstar_tools 0.6.48.7.25.1'"),
     });
     write_fits_header(out, {
         fits_card("XTENSION", "'BINTABLE'"), fits_card("BITPIX", "                    8"),
@@ -1208,7 +1208,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream step(outdir / "xout_step.log");
             step << std::setprecision(17)
-                 << "xstar_tools native fixed-state v0.6.48.7.25\n"
+                 << "xstar_tools native fixed-state v0.6.48.7.25.1\n"
                  << "program_id=" << stats.program_id << "\n"
                  << "computed_from_raw_coefficients=true\n"
                  << "active_atdb_lowered=" << (active_atdb_lowered ? "true" : "false") << "\n"
@@ -1241,7 +1241,7 @@ int command_run_fixed_state(const Options& options) {
         {
             std::ofstream summary(outdir / "native_fixed_state_summary.json");
             summary << std::setprecision(17)
-                    << "{\n  \"schema_version\": \"0.6.48.7.25\",\n"
+                    << "{\n  \"schema_version\": \"0.6.48.7.25.1\",\n"
                     << "  \"program_id\": \"" << stats.program_id << "\",\n"
                     << "  \"computed_from_raw_coefficients\": true,\n"
                     << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
@@ -1609,7 +1609,7 @@ int command_run_fixed_trajectory(const Options& options) {
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,reference_lnerr,hmctot_delta,charge_residual_delta\n";
     pops << "evaluation_index,row,population\n";
     spectra_file << "evaluation_index,bin,energy_ev,spectrum,opacity\n";
-    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.25\n"
+    step << std::setprecision(17) << "xstar_tools native fixed-state trajectory v0.6.48.7.25.1\n"
          << "trajectory_mode=reference_input_state_qualification\n"
          << "computed_from_raw_coefficients=true\n";
     xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
@@ -1662,7 +1662,7 @@ int command_run_fixed_trajectory(const Options& options) {
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
     if (rc!=0) { std::cerr << "visited report failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(std::filesystem::path(options.output_dir)/"native_trajectory_summary.json");
-    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.25\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+    summary << std::setprecision(17) << "{\n  \"schema_version\": \"0.6.48.7.25.1\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"reference_input_state_qualification\",\n  \"evaluations\": 61,\n"
             << "  \"radiation_input\": \"" << radiation.mode << "\",\n  \"radiation_bins\": " << bins << ",\n"
             << "  \"computed_from_raw_coefficients\": true,\n  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
@@ -1777,7 +1777,7 @@ int command_run_fixed_evaluation(const Options& options) {
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
     std::ofstream summary(output_root / "native_evaluation_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.25\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.25.1\",\n"
             << "  \"trajectory_mode\": \"single_reference_input_state_qualification\",\n"
             << "  \"trajectory_row\": " << options.evaluation << ",\n"
             << "  \"evaluation_index\": " << row.evaluation_index << ",\n"
@@ -2143,14 +2143,14 @@ int fixed_dsec_evaluator(
 
     evaluation->hmctot = output.hmctot;
     evaluation->elcter = trial_state->electron_fraction_xee - output.elcter;
-    // Match DsecMutableRuntimeState.commit_calc_hmc_all: calc_hmc_all returns
-    // kelvin, then DSEC stores temperature_t4 = temperature_k / 1e4.  Keep
-    // both operations explicit so the callback snapshot and committed state
-    // carry the same source IEEE value.
-    volatile double committed_temperature_k = input.temperature_k;
-    volatile double committed_temperature_t4 = committed_temperature_k / 1.0e4;
-    snapshot.temperature_t4 = committed_temperature_t4;
-    evaluation->temperature_t4 = committed_temperature_t4;
+    // v0.6.48.7.26: the thermal controller owns the single source-faithful
+    // T4 -> kelvin -> T4 state commit.  Returning input.temperature_k/1e4
+    // here pre-committed the callback state and made the physical evaluator
+    // traverse the conversion twice, while secant-ieee-self-test traversed it
+    // once.  Return the uncommitted trial T4 and let thermal_kernels.cpp apply
+    // the sole source commit at the controller boundary.
+    snapshot.temperature_t4 = trial_state->temperature_t4;
+    evaluation->temperature_t4 = trial_state->temperature_t4;
     evaluation->electron_fraction_xee = trial_state->electron_fraction_xee;
     evaluation->hydrogen_density_cm3 = trial_state->hydrogen_density_cm3;
     evaluation->state_generation = data->cumulative_stats->state_generation;
@@ -2351,7 +2351,7 @@ int command_run_fixed_dsec(const Options& options) {
         const char* trajectory_mode = prefix_mode ? "call1_native_controller_prefix" : "two_state_type53_thermal_controller_smoke";
         std::ofstream smoke(std::filesystem::path(options.output_dir) / summary_name);
         smoke << std::setprecision(17)
-              << "{\n  \"schema_version\": \"0.6.48.7.25\",\n"
+              << "{\n  \"schema_version\": \"0.6.48.7.25.1\",\n"
               << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n"
               << "  \"evaluations_completed\": " << stats.evaluations_completed << ",\n"
               << "  \"snapshots\": " << snapshots.size() << ",\n"
@@ -2469,7 +2469,7 @@ int command_run_fixed_dsec(const Options& options) {
         }
     }
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.7.25\n"
+         << "xstar_tools native DSEC trajectory v0.6.48.7.25.1\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -2564,7 +2564,7 @@ int command_run_fixed_dsec(const Options& options) {
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.25\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.25.1\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"

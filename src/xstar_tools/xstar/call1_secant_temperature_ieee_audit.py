@@ -1,11 +1,11 @@
-"""v0.6.48.7.25 call-1 secant temperature IEEE restoration audit."""
+"""v0.6.48.7.25.1 call-1 secant temperature IEEE restoration audit."""
 from __future__ import annotations
 import argparse, csv, json, shutil, math, struct
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.25"
-SCHEMA = "xstar-tools-v0648725-call1-secant-temperature-ieee-v1"
+RELEASE = "0.6.48.7.25.1"
+SCHEMA = "xstar-tools-v06487251-call1-secant-single-commit-v1"
 LEAVES = ("cmp1","cmp2","htcomp","clcomp","clbrems","htfreef")
 HHE = ("h_heating","h_cooling","h_heating2","h_cooling2","he_heating","he_cooling","he_heating2","he_cooling2")
 MG = ("mg_heating","mg_cooling","mg_heating2","mg_cooling2")

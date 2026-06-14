@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.25.1 - 2026-06-14
+
+- Removes the duplicate physical evaluator K-to-T4 pre-commit; the thermal controller is now the sole owner of the source T4-to-kelvin-to-T4 state commit.
+- Resolves the two remaining one-ULP physical temperature mismatches at call-1 evaluations 14 and 16 without hard-coded temperatures.
+- Extends the native secant self-test contract with `physical_callback_precommit=false` and `single_commit_owner=thermal_controller`.
+- Preserves exact call-1 thermal leaves, H/He/Mg qualification budgets, electron fraction, charge residual, and `hmctot`.
+- Keeps calls 2-4 gated on a complete 21-state physical rerun; thermal, product, and production promotion remain blocked.
+
 ## 0.6.48.7.25 - 2026-06-14
 
 - Restores the source DSEC post-evaluation temperature commit as explicit T4-to-kelvin and kelvin-to-T4 operations, preserving the source binary64 rounding point.
