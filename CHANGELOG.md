@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.30.1 - 2026-06-14
+
+- Corrected the call-2 helium seed audit to compare native loaded seeds with the exact call-start `global_xilevg` payload rather than source post-solve populations.
+- Added an explicit phase-aligned 78-row transport ledger and separate seed-transport and post-solve population gates.
+- No physics formulas or controller behavior changed.
+
 ## 0.6.48.7.28 - 2026-06-14
 
 - Added hash-verified source capture of call-2/evaluation-1 helium populations before/after solve.

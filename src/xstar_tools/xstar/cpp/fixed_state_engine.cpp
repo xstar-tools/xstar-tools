@@ -352,6 +352,8 @@ struct NativeElementDiagnostic {
     std::uint64_t records_constructed = 0;
     std::uint64_t terms_constructed = 0;
     bool solve_response_captured = false;
+    std::vector<int> active_loaded_global_level_indices;
+    std::vector<double> active_loaded_call_start_xilevg;
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
@@ -2450,6 +2452,17 @@ int run_impl(
         element_diagnostic.terms_constructed = eout.terms_constructed;
         if (helium_solve_response && element.element_z == 2) {
             element_diagnostic.solve_response_captured = true;
+            element_diagnostic.active_loaded_global_level_indices.resize(static_cast<std::size_t>(active.element.n_rows), 0);
+            element_diagnostic.active_loaded_call_start_xilevg.resize(static_cast<std::size_t>(active.element.n_rows), 0.0);
+            for (int compact_row = 1; compact_row <= active.element.n_rows; ++compact_row) {
+                const auto& active_row = active.element.rows.at(static_cast<std::size_t>(compact_row - 1));
+                element_diagnostic.active_loaded_global_level_indices[static_cast<std::size_t>(compact_row - 1)] = active_row.global_level_index;
+                if (input.global_xilevg && input.global_level_count > 0 && active_row.global_level_index > 0 &&
+                    static_cast<std::size_t>(active_row.global_level_index) <= input.global_level_count) {
+                    element_diagnostic.active_loaded_call_start_xilevg[static_cast<std::size_t>(compact_row - 1)] =
+                        input.global_xilevg[active_row.global_level_index - 1];
+                }
+            }
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations = buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
@@ -3078,7 +3091,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_rows || !solve_matrix || !solve_terms) {
                 throw std::runtime_error("cannot create helium solve-response CSV files");
             }
-            solve_rows << "evaluation_ordinal,compact_row,full_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,is_normalization_row,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
+            solve_rows << "evaluation_ordinal,compact_row,full_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,is_normalization_row,loaded_global_level_index,loaded_call_start_xilevg,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
             solve_rows << std::setprecision(17);
             for (int compact_row = 1; compact_row <= n; ++compact_row) {
                 const int full_row = helium->active.full_row_start + compact_row - 1;
@@ -3088,6 +3101,8 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                            << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ','
                            << row.energy_ev << ',' << row.statistical_weight << ','
                            << (compact_row == helium->active.element.normalization_row ? 1 : 0) << ','
+                           << helium->active_loaded_global_level_indices.at(index) << ','
+                           << helium->active_loaded_call_start_xilevg.at(index) << ','
                            << helium->active_initial_populations.at(index) << ','
                            << helium->active_final_outer_start_populations.at(index) << ','
                            << helium->active_final_populations.at(index) << ','
