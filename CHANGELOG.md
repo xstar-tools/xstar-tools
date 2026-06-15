@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.31 - 2026-06-15
+
+- Add a hash-verified v0.6.47.2 call-2/evaluation-1 helium solve-state capture with transformed initial populations, dense and normalized matrices, RHS, source-order matrix terms, and Lucy iteration traces.
+- Compare the source system with the unchanged native solve-response ledgers using independent transformed-state, RHS, dense-matrix, source-order metadata, and coefficient gates.
+- Preserve the exact 78-row He I/He II global-level mapping and raw `global_xilevg` seed transport established by v0.6.48.7.30.4.
+- Keep type-53 separately fixed and report non-type-53 type-50, type-71, and type-99 rate/matrix gates before interpreting post-solve or thermal differences.
+- Keep H, continuum, Mg, calls 3-4, thermal parity, product parity, and production promotion blocked.
+
 ## 0.6.48.7.30.4 - 2026-06-15
 
 - Correct the complete He II source ordinal by subtracting one from the already-resolved global-level index for every `Z=2, stage=2` compact row.
