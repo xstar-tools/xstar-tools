@@ -470,12 +470,12 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
         _, energy, weight, _, principal_n, orbital_l = _level_payload(master, derived, ion_index, local_level)
         stage = int(derived.ion_stage[ion_index])
         global_level_index = int((global_level_index_by_key or {}).get((int(element_z), stage, local_level), 0))
-        # v0.6.48.7.30.2: the compact He II manifold carries the destination
+        # v0.6.48.7.30.3: the compact He II manifold carries the destination
         # ion ground state as the trailing role of the shared boundary row.
         # Source global xilevg ordinals for these rows are therefore one local
         # level earlier than the role label used by the compact basis.  Apply
         # this only to He II; He I and all other elements retain literal roles.
-        if int(element_z) == 2 and stage == 2 and local_level > 1:
+        if int(element_z) == 2 and stage == 2:
             corrected = int((global_level_index_by_key or {}).get((2, 2, local_level - 1), 0))
             if corrected > 0:
                 global_level_index = corrected

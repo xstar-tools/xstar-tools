@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.48.7.30.3 - 2026-06-14
+
+- Complete the He II global-level mapping correction for the first boundary row, mapping compact rows 46–78 to global levels 79–111.
+
 ## 0.6.48.7.30.2 - 2026-06-14
 
 - Correct the lowered He II call-start population mapping so compact rows 46–78 consume source global levels 79–111 rather than 80–112.
