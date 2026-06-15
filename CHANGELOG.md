@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.31.2 - 2026-06-15
+
+- Fix the generated v0.6.47.2 helium solve-state probe to terminate `v0472_call2_eval1_he_solve_state.json` with a real newline instead of the literal characters `\n`.
+- Validate the emitted solve-state JSON immediately inside the source probe before the wrapper proceeds.
+- Add a structured missing-summary checker path so interrupted source capture or decomposition runs report instrumentation gates instead of raising `FileNotFoundError`.
+- Preserve all successfully captured helium solve rows, dense-matrix cells, source-order terms, and Lucy iteration traces; no physics, matrix, solver, thermal, controller, or product behavior changes.
+
 ## 0.6.48.7.31.1 - 2026-06-15
 
 - Fix the source call-2 helium solve-state probe to use the actual v0.6.47.2 `ElementBasisRow` schema.

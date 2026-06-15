@@ -3,7 +3,7 @@ from xstar_tools.xstar.v0472_call2_helium_solve_state_capture import RELEASE, _P
 
 
 def test_release_and_actual_element_basis_row_schema():
-    assert RELEASE == "0.6.48.7.31.1"
+    assert RELEASE == "0.6.48.7.31.2"
     assert "assembly.basis.ion_stage" in _PROBE
     assert "meta.ion_counter" in _PROBE
     assert "'ion_stage':stage" in _PROBE

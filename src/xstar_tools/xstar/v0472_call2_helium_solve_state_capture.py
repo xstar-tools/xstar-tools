@@ -6,8 +6,8 @@ from typing import Any
 from . import v0472_full_dsec_thermal_budget_capture as base
 from . import v0472_thermal_budget_state_refresh_capture as low
 
-RELEASE = "0.6.48.7.31.1"
-SCHEMA = "xstar-tools-v06487311-v0472-call2-helium-solve-state-capture-v1"
+RELEASE = "0.6.48.7.31.2"
+SCHEMA = "xstar-tools-v06487312-v0472-call2-helium-solve-state-capture-v1"
 REPORT = "v0472_call2_eval1_he_solve_capture_report.json"
 
 _INJECT = r'''
@@ -123,7 +123,9 @@ def _v048731_write_he_solve_outputs():
     _v048731_write_rows('v0472_call2_eval1_he_superlevel_trace.csv',_HE_SUPER_TRACE)
     _v048731_write_rows('v0472_call2_eval1_he_condensed_matrix_trace.csv',_HE_CONDENSED_TRACE)
     _v048731_write_rows('v0472_call2_eval1_he_fixed_point_trace.csv',_HE_FIXED_TRACE)
-    (_OUT/'v0472_call2_eval1_he_solve_state.json').write_text(json.dumps(_HE_SOLVE_STATE,indent=2,sort_keys=True)+'\\n')
+    state_path=_OUT/'v0472_call2_eval1_he_solve_state.json'
+    state_path.write_text(json.dumps(_HE_SOLVE_STATE,indent=2,sort_keys=True)+'\n')
+    json.loads(state_path.read_text())
 
 '''
 _PROBE = _PROBE.replace('def finalize(run_summary=None):\n', _EXTRA + 'def finalize(run_summary=None):\n    _v048731_write_he_solve_outputs()\n', 1)
