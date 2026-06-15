@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.30.2 - 2026-06-14
+
+- Correct the lowered He II call-start population mapping so compact rows 46–78 consume source global levels 79–111 rather than 80–112.
+- Preserve He I rows 1–45 and all non-helium mappings unchanged.
+- Add a strict 78-row mapping and raw `global_xilevg` transport ledger with an explicit normalization-row level-111 gate.
+- Keep rate, matrix-thermal, general-helium, and calls 3–4 gates blocked until the physical corrected replay accepts.
+
+# Changelog
+
 ## 0.6.48.7.30.1 - 2026-06-14
 
 - Corrected the call-2 helium seed audit to compare native loaded seeds with the exact call-start `global_xilevg` payload rather than source post-solve populations.
