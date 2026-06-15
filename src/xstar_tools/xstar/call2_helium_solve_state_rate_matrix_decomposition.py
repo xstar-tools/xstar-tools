@@ -1,143 +1,599 @@
-"""v0.6.48.7.31.2 call-2 helium solve-state and rate-matrix decomposition."""
+"""v0.6.48.7.31.3 call-2 helium solve-state term-alignment and seed-semantics audit."""
 from __future__ import annotations
-import argparse, csv, json, math
-from collections import defaultdict
+
+import argparse
+import csv
+import json
+import math
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
-RELEASE="0.6.48.7.31.2"
-SCHEMA="xstar-tools-v06487312-call2-helium-solve-state-rate-matrix-decomposition-v1"
+RELEASE = "0.6.48.7.31.3"
+SCHEMA = "xstar-tools-v06487313-helium-solve-state-term-alignment-seed-semantics-v1"
 
-def read_csv(path: Path) -> list[dict[str,str]]:
-    with path.open(newline='') as f: return list(csv.DictReader(f))
 
-def f(row: dict[str,str], key: str, default: float=math.nan) -> float:
-    try: return float(row.get(key,default))
-    except (TypeError,ValueError): return default
+def read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="") as handle:
+        return list(csv.DictReader(handle))
 
-def i(row: dict[str,str], key: str, default: int=0) -> int:
-    try: return int(float(row.get(key,default)))
-    except (TypeError,ValueError): return default
 
-def write_csv(path: Path, rows: list[dict[str,Any]]) -> None:
-    fields=[]
+def f(row: dict[str, str], key: str, default: float = math.nan) -> float:
+    try:
+        return float(row.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def i(row: dict[str, str], key: str, default: int = 0) -> int:
+    try:
+        return int(float(row.get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    fields: list[str] = []
     for row in rows:
         for key in row:
-            if key not in fields: fields.append(key)
-    with path.open('w',newline='') as h:
-        w=csv.DictWriter(h,fieldnames=fields,extrasaction='ignore'); w.writeheader(); w.writerows(rows)
+            if key not in fields:
+                fields.append(key)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
-def role(value: str) -> str:
-    return {'forward_offdiag':'forward_gain','reverse_offdiag':'reverse_gain'}.get(value,value)
 
-def exact(a: float,b: float) -> bool: return math.isfinite(a) and math.isfinite(b) and a==b
+def canonical_role(value: str) -> str:
+    return {
+        "forward_offdiag": "forward_gain",
+        "reverse_offdiag": "reverse_gain",
+    }.get(value, value)
+
+
+def exact(a: float, b: float) -> bool:
+    return math.isfinite(a) and math.isfinite(b) and a == b
+
+
+def finite_delta(a: float, b: float) -> float:
+    return abs(b - a) if math.isfinite(a) and math.isfinite(b) else math.inf
+
+
+def term_base_key(row: dict[str, str]) -> tuple[int, int, int, str, int, int]:
+    """Stable cross-runtime term identity, excluding stream position."""
+    return (
+        i(row, "record"),
+        i(row, "data_type"),
+        i(row, "rate_type"),
+        canonical_role(row.get("role", "")),
+        i(row, "compact_row"),
+        i(row, "compact_column"),
+    )
+
+
+def indexed_terms(
+    rows: Iterable[dict[str, str]],
+) -> dict[tuple[int, int, int, str, int, int, int], dict[str, str]]:
+    """Add an occurrence ordinal for duplicate metadata keys."""
+    counts: Counter[tuple[int, int, int, str, int, int]] = Counter()
+    indexed: dict[tuple[int, int, int, str, int, int, int], dict[str, str]] = {}
+    for row in rows:
+        base = term_base_key(row)
+        counts[base] += 1
+        indexed[base + (counts[base],)] = row
+    return indexed
+
+
+def key_fields(key: tuple[int, int, int, str, int, int, int]) -> dict[str, Any]:
+    record, dtype, rate_type, role_name, row, column, occurrence = key
+    return {
+        "record": record,
+        "data_type": dtype,
+        "rate_type": rate_type,
+        "role": role_name,
+        "compact_row": row,
+        "compact_column": column,
+        "occurrence_ordinal": occurrence,
+    }
+
+
+def term_row_payload(prefix: str, row: dict[str, str] | None) -> dict[str, Any]:
+    if row is None:
+        return {
+            f"{prefix}_source_order_index": 0,
+            f"{prefix}_term_source_position": 0,
+            f"{prefix}_contribution_source_position": 0,
+        }
+    return {
+        f"{prefix}_source_order_index": i(row, "source_order_index"),
+        f"{prefix}_term_source_position": i(row, "term_source_position", i(row, "term_index")),
+        f"{prefix}_contribution_source_position": i(row, "contribution_source_position"),
+    }
+
+
+def all_coefficients_exact(row: dict[str, Any]) -> bool:
+    return all(bool(row[f"{name}_exact"]) for name in ("aj1", "aj2", "cj", "cj2"))
+
+
+def family_gate(
+    dtype: int,
+    comparison_rows: list[dict[str, Any]],
+    unmatched_source: list[dict[str, Any]],
+    unmatched_native: list[dict[str, Any]],
+) -> str:
+    matched = [row for row in comparison_rows if int(row["data_type"]) == dtype]
+    source_gap = any(int(row["data_type"]) == dtype for row in unmatched_source)
+    native_gap = any(int(row["data_type"]) == dtype for row in unmatched_native)
+    if not matched and not source_gap and not native_gap:
+        return "NOT_PRESENT"
+    if source_gap or native_gap:
+        return "NOT_EVALUATED_TERM_STREAM_ALIGNMENT"
+    return "ACCEPT" if matched and all(all_coefficients_exact(row) for row in matched) else "REJECT"
+
 
 def main() -> int:
-    p=argparse.ArgumentParser(); p.add_argument('--source-capture',type=Path,required=True); p.add_argument('--native-replay',type=Path,required=True); p.add_argument('--prior-summary',type=Path,required=True); p.add_argument('--output',type=Path,required=True); a=p.parse_args(); a.output.mkdir(parents=True,exist_ok=True)
-    source_report=json.loads((a.source_capture/'v0472_call2_eval1_he_solve_capture_report.json').read_text())
-    prior=json.loads(a.prior_summary.read_text()); pg=prior.get('gates',{})
-    source_rows=read_csv(a.source_capture/'v0472_call2_eval1_he_solve_rows.csv')
-    source_matrix=read_csv(a.source_capture/'v0472_call2_eval1_he_solve_matrix.csv')
-    source_terms=read_csv(a.source_capture/'v0472_call2_eval1_he_source_order_matrix_terms.csv')
-    native_rows=read_csv(a.native_replay/'diagnostics/evaluation_0022_helium_solve_rows.csv')
-    native_matrix=read_csv(a.native_replay/'diagnostics/evaluation_0022_helium_solve_matrix.csv')
-    native_terms=read_csv(a.native_replay/'diagnostics/evaluation_0022_helium_source_order_terms.csv')
-    native_state=json.loads((a.native_replay/'diagnostics/evaluation_0022_helium_solve_state.json').read_text())
-    outer_trace=read_csv(a.source_capture/'v0472_call2_eval1_he_outer_level_trace.csv')
-    fixed_trace=read_csv(a.source_capture/'v0472_call2_eval1_he_fixed_point_trace.csv')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source-capture", type=Path, required=True)
+    parser.add_argument("--native-replay", type=Path, required=True)
+    parser.add_argument("--prior-summary", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
 
-    sr={i(r,'element_row'):r for r in source_rows}; nr={i(r,'full_row'):r for r in native_rows}
-    row_cmp=[]
-    for row_id in sorted(sr):
-        s=sr[row_id]; n=nr.get(row_id,{})
-        sinit=f(s,'transformed_initial_population'); ninit=f(n,'initial_population')
-        souter=f(s,'final_outer_start_population'); nouter=f(n,'final_outer_start_population')
-        sfinal=f(s,'final_population'); nfinal=f(n,'final_population')
-        srhs=f(s,'rhs'); nrhs=f(n,'rhs')
-        row_cmp.append({'element_row':row_id,'ion':i(s,'ion'),'is_normalization_row':i(s,'is_normalization_row'),
-            'source_transformed_initial':sinit,'native_transformed_initial':ninit,'transformed_initial_exact':exact(sinit,ninit),
-            'source_rhs':srhs,'native_rhs':nrhs,'rhs_exact':exact(srhs,nrhs),
-            'source_final_outer_start':souter,'native_final_outer_start':nouter,'final_outer_start_exact':exact(souter,nouter),
-            'source_final_population':sfinal,'native_final_population':nfinal,'post_solve_exact':exact(sfinal,nfinal)})
-    write_csv(a.output/'call2_he_solve_state_comparison.csv',row_cmp)
+    source_report = json.loads(
+        (args.source_capture / "v0472_call2_eval1_he_solve_capture_report.json").read_text()
+    )
+    prior = json.loads(args.prior_summary.read_text())
+    prior_gates = prior.get("gates", {})
 
-    sm={(i(r,'compact_row'),i(r,'compact_column')):r for r in source_matrix}; nm={(i(r,'compact_row'),i(r,'compact_column')):r for r in native_matrix}
-    matrix_cmp=[]
-    for key in sorted(sm):
-        s=sm[key]; n=nm.get(key,{})
-        sd=f(s,'dense_value'); nd=f(n,'dense_value'); sh=f(s,'heating_value'); nh=f(n,'heating_value'); sh2=f(s,'heating2_value'); nh2=f(n,'heating2_value')
-        matrix_cmp.append({'compact_row':key[0],'compact_column':key[1],'source_dense':sd,'native_dense':nd,'dense_exact':exact(sd,nd),
-            'dense_abs_delta':abs(nd-sd) if math.isfinite(sd) and math.isfinite(nd) else math.inf,
-            'source_heating_matrix':sh,'native_heating_matrix':nh,'heating_exact':exact(sh,nh),
-            'source_heating2_matrix':sh2,'native_heating2_matrix':nh2,'heating2_exact':exact(sh2,nh2)})
-    write_csv(a.output/'call2_he_dense_matrix_comparison.csv',matrix_cmp)
+    source_rows = read_csv(args.source_capture / "v0472_call2_eval1_he_solve_rows.csv")
+    source_matrix = read_csv(args.source_capture / "v0472_call2_eval1_he_solve_matrix.csv")
+    source_terms = read_csv(
+        args.source_capture / "v0472_call2_eval1_he_source_order_matrix_terms.csv"
+    )
+    native_rows = read_csv(
+        args.native_replay / "diagnostics/evaluation_0022_helium_solve_rows.csv"
+    )
+    native_matrix = read_csv(
+        args.native_replay / "diagnostics/evaluation_0022_helium_solve_matrix.csv"
+    )
+    native_terms = read_csv(
+        args.native_replay / "diagnostics/evaluation_0022_helium_source_order_terms.csv"
+    )
+    native_state = json.loads(
+        (args.native_replay / "diagnostics/evaluation_0022_helium_solve_state.json").read_text()
+    )
+    outer_trace = read_csv(
+        args.source_capture / "v0472_call2_eval1_he_outer_level_trace.csv"
+    )
+    fixed_trace = read_csv(
+        args.source_capture / "v0472_call2_eval1_he_fixed_point_trace.csv"
+    )
 
-    nt={i(r,'source_order_index'):r for r in native_terms}; term_cmp=[]; family=defaultdict(lambda:{'terms':0,'metadata_mismatches':0,'aj1_mismatches':0,'aj2_mismatches':0,'cj_mismatches':0,'cj2_mismatches':0,'max_abs_delta':0.0})
-    for s in source_terms:
-        order=i(s,'source_order_index'); n=nt.get(order,{})
-        dtype=i(s,'data_type'); dest=i(s,'compact_row'); bucket=family[(dtype,dest)]
-        meta=(i(s,'term_index')==i(n,'term_source_position') and i(s,'record')==i(n,'record') and dtype==i(n,'data_type') and i(s,'rate_type')==i(n,'rate_type') and role(s.get('role',''))==n.get('role','') and dest==i(n,'compact_row') and i(s,'compact_column')==i(n,'compact_column'))
-        values={}
-        for key in ('aj1','aj2','cj','cj2'):
-            sv=f(s,key); nv=f(n,key); ok=exact(sv,nv); delta=abs(nv-sv) if math.isfinite(sv) and math.isfinite(nv) else math.inf
-            values[f'source_{key}']=sv; values[f'native_{key}']=nv; values[f'{key}_exact']=ok; values[f'{key}_abs_delta']=delta
-            if not ok: bucket[f'{key}_mismatches']+=1
-            bucket['max_abs_delta']=max(bucket['max_abs_delta'],delta)
-        bucket['terms']+=1
-        if not meta: bucket['metadata_mismatches']+=1
-        term_cmp.append({'source_order_index':order,'source_term_index':i(s,'term_index'),'native_term_source_position':i(n,'term_source_position'),
-            'record':i(s,'record'),'data_type':dtype,'rate_type':i(s,'rate_type'),'role':role(s.get('role','')),
-            'compact_row':dest,'compact_column':i(s,'compact_column'),'metadata_exact':meta,'type53':1 if dtype==53 else 0,**values})
-    write_csv(a.output/'call2_he_source_order_term_comparison.csv',term_cmp)
-    family_rows=[]
-    for (dtype,dest),b in sorted(family.items()):
-        family_rows.append({'data_type':dtype,'destination_row':dest,'type53':1 if dtype==53 else 0,**b,
-            'family_row_exact':b['metadata_mismatches']==0 and all(b[f'{x}_mismatches']==0 for x in ('aj1','aj2','cj','cj2'))})
-    write_csv(a.output/'call2_he_rate_family_row_gaps.csv',family_rows)
+    # Lifecycle-aligned solve-state and seed-semantics ledger.
+    source_by_row = {i(row, "element_row"): row for row in source_rows}
+    native_by_row = {i(row, "full_row"): row for row in native_rows}
+    row_comparison: list[dict[str, Any]] = []
+    seed_comparison: list[dict[str, Any]] = []
+    for row_id in sorted(source_by_row):
+        source = source_by_row[row_id]
+        native = native_by_row.get(row_id, {})
 
-    baseline=(prior.get('result')=='ACCEPT' and pg.get('CALL2_HE_78_ROW_MAPPING_EXACT')=='ACCEPT' and pg.get('CALL2_HE_SEED_TRANSPORT_EXACT')=='ACCEPT')
-    capture=source_report.get('result')=='ACCEPT'
-    transformed=len(row_cmp)==78 and all(r['transformed_initial_exact'] for r in row_cmp)
-    rhs=len(row_cmp)==78 and all(r['rhs_exact'] for r in row_cmp)
-    dense=len(matrix_cmp)==78*78 and all(r['dense_exact'] for r in matrix_cmp)
-    term_metadata=len(term_cmp)>0 and len(term_cmp)==len(native_terms) and all(r['metadata_exact'] for r in term_cmp)
-    rate_coeff=term_metadata and all(all(r[f'{x}_exact'] for x in ('aj1','aj2','cj','cj2')) for r in term_cmp)
-    type53=all(r['metadata_exact'] and all(r[f'{x}_exact'] for x in ('aj1','aj2','cj','cj2')) for r in term_cmp if r['type53']) and any(r['type53'] for r in term_cmp)
-    type_gates={}
-    for dtype in (50,71,99):
-        rows=[r for r in term_cmp if r['data_type']==dtype]
-        type_gates[dtype]=bool(rows) and all(r['metadata_exact'] and all(r[f'{x}_exact'] for x in ('aj1','aj2','cj','cj2')) for r in rows)
-    post=len(row_cmp)==78 and all(r['post_solve_exact'] for r in row_cmp)
-    outer=len(row_cmp)==78 and all(r['final_outer_start_exact'] for r in row_cmp)
-    source_trace=bool(outer_trace) and bool(fixed_trace)
-    matrix_ready=transformed and rhs and dense and term_metadata
-    gates={
-        'CALL1_ACCEPTED_BASELINE':'ACCEPT' if baseline else 'REJECT',
-        'CALL2_HE_SOURCE_SOLVE_STATE_CAPTURE':'ACCEPT' if capture else 'REJECT',
-        'CALL2_HE_SOURCE_ITERATION_TRACE':'ACCEPT' if source_trace else 'REJECT',
-        'CALL2_HE_TRANSFORMED_INITIAL_STATE':'ACCEPT' if transformed else 'REJECT',
-        'CALL2_HE_RHS_CONSTRUCTION':'ACCEPT' if rhs else 'REJECT',
-        'CALL2_HE_DENSE_MATRIX_ASSEMBLY':'ACCEPT' if dense else 'REJECT',
-        'CALL2_HE_SOURCE_ORDER_TERM_METADATA':'ACCEPT' if term_metadata else 'REJECT',
-        'CALL2_HE_TYPE53_MATRIX_FIXED':'ACCEPT' if type53 else 'REJECT',
-        'CALL2_HE_TYPE50_RATE_MATRIX':'ACCEPT' if type_gates[50] else 'REJECT',
-        'CALL2_HE_TYPE71_RATE_MATRIX':'ACCEPT' if type_gates[71] else 'REJECT',
-        'CALL2_HE_TYPE99_RATE_MATRIX':'ACCEPT' if type_gates[99] else 'REJECT',
-        'CALL2_HE_RATE_EVALUATION':'ACCEPT' if rate_coeff else 'REJECT',
-        'CALL2_HE_MATRIX_SYSTEM_READY':'ACCEPT' if matrix_ready else 'REJECT',
-        'CALL2_HE_FINAL_OUTER_START_STATE':'ACCEPT' if outer else ('REJECT' if matrix_ready else 'BLOCKED_BY_MATRIX_SYSTEM'),
-        'CALL2_HE_POST_SOLVE_POPULATION_EXACT':'ACCEPT' if post else ('REJECT' if matrix_ready else 'BLOCKED_BY_MATRIX_SYSTEM'),
-        'CALL2_HE_NATIVE_ITERATION_TRACE':'NOT_CAPTURED_NATIVE_ABI',
-        'CALL2_HE_SOLVER_NORMALIZATION':'RUN_ALLOWED' if matrix_ready else 'BLOCKED_BY_MATRIX_SYSTEM',
-        'CALL2_HE_MATRIX_THERMAL_ACCUMULATION':'RUN_ALLOWED' if rate_coeff else 'BLOCKED_BY_RATE_MATRIX',
-        'CALL2_GENERAL_HE_THERMAL':'BLOCKED_BY_POST_SOLVE_POPULATION' if not post else 'RUN_ALLOWED',
-        'CALLS_3_TO_4':'BLOCKED_BY_CALL2_HELIUM','THERMAL_PARITY':'BLOCKED','PRODUCT_PARITY':'BLOCKED','PRODUCTION_PROMOTION':'BLOCKED'}
-    core=baseline and capture and source_trace and len(row_cmp)==78 and len(matrix_cmp)==78*78 and len(term_cmp)>0
-    report={'schema':SCHEMA,'release':RELEASE,'result':'ACCEPT' if core else 'REJECT','rows':len(row_cmp),'matrix_cells':len(matrix_cmp),'source_order_terms':len(term_cmp),
-        'transformed_initial_exact_rows':sum(r['transformed_initial_exact'] for r in row_cmp),'rhs_exact_rows':sum(r['rhs_exact'] for r in row_cmp),
-        'dense_matrix_exact_cells':sum(r['dense_exact'] for r in matrix_cmp),'post_solve_exact_rows':sum(r['post_solve_exact'] for r in row_cmp),
-        'outer_trace_rows':len(outer_trace),'fixed_point_trace_rows':len(fixed_trace),'native_solver_method':native_state.get('solver_method'),
-        'gates':gates,'qualification_only':True,'production_promotion_ready':False}
-    (a.output/'call2_helium_solve_state_rate_matrix_decomposition_summary.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
-    print(json.dumps(report,indent=2,sort_keys=True)); return 0 if core else 2
-if __name__=='__main__': raise SystemExit(main())
+        source_compact_seed = f(source, "transformed_initial_population")
+        raw_workspace_value = f(native, "loaded_call_start_xilevg")
+        native_compact_seed = raw_workspace_value
+        native_solver_seed = f(native, "initial_population")
+        source_outer = f(source, "final_outer_start_population")
+        native_outer = f(native, "final_outer_start_population")
+        source_final = f(source, "final_population")
+        native_final = f(native, "final_population")
+        source_rhs = f(source, "rhs")
+        native_rhs = f(native, "rhs")
+        normalization_row = i(source, "is_normalization_row")
+
+        compact_exact = exact(source_compact_seed, native_compact_seed)
+        solver_seed_exact = exact(source_compact_seed, native_solver_seed)
+        normalization_applied = (
+            math.isfinite(native_compact_seed)
+            and math.isfinite(native_solver_seed)
+            and native_compact_seed != native_solver_seed
+        )
+        scale = (
+            native_solver_seed / native_compact_seed
+            if math.isfinite(native_solver_seed)
+            and math.isfinite(native_compact_seed)
+            and native_compact_seed != 0.0
+            else math.nan
+        )
+
+        seed_comparison.append(
+            {
+                "element_row": row_id,
+                "ion": i(source, "ion"),
+                "ion_stage": i(source, "ion_stage"),
+                "is_normalization_row": normalization_row,
+                "loaded_global_level_index": i(native, "loaded_global_level_index"),
+                "raw_global_workspace_value": raw_workspace_value,
+                "source_compact_mapped_seed": source_compact_seed,
+                "native_compact_mapped_seed": native_compact_seed,
+                "normalized_native_solver_seed": native_solver_seed,
+                "source_compact_vs_native_compact_exact": compact_exact,
+                "source_compact_vs_native_solver_exact": solver_seed_exact,
+                "native_pre_solve_normalization_applied": normalization_applied,
+                "native_pre_solve_scale": scale,
+                "shared_ion_boundary_row": 1 if row_id == 46 else 0,
+                "post_boundary_row": 1 if row_id == 47 else 0,
+            }
+        )
+        row_comparison.append(
+            {
+                "element_row": row_id,
+                "ion": i(source, "ion"),
+                "is_normalization_row": normalization_row,
+                "source_compact_mapped_seed": source_compact_seed,
+                "native_compact_mapped_seed": native_compact_seed,
+                "native_normalized_solver_seed": native_solver_seed,
+                "compact_seed_exact": compact_exact,
+                "transformed_initial_exact": solver_seed_exact,
+                "source_rhs": source_rhs,
+                "native_rhs": native_rhs,
+                "rhs_exact": exact(source_rhs, native_rhs),
+                "source_final_outer_start": source_outer,
+                "native_final_outer_start": native_outer,
+                "final_outer_start_exact": exact(source_outer, native_outer),
+                "source_final_population": source_final,
+                "native_final_population": native_final,
+                "post_solve_exact": exact(source_final, native_final),
+            }
+        )
+    write_csv(args.output / "call2_he_seed_semantics_comparison.csv", seed_comparison)
+    write_csv(args.output / "call2_he_solve_state_comparison.csv", row_comparison)
+
+    # Dense matrix comparison remains independent of term-stream alignment.
+    source_matrix_by_cell = {
+        (i(row, "compact_row"), i(row, "compact_column")): row
+        for row in source_matrix
+    }
+    native_matrix_by_cell = {
+        (i(row, "compact_row"), i(row, "compact_column")): row
+        for row in native_matrix
+    }
+    matrix_comparison: list[dict[str, Any]] = []
+    for key in sorted(source_matrix_by_cell):
+        source = source_matrix_by_cell[key]
+        native = native_matrix_by_cell.get(key, {})
+        source_dense = f(source, "dense_value")
+        native_dense = f(native, "dense_value")
+        source_heat = f(source, "heating_value")
+        native_heat = f(native, "heating_value")
+        source_heat2 = f(source, "heating2_value")
+        native_heat2 = f(native, "heating2_value")
+        matrix_comparison.append(
+            {
+                "compact_row": key[0],
+                "compact_column": key[1],
+                "source_dense": source_dense,
+                "native_dense": native_dense,
+                "dense_exact": exact(source_dense, native_dense),
+                "dense_abs_delta": finite_delta(source_dense, native_dense),
+                "source_heating_matrix": source_heat,
+                "native_heating_matrix": native_heat,
+                "heating_exact": exact(source_heat, native_heat),
+                "source_heating2_matrix": source_heat2,
+                "native_heating2_matrix": native_heat2,
+                "heating2_exact": exact(source_heat2, native_heat2),
+            }
+        )
+    write_csv(args.output / "call2_he_dense_matrix_comparison.csv", matrix_comparison)
+
+    # Metadata-keyed term alignment. Positional source-order matching is retired.
+    source_indexed = indexed_terms(source_terms)
+    native_indexed = indexed_terms(native_terms)
+    source_keys = set(source_indexed)
+    native_keys = set(native_indexed)
+    matched_keys = sorted(source_keys & native_keys)
+    source_only_keys = sorted(source_keys - native_keys)
+    native_only_keys = sorted(native_keys - source_keys)
+
+    term_comparison: list[dict[str, Any]] = []
+    for key in matched_keys:
+        source = source_indexed[key]
+        native = native_indexed[key]
+        values: dict[str, Any] = {}
+        for name in ("aj1", "aj2", "cj", "cj2"):
+            source_value = f(source, name)
+            native_value = f(native, name)
+            values[f"source_{name}"] = source_value
+            values[f"native_{name}"] = native_value
+            values[f"{name}_exact"] = exact(source_value, native_value)
+            values[f"{name}_abs_delta"] = finite_delta(source_value, native_value)
+        term_comparison.append(
+            {
+                "alignment_status": "MATCHED_METADATA_KEY",
+                **key_fields(key),
+                **term_row_payload("source", source),
+                **term_row_payload("native", native),
+                "metadata_key_exact": True,
+                "type53": 1 if key[1] == 53 else 0,
+                **values,
+            }
+        )
+
+    unmatched_source: list[dict[str, Any]] = []
+    for key in source_only_keys:
+        source = source_indexed[key]
+        transpose_key = (key[0], key[1], key[2], key[3], key[5], key[4], key[6])
+        unmatched_source.append(
+            {
+                "alignment_status": "UNMATCHED_SOURCE",
+                **key_fields(key),
+                **term_row_payload("source", source),
+                "possible_native_transpose_match": transpose_key in native_indexed,
+                "source_aj1": f(source, "aj1"),
+                "source_aj2": f(source, "aj2"),
+                "source_cj": f(source, "cj"),
+                "source_cj2": f(source, "cj2"),
+            }
+        )
+
+    unmatched_native: list[dict[str, Any]] = []
+    for key in native_only_keys:
+        native = native_indexed[key]
+        transpose_key = (key[0], key[1], key[2], key[3], key[5], key[4], key[6])
+        unmatched_native.append(
+            {
+                "alignment_status": "UNMATCHED_NATIVE",
+                **key_fields(key),
+                **term_row_payload("native", native),
+                "possible_source_transpose_match": transpose_key in source_indexed,
+                "native_aj1": f(native, "aj1"),
+                "native_aj2": f(native, "aj2"),
+                "native_cj": f(native, "cj"),
+                "native_cj2": f(native, "cj2"),
+            }
+        )
+
+    write_csv(args.output / "call2_he_metadata_keyed_term_comparison.csv", term_comparison)
+    # Compatibility filename now contains metadata-keyed matches only.
+    write_csv(args.output / "call2_he_source_order_term_comparison.csv", term_comparison)
+    write_csv(args.output / "call2_he_unmatched_source_terms.csv", unmatched_source)
+    write_csv(args.output / "call2_he_unmatched_native_terms.csv", unmatched_native)
+
+    # Per-family/row summaries include explicit alignment completeness.
+    family: dict[tuple[int, int], dict[str, Any]] = defaultdict(
+        lambda: {
+            "matched_terms": 0,
+            "unmatched_source_terms": 0,
+            "unmatched_native_terms": 0,
+            "aj1_mismatches": 0,
+            "aj2_mismatches": 0,
+            "cj_mismatches": 0,
+            "cj2_mismatches": 0,
+            "max_abs_delta": 0.0,
+        }
+    )
+    for row in term_comparison:
+        bucket = family[(int(row["data_type"]), int(row["compact_row"]))]
+        bucket["matched_terms"] += 1
+        for name in ("aj1", "aj2", "cj", "cj2"):
+            if not bool(row[f"{name}_exact"]):
+                bucket[f"{name}_mismatches"] += 1
+            bucket["max_abs_delta"] = max(
+                float(bucket["max_abs_delta"]), float(row[f"{name}_abs_delta"])
+            )
+    for row in unmatched_source:
+        family[(int(row["data_type"]), int(row["compact_row"]))][
+            "unmatched_source_terms"
+        ] += 1
+    for row in unmatched_native:
+        family[(int(row["data_type"]), int(row["compact_row"]))][
+            "unmatched_native_terms"
+        ] += 1
+
+    family_rows: list[dict[str, Any]] = []
+    for (dtype, destination), bucket in sorted(family.items()):
+        alignment_complete = (
+            bucket["unmatched_source_terms"] == 0
+            and bucket["unmatched_native_terms"] == 0
+        )
+        coefficients_exact = all(
+            bucket[f"{name}_mismatches"] == 0 for name in ("aj1", "aj2", "cj", "cj2")
+        )
+        family_rows.append(
+            {
+                "data_type": dtype,
+                "destination_row": destination,
+                "type53": 1 if dtype == 53 else 0,
+                **bucket,
+                "alignment_complete": alignment_complete,
+                "coefficients_exact_when_aligned": alignment_complete and coefficients_exact,
+                "family_row_status": (
+                    "ACCEPT"
+                    if alignment_complete and coefficients_exact
+                    else "REJECT"
+                    if alignment_complete
+                    else "NOT_EVALUATED_TERM_STREAM_ALIGNMENT"
+                ),
+            }
+        )
+    write_csv(args.output / "call2_he_rate_family_row_gaps.csv", family_rows)
+
+    baseline = (
+        prior.get("result") == "ACCEPT"
+        and prior_gates.get("CALL2_HE_78_ROW_MAPPING_EXACT") == "ACCEPT"
+        and prior_gates.get("CALL2_HE_SEED_TRANSPORT_EXACT") == "ACCEPT"
+    )
+    capture = source_report.get("result") == "ACCEPT"
+    source_trace = bool(outer_trace) and bool(fixed_trace)
+    rhs_exact = len(row_comparison) == 78 and all(row["rhs_exact"] for row in row_comparison)
+    dense_exact = len(matrix_comparison) == 78 * 78 and all(
+        row["dense_exact"] for row in matrix_comparison
+    )
+    compact_seed_exact = len(seed_comparison) == 78 and all(
+        row["source_compact_vs_native_compact_exact"] for row in seed_comparison
+    )
+    transformed_exact = len(seed_comparison) == 78 and all(
+        row["source_compact_vs_native_solver_exact"] for row in seed_comparison
+    )
+    post_exact = len(row_comparison) == 78 and all(
+        row["post_solve_exact"] for row in row_comparison
+    )
+    outer_exact = len(row_comparison) == 78 and all(
+        row["final_outer_start_exact"] for row in row_comparison
+    )
+    term_alignment_complete = not unmatched_source and not unmatched_native
+    metadata_keyed_alignment_available = bool(term_comparison)
+    matched_coefficients_exact = bool(term_comparison) and all(
+        all_coefficients_exact(row) for row in term_comparison
+    )
+
+    if term_alignment_complete:
+        type_gates = {
+            dtype: family_gate(dtype, term_comparison, unmatched_source, unmatched_native)
+            for dtype in (50, 53, 71, 99)
+        }
+        rate_gate = "ACCEPT" if matched_coefficients_exact else "REJECT"
+        rate_attribution_gate = rate_gate
+    else:
+        type_gates = {dtype: "NOT_EVALUATED_TERM_STREAM_ALIGNMENT" for dtype in (50, 53, 71, 99)}
+        rate_gate = "NOT_EVALUATED_TERM_STREAM_ALIGNMENT"
+        rate_attribution_gate = "NOT_EVALUATED_TERM_STREAM_ALIGNMENT"
+
+    raw_sum = sum(float(row["raw_global_workspace_value"]) for row in seed_comparison)
+    source_compact_sum = sum(float(row["source_compact_mapped_seed"]) for row in seed_comparison)
+    native_compact_sum = sum(float(row["native_compact_mapped_seed"]) for row in seed_comparison)
+    native_solver_sum = sum(float(row["normalized_native_solver_seed"]) for row in seed_comparison)
+    normalization_applied_rows = sum(
+        bool(row["native_pre_solve_normalization_applied"]) for row in seed_comparison
+    )
+
+    seed_semantics_captured = len(seed_comparison) == 78
+    matrix_ready = transformed_exact and rhs_exact and dense_exact and term_alignment_complete
+
+    gates: dict[str, str] = {
+        "CALL1_ACCEPTED_BASELINE": "ACCEPT" if baseline else "REJECT",
+        "CALL2_HE_SOURCE_SOLVE_STATE_CAPTURE": "ACCEPT" if capture else "REJECT",
+        "CALL2_HE_SOURCE_ITERATION_TRACE": "ACCEPT" if source_trace else "REJECT",
+        "CALL2_HE_SEED_PHASE_LEDGER": "ACCEPT" if seed_semantics_captured else "REJECT",
+        "CALL2_HE_RAW_GLOBAL_WORKSPACE_CAPTURE": "ACCEPT" if seed_semantics_captured else "REJECT",
+        "CALL2_HE_SOURCE_COMPACT_SEED_SEMANTICS": "ACCEPT" if seed_semantics_captured else "REJECT",
+        "CALL2_HE_NATIVE_COMPACT_SEED_PARITY": "ACCEPT" if compact_seed_exact else "REJECT",
+        "CALL2_HE_COMPACT_SEED_MAPPING": "ACCEPT" if compact_seed_exact else "REJECT",
+        "CALL2_HE_PRE_SOLVE_NORMALIZATION": "ACCEPT" if transformed_exact else "REJECT",
+        "CALL2_HE_TRANSFORMED_INITIAL_STATE": "ACCEPT" if transformed_exact else "REJECT",
+        "CALL2_HE_RHS_CONSTRUCTION": "ACCEPT" if rhs_exact else "REJECT",
+        "CALL2_HE_DENSE_MATRIX_ASSEMBLY": "ACCEPT" if dense_exact else "REJECT",
+        "CALL2_HE_SOURCE_ORDER_POSITIONAL_COMPARISON": "RETIRED",
+        "CALL2_HE_METADATA_KEYED_TERM_ALIGNMENT": (
+            "ACCEPT" if metadata_keyed_alignment_available else "REJECT"
+        ),
+        "CALL2_HE_TERM_STREAM_COMPLETE": "ACCEPT" if term_alignment_complete else "REJECT",
+        "CALL2_HE_SOURCE_ORDER_TERM_METADATA": (
+            "ACCEPT" if term_alignment_complete else "REJECT"
+        ),
+        "CALL2_HE_TYPE53_MATRIX_FIXED": type_gates[53],
+        "CALL2_HE_TYPE50_RATE_MATRIX": type_gates[50],
+        "CALL2_HE_TYPE71_RATE_MATRIX": type_gates[71],
+        "CALL2_HE_TYPE99_RATE_MATRIX": type_gates[99],
+        "CALL2_HE_RATE_EVALUATION": rate_gate,
+        "CALL2_HE_RATE_FAMILY_ATTRIBUTION": rate_attribution_gate,
+        "CALL2_HE_MATRIX_SYSTEM_READY": "ACCEPT" if matrix_ready else "REJECT",
+        "CALL2_HE_FINAL_OUTER_START_STATE": (
+            "ACCEPT"
+            if outer_exact
+            else "BLOCKED_BY_SEED_SEMANTICS"
+            if not transformed_exact
+            else "BLOCKED_BY_MATRIX_SYSTEM"
+        ),
+        "CALL2_HE_POST_SOLVE_POPULATION_EXACT": (
+            "ACCEPT"
+            if post_exact
+            else "BLOCKED_BY_SEED_SEMANTICS"
+            if not transformed_exact
+            else "BLOCKED_BY_MATRIX_SYSTEM"
+        ),
+        "CALL2_HE_NATIVE_ITERATION_TRACE": "NOT_CAPTURED_NATIVE_ABI",
+        "CALL2_HE_SOLVER_NORMALIZATION": (
+            "BLOCKED_BY_SEED_SEMANTICS" if not transformed_exact else "RUN_ALLOWED"
+        ),
+        "CALL2_HE_MATRIX_THERMAL_ACCUMULATION": (
+            "RUN_ALLOWED"
+            if rate_gate == "ACCEPT"
+            else "BLOCKED_BY_TERM_STREAM_ALIGNMENT"
+            if rate_gate == "NOT_EVALUATED_TERM_STREAM_ALIGNMENT"
+            else "BLOCKED_BY_RATE_MATRIX"
+        ),
+        "CALL2_GENERAL_HE_THERMAL": (
+            "RUN_ALLOWED" if post_exact else "BLOCKED_BY_POST_SOLVE_POPULATION"
+        ),
+        "CALLS_3_TO_4": "BLOCKED_BY_CALL2_HELIUM",
+        "THERMAL_PARITY": "BLOCKED",
+        "PRODUCT_PARITY": "BLOCKED",
+        "PRODUCTION_PROMOTION": "BLOCKED",
+    }
+
+    unmatched_source_by_type = Counter(int(row["data_type"]) for row in unmatched_source)
+    unmatched_native_by_type = Counter(int(row["data_type"]) for row in unmatched_native)
+    core = (
+        baseline
+        and capture
+        and source_trace
+        and len(row_comparison) == 78
+        and len(matrix_comparison) == 78 * 78
+        and seed_semantics_captured
+        and metadata_keyed_alignment_available
+    )
+    report = {
+        "schema": SCHEMA,
+        "release": RELEASE,
+        "result": "ACCEPT" if core else "REJECT",
+        "rows": len(row_comparison),
+        "matrix_cells": len(matrix_comparison),
+        "source_terms": len(source_terms),
+        "native_terms": len(native_terms),
+        "metadata_keyed_matched_terms": len(term_comparison),
+        "unmatched_source_terms": len(unmatched_source),
+        "unmatched_native_terms": len(unmatched_native),
+        "unmatched_source_by_data_type": {
+            str(key): value for key, value in sorted(unmatched_source_by_type.items())
+        },
+        "unmatched_native_by_data_type": {
+            str(key): value for key, value in sorted(unmatched_native_by_type.items())
+        },
+        "source_compact_seed_exact_rows": sum(
+            row["source_compact_vs_native_compact_exact"] for row in seed_comparison
+        ),
+        "transformed_initial_exact_rows": sum(
+            row["source_compact_vs_native_solver_exact"] for row in seed_comparison
+        ),
+        "rhs_exact_rows": sum(row["rhs_exact"] for row in row_comparison),
+        "dense_matrix_exact_cells": sum(row["dense_exact"] for row in matrix_comparison),
+        "post_solve_exact_rows": sum(row["post_solve_exact"] for row in row_comparison),
+        "outer_trace_rows": len(outer_trace),
+        "fixed_point_trace_rows": len(fixed_trace),
+        "raw_global_workspace_sum": raw_sum,
+        "source_compact_seed_sum": source_compact_sum,
+        "native_compact_seed_sum": native_compact_sum,
+        "native_normalized_solver_seed_sum": native_solver_sum,
+        "native_pre_solve_normalization_applied_rows": normalization_applied_rows,
+        "native_solver_method": native_state.get("solver_method"),
+        "gates": gates,
+        "audit_corrections": {
+            "positional_term_comparison_retired": True,
+            "metadata_key_occurrence_alignment": True,
+            "unmatched_term_inventories": True,
+            "seed_lifecycle_phases_separated": True,
+        },
+        "physics_changed": False,
+        "qualification_only": True,
+        "production_promotion_ready": False,
+    }
+    (args.output / "call2_helium_solve_state_rate_matrix_decomposition_summary.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if core else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

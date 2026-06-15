@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.31.3 - 2026-06-15
+
+- Retire positional source-order term comparison for the call-2 helium solve audit and align source/native terms by record, data type, rate type, normalized role, compact row/column, and duplicate occurrence ordinal.
+- Emit separate unmatched-source and unmatched-native term inventories and withhold rate-family conclusions whenever the term streams are incomplete.
+- Separate raw runtime `global_xilevg`, source compact mapped seed, native compact mapped seed, and normalized native solver seed in a lifecycle-aligned 78-row ledger.
+- Reclassify the active seed defects as source-compact overwrite mismatch plus premature native pre-solve normalization; retain exact RHS and independently observed dense-matrix differences.
+- Make no changes to rates, matrices, solvers, thermal physics, controller behavior, or products.
+
 ## 0.6.48.7.31.2 - 2026-06-15
 
 - Fix the generated v0.6.47.2 helium solve-state probe to terminate `v0472_call2_eval1_he_solve_state.json` with a real newline instead of the literal characters `\n`.
