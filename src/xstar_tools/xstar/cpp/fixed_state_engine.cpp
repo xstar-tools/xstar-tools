@@ -300,6 +300,23 @@ struct Type53SourceShadow {
     std::size_t continuum_tau_count = 0;
 };
 
+struct Type50SourceShadow {
+    bool valid = false;
+    std::array<double,6> ans{};
+    double stored_wavelength_a = 0.0;
+    double endpoint_energy_ev = 0.0;
+    double covering_fraction = 0.0;
+    double ptmp1 = 0.0;
+    double ptmp2 = 0.0;
+    double bremsa_nb1 = 0.0;
+    double density_floor_s = 0.0;
+    bool density_floor_applied = false;
+    bool photoexcitation_zero_covering = false;
+    bool used_dsec_covering = false;
+    bool used_dsec_radiation = false;
+    int nb1_one_based = 0;
+};
+
 struct Type99SourceShadow {
     bool valid = false;
     std::array<double,6> ans{};
@@ -341,6 +358,7 @@ struct EvaluatedRecord {
     double opakab = 0.0;
     double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
     Type53SourceShadow type53_shadow{};
+    Type50SourceShadow type50_shadow{};
     Type99SourceShadow type99_shadow{};
 };
 
@@ -2002,11 +2020,70 @@ EvaluatedRecord evaluate_record(
             if (!r || record.real_count < 2) throw std::runtime_error("radiative line payload requires A and oscillator strength");
             const double a = std::max(0.0, r[0]);
             const double oscillator = std::max(0.0, r[1]);
-            const double flux = input.radiation_bin_count > 0 ? interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, delta_ev) : 0.0;
-            c.ans1 = oscillator * flux * 1.0e-18 * std::max(0.0, 1.0 - input.covering_fraction);
-            c.ans2 = a;
-            c.ans3 = c.ans2 * delta_ev * kErgPerEv;
-            c.ans4 = c.ans1 * delta_ev * kErgPerEv;
+            const double stored_wavelength_a = record.real_count >= 3 && std::isfinite(r[2]) && r[2] > 0.0
+                ? std::abs(r[2])
+                : (delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0);
+            const bool has_dsec_covering =
+                (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
+            const double cfrac = std::clamp(
+                has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction, 0.0, 1.0);
+
+            // The call-2 fixed-state capture is on the optically thin line
+            // branch.  pescl(0)=1/2, hence the source directional factors are
+            // ptmp1=0.5*(1-cfrac), ptmp2=0.5*(1-cfrac)+cfrac and their sum is
+            // exactly one.  This restores the source post-swap convention
+            // without introducing a record oracle.
+            const double ptmp1 = 0.5 * (1.0 - cfrac);
+            const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
+            const double escaped_raw = a * (ptmp1 + ptmp2);
+            const double density_floor = 1.0e-20 * input.hydrogen_density_cm3;
+            const double escaped = std::max(escaped_raw, density_floor);
+
+            double bremsa_nb1 = 0.0;
+            int nb1_one_based = 0;
+            bool used_dsec_radiation = false;
+            const bool high_wavelength_zero = stored_wavelength_a > 0.99e9;
+            const double cover = std::max(0.0, 1.0 - cfrac);
+            double photo = 0.0;
+            if (!high_wavelength_zero && cover != 0.0) {
+                if (input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3) {
+                    nb1_one_based = type99_nbinc_fortran_value(
+                        delta_ev, input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+                    if (nb1_one_based > 0 && static_cast<std::size_t>(nb1_one_based) <= input.dsec_radiation_bin_count) {
+                        bremsa_nb1 = input.dsec_bremsa[static_cast<std::size_t>(nb1_one_based - 1)];
+                        used_dsec_radiation = true;
+                    }
+                } else if (input.radiation_energy_ev && input.radiation_flux && input.radiation_bin_count > 0) {
+                    bremsa_nb1 = interp_linear(
+                        input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, delta_ev);
+                }
+                photo = 0.02655 * oscillator * stored_wavelength_a * 1.0e-8 *
+                    bremsa_nb1 / 3.0e10 * cover;
+            }
+
+            // Literal ucalc.f90 Type-50 post-swap answer convention.
+            c.ans1 = photo;
+            c.ans2 = escaped;
+            c.ans3 = -escaped * delta_ev * kErgPerEv;
+            c.ans4 = -photo * delta_ev * kErgPerEv;
+            c.ans5 = 0.0;
+            c.ans6 = 0.0;
+
+            out.type50_shadow.valid = true;
+            out.type50_shadow.ans = {c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
+            out.type50_shadow.stored_wavelength_a = stored_wavelength_a;
+            out.type50_shadow.endpoint_energy_ev = delta_ev;
+            out.type50_shadow.covering_fraction = cfrac;
+            out.type50_shadow.ptmp1 = ptmp1;
+            out.type50_shadow.ptmp2 = ptmp2;
+            out.type50_shadow.bremsa_nb1 = bremsa_nb1;
+            out.type50_shadow.density_floor_s = density_floor;
+            out.type50_shadow.density_floor_applied = density_floor > escaped_raw;
+            out.type50_shadow.photoexcitation_zero_covering = cover == 0.0;
+            out.type50_shadow.used_dsec_covering = has_dsec_covering;
+            out.type50_shadow.used_dsec_radiation = used_dsec_radiation;
+            out.type50_shadow.nb1_one_based = nb1_one_based;
+
             const bool use_fixed_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE");
             const bool use_dsec_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_DSEC_RUNTIME_ORACLE");
             if (use_fixed_type50_oracle && use_dsec_type50_oracle) {
@@ -2027,17 +2104,9 @@ EvaluatedRecord evaluate_record(
                         record.lower_row != oracle->lower_row || record.upper_row != oracle->upper_row) {
                         throw std::runtime_error("type50 DSEC runtime oracle identity mismatch");
                     }
-                    c.ans1 = oracle->ans[0];
-                    c.ans2 = oracle->ans[1];
-                    c.ans3 = oracle->ans[2];
-                    c.ans4 = oracle->ans[3];
-                    c.ans5 = oracle->ans[4];
-                    c.ans6 = oracle->ans[5];
-                    // The original DSEC ucalc path commits the type-50 thermal
-                    // channels with the hydrogen-density multiplier.  The
-                    // fixed evaluator replay did not include this live matrix
-                    // contract.
-                    }
+                    c.ans1 = oracle->ans[0]; c.ans2 = oracle->ans[1]; c.ans3 = oracle->ans[2];
+                    c.ans4 = oracle->ans[3]; c.ans5 = oracle->ans[4]; c.ans6 = oracle->ans[5];
+                }
             } else if (use_fixed_type50_oracle) {
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error("type50 manifold oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2052,19 +2121,20 @@ EvaluatedRecord evaluate_record(
                         record.lower_row != oracle->lower_row || record.upper_row != oracle->upper_row) {
                         throw std::runtime_error("type50 manifold oracle identity mismatch");
                     }
-                    c.ans1 = oracle->ans[0];
-                    c.ans2 = oracle->ans[1];
-                    c.ans3 = oracle->ans[2];
-                    c.ans4 = oracle->ans[3];
-                    c.ans5 = oracle->ans[4];
-                    c.ans6 = oracle->ans[5];
+                    c.ans1 = oracle->ans[0]; c.ans2 = oracle->ans[1]; c.ans3 = oracle->ans[2];
+                    c.ans4 = oracle->ans[3]; c.ans5 = oracle->ans[4]; c.ans6 = oracle->ans[5];
                 }
             }
-            const double wavelength_a = delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0;
             const double mass = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
             const double thermal_velocity = 1.29e6 / std::sqrt(std::max(mass / std::max(t4, 1.0e-300), 1.0e-300));
             const double v = std::sqrt(std::pow(input.turbulent_velocity_km_s * 1.0e5, 2) + thermal_velocity * thermal_velocity);
-            out.opakab = v > 0.0 ? 0.02655 * oscillator * wavelength_a * 1.0e-8 / v : 0.0;
+            // Preserve the already-qualified Type-50 opakab product path.
+            // The stored source wavelength is used for the rate branch, while
+            // product promotion retains the endpoint-derived wavelength until
+            // product parity is reopened explicitly.
+            const double product_wavelength_a = delta_ev > 0.0 ? 12398.4016 / delta_ev : 0.0;
+            out.opakab = (!high_wavelength_zero && v > 0.0)
+                ? 0.02655 * oscillator * product_wavelength_a * 1.0e-8 / v : 0.0;
             out.spectral = true;
             out.line_energy_ev = delta_ev;
             out.atomic_mass_amu = mass;
@@ -3470,7 +3540,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -3518,6 +3588,20 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type53_shadow.continuum_index_one_based
                         << ',' << item.type53_shadow.dsec_radiation_bin_count
                         << ',' << item.type53_shadow.continuum_tau_count
+                        << ',' << (item.type50_shadow.valid ? 1 : 0);
+            for (double value : item.type50_shadow.ans) record_file << ',' << value;
+            record_file << ',' << item.type50_shadow.stored_wavelength_a
+                        << ',' << item.type50_shadow.endpoint_energy_ev
+                        << ',' << item.type50_shadow.covering_fraction
+                        << ',' << item.type50_shadow.ptmp1
+                        << ',' << item.type50_shadow.ptmp2
+                        << ',' << item.type50_shadow.bremsa_nb1
+                        << ',' << item.type50_shadow.density_floor_s
+                        << ',' << (item.type50_shadow.density_floor_applied ? 1 : 0)
+                        << ',' << (item.type50_shadow.photoexcitation_zero_covering ? 1 : 0)
+                        << ',' << (item.type50_shadow.used_dsec_covering ? 1 : 0)
+                        << ',' << (item.type50_shadow.used_dsec_radiation ? 1 : 0)
+                        << ',' << item.type50_shadow.nb1_one_based
                         << ',' << (item.type99_shadow.valid ? 1 : 0);
             for (double value : item.type99_shadow.ans) record_file << ',' << value;
             record_file << ',' << item.type99_shadow.threshold_ev

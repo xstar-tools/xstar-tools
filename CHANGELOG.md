@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.37 - 2026-06-15
+
+- Corrected the native Type-50 DSEC covering/zero-photoexcitation branch using the transported call-state covering fraction.
+- Restored source optically thin `ptmp1/ptmp2`, density-floor, post-swap `ans1`-`ans6`, and thermal sign semantics.
+- Retained the literal Type-50 stored wavelength in the lowered payload while preserving the qualified endpoint-derived `opakab` product path.
+- Closed records 781 and 917 and all 301 helium Type-50 record answers; Type-50 rate-matrix parity now passes.
+- Improved the call-2 helium dense matrix from 5489/6084 to 5784/6084 exact cells; fixed-state parity remains blocked by 300 cells.
+- Added Type-50 record diagnostics, runner, readiness checker, strict checker, tests, and technical note.
+
 ## 0.6.48.7.36 — Type-99 source-faithful correction - 2026-06-15
 
 - Preserved Type-99 pre-alias destination energy, threshold, and statistical weight in the lowered payload.

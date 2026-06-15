@@ -610,7 +610,11 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         aij = raw_reals[2]
         gup, glo = _row_weight(rows, upper_row), _row_weight(rows, lower_row)
         oscillator = 0.0 if wavelength <= 0.0 else 1.0e-16 * aij * gup * wavelength * wavelength / (0.667274 * glo)
-        payload_reals = [aij, oscillator]
+        # v0.6.48.7.37: retain the literal stored wavelength in addition to
+        # A and the source-derived oscillator strength.  Type-50 uses the
+        # stored wavelength for flin/opakab and the endpoint energy difference
+        # for the population/thermal energy channels.
+        payload_reals = [aij, oscillator, wavelength]
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt in {51, 56, 69}:
