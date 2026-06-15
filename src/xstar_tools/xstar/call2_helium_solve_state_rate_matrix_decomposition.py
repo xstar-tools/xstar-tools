@@ -1,12 +1,12 @@
-"""v0.6.48.7.31 call-2 helium solve-state and rate-matrix decomposition."""
+"""v0.6.48.7.31.1 call-2 helium solve-state and rate-matrix decomposition."""
 from __future__ import annotations
 import argparse, csv, json, math
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE="0.6.48.7.31"
-SCHEMA="xstar-tools-v0648731-call2-helium-solve-state-rate-matrix-decomposition-v1"
+RELEASE="0.6.48.7.31.1"
+SCHEMA="xstar-tools-v06487311-call2-helium-solve-state-rate-matrix-decomposition-v1"
 
 def read_csv(path: Path) -> list[dict[str,str]]:
     with path.open(newline='') as f: return list(csv.DictReader(f))

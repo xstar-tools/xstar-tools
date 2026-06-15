@@ -6,8 +6,8 @@ from typing import Any
 from . import v0472_full_dsec_thermal_budget_capture as base
 from . import v0472_thermal_budget_state_refresh_capture as low
 
-RELEASE = "0.6.48.7.31"
-SCHEMA = "xstar-tools-v0648731-v0472-call2-helium-solve-state-capture-v1"
+RELEASE = "0.6.48.7.31.1"
+SCHEMA = "xstar-tools-v06487311-v0472-call2-helium-solve-state-capture-v1"
 REPORT = "v0472_call2_eval1_he_solve_capture_report.json"
 
 _INJECT = r'''
@@ -35,11 +35,13 @@ def _v048731_capture_he_solve(call_id, local_eval, global_eval, state, result):
         outer=np.asarray(solve.final_outer_start_populations,dtype=float)
         rhs=np.asarray(assembly.rhs,dtype=float)
         rows=tuple(assembly.basis.rows)
+        ion_stages=np.asarray(assembly.basis.ion_stage,dtype=np.int32)
         for i in range(n):
             meta=rows[i]
+            stage=int(ion_stages[i+1])
             _HE_SOLVE_ROWS.append({
-                'element_row':i+1,'ion':int(meta.ion),'ion_charge':int(meta.ion_charge),
-                'superlevel':int(meta.superlevel),'global_level_index':int(getattr(meta,'global_level_index',0) or 0),
+                'element_row':i+1,'ion':int(meta.ion_counter),'ion_charge':max(0,stage-1),
+                'ion_stage':stage,'superlevel':int(meta.superlevel),'global_level_index':0,
                 'is_normalization_row':1 if i+1==int(assembly.basis.normalization_row) else 0,
                 'transformed_initial_population':float(initial[i]),
                 'final_outer_start_population':float(outer[i]) if outer.size==n else float('nan'),

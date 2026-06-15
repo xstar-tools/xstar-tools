@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.31.1 - 2026-06-15
+
+- Fix the source call-2 helium solve-state probe to use the actual v0.6.47.2 `ElementBasisRow` schema.
+- Derive the physical ion stage from `assembly.basis.ion_stage`, retain the compact ion counter from `meta.ion_counter`, and derive charge as `ion_stage - 1`.
+- Remove invalid `meta.ion` and `meta.ion_charge` accesses that aborted the v0.6.48.7.31 source capture before any solve-state ledger was written.
+- Keep the v0.6.48.7.30.4 global-level mapping ledger authoritative; no physics, matrix, solver, thermal, controller, or product behavior changes.
+
 ## 0.6.48.7.31 - 2026-06-15
 
 - Add a hash-verified v0.6.47.2 call-2/evaluation-1 helium solve-state capture with transformed initial populations, dense and normalized matrices, RHS, source-order matrix terms, and Lucy iteration traces.
