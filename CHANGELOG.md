@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.36 — Type-99 source-faithful correction - 2026-06-15
+
+- Preserved Type-99 pre-alias destination energy, threshold, and statistical weight in the lowered payload.
+- Reconstructed the source 999-bin `ener`/`bremsmap` workspace for `phint53hunt`.
+- Restored source/Python `calt99`, `milne/intin`, normalization, and final `ans1`–`ans6` semantics for helium records 779, 780, and 1695.
+- Added direct intermediate and final-answer qualification gates.
+- Verified all three target records and the complete Type-99 rate matrix exactly; dense-matrix parity improves to 5,489/6,084, leaving 595 cells.
+- Kept fixed-state ABI 60487, lowered-program ABI 60485, thermal parity blocked, and production promotion blocked.
+
 ## 0.6.48.7.35 - 2026-06-15
 
 - Added a diagnostic-only post-Type-56 bound-free coefficient and matrix-residual decomposition.

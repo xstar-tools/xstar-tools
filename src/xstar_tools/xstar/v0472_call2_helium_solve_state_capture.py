@@ -6,8 +6,8 @@ from typing import Any
 from . import v0472_full_dsec_thermal_budget_capture as base
 from . import v0472_thermal_budget_state_refresh_capture as low
 
-RELEASE = "0.6.48.7.35"
-SCHEMA = "xstar-tools-v0648735-v0472-call2-helium-solve-state-capture-v1"
+RELEASE = "0.6.48.7.36"
+SCHEMA = "xstar-tools-v0648736-v0472-call2-helium-solve-state-capture-v1"
 REPORT = "v0472_call2_eval1_he_solve_capture_report.json"
 
 _INJECT = r'''

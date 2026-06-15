@@ -300,6 +300,37 @@ struct Type53SourceShadow {
     std::size_t continuum_tau_count = 0;
 };
 
+struct Type99SourceShadow {
+    bool valid = false;
+    std::array<double,6> ans{};
+    double threshold_ev = 0.0;
+    double destination_energy_ev = 0.0;
+    double bound_energy_ev = 0.0;
+    double swrat = 0.0;
+    double calt99_density_cm3 = 0.0;
+    double phint53hunt_density_cm3 = 0.0;
+    double rec_cm3_s = 0.0;
+    double milne_alpha_cm3_s = 0.0;
+    double cross_section_scale = 0.0;
+    double ans2d_unscaled_s = 0.0;
+    double phint_scale = 0.0;
+    double pirt_unscaled_s = 0.0;
+    double rrrt_unscaled_s = 0.0;
+    double piht_unscaled_erg_s = 0.0;
+    double rrcl_unscaled_erg_s = 0.0;
+    double piht2_unscaled_erg_s = 0.0;
+    double rrcl2_unscaled_erg_s = 0.0;
+    int nbinc_threshold_one_based = 0;
+    int nb1_one_based = 0;
+    int nphint_one_based = 0;
+    int ndelt = 0;
+    int npass = 0;
+    int last_pass_first_kl_one_based = 0;
+    int last_pass_last_kl_one_based = 0;
+    int cached_atmp22_stale_reuses = 0;
+    bool used_dsec_radiation = false;
+};
+
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
@@ -310,6 +341,7 @@ struct EvaluatedRecord {
     double opakab = 0.0;
     double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
     Type53SourceShadow type53_shadow{};
+    Type99SourceShadow type99_shadow{};
 };
 
 struct NativeRecordDiagnostic {
@@ -1078,6 +1110,409 @@ bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std
     return std::isfinite(upward)&&std::isfinite(downward);
 }
 
+struct Type99PhintResult {
+    bool valid = false;
+    double pirt = 0.0;
+    double rrrt = 0.0;
+    double piht = 0.0;
+    double rrcl = 0.0;
+    double piht2 = 0.0;
+    double rrcl2 = 0.0;
+    int nbinc_threshold_one_based = 0;
+    int nb1_one_based = 0;
+    int nphint_one_based = 0;
+    int ndelt = 0;
+    int npass = 0;
+    int last_pass_first_kl_one_based = 0;
+    int last_pass_last_kl_one_based = 0;
+    int cached_atmp22_stale_reuses = 0;
+};
+
+int type99_nbinc_fortran_value(double energy, const double* epi, std::size_t count) {
+    if (!epi || count < 3) return 1;
+    const int n = static_cast<int>(count);
+    const int numcon2 = std::max(2, n / 50);
+    const int numcon3 = n - numcon2;
+    if (numcon3 < 2 || energy < 1.0e-34 || epi[0] <= 1.0e-34 || epi[numcon3 - 1] <= 1.0e-34) return 1;
+    const double xtmp = std::max(energy, epi[1]);
+    const double denominator = std::log(epi[numcon3 - 1] / epi[0]);
+    if (denominator == 0.0) return 1;
+    int jlo = static_cast<int>((numcon3 - 1) * std::log(xtmp / epi[0]) / denominator) + 1;
+    if (jlo < numcon3) {
+        const double tst = std::abs(std::log(energy / (1.0e-34 + epi[jlo - 1])));
+        const double tst2 = std::abs(std::log(energy / (1.0e-34 + epi[jlo])));
+        if (tst2 < tst) ++jlo;
+    }
+    return std::max(1, std::min(numcon3, jlo));
+}
+
+void build_type99_reduced_radiation(
+    const double* full_epi,
+    const double* full_bremsa,
+    std::size_t full_count,
+    std::vector<double>& epim,
+    std::vector<double>& bremsam
+) {
+    constexpr int reduced_count = 999;
+    constexpr int reduced_tail = std::max(2, reduced_count / 50);
+    constexpr int reduced_log_count = reduced_count - reduced_tail;
+    epim.assign(reduced_count, 0.0);
+    bremsam.assign(reduced_count, 0.0);
+    epim[0] = 0.1;
+    const double ratio = std::pow(4.0e5 / 0.1, 1.0 / static_cast<double>(reduced_log_count - 1));
+    for (int i = 1; i < reduced_log_count; ++i) epim[static_cast<std::size_t>(i)] = epim[static_cast<std::size_t>(i - 1)] * ratio;
+    const double ratio2 = std::pow(1.0e6 / 4.0e5, 1.0 / static_cast<double>(reduced_tail - 1));
+    for (int i = reduced_log_count; i < reduced_count; ++i) epim[static_cast<std::size_t>(i)] = epim[static_cast<std::size_t>(i - 1)] * ratio2;
+    for (int i = 0; i < reduced_count; ++i) {
+        const int mapped_one_based = type99_nbinc_fortran_value(epim[static_cast<std::size_t>(i)], full_epi, full_count);
+        const std::size_t mapped = static_cast<std::size_t>(std::max(1, mapped_one_based) - 1);
+        bremsam[static_cast<std::size_t>(i)] = full_bremsa[std::min(mapped, full_count - 1)];
+    }
+}
+
+double type99_find53_cross_section(
+    const std::vector<double>& energy_ryd,
+    const std::vector<double>& sigma_cm2,
+    double efnd_ryd
+) {
+    if (energy_ryd.size() < 2 || energy_ryd.size() != sigma_cm2.size() || efnd_ryd < 0.0 || efnd_ryd > energy_ryd.back()) return 0.0;
+    const auto upper = std::upper_bound(energy_ryd.begin(), energy_ryd.end(), efnd_ryd);
+    std::size_t j = upper == energy_ryd.begin() ? 0 : static_cast<std::size_t>(upper - energy_ryd.begin() - 1);
+    j = std::min(j, energy_ryd.size() - 2);
+    const double e0 = energy_ryd[j], e1 = energy_ryd[j + 1];
+    const double s0 = std::max(sigma_cm2[j], 0.0), s1 = std::max(sigma_cm2[j + 1], 0.0);
+    if (j + 1 == energy_ryd.size() - 1 && e0 > 0.0 && e1 > 0.0 && efnd_ryd > 0.0) {
+        const double slope = std::log(std::max(s1, 1.0e-26) / std::max(s0, 1.0e-26)) /
+            std::log(std::max(e1, 1.0e-26) / std::max(e0, 1.0e-26));
+        return std::max(0.0, s0 * std::pow(efnd_ryd / e0, slope));
+    }
+    if (e1 == e0) return s0;
+    const double f = (efnd_ryd - e0) / (e1 - e0);
+    return std::max(0.0, s0 + f * (s1 - s0));
+}
+
+std::pair<double,double> type99_milne_intin(double x1, double x2, double x0, double temperature_k) {
+    constexpr double ryk = 7.2438e15;
+    const double temp = std::max(temperature_k, 1.0e-300);
+    const double s1 = x1 * ryk / temp;
+    const double s2 = x2 * ryk / temp;
+    const double s0 = x0 * ryk / temp;
+    const double delt = ryk / temp;
+    if (!(delt > 0.0) || !std::isfinite(delt)) return {0.0, 0.0};
+    double ri2 = 0.0;
+    if ((s1 - s0) < 90.0) {
+        ri2 = std::exp(s0 - s1) * ((s1 * s1 + 2.0 * s1 + 2.0) -
+            std::exp(s1 - s2) * (s2 * s2 + 2.0 * s2 + 2.0)) / delt / std::sqrt(delt);
+        if (s0 < 1.0e-3 && s1 < 1.0e-3 && s2 < 1.0e-3) ri2 = 0.0;
+    }
+    const double rr = std::exp(s0 - s1) * (std::pow(s1, 3.0) - std::exp(s1 - s2) * std::pow(s2, 3.0));
+    double ri3 = (rr / delt / std::sqrt(delt) + 3.0 * ri2) / delt;
+    if (!std::isfinite(ri2)) ri2 = 0.0;
+    if (!std::isfinite(ri3)) ri3 = 0.0;
+    return {ri2, ri3};
+}
+
+double type99_milne_alpha(
+    const std::vector<double>& energy_ryd,
+    const std::vector<double>& sigma_mb,
+    double threshold_ryd,
+    double temperature_k
+) {
+    if (energy_ryd.size() < 2 || energy_ryd.size() != sigma_mb.size() || !(threshold_ryd > 0.0)) return 0.0;
+    constexpr double ry_erg = 2.17896e-11;
+    const double st = (energy_ryd[0] + threshold_ryd) * ry_erg;
+    double total = 0.0;
+    double previous_total = 1.0;
+    constexpr double crit = 0.01;
+    for (std::size_t i = 1; i < energy_ryd.size(); ++i) {
+        if (std::abs(total - previous_total) <= crit * std::abs(total) && i > 1) break;
+        const double s1 = (energy_ryd[i - 1] + threshold_ryd) * ry_erg;
+        const double s2 = (energy_ryd[i] + threshold_ryd) * ry_erg;
+        if (s2 < s1) return 0.0;
+        const double v1 = std::max(sigma_mb[i - 1], 0.0);
+        const double v2 = std::max(sigma_mb[i], 0.0);
+        if (v1 != 0.0 || v2 != 0.0) {
+            const double rb = (v2 - v1) / (s2 - s1 + 1.0e-24);
+            const double ra = v2 - rb * s2;
+            const auto integrals = type99_milne_intin(s1, s2, st, temperature_k);
+            previous_total = total;
+            total += ra * integrals.first + rb * integrals.second;
+        }
+    }
+    const double alpha = total * 0.79788 * 40.4153;
+    return std::isfinite(alpha) ? std::max(alpha, 0.0) : 0.0;
+}
+
+Type99PhintResult evaluate_type99_phint53hunt(
+    const std::vector<double>& energy_ryd,
+    const std::vector<double>& sigma_cm2,
+    double threshold_ev,
+    double temperature_k,
+    double electron_density_cm3,
+    double swrat,
+    const double* epi,
+    const double* bremsa,
+    std::size_t grid_count,
+    double crit = 0.01
+) {
+    Type99PhintResult out;
+    if (energy_ryd.size() < 2 || energy_ryd.size() != sigma_cm2.size() || !epi || !bremsa || grid_count < 3) return out;
+    const int n = static_cast<int>(grid_count);
+    const int numcon2 = std::max(2, n / 50);
+    const int numcon3 = n - numcon2;
+    const int nbinc_threshold = type99_nbinc_fortran_value(threshold_ev, epi, grid_count);
+    const int nb1 = nbinc_threshold + 1;
+    out.nbinc_threshold_one_based = nbinc_threshold;
+    out.nb1_one_based = nb1;
+    if (nb1 >= numcon3) return out;
+    const double emax = threshold_ev + energy_ryd.back() * kType53RydEv;
+    int nphint = type99_nbinc_fortran_value(emax, epi, grid_count);
+    int ndelt = std::max(nphint - nb1, 1);
+    int itmp = static_cast<int>(std::log(static_cast<double>(ndelt)) / 0.69315 + 0.5);
+    while (true) {
+        ndelt = 1 << std::max(itmp, 0);
+        nphint = nb1 + ndelt;
+        double etst = 0.0;
+        if (nphint <= numcon3) etst = (epi[nphint - 1] - threshold_ev) / kType53RydEv;
+        if (nphint > numcon3 || etst > energy_ryd.back()) {
+            --itmp;
+            if (itmp > 1) continue;
+        }
+        break;
+    }
+    out.nphint_one_based = nphint;
+    out.ndelt = ndelt;
+    const double t4 = temperature_k / 1.0e4;
+    const double bktm = (xstar_constants::kBoltzmannErgPerK * 1.0e4 /
+        xstar_constants::kModernErgPerEv) * t4;
+    const double rnist = 5.216e-21 * swrat / std::max(t4 * std::sqrt(std::max(t4, 0.0)), 1.0e-48);
+    std::vector<unsigned char> luse(grid_count, 0);
+    std::vector<double> ansar1(grid_count, 0.0), ansar2(grid_count, 0.0);
+    int nskip = ndelt;
+    int npass = 0;
+    double sumr = 0.0, sumh = 0.0, sumi = 0.0, sumc = 0.0, sumh2 = 0.0, sumc2 = 0.0;
+    double tst1 = std::numeric_limits<double>::infinity();
+    double tst2 = tst1, tst3 = tst1, tst4 = tst1;
+    int last_first = 0, last_last = 0, stale_reuses = 0;
+    while ((tst3 > crit || tst1 > crit || tst2 > crit || tst4 > crit || sumi <= 1.0e-24) && nskip > 1) {
+        ++npass;
+        nskip = std::max(1, nskip / 2);
+        const double sumro = sumr, sumho = sumh, sumio = sumi, sumco = sumc;
+        sumr = sumh = sumi = sumc = sumh2 = sumc2 = 0.0;
+        double tempr = 0.0, tempi = 0.0, atmp2 = 0.0, atmp22 = 0.0;
+        double ener = epi[nb1 - 1];
+        last_first = 0;
+        last_last = 0;
+        for (int kl = std::max(1, nb1 - 1); kl <= nphint; kl += nskip) {
+            if (last_first == 0) last_first = kl;
+            last_last = kl;
+            const int k = kl - 1;
+            const double enero = ener;
+            const double epii = epi[k];
+            ener = epii;
+            const double bremtmp = bremsa[k] / 25.3;
+            const double tempio = tempi, atmp2o = atmp2, atmp22o = atmp22;
+            double sgtmp = 0.0;
+            if (ener >= threshold_ev) {
+                if (luse[static_cast<std::size_t>(k)] == 0) {
+                    const double efnd = (ener - threshold_ev) / kType53RydEv;
+                    sgtmp = type99_find53_cross_section(energy_ryd, sigma_cm2, efnd);
+                    const double exptmp = type53_expo(-(epii - threshold_ev) / std::max(bktm, 1.0e-48));
+                    const double bbnurj = std::pow(std::min(2.0e4, epii), 3.0);
+                    const double tempi1 = rnist * bbnurj * sgtmp * exptmp * 1.571e22 / std::max(epii, 1.0e-48);
+                    const double tempi2 = rnist * bremtmp * sgtmp * exptmp / std::max(epii, 1.0e-48);
+                    tempi = tempi1 + tempi2;
+                    atmp2 = tempi * epii;
+                    atmp22 = tempi * (epii - threshold_ev);
+                    ansar1[static_cast<std::size_t>(k)] = sgtmp;
+                    ansar2[static_cast<std::size_t>(k)] = atmp2;
+                } else {
+                    sgtmp = ansar1[static_cast<std::size_t>(k)];
+                    atmp2 = ansar2[static_cast<std::size_t>(k)];
+                    tempi = atmp2 / std::max(epii, 1.0e-48);
+                    ++stale_reuses;
+                }
+            }
+            const double tempro = tempr;
+            tempr = 25.3 * sgtmp * bremtmp / std::max(epii, 1.0e-48);
+            const double deld = ener - enero;
+            sumr += (tempr + tempro) * deld / 2.0;
+            sumh += (tempr * ener + tempro * enero) * deld / 2.0;
+            sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * deld / 2.0;
+            sumi += (tempi + tempio) * deld / 2.0;
+            sumc += (atmp2 + atmp2o) * deld / 2.0;
+            sumc2 += (atmp22 + atmp22o) * deld / 2.0;
+            luse[static_cast<std::size_t>(k)] = 1;
+        }
+        tst3 = std::abs((sumio - sumi) / (sumio + sumi + 1.0e-24));
+        tst1 = std::abs((sumro - sumr) / (sumro + sumr + 1.0e-24));
+        tst2 = std::abs((sumho - sumh) / (sumho + sumh + 1.0e-24));
+        tst4 = std::abs((sumco - sumc) / (sumco + sumc + 1.0e-24));
+    }
+    out.valid = true;
+    out.pirt = sumr;
+    out.rrrt = electron_density_cm3 * sumi;
+    out.piht = sumh * kErgPerEv;
+    out.rrcl = electron_density_cm3 * sumc * kErgPerEv;
+    out.piht2 = sumh2 * kErgPerEv;
+    out.rrcl2 = electron_density_cm3 * sumc2 * kErgPerEv;
+    out.npass = npass;
+    out.last_pass_first_kl_one_based = last_first;
+    out.last_pass_last_kl_one_based = last_last;
+    out.cached_atmp22_stale_reuses = stale_reuses;
+    return out;
+}
+
+bool evaluate_type99_source_faithful(
+    const ProgramRecord& record,
+    const double* payload,
+    const std::int64_t* ints,
+    const ElementRow& lower,
+    const ElementRow& upper,
+    const xstar_fixed_state_input_v1& input,
+    xstar_element_contribution_v1& contribution,
+    Type99SourceShadow* shadow
+) {
+    if (!payload || !ints || record.int_count < 3) return false;
+    const int nden = static_cast<int>(ints[0]);
+    const int ntem = static_cast<int>(ints[1]);
+    const int nxs = static_cast<int>(ints[2]);
+    if (nden <= 0 || ntem <= 1 || nxs <= 1) return false;
+    const std::size_t need = static_cast<std::size_t>(nden + ntem + nden * ntem + 2 * nxs);
+    if (record.real_count < need || !(input.temperature_k > 0.0) || !(input.hydrogen_density_cm3 > 0.0) || !(input.electron_density_cm3 > 0.0)) return false;
+    // v0.6.48.7.36 appends source leveltemp metadata after the literal
+    // calt99 payload.  Older lowered programs remain readable and fall back
+    // to the compact-row values, but strict Type-99 qualification requires
+    // destination energy, threshold, and destination statistical weight.
+    const bool has_source_destination = record.real_count >= need + 3;
+    const double destination_energy_ev = has_source_destination ? payload[need] : upper.energy_ev;
+    const double threshold_ev = has_source_destination ? payload[need + 1] : std::abs(upper.energy_ev - lower.energy_ev);
+    const double destination_weight = has_source_destination ? payload[need + 2] : upper.statistical_weight;
+    if (!(threshold_ev > 0.0) || !(lower.statistical_weight > 0.0) || !(destination_weight > 0.0)) return false;
+    const double threshold_ryd = threshold_ev / 13.6;
+    const double* dens_grid = payload;
+    const double* temp_grid = payload + nden;
+    const double* table = payload + nden + ntem;
+    const double* xs = payload + nden + ntem + nden * ntem;
+    const double logn = std::log10(input.hydrogen_density_cm3);
+    double logt = std::log10(input.temperature_k);
+    if (logt < temp_grid[0] || logt > temp_grid[ntem - 1]) {
+        logt = std::min(0.999 * temp_grid[ntem - 1], std::max(1.001 * temp_grid[0], logt));
+    }
+    int in_fortran = 0;
+    if (nden > 1) {
+        if (logn <= dens_grid[0]) in_fortran = 1;
+        else {
+            for (int i = 1; i < nden; ++i) {
+                if (logn >= dens_grid[i - 1] && logn <= dens_grid[i]) in_fortran = i;
+            }
+            in_fortran = std::max(in_fortran, 1);
+        }
+    } else in_fortran = 1;
+    const int in0 = in_fortran - 1;
+    int it0 = 0;
+    for (int k = 0; k < ntem - 1; ++k) {
+        if (temp_grid[k] <= logt && logt < temp_grid[k + 1]) { it0 = k; break; }
+    }
+    it0 = std::max(0, std::min(ntem - 2, it0));
+    const auto rcoef = [&](int jt, int jn) {
+        const double value = table[jt * nden + jn];
+        return value > -1.0e-31 ? std::log10(value + 1.0e-30) : value;
+    };
+    const double t0 = temp_grid[it0], t1 = temp_grid[it0 + 1];
+    if (t1 == t0) return false;
+    const double rec1 = rcoef(it0, in0) + (rcoef(it0 + 1, in0) - rcoef(it0, in0)) / (t1 - t0) * (logt - t0);
+    double logrec = rec1;
+    if (!(in_fortran == nden || in_fortran <= 1)) {
+        const double n0 = dens_grid[in0], n1 = dens_grid[in0 + 1];
+        if (n1 == n0) return false;
+        const double rec2 = rcoef(it0, in0 + 1) + (rcoef(it0 + 1, in0 + 1) - rcoef(it0, in0 + 1)) / (t1 - t0) * (logt - t0);
+        logrec = rec1 + (rec2 - rec1) / (n1 - n0) * (logn - n0);
+    }
+    const double rec = std::pow(10.0, logrec);
+    if (!(rec >= 0.0) || !std::isfinite(rec)) return false;
+    std::vector<double> energy_ryd(static_cast<std::size_t>(nxs), 0.0);
+    std::vector<double> sigma_mb(static_cast<std::size_t>(nxs), 0.0);
+    for (int i = 0; i < nxs; ++i) {
+        energy_ryd[static_cast<std::size_t>(i)] = xs[2 * i];
+        sigma_mb[static_cast<std::size_t>(i)] = std::max(xs[2 * i + 1], 0.0);
+    }
+    const double alpha = type99_milne_alpha(energy_ryd, sigma_mb, threshold_ryd, input.temperature_k);
+    if (!(alpha > 0.0)) return false;
+    const double cross_section_scale = rec / alpha;
+    std::vector<double> sigma_cm2(static_cast<std::size_t>(nxs), 0.0);
+    for (int i = 0; i < nxs; ++i) sigma_cm2[static_cast<std::size_t>(i)] = sigma_mb[static_cast<std::size_t>(i)] * cross_section_scale * 1.0e-18;
+    const bool has_dsec = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
+    std::vector<double> reduced_epi;
+    std::vector<double> reduced_bremsa;
+    const double* epi = input.radiation_energy_ev;
+    const double* bremsa = input.radiation_flux;
+    std::size_t count = input.radiation_bin_count;
+    if (has_dsec) {
+        build_type99_reduced_radiation(
+            input.dsec_radiation_energy_ev, input.dsec_bremsa, input.dsec_radiation_bin_count,
+            reduced_epi, reduced_bremsa);
+        epi = reduced_epi.data();
+        bremsa = reduced_bremsa.data();
+        count = reduced_epi.size();
+    }
+    const double swrat = lower.statistical_weight / destination_weight;
+    const Type99PhintResult ph = evaluate_type99_phint53hunt(
+        energy_ryd, sigma_cm2, threshold_ev, input.temperature_k,
+        input.electron_density_cm3, swrat, epi, bremsa, count, 0.01);
+    if (!ph.valid || !(ph.rrrt > 1.0e-48)) return false;
+    const double phint_scale = rec * input.electron_density_cm3 / ph.rrrt;
+    contribution.ans1 = ph.pirt * phint_scale;
+    contribution.ans2 = rec * input.electron_density_cm3;
+    const double ans3_pre = ph.piht * phint_scale;
+    const double ans4_pre = ph.rrcl;
+    const double ans5_pre = ph.piht2 * phint_scale;
+    const double ans6_pre = ph.rrcl2;
+    contribution.ans5 = -ans6_pre;
+    contribution.ans6 = -ans5_pre;
+    contribution.ans3 = -ans4_pre;
+    contribution.ans4 = -ans3_pre;
+    const double energy_difference = destination_energy_ev - lower.energy_ev;
+    contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) /
+        std::max(1.0e-43, std::abs(contribution.ans4) - threshold_ev * kErgPerEv * contribution.ans1);
+    contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) /
+        std::max(1.0e-43, std::abs(contribution.ans3) - threshold_ev * kErgPerEv * contribution.ans2);
+    const bool valid = std::isfinite(contribution.ans1) && std::isfinite(contribution.ans2) &&
+        std::isfinite(contribution.ans3) && std::isfinite(contribution.ans4) &&
+        std::isfinite(contribution.ans5) && std::isfinite(contribution.ans6);
+    if (valid && shadow) {
+        shadow->valid = true;
+        shadow->ans = {{contribution.ans1, contribution.ans2, contribution.ans3, contribution.ans4, contribution.ans5, contribution.ans6}};
+        shadow->threshold_ev = threshold_ev;
+        shadow->destination_energy_ev = destination_energy_ev;
+        shadow->bound_energy_ev = lower.energy_ev;
+        shadow->swrat = swrat;
+        shadow->calt99_density_cm3 = input.hydrogen_density_cm3;
+        shadow->phint53hunt_density_cm3 = input.electron_density_cm3;
+        shadow->rec_cm3_s = rec;
+        shadow->milne_alpha_cm3_s = alpha;
+        shadow->cross_section_scale = cross_section_scale;
+        shadow->ans2d_unscaled_s = ph.rrrt;
+        shadow->phint_scale = phint_scale;
+        shadow->pirt_unscaled_s = ph.pirt;
+        shadow->rrrt_unscaled_s = ph.rrrt;
+        shadow->piht_unscaled_erg_s = ph.piht;
+        shadow->rrcl_unscaled_erg_s = ph.rrcl;
+        shadow->piht2_unscaled_erg_s = ph.piht2;
+        shadow->rrcl2_unscaled_erg_s = ph.rrcl2;
+        shadow->nbinc_threshold_one_based = ph.nbinc_threshold_one_based;
+        shadow->nb1_one_based = ph.nb1_one_based;
+        shadow->nphint_one_based = ph.nphint_one_based;
+        shadow->ndelt = ph.ndelt;
+        shadow->npass = ph.npass;
+        shadow->last_pass_first_kl_one_based = ph.last_pass_first_kl_one_based;
+        shadow->last_pass_last_kl_one_based = ph.last_pass_last_kl_one_based;
+        shadow->cached_atmp22_stale_reuses = ph.cached_atmp22_stale_reuses;
+        shadow->used_dsec_radiation = has_dsec;
+    }
+    return valid;
+}
+
 const ElementRow& row_at(const ElementProgram& element, int one_based) {
     if (one_based < 1 || one_based > element.n_rows) throw std::runtime_error("row index outside element");
     return element.rows[static_cast<std::size_t>(one_based - 1)];
@@ -1721,6 +2156,11 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
+            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) break;
+            // Backward-compatible development-fixture path.  Strict v0.6.48.7.36
+            // qualification uses the appended source destination metadata and
+            // the live DSEC workspace above; older compact fixtures retain the
+            // pre-v36 approximate evaluator so ABI/self-tests remain readable.
             if (!r || !ints || record.int_count < 3) throw std::runtime_error("type99 payload requires nden,ntem,nxs");
             const int nd=static_cast<int>(ints[0]), nt=static_cast<int>(ints[1]), nx=static_cast<int>(ints[2]);
             const std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+2*nx);
@@ -1748,33 +2188,16 @@ EvaluatedRecord evaluate_record(
                 alpha += 0.5*(s0+s1)*std::abs(e1-e0)*limited_exp(-em/std::max(kt_ev,1.0e-300));
             }
             alpha=std::max(alpha*1.0e-18,1.0e-300);
-            const double scale=rec/alpha;
-            double photo=0.0,heat=0.0;
+            const double scale=rec/alpha; double photo=0.0,heat=0.0;
             for (int k=0;k<nx;++k) {
                 const double e=delta_ev+std::max(0.0,xs[2*k])*kRydEv;
                 const double sigma=std::max(0.0,xs[2*k+1])*1.0e-18*scale;
                 const double flux=interp_linear(input.radiation_energy_ev,input.radiation_flux,input.radiation_bin_count,e);
                 photo+=flux*sigma; heat+=flux*sigma*std::max(0.0,e-delta_ev)*kErgPerEv;
             }
-            photo/=nx; heat/=nx;
-            c.ans1=photo; c.ans2=rec*ne;
+            photo/=nx; heat/=nx; c.ans1=photo; c.ans2=rec*ne;
             c.ans3=-c.ans2*delta_ev*kErgPerEv; c.ans4=-heat;
             c.ans5=c.ans2*delta_ev*kErgPerEv; c.ans6=heat;
-            if (record.record == 1695 && record.source_position == 6312 &&
-                environment_flag("XSTAR_QUALIFICATION_TYPE99_RECORD1695_ORACLE")) {
-                if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
-                    throw std::runtime_error("type99 record-1695 oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
-                }
-                // Qualification-only evaluation-61 substitution from the immutable
-                // v0.6.47.2 fixed-state evaluator oracle.  This is deliberately not
-                // a production/general-state implementation.
-                c.ans1=104.14911901939827;
-                c.ans2=9.817240995458149e-06;
-                c.ans3=-1.4727192074803814e-16;
-                c.ans4=-1.52553189799137e-10;
-                c.ans5=-1.486074981946877e-16;
-                c.ans6=-8.952867377875771e-11;
-            }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
@@ -3047,7 +3470,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -3094,7 +3517,35 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << (item.type53_shadow.runtime_state_abi_used ? 1 : 0)
                         << ',' << item.type53_shadow.continuum_index_one_based
                         << ',' << item.type53_shadow.dsec_radiation_bin_count
-                        << ',' << item.type53_shadow.continuum_tau_count << '\n';
+                        << ',' << item.type53_shadow.continuum_tau_count
+                        << ',' << (item.type99_shadow.valid ? 1 : 0);
+            for (double value : item.type99_shadow.ans) record_file << ',' << value;
+            record_file << ',' << item.type99_shadow.threshold_ev
+                        << ',' << item.type99_shadow.destination_energy_ev
+                        << ',' << item.type99_shadow.bound_energy_ev
+                        << ',' << item.type99_shadow.swrat
+                        << ',' << item.type99_shadow.calt99_density_cm3
+                        << ',' << item.type99_shadow.phint53hunt_density_cm3
+                        << ',' << item.type99_shadow.rec_cm3_s
+                        << ',' << item.type99_shadow.milne_alpha_cm3_s
+                        << ',' << item.type99_shadow.cross_section_scale
+                        << ',' << item.type99_shadow.ans2d_unscaled_s
+                        << ',' << item.type99_shadow.phint_scale
+                        << ',' << item.type99_shadow.pirt_unscaled_s
+                        << ',' << item.type99_shadow.rrrt_unscaled_s
+                        << ',' << item.type99_shadow.piht_unscaled_erg_s
+                        << ',' << item.type99_shadow.rrcl_unscaled_erg_s
+                        << ',' << item.type99_shadow.piht2_unscaled_erg_s
+                        << ',' << item.type99_shadow.rrcl2_unscaled_erg_s
+                        << ',' << item.type99_shadow.nbinc_threshold_one_based
+                        << ',' << item.type99_shadow.nb1_one_based
+                        << ',' << item.type99_shadow.nphint_one_based
+                        << ',' << item.type99_shadow.ndelt
+                        << ',' << item.type99_shadow.npass
+                        << ',' << item.type99_shadow.last_pass_first_kl_one_based
+                        << ',' << item.type99_shadow.last_pass_last_kl_one_based
+                        << ',' << item.type99_shadow.cached_atmp22_stale_reuses
+                        << ',' << (item.type99_shadow.used_dsec_radiation ? 1 : 0) << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
             summary.last_source_position = c.source_position;

@@ -778,9 +778,51 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         id2 = int(block.nlev) + int(raw_ints[-4]) - 1
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
-        payload_reals = list(raw_reals)
+
+        # v0.6.48.7.36: Type-99 must retain the mutable source leveltemp
+        # destination workspace rather than re-reading the compact alias row.
+        # At an ion boundary the next-ion ground overwrites the previous-ion
+        # continuum in the compact matrix, but ucalc.f90 still uses the original
+        # destination energy/statistical weight when deriving ett, swrat, and the
+        # final heating corrections.  Append backward-compatible metadata after
+        # the literal calt99 payload: destination energy, threshold, destination g.
+        _, bound_energy, _bound_weight, _bound_label, _bound_n, _bound_l = _level_payload(
+            master, derived, ion_index, id1
+        )
+        if id2 <= int(block.nlev):
+            destination_ion_index = ion_index
+            destination_local_level = id2
+            _, destination_energy, destination_weight, _label, _n, _l = _level_payload(
+                master, derived, destination_ion_index, destination_local_level
+            )
+            threshold_ev = abs(bound_energy - destination_energy)
+        else:
+            ordered_blocks = list(basis.blocks)
+            block_position = next(
+                (idx for idx, candidate in enumerate(ordered_blocks) if int(candidate.ion_index) == ion_index),
+                -1,
+            )
+            if block_position < 0 or block_position + 1 >= len(ordered_blocks):
+                raise ValueError(f"type99 record {rec} has no next-ion parent destination")
+            destination_block = ordered_blocks[block_position + 1]
+            destination_ion_index = int(destination_block.ion_index)
+            destination_local_level = id2 - int(block.nlev) + 1
+            _, parent_excitation, destination_weight, _label, _n, _l = _level_payload(
+                master, derived, destination_ion_index, destination_local_level
+            )
+            _, continuum_energy, _continuum_weight, _clabel, _cn, _cl = _level_payload(
+                master, derived, ion_index, int(block.nlev)
+            )
+            threshold_ev = abs(bound_energy + parent_excitation)
+            destination_energy = continuum_energy + parent_excitation
+
+        payload_reals = list(raw_reals) + [
+            float(destination_energy),
+            float(threshold_ev),
+            float(destination_weight),
+        ]
         payload_ints = list(raw_ints)
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        line_energy = float(threshold_ev)
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unhandled active-lowerer type {dt}")
 

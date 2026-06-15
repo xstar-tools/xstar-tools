@@ -378,15 +378,21 @@ def main() -> int:
     direct_native_status = "ACCEPT" if direct_native_exact and set(native_direct_by_key) == set(keys) else "REJECT"
     expected_bad_cells = int(base.get("matrix_cells", len(matrix))) - int(base.get("dense_matrix_exact_cells", 0))
     decomposition_complete = (
-        len(matrix) == 6084 and len(bad_cells) == expected_bad_cells == 597
+        len(matrix) == 6084 and len(bad_cells) == expected_bad_cells
         and all_cells_replayed and all_bad_cells_attributed
-        and len(cell_summaries) == 597 and role_complete
+        and len(cell_summaries) == len(bad_cells) and role_complete
     )
+    count_gate = f"CALL2_HE_REMAINING_{len(bad_cells)}_CELL_DECOMPOSITION"
 
     gates.update({
-        "CALL2_HE_REMAINING_597_CELL_DECOMPOSITION": "ACCEPT" if decomposition_complete else "REJECT",
+        "CALL2_HE_REMAINING_MATRIX_CELL_DECOMPOSITION": "ACCEPT" if decomposition_complete else "REJECT",
+        count_gate: "ACCEPT" if decomposition_complete else "REJECT",
+        "CALL2_HE_REMAINING_597_CELL_DECOMPOSITION": (
+            "ACCEPT" if decomposition_complete and len(bad_cells) == 597
+            else f"SUPERSEDED_BY_{len(bad_cells)}_CELL_DECOMPOSITION"
+        ),
         "CALL2_HE_SOURCE_MATRIX_ORDER_REPLAY": "ACCEPT" if all_cells_replayed else "REJECT",
-        "CALL2_HE_EVERY_REMAINING_CELL_ATTRIBUTED": "ACCEPT" if all_bad_cells_attributed and len(cell_summaries) == 597 else "REJECT",
+        "CALL2_HE_EVERY_REMAINING_CELL_ATTRIBUTED": "ACCEPT" if all_bad_cells_attributed and len(cell_summaries) == len(bad_cells) else "REJECT",
         "CALL2_HE_BOUND_FREE_RECORD_ANSWER_RECONSTRUCTION": "ACCEPT" if role_complete and len(answer_rows) == 438 else "REJECT",
         "CALL2_HE_BOUND_FREE_DIRECT_SOURCE_RECORD_CAPTURE": direct_source_status,
         "CALL2_HE_BOUND_FREE_DIRECT_NATIVE_RECORD_CAPTURE": direct_native_status,
@@ -400,7 +406,7 @@ def main() -> int:
         "CALL2_HE_TYPE53_ROOT_CAUSE": "NOT_EVALUATED_DECOMPOSITION_ONLY",
         "CALL2_HE_TYPE95_ROOT_CAUSE": "NOT_EVALUATED_DECOMPOSITION_ONLY",
         "CALL2_HE_TYPE99_ROOT_CAUSE": "NOT_EVALUATED_DECOMPOSITION_ONLY",
-        "CALL2_HE_FIXED_STATE_PARITY": "BLOCKED_BY_597_MATRIX_CELLS",
+        "CALL2_HE_FIXED_STATE_PARITY": f"BLOCKED_BY_{len(bad_cells)}_MATRIX_CELLS",
         "THERMAL_PARITY": "BLOCKED",
         "PRODUCT_PARITY": "BLOCKED",
         "PRODUCTION_PROMOTION": "BLOCKED",
@@ -412,7 +418,7 @@ def main() -> int:
         "CALL2_HE_TYPE56_RATE_MATRIX", "CALL2_HE_TYPE63_RATE_MATRIX", "CALL2_HE_TYPE71_RATE_MATRIX",
     ))
     targeted = all(gates.get(name) == "ACCEPT" for name in (
-        "CALL2_HE_REMAINING_597_CELL_DECOMPOSITION", "CALL2_HE_SOURCE_MATRIX_ORDER_REPLAY",
+        "CALL2_HE_REMAINING_MATRIX_CELL_DECOMPOSITION", "CALL2_HE_SOURCE_MATRIX_ORDER_REPLAY",
         "CALL2_HE_EVERY_REMAINING_CELL_ATTRIBUTED", "CALL2_HE_BOUND_FREE_RECORD_ANSWER_RECONSTRUCTION",
         "CALL2_HE_BOUND_FREE_DIRECT_NATIVE_RECORD_CAPTURE", "CALL2_HE_FIRST_CAUSAL_RECORD_IDENTIFIED",
         "CALL2_HE_FIRST_BOUND_FREE_CAUSAL_RECORD_IDENTIFIED", "CALL2_HE_TYPE50_RESIDUAL_LOCALIZED",

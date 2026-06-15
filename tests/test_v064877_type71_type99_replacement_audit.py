@@ -13,7 +13,7 @@ from xstar_tools.xstar.v0472_type99_runtime_capture import verify as verify99
 ROOT=Path(__file__).resolve().parents[1]
 
 def test_release_is_pinned():
-    assert xstar_tools.__version__ == "0.6.48.7.35"
+    assert xstar_tools.__version__ == "0.6.48.7.36"
     assert RELEASE == "0.6.48.7.13"
 
 def test_type71_oracle_is_complete_and_exactly_pinned():
@@ -46,7 +46,11 @@ def test_portable_snapshot_has_no_links(tmp_path):
 
 def test_qualification_gate_and_release_scripts_exist():
     cpp=(ROOT/"src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
-    assert "XSTAR_QUALIFICATION_TYPE99_RECORD1695_ORACLE" in cpp
+    # v0.6.48.7.36 supersedes the record-1695 qualification oracle with the
+    # genuine source-faithful Type-99 evaluator while retaining the general
+    # qualification replacement switch for older promoted families.
+    assert "evaluate_type99_source_faithful" in cpp
+    assert "build_type99_reduced_radiation" in cpp
     assert "XSTAR_QUALIFICATION_REPLACEMENT" in cpp
     assert (ROOT/"run_v04877_type71_type99_replacement_audit.sh").is_file()
     assert (ROOT/"check_v04877_type71_type99_replacement_audit.py").is_file()
