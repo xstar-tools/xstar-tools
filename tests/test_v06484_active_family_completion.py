@@ -188,7 +188,7 @@ def test_phase1_lowerer_serializes_host_payload_shapes() -> None:
 
     type63 = lower(63, [], [1, 2, 1, 0])
     assert type63["lower_row"] == 1 and type63["upper_row"] == 2
-    assert type63["ints"] == [1, 0, 2, 1, 1]
+    assert type63["ints"] == [1, 0, 2, 1, 1, 1, 2]
 
     raw_grid = [4.0, 10.0, 4.0, 7.0, -7.0, -6.5, -6.0, -5.5, 1000.0]
     type71 = lower(71, raw_grid, [2, 2, 1, 2, 3, 0])

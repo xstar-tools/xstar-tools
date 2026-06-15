@@ -1783,11 +1783,36 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
             if (!ints || record.int_count < 5) throw std::runtime_error("type63 payload requires ni,li,nf,lf,iq");
             double values[6]{};
+            // v0.6.48.7.33: matrix lower/upper endpoints are source energy
+            // ordered, but ans1/ans2 retain the literal packed-record initial
+            // and final channels.  New lowered programs carry those rows in
+            // ints[5:7]; the n/l inference keeps older qualification fixtures
+            // readable without changing the fixed-state C ABI.
+            const ElementRow* initial = &lower;
+            const ElementRow* final = &upper;
+            if (record.int_count >= 7) {
+                initial = &row_at(element, static_cast<int>(ints[5]));
+                final = &row_at(element, static_cast<int>(ints[6]));
+            } else {
+                const bool lower_is_initial = lower.principal_n == static_cast<int>(ints[0]) &&
+                    lower.orbital_l == static_cast<int>(ints[1]);
+                const bool upper_is_initial = upper.principal_n == static_cast<int>(ints[0]) &&
+                    upper.orbital_l == static_cast<int>(ints[1]);
+                if (!lower_is_initial && upper_is_initial) {
+                    initial = &upper;
+                    final = &lower;
+                }
+            }
             const int rc=xstar_engine_type63_rates_v1(
                 static_cast<int>(ints[0]),static_cast<int>(ints[1]),static_cast<int>(ints[2]),static_cast<int>(ints[3]),static_cast<int>(ints[4]),
-                input.temperature_k,ne,lower.energy_ev,upper.energy_ev,lower.statistical_weight,upper.statistical_weight,values);
+                input.temperature_k,ne,initial->energy_ev,final->energy_ev,initial->statistical_weight,final->statistical_weight,values);
             if (rc!=0) throw std::runtime_error("type63 native scalar evaluation failed");
             c.ans1=values[0]; c.ans2=values[1]; c.ans3=values[2]; c.ans4=values[3]; c.ans5=values[4]; c.ans6=values[5];
+            // Source msolvelucy multiplies the type-63 thermal coefficients by
+            // xpx, the hydrogen-density matrix scale.  The population rates
+            // already contain electron density; this restores only the source
+            // matrix scaling for cj/cj2 and leaves aj1/aj2 unchanged.
+            c.density_scale=input.hydrogen_density_cm3;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION: {
@@ -2347,10 +2372,14 @@ int run_impl(
                 original.data_type == 71 && original.upper_row != 77;
             const bool unqualified_type99_ablated = element.element_z == 2 && helium_unqualified_type99_ablation &&
                 original.data_type == 99 && original.source_position != 6312;
+            const bool source_absent_type95_self_loop = element.element_z == 2 &&
+                original.data_type == 95 && original.rate_type == 15 &&
+                original.lower_row == original.upper_row;
             const bool qualification_ablated = matrix_family_ablated || matrix_source_ablated || matrix_row_ablated ||
                 unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
             bool matrix_committed = false;
-            if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated) {
+            if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated &&
+                !source_absent_type95_self_loop) {
                 auto contribution = original;
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;

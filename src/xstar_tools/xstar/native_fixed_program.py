@@ -669,16 +669,26 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
     elif dt == 63:
         if len(raw_ints) < 4:
             raise ValueError(f"type63 record {rec} has short integer payload")
+        # ucalc.f90 label 63 preserves literal initial/final scalar channels,
+        # while msolvelucy orders the matrix endpoints by source level energy.
+        # Retain both identities: the contribution lower/upper rows follow the
+        # source energy comparison and the payload carries the literal initial
+        # and final rows used by the type-63 scalar evaluator.
         a, b, iq = int(raw_ints[-4]), int(raw_ints[-3]), int(raw_ints[-2])
-        lower_row = _compact_row_for_local(basis, ion_index, a)
-        upper_row = _compact_row_for_local(basis, ion_index, b)
-        ni, li = _row_n(rows, lower_row), _row_l(rows, lower_row)
-        nf, lf = _row_n(rows, upper_row), _row_l(rows, upper_row)
+        initial_row = _compact_row_for_local(basis, ion_index, a)
+        final_row = _compact_row_for_local(basis, ion_index, b)
+        initial_energy = _row_energy(rows, initial_row)
+        final_energy = _row_energy(rows, final_row)
+        lower_row, upper_row = initial_row, final_row
+        if (initial_energy / (1.0e-24 + final_energy) - 1.0) >= 1.0e-8:
+            lower_row, upper_row = final_row, initial_row
+        ni, li = _row_n(rows, initial_row), _row_l(rows, initial_row)
+        nf, lf = _row_n(rows, final_row), _row_l(rows, final_row)
         if ni <= 0 or nf <= 0 or li < 0 or lf < 0 or iq <= 0:
             raise ValueError(f"type63 record {rec} missing quantum numbers")
         payload_reals = []
-        payload_ints = [ni, li, nf, lf, iq]
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        payload_ints = [ni, li, nf, lf, iq, initial_row, final_row]
+        line_energy = abs(initial_energy - final_energy)
     elif dt in {49, 53}:
         if len(raw_ints) < 4 or len(raw_reals) < 4:
             raise ValueError(f"type{dt} record {rec} has short payload")

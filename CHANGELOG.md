@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.33 - 2026-06-15
+
+- Apply source energy-ordering semantics to Type-63 matrix endpoints while retaining literal packed-record initial/final scalar channels.
+- Carry literal Type-63 initial/final compact rows in the lowered payload so scalar evaluation remains independent of matrix endpoint orientation.
+- Restore the source hydrogen-density matrix scale for Type-63 thermal coefficients without changing population-rate coefficients.
+- Suppress source-absent helium Type-95 same-row matrix contributions for records 1629 and 1980 while retaining scalar evaluation and diagnostics.
+- Close the call-2 helium term stream at 5,232 source terms, 5,232 native terms, 5,232 metadata-keyed matches, and zero unmatched terms.
+- Enable valid family-level rate attribution; retain strict rejections for remaining coefficient and dense-matrix differences and keep thermal/product/production promotion blocked.
+
 ## 0.6.48.7.32 - 2026-06-15
 
 - Reconstruct the runtime-supplied helium compact population seed using source overlapping-ion semantics instead of loading one independent global level per compact row.
