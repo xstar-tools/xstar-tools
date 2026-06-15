@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.30.4 - 2026-06-15
+
+- Correct the complete He II source ordinal by subtracting one from the already-resolved global-level index for every `Z=2, stage=2` compact row.
+- Map He II compact rows 46–78 exactly to global levels 79–111, including boundary row 46 and normalization row 78.
+- Split the 78-row ledger-presence gate from the strict 78/78 structural mapping gate.
+- Preserve all rates, matrices, thermal formulas, type-53 behavior, controller logic, and product behavior unchanged.
+
 ## 0.6.48.7.30.3 - 2026-06-14
 
 - Complete the He II global-level mapping correction for the first boundary row, mapping compact rows 46–78 to global levels 79–111.

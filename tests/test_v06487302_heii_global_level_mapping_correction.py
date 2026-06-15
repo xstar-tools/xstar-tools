@@ -6,5 +6,5 @@ def test_release():
 
 def test_targeted_correction_retained_and_completed():
     t = Path('src/xstar_tools/xstar/native_fixed_program.py').read_text()
-    assert 'int(element_z) == 2 and stage == 2:' in t
-    assert '(2, 2, local_level - 1)' in t
+    assert 'int(element_z) == 2 and stage == 2 and global_level_index > 0:' in t
+    assert 'global_level_index -= 1' in t

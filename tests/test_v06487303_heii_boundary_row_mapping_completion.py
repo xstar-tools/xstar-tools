@@ -6,7 +6,7 @@ def test_release():
 
 def test_boundary_row_included_in_targeted_correction():
     t = Path('src/xstar_tools/xstar/native_fixed_program.py').read_text()
-    assert 'int(element_z) == 2 and stage == 2:' in t
-    block = t[t.index('# v0.6.48.7.30.3:'):t.index('rows.append', t.index('# v0.6.48.7.30.3:'))]
+    assert 'int(element_z) == 2 and stage == 2 and global_level_index > 0:' in t
+    block = t[t.index('# v0.6.48.7.30.4:'):t.index('rows.append', t.index('# v0.6.48.7.30.4:'))]
     assert 'local_level > 1' not in block
-    assert '(2, 2, local_level - 1)' in block
+    assert 'global_level_index -= 1' in block
