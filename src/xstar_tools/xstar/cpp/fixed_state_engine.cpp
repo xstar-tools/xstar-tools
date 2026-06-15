@@ -352,6 +352,8 @@ struct NativeElementDiagnostic {
     std::uint64_t records_constructed = 0;
     std::uint64_t terms_constructed = 0;
     bool solve_response_captured = false;
+    std::vector<int> active_raw_global_level_indices;
+    std::vector<double> active_raw_call_start_xilevg;
     std::vector<int> active_loaded_global_level_indices;
     std::vector<double> active_loaded_call_start_xilevg;
     std::vector<double> active_initial_populations;
@@ -2067,6 +2069,52 @@ ActiveElementView make_active_element_view(
     return view;
 }
 
+struct RuntimeInitialSeed {
+    int global_level_index = 0;
+    double value = 0.0;
+    bool loaded = false;
+};
+
+RuntimeInitialSeed source_faithful_runtime_initial_seed(
+    const ElementProgram& e,
+    std::size_t compact_index,
+    const xstar_fixed_state_input_v1* runtime_input) {
+    RuntimeInitialSeed seed;
+    if (!runtime_input || runtime_input->global_level_count == 0 || !runtime_input->global_xilevg ||
+        compact_index >= e.rows.size()) return seed;
+
+    const int compact_row = static_cast<int>(compact_index) + 1;
+    const auto& row = e.rows[compact_index];
+
+    // v0.6.48.7.32: reproduce the source msolvelucy compact-seed contract
+    // for helium.  Each ion copies nlev entries, while the compact cursor
+    // advances by nlev-1.  The next-ion ground therefore overwrites the
+    // preceding continuum row.  The lowered He II ordinals retain the shared
+    // ground at their first row; subsequent rows consume the following global
+    // level, and the terminal solver-normalization row starts at exact zero.
+    if (e.element_z == 2 && compact_row == e.normalization_row) {
+        seed.global_level_index = 0;
+        seed.value = 0.0;
+        seed.loaded = true;
+        return seed;
+    }
+
+    int global_level_index = row.global_level_index;
+    if (e.element_z == 2 && compact_index > 0 && row.ion_charge > 0 &&
+        e.rows[compact_index - 1].ion_charge == row.ion_charge) {
+        ++global_level_index;
+    }
+    if (global_level_index <= 0 ||
+        static_cast<std::size_t>(global_level_index) > runtime_input->global_level_count) return seed;
+
+    const double value = runtime_input->global_xilevg[global_level_index - 1];
+    if (!std::isfinite(value) || value < 0.0) return seed;
+    seed.global_level_index = global_level_index;
+    seed.value = value;
+    seed.loaded = true;
+    return seed;
+}
+
 ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr) {
     ElementBuffers b;
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
@@ -2077,19 +2125,27 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
+    bool source_faithful_helium_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
         b.initial[k] = e.rows[k].initial_population;
-        if (runtime_input && runtime_input->global_level_count > 0 && e.rows[k].global_level_index > 0 &&
-            static_cast<std::size_t>(e.rows[k].global_level_index) <= runtime_input->global_level_count) {
-            const double value = runtime_input->global_xilevg[e.rows[k].global_level_index - 1];
-            if (std::isfinite(value) && value >= 0.0) b.initial[k] = value;
+        const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
+        if (seed.loaded) {
+            b.initial[k] = seed.value;
+            if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
         }
     }
-    double initial_total = 0.0;
-    for (double value : b.initial) initial_total += value;
-    if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
+
+    // The source passes the unnormalized helium compact vector into
+    // msolvelucy.  Number conservation is imposed by the solver normalization
+    // row; normalizing here changes every solve-state entry and duplicates the
+    // shared He I/He II boundary population.
+    if (!source_faithful_helium_runtime_seed) {
+        double initial_total = 0.0;
+        for (double value : b.initial) initial_total += value;
+        if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
+    }
     return b;
 }
 
@@ -2452,16 +2508,22 @@ int run_impl(
         element_diagnostic.terms_constructed = eout.terms_constructed;
         if (helium_solve_response && element.element_z == 2) {
             element_diagnostic.solve_response_captured = true;
+            element_diagnostic.active_raw_global_level_indices.resize(static_cast<std::size_t>(active.element.n_rows), 0);
+            element_diagnostic.active_raw_call_start_xilevg.resize(static_cast<std::size_t>(active.element.n_rows), 0.0);
             element_diagnostic.active_loaded_global_level_indices.resize(static_cast<std::size_t>(active.element.n_rows), 0);
             element_diagnostic.active_loaded_call_start_xilevg.resize(static_cast<std::size_t>(active.element.n_rows), 0.0);
             for (int compact_row = 1; compact_row <= active.element.n_rows; ++compact_row) {
-                const auto& active_row = active.element.rows.at(static_cast<std::size_t>(compact_row - 1));
-                element_diagnostic.active_loaded_global_level_indices[static_cast<std::size_t>(compact_row - 1)] = active_row.global_level_index;
+                const std::size_t compact_index = static_cast<std::size_t>(compact_row - 1);
+                const auto& active_row = active.element.rows.at(compact_index);
+                element_diagnostic.active_raw_global_level_indices[compact_index] = active_row.global_level_index;
                 if (input.global_xilevg && input.global_level_count > 0 && active_row.global_level_index > 0 &&
                     static_cast<std::size_t>(active_row.global_level_index) <= input.global_level_count) {
-                    element_diagnostic.active_loaded_call_start_xilevg[static_cast<std::size_t>(compact_row - 1)] =
+                    element_diagnostic.active_raw_call_start_xilevg[compact_index] =
                         input.global_xilevg[active_row.global_level_index - 1];
                 }
+                const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(active.element, compact_index, &input);
+                element_diagnostic.active_loaded_global_level_indices[compact_index] = seed.global_level_index;
+                if (seed.loaded) element_diagnostic.active_loaded_call_start_xilevg[compact_index] = seed.value;
             }
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations = buffers.outer;
@@ -3091,7 +3153,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             if (!solve_rows || !solve_matrix || !solve_terms) {
                 throw std::runtime_error("cannot create helium solve-response CSV files");
             }
-            solve_rows << "evaluation_ordinal,compact_row,full_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,is_normalization_row,loaded_global_level_index,loaded_call_start_xilevg,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
+            solve_rows << "evaluation_ordinal,compact_row,full_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,is_normalization_row,raw_global_level_index,raw_call_start_xilevg,loaded_global_level_index,loaded_call_start_xilevg,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
             solve_rows << std::setprecision(17);
             for (int compact_row = 1; compact_row <= n; ++compact_row) {
                 const int full_row = helium->active.full_row_start + compact_row - 1;
@@ -3101,6 +3163,8 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                            << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ','
                            << row.energy_ev << ',' << row.statistical_weight << ','
                            << (compact_row == helium->active.element.normalization_row ? 1 : 0) << ','
+                           << helium->active_raw_global_level_indices.at(index) << ','
+                           << helium->active_raw_call_start_xilevg.at(index) << ','
                            << helium->active_loaded_global_level_indices.at(index) << ','
                            << helium->active_loaded_call_start_xilevg.at(index) << ','
                            << helium->active_initial_populations.at(index) << ','

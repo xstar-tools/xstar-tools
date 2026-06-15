@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.32 - 2026-06-15
+
+- Reconstruct the runtime-supplied helium compact population seed using source overlapping-ion semantics instead of loading one independent global level per compact row.
+- Preserve the shared He I continuum/He II ground row, advance subsequent He II rows to the following global level, and initialize the terminal solver-normalization row to exact zero.
+- Remove premature native pre-solve normalization for runtime-supplied helium compact seeds; retain the existing fallback normalization for other seed paths.
+- Add explicit shared-boundary, terminal-zero, compact-seed, pre-solve-normalization-removal, and transformed-initial-state gates.
+- Keep the independently observed dense-matrix and term-stream alignment failures blocked for later releases.
+
 ## 0.6.48.7.31.3 - 2026-06-15
 
 - Retire positional source-order term comparison for the call-2 helium solve audit and align source/native terms by record, data type, rate type, normalized role, compact row/column, and duplicate occurrence ordinal.
