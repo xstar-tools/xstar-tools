@@ -5,6 +5,7 @@
 #include "xstar_science_fits.hpp"
 #include "xstar_standalone_internal.hpp"
 
+#include "xstar_constants.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -2147,7 +2148,7 @@ int fixed_dsec_evaluator(
     // fixed-state engine's native continuum expression intentionally so the
     // historical continuum and full-spectrum FITS writers no longer consume
     // the same array.
-    constexpr double kBoltzmannEvK = 8.617333262145e-5;
+    constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
     const double kt_ev = kBoltzmannEvK * input.temperature_k;
     const double ff_total = 1.426e-27 * std::sqrt(input.temperature_k) *
         input.electron_density_cm3 * input.ionized_h_density_cm3;

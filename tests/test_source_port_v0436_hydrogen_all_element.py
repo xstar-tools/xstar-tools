@@ -30,6 +30,11 @@ from xstar_atomic.source_port.calc_hmc_all_parity import (
     _all_element_acceptance_summary,
 )
 from xstar_atomic.source_port.element_equilibrium import _matrix_terms_for_result
+from xstar_tools.xstar.constants import (
+    COLLISION_RATE_COEFFICIENT_PER_SQRT_T4,
+    LEGACY_BOLTZMANN_EV_PER_T4,
+    MODERN_ERG_PER_EV,
+)
 
 
 def _levels() -> UCalcLevelTable:
@@ -90,20 +95,20 @@ def test_type62_is_translated_and_matches_calt6062_source_formula():
 
     de = 10.2
     t = temperature / 1.0e4
-    temp_for_fit = max(temperature, 0.02 * de * 1.0e4 / 0.861707)
+    temp_for_fit = max(temperature, 0.02 * de * 1.0e4 / LEGACY_BOLTZMANN_EV_PER_T4)
     t1 = temp_for_fit * 6.33652e-6
     tt = min(t1, 1.0)
     upsilon = 0.8 + 0.2 * tt + 0.03 * tt**2
     upsilon += 0.15 * math.log(2.0 * tt) * math.exp(-0.4 * tt)
     if t1 > tt:
         upsilon *= 1.0 + math.log(t1 / 1.0) / (math.log(t1 / 1.0) + 1.0)
-    cji = 8.626e-8 * upsilon / math.sqrt(t) / (1.0e-16 + 6.0)
-    cij = cji * 6.0 * math.exp(-de / (0.861707 * t)) / (1.0e-16 + 2.0)
+    cji = COLLISION_RATE_COEFFICIENT_PER_SQRT_T4 * upsilon / math.sqrt(t) / (1.0e-16 + 6.0)
+    cij = cji * 6.0 * math.exp(-de / (LEGACY_BOLTZMANN_EV_PER_T4 * t)) / (1.0e-16 + 2.0)
     ne = 1.0e8 * 1.2046560563936872
     assert result.ans1 == pytest.approx(cij * ne)
     assert result.ans2 == pytest.approx(cji * ne)
-    assert result.ans6 == pytest.approx(result.ans1 * de * 1.602176634e-12)
-    assert result.ans5 == pytest.approx(result.ans2 * de * 1.602176634e-12)
+    assert result.ans6 == pytest.approx(result.ans1 * de * MODERN_ERG_PER_EV)
+    assert result.ans5 == pytest.approx(result.ans2 * de * MODERN_ERG_PER_EV)
     assert result.diagnostics["fit_form"] == "callaway_type62_polynomial_plus_log_exp_tail"
     assert result.diagnostics["lower_principal_n"] == 1
     assert result.diagnostics["upper_principal_n"] == 2

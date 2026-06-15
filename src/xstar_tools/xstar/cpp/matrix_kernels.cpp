@@ -1,3 +1,4 @@
+#include "xstar_constants.h"
 // Optional XSTAR matrix-assembly kernels.
 //
 // v0.5.67 starts libxstar_matrix.so as a plain C ABI shared library.  The
@@ -428,7 +429,7 @@ int xstar_matrix_eval_simple_ucalc(
         write_message(errbuf, errbuf_size, "non-finite thermodynamic input to xstar_matrix_eval_simple_ucalc");
         return 3;
     }
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;
@@ -656,10 +657,10 @@ extern "C" int xstar_matrix_eval_type51_ucalc_batch(
         if (!ok) continue;
         const double t_xstar = temperature_k / 1.0e4;
         const double tsq = std::sqrt(t_xstar);
-        const double ekt_ev = 0.861707 * t_xstar;
+        const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
         if (tsq <= 0.0 || ekt_ev <= 0.0) continue;
         const double delta = eij_ev / ekt_ev;
-        const double q_deexc = 8.626e-8 * ups / tsq / g_upper[k];
+        const double q_deexc = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / tsq / g_upper[k];
         const double q_exc = q_deexc * g_upper[k] * xstar_matrix_expo_limited(-delta) / g_lower[k];
         const double ans1 = q_exc * electron_density_cm3;
         const double ans2 = q_deexc * electron_density_cm3;
@@ -775,14 +776,14 @@ int xstar_matrix_build_mg_type51_rates_and_matrix(
         }
         const double t_xstar = temperature_k / 1.0e4;
         const double tsq = std::sqrt(t_xstar);
-        const double ekt_ev = 0.861707 * t_xstar;
+        const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
         if (tsq <= 0.0 || ekt_ev <= 0.0) {
             ++fallback_nonfinite_answer;
             ++ucalc_cpp_unsupported;
             continue;
         }
         const double delta = eij_ev / ekt_ev;
-        const double q_deexc = 8.626e-8 * ups / tsq / g_upper[k];
+        const double q_deexc = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / tsq / g_upper[k];
         const double q_exc = q_deexc * g_upper[k] * xstar_matrix_expo_limited(-delta) / g_lower[k];
         const double ans1 = q_exc * electron_density_cm3;
         const double ans2 = q_deexc * electron_density_cm3;
@@ -1128,7 +1129,7 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads(
     }
 
     const auto compute_start = std::chrono::steady_clock::now();
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;
@@ -1339,7 +1340,7 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads_batch(
     }
 
     const auto compute_start = std::chrono::steady_clock::now();
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;
@@ -1530,7 +1531,7 @@ int xstar_matrix_accumulate_mg_ion_source_simple_terms(
         return 4;
     }
 
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;
@@ -1798,8 +1799,8 @@ int xstar_matrix_accumulate_mg_ion_rate7_type49_terms(
     }
     const double ryd_ev = 13.605692;
     const double erg_per_ev = 1.602176634e-12;
-    const double kboltz_erg_k = 1.380649e-16;
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kboltz_erg_k = xstar_constants::kBoltzmannErgPerK;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;
@@ -2098,8 +2099,8 @@ int xstar_matrix_accumulate_mg_ion_rate7_type53_terms(
     }
     const double ryd_ev = 13.605692;
     const double erg_per_ev = 1.602176634e-12;
-    const double kboltz_erg_k = 1.380649e-16;
-    const double kt_ev_per_1e4k = 0.861707;
+    const double kboltz_erg_k = xstar_constants::kBoltzmannErgPerK;
+    const double kt_ev_per_1e4k = xstar_constants::kLegacyBoltzmannEvPerT4;
     const auto expo = [](double x) -> double {
         if (x < -60.0) x = -60.0;
         if (x > 60.0) x = 60.0;

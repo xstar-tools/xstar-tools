@@ -1,0 +1,15 @@
+// Single source of truth for XSTAR constants that currently have multiple
+// historical values in the Python and C++ backends.  Do not change a value
+// here without recapturing the affected scientific reference.
+XSTAR_CONSTANT(kLegacyRoundedBoltzmannEvPerK, 8.617e-5)
+XSTAR_CONSTANT(kSourceCollisionBoltzmannEvPerK, 8.61707e-5)
+XSTAR_CONSTANT(kModernShortBoltzmannEvPerK, 8.617333262e-5)
+XSTAR_CONSTANT(kModernBoltzmannEvPerK, 8.617333262145e-5)
+XSTAR_CONSTANT(kLegacyBoltzmannKevPerK, 8.617385e-8)
+XSTAR_CONSTANT(kLegacyBoltzmannEvPerT4, 0.861707)
+XSTAR_CONSTANT(kModernBoltzmannEvPerT4, 0.8617333262145)
+XSTAR_CONSTANT(kBoltzmannErgPerK, 1.380649e-16)
+XSTAR_CONSTANT(kLegacyCollisionErgPerEv, 1.602197e-12)
+XSTAR_CONSTANT(kModernErgPerEv, 1.602176634e-12)
+XSTAR_CONSTANT(kCollisionRateCoefficientPerSqrtK, 8.626e-6)
+XSTAR_CONSTANT(kCollisionRateCoefficientPerSqrtT4, 8.626e-8)

@@ -6,6 +6,7 @@
 #include "type50_dsec_runtime_oracle_v048713.h"
 #include "type53_row46_dsec_runtime_oracle_v048716.h"
 
+#include "xstar_constants.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -31,8 +32,8 @@
 namespace {
 
 using clock_type = std::chrono::steady_clock;
-constexpr double kBoltzmannEvK = 8.617333262145e-5;
-constexpr double kErgPerEv = 1.602176634e-12;
+constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
+constexpr double kErgPerEv = xstar_constants::kModernErgPerEv;
 constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
@@ -307,6 +308,7 @@ struct EvaluatedRecord {
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
     double opakab = 0.0;
+    double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
     Type53SourceShadow type53_shadow{};
 };
 
@@ -431,9 +433,9 @@ double source_cmpfnc(double ee, double sxx) {
 SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::size_t n, double temperature_k, double hydrogen_density, double electron_fraction) {
     if (!epi || !bremsa || n < 2) throw std::runtime_error("source comp2 requires complete DSEC radiation workspace");
     constexpr double emc2 = 5.11e5;
-    const double kt_per_t4 = static_cast<double>(static_cast<float>(0.861707));
+    const double kt_per_t4 = static_cast<double>(static_cast<float>(xstar_constants::kLegacyBoltzmannEvPerT4));
     const double sigma_t = static_cast<double>(static_cast<float>(6.6524587321e-25));
-    const double erg_per_ev = static_cast<double>(static_cast<float>(1.602176634e-12));
+    const double erg_per_ev = static_cast<double>(static_cast<float>(xstar_constants::kModernErgPerEv));
     const double t4 = temperature_k / 1.0e4;
     const double ekt = t4 * kt_per_t4;
     const double sxx = 1.0 / (emc2 / (ekt + 1.0e-10));
@@ -980,19 +982,19 @@ bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std:
 
 double collision_pair_upward(double upsilon, double delta_ev, double temperature_k, double ne, double gl) {
     const double t4=temperature_k/1.0e4;
-    return 8.626e-8*upsilon*limited_exp(-delta_ev/std::max(kBoltzmannEvK*temperature_k,1.0e-300))*ne/
+    return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*limited_exp(-delta_ev/std::max(kBoltzmannEvK*temperature_k,1.0e-300))*ne/
         (std::sqrt(std::max(t4,1.0e-300))*std::max(gl,1.0e-300));
 }
 
 double collision_pair_downward(double upsilon, double temperature_k, double ne, double gu) {
     const double t4=temperature_k/1.0e4;
-    return 8.626e-8*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
+    return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
 }
 
 double callaway_upsilon(int data_type, const double* r, std::size_t nr, double temperature_k, double delta_ev) {
     const std::size_t min_count=data_type==60?3u:6u;
     if (!r||nr<min_count||!(temperature_k>0.0)||!(delta_ev>0.0)) throw std::runtime_error("invalid type60/62 payload");
-    const double floor_k=0.02*delta_ev*1.0e4/0.8617333262145;
+    const double floor_k=0.02*delta_ev*1.0e4/xstar_constants::kModernBoltzmannEvPerT4;
     const double teff=std::max(temperature_k,floor_k);
     const double t1=teff>1.0e9?6.33652e3:teff*6.33652e-6;
     const double tt=std::min(t1,1.0);
@@ -1198,8 +1200,8 @@ bool evaluate_type53_source_integral(
     const int klmax = std::max(nb1, k - 1);
     if (iterations >= max_iterations || nb1 >= klmax || nb1 >= n_grid) return false;
 
-    constexpr double kBoltzmannErgK = 1.380649e-16;
-    constexpr double kKtEvPerT4 = 0.861707;
+    constexpr double kBoltzmannErgK = xstar_constants::kBoltzmannErgPerK;
+    constexpr double kKtEvPerT4 = xstar_constants::kLegacyBoltzmannEvPerT4;
     const double t4 = input.temperature_k / 1.0e4;
     const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
     const double bound_g = row46_contract ? row46_contract->bound_statistical_weight : lower.statistical_weight;
@@ -1325,7 +1327,9 @@ EvaluatedRecord evaluate_record(
     c.ion_stage = record.ion_stage;
     c.lower_row = record.lower_row;
     c.upper_row = record.upper_row;
-    c.density_scale = record.density_scale;
+    // Source calc_hmc_ion applies xpx at the common matrix insertion boundary
+    // for every cj/cj2 channel.  Keep population rates unscaled.
+    c.density_scale = record.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;
     out.matrix_enabled = record.matrix_enabled;
 
     switch (record.opcode) {
@@ -1509,7 +1513,6 @@ EvaluatedRecord evaluate_record(
                     c.ans5 = source_shadow.ans5;
                     c.ans6 = source_shadow.ans6;
                 }
-                c.density_scale = input.hydrogen_density_cm3;
                 out.type53_shadow.captured_state_anchor = captured_state_anchor;
                 out.type53_shadow.tau_in = contract_tau_in;
                 out.type53_shadow.tau_out = contract_tau_out;
@@ -1599,8 +1602,7 @@ EvaluatedRecord evaluate_record(
                     // channels with the hydrogen-density multiplier.  The
                     // fixed evaluator replay did not include this live matrix
                     // contract.
-                    c.density_scale = input.hydrogen_density_cm3;
-                }
+                    }
             } else if (use_fixed_type50_oracle) {
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error("type50 manifold oracle replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -1637,7 +1639,7 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
             const double ups = type51_upsilon(r, record.real_count, ints, record.int_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type51 payload");
-            const double qde = 8.626e-8 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
+            const double qde = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
             const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
             c.ans1 = qex * ne;
             c.ans2 = qde * ne;
@@ -1676,12 +1678,26 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
             const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
-            const double qde = 8.626e-8 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
-            const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
+            if (!(lower.statistical_weight > 0.0) || !(upper.statistical_weight > 0.0)) {
+                throw std::runtime_error("type56 requires positive statistical weights");
+            }
+            // Match xstar_tools.collisions.q_rates_from_upsilon exactly:
+            // source collision k_B, sqrt(T), shared rate coefficient, and expression order.
+            const double root_t = std::sqrt(input.temperature_k);
+            const double collision_kt_ev =
+                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+            const double qex =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups *
+                std::exp(-delta_ev / collision_kt_ev) /
+                (lower.statistical_weight * root_t);
+            const double qde =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups /
+                (upper.statistical_weight * root_t);
             c.ans1 = qex * ne;
             c.ans2 = qde * ne;
-            c.ans5 = c.ans2 * delta_ev * kErgPerEv;
-            c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            out.type56_upsilon = ups;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE86_AUGER: {
@@ -1808,17 +1824,12 @@ EvaluatedRecord evaluate_record(
                 input.temperature_k,ne,initial->energy_ev,final->energy_ev,initial->statistical_weight,final->statistical_weight,values);
             if (rc!=0) throw std::runtime_error("type63 native scalar evaluation failed");
             c.ans1=values[0]; c.ans2=values[1]; c.ans3=values[2]; c.ans4=values[3]; c.ans5=values[4]; c.ans6=values[5];
-            // Source msolvelucy multiplies the type-63 thermal coefficients by
-            // xpx, the hydrogen-density matrix scale.  The population rates
-            // already contain electron density; this restores only the source
-            // matrix scaling for cj/cj2 and leaves aj1/aj2 unchanged.
-            c.density_scale=input.hydrogen_density_cm3;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION: {
             const double ups = type69_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type69 payload");
-            const double qde = 8.626e-8 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
+            const double qde = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
             const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
             c.ans1 = qex * ne;
             c.ans2 = qde * ne;
@@ -1847,9 +1858,9 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
             if (!r||record.real_count<2||!ints||record.int_count<2) throw std::runtime_error("type72 payload too short");
-            const double scale=3.3e-11*std::pow(13.6/std::max(0.8617333262145*t4,1.0e-300),1.5);
+            const double scale=3.3e-11*std::pow(13.6/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300),1.5);
             const double rtmp=record.real_count>=3?r[2]:1.0;
-            const double rate=scale*limited_exp(-r[1]/std::max(0.8617333262145*t4,1.0e-300))*(r[0]/1.0e13)*rtmp;
+            const double rate=scale*limited_exp(-r[1]/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300))*(r[0]/1.0e13)*rtmp;
             const auto& ground=row_at(element,static_cast<int>(ints[0]));
             const auto& parent=row_at(element,static_cast<int>(ints[1]));
             const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
@@ -3036,7 +3047,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -3061,7 +3072,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << (diagnostic.matrix_committed ? 1 : 0) << ',' << (item.spectral ? 1 : 0) << ','
                         << c.ans1 << ',' << c.ans2 << ',' << c.ans3 << ',' << c.ans4 << ',' << c.ans5 << ',' << c.ans6 << ','
                         << c.density_scale << ',' << item.line_energy_ev << ',' << item.atomic_mass_amu << ','
-                        << item.natural_width_ev << ',' << item.opakab << ','
+                        << item.natural_width_ev << ',' << item.opakab << ',' << item.type56_upsilon << ','
                         << (item.type53_shadow.valid ? 1 : 0);
             for (std::size_t k = 0; k < item.type53_shadow.ans.size(); ++k) {
                 record_file << ',' << item.type53_shadow.ans[k];

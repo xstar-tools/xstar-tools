@@ -6,6 +6,11 @@ conventions used by the type-51 branch of ``xstarlib/src/ucalc.f90``.
 """
 from __future__ import annotations
 
+from .xstar.constants import (
+    COLLISION_RATE_COEFFICIENT_PER_SQRT_T4,
+    LEGACY_BOLTZMANN_EV_PER_T4,
+)
+
 import math
 from typing import Any, Dict, Mapping, Sequence
 
@@ -226,9 +231,9 @@ def evaluate_type51_ucalc_record(
 
     t_xstar = temperature_k / 1.0e4
     tsq = math.sqrt(t_xstar)
-    ekt_ev = 0.861707 * t_xstar
+    ekt_ev = LEGACY_BOLTZMANN_EV_PER_T4 * t_xstar
     delta = eij_ev / ekt_ev
-    q_deexc = 8.626e-8 * upsilon / tsq / g_upper
+    q_deexc = COLLISION_RATE_COEFFICIENT_PER_SQRT_T4 * upsilon / tsq / g_upper
     q_exc = q_deexc * g_upper * xstar_expo(-delta) / g_lower
     ans1 = q_exc * electron_density_cm3
     ans2 = q_deexc * electron_density_cm3

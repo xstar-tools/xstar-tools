@@ -6,8 +6,8 @@ from typing import Any
 from . import v0472_full_dsec_thermal_budget_capture as base
 from . import v0472_thermal_budget_state_refresh_capture as low
 
-RELEASE = "0.6.48.7.31.3"
-SCHEMA = "xstar-tools-v06487312-v0472-call2-helium-solve-state-capture-v1"
+RELEASE = "0.6.48.7.34"
+SCHEMA = "xstar-tools-v0648734-v0472-call2-helium-solve-state-capture-v1"
 REPORT = "v0472_call2_eval1_he_solve_capture_report.json"
 
 _INJECT = r'''
@@ -20,6 +20,7 @@ _HE_CONDENSED_TRACE=[]
 _HE_FIXED_TRACE=[]
 _HE_SOLVE_STATE={}
 _HE_SOLVE_INTERCEPTS=[]
+_HE_TYPE56_RECORDS=[]
 
 def _v048731_capture_he_solve(call_id, local_eval, global_eval, state, result):
     if int(call_id)!=2 or int(local_eval)!=1: return
@@ -60,6 +61,20 @@ def _v048731_capture_he_solve(call_id, local_eval, global_eval, state, result):
                 'ion_stage':int(term.ion_stage),'role':str(term.role),'compact_row':int(term.row),'compact_column':int(term.column),
                 'aj1':float(term.aj1),'aj2':float(term.aj2),'cj':float(term.cj),'cj2':float(term.cj2),
                 'type53':1 if int(term.data_type)==53 else 0})
+        for rr in tuple(getattr(assembly,'record_results',()) or ()):
+            if int(rr.get('data_type',0) or 0)!=56: continue
+            _HE_TYPE56_RECORDS.append({
+                'record':int(rr.get('record',0) or 0),'data_type':56,'rate_type':int(rr.get('rate_type',0) or 0),
+                'ion_index':int(rr.get('ion_index',0) or 0),'ion_stage':int(rr.get('ion_stage',0) or 0),
+                'idest1':int(rr.get('idest1',0) or 0),'idest2':int(rr.get('idest2',0) or 0),
+                'temperature_K':float(rr.get('diag_temperature_K',float('nan'))),
+                'upsilon':float(rr.get('diag_upsilon',float('nan'))),
+                'q_excitation_cm3_s':float(rr.get('diag_q_excitation_cm3_s',float('nan'))),
+                'q_deexcitation_cm3_s':float(rr.get('diag_q_deexcitation_cm3_s',float('nan'))),
+                'ans1':float(rr.get('ans1',float('nan'))),'ans2':float(rr.get('ans2',float('nan'))),
+                'ans5':float(rr.get('ans5',float('nan'))),'ans6':float(rr.get('ans6',float('nan'))),
+                'delta_e_eV':float(rr.get('diag_delta_e_eV',float('nan'))),
+                'g_lower':float(rr.get('diag_g_lower',float('nan'))),'g_upper':float(rr.get('diag_g_upper',float('nan')))})
         trace=getattr(solve,'trace',None)
         if trace is not None:
             _HE_OUTER_TRACE.extend(dict(r) for r in trace.outer_level_rows)
@@ -123,6 +138,7 @@ def _v048731_write_he_solve_outputs():
     _v048731_write_rows('v0472_call2_eval1_he_superlevel_trace.csv',_HE_SUPER_TRACE)
     _v048731_write_rows('v0472_call2_eval1_he_condensed_matrix_trace.csv',_HE_CONDENSED_TRACE)
     _v048731_write_rows('v0472_call2_eval1_he_fixed_point_trace.csv',_HE_FIXED_TRACE)
+    _v048731_write_rows('v0472_call2_eval1_he_type56_records.csv',_HE_TYPE56_RECORDS)
     state_path=_OUT/'v0472_call2_eval1_he_solve_state.json'
     state_path.write_text(json.dumps(_HE_SOLVE_STATE,indent=2,sort_keys=True)+'\n')
     json.loads(state_path.read_text())
@@ -135,7 +151,7 @@ FILES = (
     'v0472_call2_eval1_he_solve_rows.csv','v0472_call2_eval1_he_solve_matrix.csv',
     'v0472_call2_eval1_he_source_order_matrix_terms.csv','v0472_call2_eval1_he_outer_level_trace.csv',
     'v0472_call2_eval1_he_superlevel_trace.csv','v0472_call2_eval1_he_condensed_matrix_trace.csv',
-    'v0472_call2_eval1_he_fixed_point_trace.csv','v0472_call2_eval1_he_solve_state.json')
+    'v0472_call2_eval1_he_fixed_point_trace.csv','v0472_call2_eval1_he_type56_records.csv','v0472_call2_eval1_he_solve_state.json')
 
 def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
@@ -164,11 +180,12 @@ def capture(source_archive: Path, atdb: Path, out: Path, params: Path, coheat: P
     state_ok=(out/FILES[-1]).is_file() and bool(json.loads((out/FILES[-1]).read_text()))
     log=(out/'v0472_call2_he_solve_capture.log').read_text(errors='replace')
     intercept='v048731_he_solve_capture_enable call=2 local=1' in log
-    core=intercept and counts[FILES[0]]==78 and counts[FILES[1]]==78*78 and counts[FILES[2]]>0 and counts[FILES[3]]>0 and state_ok
+    core=intercept and counts[FILES[0]]==78 and counts[FILES[1]]==78*78 and counts[FILES[2]]>0 and counts[FILES[3]]>0 and counts['v0472_call2_eval1_he_type56_records.csv']>0 and state_ok
     report={'schema':SCHEMA,'release':RELEASE,'result':'ACCEPT' if core else 'REJECT','counts':counts,
         'call2_he_solve_intercept':'ACCEPT' if intercept else 'REJECT','source_solve_rows':'ACCEPT' if counts[FILES[0]]==78 else 'REJECT',
         'source_matrix_rows':'ACCEPT' if counts[FILES[1]]==78*78 else 'REJECT','source_term_rows':'ACCEPT' if counts[FILES[2]]>0 else 'REJECT',
-        'source_iteration_trace':'ACCEPT' if counts[FILES[3]]>0 else 'REJECT','qualification_only':True,'production_promotion_ready':False}
+        'source_iteration_trace':'ACCEPT' if counts[FILES[3]]>0 else 'REJECT',
+        'source_type56_records':'ACCEPT' if counts.get('v0472_call2_eval1_he_type56_records.csv',0)>0 else 'REJECT','qualification_only':True,'production_promotion_ready':False}
     _write_json(out/REPORT,report); return report
 
 def main() -> int:

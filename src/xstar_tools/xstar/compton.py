@@ -11,6 +11,8 @@ trapezoidal continuum integration are preserved deliberately.
 
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass, field
 import csv
 import hashlib
@@ -27,7 +29,7 @@ from .fortran_numbers import parse_fortran_float
 
 XSTAR_COMPTON_NCOMP = 101
 XSTAR_COMPTON_EMC2_EV = 5.11e5
-XSTAR_COMPTON_KT_EV_PER_T4 = float(np.float32(0.861707))
+XSTAR_COMPTON_KT_EV_PER_T4 = float(np.float32(LEGACY_BOLTZMANN_EV_PER_T4))
 XSTAR_THOMSON_CROSS_SECTION_CM2 = float(np.float32(6.6524587321e-25))
 XSTAR_ERG_PER_EV = float(np.float32(1.602176634e-12))
 

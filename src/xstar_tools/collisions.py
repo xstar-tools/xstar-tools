@@ -39,6 +39,12 @@ Search O VIII Ly-alpha collision records::
 
 from __future__ import annotations
 
+from .xstar.constants import (
+    COLLISION_RATE_COEFFICIENT_PER_SQRT_K,
+    LEGACY_ROUNDED_BOLTZMANN_EV_PER_K,
+    SOURCE_COLLISION_BOLTZMANN_EV_PER_K,
+)
+
 import argparse
 import csv
 import json
@@ -64,8 +70,8 @@ except Exception as exc:  # pragma: no cover
 
 HC_EV_A = 12398.4016
 RYD_EV = 13.605692
-KB_EV_PER_K = 8.61707e-5
-QCOEF = 8.626e-6  # cm^3 s^-1 K^1/2, XSTAR 8.626e-8 with t=T/1e4
+KB_EV_PER_K = SOURCE_COLLISION_BOLTZMANN_EV_PER_K
+QCOEF = COLLISION_RATE_COEFFICIENT_PER_SQRT_K  # cm^3 s^-1 K^1/2, XSTAR 8.626e-8 with t=T/1e4
 
 COLLISION_DATA_TYPES = {51, 56, 63, 67, 68, 69, 98}
 
@@ -614,7 +620,7 @@ def impactn_py(n: int, m: int, temp: float, ic: int, amn: float, *, max_outer: i
         return 0.0
     rm = 1.0
     z1 = 1.0
-    tk = 8.617e-5 * temp
+    tk = LEGACY_ROUNDED_BOLTZMANN_EV_PER_K * temp
     inc = 1
     jm = 90 * inc
     ecm = 109737.0 * float(ic * ic) * (1.0/float(n*n) - 1.0/float(m*m))

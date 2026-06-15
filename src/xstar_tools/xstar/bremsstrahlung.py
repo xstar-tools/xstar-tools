@@ -11,6 +11,8 @@ branch remains commented out.  Both behaviors are preserved deliberately.
 """
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass, field
 import csv
 import json
@@ -26,7 +28,7 @@ from .fortran_numbers import parse_fortran_float
 # Default-real literals in bremem.f90 are rounded to binary32 before assignment
 # to REAL(8).  Preserve that source behavior deliberately.
 XSTAR_BREMEM_CC = float(np.float32(1.032e-13))
-XSTAR_BREMEM_KT_EV_PER_T4 = float(np.float32(0.861707))
+XSTAR_BREMEM_KT_EV_PER_T4 = float(np.float32(LEGACY_BOLTZMANN_EV_PER_T4))
 XSTAR_BREMEM_ION_Z2_FACTOR = float(np.float32(1.4))
 XSTAR_BREMEM_GAMMA_FACTOR = float(np.float32(0.158))
 XSTAR_BREMEM_ION_CHARGE = 1.0

@@ -1,5 +1,6 @@
 #include "xstar_backend_common.hpp"
 #include "compact_arrays.hpp"
+#include "xstar_constants.h"
 #include <cstdint>
 #include <sstream>
 #include <algorithm>
@@ -298,7 +299,7 @@ double native_impactn(int n, int m, double temp, int ic, double amn) {
     const double xm = 157888.0 * static_cast<double>(ic * ic) / temp / static_cast<double>(m * m);
     if (xm > 60.0) return 0.0;
     const double rm = 1.0, z1 = 1.0;
-    const double tk = 8.617e-5 * temp;
+    const double tk = xstar_constants::kLegacyRoundedBoltzmannEvPerK * temp;
     const int inc = 1, jm = 90 * inc;
     double ecm = 109737.0 * static_cast<double>(ic * ic) * (1.0 / static_cast<double>(n * n) - 1.0 / static_cast<double>(m * m));
     const double ecm3 = std::pow(ecm, 3.0);

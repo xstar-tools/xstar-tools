@@ -12,6 +12,8 @@ is zero because the Fortran routine mutates its caller-owned workspace.
 """
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass, field
 import csv
 import json
@@ -27,7 +29,7 @@ from .fortran_numbers import parse_fortran_float
 # Default-real literals in freef.f90 are rounded to binary32 before assignment
 # to REAL(8).  Preserve that source behavior deliberately.
 XSTAR_FREEF_CC = float(np.float32(2.614e-37))
-XSTAR_FREEF_KT_EV_PER_T4 = float(np.float32(0.861707))
+XSTAR_FREEF_KT_EV_PER_T4 = float(np.float32(LEGACY_BOLTZMANN_EV_PER_T4))
 XSTAR_FREEF_ION_Z2_FACTOR = float(np.float32(1.4))
 XSTAR_FREEF_GAMMA_FACTOR = float(np.float32(0.158))
 XSTAR_FREEF_GAUNT_FACTOR = 1.0

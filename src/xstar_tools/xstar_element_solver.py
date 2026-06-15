@@ -28,6 +28,12 @@ from types import SimpleNamespace
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
+from .xstar.constants import (
+    LEGACY_BOLTZMANN_EV_PER_T4,
+    MODERN_BOLTZMANN_EV_PER_K,
+    MODERN_SHORT_BOLTZMANN_EV_PER_K,
+    SOURCE_COLLISION_BOLTZMANN_EV_PER_K,
+)
 
 from .hierarchy import ATDB, Z_TO_SYMBOL, roman
 from .lines import choose_z, extract_levels, extract_lines
@@ -1818,7 +1824,7 @@ def _evaluate_type95_bryans_ci(reals: Sequence[float], ints: Sequence[int], *, t
     nspline = int((len(rd) - 2) // 2)
     if nspline < 2 or len(rd) < 2 + 2 * nspline:
         return {"python_eval_status": "type95_bad_spline_layout", "type95_nspline": nspline}
-    ekt = 0.861707 * (float(temperature) / 1.0e4)
+    ekt = LEGACY_BOLTZMANN_EV_PER_T4 * (float(temperature) / 1.0e4)
     tt = ekt / ee
     if tt <= 0.0:
         return {"python_eval_status": "type95_bad_tt", "type95_tt": tt}
@@ -8172,7 +8178,7 @@ def _evaluate_phint53_milne_ans2_integral(
         return {"phint53_milne_ans2_status": "not_evaluated_empty_energy_range"}
     ngrid = max(int(n_energy_grid_points or 0), 16)
     grid = _log_energy_grid(emin, emax, ngrid)
-    kT_eV = 8.61707e-5 * max(float(temperature_K), 1.0e-300)
+    kT_eV = SOURCE_COLLISION_BOLTZMANN_EV_PER_K * max(float(temperature_K), 1.0e-300)
     q2 = 2.07e-16 * max(float(electron_density), 0.0) * (max(float(temperature_K), 1.0e-300) ** -1.5)
     rs = q2 / max(float(gc), 1.0e-300)
     rnist0 = float(gb) * rs
@@ -8295,7 +8301,7 @@ def _placeholder_bremsa_value(
         return 0.0
     e = max(float(energy_eV), 1.0e-300)
     if mode == "blackbody":
-        kT_eV = max(8.617333262e-5 * max(float(temperature_K), 1.0), 1.0e-30)
+        kT_eV = max(MODERN_SHORT_BOLTZMANN_EV_PER_K * max(float(temperature_K), 1.0), 1.0e-30)
         x = max(e / kT_eV, 0.0)
         if x > 700.0:
             return 0.0
@@ -10085,7 +10091,7 @@ def build_type53_type74_ucalc_closure_audit_rows(
     meta = _global_index_metadata(global_index_rows)
     by_record_milne: Dict[object, dict] = {r.get("record"): r for r in type53_milne_inverse_audit_rows}
     by_record_t74_proxy: Dict[object, dict] = {r.get("record"): r for r in type74_inverse_recombination_audit_rows}
-    kT_eV = 8.617333262e-5 * max(float(temperature), 1.0e-300)
+    kT_eV = MODERN_SHORT_BOLTZMANN_EV_PER_K * max(float(temperature), 1.0e-300)
     rows: List[dict] = []
 
     component_sums: Dict[str, dict] = {}
@@ -11326,7 +11332,7 @@ def _xstar_levwk_seed_weights(
     ne = float(electron_density or 0.0)
     if tm <= 0.0 or ne <= 0.0 or not math.isfinite(tm) or not math.isfinite(ne):
         return out
-    kT_eV = 8.617333262145e-5 * tm
+    kT_eV = MODERN_BOLTZMANN_EV_PER_K * tm
     if kT_eV <= 0.0:
         return out
     q2 = 2.07e-16 * ne * (tm ** (-1.5))

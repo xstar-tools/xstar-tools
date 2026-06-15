@@ -39,6 +39,8 @@ Generate an approximate O VII source distribution::
 
 from __future__ import annotations
 
+from .xstar.constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 import argparse
 import csv
 import json
@@ -67,7 +69,7 @@ ELECTRON_RECOMB_DATA_TYPES = {1, 7, 8, 22, 30, 37, 38, 39}
 CHARGE_EXCHANGE_H0_DATA_TYPES = {2}
 RECOMB_DATA_TYPES = ELECTRON_RECOMB_DATA_TYPES
 RECOMB_LIKE_RATE_TYPES = {2, 6, 8}
-K_B_EV_PER_1E4K = 0.861707  # k_B * 1e4 K in eV, as used in ucalc.f90
+K_B_EV_PER_1E4K = LEGACY_BOLTZMANN_EV_PER_T4  # k_B * 1e4 K in eV, as used in ucalc.f90
 
 CASCADE_TARGET_PRESETS: Dict[str, str] = {
     # Recommended neutral Stage-6 O VII triplet target map. It gives equal

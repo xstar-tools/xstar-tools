@@ -18,6 +18,8 @@ and prevents the strict direct-solve readiness gate.
 """
 from __future__ import annotations
 
+from .constants import SOURCE_COLLISION_BOLTZMANN_EV_PER_K
+
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Mapping, MutableMapping, Optional, Sequence, Tuple
@@ -1027,8 +1029,8 @@ def levwk(levels: UCalcLevelTable, context: ElementEquilibriumContext) -> np.nda
     if tm <= 0:
         raise ElementEquilibriumError("temperature must be positive")
     xnx = float(context.electron_density_cm3)
-    # bk/ergsev in XSTAR is 8.61707e-5 eV K^-1.
-    bktm = 8.61707e-5 * tm
+    # Use the shared source-faithful collision Boltzmann value.
+    bktm = SOURCE_COLLISION_BOLTZMANN_EV_PER_K * tm
     q2 = 2.07e-16 * xnx * tm ** (-1.5)
     continuum = levels.require(nlev)
     emlt_cont = continuum.statistical_weight

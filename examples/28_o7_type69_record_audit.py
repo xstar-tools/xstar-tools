@@ -29,8 +29,13 @@ import math
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-KB_EV_PER_K = 8.61707e-5
-QCOEF = 8.626e-6
+from xstar_tools.xstar.constants import (
+    COLLISION_RATE_COEFFICIENT_PER_SQRT_K,
+    SOURCE_COLLISION_BOLTZMANN_EV_PER_K,
+)
+
+KB_EV_PER_K = SOURCE_COLLISION_BOLTZMANN_EV_PER_K
+QCOEF = COLLISION_RATE_COEFFICIENT_PER_SQRT_K
 
 
 

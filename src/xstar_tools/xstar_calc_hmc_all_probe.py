@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Dict
 
 from .xstar_call_correlation_probe import write_call_correlation_probe_products
+from .xstar.constants import LEGACY_BOLTZMANN_EV_PER_T4
 
 
 def calc_hmc_all_probe_helper() -> str:
     """Return a compile-safe free-form Fortran helper with bounded capture."""
-    return r'''! xstar-atomic v0.4.48 correlated complete fixed-state calc_hmc_all probe.
+    source = r'''! xstar-atomic v0.4.48 correlated complete fixed-state calc_hmc_all probe.
 !
 ! Diagnostic only: this helper never changes rates, populations, or state.
 module xap_calc_hmc_probe_state
@@ -318,7 +319,7 @@ subroutine xap_hmc_comp2(t4, xee, xpx, ncn2, epi, bremsa, cmp1, cmp2)
   real(8) :: ekt, xnx, htcomp, clcomp
 
   if (xap_hmc_capture .ne. 1) return
-  ekt = t4*0.861707
+  ekt = t4*@XSTAR_LEGACY_BOLTZMANN_EV_PER_T4@
   xnx = xpx*xee
   htcomp = cmp1*xnx*1.602176634e-12
   clcomp = ekt*cmp2*xnx*1.602176634e-12
@@ -404,7 +405,7 @@ subroutine xap_hmc_freef_bin(kk, ncn2, epi, bremsa, temp, gam, gau, &
   endif
 
   if (kk .eq. ncn2) then
-    ekt = xap_hmc_freef_t4*0.861707
+    ekt = xap_hmc_freef_t4*@XSTAR_LEGACY_BOLTZMANN_EV_PER_T4@
     t6 = xap_hmc_freef_t4/100.
     xnx = xap_hmc_freef_xpx*xap_hmc_freef_xee
     enz2 = 1.4*xnx
@@ -487,7 +488,7 @@ subroutine xap_hmc_bremem_bin(kk, ncn2, epi, temp, gam, gau, brtmp, &
   endif
 
   if (kk .eq. ncn2) then
-    ekt = xap_hmc_bremem_t4*0.861707
+    ekt = xap_hmc_bremem_t4*@XSTAR_LEGACY_BOLTZMANN_EV_PER_T4@
     t6 = xap_hmc_bremem_t4/100.
     xnx = xap_hmc_bremem_xpx*xap_hmc_bremem_xee
     enz2 = 1.4*xnx
@@ -574,7 +575,7 @@ subroutine xap_hmc_heatf_post(ncn2, httot, cltot, httot2, cltot2, &
   if (xap_hmc_capture .ne. 1) return
   if (ncn2 .ne. xap_hmc_heatf_ncn2) return
   xnx = xap_hmc_heatf_xpx*xap_hmc_heatf_xee
-  ekt = xap_hmc_heatf_t4*0.861707
+  ekt = xap_hmc_heatf_t4*@XSTAR_LEGACY_BOLTZMANN_EV_PER_T4@
   inquire(file='xstar_calc_hmc_all_heatf_summary_probe.csv', exist=exists)
   open(newunit=lun, file='xstar_calc_hmc_all_heatf_summary_probe.csv', &
        status='unknown', position='append', action='write', iostat=ios)
@@ -989,6 +990,7 @@ subroutine xap_hmc_pre_continuum(t4, xee, xpx, httot, cltot, httot2, &
 9004 format(i12,',',i12,5(',',es26.16e3),',',i12,',',i12)
 end subroutine xap_hmc_pre_continuum
 '''
+    return source.replace('@XSTAR_LEGACY_BOLTZMANN_EV_PER_T4@', repr(LEGACY_BOLTZMANN_EV_PER_T4))
 
 
 def calc_hmc_all_insertion_snippets() -> Dict[str, str]:

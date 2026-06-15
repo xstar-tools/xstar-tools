@@ -15,6 +15,12 @@ remaining leaf routines are translated source-file by source-file.
 """
 from __future__ import annotations
 
+from .constants import (
+    BOLTZMANN_ERG_PER_K,
+    COLLISION_RATE_COEFFICIENT_PER_SQRT_T4,
+    LEGACY_BOLTZMANN_EV_PER_T4,
+)
+
 from dataclasses import dataclass, field, replace
 from enum import Enum
 import math
@@ -25,13 +31,13 @@ import numpy as np
 from .atomic_database import XSTARMasterData
 
 ERG_PER_EV = 1.602197e-12
-XSTAR_KT_EV_PER_1E4K = 0.861707
+XSTAR_KT_EV_PER_1E4K = LEGACY_BOLTZMANN_EV_PER_T4
 
 # Current XSTAR ``constants.f90`` values used by the continuum-integration
 # routines.  Keep these separate from historical formulas that literally use
 # the older rounded coefficients above.
 XSTAR_SOURCE_ERG_PER_EV = 1.602176634e-12
-XSTAR_SOURCE_BOLTZMANN_ERG_K = 1.380649e-16
+XSTAR_SOURCE_BOLTZMANN_ERG_K = BOLTZMANN_ERG_PER_K
 XSTAR_SOURCE_KT_EV_PER_1E4K = (
     XSTAR_SOURCE_BOLTZMANN_ERG_K * 1.0e4 / XSTAR_SOURCE_ERG_PER_EV
 )
@@ -1546,7 +1552,7 @@ class SourceFaithfulUCalc:
             j=_linear_hunt(r.reals[-4:],c.t); nind=len(r.reals)-8+j-1
         cijpp=r.reals[max(0,min(nind,len(r.reals)-1))]; elin=abs(r.reals[0]); gu=c.levels.weight(up); gl=c.levels.weight(lo)
         if elin<=1e-24: return self._ctx_result(r,s,idest1=lo,idest2=up)
-        ex=_expo(-(12398.4016/elin)/(XSTAR_KT_EV_PER_1E4K*c.t)); cji=8.626e-8*cijpp/c.tsq/max(gu,1e-48)
+        ex=_expo(-(12398.4016/elin)/(XSTAR_KT_EV_PER_1E4K*c.t)); cji=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*cijpp/c.tsq/max(gu,1e-48)
         cij=cji*gu*ex/c.tsq/max(gl,1e-48); ne=c.electron_density_cm3
         return self._ctx_result(r,s,ans1=cij*ne,ans2=cji*ne,idest1=lo,idest2=up,
             context_fields_used=("temperature_k","xpx","xee","levels"))
@@ -1559,7 +1565,7 @@ class SourceFaithfulUCalc:
         lo,up=r.integers[0],r.integers[1]; elin=abs(r.reals[0]); gu=c.levels.weight(up); gl=c.levels.weight(lo)
         if elin<=1e-24: return self._ctx_result(r,s,idest1=lo,idest2=up)
         om=r.reals[3]; de=12398.4016/elin; ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t)); ne=c.electron_density_cm3
-        cij=8.626e-8*om*ex/c.tsq/max(gl,1e-48); cji=8.626e-8*om/c.tsq/max(gu,1e-48)
+        cij=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om*ex/c.tsq/max(gl,1e-48); cji=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48)
         return self._ctx_result(r,s,ans1=cij*ne,ans2=cji*ne,ans5=cji*ne*de*ERG_PER_EV,ans6=cij*ne*de*ERG_PER_EV,
             idest1=lo,idest2=up,context_fields_used=("temperature_k","xpx","xee","levels"))
 
@@ -1955,7 +1961,7 @@ class SourceFaithfulUCalc:
         if len(r.integers)<2 or not r.reals: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type81_short_record")
         a,b=int(r.integers[0]),int(r.integers[1]); lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a); de=abs(c.levels.energy(up)-c.levels.energy(lo)); om=max(float(r.reals[0]),0.0)
         gu=c.levels.weight(up); gl=c.levels.weight(lo); ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t)); ne=c.electron_density_cm3
-        qd=8.626e-8*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
+        qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,diagnostics={"upsilon":om},context_fields_used=("temperature_k","xpx","xee","levels"))
 
     def _eval_type82(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
@@ -2008,7 +2014,7 @@ class SourceFaithfulUCalc:
         ns=len(r.reals)//2; tg=np.asarray(r.reals[:ns],float); vals=np.asarray(r.reals[ns:2*ns],float); ekt=XSTAR_KT_EV_PER_1E4K*c.t
         if ns<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type97_missing_spline")
         ups=float(np.interp(ekt,tg,vals,left=vals[0],right=vals[-1])); gl=c.levels.weight(id1); gu=dest_g or c.levels.weight(c.nlevp)
-        cji=8.626e-8*ups/c.tsq/max(gu,1e-48); ex=_expo(-threshold/max(ekt,1e-48)); cij=cji*gu*ex/max(gl,1e-48); ne=c.electron_density_cm3; ans1=cij*ne; rinf=2.08e-22*gl/max(gu,1e-48)/max(c.t*c.tsq,1e-48); ans2=ans1*rinf*ne/max(ex,1e-300)
+        cji=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*ups/c.tsq/max(gu,1e-48); ex=_expo(-threshold/max(ekt,1e-48)); cij=cji*gu*ex/max(gl,1e-48); ne=c.electron_density_cm3; ans1=cij*ne; rinf=2.08e-22*gl/max(gu,1e-48)/max(c.t*c.tsq,1e-48); ans2=ans1*rinf*ne/max(ex,1e-300)
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*threshold*ERG_PER_EV,ans6=ans1*threshold*ERG_PER_EV,idest1=id1,idest2=id2,diagnostics={"upsilon":ups,"threshold_eV":threshold},context_fields_used=("temperature_k","xpx","xee","levels"))
 
     def _eval_type50(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
@@ -2581,7 +2587,7 @@ class SourceFaithfulUCalc:
             1.0e-300,
         )
         exptmp = _expo(-delt)
-        cji = 8.626e-8 * upsilon / c.tsq / (1.0e-16 + gu)
+        cji = COLLISION_RATE_COEFFICIENT_PER_SQRT_T4 * upsilon / c.tsq / (1.0e-16 + gu)
         cij = cji * gu * exptmp / (1.0e-16 + gl)
         ne = c.electron_density_cm3
         ans1 = cij * ne
@@ -2663,7 +2669,7 @@ class SourceFaithfulUCalc:
         a,b=r.integers[:2]; lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a)
         de=r.reals[0]; wav=12398.4016/max(de,1e-48); temp=max(c.temperature_k,2.8777e6/wav); ups=self._calt66(r.reals,temp)
         gu=c.levels.weight(up); gl=c.levels.weight(lo); ne=c.electron_density_cm3; ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t))
-        qd=8.626e-8*ups/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
+        qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*ups/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"upsilon":ups,"effective_temperature_K":temp},context_fields_used=("temperature_k","xpx","xee","levels"))
 
@@ -2681,7 +2687,7 @@ class SourceFaithfulUCalc:
         if y*aa+y<=40: qij += y*_expo(y*aa)*(cr*er/(aa+1)**(rr-1)+cr1*er1/(aa+1)**rr)
         crate=max(qij*1.578876e5/temp*math.sqrt(temp)/max(zeff*zeff,1e-48)*5.46538e-11,0.0)
         gl=c.levels.weight(lo); gu=c.levels.weight(up); om=crate/max(gl,1e-48); ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t)); ne=c.electron_density_cm3
-        qd=8.626e-8*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
+        qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"crate":crate},context_fields_used=("temperature_k","xpx","xee","levels"))
 
@@ -2693,7 +2699,7 @@ class SourceFaithfulUCalc:
         else:
             tg=r.reals[:nt]; vals=r.reals[nt:2*nt]; j=_linear_hunt(tg,math.log10(c.temperature_k)); om=vals[j]+(vals[j+1]-vals[j])*(math.log10(c.temperature_k)-tg[j])/max(tg[j+1]-tg[j],1e-24)
         om=max(om,0.0); gu=c.levels.weight(up); gl=c.levels.weight(lo); ex=_expo(-de/(XSTAR_KT_EV_PER_1E4K*c.t)); ne=c.electron_density_cm3
-        qe=8.626e-8*om*ex/c.tsq/max(gl,1e-48); qd=8.626e-8*om/c.tsq/max(gu,1e-48)
+        qe=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om*ex/c.tsq/max(gl,1e-48); qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"upsilon":om},context_fields_used=("temperature_k","xpx","xee","levels"))
 
@@ -2711,7 +2717,7 @@ class SourceFaithfulUCalc:
         for n in range(1,6): en.append((1.0-xr*en[-1])/n)
         omc=par[0]+xr*(par[1]*en[0]+par[2]*en[1]+2*par[3]*en[2]+6*par[4]*en[3]+24*par[5]*en[4]+120*par[6]*en[5])+par[7]*en[0]
         nr=min(max(r.integers[1],0),4); start=11; xs=list(r.reals[start:start+nr]); amps=list(r.reals[start+nr:start+2*nr]); omr=sum(aa*(xx*x)*_expo(-xx*x) for xx,aa in zip(xs,amps)); om=omc+omr
-        gu=c.levels.weight(up); gl=c.levels.weight(lo); ne=c.electron_density_cm3; ex=_expo(-x); qd=8.626e-8*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
+        gu=c.levels.weight(up); gl=c.levels.weight(lo); ne=c.electron_density_cm3; ex=_expo(-x); qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*eij*ERG_PER_EV,ans6=qe*ne*eij*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"omega_cont":omc,"omega_res":omr},context_fields_used=("temperature_k","xpx","xee","levels"))
 

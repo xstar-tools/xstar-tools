@@ -7,6 +7,8 @@ record-by-record with ``ucalc.f90``.
 """
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_KEV_PER_K
+
 import math
 from typing import Iterable, Sequence
 
@@ -14,7 +16,7 @@ import numpy as np
 
 RYDBERG_EV = 13.605692
 ERG_PER_EV = 1.602197e-12
-KBOLTZ_KEV_K = 8.617385e-8
+KBOLTZ_KEV_K = LEGACY_BOLTZMANN_KEV_PER_K
 UPSILON_COLL_COEFF = 8.629e-6
 
 

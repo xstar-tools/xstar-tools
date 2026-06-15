@@ -15,6 +15,8 @@ physical arrays.
 
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -919,7 +921,7 @@ def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
     uux = enlumx / (12.56 * xpx * r19 * r19) / 3.0e10
     skse = xlum / (xpx * r19 * r19)
     zeta = np.log10(max(1.0e-24, skse))
-    ekt = t4 * 0.861707 * ERGSEV
+    ekt = t4 * LEGACY_BOLTZMANN_EV_PER_T4 * ERGSEV
     sksec = skse / 12.56 / ((1.0 + xee) * ekt * 2.998e10)
     zetac = np.log10(max(1.0e-24, sksec))
     nry_gamma = max(1, min(n, int(nbinc(13.7, epi, n)) + 1)) - 1

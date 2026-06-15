@@ -57,7 +57,7 @@ def test_cpp_type63_density_and_type95_suppression_contract() -> None:
     assert "record.int_count >= 7" in text
     assert "initial = &row_at(element, static_cast<int>(ints[5]))" in text
     assert "final = &row_at(element, static_cast<int>(ints[6]))" in text
-    assert "c.density_scale=input.hydrogen_density_cm3" in text
+    assert "c.density_scale = record.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;" in text
     assert "source_absent_type95_self_loop" in text
     assert "original.data_type == 95" in text
     assert "original.lower_row == original.upper_row" in text

@@ -13,6 +13,8 @@ Fortran default-real literal rounding.
 """
 from __future__ import annotations
 
+from .constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass, field
 import csv
 import json
@@ -27,7 +29,7 @@ from .fortran_numbers import parse_fortran_float
 
 # These literals are default REAL in heatf.f90 and constants.f90 and therefore
 # round to binary32 before promotion to REAL(8).
-XSTAR_HEATF_KT_EV_PER_T4 = float(np.float32(0.861707))
+XSTAR_HEATF_KT_EV_PER_T4 = float(np.float32(LEGACY_BOLTZMANN_EV_PER_T4))
 XSTAR_HEATF_ERG_PER_EV = float(np.float32(1.602176634e-12))
 XSTAR_HEATF_RESIDUAL_FLOOR = float(np.float32(1.0e-37))
 XSTAR_HEATF_RESIDUAL_FACTOR = float(np.float32(2.0))

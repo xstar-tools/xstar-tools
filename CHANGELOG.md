@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.34 - 2026-06-15
+
+- Centralize historical and modern Boltzmann-related values in one shared `constants.def` consumed by both Python and C++, without changing the immutable v0.6.47.2 benchmark reference.
+- Keep source-faithful collision branches on the Python value `8.61707e-5 eV K^-1`; retain the CODATA value as a named deferred-promotion constant.
+- Restore Type-56 Python/IEEE arithmetic order using `sqrt(T)`, `8.626e-6`, and the Python collision energy conversion for `ans5/ans6`.
+- Capture all 411 source Type-56 record diagnostics and replay the exact captured Type-56 temperature for phase-aligned coefficient comparison.
+- Apply source `xpx` scaling once at the common matrix-insertion boundary for all committed `cj/cj2` contributions; remove Type-53 and Type-63 family-specific scaling to prevent double application.
+- Preserve the accepted helium seed, exact RHS, Type-63 orientation, Type-95 self-loop suppression, and complete 5,232-term stream.
+- Keep dense-matrix, post-solve, thermal, product, and production promotion evidence-gated.
+
 ## 0.6.48.7.33 - 2026-06-15
 
 - Apply source energy-ordering semantics to Type-63 matrix endpoints while retaining literal packed-record initial/final scalar channels.

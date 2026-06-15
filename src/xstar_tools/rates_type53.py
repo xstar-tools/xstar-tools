@@ -16,14 +16,16 @@ arrays produced by the same source loop.
 """
 from __future__ import annotations
 
+from .xstar.constants import BOLTZMANN_ERG_PER_K, LEGACY_BOLTZMANN_EV_PER_T4
+
 from dataclasses import dataclass
 import math
 from typing import Any, Mapping, Sequence
 
 RYDBERG_EV = 13.605692
 ERG_PER_EV = 1.602176634e-12
-BOLTZMANN_ERG_K = 1.380649e-16
-XSTAR_KT_EV_PER_1E4K = 0.861707
+BOLTZMANN_ERG_K = BOLTZMANN_ERG_PER_K
+XSTAR_KT_EV_PER_1E4K = LEGACY_BOLTZMANN_EV_PER_T4
 
 
 def _expo(value: float) -> float:

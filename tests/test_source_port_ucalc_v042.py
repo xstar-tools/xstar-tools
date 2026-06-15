@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from xstar_tools.xstar.constants import LEGACY_BOLTZMANN_EV_PER_T4
+
 from xstar_atomic.source_port import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -287,7 +289,7 @@ def test_type95_uses_eint_e1_not_scaled_expint_em1():
     record = UCalcRecord(17362, 95, 5, 0, reals, (1, 1, 7))
     result = SourceFaithfulUCalc().evaluate(record, context)
 
-    tt = (0.861707 * 100.0) / 10.0
+    tt = (LEGACY_BOLTZMANN_EV_PER_T4 * 100.0) / 10.0
     xx = 1.0 - 0.693147 / math.log(tt + 2.0)
     rho = 2.0 + (xx - 0.5) * (3.0 - 2.0) / (0.9 - 0.5)
     e1, _, _ = _xstar_eint(1.0 / tt)
