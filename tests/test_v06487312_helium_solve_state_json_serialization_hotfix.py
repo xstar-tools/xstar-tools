@@ -9,7 +9,7 @@ from xstar_tools.xstar.v0472_call2_helium_solve_state_capture import RELEASE, _P
 
 
 def test_generated_probe_writes_valid_json_newline_and_validates():
-    assert RELEASE == "0.6.48.7.34"
+    assert RELEASE == "0.6.48.7.35"
     assert "state_path.write_text(json.dumps(_HE_SOLVE_STATE,indent=2,sort_keys=True)+'\\n')" in _PROBE
     assert "+'\\\\n'" not in _PROBE
     assert "json.loads(state_path.read_text())" in _PROBE

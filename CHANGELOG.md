@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.35 - 2026-06-15
+
+- Added a diagnostic-only post-Type-56 bound-free coefficient and matrix-residual decomposition.
+- Replayed all 6,084 source and native helium matrix cells independently in their exact insertion orders.
+- Attributed all 597 remaining non-exact dense cells to coefficient differences or explicit accumulation-order-only differences.
+- Reconstructed `ans1`–`ans6` for all 438 Type-50/53/95/99 records from the complete 5,232-term stream.
+- Added direct v0.6.47.2 bound-free record capture for future physical reruns.
+- Localized the dominant residual to Type-99 record 780 at cell `(31,31)` without claiming an unproven root cause.
+- Preserved ABI 60487, all accepted Type-56/63/71/seed/RHS gates, and blocked fixed-state and thermal promotion.
+
 ## 0.6.48.7.34 - 2026-06-15
 
 - Centralize historical and modern Boltzmann-related values in one shared `constants.def` consumed by both Python and C++, without changing the immutable v0.6.47.2 benchmark reference.
