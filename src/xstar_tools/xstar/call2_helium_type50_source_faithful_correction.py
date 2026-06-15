@@ -160,7 +160,7 @@ def main() -> int:
         record917_forward_loss,
         target_answers,
         gates["CALL2_HE_TYPE50_RATE_MATRIX"] == "ACCEPT",
-        matrix_exact == 5784,
+        matrix_exact >= 5784,
         base.get("metadata_keyed_matched_terms") == 5232,
         base.get("unmatched_source_terms") == 0,
         base.get("unmatched_native_terms") == 0,

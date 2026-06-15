@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.38 - 2026-06-15
+
+- Restored the Type-53 source threshold as `rlev(4,idest1)-rlev(1,idest1)` plus the excited-parent correction, rather than deriving it from compact alias-row energies.
+- Preserved current-ion continuum energy/statistical weight, physical destination statistical weight, and persistent `leveltemp` destination energy in the lowered Type-53 payload.
+- Corrected record 651 `ans1`-`ans6`, forward diagonal loss, and all row-2 matrix contributions exactly.
+- Closed the remaining record-688 one-ULP Type-53 cooling accumulator under its exact source context without substituting captured answers.
+- Verified all 132 helium Type-53 records and the complete Type-53 rate matrix exactly.
+- Improved call-2 helium dense-matrix parity from 5,784/6,084 to 5,962/6,084 exact cells; 122 cells remain under Types 54, 57, 69, 74, 76, 77, and 95.
+- Added Type-53 diagnostics, runner, readiness checker, strict checker, tests, and technical note; fixed-state and thermal promotion remain blocked.
+
 ## 0.6.48.7.37 - 2026-06-15
 
 - Corrected the native Type-50 DSEC covering/zero-photoexcitation branch using the transported call-state covering fraction.

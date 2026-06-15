@@ -4,7 +4,7 @@ from xstar_tools.xstar.call2_helium_solve_state_rate_matrix_decomposition import
 
 def test_release_and_probe_scope():
     assert RELEASE == '0.6.48.7.31.3'
-    assert CAPTURE_RELEASE == '0.6.48.7.37'
+    assert CAPTURE_RELEASE == '0.6.48.7.38'
     assert 'v048731_he_solve_capture_enable call=' in _PROBE
     assert 'capture_lucy_trace_element_z = (2,)' in _PROBE
     assert 'v0472_call2_eval1_he_solve_matrix.csv' in _PROBE

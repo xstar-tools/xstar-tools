@@ -4,7 +4,8 @@ from pathlib import Path
 def test_type53_uses_destination_continuum_energy() -> None:
     root = Path(__file__).resolve().parents[1]
     text = (root / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
-    assert "row46_contract->destination_energy_ev : upper.energy_ev" in text
+    assert "record_context->continuum_energy_ev" in text
+    assert "record_context->leveltemp_destination_energy_ev" in text
     assert "row46_contract ? 0.0 : upper.energy_ev" not in text
 
 

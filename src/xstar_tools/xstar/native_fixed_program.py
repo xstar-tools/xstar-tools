@@ -444,6 +444,23 @@ def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) 
     return rec, energy, weight, label, principal_n, orbital_l
 
 
+def _level_ionization_potential(master: Any, derived: Any, ion_index: int, local_level: int) -> float:
+    """Return the literal level-table rlev(4) ionization-potential field."""
+    import numpy as np
+
+    npilev = np.asarray(derived.npilev, dtype=np.int64)
+    if local_level <= 0 or local_level >= npilev.shape[0] or ion_index <= 0 or ion_index >= npilev.shape[1]:
+        raise ValueError(f"level lookup outside npilev: ion={ion_index} local={local_level}")
+    global_index = int(npilev[local_level, ion_index])
+    if global_index <= 0 or global_index >= len(derived.level_record_by_global_index):
+        raise ValueError(f"missing global level for ion={ion_index} local={local_level}")
+    rec = int(derived.level_record_by_global_index[global_index])
+    reals = list(master.record_reals(rec))
+    if len(reals) < 4:
+        raise ValueError(f"level record {rec} lacks rlev(4) ionization potential")
+    return float(reals[3])
+
+
 def _build_element_layout(master: Any, derived: Any, element_z: int, element_index: int, global_level_index_by_key: Mapping[tuple[int, int, int], int] | None = None) -> tuple[dict[str, Any], list[dict[str, Any]], Any, dict[int, Any]]:
     from .element_equilibrium import build_element_compact_basis
 
@@ -693,7 +710,7 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         payload_reals = []
         payload_ints = [ni, li, nf, lf, iq, initial_row, final_row]
         line_energy = abs(initial_energy - final_energy)
-    elif dt in {49, 53}:
+    elif dt == 49:
         if len(raw_ints) < 4 or len(raw_reals) < 4:
             raise ValueError(f"type{dt} record {rec} has short payload")
         id1 = int(raw_ints[-2])
@@ -704,6 +721,70 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_ints = []
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+    elif dt == 53:
+        if len(raw_ints) < 4 or len(raw_reals) < 4:
+            raise ValueError(f"type{dt} record {rec} has short payload")
+        id1 = int(raw_ints[-2])
+        off = max(0, int(raw_ints[-4]))
+        id2 = int(block.nlev) + off - 1
+        lower_row = _compact_row_for_local(basis, ion_index, id1)
+        upper_row = _compact_row_for_idest(basis, block, id2)
+
+        # v0.6.48.7.38: the compact matrix aliases the current-ion continuum
+        # with the next-ion ground.  Type-53 ucalc does not derive its threshold,
+        # Saha weight, or final electron-energy correction from that alias row.
+        # Retain the original current-ion continuum context and the mutable
+        # leveltemp destination value after the literal cross-section pairs.
+        _, bound_energy, bound_weight, _blabel, _bn, _bl = _level_payload(
+            master, derived, ion_index, id1
+        )
+        bound_ionization_potential = _level_ionization_potential(
+            master, derived, ion_index, id1
+        )
+        base_threshold_ev = float(bound_ionization_potential) - float(bound_energy)
+        _, continuum_energy, continuum_weight, _clabel, _cn, _cl = _level_payload(
+            master, derived, ion_index, int(block.nlev)
+        )
+        if id2 <= int(block.nlev):
+            _, destination_energy, destination_weight, _dlabel, _dn, _dl = _level_payload(
+                master, derived, ion_index, id2
+            )
+            leveltemp_destination_energy = destination_energy
+        else:
+            ordered_blocks = list(basis.blocks)
+            block_position = next(
+                (idx for idx, candidate in enumerate(ordered_blocks) if int(candidate.ion_index) == ion_index),
+                -1,
+            )
+            if block_position < 0 or block_position + 1 >= len(ordered_blocks):
+                raise ValueError(f"type53 record {rec} has no next-ion parent destination")
+            destination_block = ordered_blocks[block_position + 1]
+            destination_local_level = id2 - int(block.nlev) + 1
+            _, parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
+                master, derived, int(destination_block.ion_index), destination_local_level
+            )
+            # In calc_hmc_ion's first active-ion pass, higher leveltemp columns
+            # have not yet been written.  ucalc therefore reads the persistent
+            # zero workspace value for excited-parent destinations (record 651
+            # is the decisive row-2 example), while retaining the destination g.
+            leveltemp_destination_energy = 0.0
+
+        threshold_ev = base_threshold_ev + (
+            float(parent_excitation) if id2 > int(block.nlev) else 0.0
+        )
+        threshold_ev = max(0.0, float(threshold_ev))
+        pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
+        payload_reals = pair_payload + [
+            float(threshold_ev),
+            float(bound_energy),
+            float(continuum_energy),
+            float(bound_weight),
+            float(continuum_weight),
+            float(destination_weight),
+            float(leveltemp_destination_energy),
+        ]
+        payload_ints = []
+        line_energy = float(threshold_ev)
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:
             raise ValueError(f"type76 record {rec} has short payload")
